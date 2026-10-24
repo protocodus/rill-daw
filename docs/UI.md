@@ -47,7 +47,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
 | Non-modal operation feedback | `notice`, `NoticeKind` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
-| Plug-in library entries and previews | `catalog_item`, `image_preview` |
+| Plug-in library cards and previews | `device_card`, `device_grid`, `device_grid_layout`, `image_preview` |
 | Bounded context titles | `text::bounded_block` |
 | Inactive clip regions | `paint_clip_tail` |
 | Surfaces | `panel`, `card`, `inset`, `soft_surface`, `paint_ambient` |
@@ -188,7 +188,9 @@ request. Existing command-line exports continue to include tails.
 
 ## Device library and effect chains
 
-**Window → Library** opens a large browser with Instruments and Effects tabs. Search matches names, developers, and category metadata; the developer selector narrows results independently. The selected device shows its cached native editor image and one primary action appropriate to the insertion context. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. A tooltip includes the plugin location and class identity. Actions remain above preview content, so a background capture cannot move them under the pointer.
+**Window → Library** opens a large card grid with Instruments and Effects tabs. Each card shows a cached native editor preview, the device name, and its developer. Names wrap to two lines; full text remains in the tooltip. Missing previews use a quiet instrument/effect icon. The grid adapts its columns to the available width and scrolls independently of the selected device's fixed action footer. Click to select, double-click or press Enter to insert/assign, and use arrow keys to move between cards. Left/Right remain text-editing keys while search has focus.
+
+Search matches names, developers, and category metadata; the developer selector narrows results independently. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. The footer keeps one primary action appropriate to the insertion context. Background preview completion cannot move its target or change the selection. Only visible card rows are built; a bounded asynchronous cache decodes previews off the UI thread, memoizes failures, and invalidates refreshed images without clearing unrelated previews. The shared `device_card` and `device_grid` components own card styling, stable input identities, focus, and virtualized layout.
 
 The instrument tab creates a MIDI track and pattern or assigns the selected MIDI track, then opens its native editor. **Effects → + Insert** opens this same browser pinned to that channel. **Add to effect chain** returns to the channel's inserts. **Create send track** creates a bus containing the effect and a post-fader send from the source at 25%; configure the plugin's wet/dry control for the desired return. Routing also offers **Create send track**. Escape returns to the caller without inserting anything.
 

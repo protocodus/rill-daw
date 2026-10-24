@@ -42,7 +42,7 @@ fn menu(app: &mut Harness, menu: &str, item: &str) -> Value {
         }
     }
     if menu == "+ Insert" {
-        common::wait_visible(app, "Add to effect chain");
+        common::wait_library_device(app, item);
     }
     let state = click_front(app, item);
     if menu == "+ Insert" {
@@ -768,16 +768,20 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
     }
     for _ in 0..2 {
         let state = app.inspect();
-        let count = state["visible_labels"]
+        let card = state["library"]["cards"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|label| *label == "Rill Fixture A")
-            .count();
-        // The selected row precedes its preview heading; arrangement headers may
-        // carry the same track name beneath the foreground library window.
-        app.command(json!({"command":"click","label":"Rill Fixture A","occurrence":count-2}));
+            .find(|card| card["name"] == "Rill Fixture A")
+            .unwrap();
+        // Click the actual card preview, independent of matching names retained
+        // in the caller and persistent selection footer.
+        let rect = &card["rect"];
+        app.command(json!({"command":"pointer", "phase":"click",
+            "x":(rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+            "y":rect["min"][1].as_f64().unwrap() + 36.0}));
     }
+
     let state = app.inspect();
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
     assert_eq!(state["project"]["tracks"][1]["clips"][0]["length"], 4.0);

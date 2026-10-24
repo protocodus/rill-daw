@@ -249,3 +249,24 @@ pub fn wait_visible(app: &mut Harness, label: &str) {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+/// Wait for a rendered device card rather than its always-present disabled action.
+/// A search field may have exactly the same visible text as the requested device.
+pub fn wait_library_device(app: &mut Harness, name: &str) {
+    let deadline = Instant::now() + Duration::from_secs(35);
+    loop {
+        let state = app.inspect();
+        if state["library"]["cards"]
+            .as_array()
+            .is_some_and(|cards| cards.iter().any(|card| card["name"] == name))
+        {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Missing device card {name}: {}",
+            state["library"]
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

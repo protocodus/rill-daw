@@ -203,6 +203,7 @@ struct Harness {
     menu_labels: Vec<(String, Rect)>,
     inspect_paint: bool,
     painted_rects: Vec<Value>,
+    painted_images: Vec<Value>,
     clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
@@ -258,6 +259,7 @@ impl Harness {
             menu_labels: Vec::new(),
             inspect_paint: false,
             painted_rects: Vec::new(),
+            painted_images: Vec::new(),
             clipboard_text: None,
             close_requested: false,
             focused: true,
@@ -324,10 +326,12 @@ impl Harness {
         });
         self.labels.clear();
         self.painted_rects.clear();
+        self.painted_images.clear();
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
             if self.inspect_paint {
                 collect_painted_rects(&clipped.shape, clipped.clip_rect, &mut self.painted_rects);
+                collect_painted_images(&clipped.shape, clipped.clip_rect, &mut self.painted_images);
             }
         }
     }
@@ -528,6 +532,7 @@ impl Harness {
     fn execute(&mut self, command: Command) -> Result<bool> {
         self.inspect_paint = false;
         self.painted_rects.clear();
+        self.painted_images.clear();
         match command {
             Command::FileDialog { kind, path } => {
                 use crate::document_ui::DocumentDialog;
@@ -866,6 +871,7 @@ impl Harness {
         state["exported_file"] = json!(self.app.exported_file);
         if self.inspect_paint {
             state["painted_rects"] = json!(self.painted_rects);
+            state["painted_images"] = json!(self.painted_images);
         }
         state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
         state["popup_context"] = self.app.popup_context_diagnostics();
@@ -910,6 +916,26 @@ fn collect_painted_rects(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value
         egui::Shape::Vec(shapes) => {
             for shape in shapes {
                 collect_painted_rects(shape, clip, output);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_painted_images(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value>) {
+    match shape {
+        egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => {
+            let rect = mesh.calc_bounds().intersect(clip);
+            if rect.is_positive() {
+                output.push(json!({
+                    "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
+                    "texture_id": format!("{:?}", mesh.texture_id),
+                }));
+            }
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_images(shape, clip, output);
             }
         }
         _ => {}

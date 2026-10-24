@@ -109,6 +109,8 @@ With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrume
 
 The `library_e2e` target drives the large device browser through actual UI controls: name/category search, developer filtering, MIDI instrument creation and assignment, cached instrument/effect previews, insertion into the active chain, creation of routed send returns, and returning from the routing browser with Escape. Its drag test loads stateful effect slots, reorders them by pointer gesture, checks stable IDs/state/parameter overrides/automation, exercises Undo/Redo, and saves/reopens a `.rill` bundle. These metadata fixtures need neither installed plugins nor an audio device and run in containers. Real native preview capture remains covered by the opt-in installed-plugin tests.
 
+`device_cards_e2e` checks the responsive card grid using cached PNG fixtures, including actual painted image meshes, device/developer text, placeholders, both themes and display densities, compact-window bounds, virtualized scrolling, two-dimensional keyboard navigation, filtering, and safe click/double-click creation and assignment. `inspect` with `paint: true` includes `painted_images` alongside painted rectangles; normal frames do not collect these diagnostics. Shared component tests cover large catalogs, long Unicode names, focus, and stable geometry as previews arrive. Preview-cache tests cover bounded background decoding, refresh invalidation, failure memoization, and eviction.
+
 ```sh
 cargo test --locked -p daw-app --test library_e2e
 ```

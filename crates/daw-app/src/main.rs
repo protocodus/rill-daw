@@ -11,6 +11,7 @@ mod export_ui;
 mod history_ui;
 mod join_ui;
 mod library;
+mod library_preview;
 mod midi_editor;
 mod plugin_ui;
 mod project_io;
