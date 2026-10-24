@@ -502,6 +502,37 @@ impl DawApp {
                         if !entry.plugin.vendor.is_empty() {
                             ui.label(&entry.plugin.vendor);
                         }
+                        // Keep Add and Assign above asynchronous preview content
+                        // so a completed capture cannot move Add
+                        // beneath a pointer that was aimed at Assign.
+                        ui.add_space(10.0);
+                        if daw_ui::primary_button(
+                            ui,
+                            if assign {
+                                "Assign instrument"
+                            } else {
+                                "Add instrument track"
+                            },
+                        )
+                        .clicked()
+                        {
+                            action = Some((entry.plugin.clone(), assign));
+                        }
+                        let can_assign = self
+                            .selected_track
+                            .and_then(|id| self.project.track(id))
+                            .is_some_and(|track| track.kind == TrackKind::Midi);
+                        if !assign
+                            && ui
+                                .add_enabled(
+                                    can_assign,
+                                    daw_ui::button_widget("Assign to selected track"),
+                                )
+                                .clicked()
+                        {
+                            action = Some((entry.plugin.clone(), true));
+                        }
+                        ui.add_space(10.0);
                         if let Some(path) = &entry.thumbnail {
                             if state
                                 .preview
@@ -565,33 +596,6 @@ impl DawApp {
                                     .color(MUTED),
                             )
                             .on_hover_text(message);
-                        }
-                        ui.add_space(10.0);
-                        if daw_ui::primary_button(
-                            ui,
-                            if assign {
-                                "Assign instrument"
-                            } else {
-                                "Add instrument track"
-                            },
-                        )
-                        .clicked()
-                        {
-                            action = Some((entry.plugin.clone(), assign));
-                        }
-                        let can_assign = self
-                            .selected_track
-                            .and_then(|id| self.project.track(id))
-                            .is_some_and(|track| track.kind == TrackKind::Midi);
-                        if !assign
-                            && ui
-                                .add_enabled(
-                                    can_assign,
-                                    daw_ui::button_widget("Assign to selected track"),
-                                )
-                                .clicked()
-                        {
-                            action = Some((entry.plugin.clone(), true));
                         }
                     } else {
                         ui.label(egui::RichText::new("Select an instrument").color(MUTED));
@@ -1173,7 +1177,10 @@ mod tests {
         let mut project = Project::new();
         let id = project.add_midi_track("Instrument");
         let instrument = Instrument::Vst3 {
-            path: "/missing/Test.vst3".into(),
+            path: directory
+                .join("missing/Test.vst3")
+                .to_string_lossy()
+                .into_owned(),
             class_id: None,
         };
         project.set_instrument(id, instrument.clone()).unwrap();
@@ -1182,6 +1189,129 @@ mod tests {
         app.modified = true;
         app.instrument_ui.owner = Some((id, instrument));
         app
+    }
+
+    #[test]
+    fn preview_completion_preserves_the_assign_action_and_track_count() {
+        for failed in [true, false] {
+            let directory = tempfile::tempdir().unwrap();
+            let ctx = egui::Context::default();
+            let mut project = Project::new();
+            let target = project.add_midi_track("Existing MIDI track");
+            let mut app = DawApp::with_context(&ctx, project, None);
+            app.library_open = true;
+            app.selected_track = Some(target);
+            let entry = CatalogEntry {
+                plugin: daw_plugins::PluginInfo {
+                    name: "Selected instrument".into(),
+                    path: directory.path().join("Fixture.vst3"),
+                    vendor: "Test vendor".into(),
+                    category: "Instrument".into(),
+                    class_id: Some("11111111111111111111111111111111".into()),
+                },
+                fingerprint: "fixture".into(),
+                thumbnail: None,
+                thumbnail_size: None,
+                status: ThumbnailStatus::Missing,
+            };
+            app.vst_catalog = vec![entry.clone()];
+            let capture: CaptureJob = Arc::new(Mutex::new(None));
+            ctx.data_mut(|data| {
+                data.insert_temp(
+                    egui::Id::new("plugin_library_state"),
+                    LibraryUi {
+                        selected: Some(entry.fingerprint.clone()),
+                        attempted: HashSet::from([entry.fingerprint.clone()]),
+                        capture: Some(capture.clone()),
+                        ..Default::default()
+                    },
+                )
+            });
+            let mut time = 0.0;
+            let mut frame = |app: &mut DawApp, events| {
+                time += 1.0 / 60.0;
+                ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1600.0, 1000.0),
+                        )),
+                        time: Some(time),
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        app.poll_plugin_previews(ctx);
+                        app.plugin_library(ctx);
+                    },
+                )
+            };
+            fn action_position(output: &egui::FullOutput, label: &str) -> egui::Pos2 {
+                output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| {
+                        if let egui::Shape::Text(text) = &shape.shape
+                            && text.galley.text() == label
+                        {
+                            Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center())
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("visible library action")
+            }
+            frame(&mut app, vec![]);
+            frame(&mut app, vec![]);
+            let loading = frame(&mut app, vec![]);
+            let assign = action_position(&loading, "Assign to selected track");
+            let add = action_position(&loading, "Add instrument track");
+            let mut completed = entry.clone();
+            if failed {
+                completed.status = ThumbnailStatus::Failed {
+                    message: "Preview failed".into(),
+                };
+            } else {
+                let png = directory.path().join("preview.png");
+                image::RgbaImage::from_pixel(16, 16, image::Rgba([120, 80, 40, 255]))
+                    .save(&png)
+                    .unwrap();
+                completed.thumbnail = Some(png);
+                completed.thumbnail_size = Some([16, 16]);
+                completed.status = ThumbnailStatus::Ready;
+            }
+            *capture.lock().unwrap() = Some(Ok(completed));
+            let ready = frame(&mut app, vec![]);
+            assert!(action_position(&ready, "Assign to selected track").distance(assign) <= 1.0);
+            assert!(action_position(&ready, "Add instrument track").distance(add) <= 1.0);
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(assign),
+                        egui::Event::PointerButton {
+                            pos: assign,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert_eq!(
+                app.project.tracks.len(),
+                1,
+                "Assign must never create a second track"
+            );
+            assert_eq!(app.selected_track, Some(target));
+            assert_eq!(
+                app.project.track(target).unwrap().instrument,
+                Instrument::Vst3 {
+                    path: entry.plugin.path.to_string_lossy().into_owned(),
+                    class_id: entry.plugin.class_id,
+                }
+            );
+        }
     }
 
     #[test]
