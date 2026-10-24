@@ -273,8 +273,11 @@ impl Project {
                 self.beats_per_bar = meter;
             }
         }
-        let ids = imported.tracks.iter().map(|track| track.id).collect();
-        self.tracks.extend(imported.tracks);
+        let ids = imported
+            .tracks
+            .into_iter()
+            .map(|track| self.insert_new_track(track))
+            .collect();
         Ok(ids)
     }
 

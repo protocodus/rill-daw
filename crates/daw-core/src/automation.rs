@@ -391,9 +391,7 @@ impl Project {
             ],
             interpolation: Interpolation::Linear,
         });
-        let id = track.id;
-        self.tracks.push(track);
-        Ok(id)
+        Ok(self.insert_new_track(track))
     }
 
     pub fn automation_lane(&self, track: u64) -> Option<&AutomationLane> {
