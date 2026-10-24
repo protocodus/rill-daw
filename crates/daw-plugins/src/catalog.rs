@@ -449,9 +449,14 @@ mod tests {
         other.class_id = Some("DEF".into());
         assert_ne!(fingerprint(&other)?, original.fingerprint);
         assert_eq!(cache.lookup(&other)?.status, ThumbnailStatus::Missing);
-        fs::File::open(info.path.join("Contents/processor"))?.set_times(
+        let processor = info.path.join("Contents/processor");
+        let original_contents = fs::read(&processor)?;
+        // Windows requires a writable handle to change file timestamps. Opening
+        // without create/truncate preserves the mtime-only invalidation fixture.
+        OpenOptions::new().write(true).open(&processor)?.set_times(
             fs::FileTimes::new().set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1234)),
         )?;
+        assert_eq!(fs::read(&processor)?, original_contents);
         assert_ne!(
             fingerprint(&info)?,
             original.fingerprint,

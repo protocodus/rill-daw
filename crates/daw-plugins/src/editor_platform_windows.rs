@@ -5,7 +5,7 @@ use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, RECT},
     Graphics::Gdi::{
         BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS,
-        DeleteDC, DeleteObject, GetDC, HBITMAP, HDC, HGDIOBJ, ReleaseDC, SelectObject,
+        DeleteDC, DeleteObject, GdiFlush, GetDC, HBITMAP, HDC, HGDIOBJ, ReleaseDC, SelectObject,
     },
     Storage::Xps::{PW_CLIENTONLY, PrintWindow},
     UI::WindowsAndMessaging::{
@@ -105,6 +105,13 @@ impl Platform {
         ensure!(
             unsafe { PrintWindow(window, bitmap.memory, PW_CLIENTONLY | 2) } != 0,
             "This native editor cannot be captured with PrintWindow"
+        );
+        // CreateDIBSection requires GDI/CPU synchronization before reading its
+        // bits. PrintWindow can return with same-thread drawing still batched.
+        // SAFETY: flush this UI thread's GDI work while the selected DIB is alive.
+        ensure!(
+            unsafe { GdiFlush() } != 0,
+            "Flushing native editor capture pixels failed"
         );
         let length = width as usize * height as usize * 4;
         // SAFETY: top-down 32bpp DIB allocated exactly width*height*4 bytes and
@@ -255,6 +262,7 @@ impl Drop for CaptureBitmap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
     use windows_sys::Win32::{
         Foundation::{LRESULT, WPARAM},
         Graphics::Gdi::{
@@ -263,9 +271,11 @@ mod tests {
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, UnregisterClassW,
-            WM_PAINT, WM_PRINTCLIENT, WNDCLASSW, WS_POPUP, WS_VISIBLE,
+            WM_PAINT, WM_PRINT, WM_PRINTCLIENT, WNDCLASSW, WS_POPUP, WS_VISIBLE,
         },
     };
+
+    static PRINT_MESSAGES: AtomicU32 = AtomicU32::new(0);
 
     unsafe fn paint(window: HWND, dc: HDC) {
         let mut rect = RECT::default();
@@ -283,7 +293,11 @@ mod tests {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        if message == WM_PRINT {
+            PRINT_MESSAGES.fetch_or(1, Ordering::Relaxed);
+        }
         if message == WM_PRINTCLIENT {
+            PRINT_MESSAGES.fetch_or(2, Ordering::Relaxed);
             unsafe {
                 paint(window, wparam as HDC);
             }
@@ -346,7 +360,12 @@ mod tests {
                 png::Decoder::new(std::io::BufReader::new(File::open(image)?)).read_info()?;
             let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
             reader.next_frame(&mut pixels)?;
-            assert_eq!(&pixels[0..3], &[255, 255, 255]);
+            assert_eq!(
+                &pixels[0..3],
+                &[255, 255, 255],
+                "Print message flags: {} (WM_PRINT=1, WM_PRINTCLIENT=2)",
+                PRINT_MESSAGES.load(Ordering::Relaxed)
+            );
             assert_eq!(&pixels[23 * 3..24 * 3], &[0, 0, 0]);
             Ok(())
         })();

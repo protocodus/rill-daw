@@ -66,12 +66,25 @@ fn a_hung_worker_is_killed_at_the_response_deadline() {
     let path = temp.path().join("hung-helper");
     std::fs::write(&path, "#!/bin/sh\nexec sleep 30\n").unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let mut child = PluginHostProcess::new(Some(path), Duration::from_millis(80)).unwrap();
+    // A concurrent fork can briefly inherit a writable descriptor for this fresh
+    // script. Retry only exec's ETXTBSY, before starting the protocol deadline.
+    // The SDK exposes spawn errors as strings, retaining the numeric OS code.
+    let spawn_deadline = Instant::now() + Duration::from_secs(2);
+    let mut child = loop {
+        match PluginHostProcess::new(Some(path.clone()), Duration::from_millis(80)) {
+            Ok(child) => break child,
+            Err(error) if error.contains("(os error 26)") && Instant::now() < spawn_deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("Failed to start hung-worker fixture: {error}"),
+        }
+    };
     let start = Instant::now();
     let error = child
         .send_command(HostCommand::StartProcessing)
         .unwrap_err();
     assert!(error.to_lowercase().contains("timed out"), "{error}");
     assert!(start.elapsed() < Duration::from_secs(2));
+    assert!(!child.is_alive(), "Timed-out worker must be terminated");
     assert!(child.send_command(HostCommand::StartProcessing).is_err());
 }
