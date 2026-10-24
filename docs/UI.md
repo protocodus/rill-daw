@@ -11,11 +11,11 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Token family | Values |
 | --- | --- |
 | Spacing | `SPACE_XS` 4, `SPACE_SM` 8, `SPACE_MD` 12, `SPACE_LG` 16, `SPACE_XL` 24 |
-| Controls | `CONTROL_HEIGHT` 30, `COMPACT_HEIGHT` 24, `SELECT_WIDTH` 160 |
-| Corners | `RADIUS` 3 |
+| Controls | `CONTROL_HEIGHT` 34, `COMPACT_HEIGHT` 24, `SELECT_WIDTH` 160 |
+| Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
 | Typography | Caption 13, note 14, button/body 15, subtitle 16, title 20; canvas 12, track title 14 |
 
-Sizes are logical screen points and follow egui's display scaling. Surfaces use neutral grays and a restrained luminance hierarchy. Action buttons have a quiet fill; inputs retain visible boundaries. Accent color identifies active choices and keyboard focus. Cards and utility windows have no shadows, and sections use spacing rather than nested outlines. Body and button text remain 15 points, with 30-point action targets. Avoid introducing a second app-specific palette or copied spacing scale.
+Sizes are logical screen points and follow egui's display scaling. Surfaces use soft slate in Dark and warm mist in Light, with a muted sage accent and a restrained luminance hierarchy. Action buttons have a quiet fill; inputs retain visible boundaries. Accent color identifies active choices and keyboard focus. Cards and controls stay flat; utility windows use a clearer border and a soft shadow to distinguish them from the workspace. Sections use spacing rather than nested outlines. Body and button text remain 15 points, with 34-point action targets. Avoid introducing a second app-specific palette or copied spacing scale.
 
 ## Components
 
@@ -43,10 +43,14 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Interactive parameter curves | `curve_editor`, `CurvePoint`, `CurveView`, `CurveEdit` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
 | Plug-in library entries and previews | `catalog_item`, `image_preview` |
-| Surfaces | `panel`, `card`, `inset` |
+| Surfaces | `panel`, `card`, `inset`, `soft_surface`, `paint_ambient` |
 | Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
+
+Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point inner margins and scroll within the available viewport. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
+
+`paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases remain flat. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
 
 Use native response composition rather than adding a second event system:
 

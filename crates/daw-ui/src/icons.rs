@@ -509,6 +509,7 @@ impl Widget for IconButton {
         // prevents horizontal_wrapped from wrapping individual buttons.
         let previous_style = ui.style().clone();
         ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
+        ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::NONE;
         let output = self.button.atom_ui(ui);
         ui.set_style(previous_style);
         if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {

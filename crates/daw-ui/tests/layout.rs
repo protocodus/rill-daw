@@ -38,7 +38,8 @@ fn workspace_header_stays_at_the_top_and_back_keeps_native_keyboard_accessibilit
                     |ui| controls::button(ui, "Properties"),
                 );
                 assert!(
-                    header.response.rect.height() <= 48.0,
+                    header.response.rect.height()
+                        <= controls::tokens::CONTROL_HEIGHT + 2.0 * controls::tokens::SPACE_SM,
                     "header must not consume canvas height: {:?}",
                     header.response.rect
                 );

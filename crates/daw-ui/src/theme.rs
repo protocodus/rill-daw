@@ -34,6 +34,7 @@ pub struct Palette {
     pub panel: Color32,
     pub raised: Color32,
     pub line: Color32,
+    pub window_border: Color32,
     pub text: Color32,
     pub muted: Color32,
     pub accent: Color32,
@@ -57,20 +58,21 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 pub const DARK: Palette = Palette {
-    bg: rgb(28, 29, 31),
-    panel: rgb(35, 36, 38),
-    raised: rgb(42, 43, 46),
-    line: rgb(57, 59, 62),
-    text: rgb(225, 227, 230),
-    muted: rgb(163, 168, 174),
-    accent: rgb(115, 205, 178),
-    orange: rgb(245, 178, 108),
-    track_selected: rgb(47, 58, 58),
-    track_alternate: rgb(32, 33, 35),
-    grid_minor: rgb(45, 47, 51),
-    grid_bar: rgb(71, 75, 81),
-    control_fill: rgb(49, 51, 54),
-    control_hover: rgb(58, 61, 65),
+    bg: rgb(27, 31, 33),
+    panel: rgb(34, 39, 41),
+    raised: rgb(41, 47, 49),
+    line: rgb(58, 67, 68),
+    window_border: rgb(88, 104, 104),
+    text: rgb(229, 234, 232),
+    muted: rgb(173, 182, 182),
+    accent: rgb(145, 190, 177),
+    orange: rgb(221, 176, 126),
+    track_selected: rgb(49, 67, 63),
+    track_alternate: rgb(31, 36, 38),
+    grid_minor: rgb(43, 50, 53),
+    grid_bar: rgb(66, 77, 79),
+    control_fill: rgb(46, 54, 56),
+    control_hover: rgb(56, 66, 67),
     piano_black: rgb(27, 33, 41),
     piano_white: rgb(207, 215, 224),
     note: rgb(83, 156, 238),
@@ -80,20 +82,21 @@ pub const DARK: Palette = Palette {
     piano_rows_white: [rgb(42, 48, 56), rgb(40, 57, 76), rgb(44, 65, 88)],
 };
 pub const LIGHT: Palette = Palette {
-    bg: rgb(247, 247, 246),
-    panel: rgb(239, 240, 239),
-    raised: rgb(250, 250, 249),
-    line: rgb(211, 214, 213),
-    text: rgb(38, 42, 43),
-    muted: rgb(91, 99, 101),
-    accent: rgb(20, 105, 81),
-    orange: rgb(153, 77, 0),
-    track_selected: rgb(217, 230, 225),
-    track_alternate: rgb(236, 238, 237),
-    grid_minor: rgb(222, 225, 224),
-    grid_bar: rgb(178, 186, 184),
-    control_fill: rgb(226, 230, 228),
-    control_hover: rgb(215, 222, 219),
+    bg: rgb(246, 247, 244),
+    panel: rgb(239, 242, 238),
+    raised: rgb(251, 252, 249),
+    line: rgb(204, 214, 207),
+    window_border: rgb(153, 172, 160),
+    text: rgb(37, 46, 44),
+    muted: rgb(82, 96, 93),
+    accent: rgb(47, 105, 90),
+    orange: rgb(139, 83, 31),
+    track_selected: rgb(216, 233, 225),
+    track_alternate: rgb(232, 237, 232),
+    grid_minor: rgb(222, 229, 223),
+    grid_bar: rgb(178, 191, 183),
+    control_fill: rgb(228, 234, 228),
+    control_hover: rgb(218, 227, 221),
     piano_black: rgb(49, 59, 72),
     piano_white: rgb(255, 255, 255),
     note: rgb(34, 105, 183),
@@ -171,29 +174,67 @@ pub fn apply(ctx: &egui::Context) {
         style.visuals.extreme_bg_color = colors.bg;
         style.visuals.faint_bg_color = colors.raised;
         style.visuals.override_text_color = Some(colors.text);
+        style.visuals.weak_text_color = Some(colors.muted);
+        style.visuals.text_edit_bg_color = Some(colors.bg);
+        style.visuals.code_bg_color = colors.bg;
+        style.visuals.hyperlink_color = colors.accent;
+        style.visuals.warn_fg_color = colors.orange;
+        style.visuals.text_cursor.stroke = Stroke::new(1.5_f32, colors.accent);
         style.visuals.selection.bg_fill = colors.track_selected;
         style.visuals.selection.stroke = Stroke::new(1.0_f32, colors.accent);
-        style.visuals.window_shadow = egui::epaint::Shadow::NONE;
-        style.visuals.popup_shadow = egui::epaint::Shadow::NONE;
-        style.visuals.window_stroke = Stroke::new(1.0_f32, colors.line);
+        style.visuals.window_shadow = egui::epaint::Shadow {
+            offset: [0, 8],
+            blur: 24,
+            spread: 0,
+            color: Color32::from_black_alpha(if theme == egui::Theme::Dark { 85 } else { 36 }),
+        };
+        style.visuals.popup_shadow = egui::epaint::Shadow {
+            offset: [0, 4],
+            blur: 16,
+            spread: 0,
+            color: Color32::from_black_alpha(if theme == egui::Theme::Dark { 64 } else { 28 }),
+        };
+        style.visuals.window_highlight_topmost = false;
+        style.visuals.window_stroke =
+            Stroke::new(tokens::WINDOW_BORDER_WIDTH, colors.window_border);
         style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, colors.line);
         style.visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, colors.muted);
+        style.visuals.widgets.noninteractive.bg_fill = colors.bg;
+        style.visuals.widgets.noninteractive.weak_bg_fill = colors.panel;
         style.visuals.widgets.inactive.bg_fill = colors.control_fill;
         style.visuals.widgets.inactive.weak_bg_fill = colors.raised;
         style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
+        style.visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, colors.text);
         style.visuals.widgets.hovered.bg_fill = colors.control_hover;
         style.visuals.widgets.hovered.weak_bg_fill = colors.control_hover;
         style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.line);
+        style.visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, colors.text);
         style.visuals.widgets.active.bg_fill = colors.track_selected;
         style.visuals.widgets.active.weak_bg_fill = colors.track_selected;
         style.visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, colors.accent);
-        style.visuals.widgets.inactive.corner_radius = tokens::RADIUS.into();
-        style.visuals.widgets.hovered.corner_radius = tokens::RADIUS.into();
-        style.visuals.widgets.active.corner_radius = tokens::RADIUS.into();
-        style.visuals.window_corner_radius = tokens::RADIUS.into();
-        style.visuals.menu_corner_radius = tokens::RADIUS.into();
+        style.visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, colors.text);
+        style.visuals.widgets.open.bg_fill = colors.track_selected;
+        style.visuals.widgets.open.weak_bg_fill = colors.track_selected;
+        style.visuals.widgets.open.bg_stroke = Stroke::new(1.0_f32, colors.accent);
+        style.visuals.widgets.open.fg_stroke = Stroke::new(1.0_f32, colors.text);
+        for visuals in [
+            &mut style.visuals.widgets.noninteractive,
+            &mut style.visuals.widgets.inactive,
+            &mut style.visuals.widgets.hovered,
+            &mut style.visuals.widgets.active,
+            &mut style.visuals.widgets.open,
+        ] {
+            visuals.corner_radius = tokens::RADIUS.into();
+            visuals.expansion = 0.0;
+        }
+        style.visuals.window_corner_radius = tokens::SURFACE_RADIUS.into();
+        style.visuals.menu_corner_radius = tokens::SURFACE_RADIUS.into();
         style.spacing.item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
-        style.spacing.button_padding = egui::vec2(tokens::BUTTON_PADDING_X, tokens::SPACE_XS);
+        style.spacing.button_padding =
+            egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+        style.spacing.window_margin = (tokens::POPUP_MARGIN as i8).into();
+        style.spacing.menu_margin = (tokens::SPACE_SM as i8).into();
+        style.spacing.icon_spacing = tokens::SPACE_SM;
         style.spacing.interact_size.y = tokens::CONTROL_HEIGHT;
         style.spacing.combo_width = tokens::SELECT_WIDTH;
         for (text_style, size) in [

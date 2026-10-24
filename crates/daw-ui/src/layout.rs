@@ -7,9 +7,12 @@ use std::hash::Hash;
 /// A compact action row which wraps as complete controls when space is limited.
 pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
     egui::Frame::new()
-        .inner_margin(tokens::SPACE_SM)
+        .inner_margin(egui::Margin::symmetric(
+            tokens::SPACE_MD as i8,
+            tokens::SPACE_SM as i8,
+        ))
         .show(ui, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_XS, tokens::SPACE_XS);
+            ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
             ui.horizontal_wrapped(contents).inner
         })
 }
@@ -17,7 +20,7 @@ pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResp
 /// Keep related controls together inside a wrapping toolbar.
 pub fn toolbar_group<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
     ui.scope(|ui| {
-        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
         ui.horizontal(contents).inner
     })
 }
@@ -56,9 +59,13 @@ pub fn workspace_header<R>(
     title: impl Into<WidgetText>,
     actions: impl FnOnce(&mut Ui) -> R,
 ) -> WorkspaceHeaderResponse<R> {
-    let row = egui::Frame::new()
-        .inner_margin(tokens::SPACE_SM)
-        .show(ui, |ui| {
+    let row = crate::soft_surface(
+        ui,
+        egui::Frame::new().inner_margin(egui::Margin::symmetric(
+            tokens::SPACE_MD as i8,
+            tokens::SPACE_SM as i8,
+        )),
+        |ui| {
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let inner = actions(ui);
@@ -80,7 +87,8 @@ pub fn workspace_header<R>(
                 .inner
             })
             .inner
-        });
+        },
+    );
     WorkspaceHeaderResponse {
         back: row.inner.0,
         inner: row.inner.1,
@@ -107,13 +115,18 @@ pub fn mixer_strip<R>(
                 colors.panel
             })
             .inner_margin(tokens::SPACE_MD);
-        let result = frame.show(ui, |ui| {
+        let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_width((width - 2.0 * tokens::SPACE_MD).max(0.0));
                 contents(ui)
             })
             .inner
-        });
+        };
+        let result = if selected {
+            crate::soft_surface(ui, frame, content)
+        } else {
+            frame.show(ui, content)
+        };
         let rect = result.response.rect;
         ui.painter().line_segment(
             [rect.right_top(), rect.right_bottom()],

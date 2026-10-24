@@ -131,3 +131,17 @@ cover live note drags, quantize preview/cancel/apply, and rejected boundary edit
 ```sh
 cargo test --locked -p daw-app --test clones_e2e
 ```
+
+`components_e2e` checks shared controls and popup navigation at the 1100×720 minimum viewport in both
+appearances and at 1×/2× display density. It exercises settings choices, text
+fields, toggles, library search/filtering, and returning between focused views;
+Cancel preserves the active settings and project. Surface tests verify bounded
+mesh work, clipping, transparent edges, and unchanged interaction/layout. Shared
+menu regressions cover fast nested-menu clicks, leaf selection, keyboard access,
+Escape, and outside-click dismissal. Existing MIDI scenarios also enforce a
+compact wrapped toolbar at a narrow desktop viewport.
+
+```sh
+cargo test --locked -p daw-ui
+cargo test --locked -p daw-app --test components_e2e
+```

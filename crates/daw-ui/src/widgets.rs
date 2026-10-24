@@ -34,7 +34,8 @@ pub fn menu_button<R>(
 ) -> InnerResponse<Option<R>> {
     let label = label.into();
     if let Some(icon) = crate::Icon::for_label(label.text()) {
-        let response = ui.menu_button(
+        let response = native_menu_button(
+            ui,
             (
                 egui::Atom::custom(egui::Id::new("rill-menu-icon"), egui::Vec2::splat(18.0)),
                 label,
@@ -55,8 +56,42 @@ pub fn menu_button<R>(
         );
         response
     } else {
-        ui.menu_button(label, add_contents)
+        native_menu_button(ui, label, add_contents)
     }
+}
+
+fn native_menu_button<'a, R>(
+    ui: &mut Ui,
+    atoms: impl egui::IntoAtoms<'a>,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    use egui::containers::menu::{MenuConfig, MenuState, SubMenu, SubMenuButton};
+    if !egui::containers::menu::is_in_menu(ui) {
+        return ui.menu_button(atoms, add_contents);
+    }
+    let submenu = SubMenuButton::new(atoms);
+    let id = ui.next_auto_id();
+    let open = MenuState::from_ui(ui, |state, _| {
+        state.open_item == Some(SubMenu::id_from_widget_id(id))
+    });
+    let inactive = ui.visuals().widgets.inactive;
+    if open {
+        ui.visuals_mut().widgets.inactive = ui.visuals().widgets.open;
+    }
+    let response = ui.add(submenu.button);
+    ui.visuals_mut().widgets.inactive = inactive;
+    let mut config = MenuConfig::find(ui);
+    if response.clicked() {
+        // A new submenu's provisional first-frame area can cover this button.
+        // Its subsequent move must not turn the opening click into an outside
+        // click. All later leaf/outside clicks retain the inherited behavior.
+        config.close_behavior = egui::PopupCloseBehavior::IgnoreClicks;
+    }
+    let inner = submenu
+        .sub_menu
+        .config(config)
+        .show(ui, &response, add_contents);
+    InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
 /// A searchable or editable popover stays open while its internal controls are used.
@@ -132,15 +167,14 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
         )
     });
     if ui.is_rect_visible(rect) {
+        let colors = theme::palette(ui.ctx());
         let visuals = ui.style().interact(&response);
         let track = egui::Rect::from_center_size(
             egui::pos2(rect.left() + tokens::SWITCH_WIDTH * 0.5, rect.center().y),
             egui::vec2(tokens::SWITCH_WIDTH, tokens::SWITCH_HEIGHT),
         );
         let fill = if *value {
-            theme::palette(ui.ctx())
-                .accent
-                .gamma_multiply(if ui.is_enabled() { 0.65 } else { 0.25 })
+            colors.accent
         } else {
             visuals.bg_fill
         };
@@ -161,7 +195,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
         ui.painter().circle_filled(
             egui::pos2(center_x, track.center().y),
             radius,
-            visuals.text_color(),
+            if *value { colors.bg } else { colors.muted },
         );
         ui.painter().galley(
             egui::pos2(track.right() + gap, rect.center().y - galley.size().y * 0.5),
@@ -287,6 +321,11 @@ pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Re
         egui::TextEdit::singleline(value)
             .hint_text(hint)
             .desired_width(width.max(0.0))
+            .margin(egui::vec2(
+                tokens::BUTTON_PADDING_X,
+                tokens::BUTTON_PADDING_Y,
+            ))
+            .vertical_align(egui::Align::Center)
             .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
     )
 }
@@ -448,40 +487,55 @@ pub fn panel(ctx: &egui::Context) -> Frame {
     Frame::new()
         .fill(theme::palette(ctx).panel)
         .inner_margin(tokens::SPACE_LG)
-        .corner_radius(tokens::RADIUS)
+        .corner_radius(tokens::SURFACE_RADIUS)
 }
 
 pub fn card(ctx: &egui::Context) -> Frame {
     Frame::new()
         .fill(theme::palette(ctx).raised)
         .inner_margin(tokens::SPACE_MD)
-        .corner_radius(tokens::RADIUS)
+        .corner_radius(tokens::SURFACE_RADIUS)
 }
 
 pub fn inset(ctx: &egui::Context) -> Frame {
     Frame::new()
         .fill(theme::palette(ctx).bg)
         .inner_margin(tokens::SPACE_SM)
-        .corner_radius(tokens::RADIUS)
+        .corner_radius(tokens::SURFACE_RADIUS)
+}
+
+fn popup_bounds(ctx: &egui::Context) -> egui::Rect {
+    let viewport = ctx.content_rect();
+    egui::Rect::from_min_max(
+        viewport.min + egui::vec2(tokens::POPUP_MARGIN, tokens::POPUP_TOP),
+        viewport.max - egui::Vec2::splat(tokens::POPUP_MARGIN),
+    )
+}
+
+fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
+    // egui adds the frame, a padded native title row, and its separator outside
+    // the body. Reserve all of them so content cannot hide the close button or
+    // grow beyond the viewport when an asynchronous view adds more rows.
+    let frame = 2.0 * (tokens::POPUP_MARGIN + tokens::WINDOW_BORDER_WIDTH);
+    let title = tokens::CONTROL_HEIGHT + 2.0 * tokens::POPUP_MARGIN + tokens::WINDOW_BORDER_WIDTH;
+    (popup_bounds(ctx).size() - egui::vec2(frame, frame + title)).max(egui::vec2(160.0, 120.0))
 }
 
 /// On-demand property/utility window with the same surfaces and spacing as the
 /// main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
 pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
-    let viewport = ctx.content_rect();
-    let available = egui::Rect::from_min_max(
-        viewport.min + egui::vec2(tokens::SPACE_XL, 104.0),
-        viewport.max - egui::Vec2::splat(tokens::SPACE_XL),
-    );
+    let available = popup_bounds(ctx);
     egui::Window::new(title)
-        .frame(panel(ctx).stroke(egui::Stroke::new(1.0_f32, theme::palette(ctx).line)))
+        .frame(
+            panel(ctx)
+                .inner_margin(tokens::POPUP_MARGIN)
+                .stroke(ctx.style().visuals.window_stroke)
+                .shadow(ctx.style().visuals.window_shadow),
+        )
         .default_width(480.0)
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(available.center())
-        .max_size(
-            (available.size() - egui::Vec2::splat(2.0 * tokens::SPACE_LG))
-                .max(egui::vec2(160.0, 120.0)),
-        )
+        .max_size(popup_body_size(ctx))
         .constrain_to(available)
         .movable(false)
         .scroll([false, true])
@@ -492,15 +546,10 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
 /// A focused canvas tool, opened on demand over the arrangement. Its viewport
 /// bounds leave the transport accessible and keep close controls on screen.
 pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
-    let viewport = ctx.content_rect();
-    let size = egui::vec2(
-        (viewport.width() - 96.0).max(320.0),
-        (viewport.height() - 196.0).max(240.0),
-    );
     popup(title, ctx)
         .pivot(egui::Align2::LEFT_TOP)
-        .fixed_pos(viewport.min + egui::vec2(24.0, 112.0))
-        .fixed_size(size)
+        .fixed_pos(popup_bounds(ctx).min)
+        .fixed_size(popup_body_size(ctx))
         .movable(false)
 }
 

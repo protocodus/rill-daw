@@ -325,36 +325,55 @@ impl DawApp {
                 daw_ui::text::TextRole::Note,
                 format!("{} · {}", pitch_class(self.root), self.scale.name()),
             );
-        });
-        if self.tool == Tool::MultiDraw {
-            daw_ui::toolbar(ui, |ui| {
-                daw_ui::select("midi_stack", state.stack.name())
-                    .show_ui(ui, |ui| {
-                        for stack in [NoteStack::Chord, NoteStack::Scale] {
-                            daw_ui::selectable_value(ui, &mut state.stack, stack, stack.name());
+            if self.tool == Tool::MultiDraw {
+                // Keep the active tool's options with its toolbar. At narrower
+                // widths they share the wrapped row instead of adding a third
+                // padded bar above the note canvas.
+                daw_ui::toolbar_group(ui, |ui| {
+                    daw_ui::select("midi_stack", state.stack.name())
+                        .show_ui(ui, |ui| {
+                            for stack in [NoteStack::Chord, NoteStack::Scale] {
+                                daw_ui::selectable_value(ui, &mut state.stack, stack, stack.name());
+                            }
+                        })
+                        .response
+                        .on_hover_text("Multi-draw fills the clicked octave");
+                    match state.stack {
+                        NoteStack::Single => {}
+                        NoteStack::Chord => {
+                            daw_ui::select("active_midi_chord", state.chord.name()).show_ui(
+                                ui,
+                                |ui| {
+                                    for chord in Chord::ALL {
+                                        daw_ui::selectable_value(
+                                            ui,
+                                            &mut state.chord,
+                                            chord,
+                                            chord.name(),
+                                        );
+                                    }
+                                },
+                            );
                         }
-                    })
-                    .response
-                    .on_hover_text("Multi-draw fills the clicked octave");
-                match state.stack {
-                    NoteStack::Single => {}
-                    NoteStack::Chord => {
-                        daw_ui::select("active_midi_chord", state.chord.name()).show_ui(ui, |ui| {
-                            for chord in Chord::ALL {
-                                daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name());
-                            }
-                        });
+                        NoteStack::Scale => {
+                            daw_ui::select("active_midi_scale", self.scale.name()).show_ui(
+                                ui,
+                                |ui| {
+                                    for scale in Scale::ALL {
+                                        daw_ui::selectable_value(
+                                            ui,
+                                            &mut self.scale,
+                                            scale,
+                                            scale.name(),
+                                        );
+                                    }
+                                },
+                            );
+                        }
                     }
-                    NoteStack::Scale => {
-                        daw_ui::select("active_midi_scale", self.scale.name()).show_ui(ui, |ui| {
-                            for scale in Scale::ALL {
-                                daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name());
-                            }
-                        });
-                    }
-                }
-            });
-        }
+                });
+            }
+        });
         let mut quantize_controls = serde_json::Value::Null;
         if let Some(preview) = &mut state.quantize {
             let mut apply = false;

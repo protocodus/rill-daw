@@ -1213,7 +1213,7 @@ impl DawApp {
     }
     fn transport(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("transport")
-            .frame(daw_ui::panel(ctx).inner_margin(8))
+            .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if daw_ui::button(ui, "Start")
@@ -1334,7 +1334,7 @@ impl DawApp {
 
     fn menus(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("application-menu")
-            .frame(daw_ui::panel(ctx).inner_margin(6))
+            .frame(daw_ui::panel(ctx).inner_margin(6).corner_radius(0))
             .show(ctx, |ui| {
                 daw_ui::menu_bar(ui, |ui| {
                     daw_ui::menu_button(ui, "File", |ui| {
@@ -1906,7 +1906,7 @@ impl DawApp {
             || self.waveform_warning.is_some()
         {
             egui::TopBottomPanel::bottom("status")
-                .frame(daw_ui::panel(ctx).inner_margin(8))
+                .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         if !self.error && self.waveform_warning.is_none() {
@@ -1949,12 +1949,13 @@ impl DawApp {
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
         egui::CentralPanel::default()
-            .frame(daw_ui::inset(ctx).inner_margin(0))
+            .frame(daw_ui::inset(ctx).inner_margin(0).corner_radius(0))
             .show(ctx, |ui| {
                 // Only the active task owns the canvas. Keeping a disabled
                 // arrangement underneath tools adds visual noise and duplicate
                 // controls to accessibility/automation trees.
                 if utility_open {
+                    daw_ui::paint_ambient(ui.painter(), ui.max_rect());
                     self.drop_target = None;
                     return;
                 }
