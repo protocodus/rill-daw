@@ -57,13 +57,16 @@ fn channel_meters_follow_own_fader_pan_bus_and_send_without_changing_audio() {
         let meters = ChannelMeters::new(&project);
         let mut metered = Renderer::new_with_workers(&project, 48_000, false, workers).unwrap();
         metered.attach_channel_meters(&meters);
+        if let Some(pool) = &metered.workers {
+            pool.prime_completion_wait_for_test();
+        }
         let mut reference = Renderer::new_with_workers(&project, 48_000, false, workers).unwrap();
         let mut output = [[0.0; 2]; BLOCK];
         let mut positions = [0.0; BLOCK];
         let mut dry = output;
         let mut dry_positions = positions;
-        // Prime persistent worker-channel bookkeeping before measuring the
-        // steady-state dispatcher, as the existing allocation suite does.
+        // Prime processing buffers separately from the explicit blocking-channel
+        // warm-up above; a fast render alone may never need to wait for a worker.
         metered.render(&mut output, &mut positions).unwrap();
         reference.render(&mut dry, &mut dry_positions).unwrap();
         assert_eq!(output, dry);

@@ -347,6 +347,11 @@ fn disconnected_worker_restores_dispatched_and_unsent_nodes_without_drop_deadloc
 fn prepared_parallel_dispatch_reuses_its_buffers_without_allocating() {
     let (_directory, project, _) = fixture();
     let mut renderer = Renderer::new_with_workers(&project, 48_000, false, 4).unwrap();
+    renderer
+        .workers
+        .as_ref()
+        .unwrap()
+        .prime_completion_wait_for_test();
     let mut audio = [[0.0; 2]; 1024];
     let mut positions = [0.0; 1024];
     renderer.render(&mut audio, &mut positions).unwrap();
