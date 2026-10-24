@@ -565,6 +565,71 @@ fn canceling_setup_discards_a_buffer_dropdown_change_without_touching_active_set
     assert!(!harness.app.history.can_undo());
 }
 
+fn setup_with_two_rate_device() -> Harness {
+    let mut harness = Harness::new(0.0);
+    harness.app.settings.sample_rate = 48_000;
+    harness.app.settings.device_name = None;
+    harness.app.setup_draft = harness.app.settings.clone();
+    harness.app.setup_page = SetupPage::Audio;
+    harness.app.devices = vec![daw_engine::DeviceInfo {
+        name: "Two-rate device fixture".into(),
+        is_default: true,
+        supported_sample_rates: vec![44_100, 48_000],
+        channels: 2,
+    }];
+    harness
+}
+
+#[test]
+fn native_setup_filters_sample_rates_to_the_selected_device_capabilities() {
+    let mut harness = setup_with_two_rate_device();
+    // Inject capabilities directly so no physical device is queried or opened.
+    harness.app.setup_open = true;
+    let output = harness.settle_full();
+    let dropdown = text_position(&output, "48000 Hz", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(dropdown);
+    let output = harness.settle_full();
+    assert!(has_text(&output, "44100 Hz"));
+    assert!(!has_text(&output, "88200 Hz"));
+    assert!(!has_text(&output, "96000 Hz"));
+    let choice = text_position(&output, "44100 Hz", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(choice);
+    harness.settle_full();
+    assert_eq!(harness.app.setup_draft.sample_rate, 44_100);
+    assert_eq!(harness.app.settings.sample_rate, 48_000);
+    assert!(harness.app.engine.is_none());
+}
+
+#[test]
+fn offline_setup_discards_device_inventory_and_keeps_portable_export_rates() {
+    let mut harness = setup_with_two_rate_device();
+    harness.app.audio_device_enabled = false;
+    harness.app.open_popup(PopupKind::Setup);
+    assert!(harness.app.devices.is_empty());
+    let output = harness.settle_full();
+    let dropdown = text_position(&output, "48000 Hz", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(dropdown);
+    let output = harness.settle_full();
+    for rate in ["44100 Hz", "48000 Hz", "88200 Hz", "96000 Hz"] {
+        assert!(has_text(&output, rate), "Missing portable rate {rate}");
+    }
+    let choice = text_position(&output, "96000 Hz", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(choice);
+    let output = harness.settle_full();
+    assert_eq!(harness.app.setup_draft.sample_rate, 96_000);
+    let refresh = text_position(&output, "Refresh devices", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(refresh);
+    let output = harness.settle_full();
+    assert!(harness.app.devices.is_empty());
+    assert_eq!(harness.app.setup_draft.sample_rate, 96_000);
+    let cancel = text_position(&output, "Cancel", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(cancel);
+    harness.settle_full();
+    assert_eq!(harness.app.settings.sample_rate, 48_000);
+    assert!(!harness.app.setup_open);
+    assert!(harness.app.engine.is_none());
+}
+
 #[test]
 fn leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the_clip() {
     let mut harness = Harness::new(0.0);

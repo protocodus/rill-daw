@@ -40,6 +40,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Track color | `color_edit` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
 | Interactive parameter curves | `curve_editor`, `CurvePoint`, `CurveView`, `CurveEdit` |
+| Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
 | Plug-in library entries and previews | `catalog_item`, `image_preview` |
 | Surfaces | `panel`, `card`, `inset` |
 | Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
@@ -125,6 +126,20 @@ cargo clippy -p daw-ui --all-targets -- -D warnings
 `workspace_popup(title, ctx)` remains available for a large utility canvas such as automation, bounded below the transport. Clip Editor and Mixer use the central workspace and `workspace_header` instead. Utilities do not paint an inactive arranger behind them. Menu commands, Back, Escape, and window close use the same navigation state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
 
 `curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.
+
+`crossfade_editor` edits two normalized cubic Bézier control points and displays
+the paired incoming and outgoing gains. Their sum is one. Drag a handle or use
+arrow keys (Shift for fine adjustments); Home restores a linear fade. Handle
+times stay ordered and gains remain bounded. The response includes change/drag
+state and handle rectangles for application undo and interaction tests.
+`paint_crossfade` reuses the same curve drawing in a timeline region without
+adding layout or input targets.
+
+The transport's **Loop** toggle enables repetition. **Range** opens Start beat and
+End beat controls; both use one-based beat numbers, and the end is exclusive.
+The current range remains visible beside the picker. Range edits and enabling
+Loop are undoable and saved with the project. WAV export renders the complete
+song regardless of the transport loop.
 
 ## Device library and effect chains
 

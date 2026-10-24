@@ -677,6 +677,8 @@ impl Harness {
             "midi_editor": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("midi_editor_diagnostics"))),
             "audio_editor": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("audio_editor_diagnostics"))),
             "timeline": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("timeline_diagnostics"))),
+            "crossfade": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("crossfade_diagnostics"))),
+            "join_pending": self.app.join_ui.pending(),
             "plugin_catalog": self.app.vst_catalog.iter().map(|entry| json!({
                 "name": entry.plugin.name, "class_id": entry.plugin.class_id,
                 "thumbnail": entry.thumbnail, "status": format!("{:?}", entry.status),
@@ -690,6 +692,7 @@ impl Harness {
                 "properties": self.app.inspector_open, "instrument": self.app.instrument_open,
                 "effects": self.app.effects_open, "routing": self.app.routing_open,
                 "automation": self.app.automation_open, "history": self.app.history_open,
+                "crossfade": self.app.crossfade_open, "join": self.app.join_open,
             },
             "automation_plot_rect": self.ctx.data(|data| data.get_temp::<Rect>(egui::Id::new("automation_plot_rect"))).map(|rect| json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})),
             "settings": self.app.settings,

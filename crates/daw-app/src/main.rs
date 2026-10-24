@@ -3,9 +3,11 @@ mod arrangement;
 mod audio_editor;
 mod automation;
 mod automation_editor;
+mod crossfade_ui;
 mod editor;
 mod engine_lifecycle;
 mod history_ui;
+mod join_ui;
 mod library;
 mod midi_editor;
 mod plugin_ui;
@@ -32,7 +34,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup|crossfade|join]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -120,6 +122,8 @@ fn main() -> anyhow::Result<()> {
                 Some("clip") => app.view = app::WorkspaceView::Clip,
                 Some("library") => app.open_popup(app::PopupKind::Library),
                 Some("automation") => app.open_popup(app::PopupKind::Automation),
+                Some("crossfade") => app.open_popup(app::PopupKind::Crossfade),
+                Some("join") => app.open_popup(app::PopupKind::Join),
                 Some("routing") => app.open_popup(app::PopupKind::Routing),
                 Some("instrument") => app.open_popup(app::PopupKind::Instrument),
                 Some("rack" | "effects") => app.open_popup(app::PopupKind::Effects),

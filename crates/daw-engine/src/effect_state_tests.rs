@@ -32,7 +32,11 @@ fn bypassed_effect_presets_roundtrip_without_loading_and_preserve_audio() -> Res
     let mut slot = EffectSlot::new(
         "Bypassed",
         Effect::Vst3 {
-            path: "/not-installed.vst3".into(),
+            path: temp
+                .path()
+                .join("not-installed.vst3")
+                .to_string_lossy()
+                .into_owned(),
             class_id: None,
         },
     );
@@ -96,7 +100,11 @@ fn native_effect_state_recall_overrides_and_live_slot_updates_change_audio() -> 
         let mut bypassed = EffectSlot::new(
             "Bypassed",
             Effect::Vst3 {
-                path: "/missing.vst3".into(),
+                path: temp
+                    .path()
+                    .join("missing.vst3")
+                    .to_string_lossy()
+                    .into_owned(),
                 class_id: None,
             },
         );

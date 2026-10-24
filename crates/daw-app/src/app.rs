@@ -27,6 +27,8 @@ pub enum PopupKind {
     Routing,
     Automation,
     History,
+    Crossfade,
+    Join,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -99,6 +101,9 @@ pub struct DawApp {
     pub routing_open: bool,
     pub automation_open: bool,
     pub history_open: bool,
+    pub crossfade_open: bool,
+    pub join_open: bool,
+    pub(crate) join_ui: crate::join_ui::JoinUi,
     pub last_render_errors: u64,
     pub devices: Vec<DeviceInfo>,
     pub status: String,
@@ -193,6 +198,9 @@ impl DawApp {
             routing_open: false,
             automation_open: false,
             history_open: false,
+            crossfade_open: false,
+            join_open: false,
+            join_ui: Default::default(),
             last_render_errors: 0,
             devices: Vec::new(),
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
@@ -241,6 +249,8 @@ impl DawApp {
             (self.routing_open, PopupKind::Routing),
             (self.automation_open, PopupKind::Automation),
             (self.history_open, PopupKind::History),
+            (self.crossfade_open, PopupKind::Crossfade),
+            (self.join_open, PopupKind::Join),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -250,6 +260,7 @@ impl DawApp {
     }
 
     fn hide_focused_view(&mut self) {
+        self.join_ui.cancel();
         self.library_open = false;
         self.setup_open = false;
         self.inspector_open = false;
@@ -258,6 +269,8 @@ impl DawApp {
         self.routing_open = false;
         self.automation_open = false;
         self.history_open = false;
+        self.crossfade_open = false;
+        self.join_open = false;
         self.view = WorkspaceView::Arrangement;
     }
 
@@ -331,6 +344,8 @@ impl DawApp {
             PopupKind::Routing => self.routing_open = true,
             PopupKind::Automation => self.automation_open = true,
             PopupKind::History => self.history_open = true,
+            PopupKind::Crossfade => self.crossfade_open = true,
+            PopupKind::Join => self.join_open = true,
         }
     }
 
@@ -381,7 +396,9 @@ impl DawApp {
                     self.scan_plugins();
                 }
             }
+            PopupKind::Join => self.prepare_join(),
             PopupKind::Inspector
+            | PopupKind::Crossfade
             | PopupKind::Effects
             | PopupKind::Routing
             | PopupKind::Automation
@@ -398,6 +415,12 @@ impl DawApp {
     }
 
     fn refresh_devices(&mut self) {
+        if !self.audio_device_enabled {
+            // Offline/headless work uses the portable render rates, independent
+            // of whatever audio hardware happens to be attached to this host.
+            self.devices.clear();
+            return;
+        }
         match daw_engine::list_output_devices() {
             Ok(devices) => self.devices = devices,
             Err(error) => self.message(Err(error), ""),
@@ -994,10 +1017,16 @@ impl DawApp {
             }
             return;
         }
-        let curve_focused = self.automation_open
+        let curve_focused = (self.crossfade_open
             && ctx
-                .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
-                .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
+                .data(|data| data.get_temp::<[egui::Id; 3]>(egui::Id::new("crossfade_curve_focus")))
+                .is_some_and(|ids| {
+                    ctx.memory(|memory| ids.iter().any(|id| memory.has_focus(*id)))
+                }))
+            || self.automation_open
+                && ctx
+                    .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
+                    .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
         if (!ctx.wants_keyboard_input() || curve_focused)
             && ctx.input(|i| {
                 i.modifiers.command && (i.key_pressed(egui::Key::Z) || i.key_pressed(egui::Key::Y))
@@ -1020,6 +1049,8 @@ impl DawApp {
             || self.routing_open
             || self.automation_open
             || self.history_open
+            || self.crossfade_open
+            || self.join_open
         {
             return;
         }
@@ -1098,11 +1129,66 @@ impl DawApp {
                         self.stop();
                     }
                     let mut looping = self.project.loop_enabled;
-                    if daw_ui::toggle(ui, &mut looping, "Loop").changed() {
+                    if daw_ui::toggle(ui, &mut looping, "Loop")
+                        .on_hover_text("Repeat the range between Start beat and End beat")
+                        .changed()
+                    {
                         self.begin_edit();
                         self.project.loop_enabled = looping;
                         self.changed();
                     }
+                    let range = daw_ui::picker_button(ui, "Range", |ui| {
+                        // Display musical beat numbers from one; the project and
+                        // renderer retain their existing zero-based timeline.
+                        let mut start = self.project.loop_start + 1.0;
+                        let mut end = self.project.loop_end + 1.0;
+                        let minimum_length = 0.001_f64.min(end - start);
+                        let start_changed = ui
+                            .add(
+                                daw_ui::number(&mut start)
+                                    .prefix("Start beat ")
+                                    .speed(0.25)
+                                    .range(1.0..=(end - minimum_length))
+                                    .min_decimals(2)
+                                    .max_decimals(3),
+                            )
+                            .on_hover_text("First beat to repeat. Drag or double-click to type; Tab changes field.")
+                            .changed();
+                        let end_changed = ui
+                            .add(
+                                daw_ui::number(&mut end)
+                                    .prefix("End beat ")
+                                    .speed(0.25)
+                                    .range((start + minimum_length)..=(daw_core::MAX_BEAT + 1.0))
+                                    .min_decimals(2)
+                                    .max_decimals(3),
+                            )
+                            .on_hover_text("Exclusive end: playback jumps to Start before this beat. Drag or double-click to type.")
+                            .changed();
+                        if (start_changed || end_changed)
+                            && start.is_finite()
+                            && end.is_finite()
+                            && start >= 1.0
+                            && end > start
+                            && end <= daw_core::MAX_BEAT + 1.0
+                        {
+                            self.begin_edit();
+                            self.project.loop_start = start - 1.0;
+                            self.project.loop_end = end - 1.0;
+                            self.changed();
+                        }
+                    });
+                    range.0.on_hover_text("Set loop start and end beats");
+                    ui.label(
+                        RichText::new(format!(
+                            "Beats {:.2}–{:.2}",
+                            self.project.loop_start + 1.0,
+                            self.project.loop_end + 1.0,
+                        ))
+                        .monospace()
+                        .color(palette(ui.ctx()).muted),
+                    )
+                    .on_hover_text("Loop range in beats; the end is exclusive");
                     ui.separator();
                     let bar = (self.cursor / self.project.beats_per_bar as f64).floor() as u64 + 1;
                     let beat = (self.cursor % self.project.beats_per_bar as f64).floor() as u64 + 1;
@@ -1251,6 +1337,23 @@ impl DawApp {
                                     Err(error) => self.message(Err(error), ""),
                                 }
                             }
+                            ui.close();
+                        }
+                        if ui
+                            .add_enabled(has_clip, daw_ui::button_widget("Join clips…"))
+                            .clicked()
+                        {
+                            self.open_popup(PopupKind::Join);
+                            ui.close();
+                        }
+                        let audio_clip = self
+                            .selected()
+                            .is_some_and(|clip| matches!(clip.content, ClipContent::Audio { .. }));
+                        if ui
+                            .add_enabled(audio_clip, daw_ui::button_widget("Crossfade…"))
+                            .clicked()
+                        {
+                            self.open_popup(PopupKind::Crossfade);
                             ui.close();
                         }
                         if ui
@@ -1638,6 +1741,7 @@ impl DawApp {
         self.poll_instrument_editor(ctx);
         self.poll_project_io(ctx);
         self.poll_export();
+        self.poll_join(ctx);
         self.update_note_audition(ctx);
         if let Some(e) = &self.engine {
             self.cursor = e.position_beats();
@@ -1719,7 +1823,9 @@ impl DawApp {
             || self.effects_open
             || self.routing_open
             || self.automation_open
-            || self.history_open;
+            || self.history_open
+            || self.crossfade_open
+            || self.join_open;
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
         egui::CentralPanel::default()
@@ -1769,6 +1875,8 @@ impl DawApp {
         self.routing_popup(ctx);
         self.automation_editor(ctx);
         self.history_popup(ctx);
+        self.crossfade_popup(ctx);
+        self.join_popup(ctx);
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.

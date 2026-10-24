@@ -107,3 +107,15 @@ fallbacks, full wrapped bounds, ellipsis, and dense-row label suppression.
 cargo test --locked -p daw-ui --test typography
 cargo test --locked -p daw-app --test typography_e2e
 ```
+
+The `loop_e2e`, `crossfade_e2e`, and `joins_e2e` suites exercise transport range
+editing, validation, grouped gestures, undo/redo, project recall, exclusive audio
+priority, spline controls, and MIDI/audio clip consolidation through real menus
+and pointer/keyboard events. WAV sample oracles check overlaps, ties, resumed
+takes, complementary blends, and joined audio with channel processing applied
+once. Joined audio can be split again and survives deleting its original scratch
+WAV after portable saving. Loop settings do not truncate offline export.
+
+```sh
+cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins_e2e
+```

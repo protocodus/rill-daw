@@ -437,7 +437,12 @@ impl DawApp {
                             self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0),
                         ));
                     }
-                    for clip in &track.clips {
+                    let mut clips: Vec<_> = track.clips.iter().collect();
+                    if track.kind == TrackKind::Audio {
+                        // Stable sort preserves storage order for equal-start takes.
+                        clips.sort_by(|a, b| a.start.total_cmp(&b.start));
+                    }
+                    for clip in clips {
                         let rect = Rect::from_min_size(
                             Pos2::new(origin + clip.start as f32 * self.zoom, row.top() + 8.0),
                             Vec2::new((clip.length as f32 * self.zoom).max(4.0), (row_height - 16.0).max(1.0)),
@@ -448,6 +453,9 @@ impl DawApp {
                         let p = p.with_clip_rect(Rect::from_min_max(Pos2::new(grid_left, row.top()), row.max));
                         let col = color(track.color);
                         let is_selected = self.selected_clip == Some(clip.id);
+                        if track.kind == TrackKind::Audio {
+                            p.rect_filled(rect, 4.0, palette(ui.ctx()).bg);
+                        }
                         p.rect_filled(
                             rect,
                             4.0,
@@ -594,6 +602,18 @@ impl DawApp {
                             }
                         }
                         response.context_menu(|ui| {
+                            if daw_ui::button(ui, "Join clips…").clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                popup = Some(PopupKind::Join);
+                                ui.close();
+                            }
+                            if track.kind == TrackKind::Audio && daw_ui::button(ui, "Crossfade…").clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                popup = Some(PopupKind::Crossfade);
+                                ui.close();
+                            }
                             if daw_ui::button(ui, "Duplicate").clicked() {
                                 edits.push(Edit::Duplicate(track.id, clip.id));
                                 ui.close();
@@ -607,6 +627,20 @@ impl DawApp {
                                 ui.close();
                             }
                         });
+                    }
+                    if track.kind == TrackKind::Audio && let Ok(schedule) = daw_core::AudioSchedule::new(&track.clips) {
+                        for fade in schedule.crossfades {
+                            let rect = Rect::from_min_max(
+                                Pos2::new(origin + fade.start as f32 * self.zoom, row.top() + 31.0),
+                                Pos2::new(origin + fade.end as f32 * self.zoom, row.bottom() - 8.0),
+                            );
+                            let visible = rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), row.max));
+                            if visible.is_positive() {
+                                daw_ui::paint_crossfade(&p.with_clip_rect(visible), rect, daw_ui::CrossfadeCurve {
+                                    control1: fade.curve.control1, control2: fade.curve.control2,
+                                });
+                            }
+                        }
                     }
                     if let Some(pos) = ui.ctx().input(|i| i.pointer.hover_pos())
                         && row.contains(pos)
@@ -937,36 +971,6 @@ impl DawApp {
                     }
                 }
                 if changed {
-                    self.changed();
-                }
-                ui.add_space(14.0);
-                label(ui, "LOOP RANGE");
-                let mut start = self.project.loop_start;
-                let mut end = self.project.loop_end;
-                if ui
-                    .add(
-                        daw_ui::number(&mut start)
-                            .speed(0.25)
-                            .range(0.0..=(end - 0.25))
-                            .prefix("From  "),
-                    )
-                    .changed()
-                {
-                    self.begin_edit();
-                    self.project.loop_start = start;
-                    self.changed();
-                }
-                if ui
-                    .add(
-                        daw_ui::number(&mut end)
-                            .speed(0.25)
-                            .range((start + 0.25)..=10_000.0)
-                            .prefix("To  "),
-                    )
-                    .changed()
-                {
-                    self.begin_edit();
-                    self.project.loop_end = end;
                     self.changed();
                 }
             });

@@ -1,4 +1,4 @@
-use crate::{AudioEnvelope, AutomationLane, FadeCurve};
+use crate::{AudioCrossfade, AudioEnvelope, AutomationLane, FadeCurve};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -193,6 +193,8 @@ pub enum ClipContent {
         reverse: bool,
         #[serde(default)]
         envelope: Option<AudioEnvelope>,
+        #[serde(default)]
+        crossfade: Option<AudioCrossfade>,
     },
 }
 
@@ -251,6 +253,7 @@ impl Clip {
                 fade_out_curve: FadeCurve::Linear,
                 reverse: false,
                 envelope: None,
+                crossfade: None,
             },
         }
     }
@@ -534,6 +537,9 @@ impl Project {
         let mut right = clip.clone();
         right.refresh_ids();
         right.start = at_beat;
+        if let ClipContent::Audio { crossfade, .. } = &mut right.content {
+            *crossfade = None;
+        }
         if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
             clip.offset += clip.length - delta;
         } else {
@@ -741,6 +747,7 @@ impl Project {
                         fade_in,
                         fade_out,
                         envelope,
+                        crossfade,
                         ..
                     } => {
                         ensure!(
@@ -748,6 +755,9 @@ impl Project {
                             "Audio clip is on a MIDI track"
                         );
                         ensure!(!path.is_empty(), "Missing audio source path");
+                        if let Some(crossfade) = crossfade {
+                            crossfade.validate()?;
+                        }
                         ensure!(gain.is_finite() && *gain >= 0.0, "Invalid audio gain");
                         let envelope_length =
                             envelope.map_or(clip.length, |envelope| envelope.length);

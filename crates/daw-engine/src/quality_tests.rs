@@ -23,9 +23,9 @@ fn fixture() -> (tempfile::TempDir, Vec<String>) {
 }
 
 #[test]
-fn f64_accumulates_overlapping_clips_bus_inputs_pre_fader_sends_and_master() {
+fn f64_accumulates_bus_inputs_pre_fader_sends_and_master() {
     let (_directory, paths) = fixture();
-    for topology in 0..4 {
+    for topology in 1..4 {
         let mut project = Project::new();
         let bus = if topology >= 2 {
             let bus = project.add_bus("Sum");
@@ -34,13 +34,8 @@ fn f64_accumulates_overlapping_clips_bus_inputs_pre_fader_sends_and_master() {
         } else {
             None
         };
-        let mut single = None;
         for (index, path) in paths.iter().enumerate() {
-            let id = if topology == 0 {
-                *single.get_or_insert_with(|| project.add_audio_track("Overlapping"))
-            } else {
-                project.add_audio_track(format!("Source {index}"))
-            };
+            let id = project.add_audio_track(format!("Source {index}"));
             let track = project.track_mut(id).unwrap();
             track.gain = 1.0;
             track.pan = 0.0;

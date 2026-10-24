@@ -19,6 +19,9 @@ use std::{
 mod worker_pool;
 use worker_pool::WorkerPool;
 
+#[path = "audio_schedule.rs"]
+mod audio_schedule;
+
 #[cfg(test)]
 #[path = "effect_state_tests.rs"]
 mod effect_state_tests;
@@ -26,6 +29,10 @@ mod effect_state_tests;
 #[cfg(test)]
 #[path = "quality_tests.rs"]
 mod quality_tests;
+
+#[cfg(test)]
+#[path = "audio_overlap_tests.rs"]
+mod audio_overlap_tests;
 
 pub(crate) const BLOCK: usize = 256;
 
@@ -46,7 +53,6 @@ struct Event {
 
 struct AudioClip {
     start: u64,
-    end: u64,
     source_offset: f64,
     gain: f32,
     fade_in: f64,
@@ -58,6 +64,51 @@ struct AudioClip {
     source_length: f64,
     reverse: bool,
     data: Arc<AudioData>,
+}
+
+impl AudioClip {
+    #[inline]
+    fn sample(&self, position: u64, sample_rate: u32) -> [f32; 2] {
+        let elapsed = position - self.start;
+        let source_delta = elapsed as f64 * self.data.sample_rate as f64 / sample_rate as f64;
+        let source = self.source_offset
+            + if self.reverse {
+                self.source_length - 1.0 - source_delta
+            } else {
+                source_delta
+            };
+        if source < -1e-8 {
+            return [0.0; 2];
+        }
+        let source = source.max(0.0);
+        let frame = source.floor() as usize;
+        let frames = self.data.samples.len() / self.data.channels;
+        if frame >= frames {
+            return [0.0; 2];
+        }
+        let fraction = (source - frame as f64) as f32;
+        let next = (frame + 1).min(frames - 1);
+        let time = elapsed as f64 + self.envelope_offset;
+        let fade_in = if self.fade_in > 0.0 {
+            self.fade_in_curve.value(time / self.fade_in)
+        } else {
+            1.0
+        };
+        let fade_out = if self.fade_out > 0.0 {
+            self.fade_out_curve
+                .value((self.envelope_length - time) / self.fade_out)
+        } else {
+            1.0
+        };
+        let gain = self.gain * fade_in * fade_out;
+        let channel = |channel: usize| {
+            let channel = channel.min(self.data.channels - 1);
+            let a = self.data.samples[frame * self.data.channels + channel];
+            let b = self.data.samples[next * self.data.channels + channel];
+            (a + (b - a) * fraction) * gain
+        };
+        [channel(0), channel(1)]
+    }
 }
 
 /// A preallocated stereo delay used to align paths with different processing latency.
@@ -263,6 +314,7 @@ fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
 struct RenderTrack {
     id: u64,
     audio: Vec<AudioClip>,
+    audio_segments: Vec<audio_schedule::Segment>,
     notes: Vec<ScheduledNote>,
     events: Vec<Event>,
     event_cursor: usize,
@@ -374,57 +426,42 @@ impl RenderTrack {
                 }
             }
         }
-        for clip in &self.audio {
-            if !context.timeline {
-                break;
-            }
-            if clip.start >= end || clip.end <= start {
-                continue;
-            }
-            let first = clip.start.saturating_sub(start) as usize;
-            let last = (clip.end - start).min(count as u64) as usize;
-            let source_frames = clip.data.samples.len() / clip.data.channels;
-            for index in first..last {
-                let elapsed = start + index as u64 - clip.start;
-                let source_delta =
-                    elapsed as f64 * clip.data.sample_rate as f64 / context.sample_rate as f64;
-                let source = clip.source_offset
-                    + if clip.reverse {
-                        clip.source_length - 1.0 - source_delta
-                    } else {
-                        source_delta
-                    };
-                if source < -1e-8 {
-                    continue;
+        if context.timeline {
+            let first_segment = self
+                .audio_segments
+                .partition_point(|segment| segment.end <= start);
+            for segment in &self.audio_segments[first_segment..] {
+                if segment.start >= end {
+                    break;
                 }
-                let source = source.max(0.0);
-                let frame = source.floor() as usize;
-                if frame >= source_frames {
-                    continue;
+                let first = segment.start.saturating_sub(start) as usize;
+                let last = (segment.end - start).min(count as u64) as usize;
+                let incoming = &self.audio[segment.incoming];
+                if let (Some(outgoing), Some(curve)) = (segment.outgoing, &segment.fade) {
+                    let outgoing = &self.audio[outgoing];
+                    let duration = (segment.end - segment.start) as f64;
+                    let mut curve_cursor =
+                        curve.cursor((start + first as u64 - segment.start) as f64 / duration);
+                    for index in first..last {
+                        let position = start + index as u64;
+                        let gain = curve.value(
+                            (position - segment.start) as f64 / duration,
+                            &mut curve_cursor,
+                        );
+                        let a = outgoing.sample(position, context.sample_rate);
+                        let b = incoming.sample(position, context.sample_rate);
+                        self.mix_left[index] += f64::from(a[0]) * f64::from(1.0 - gain)
+                            + f64::from(b[0]) * f64::from(gain);
+                        self.mix_right[index] += f64::from(a[1]) * f64::from(1.0 - gain)
+                            + f64::from(b[1]) * f64::from(gain);
+                    }
+                } else {
+                    for index in first..last {
+                        let sample = incoming.sample(start + index as u64, context.sample_rate);
+                        self.mix_left[index] += f64::from(sample[0]);
+                        self.mix_right[index] += f64::from(sample[1]);
+                    }
                 }
-                let fraction = (source - frame as f64) as f32;
-                let next = (frame + 1).min(source_frames - 1);
-                let envelope_time = elapsed as f64 + clip.envelope_offset;
-                let fade_in = if clip.fade_in > 0.0 {
-                    clip.fade_in_curve.value(envelope_time / clip.fade_in)
-                } else {
-                    1.0
-                };
-                let fade_out = if clip.fade_out > 0.0 {
-                    clip.fade_out_curve
-                        .value((clip.envelope_length - envelope_time) / clip.fade_out)
-                } else {
-                    1.0
-                };
-                let gain = clip.gain * fade_in * fade_out;
-                let sample = |channel: usize| {
-                    let channel = channel.min(clip.data.channels - 1);
-                    let a = clip.data.samples[frame * clip.data.channels + channel];
-                    let b = clip.data.samples[next * clip.data.channels + channel];
-                    (a + (b - a) * fraction) * gain
-                };
-                self.mix_left[index] += f64::from(sample(0));
-                self.mix_right[index] += f64::from(sample(1));
             }
         }
         // Convert once after every source/bus contribution is accumulated.
@@ -684,6 +721,7 @@ impl Renderer {
                         fade_out_curve,
                         reverse,
                         envelope,
+                        ..
                     } => {
                         let source_path = std::fs::canonicalize(path)
                             .with_context(|| format!("Loading audio clip {}", clip.name))?;
@@ -715,7 +753,6 @@ impl Renderer {
                         );
                         audio.push(AudioClip {
                             start: to_sample(clip.start),
-                            end: to_sample(clip.start + clip.length),
                             source_offset: clip.offset * 60.0 / project.tempo
                                 * data.sample_rate as f64,
                             gain: *gain,
@@ -851,6 +888,7 @@ impl Renderer {
             tracks.push(RenderTrack {
                 id: track.id,
                 audio,
+                audio_segments: audio_schedule::compile(&track.clips, samples_per_beat)?,
                 notes,
                 events,
                 event_cursor: 0,
@@ -1039,7 +1077,10 @@ impl Renderer {
             beat.is_finite() && (0.0..=1_000_000.0).contains(&beat),
             "Seek position is outside the supported timeline"
         );
-        let sample = (beat.max(0.0) * 60.0 / self.tempo * self.sample_rate as f64).round() as u64;
+        // Match clip/event/loop compilation exactly, including half-sample
+        // boundaries. Reordering these operations can move a seek one sample.
+        let samples_per_beat = self.sample_rate as f64 * 60.0 / self.tempo;
+        let sample = (beat * samples_per_beat).round() as u64;
         self.seek_sample(sample)
     }
 
@@ -1420,7 +1461,33 @@ pub fn export_project_wav_with_options(
     write_wav(renderer, path.as_ref(), frames)
 }
 
-fn write_wav(mut renderer: Renderer, path: &Path, frames: u64) -> Result<()> {
+pub(crate) fn write_wav(renderer: Renderer, path: &Path, frames: u64) -> Result<()> {
+    write_wav_inner(renderer, path, frames, None)
+}
+
+pub(crate) fn write_wav_cancelled(
+    renderer: Renderer,
+    path: &Path,
+    frames: u64,
+    cancel: &AtomicBool,
+) -> Result<()> {
+    write_wav_inner(renderer, path, frames, Some(cancel))
+}
+
+fn write_wav_inner(
+    mut renderer: Renderer,
+    path: &Path,
+    frames: u64,
+    cancel: Option<&AtomicBool>,
+) -> Result<()> {
+    let check_cancelled = || -> Result<()> {
+        ensure!(
+            !cancel.is_some_and(|cancel| cancel.load(Ordering::Relaxed)),
+            "Audio export cancelled"
+        );
+        Ok(())
+    };
+    check_cancelled()?;
     let spec = hound::WavSpec {
         channels: 2,
         sample_rate: renderer.sample_rate,
@@ -1445,6 +1512,7 @@ fn write_wav(mut renderer: Renderer, path: &Path, frames: u64) -> Result<()> {
         let mut positions = [0.0; BLOCK];
         let mut remaining = frames as usize;
         while remaining > 0 {
+            check_cancelled()?;
             let count = remaining.min(BLOCK);
             renderer.render(&mut block[..count], &mut positions[..count])?;
             for frame in &block[..count] {
@@ -1457,7 +1525,9 @@ fn write_wav(mut renderer: Renderer, path: &Path, frames: u64) -> Result<()> {
             }
             remaining -= count;
         }
+        check_cancelled()?;
         writer.finalize()?;
+        check_cancelled()?;
         std::fs::rename(&temp, path)?;
         Ok(())
     })();

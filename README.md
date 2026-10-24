@@ -26,6 +26,8 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Non-destructive clip movement, trimming, splitting, duplication, cross-track movement, and undo/redo.
 - Drag WAV files onto an existing audio track or empty arrangement space to create a track. Dropping on a MIDI/bus/folder track creates a new audio track.
 - Non-destructive audio gain, normalization, reverse, curve fades, clipboard editing, and transient split preview.
+- Exclusive audio overlaps, optional spline crossfades, and audio/MIDI clip joining.
+- Transport loop toggle and on-demand start/end beat controls, saved with the project.
 - Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; quantize preview, legato, transpose, and note clipboard.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
@@ -83,6 +85,14 @@ In Arrangement, double-click an empty MIDI lane to create a four-beat pattern. S
 | Right-click a note | Delete the note |
 
 The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. Double-click empty space to create a note or a note to delete it. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](docs/EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+
+## Clips and looping
+
+Audio clips on one track are exclusive: the active clip with the latest start wins. If starts match, the later entry in the track wins; an earlier clip resumes when a shorter overlapping clip ends. Splitting creates a new start and can therefore change overlap priority. Overlaps switch immediately unless you enable **Edit → Crossfade…** (also in the clip context menu). Set its duration, choose Linear or Smooth, or drag the two spline handles. The complementary gain curves appear over the overlap in Arrangement. Crossfades are limited to the available overlap and next clip takeover; they apply at clip entry, not when an older clip resumes.
+
+Use **Edit → Join clips…** or the clip context menu to choose clips on one track. MIDI joining preserves visible notes and timing. Audio joining renders source edits, overlaps, and crossfades to a new WAV in the scratch directory, including silent gaps; channel processing stays live. Include every audio clip intersecting the joined span. The result is an ordinary clip that can be split, trimmed, reversed, or joined again. Joining is undoable and its source travels inside saved `.rill` projects.
+
+The transport's **Loop** toggle repeats the range shown beside it. **Range** opens **Start beat** and **End beat**; drag the values or double-click to type. Beats start at 1, and the end is exclusive: Start 1 / End 5 repeats the first four beats. Changes are undoable and saved with the project. WAV export still renders the full arrangement once.
 
 ## Effects, sends, and folders
 
