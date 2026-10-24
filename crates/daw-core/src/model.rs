@@ -1,4 +1,4 @@
-use crate::AutomationLane;
+use crate::{AudioEnvelope, AutomationLane, FadeCurve};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -14,7 +14,8 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// A generous finite timeline limit keeps beat-to-sample conversion exact and
 /// prevents malformed project files from saturating integer sample positions.
 pub const MAX_BEAT: f64 = 1_000_000.0;
-pub const MAX_INSTRUMENT_STATE_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_PLUGIN_STATE_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_INSTRUMENT_STATE_BYTES: usize = MAX_PLUGIN_STATE_BYTES;
 
 pub(crate) fn validate_vst_class_id(class_id: Option<&str>) -> Result<()> {
     ensure!(
@@ -91,6 +92,11 @@ pub struct EffectSlot {
     pub name: String,
     pub enabled: bool,
     pub effect: Effect,
+    /// Opaque VST3 component/controller state, restored before overrides.
+    #[serde(default)]
+    pub state: Vec<u8>,
+    #[serde(default)]
+    pub parameters: Vec<PluginParameterValue>,
 }
 
 impl EffectSlot {
@@ -100,6 +106,8 @@ impl EffectSlot {
             name: name.into(),
             enabled: true,
             effect,
+            state: Vec::new(),
+            parameters: Vec::new(),
         }
     }
 }
@@ -137,6 +145,25 @@ pub struct PluginParameterValue {
     pub value: f64,
 }
 
+fn validate_plugin_state(state: &[u8], parameters: &[PluginParameterValue]) -> Result<()> {
+    ensure!(
+        state.len() <= MAX_PLUGIN_STATE_BYTES,
+        "Plug-in state exceeds 64 MiB"
+    );
+    let mut parameter_ids = HashSet::new();
+    for parameter in parameters {
+        ensure!(
+            parameter_ids.insert(parameter.id),
+            "Duplicate plug-in parameter ID"
+        );
+        ensure!(
+            parameter.value.is_finite() && (0.0..=1.0).contains(&parameter.value),
+            "Plug-in parameter must be normalized between 0 and 1"
+        );
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Clip {
     pub id: u64,
@@ -158,6 +185,14 @@ pub enum ClipContent {
         gain: f32,
         fade_in: f64,
         fade_out: f64,
+        #[serde(default)]
+        fade_in_curve: FadeCurve,
+        #[serde(default)]
+        fade_out_curve: FadeCurve,
+        #[serde(default)]
+        reverse: bool,
+        #[serde(default)]
+        envelope: Option<AudioEnvelope>,
     },
 }
 
@@ -212,6 +247,10 @@ impl Clip {
                 gain: 1.0,
                 fade_in: 0.0,
                 fade_out: 0.0,
+                fade_in_curve: FadeCurve::Linear,
+                fade_out_curve: FadeCurve::Linear,
+                reverse: false,
+                envelope: None,
             },
         }
     }
@@ -231,11 +270,15 @@ impl Clip {
 
     fn constrain_fades(&mut self) {
         if let ClipContent::Audio {
-            fade_in, fade_out, ..
+            fade_in,
+            fade_out,
+            envelope,
+            ..
         } = &mut self.content
         {
-            *fade_in = fade_in.min(self.length);
-            *fade_out = fade_out.min(self.length);
+            let length = envelope.map_or(self.length, |envelope| envelope.length);
+            *fade_in = fade_in.min(length);
+            *fade_out = fade_out.min(length);
         }
     }
 }
@@ -477,11 +520,44 @@ impl Project {
             at_beat.is_finite() && at_beat > clip.start && at_beat < clip.end(),
             "Split must be inside the clip"
         );
-        let mut right = clip.clone();
         let delta = at_beat - clip.start;
+        if let ClipContent::Audio {
+            envelope: Some(envelope),
+            ..
+        } = clip.content
+        {
+            ensure!(
+                (envelope.offset + delta).abs() <= MAX_BEAT,
+                "Split exceeds the envelope range"
+            );
+        }
+        let mut right = clip.clone();
         right.refresh_ids();
         right.start = at_beat;
-        right.offset += delta;
+        if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
+            clip.offset += clip.length - delta;
+        } else {
+            right.offset += delta;
+        }
+        let envelope = match &mut clip.content {
+            ClipContent::Audio { envelope, .. } => {
+                let original = envelope.unwrap_or(AudioEnvelope {
+                    offset: 0.0,
+                    length: clip.length,
+                });
+                *envelope = Some(original);
+                Some(original)
+            }
+            _ => None,
+        };
+        if let (Some(original), ClipContent::Audio { envelope, .. }) =
+            (envelope, &mut right.content)
+        {
+            *envelope = Some(AudioEnvelope {
+                offset: original.offset + delta,
+                ..original
+            });
+        }
         right.length -= delta;
         right.constrain_fades();
         clip.length = delta;
@@ -531,11 +607,30 @@ impl Project {
     ) -> Result<()> {
         ensure!(valid_range(new_start, new_length), "Invalid clip bounds");
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
-        let new_offset = clip.offset + new_start - clip.start;
+        let delta = new_start - clip.start;
+        let new_offset = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
+            clip.offset + clip.length - delta - new_length
+        } else {
+            clip.offset + delta
+        };
         ensure!(
             valid_range(new_offset, new_length),
             "Trim extends before the source or overflows its range"
         );
+        if let ClipContent::Audio { envelope, .. } = &mut clip.content {
+            let original = envelope.unwrap_or(AudioEnvelope {
+                offset: 0.0,
+                length: clip.length,
+            });
+            ensure!(
+                (original.offset + delta).abs() <= MAX_BEAT,
+                "Trim exceeds the envelope range"
+            );
+            *envelope = Some(AudioEnvelope {
+                offset: original.offset + delta,
+                ..original
+            });
+        }
         clip.offset = new_offset;
         clip.start = new_start;
         clip.length = new_length;
@@ -601,30 +696,19 @@ impl Project {
                 ensure!(!path.is_empty(), "Missing VST3 path");
                 validate_vst_class_id(class_id.as_deref())?;
             }
-            ensure!(
-                track.instrument_state.len() <= MAX_INSTRUMENT_STATE_BYTES,
-                "Instrument state exceeds 64 MiB"
-            );
+            validate_plugin_state(&track.instrument_state, &track.instrument_parameters)
+                .context("Invalid instrument state")?;
             ensure!(
                 (track.instrument_state.is_empty() && track.instrument_parameters.is_empty())
                     || (track.kind == TrackKind::Midi
                         && matches!(track.instrument, Instrument::Vst3 { .. })),
                 "Only VST3 MIDI instruments may contain saved state or parameter overrides"
             );
-            let mut parameter_ids = HashSet::new();
-            for parameter in &track.instrument_parameters {
-                ensure!(
-                    parameter_ids.insert(parameter.id),
-                    "Duplicate instrument parameter ID"
-                );
-                ensure!(
-                    parameter.value.is_finite() && (0.0..=1.0).contains(&parameter.value),
-                    "Instrument parameter must be normalized between 0 and 1"
-                );
-            }
             for slot in &track.inserts {
                 check_id(slot.id)?;
                 slot.effect.validate()?;
+                validate_plugin_state(&slot.state, &slot.parameters)
+                    .with_context(|| format!("Invalid insert state: {}", slot.name))?;
             }
             for clip in &track.clips {
                 check_id(clip.id)?;
@@ -656,6 +740,8 @@ impl Project {
                         gain,
                         fade_in,
                         fade_out,
+                        envelope,
+                        ..
                     } => {
                         ensure!(
                             track.kind == TrackKind::Audio,
@@ -663,11 +749,21 @@ impl Project {
                         );
                         ensure!(!path.is_empty(), "Missing audio source path");
                         ensure!(gain.is_finite() && *gain >= 0.0, "Invalid audio gain");
+                        let envelope_length =
+                            envelope.map_or(clip.length, |envelope| envelope.length);
+                        ensure!(
+                            envelope.is_none_or(|envelope| envelope.offset.is_finite()
+                                && envelope.offset.abs() <= MAX_BEAT
+                                && envelope.length.is_finite()
+                                && envelope.length > 0.0
+                                && envelope.length <= MAX_BEAT),
+                            "Invalid audio envelope region"
+                        );
                         ensure!(
                             nonnegative(*fade_in)
                                 && nonnegative(*fade_out)
-                                && *fade_in <= clip.length
-                                && *fade_out <= clip.length,
+                                && *fade_in <= envelope_length
+                                && *fade_out <= envelope_length,
                             "Invalid audio fades"
                         );
                     }
@@ -678,11 +774,14 @@ impl Project {
         Ok(())
     }
 
-    /// Write a versioned project atomically beside its destination. Audio remains
-    /// referenced externally; relative paths are resolved against the project on load.
+    /// Atomically save a portable ZIP bundle for `.rill`, or legacy JSON for other
+    /// extensions. Bundles include referenced WAV assets and saved plug-in state.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         self.validate()?;
         let path = path.as_ref();
+        if crate::archive::is_bundle(path) {
+            return crate::archive::save(self, path);
+        }
         let parent = path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -723,7 +822,19 @@ impl Project {
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+        Self::load_with_assets(path, std::env::temp_dir().join("rill-project-assets"))
+    }
+
+    /// Load a project, extracting portable bundle assets into a private persistent
+    /// directory under `scratch_root`. Failed loads remove incomplete extraction.
+    pub fn load_with_assets(
+        path: impl AsRef<Path>,
+        scratch_root: impl AsRef<Path>,
+    ) -> Result<Self> {
         let path = path.as_ref();
+        if crate::archive::is_bundle(path) {
+            return crate::archive::load(path, scratch_root.as_ref());
+        }
         let file =
             fs::File::open(path).with_context(|| format!("Open project {}", path.display()))?;
         let envelope: ProjectFile =
@@ -733,27 +844,36 @@ impl Project {
             "Unsupported project version {}",
             envelope.version
         );
-        let mut project = envelope.project;
-        project.validate()?;
         let base = fs::canonicalize(path)?
             .parent()
             .context("Project has no parent directory")?
             .to_path_buf();
+        envelope.project.finish_loading(&base, true)
+    }
+
+    pub(crate) fn finish_loading(
+        mut self,
+        base: &Path,
+        resolve_plugin_paths: bool,
+    ) -> Result<Self> {
+        self.validate()?;
         let mut max_id = 0;
-        for track in &mut project.tracks {
+        for track in &mut self.tracks {
             max_id = max_id.max(track.id);
             if let Some(lane) = &track.automation {
                 for point in &lane.points {
                     max_id = max_id.max(point.id);
                 }
             }
-            if let Instrument::Vst3 { path, .. } = &mut track.instrument {
-                absolutize(path, &base);
+            if resolve_plugin_paths && let Instrument::Vst3 { path, .. } = &mut track.instrument {
+                absolutize(path, base);
             }
             for slot in &mut track.inserts {
                 max_id = max_id.max(slot.id);
                 let Effect::Vst3 { path, .. } = &mut slot.effect;
-                absolutize(path, &base);
+                if resolve_plugin_paths {
+                    absolutize(path, base);
+                }
             }
             for clip in &mut track.clips {
                 max_id = max_id.max(clip.id);
@@ -763,12 +883,12 @@ impl Project {
                             max_id = max_id.max(note.id);
                         }
                     }
-                    ClipContent::Audio { path, .. } => absolutize(path, &base),
+                    ClipContent::Audio { path, .. } => absolutize(path, base),
                 }
             }
         }
         NEXT_ID.fetch_max(max_id + 1, Ordering::Relaxed);
-        Ok(project)
+        Ok(self)
     }
 
     pub fn demo() -> Self {
@@ -845,58 +965,9 @@ fn valid_range(start: f64, length: f64) -> bool {
 }
 
 #[derive(Serialize, Deserialize)]
-struct ProjectFile {
-    version: u32,
-    project: Project,
-}
-
-/// Bounded undo/redo snapshots; call `commit` immediately BEFORE an edit (once
-/// per drag/gesture, not every pointer frame). This type never runs on audio threads.
-#[derive(Default)]
-pub struct History {
-    undo: Vec<Project>,
-    redo: Vec<Project>,
-}
-
-impl History {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn commit(&mut self, project: &Project) {
-        if self.undo.last() != Some(project) {
-            self.undo.push(project.clone());
-            if self.undo.len() > 128 {
-                self.undo.remove(0);
-            }
-        }
-        self.redo.clear();
-    }
-    pub fn undo(&mut self, project: &mut Project) -> bool {
-        if let Some(previous) = self.undo.pop() {
-            self.redo.push(std::mem::replace(project, previous));
-            true
-        } else {
-            false
-        }
-    }
-    pub fn redo(&mut self, project: &mut Project) -> bool {
-        if let Some(next) = self.redo.pop() {
-            self.undo.push(std::mem::replace(project, next));
-            true
-        } else {
-            false
-        }
-    }
-    pub fn can_undo(&self) -> bool {
-        !self.undo.is_empty()
-    }
-    pub fn can_redo(&self) -> bool {
-        !self.redo.is_empty()
-    }
-    pub fn clear(&mut self) {
-        self.undo.clear();
-        self.redo.clear();
-    }
+pub(crate) struct ProjectFile {
+    pub(crate) version: u32,
+    pub(crate) project: Project,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

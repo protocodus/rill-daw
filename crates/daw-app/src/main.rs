@@ -1,9 +1,15 @@
 mod app;
 mod arrangement;
+mod audio_editor;
 mod automation;
 mod automation_editor;
 mod editor;
+mod engine_lifecycle;
+mod history_ui;
+mod library;
+mod midi_editor;
 mod plugin_ui;
+mod project_io;
 mod routing;
 mod settings;
 mod theme;
@@ -26,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.daw.json]\nrill --render-demo output.wav\nrill --render session.daw.json output.wav\nrill --screenshot output.png [--project session.daw.json] [--view clip|mixer|instrument|effects|routing|automation|library|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nBuild all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -35,17 +41,33 @@ fn main() -> anyhow::Result<()> {
             .get(1)
             .ok_or_else(|| anyhow::anyhow!("Provide output.wav"))?;
         let p = demo();
-        daw_engine::export_project_wav(&p, output, 48_000)?;
+        let settings = settings::Settings::load();
+        daw_engine::export_project_wav_with_options(
+            &p,
+            output,
+            settings.sample_rate,
+            daw_engine::RenderOptions {
+                resample_quality: settings.resample_quality,
+            },
+        )?;
         println!("Rendered {} beats to {output}", p.end_beat());
         return Ok(());
     }
     if args.first().is_some_and(|s| s == "--render") {
         anyhow::ensure!(
             args.len() >= 3,
-            "Usage: rill --render session.daw.json output.wav"
+            "Usage: rill --render session.rill output.wav"
         );
-        let p = Project::load(&args[1])?;
-        daw_engine::export_project_wav(&p, &args[2], 48_000)?;
+        let p = Project::load_with_assets(&args[1], settings::Settings::load().scratch_dir)?;
+        let settings = settings::Settings::load();
+        daw_engine::export_project_wav_with_options(
+            &p,
+            &args[2],
+            settings.sample_rate,
+            daw_engine::RenderOptions {
+                resample_quality: settings.resample_quality,
+            },
+        )?;
         return Ok(());
     }
     let screenshot = if args.first().is_some_and(|s| s == "--screenshot") {
@@ -61,9 +83,9 @@ fn main() -> anyhow::Result<()> {
             .and_then(|index| args.get(index + 1))
     });
     let project = if let Some(path) = screenshot_project {
-        Project::load(path)?
+        Project::load_with_assets(path, settings::Settings::load().scratch_dir)?
     } else if screenshot.is_none() && !args.is_empty() {
-        Project::load(&args[0])?
+        Project::load_with_assets(&args[0], settings::Settings::load().scratch_dir)?
     } else {
         demo()
     };

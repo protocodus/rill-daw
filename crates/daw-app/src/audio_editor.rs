@@ -1,0 +1,674 @@
+//! Non-destructive audio editing in the shared clip workspace.
+use crate::{app::DawApp, theme::*};
+use daw_core::*;
+use daw_ui::{EditorTool, TimelineBounds, TimelinePane, TimelineViewport, WaveformColumn};
+use eframe::egui::{self, Pos2, Rect, Sense, Stroke, Vec2};
+use std::sync::{Arc, Mutex};
+
+const TOOLS: &[EditorTool] = &[
+    EditorTool::Cursor,
+    EditorTool::Cut,
+    EditorTool::FadeIn,
+    EditorTool::FadeOut,
+];
+type AnalysisResult = Arc<Mutex<Option<Result<Analysis, String>>>>;
+#[derive(Clone)]
+enum Analysis {
+    Gain(f32),
+    Transients(Vec<f64>),
+}
+#[derive(Clone)]
+struct Pending {
+    clip: Clip,
+    tempo: f64,
+    settings: TransientSettings,
+    result: AnalysisResult,
+}
+#[derive(Clone)]
+struct AudioView {
+    owner: u64,
+    view: TimelineViewport,
+    fitted: bool,
+    tool: EditorTool,
+    clipboard: Option<Clip>,
+    transients_open: bool,
+    settings: TransientSettings,
+    preview: Vec<f64>,
+    preview_source: Option<Clip>,
+    pending: Option<Pending>,
+    error: String,
+    amplitude_reference: f32,
+}
+impl Default for AudioView {
+    fn default() -> Self {
+        Self {
+            owner: 0,
+            view: TimelineViewport::default(),
+            fitted: false,
+            tool: EditorTool::Cursor,
+            clipboard: None,
+            transients_open: false,
+            settings: TransientSettings::default(),
+            preview: Vec::new(),
+            preview_source: None,
+            pending: None,
+            error: String::new(),
+            amplitude_reference: 1.0,
+        }
+    }
+}
+#[derive(Clone)]
+enum Edit {
+    Gain(f32),
+    Fades(f64, f64, FadeCurve, FadeCurve),
+    Reverse,
+    Split(f64),
+    Trim(f64, f64),
+    Paste(Clip, f64),
+    Duplicate,
+    Transients(Vec<f64>),
+}
+
+pub(crate) fn reset_audio_editor(ctx: &egui::Context) {
+    ctx.data_mut(|data| {
+        data.remove::<AudioView>(egui::Id::new("audio_editor_state"));
+        data.remove::<serde_json::Value>(egui::Id::new("audio_editor_diagnostics"));
+    });
+}
+
+impl DawApp {
+    pub(crate) fn audio_editor(&mut self, ui: &mut egui::Ui) {
+        let Some(clip) = self.selected().cloned() else {
+            return;
+        };
+        let Some(track) = self.selected_track else {
+            return;
+        };
+        let ClipContent::Audio {
+            path,
+            gain,
+            fade_in,
+            fade_out,
+            fade_in_curve,
+            fade_out_curve,
+            reverse,
+            ..
+        } = &clip.content
+        else {
+            return;
+        };
+        let id = egui::Id::new("audio_editor_state");
+        let mut state = ui
+            .ctx()
+            .data_mut(|d| d.get_temp::<AudioView>(id).unwrap_or_default());
+        if state.owner != clip.id {
+            state.owner = clip.id;
+            state.fitted = false;
+            state.preview.clear();
+            state.preview_source = None;
+            state.pending = None;
+            state.error.clear();
+        }
+        if state
+            .preview_source
+            .as_ref()
+            .is_some_and(|source| source != &clip)
+        {
+            state.preview.clear();
+            state.preview_source = None;
+        }
+        let mut edit = None;
+        if let Some(pending) = state.pending.clone() {
+            let finished = pending
+                .result
+                .lock()
+                .ok()
+                .and_then(|mut result| result.take());
+            if let Some(result) = finished {
+                state.pending = None;
+                if pending.clip == clip
+                    && pending.tempo == self.project.tempo
+                    && pending.settings == state.settings
+                {
+                    match result {
+                        Ok(Analysis::Gain(gain)) => edit = Some(Edit::Gain(gain)),
+                        Ok(Analysis::Transients(points)) => {
+                            state.preview = points;
+                            state.preview_source = Some(clip.clone());
+                        }
+                        Err(error) => state.error = error,
+                    }
+                }
+            } else {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(25));
+            }
+        }
+        daw_ui::editor_tool_shortcuts(ui, &mut state.tool, TOOLS);
+        let mut fit = false;
+        let mut analyze = None;
+        let mut gain_rect = Rect::NOTHING;
+        let mut sensitivity_rect = Rect::NOTHING;
+        ui.horizontal_wrapped(|ui| {
+            daw_ui::editor_tools(ui, &mut state.tool, TOOLS);
+            ui.separator();
+            fit = daw_ui::timeline_fit_button(ui).clicked();
+            if daw_ui::button(ui, "Clip start").clicked() {
+                self.seek(clip.start);
+            }
+            if daw_ui::button(ui, "Clip end").clicked() {
+                self.seek(clip.end());
+            }
+            if daw_ui::button(ui, "Snap end")
+                .on_hover_text("Move the clip end to the nearest grid division")
+                .clicked()
+            {
+                let end = self
+                    .snapped(clip.end())
+                    .max(clip.start + self.snap.max(0.001));
+                edit = Some(Edit::Trim(clip.start, end - clip.start));
+            }
+            daw_ui::select(
+                "audio_snap",
+                if self.snap > 0.0 {
+                    format!("Grid {}", self.snap)
+                } else {
+                    "Grid off".into()
+                },
+            )
+            .width(90.0)
+            .show_ui(ui, |ui| {
+                for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
+                    daw_ui::selectable_value(
+                        ui,
+                        &mut self.snap,
+                        snap,
+                        if snap == 0.0 {
+                            "Off".into()
+                        } else {
+                            format!("{snap} beat")
+                        },
+                    );
+                }
+            });
+        });
+        let mut fi = *fade_in;
+        let mut fo = *fade_out;
+        let mut fic = *fade_in_curve;
+        let mut foc = *fade_out_curve;
+        ui.horizontal_wrapped(|ui| {
+            if daw_ui::button(ui, "Set start")
+                .on_hover_text("Trim the clip start to the cursor")
+                .clicked()
+                && self.cursor < clip.end()
+            {
+                edit = Some(Edit::Trim(self.cursor, clip.end() - self.cursor));
+            }
+            if daw_ui::button(ui, "Set end")
+                .on_hover_text("Trim the clip end to the cursor")
+                .clicked()
+                && self.cursor > clip.start
+            {
+                edit = Some(Edit::Trim(clip.start, self.cursor - clip.start));
+            }
+            if daw_ui::button(ui, "Split at cursor").clicked() {
+                edit = Some(Edit::Split(self.cursor));
+            }
+            if daw_ui::button(ui, "Copy").clicked() {
+                state.clipboard = Some(clip.clone());
+            }
+            if ui
+                .add_enabled(state.clipboard.is_some(), daw_ui::button_widget("Paste"))
+                .clicked()
+            {
+                edit = Some(Edit::Paste(state.clipboard.clone().unwrap(), self.cursor));
+            }
+            if daw_ui::button(ui, "Duplicate clip").clicked() {
+                edit = Some(Edit::Duplicate);
+            }
+            let mut reversed = *reverse;
+            if daw_ui::toggle(ui, &mut reversed, "Reverse").changed() {
+                edit = Some(Edit::Reverse);
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            let mut db = 20.0 * gain.max(0.00001).log10();
+            ui.label("Gain");
+            let response = ui.add(
+                daw_ui::number(&mut db)
+                    .range(-100.0..=36.0)
+                    .speed(0.1)
+                    .suffix(" dB"),
+            );
+            gain_rect = response.rect;
+            if response.changed() {
+                edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
+            }
+            if ui
+                .add_enabled(state.pending.is_none(), daw_ui::button_widget("Normalize"))
+                .on_hover_text("Set the source peak to -1 dBFS before fades")
+                .clicked()
+            {
+                analyze = Some(false);
+            }
+            ui.separator();
+            ui.label("In");
+            let mut changed = ui
+                .add(
+                    daw_ui::number(&mut fi)
+                        .range(0.0..=clip.length)
+                        .speed(0.05)
+                        .suffix(" beats"),
+                )
+                .changed();
+            daw_ui::select("fade_in_curve", fic.name())
+                .width(105.0)
+                .show_ui(ui, |ui| {
+                    for curve in FadeCurve::ALL {
+                        changed |=
+                            daw_ui::selectable_value(ui, &mut fic, curve, curve.name()).changed();
+                    }
+                });
+            ui.label("Out");
+            changed |= ui
+                .add(
+                    daw_ui::number(&mut fo)
+                        .range(0.0..=clip.length)
+                        .speed(0.05)
+                        .suffix(" beats"),
+                )
+                .changed();
+            daw_ui::select("fade_out_curve", foc.name())
+                .width(105.0)
+                .show_ui(ui, |ui| {
+                    for curve in FadeCurve::ALL {
+                        changed |=
+                            daw_ui::selectable_value(ui, &mut foc, curve, curve.name()).changed();
+                    }
+                });
+            if changed {
+                edit = Some(Edit::Fades(fi, fo, fic, foc));
+            }
+            daw_ui::toggle(ui, &mut state.transients_open, "Transients");
+        });
+        if state.transients_open {
+            ui.horizontal_wrapped(|ui| {
+                let previous = state.settings;
+                daw_ui::select("transient_algorithm", state.settings.algorithm.name())
+                    .width(135.0)
+                    .show_ui(ui, |ui| {
+                        for algorithm in TransientAlgorithm::ALL {
+                            daw_ui::selectable_value(
+                                ui,
+                                &mut state.settings.algorithm,
+                                algorithm,
+                                algorithm.name(),
+                            );
+                        }
+                    });
+                let response = ui.add(
+                    daw_ui::slider(&mut state.settings.sensitivity, 0.0..=1.0).text("Sensitivity"),
+                );
+                sensitivity_rect = Rect::from_min_size(
+                    response.rect.min,
+                    Vec2::new(ui.spacing().slider_width, response.rect.height()),
+                );
+                ui.add(
+                    daw_ui::number(&mut state.settings.minimum_gap_ms)
+                        .range(20.0..=2000.0)
+                        .suffix(" ms gap"),
+                );
+                if previous != state.settings {
+                    state.preview.clear();
+                    state.preview_source = None;
+                }
+                if ui
+                    .add_enabled(state.pending.is_none(), daw_ui::button_widget("Analyze"))
+                    .clicked()
+                {
+                    analyze = Some(true);
+                }
+                if ui
+                    .add_enabled(
+                        !state.preview.is_empty(),
+                        daw_ui::button_widget("Split transients"),
+                    )
+                    .clicked()
+                {
+                    edit = Some(Edit::Transients(state.preview.clone()));
+                }
+                ui.label(format!("{} markers", state.preview.len()));
+            });
+        }
+        // Async feedback occupies a stable row below all actions, so completion
+        // can never move a pressed button before the pointer is released.
+        ui.label(
+            egui::RichText::new(if state.pending.is_some() {
+                "Analyzing…"
+            } else {
+                &state.error
+            })
+            .small()
+            .color(palette(ui.ctx()).muted),
+        );
+        if let Some(transients) = analyze {
+            state.error.clear();
+            let result = Arc::new(Mutex::new(None));
+            let destination = result.clone();
+            let source = clip.clone();
+            let tempo = self.project.tempo;
+            let settings = state.settings;
+            let path = path.clone();
+            std::thread::spawn(move || {
+                let value = AudioData::load_wav(path)
+                    .and_then(|data| {
+                        if transients {
+                            detect_transients(&source, &data, tempo, settings)
+                                .map(Analysis::Transients)
+                        } else {
+                            normalization_gain(&source, &data, tempo, -1.0).map(Analysis::Gain)
+                        }
+                    })
+                    .map_err(|e| e.to_string());
+                if let Ok(mut slot) = destination.lock() {
+                    *slot = Some(value);
+                }
+            });
+            state.pending = Some(Pending {
+                clip: clip.clone(),
+                tempo,
+                settings,
+                result,
+            });
+        }
+        let width = ui.available_width().max(100.0);
+        let (whole, _) = ui.allocate_exact_size(
+            Vec2::new(width, ui.available_height().max(150.0)),
+            Sense::hover(),
+        );
+        let ruler = Rect::from_min_max(
+            whole.min,
+            Pos2::new(
+                whole.right(),
+                whole.top() + daw_ui::tokens::TIMELINE_RULER_HEIGHT,
+            ),
+        );
+        let canvas = Rect::from_min_max(Pos2::new(whole.left(), ruler.bottom()), whole.max);
+        let data = self.waveforms.get(path);
+        let channels = data.map_or(1, |audio| audio.channels.min(2));
+        let bounds = TimelineBounds {
+            start_beat: clip.start,
+            end_beat: clip.end(),
+            start_row: 0.0,
+            end_row: channels as f32 * 2.0,
+        };
+        if fit || !state.fitted {
+            state.amplitude_reference =
+                data.map_or(1.0, |data| visible_peak(data, &clip, self.project.tempo));
+            state.view.fit_bounds(canvas, bounds);
+            state.fitted = true;
+        }
+        let navigation =
+            TimelinePane::new("audio_timeline", canvas).navigate(ui, &mut state.view, bounds);
+        if navigation.fit {
+            state.amplitude_reference =
+                data.map_or(1.0, |data| visible_peak(data, &clip, self.project.tempo));
+        }
+        let headroom = state.amplitude_reference;
+        let painter = ui.painter_at(whole);
+        painter.rect_filled(whole, 0.0, palette(ui.ctx()).bg);
+        daw_ui::paint_timeline_ruler(
+            &painter,
+            ruler,
+            state.view,
+            self.project.tempo,
+            self.project.beats_per_bar,
+        );
+        if let Some(data) = data {
+            draw_waveform(
+                &painter,
+                canvas,
+                state.view,
+                data,
+                &clip,
+                self.project.tempo,
+                headroom,
+                palette(ui.ctx()).accent,
+            );
+        }
+        for beat in state.preview.iter().map(|beat| clip.start + beat) {
+            let x = state.view.x_at(canvas, beat);
+            painter.with_clip_rect(canvas).line_segment(
+                [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
+                Stroke::new(1.0_f32, palette(ui.ctx()).orange),
+            );
+        }
+        for (beat, color) in [
+            (clip.start, palette(ui.ctx()).muted),
+            (clip.end(), palette(ui.ctx()).muted),
+            (self.cursor, palette(ui.ctx()).text),
+        ] {
+            let x = state.view.x_at(canvas, beat);
+            painter.with_clip_rect(canvas).line_segment(
+                [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
+                Stroke::new(1.0_f32, color),
+            );
+        }
+        let response = ui.interact(
+            canvas,
+            ui.id().with("audio_edit_canvas"),
+            if navigation.navigating {
+                Sense::hover()
+            } else {
+                Sense::click_and_drag()
+            },
+        );
+        if !navigation.navigating
+            && (response.clicked() || response.dragged())
+            && let Some(pointer) = response.interact_pointer_pos()
+        {
+            let beat = self
+                .snapped(state.view.beat_at(canvas, pointer.x))
+                .clamp(clip.start, clip.end());
+            match state.tool {
+                EditorTool::Cursor => self.seek(beat),
+                EditorTool::Cut if response.clicked() => edit = Some(Edit::Split(beat)),
+                EditorTool::FadeIn => {
+                    edit = Some(Edit::Fades(
+                        beat - clip.start,
+                        fo.min(clip.length),
+                        fic,
+                        foc,
+                    ))
+                }
+                EditorTool::FadeOut => {
+                    edit = Some(Edit::Fades(
+                        fi.min(clip.length),
+                        clip.end() - beat,
+                        fic,
+                        foc,
+                    ))
+                }
+                _ => {}
+            }
+        }
+        if let Some(edit) = edit {
+            self.begin_edit();
+            let result = match edit {
+                Edit::Gain(gain) => self.project.set_audio_gain(track, clip.id, gain),
+                Edit::Fades(fi, fo, fic, foc) => self
+                    .project
+                    .set_audio_fades(track, clip.id, fi, fo, fic, foc),
+                Edit::Reverse => self.project.reverse_audio_clip(track, clip.id),
+                Edit::Trim(start, length) => self.project.trim_clip(track, clip.id, start, length),
+                Edit::Split(beat) => self.project.split_clip(track, clip.id, beat).map(|_| ()),
+                Edit::Paste(source, start) => self
+                    .project
+                    .paste_audio_clip(track, &source, start)
+                    .map(|id| {
+                        self.selected_clip = Some(id);
+                    }),
+                Edit::Duplicate => self.project.duplicate_clip(track, clip.id).map(|id| {
+                    self.selected_clip = Some(id);
+                }),
+                Edit::Transients(points) => self
+                    .project
+                    .split_audio_transients(track, clip.id, &points)
+                    .map(|_| ()),
+            };
+            match result {
+                Ok(()) => {
+                    self.changed();
+                    state.error.clear();
+                    state.preview.clear();
+                    state.preview_source = None;
+                }
+                Err(error) => state.error = error.to_string(),
+            }
+        }
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference}));
+            d.insert_temp(id, state);
+        });
+    }
+}
+
+/// Measure only when fitting, using the displayed source window and envelope.
+/// Gain/fade edits retain this reference until the next explicit Fit.
+fn visible_peak(data: &AudioData, clip: &Clip, tempo: f64) -> f32 {
+    let ClipContent::Audio { gain, reverse, .. } = clip.content else {
+        return 1.0;
+    };
+    let frames_per_beat = data.sample_rate as f64 * 60.0 / tempo;
+    let source_start = clip.offset * frames_per_beat;
+    let start = source_start.ceil().max(0.0) as usize;
+    let end = ((clip.offset + clip.length) * frames_per_beat)
+        .ceil()
+        .max(0.0) as usize;
+    let mut peak = 0.0_f32;
+    for frame in start..end.min(data.frames()) {
+        let beat = if reverse {
+            clip.length - (frame as f64 - source_start + 1.0) / frames_per_beat
+        } else {
+            (frame as f64 - source_start) / frames_per_beat
+        };
+        let envelope = gain * clip.audio_envelope_gain(beat);
+        for channel in 0..data.channels.min(2) {
+            peak = peak.max(data.samples[frame * data.channels + channel].abs() * envelope);
+        }
+    }
+    if peak > 0.0 { peak.max(0.001) } else { 1.0 }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_waveform(
+    painter: &egui::Painter,
+    rect: Rect,
+    view: TimelineViewport,
+    data: &AudioData,
+    clip: &Clip,
+    tempo: f64,
+    headroom: f32,
+    color: egui::Color32,
+) {
+    let ClipContent::Audio { gain, .. } = clip.content else {
+        return;
+    };
+    let channels = data.channels.min(2);
+    let width = rect.width().ceil().max(0.0) as usize;
+    let mut columns = Vec::with_capacity(width * channels);
+    for x in 0..width {
+        let beat = view.beat_at(rect, rect.left() + x as f32);
+        let next = view.beat_at(rect, rect.left() + x as f32 + 1.0);
+        if next <= clip.start || beat >= clip.end() {
+            continue;
+        }
+        let start = beat.max(clip.start);
+        let end = next.min(clip.end());
+        let frames = ((end - start) * 60.0 / tempo * data.sample_rate as f64)
+            .ceil()
+            .clamp(1.0, 32.0) as usize;
+        for channel in 0..channels {
+            let mut minimum = 0.0_f32;
+            let mut maximum = 0.0_f32;
+            for index in 0..frames {
+                let local = start + (end - start) * index as f64 / frames as f64 - clip.start;
+                let sample = audio_sample(
+                    data,
+                    clip.audio_source_frame(local, tempo, data.sample_rate),
+                    channel,
+                ) * gain
+                    * clip.audio_envelope_gain(local);
+                minimum = minimum.min(sample);
+                maximum = maximum.max(sample);
+            }
+            columns.push(WaveformColumn {
+                beat,
+                channel,
+                minimum,
+                maximum,
+            });
+        }
+    }
+    daw_ui::paint_audio_waveform(painter, rect, view, &columns, channels, headroom, color);
+}
+
+pub(crate) fn paint_audio_clip(
+    painter: &egui::Painter,
+    rect: Rect,
+    data: &AudioData,
+    clip: &Clip,
+    tempo: f64,
+    color: egui::Color32,
+) {
+    if rect.width() <= 0.0 || rect.height() <= 0.0 {
+        return;
+    }
+    let view = TimelineViewport {
+        start_beat: clip.start,
+        pixels_per_beat: rect.width() / clip.length as f32,
+        row_offset: 0.0,
+        row_height: rect.height() / (data.channels.min(2) * 2) as f32,
+    };
+    draw_waveform(painter, rect, view, data, clip, tempo, 1.0, color);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fit_reference_uses_visible_window_envelope_channels_and_silence() {
+        let mut samples = vec![0.0; 16000];
+        for frame in 0..8000 {
+            samples[frame * 2] = if frame < 4000 { 0.05 } else { 1.0 };
+            samples[frame * 2 + 1] = if frame < 4000 { 0.1 } else { 1.0 };
+        }
+        let data = AudioData {
+            sample_rate: 8000,
+            channels: 2,
+            samples,
+        };
+        let mut clip = Clip::audio("Window", 0.0, 1.0, "source.wav");
+        assert!((visible_peak(&data, &clip, 120.0) - 0.1).abs() < 1e-6);
+        if let ClipContent::Audio {
+            gain,
+            fade_in,
+            fade_out,
+            reverse,
+            ..
+        } = &mut clip.content
+        {
+            *gain = 2.0;
+            *fade_in = 1.0;
+            *fade_out = 1.0;
+            *reverse = true;
+        }
+        assert!((visible_peak(&data, &clip, 120.0) - 0.05).abs() < 1e-6);
+        let silence = AudioData {
+            samples: vec![0.0; data.samples.len()],
+            ..data
+        };
+        assert_eq!(visible_peak(&silence, &clip, 120.0), 1.0);
+    }
+}

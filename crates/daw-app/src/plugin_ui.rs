@@ -1,41 +1,46 @@
 use crate::{
-    app::{DawApp, PopupKind, SetupPage},
+    app::{DawApp, PopupKind},
+    project_io::{DocumentRequest, LoadedProject},
     theme::*,
 };
 use daw_core::{
-    AutomationParameter, AutomationTarget, Clip, Instrument, PluginParameterValue, TrackKind,
+    AutomationParameter, AutomationTarget, Instrument, PluginParameterValue, TrackKind,
 };
-use daw_plugins::catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
 use daw_plugins::{EditorEvent, EditorSession, ParameterInfo};
 use eframe::egui;
 use std::{
-    collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::{Arc, Mutex, mpsc},
+    sync::mpsc,
     time::{Duration, Instant},
 };
 
-pub(crate) type EditorStateSignature = (u64, Instrument, Vec<u8>, Vec<PluginParameterValue>);
-
-type CaptureJob = Arc<Mutex<Option<Result<CatalogEntry, String>>>>;
-
-#[derive(Clone, Default)]
-struct LibraryUi {
-    activate_when_ready: bool,
-    selected: Option<String>,
-    preview: Option<(PathBuf, egui::TextureHandle)>,
-    capture: Option<CaptureJob>,
-    attempted: HashSet<String>,
-    thumbnails: HashMap<String, egui::TextureHandle>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct EditorTarget {
+    track: u64,
+    effect: Option<u64>,
 }
+
+impl From<u64> for EditorTarget {
+    fn from(track: u64) -> Self {
+        Self {
+            track,
+            effect: None,
+        }
+    }
+}
+
+pub(crate) type EditorStateSignature =
+    (EditorTarget, Instrument, Vec<u8>, Vec<PluginParameterValue>);
 
 enum PendingAction {
     Save(PathBuf),
     Export(PathBuf),
     Quit,
     New,
+    Recovery,
+    ApplySettings(crate::settings::Settings),
     Open {
-        project: Box<daw_core::Project>,
+        loaded: Box<LoadedProject>,
         path: PathBuf,
         recovery: bool,
     },
@@ -43,7 +48,10 @@ enum PendingAction {
 
 impl PendingAction {
     fn closes_editor(&self) -> bool {
-        matches!(self, Self::Quit | Self::New | Self::Open { .. })
+        matches!(
+            self,
+            Self::Quit | Self::New | Self::Open { .. } | Self::ApplySettings(_)
+        )
     }
 }
 
@@ -69,7 +77,7 @@ impl PendingState {
 
 #[derive(Default)]
 pub(crate) struct InstrumentUi {
-    owner: Option<(u64, Instrument)>,
+    owner: Option<(EditorTarget, Instrument)>,
     session: Option<EditorSession>,
     opening: Option<mpsc::Receiver<anyhow::Result<EditorSession>>>,
     metadata_job: Option<mpsc::Receiver<anyhow::Result<Vec<ParameterInfo>>>>,
@@ -84,6 +92,90 @@ pub(crate) struct InstrumentUi {
 }
 
 impl DawApp {
+    fn editor_plugin(&self, target: EditorTarget) -> Option<Instrument> {
+        let track = self.project.track(target.track)?;
+        if let Some(id) = target.effect {
+            let slot = track.inserts.iter().find(|slot| slot.id == id)?;
+            let daw_core::Effect::Vst3 { path, class_id } = &slot.effect;
+            Some(Instrument::Vst3 {
+                path: path.clone(),
+                class_id: class_id.clone(),
+            })
+        } else {
+            Some(track.instrument.clone())
+        }
+    }
+
+    fn editor_state(&self, target: EditorTarget) -> Option<(&[u8], &[PluginParameterValue])> {
+        let track = self.project.track(target.track)?;
+        if let Some(id) = target.effect {
+            let slot = track.inserts.iter().find(|slot| slot.id == id)?;
+            Some((&slot.state, &slot.parameters))
+        } else {
+            Some((&track.instrument_state, &track.instrument_parameters))
+        }
+    }
+
+    fn editor_state_mut(
+        &mut self,
+        target: EditorTarget,
+    ) -> Option<(&mut Vec<u8>, &mut Vec<PluginParameterValue>)> {
+        let track = self.project.track_mut(target.track)?;
+        if let Some(id) = target.effect {
+            let slot = track.inserts.iter_mut().find(|slot| slot.id == id)?;
+            Some((&mut slot.state, &mut slot.parameters))
+        } else {
+            Some((
+                &mut track.instrument_state,
+                &mut track.instrument_parameters,
+            ))
+        }
+    }
+
+    pub(crate) fn open_effect_editor(&mut self, track: u64, effect: u64) {
+        self.open_popup(PopupKind::Instrument);
+        self.selected_track = Some(track);
+        self.effect_editor_target = Some((track, effect));
+        self.instrument_autolaunch = Some(track);
+    }
+
+    pub(crate) fn request_settings_apply(&mut self) {
+        self.apply_settings_snapshot(self.setup_draft.clone());
+    }
+
+    pub(crate) fn apply_settings_snapshot(&mut self, settings: crate::settings::Settings) {
+        // Appearance is independent of the audio graph and native editor state.
+        // Applying it must not interrupt a playing session or close its editor.
+        let mut same_audio_and_storage = self.settings.clone();
+        same_audio_and_storage.appearance = settings.appearance;
+        if same_audio_and_storage == settings {
+            self.apply_appearance_settings(settings);
+            return;
+        }
+        if let Err(error) = settings.validate() {
+            self.message(Err(error), "");
+            return;
+        }
+        if self.defer_document_request(DocumentRequest::Settings(settings.clone())) {
+            return;
+        }
+        if let Some(PendingAction::ApplySettings(settings)) =
+            self.defer_for_editor(PendingAction::ApplySettings(settings))
+        {
+            self.finish_settings_apply(settings);
+        }
+    }
+
+    pub(crate) fn request_recovery_save(&mut self) {
+        if self.modified
+            && !self.project_io_pending()
+            && !self.state_sync_pending()
+            && let Some(PendingAction::Recovery) = self.defer_for_editor(PendingAction::Recovery)
+        {
+            self.autosave_recovery();
+        }
+    }
+
     pub(crate) fn reset_instrument_ui(&mut self) {
         if let Some(session) = self.instrument_ui.session.take() {
             std::thread::spawn(move || drop(session));
@@ -95,13 +187,13 @@ impl DawApp {
     }
 
     pub(crate) fn editor_state_signature(&self) -> Option<EditorStateSignature> {
-        let (id, _) = self.instrument_ui.owner.as_ref()?;
-        let track = self.project.track(*id)?;
+        let (target, _) = self.instrument_ui.owner.as_ref()?;
+        let (state, parameters) = self.editor_state(*target)?;
         Some((
-            *id,
-            track.instrument.clone(),
-            track.instrument_state.clone(),
-            track.instrument_parameters.clone(),
+            *target,
+            self.editor_plugin(*target)?,
+            state.to_vec(),
+            parameters.to_vec(),
         ))
     }
 
@@ -116,9 +208,7 @@ impl DawApp {
             self.instrument_ui = InstrumentUi::default();
             if pending {
                 self.message(
-                    Err(anyhow::anyhow!(
-                        "Instrument state save cancelled by Undo/Redo"
-                    )),
+                    Err(anyhow::anyhow!("Plugin state save cancelled by Undo/Redo")),
                     "",
                 );
             }
@@ -134,6 +224,10 @@ impl DawApp {
             "selected": self.instrument_ui.selected,
             "last_touched": self.instrument_ui.last_touched,
             "error": self.instrument_ui.error,
+            "track": self.instrument_ui.owner.as_ref().map(|(target, _)| target.track),
+            "effect": self.instrument_ui.owner.as_ref().and_then(|(target, _)| target.effect),
+            "pid": self.instrument_ui.session.as_ref().map(EditorSession::process_id),
+            "selected_value": self.instrument_ui.selected.and_then(|id| self.instrument_ui.parameters.iter().find(|parameter| parameter.id == id)).map(|parameter| parameter.value),
         })
     }
 
@@ -145,11 +239,28 @@ impl DawApp {
         if self.instrument_ui.pending.is_some() {
             self.message(
                 Err(anyhow::anyhow!(
-                    "Wait for the instrument state to finish saving"
+                    "Wait for the plugin state to finish saving"
                 )),
                 "",
             );
             return None;
+        }
+        if self
+            .instrument_ui
+            .owner
+            .as_ref()
+            .is_some_and(|(target, plugin)| self.editor_plugin(*target).as_ref() != Some(plugin))
+        {
+            // Assignment/deletion already discarded this owner's state. Its
+            // delayed startup or close must not hold the current document's
+            // Save/Quit barrier or write a snapshot into the replacement class.
+            // Retire the receiver too: it may already contain a native session
+            // whose destructor must run away from the UI thread.
+            let obsolete = std::mem::take(&mut self.instrument_ui);
+            std::thread::spawn(move || drop(obsolete));
+            if matches!(action, PendingAction::Quit) {
+                self.instrument_autolaunch = None;
+            }
         }
         if self.instrument_ui.session.is_none() && self.instrument_ui.opening.is_none() {
             return Some(action);
@@ -181,45 +292,59 @@ impl DawApp {
             request_id,
             saved: request_id.is_some() && request_id == self.instrument_ui.last_saved_request,
         });
-        self.status = "Saving instrument state…".into();
+        self.status = "Saving plugin state…".into();
         self.error = false;
         None
     }
 
     pub(crate) fn new_session(&mut self) {
+        if self.defer_document_request(DocumentRequest::New) {
+            return;
+        }
         if let Some(PendingAction::New) = self.defer_for_editor(PendingAction::New) {
             self.finish_new_session();
         }
     }
 
     pub(crate) fn request_open_project(&mut self, path: PathBuf, recovery: bool) {
-        let project = match daw_core::Project::load(&path) {
-            Ok(project) => Box::new(project),
-            Err(error) => {
-                self.message(Err(error), "");
-                return;
-            }
-        };
+        if self.defer_document_request(DocumentRequest::Open(path.clone(), recovery)) {
+            return;
+        }
+        self.start_project_load(path, recovery);
+    }
+
+    pub(crate) fn accept_loaded_project(
+        &mut self,
+        loaded: LoadedProject,
+        path: PathBuf,
+        recovery: bool,
+    ) {
         if let Some(PendingAction::Open {
-            project,
+            loaded,
             path,
             recovery,
         }) = self.defer_for_editor(PendingAction::Open {
-            project,
+            loaded: Box::new(loaded),
             path,
             recovery,
         }) {
-            self.finish_open_project(*project, path, recovery);
+            self.finish_open_project(*loaded, path, recovery);
         }
     }
 
     pub(crate) fn save_to(&mut self, path: PathBuf) {
+        if self.defer_document_request(DocumentRequest::Save(path.clone())) {
+            return;
+        }
         if let Some(PendingAction::Save(path)) = self.defer_for_editor(PendingAction::Save(path)) {
             self.finish_project_save(path);
         }
     }
 
     pub(crate) fn export_to(&mut self, path: PathBuf) {
+        if self.defer_document_request(DocumentRequest::Export(path.clone())) {
+            return;
+        }
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
@@ -241,437 +366,51 @@ impl DawApp {
         ) {
             return;
         }
+        if self.defer_document_request(DocumentRequest::Quit) {
+            return;
+        }
+        self.error = false;
         if let Some(PendingAction::Quit) = self.defer_for_editor(PendingAction::Quit) {
             self.autosave_recovery();
+            self.retire_engine();
             self.close_ready = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-    }
-
-    /// Capture one verified instrument at a time. Discovery remains metadata-only;
-    /// initialization and screenshot work always happen in isolated helpers.
-    pub(crate) fn poll_plugin_previews(&mut self, ctx: &egui::Context) {
-        let key = egui::Id::new("plugin_library_state");
-        let mut state = ctx
-            .data_mut(|data| data.get_temp::<LibraryUi>(key))
-            .unwrap_or_default();
-        if !self.library_open {
-            state.activate_when_ready = false;
-        }
-        if let Some(job) = &state.capture {
-            let result = job.lock().ok().and_then(|mut job| job.take());
-            if let Some(result) = result {
-                state.capture = None;
-                match result {
-                    Ok(entry) => {
-                        if let Some(current) = self
-                            .vst_catalog
-                            .iter_mut()
-                            .find(|item| item.fingerprint == entry.fingerprint)
-                        {
-                            *current = entry;
-                        }
-                        state.preview = None;
-                    }
-                    Err(error) => self.message(Err(anyhow::anyhow!(error)), ""),
-                }
-            } else {
-                ctx.request_repaint_after(Duration::from_millis(100));
-            }
-        }
-        if state.capture.is_none()
-            && !self.state_sync_pending()
-            && let Some(entry) = self
-                .vst_catalog
-                .iter()
-                .filter(|entry| {
-                    (entry.plugin.is_instrument() == Some(true)
-                        || state.selected.as_ref() == Some(&entry.fingerprint))
-                        && matches!(entry.status, ThumbnailStatus::Missing)
-                        && !state.attempted.contains(&entry.fingerprint)
-                })
-                .min_by_key(|entry| state.selected.as_ref() != Some(&entry.fingerprint))
-        {
-            state.attempted.insert(entry.fingerprint.clone());
-            let job: CaptureJob = Arc::new(Mutex::new(None));
-            state.capture = Some(job.clone());
-            let plugin = entry.plugin.clone();
-            std::thread::spawn(move || {
-                let result = PluginCatalog::default()
-                    .capture(&plugin, |plugin, output| {
-                        daw_plugins::capture_editor_info(plugin, output)
-                    })
-                    .map_err(|error| format!("{error:#}"));
-                if let Ok(mut job) = job.lock() {
-                    *job = Some(result);
-                }
-            });
-            ctx.request_repaint_after(Duration::from_millis(100));
-        }
-        ctx.data_mut(|data| data.insert_temp(key, state));
-    }
-
-    pub(crate) fn open_instrument_chooser(&mut self, assign: bool) {
-        let target = self.selected_track.filter(|id| {
-            self.project
-                .track(*id)
-                .is_some_and(|track| track.kind == TrackKind::Midi)
-        });
-        self.open_popup(PopupKind::Library);
-        self.plugin_filter.clear();
-        self.plugin_assign_target = if assign { target } else { None };
-    }
-
-    pub(crate) fn plugin_library(&mut self, ctx: &egui::Context) {
-        if !self.library_open {
-            return;
-        }
-        let key = egui::Id::new("plugin_library_state");
-        let mut state = ctx
-            .data_mut(|data| data.get_temp::<LibraryUi>(key))
-            .unwrap_or_default();
-        let mut open = true;
-        let mut action = None;
-        let mut folders = false;
-        let assign = self.plugin_assign_target.is_some();
-        let pressed_enter = ctx
-            .data_mut(|data| data.remove_temp::<bool>(egui::Id::new("instrument_chooser_enter")))
-            .unwrap_or(false)
-            || ctx.input(|i| i.key_pressed(egui::Key::Enter));
-        state.activate_when_ready |= pressed_enter;
-        let activate = state.activate_when_ready && self.vst_scan.is_none();
-        if activate {
-            state.activate_when_ready = false;
-        }
-        daw_ui::popup("Instrument library")
-            .id(egui::Id::new("library"))
-            .open(&mut open)
-            .default_width(780.0)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    let search = daw_ui::text_field(
-                        ui,
-                        &mut self.plugin_filter,
-                        "Search instruments",
-                        390.0,
-                    );
-                    if self.plugin_search_focus {
-                        if search.has_focus() {
-                            self.plugin_search_focus = false;
-                        } else {
-                            search.request_focus();
-                        }
-                    }
-                    if search.changed() {
-                        state.selected = None;
-                    }
-                    if ui
-                        .add_enabled(
-                            self.vst_scan.is_none(),
-                            daw_ui::button_widget(if self.vst_scan.is_some() {
-                                "Scanning…"
-                            } else {
-                                "Scan"
-                            }),
-                        )
-                        .clicked()
-                    {
-                        self.scan_plugins();
-                    }
-                    folders = daw_ui::button(ui, "Folders").clicked();
-                });
-                ui.add_space(8.0);
-                let filter = self.plugin_filter.to_lowercase();
-                let matches: Vec<_> = self
-                    .vst_catalog
-                    .iter()
-                    .filter(|entry| {
-                        entry.plugin.is_instrument() != Some(false)
-                            && format!("{} {}", entry.plugin.name, entry.plugin.vendor)
-                                .to_lowercase()
-                                .contains(&filter)
-                    })
-                    .collect();
-                if !matches
-                    .iter()
-                    .any(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
-                {
-                    state.selected = matches.first().map(|entry| entry.fingerprint.clone());
-                }
-                let step = ctx.input(|i| {
-                    if i.key_pressed(egui::Key::ArrowDown) {
-                        1
-                    } else if i.key_pressed(egui::Key::ArrowUp) {
-                        -1
-                    } else {
-                        0
-                    }
-                });
-                if step != 0 && !matches.is_empty() {
-                    let index = matches
-                        .iter()
-                        .position(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
-                        .unwrap_or(0);
-                    let index =
-                        (index as isize + step).clamp(0, matches.len() as isize - 1) as usize;
-                    state.selected = Some(matches[index].fingerprint.clone());
-                }
-                if activate
-                    && let Some(entry) = matches
-                        .iter()
-                        .find(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
-                {
-                    action = Some((entry.plugin.clone(), assign));
-                }
-                ui.columns(2, |columns| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("instrument_catalog")
-                        .max_height(380.0)
-                        .show(&mut columns[0], |ui| {
-                            let mut count = 0;
-                            for entry in self
-                                .vst_catalog
-                                .iter()
-                                .filter(|entry| entry.plugin.is_instrument() != Some(false))
-                            {
-                                let plugin = &entry.plugin;
-                                if !format!("{} {}", plugin.name, plugin.vendor)
-                                    .to_lowercase()
-                                    .contains(&filter)
-                                {
-                                    continue;
-                                }
-                                count += 1;
-                                let detail = if plugin.is_instrument().is_none() {
-                                    "Unverified VST3".to_owned()
-                                } else if plugin.vendor.is_empty() {
-                                    "VST3 instrument".to_owned()
-                                } else {
-                                    plugin.vendor.clone()
-                                };
-                                let row_visible =
-                                    ui.clip_rect().intersects(egui::Rect::from_min_size(
-                                        ui.cursor().min,
-                                        egui::vec2(ui.available_width(), 58.0),
-                                    ));
-                                if row_visible
-                                    && !state.thumbnails.contains_key(&entry.fingerprint)
-                                    && let Some(path) = &entry.thumbnail
-                                    && let Ok(image) = image::open(path)
-                                {
-                                    let image = image.thumbnail(96, 64).to_rgba8();
-                                    let pixels = egui::ColorImage::from_rgba_unmultiplied(
-                                        [image.width() as usize, image.height() as usize],
-                                        image.as_raw(),
-                                    );
-                                    state.thumbnails.insert(
-                                        entry.fingerprint.clone(),
-                                        ctx.load_texture(
-                                            format!("thumb-{}", entry.fingerprint),
-                                            pixels,
-                                            egui::TextureOptions::LINEAR,
-                                        ),
-                                    );
-                                }
-                                let response = daw_ui::catalog_item(
-                                    ui,
-                                    state.selected.as_ref() == Some(&entry.fingerprint),
-                                    &plugin.name,
-                                    &detail,
-                                    state.thumbnails.get(&entry.fingerprint),
-                                );
-                                if response.clicked() {
-                                    state.selected = Some(entry.fingerprint.clone());
-                                    state.preview = None;
-                                }
-                                if response.double_clicked() {
-                                    action = Some((plugin.clone(), assign));
-                                }
-                            }
-                            if count == 0 && self.vst_scan.is_none() {
-                                ui.label("No instruments found");
-                            }
-                        });
-                    let ui = &mut columns[1];
-                    if let Some(entry) = state.selected.as_ref().and_then(|path| {
-                        self.vst_catalog
-                            .iter()
-                            .find(|entry| &entry.fingerprint == path)
-                    }) {
-                        ui.heading(&entry.plugin.name);
-                        if !entry.plugin.vendor.is_empty() {
-                            ui.label(&entry.plugin.vendor);
-                        }
-                        // Keep Add and Assign above asynchronous preview content
-                        // so a completed capture cannot move Add
-                        // beneath a pointer that was aimed at Assign.
-                        ui.add_space(10.0);
-                        if daw_ui::primary_button(
-                            ui,
-                            if assign {
-                                "Assign instrument"
-                            } else {
-                                "Add instrument track"
-                            },
-                        )
-                        .clicked()
-                        {
-                            action = Some((entry.plugin.clone(), assign));
-                        }
-                        let can_assign = self
-                            .selected_track
-                            .and_then(|id| self.project.track(id))
-                            .is_some_and(|track| track.kind == TrackKind::Midi);
-                        if !assign
-                            && ui
-                                .add_enabled(
-                                    can_assign,
-                                    daw_ui::button_widget("Assign to selected track"),
-                                )
-                                .clicked()
-                        {
-                            action = Some((entry.plugin.clone(), true));
-                        }
-                        ui.add_space(10.0);
-                        if let Some(path) = &entry.thumbnail {
-                            if state
-                                .preview
-                                .as_ref()
-                                .is_none_or(|(loaded, _)| loaded != path)
-                                && let Ok(image) = image::open(path).map(|image| image.to_rgba8())
-                            {
-                                let size = [image.width() as usize, image.height() as usize];
-                                let pixels =
-                                    egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
-                                state.preview = Some((
-                                    path.clone(),
-                                    ctx.load_texture(
-                                        entry.fingerprint.clone(),
-                                        pixels,
-                                        egui::TextureOptions::LINEAR,
-                                    ),
-                                ));
-                            }
-                            if let Some((_, texture)) = &state.preview {
-                                daw_ui::image_preview(
-                                    ui,
-                                    texture,
-                                    egui::vec2(ui.available_width(), 240.0),
-                                );
-                            }
-                        }
-                        if state.capture.is_some() {
-                            ui.label("Capturing editor…");
-                        } else if (matches!(entry.status, ThumbnailStatus::Missing)
-                            && !state.attempted.contains(&entry.fingerprint))
-                            || daw_ui::button(
-                                ui,
-                                if entry.thumbnail.is_some() {
-                                    "Refresh preview"
-                                } else {
-                                    "Capture preview"
-                                },
-                            )
-                            .clicked()
-                        {
-                            state.attempted.insert(entry.fingerprint.clone());
-                            let job: CaptureJob = Arc::new(Mutex::new(None));
-                            state.capture = Some(job.clone());
-                            let plugin = entry.plugin.clone();
-                            std::thread::spawn(move || {
-                                let result = PluginCatalog::default()
-                                    .capture(&plugin, |plugin, output| {
-                                        daw_plugins::capture_editor_info(plugin, output)
-                                    })
-                                    .map_err(|error| format!("{error:#}"));
-                                if let Ok(mut job) = job.lock() {
-                                    *job = Some(result);
-                                }
-                            });
-                        }
-                        if let ThumbnailStatus::Failed { message } = &entry.status {
-                            ui.label(
-                                egui::RichText::new("Preview unavailable")
-                                    .small()
-                                    .color(MUTED),
-                            )
-                            .on_hover_text(message);
-                        }
-                    } else {
-                        ui.label(egui::RichText::new("Select an instrument").color(MUTED));
-                    }
-                });
-            });
-        self.library_open &= open;
-        if folders {
-            self.open_popup(PopupKind::Setup);
-            self.setup_page = SetupPage::Plugins;
-        }
-        if let Some((plugin, replace)) = action {
-            self.begin_edit();
-            let track = if replace {
-                self.plugin_assign_target.or(self.selected_track).unwrap()
-            } else {
-                let id = self.project.add_midi_track(&plugin.name);
-                let clip = Clip::midi(
-                    "New pattern",
-                    self.snapped(self.cursor).max(0.0),
-                    4.0,
-                    Vec::new(),
-                );
-                self.selected_clip = Some(clip.id);
-                self.project.track_mut(id).unwrap().clips.push(clip);
-                id
-            };
-            let result = self.project.set_instrument(
-                track,
-                Instrument::Vst3 {
-                    path: plugin.path.to_string_lossy().into_owned(),
-                    class_id: plugin.class_id.clone(),
-                },
-            );
-            if result.is_ok() {
-                self.selected_track = Some(track);
-                if replace {
-                    self.selected_clip = self
-                        .project
-                        .track(track)
-                        .and_then(|track| track.clips.first())
-                        .map(|clip| clip.id);
-                }
-                self.selected_notes.clear();
-                self.changed();
-                self.open_popup(PopupKind::Instrument);
-                self.instrument_autolaunch = Some(track);
-            }
-            self.message(
-                result,
-                if replace {
-                    "Instrument assigned"
-                } else {
-                    "Instrument track added"
-                },
-            );
-        }
-        ctx.data_mut(|data| data.insert_temp(key, state));
     }
 
     pub(crate) fn plugin_instrument_editor(&mut self, ctx: &egui::Context) {
         if !self.instrument_open {
             return;
         }
-        let Some(track) = self
-            .selected_track
-            .and_then(|id| self.project.track(id))
-            .filter(|track| track.kind == TrackKind::Midi)
-        else {
+        let target = if let Some((track, effect)) = self.effect_editor_target {
+            EditorTarget {
+                track,
+                effect: Some(effect),
+            }
+        } else if let Some(track) = self.selected_track.filter(|id| {
+            self.project
+                .track(*id)
+                .is_some_and(|track| track.kind == TrackKind::Midi)
+        }) {
+            EditorTarget::from(track)
+        } else {
             self.instrument_open = false;
             return;
         };
-        let track_id = track.id;
+        let Some(instrument) = self.editor_plugin(target) else {
+            self.instrument_open = false;
+            return;
+        };
+        let track_id = target.track;
+        let track = self.project.track(track_id).unwrap();
         let name = track.name.clone();
-        let instrument = track.instrument.clone();
-        let owner = (track_id, instrument.clone());
+        let title = if let Some(effect) = target.effect {
+            let slot = track.inserts.iter().find(|slot| slot.id == effect).unwrap();
+            format!("Effect · {name} · {}", slot.name)
+        } else {
+            format!("Instrument · {name}")
+        };
+        let owner = (target, instrument.clone());
         if self.instrument_ui.owner.as_ref() != Some(&owner) {
             if self.instrument_ui.session.is_some() || self.instrument_ui.opening.is_some() {
                 if !self.instrument_ui.closing
@@ -694,7 +433,7 @@ impl DawApp {
         let mut fetch = false;
         let mut update = None;
         let mut automate = None;
-        daw_ui::popup(format!("Instrument · {name}"))
+        daw_ui::popup(title, ctx)
             .id(egui::Id::new("instrument_editor"))
             .open(&mut open)
             .default_width(600.0)
@@ -723,17 +462,14 @@ impl DawApp {
                                 }),
                             )
                             .clicked();
-                        choose = daw_ui::button(ui, "Change instrument").clicked();
-                        if let Some(session) = &self.instrument_ui.session {
-                            if daw_ui::button(ui, "Save state").clicked()
-                                && let Err(error) = session.save_state()
-                            {
-                                self.instrument_ui.error = Some(error.to_string());
-                            }
-                            if daw_ui::button(ui, "Close editor").clicked() {
-                                let _ = session.close();
-                                self.instrument_ui.closing = true;
-                            }
+                        if target.effect.is_none() {
+                            choose = daw_ui::button(ui, "Change instrument").clicked();
+                        }
+                        if let Some(session) = &self.instrument_ui.session
+                            && daw_ui::button(ui, "Close editor").clicked()
+                        {
+                            let _ = session.close();
+                            self.instrument_ui.closing = true;
                         }
                     });
                     ui.separator();
@@ -783,8 +519,10 @@ impl DawApp {
                         .and_then(|id| self.instrument_ui.parameters.iter().find(|p| p.id == id))
                     {
                         let mut value = parameter.value;
-                        let response =
-                            ui.add(daw_ui::slider(&mut value, 0.0..=1.0).text(&parameter.name));
+                        let response = ui.add_enabled(
+                            self.parameter_editing_enabled(),
+                            daw_ui::slider(&mut value, 0.0..=1.0).text(&parameter.name),
+                        );
                         ctx.data_mut(|data| {
                             data.insert_temp(
                                 egui::Id::new("instrument_parameter_rect"),
@@ -809,7 +547,7 @@ impl DawApp {
                         automate = Some((parameter.id, parameter.value, parameter.name.clone()));
                     }
                     if let Some(error) = &self.instrument_ui.error {
-                        ui.colored_label(ORANGE, error);
+                        ui.colored_label(palette(ui.ctx()).orange, error);
                     }
                 }
             });
@@ -825,37 +563,49 @@ impl DawApp {
         if launch {
             self.instrument_autolaunch = None;
         }
-        if launch || fetch {
-            let track = self.project.track(track_id).unwrap();
-            if let Instrument::Vst3 { path, class_id } = &track.instrument {
-                let path = PathBuf::from(path);
-                let class_id = class_id.clone();
-                let state = track.instrument_state.clone();
-                let parameters: Vec<_> = track
-                    .instrument_parameters
-                    .iter()
-                    .map(|p| (p.id, p.value))
-                    .collect();
-                self.instrument_ui.error = None;
-                if launch {
-                    // Ready provides current values. An older metadata-only probe
-                    // must never replace them after the editor starts receiving edits.
-                    self.instrument_ui.metadata_job = None;
-                    let (tx, rx) = mpsc::channel();
-                    self.instrument_ui.opening = Some(rx);
-                    std::thread::spawn(move || {
-                        let _ = tx.send(EditorSession::open_class(
-                            &path,
-                            class_id.as_deref(),
-                            &state,
-                            &parameters,
-                        ));
-                    });
-                } else {
-                    let (tx, rx) = mpsc::channel();
-                    self.instrument_ui.metadata_job = Some(rx);
-                    std::thread::spawn(move || {
-                        let result = (|| -> anyhow::Result<_> {
+        if (launch || fetch)
+            && let Instrument::Vst3 { path, class_id } = &instrument
+        {
+            let path = PathBuf::from(path);
+            let class_id = class_id.clone();
+            let (state, parameters) = self.editor_state(target).unwrap();
+            let state = state.to_vec();
+            let parameters: Vec<_> = parameters.iter().map(|p| (p.id, p.value)).collect();
+            self.instrument_ui.error = None;
+            if launch {
+                // Ready provides current values. An older metadata-only probe
+                // must never replace them after the editor starts receiving edits.
+                self.instrument_ui.metadata_job = None;
+                let (tx, rx) = mpsc::channel();
+                self.instrument_ui.opening = Some(rx);
+                std::thread::spawn(move || {
+                    let _ = tx.send(EditorSession::open_class(
+                        &path,
+                        class_id.as_deref(),
+                        &state,
+                        &parameters,
+                    ));
+                });
+            } else {
+                let (tx, rx) = mpsc::channel();
+                self.instrument_ui.metadata_job = Some(rx);
+                std::thread::spawn(move || {
+                    let result = (|| -> anyhow::Result<_> {
+                        if target.effect.is_some() {
+                            let mut plugin = daw_plugins::VstEffect::load_class(
+                                &path,
+                                class_id.as_deref(),
+                                48_000.0,
+                                256,
+                            )?;
+                            if !state.is_empty() {
+                                plugin.load_state(&state)?;
+                            }
+                            for (id, value) in parameters {
+                                plugin.set_parameter(id, value)?;
+                            }
+                            plugin.parameters()
+                        } else {
                             let mut plugin = daw_plugins::VstInstrument::load_class(
                                 &path,
                                 class_id.as_deref(),
@@ -869,19 +619,22 @@ impl DawApp {
                                 plugin.set_parameter(id, value)?;
                             }
                             plugin.parameters()
-                        })();
-                        let _ = tx.send(result);
-                    });
-                }
+                        }
+                    })();
+                    let _ = tx.send(result);
+                });
             }
         }
-        if let Some((id, value)) = update {
+        if let Some((id, value)) = update
+            && self.parameter_editing_enabled()
+        {
             if let Some(session) = &self.instrument_ui.session
                 && let Err(error) = session.set_parameter(id, value)
             {
                 self.instrument_ui.error = Some(error.to_string());
+            } else {
+                self.apply_instrument_parameters(&[(id, value)]);
             }
-            self.apply_instrument_parameters(&[(id, value)]);
         }
         if let Some((id, value, label)) = automate {
             self.begin_edit();
@@ -889,15 +642,18 @@ impl DawApp {
                 format!("{name} · {label}"),
                 AutomationTarget {
                     track: track_id,
-                    parameter: AutomationParameter::VstParameter { effect: None, id },
+                    parameter: AutomationParameter::VstParameter {
+                        effect: target.effect,
+                        id,
+                    },
                 },
                 value as f32,
             ) {
                 Ok(id) => {
+                    self.open_popup(PopupKind::Automation);
                     self.selected_track = Some(id);
                     self.selected_clip = None;
                     self.changed();
-                    self.open_popup(PopupKind::Automation);
                 }
                 Err(error) => self.message(Err(error), ""),
             }
@@ -970,6 +726,7 @@ impl DawApp {
         {
             self.instrument_ui.pending = None;
             self.autosave_recovery();
+            self.retire_engine();
             self.close_ready = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -999,10 +756,8 @@ impl DawApp {
             .instrument_ui
             .owner
             .as_ref()
-            .is_some_and(|(id, instrument)| {
-                self.project
-                    .track(*id)
-                    .is_some_and(|track| &track.instrument == instrument)
+            .is_some_and(|(target, instrument)| {
+                self.editor_plugin(*target).as_ref() == Some(instrument)
             });
         if !valid
             && !self.instrument_ui.closing
@@ -1012,61 +767,82 @@ impl DawApp {
             self.instrument_ui.closing = true;
         }
         let mut updates = Vec::new();
-        let mut saved = None;
         let mut closed = editor_failed;
         let mut closed_request = None;
+        let mut events = Vec::new();
         if let Some(session) = &mut self.instrument_ui.session {
             for _ in 0..256 {
                 let Some(event) = session.try_recv() else {
                     break;
                 };
-                match event {
-                    EditorEvent::Ready { parameters } => {
+                events.push(event);
+            }
+        }
+        for event in events {
+            match event {
+                EditorEvent::Ready { parameters } => {
+                    if !parameters
+                        .iter()
+                        .any(|p| Some(p.id) == self.instrument_ui.selected && !p.read_only)
+                    {
                         self.instrument_ui.selected =
                             parameters.iter().find(|p| !p.read_only).map(|p| p.id);
-                        self.instrument_ui.parameters = parameters;
                     }
-                    EditorEvent::ParameterChanged { id, value } => updates.push((id, value)),
-                    EditorEvent::StateSaved { request_id, state } => {
-                        if valid {
-                            self.instrument_ui.last_saved_request = request_id;
+                    self.instrument_ui.parameters = parameters;
+                }
+                EditorEvent::ParameterChanged { id, value } => {
+                    if value.is_finite() && (0.0..=1.0).contains(&value) {
+                        // A following snapshot may subsume the value override,
+                        // but must not discard the identity of the last gesture.
+                        self.instrument_ui.last_touched = Some(id);
+                        if let Some(parameter) = self
+                            .instrument_ui
+                            .parameters
+                            .iter_mut()
+                            .find(|p| p.id == id)
+                        {
+                            parameter.value = value;
                         }
-                        if valid && let Some(pending) = &mut self.instrument_ui.pending {
-                            pending.observe_snapshot(request_id);
-                        }
-                        // The opaque snapshot contains every earlier gesture; keep only
-                        // changes received after it as normalized overrides.
-                        updates.clear();
-                        saved = Some(state);
+                        updates.push((id, value));
                     }
-                    EditorEvent::Closed { request_id } => {
-                        closed_request = Some(request_id);
-                        closed = true;
-                        break;
-                    }
-                    EditorEvent::Error { message } => {
-                        self.instrument_ui.error = Some(message);
+                }
+                EditorEvent::StateSaved { request_id, state } => {
+                    if state.len() > daw_core::MAX_PLUGIN_STATE_BYTES {
+                        self.instrument_ui.error =
+                            Some("Plugin state exceeds the supported size".into());
                         editor_failed = true;
                         closed = true;
                         break;
                     }
-                    EditorEvent::Captured { .. } | EditorEvent::Heartbeat => {}
+                    if valid {
+                        self.instrument_ui.last_saved_request = request_id;
+                    }
+                    if valid && let Some(pending) = &mut self.instrument_ui.pending {
+                        pending.observe_snapshot(request_id);
+                    }
+                    // Commit preceding gestures first so consolidation cannot erase
+                    // their Undo boundary when events arrive in one UI frame.
+                    if valid {
+                        self.apply_instrument_parameters(&updates);
+                        self.apply_editor_snapshot(state);
+                    }
+                    updates.clear();
                 }
+                EditorEvent::Closed { request_id } => {
+                    closed_request = Some(request_id);
+                    closed = true;
+                    break;
+                }
+                EditorEvent::Error { message } => {
+                    self.instrument_ui.error = Some(message);
+                    editor_failed = true;
+                    closed = true;
+                    break;
+                }
+                EditorEvent::Captured { .. } | EditorEvent::Heartbeat => {}
             }
         }
         if valid {
-            if let Some(state) = saved {
-                let id = self.instrument_ui.owner.as_ref().unwrap().0;
-                if self.project.track(id).is_some_and(|track| {
-                    track.instrument_state != state || !track.instrument_parameters.is_empty()
-                }) {
-                    self.begin_edit();
-                    let track = self.project.track_mut(id).unwrap();
-                    track.instrument_state = state;
-                    track.instrument_parameters.clear();
-                    self.changed();
-                }
-            }
             self.apply_instrument_parameters(&updates);
         }
         if closed {
@@ -1092,19 +868,24 @@ impl DawApp {
                     self.instrument_ui.opening = None;
                     self.instrument_ui.closing = false;
                     self.autosave_recovery();
-                    self.message(Err(anyhow::anyhow!("Instrument state could not be saved. The operation was cancelled; the last known session was saved to recovery. Retry after reopening the instrument.")), "");
+                    self.message(Err(anyhow::anyhow!("Plugin state could not be saved. The operation was cancelled; the last known session was saved to recovery. Retry after reopening the plugin.")), "");
                 } else {
                     match pending.action {
                         PendingAction::Save(path) => self.finish_project_save(path),
                         PendingAction::Export(path) => self.start_export(path),
                         PendingAction::New => self.finish_new_session(),
+                        PendingAction::Recovery => self.autosave_recovery(),
+                        PendingAction::ApplySettings(settings) => {
+                            self.finish_settings_apply(settings)
+                        }
                         PendingAction::Open {
-                            project,
+                            loaded,
                             path,
                             recovery,
-                        } => self.finish_open_project(*project, path, recovery),
+                        } => self.finish_open_project(*loaded, path, recovery),
                         PendingAction::Quit => {
                             self.autosave_recovery();
+                            self.retire_engine();
                             self.close_ready = true;
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
@@ -1120,30 +901,63 @@ impl DawApp {
         }
     }
 
-    fn apply_instrument_parameters(&mut self, updates: &[(u32, f64)]) {
-        let Some((track_id, instrument)) = self.instrument_ui.owner.clone() else {
+    fn parameter_editing_enabled(&self) -> bool {
+        self.instrument_ui.opening.is_none()
+            && !self.instrument_ui.closing
+            && !self.state_sync_pending()
+    }
+
+    fn apply_editor_snapshot(&mut self, state: Vec<u8>) {
+        let Some((target, _)) = self.instrument_ui.owner.as_ref() else {
             return;
         };
-        if updates.is_empty()
-            || !self
-                .project
-                .track(track_id)
-                .is_some_and(|track| track.instrument == instrument)
-        {
+        let target = *target;
+        let Some((previous, overrides)) = self.editor_state(target) else {
+            return;
+        };
+        if previous == state && overrides.is_empty() {
             return;
         }
+        let opaque_edit = !previous.is_empty() && overrides.is_empty();
+        // A native event can arrive while an application drag is still pending.
+        // Seal that earlier edit before inserting a later native-history entry.
+        self.flush_pending_edit();
+        // Parameter gestures already own an Undo entry. Encoding those values in
+        // an opaque blob is persistence bookkeeping, as is the initial capture.
+        // Preset changes without parameter callbacks retain a distinct Undo step.
+        if opaque_edit {
+            self.history
+                .commit_named(&self.project, "Change plug-in preset");
+        }
+        let (saved, overrides) = self.editor_state_mut(target).unwrap();
+        *saved = state;
+        overrides.clear();
+        // A first capture or representation consolidation has no extra Undo
+        // step, but it still changes the document that must be persisted.
+        if self.history.is_saved() {
+            self.history.mark_unsaved();
+        }
+        self.changed();
+    }
+
+    fn apply_instrument_parameters(&mut self, updates: &[(u32, f64)]) {
+        let Some((target, instrument)) = self.instrument_ui.owner.clone() else {
+            return;
+        };
+        if updates.is_empty() || self.editor_plugin(target).as_ref() != Some(&instrument) {
+            return;
+        }
+        self.flush_pending_edit();
         let before = self.project.clone();
         for &(id, value) in updates {
             if !value.is_finite() || !(0.0..=1.0).contains(&value) {
                 continue;
             }
-            let track = self.project.track_mut(track_id).unwrap();
-            if let Some(parameter) = track.instrument_parameters.iter_mut().find(|p| p.id == id) {
+            let (_, parameters) = self.editor_state_mut(target).unwrap();
+            if let Some(parameter) = parameters.iter_mut().find(|p| p.id == id) {
                 parameter.value = value;
             } else {
-                track
-                    .instrument_parameters
-                    .push(PluginParameterValue { id, value });
+                parameters.push(PluginParameterValue { id, value });
             }
             if let Some(parameter) = self
                 .instrument_ui
@@ -1155,13 +969,26 @@ impl DawApp {
             }
             self.instrument_ui.last_touched = Some(id);
             if let Some(engine) = &self.engine
-                && let Err(error) = engine.set_instrument_parameter(track_id, id, value)
+                && let Err(error) =
+                    engine.set_plugin_parameter(target.track, target.effect, id, value)
             {
                 self.instrument_ui.error = Some(error.to_string());
             }
         }
         if self.project != before {
-            self.history.commit(&before);
+            let label = if target.effect.is_some() {
+                "Effect parameter"
+            } else {
+                "Instrument parameter"
+            };
+            let mut ids: Vec<_> = updates.iter().map(|(id, _)| *id).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            self.history.commit_grouped(
+                &before,
+                label,
+                format!("plugin:{}:{:?}:{ids:?}", target.track, target.effect),
+            );
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
         }
@@ -1187,131 +1014,141 @@ mod tests {
         let mut app = DawApp::with_context(ctx, project, None);
         app.settings.scratch_dir = directory.join("recovery");
         app.modified = true;
-        app.instrument_ui.owner = Some((id, instrument));
+        app.instrument_ui.owner = Some((id.into(), instrument));
         app
     }
 
     #[test]
-    fn preview_completion_preserves_the_assign_action_and_track_count() {
-        for failed in [true, false] {
-            let directory = tempfile::tempdir().unwrap();
-            let ctx = egui::Context::default();
-            let mut project = Project::new();
-            let target = project.add_midi_track("Existing MIDI track");
-            let mut app = DawApp::with_context(&ctx, project, None);
-            app.library_open = true;
-            app.selected_track = Some(target);
-            let entry = CatalogEntry {
-                plugin: daw_plugins::PluginInfo {
-                    name: "Selected instrument".into(),
-                    path: directory.path().join("Fixture.vst3"),
-                    vendor: "Test vendor".into(),
-                    category: "Instrument".into(),
-                    class_id: Some("11111111111111111111111111111111".into()),
-                },
-                fingerprint: "fixture".into(),
-                thumbnail: None,
-                thumbnail_size: None,
-                status: ThumbnailStatus::Missing,
-            };
-            app.vst_catalog = vec![entry.clone()];
-            let capture: CaptureJob = Arc::new(Mutex::new(None));
-            ctx.data_mut(|data| {
-                data.insert_temp(
-                    egui::Id::new("plugin_library_state"),
-                    LibraryUi {
-                        selected: Some(entry.fingerprint.clone()),
-                        attempted: HashSet::from([entry.fingerprint.clone()]),
-                        capture: Some(capture.clone()),
-                        ..Default::default()
-                    },
-                )
-            });
-            let mut time = 0.0;
-            let mut frame = |app: &mut DawApp, events| {
-                time += 1.0 / 60.0;
-                ctx.run(
-                    egui::RawInput {
-                        screen_rect: Some(egui::Rect::from_min_size(
-                            egui::Pos2::ZERO,
-                            egui::vec2(1600.0, 1000.0),
-                        )),
-                        time: Some(time),
-                        events,
-                        ..Default::default()
-                    },
-                    |ctx| {
-                        app.poll_plugin_previews(ctx);
-                        app.plugin_library(ctx);
-                    },
-                )
-            };
-            fn action_position(output: &egui::FullOutput, label: &str) -> egui::Pos2 {
-                output
-                    .shapes
-                    .iter()
-                    .find_map(|shape| {
-                        if let egui::Shape::Text(text) = &shape.shape
-                            && text.galley.text() == label
-                        {
-                            Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center())
-                        } else {
-                            None
-                        }
-                    })
-                    .expect("visible library action")
-            }
-            frame(&mut app, vec![]);
-            frame(&mut app, vec![]);
-            let loading = frame(&mut app, vec![]);
-            let assign = action_position(&loading, "Assign to selected track");
-            let add = action_position(&loading, "Add instrument track");
-            let mut completed = entry.clone();
-            if failed {
-                completed.status = ThumbnailStatus::Failed {
-                    message: "Preview failed".into(),
-                };
-            } else {
-                let png = directory.path().join("preview.png");
-                image::RgbaImage::from_pixel(16, 16, image::Rgba([120, 80, 40, 255]))
-                    .save(&png)
-                    .unwrap();
-                completed.thumbnail = Some(png);
-                completed.thumbnail_size = Some([16, 16]);
-                completed.status = ThumbnailStatus::Ready;
-            }
-            *capture.lock().unwrap() = Some(Ok(completed));
-            let ready = frame(&mut app, vec![]);
-            assert!(action_position(&ready, "Assign to selected track").distance(assign) <= 1.0);
-            assert!(action_position(&ready, "Add instrument track").distance(add) <= 1.0);
-            for pressed in [true, false] {
-                frame(
-                    &mut app,
-                    vec![
-                        egui::Event::PointerMoved(assign),
-                        egui::Event::PointerButton {
-                            pos: assign,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
-                );
-            }
-            assert_eq!(
-                app.project.tracks.len(),
-                1,
-                "Assign must never create a second track"
-            );
-            assert_eq!(app.selected_track, Some(target));
-            assert_eq!(
-                app.project.track(target).unwrap().instrument,
-                Instrument::Vst3 {
-                    path: entry.plugin.path.to_string_lossy().into_owned(),
-                    class_id: entry.plugin.class_id,
-                }
-            );
-        }
+    fn automatic_snapshots_preserve_parameter_undo_without_extra_steps() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        let target = app.instrument_ui.owner.as_ref().unwrap().0;
+        app.apply_editor_snapshot(vec![1]);
+        assert!(
+            !app.history.can_undo(),
+            "Opening an unchanged editor is not an edit"
+        );
+        app.edit_dirty = false;
+        app.apply_instrument_parameters(&[(7, 0.8)]);
+        app.apply_editor_snapshot(vec![2]);
+        assert!(app.history.undo(&mut app.project));
+        let (state, parameters) = app.editor_state(target).unwrap();
+        assert_eq!(state, &[1]);
+        assert!(parameters.is_empty());
+        assert!(
+            !app.history.can_undo(),
+            "Encoding a parameter edit must not add an Undo"
+        );
+        assert!(app.history.redo(&mut app.project));
+        assert_eq!(app.editor_state(target).unwrap().0, &[2]);
+        app.apply_editor_snapshot(vec![3]);
+        assert!(app.history.undo(&mut app.project));
+        assert_eq!(
+            app.editor_state(target).unwrap().0,
+            &[2],
+            "Opaque preset edits remain undoable"
+        );
+    }
+
+    #[test]
+    fn parameter_controls_wait_for_start_close_and_state_barriers() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        assert!(app.parameter_editing_enabled());
+        let (_sender, receiver) = mpsc::channel();
+        app.instrument_ui.opening = Some(receiver);
+        assert!(!app.parameter_editing_enabled());
+        app.instrument_ui.opening = None;
+        app.instrument_ui.closing = true;
+        assert!(!app.parameter_editing_enabled());
+        app.instrument_ui.closing = false;
+        app.instrument_ui.pending = Some(PendingState {
+            action: PendingAction::Recovery,
+            deadline: Instant::now() + Duration::from_secs(30),
+            request_id: Some(1),
+            saved: false,
+        });
+        assert!(!app.parameter_editing_enabled());
+        app.instrument_ui.pending = None;
+        assert!(app.parameter_editing_enabled());
+    }
+
+    #[test]
+    fn native_parameter_change_follows_an_unflushed_ui_edit_in_history() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        let target = app.instrument_ui.owner.as_ref().unwrap().0;
+        app.apply_editor_snapshot(vec![1]);
+        app.flush_pending_edit();
+        let original = app.project.clone();
+        app.begin_edit();
+        app.project.tracks[0].name = "Edited channel".into();
+        app.changed();
+        let renamed = app.project.clone();
+        app.apply_instrument_parameters(&[(7, 0.8)]);
+        app.flush_pending_edit();
+        assert!(app.history.undo(&mut app.project));
+        assert_eq!(
+            app.project, renamed,
+            "Undo native gesture must retain the preceding UI edit"
+        );
+        assert!(app.editor_state(target).unwrap().1.is_empty());
+        assert!(app.history.undo(&mut app.project));
+        assert_eq!(app.project, original);
+        assert!(app.history.redo(&mut app.project));
+        assert_eq!(app.project, renamed);
+        assert!(app.history.redo(&mut app.project));
+        assert_eq!(app.editor_state(target).unwrap().1[0].value, 0.8);
+    }
+
+    #[test]
+    fn opaque_preset_follows_an_unflushed_ui_edit_without_duplicate_steps() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        app.apply_editor_snapshot(vec![1]);
+        app.flush_pending_edit();
+        let original = app.project.clone();
+        app.begin_edit();
+        app.project.tracks[0].gain = 0.6;
+        app.changed();
+        let fader = app.project.clone();
+        app.apply_editor_snapshot(vec![2]);
+        app.flush_pending_edit();
+        assert_eq!(app.history.undo_labels().count(), 2);
+        assert!(app.history.undo(&mut app.project));
+        assert_eq!(
+            app.project, fader,
+            "Undo preset must retain the preceding fader move"
+        );
+        assert!(app.history.undo(&mut app.project));
+        assert_eq!(app.project, original);
+    }
+
+    #[test]
+    fn first_native_capture_stays_dirty_without_an_artificial_undo_step() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        app.modified = false;
+        assert!(app.history.is_saved());
+        app.apply_editor_snapshot(vec![1]);
+        app.flush_pending_edit();
+        assert!(app.modified);
+        assert!(!app.history.is_saved());
+        assert!(!app.history.can_undo());
+        app.history.mark_saved_at(app.history.state_id());
+        app.modified = false;
+        app.apply_editor_snapshot(vec![1]);
+        app.flush_pending_edit();
+        assert!(
+            !app.modified,
+            "An identical snapshot must not dirty a saved document"
+        );
+        assert!(app.history.is_saved());
     }
 
     #[test]
@@ -1363,7 +1200,7 @@ mod tests {
             if load_existing {
                 // An opened document can reuse the exact same track and class IDs.
                 app.finish_open_project(
-                    app.project.clone(),
+                    app.project.clone().into(),
                     directory.path().join("other.json"),
                     false,
                 );
@@ -1426,6 +1263,49 @@ mod tests {
             app.instrument_ui.error.as_deref(),
             Some("Plug-in executable could not load")
         );
+        assert_eq!(
+            Project::load(app.settings.scratch_dir.join("recovery.daw.json")).unwrap(),
+            app.project
+        );
+    }
+
+    #[test]
+    fn quitting_after_reassignment_does_not_wait_for_the_obsolete_editor_startup() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        let (sender, receiver) = mpsc::channel();
+        app.instrument_ui.opening = Some(receiver);
+        let track = app.instrument_ui.owner.as_ref().unwrap().0.track;
+        let Instrument::Vst3 { path, .. } = app.project.track(track).unwrap().instrument.clone()
+        else {
+            unreachable!()
+        };
+        app.project
+            .set_instrument(
+                track,
+                Instrument::Vst3 {
+                    path,
+                    class_id: Some("22222222222222222222222222222222".into()),
+                },
+            )
+            .unwrap();
+        app.instrument_autolaunch = Some(track);
+        app.request_quit(&ctx);
+        assert!(
+            app.close_ready,
+            "The replaced class cannot save into the new class"
+        );
+        assert!(!app.state_sync_pending());
+        assert!(app.instrument_ui.owner.is_none());
+        assert!(app.instrument_ui.opening.is_none());
+        assert!(app.instrument_autolaunch.is_none());
+        // A late startup outcome belongs to the abandoned owner and cannot
+        // cancel Quit or overwrite the current assignment's recovery snapshot.
+        let _ = sender.send(Err(anyhow::anyhow!("Obsolete class failed to load")));
+        app.poll_instrument_editor(&ctx);
+        assert!(!app.error);
+        assert!(app.close_ready);
         assert_eq!(
             Project::load(app.settings.scratch_dir.join("recovery.daw.json")).unwrap(),
             app.project

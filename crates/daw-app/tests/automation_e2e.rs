@@ -179,6 +179,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     app.click("New instrument");
     menu(&mut app, "Window", "Effects");
     menu(&mut app, "+ Insert", "Rill Fixture FX");
+    app.click("Add to effect chain");
     menu(&mut app, "Window", "Routing");
     menu(&mut app, "+ Send", "New bus");
     let state = app.inspect();

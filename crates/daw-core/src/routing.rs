@@ -12,6 +12,37 @@ impl Effect {
 }
 
 impl Project {
+    /// Replace a slot's plug-in while keeping its identity and routing position.
+    /// A different processor invalidates its saved state and automation IDs.
+    pub fn set_effect(&mut self, track_id: u64, effect_id: u64, effect: Effect) -> Result<()> {
+        let mut candidate = self.clone();
+        let slot = candidate
+            .track_mut(track_id)
+            .context("Track not found")?
+            .inserts
+            .iter_mut()
+            .find(|slot| slot.id == effect_id)
+            .context("Insert not found")?;
+        if slot.effect != effect {
+            slot.effect = effect;
+            slot.state.clear();
+            slot.parameters.clear();
+            candidate.tracks.retain(|track| {
+                !track.automation.as_ref().is_some_and(|lane| {
+                    lane.target.track == track_id
+                        && matches!(
+                            lane.target.parameter,
+                            crate::AutomationParameter::VstParameter { effect: Some(id), .. }
+                                if id == effect_id
+                        )
+                })
+            });
+        }
+        candidate.validate()?;
+        *self = candidate;
+        Ok(())
+    }
+
     pub fn add_bus(&mut self, name: impl Into<String>) -> u64 {
         let mut track = Track::new(name, TrackKind::Bus);
         track.gain = 1.0;

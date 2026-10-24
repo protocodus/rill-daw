@@ -5,10 +5,8 @@ use crate::{theme, tokens};
 use egui::{Button, ComboBox, DragValue, Frame, InnerResponse, Response, Slider, Ui, WidgetText};
 use std::{hash::Hash, ops::RangeInclusive};
 
-pub fn button_widget(label: impl Into<WidgetText>) -> Button<'static> {
-    Button::new(label.into())
-        .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
-        .corner_radius(tokens::RADIUS)
+pub fn button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
+    crate::IconButton::new(label)
 }
 
 pub fn button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
@@ -18,17 +16,16 @@ pub fn button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(
         button_widget(label)
-            .fill(theme::ACCENT.gamma_multiply(0.24))
-            .stroke(egui::Stroke::new(1.0_f32, theme::ACCENT)),
+            .fill(theme::palette(ui.ctx()).accent.gamma_multiply(0.24))
+            .stroke(egui::Stroke::new(1.0_f32, theme::palette(ui.ctx()).accent)),
     )
 }
 
 pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(
-        Button::new(label.into())
+        button_widget(label)
             .small()
-            .min_size(egui::vec2(0.0, tokens::COMPACT_HEIGHT))
-            .corner_radius(tokens::RADIUS),
+            .min_size(egui::vec2(0.0, tokens::COMPACT_HEIGHT)),
     )
 }
 
@@ -37,7 +34,31 @@ pub fn menu_button<R>(
     label: impl Into<WidgetText>,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
-    ui.menu_button(label.into(), add_contents)
+    let label = label.into();
+    if let Some(icon) = crate::Icon::for_label(label.text()) {
+        let response = ui.menu_button(
+            (
+                egui::Atom::custom(egui::Id::new("rill-menu-icon"), egui::Vec2::splat(18.0)),
+                label,
+            ),
+            add_contents,
+        );
+        let rect = egui::Rect::from_center_size(
+            egui::pos2(
+                response.response.rect.left() + ui.spacing().button_padding.x + 9.0,
+                response.response.rect.center().y,
+            ),
+            egui::Vec2::splat(18.0),
+        );
+        icon.paint(
+            ui.painter(),
+            rect,
+            ui.style().interact(&response.response).text_color(),
+        );
+        response
+    } else {
+        ui.menu_button(label, add_contents)
+    }
 }
 
 /// A searchable or editable popover stays open while its internal controls are used.
@@ -47,12 +68,16 @@ pub fn picker_button<R>(
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
-    egui::containers::menu::MenuButton::from_button(button_widget(label))
-        .config(
-            egui::containers::menu::MenuConfig::new()
-                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
-        )
-        .ui(ui, contents)
+    egui::containers::menu::MenuButton::from_button(
+        Button::new(label.into())
+            .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
+            .corner_radius(tokens::RADIUS),
+    )
+    .config(
+        egui::containers::menu::MenuConfig::new()
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+    )
+    .ui(ui, contents)
 }
 
 /// Application command bar; menus use the same native focus and popup behavior
@@ -62,7 +87,12 @@ pub fn menu_bar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerRes
 }
 
 pub fn toggle(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Response {
-    ui.toggle_value(value, label.into())
+    let mut response = selectable(ui, *value, label);
+    if response.clicked() {
+        *value = !*value;
+        response.mark_changed();
+    }
+    response
 }
 
 pub fn checkbox(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Response {
@@ -77,7 +107,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
     let available = (ui.available_width() - tokens::SWITCH_WIDTH - tokens::SPACE_SM).max(0.0);
     let galley = label.into_galley(
         ui,
-        Some(egui::TextWrapMode::Extend),
+        Some(egui::TextWrapMode::Wrap),
         available,
         egui::TextStyle::Button,
     );
@@ -110,7 +140,9 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
             egui::vec2(tokens::SWITCH_WIDTH, tokens::SWITCH_HEIGHT),
         );
         let fill = if *value {
-            theme::ACCENT.gamma_multiply(if ui.is_enabled() { 0.65 } else { 0.25 })
+            theme::palette(ui.ctx())
+                .accent
+                .gamma_multiply(if ui.is_enabled() { 0.65 } else { 0.25 })
         } else {
             visuals.bg_fill
         };
@@ -142,7 +174,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
             ui.painter().rect_stroke(
                 rect.expand(2.0),
                 tokens::RADIUS,
-                egui::Stroke::new(1.5_f32, theme::ACCENT),
+                egui::Stroke::new(1.5_f32, theme::palette(ui.ctx()).accent),
                 egui::StrokeKind::Outside,
             );
         }
@@ -160,7 +192,12 @@ pub fn radio_value<T: PartialEq>(
 }
 
 pub fn selectable(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> Response {
-    ui.selectable_label(selected, label.into())
+    ui.add(
+        button_widget(label)
+            .selected(selected)
+            .frame_when_inactive(selected)
+            .frame(true),
+    )
 }
 
 pub fn selectable_value<T: PartialEq>(
@@ -169,7 +206,12 @@ pub fn selectable_value<T: PartialEq>(
     value: T,
     label: impl Into<WidgetText>,
 ) -> Response {
-    ui.selectable_value(current, value, label.into())
+    let mut response = selectable(ui, *current == value, label);
+    if response.clicked() && *current != value {
+        *current = value;
+        response.mark_changed();
+    }
+    response
 }
 
 /// Compact canvas control with a caller-owned stable ID; used for track mute,
@@ -326,11 +368,11 @@ pub fn catalog_item(
         rect,
         tokens::RADIUS,
         if selected {
-            theme::ACCENT.gamma_multiply(0.15)
+            theme::palette(ui.ctx()).accent.gamma_multiply(0.15)
         } else if response.hovered() {
-            theme::RAISED
+            theme::palette(ui.ctx()).raised
         } else {
-            theme::PANEL
+            theme::palette(ui.ctx()).panel
         },
     );
     let mut x = rect.left() + tokens::SPACE_MD;
@@ -350,39 +392,50 @@ pub fn catalog_item(
         );
         x += size.x + tokens::SPACE_MD;
     }
-    painter.text(
-        egui::pos2(
-            x,
-            rect.top()
-                + if detail.is_empty() {
-                    height * 0.5
-                } else {
-                    18.0
-                },
+    crate::text::paint_row(
+        &painter,
+        egui::Rect::from_min_max(
+            egui::pos2(x, rect.top() + tokens::SPACE_XS),
+            egui::pos2(
+                rect.right() - tokens::SPACE_MD,
+                rect.top()
+                    + if detail.is_empty() {
+                        height - tokens::SPACE_XS
+                    } else {
+                        30.0
+                    },
+            ),
         ),
-        egui::Align2::LEFT_CENTER,
+        crate::text::TextRole::Label,
         title,
-        egui::FontId::proportional(13.0),
-        theme::TEXT,
     );
     if !detail.is_empty() {
-        painter.text(
-            egui::pos2(x, rect.top() + 39.0),
-            egui::Align2::LEFT_CENTER,
+        crate::text::paint_row(
+            &painter,
+            egui::Rect::from_min_max(
+                egui::pos2(x, rect.top() + 30.0),
+                egui::pos2(
+                    rect.right() - tokens::SPACE_MD,
+                    rect.bottom() - tokens::SPACE_XS,
+                ),
+            ),
+            crate::text::TextRole::Note,
             detail,
-            egui::FontId::proportional(10.0),
-            theme::MUTED,
         );
     }
     if response.has_focus() {
         painter.rect_stroke(
             rect,
             tokens::RADIUS,
-            egui::Stroke::new(1.0_f32, theme::ACCENT),
+            egui::Stroke::new(1.0_f32, theme::palette(ui.ctx()).accent),
             egui::StrokeKind::Inside,
         );
     }
-    response
+    response.on_hover_text(if detail.is_empty() {
+        title.to_owned()
+    } else {
+        format!("{title}\n{detail}")
+    })
 }
 
 pub fn image_preview(ui: &mut Ui, texture: &egui::TextureHandle, max_size: egui::Vec2) -> Response {
@@ -393,33 +446,33 @@ pub fn image_preview(ui: &mut Ui, texture: &egui::TextureHandle, max_size: egui:
     ui.image((texture.id(), original * scale))
 }
 
-pub fn panel() -> Frame {
+pub fn panel(ctx: &egui::Context) -> Frame {
     Frame::new()
-        .fill(theme::PANEL)
+        .fill(theme::palette(ctx).panel)
         .inner_margin(tokens::SPACE_LG)
         .corner_radius(tokens::RADIUS)
 }
 
-pub fn card() -> Frame {
+pub fn card(ctx: &egui::Context) -> Frame {
     Frame::new()
-        .fill(theme::RAISED)
+        .fill(theme::palette(ctx).raised)
         .inner_margin(tokens::SPACE_MD)
         .corner_radius(tokens::RADIUS)
-        .stroke(egui::Stroke::new(1.0_f32, theme::LINE))
+        .stroke(egui::Stroke::new(1.0_f32, theme::palette(ctx).line))
 }
 
-pub fn inset() -> Frame {
+pub fn inset(ctx: &egui::Context) -> Frame {
     Frame::new()
-        .fill(theme::BG)
+        .fill(theme::palette(ctx).bg)
         .inner_margin(tokens::SPACE_SM)
         .corner_radius(tokens::RADIUS)
 }
 
 /// On-demand property/utility window with the same surfaces and spacing as the
 /// main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
-pub fn popup<'a>(title: impl Into<WidgetText>) -> egui::Window<'a> {
+pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
     egui::Window::new(title)
-        .frame(panel().stroke(egui::Stroke::new(1.0_f32, theme::LINE)))
+        .frame(panel(ctx).stroke(egui::Stroke::new(1.0_f32, theme::palette(ctx).line)))
         .default_width(480.0)
         .collapsible(false)
         .resizable(false)
@@ -433,8 +486,34 @@ pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) ->
         (viewport.width() - 96.0).max(320.0),
         (viewport.height() - 196.0).max(240.0),
     );
-    popup(title)
+    popup(title, ctx)
         .fixed_pos(viewport.min + egui::vec2(24.0, 112.0))
         .fixed_size(size)
         .movable(false)
+}
+
+/// A dedicated drag affordance keeps row switches and editor buttons clickable.
+pub fn reorder_handle<T: Send + Sync + 'static>(ui: &mut Ui, payload: T) -> Response {
+    let response = ui
+        .add(button_widget("⋮⋮").sense(egui::Sense::drag()))
+        .on_hover_cursor(egui::CursorIcon::Grab)
+        .on_hover_text("Drag to reorder");
+    response.dnd_set_drag_payload(payload);
+    response
+}
+
+/// Highlight the destination row and return its payload only on release.
+pub fn reorder_drop_target<T: Send + Sync + 'static>(
+    ui: &Ui,
+    response: &Response,
+) -> Option<std::sync::Arc<T>> {
+    if response.dnd_hover_payload::<T>().is_some() {
+        ui.painter().rect_stroke(
+            response.rect,
+            tokens::RADIUS,
+            egui::Stroke::new(1.5_f32, theme::palette(ui.ctx()).accent),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response.dnd_release_payload::<T>()
 }

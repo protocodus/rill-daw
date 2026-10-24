@@ -11,9 +11,11 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    pub appearance: daw_ui::theme::Appearance,
     pub device_name: Option<String>,
     pub sample_rate: u32,
     pub buffer_frames: u32,
+    pub resample_quality: daw_engine::ResampleQuality,
     pub scratch_dir: PathBuf,
     pub vst_dirs: Vec<PathBuf>,
 }
@@ -45,9 +47,11 @@ fn config_dir() -> PathBuf {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            appearance: daw_ui::theme::Appearance::System,
             device_name: None,
             sample_rate: 48_000,
             buffer_frames: 256,
+            resample_quality: daw_engine::ResampleQuality::High,
             scratch_dir: config_dir().join("Scratch"),
             vst_dirs: Vec::new(),
         }
@@ -129,6 +133,7 @@ impl Settings {
             device_name: self.device_name.clone(),
             sample_rate: self.sample_rate,
             buffer_frames: self.buffer_frames,
+            resample_quality: self.resample_quality,
         }
     }
 }

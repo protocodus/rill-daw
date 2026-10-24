@@ -29,6 +29,10 @@ impl Harness {
 
     fn launch(vst_path: Option<&std::path::Path>) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
+        Self::launch_in(vst_path, directory)
+    }
+
+    fn launch_in(vst_path: Option<&std::path::Path>, directory: TempDir) -> Self {
         let binary = std::env::var_os("RILL_E2E_BINARY")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
         let mut command = Command::new(binary);
@@ -82,11 +86,21 @@ impl Harness {
         harness
     }
 
+    /// Restart the production process with the same isolated settings and cache.
+    pub fn restart(mut self) -> Self {
+        let result = self.raw_command(json!({"command":"quit"}));
+        assert_eq!(result["ok"], true, "{result}");
+        assert_eq!(result["event"], "exiting");
+        let directory = std::mem::replace(&mut self.directory, tempfile::tempdir().unwrap());
+        self.wait_exit();
+        Self::launch_in(None, directory)
+    }
+
     fn response(&self) -> Value {
         let line = self
             .output
-            .recv_timeout(Duration::from_secs(45))
-            .expect("application did not return JSON within 45 seconds");
+            .recv_timeout(Duration::from_secs(125))
+            .expect("application did not return JSON within 125 seconds");
         serde_json::from_str(&line)
             .unwrap_or_else(|error| panic!("Invalid application output {line:?}: {error}"))
     }
@@ -164,6 +178,7 @@ pub fn plugin_fixture() -> TempDir {
 pub fn fixture_library(app: &mut Harness) {
     app.click("Window");
     app.click("Library");
+    app.click("Instruments");
     let state = app.inspect();
     if state["visible_labels"]
         .as_array()

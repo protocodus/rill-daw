@@ -56,12 +56,15 @@ Supported commands:
 | Command | Arguments | Behavior |
 | --- | --- | --- |
 | `inspect` | — | Advance frames and return the project, selection, popup state, settings, status, visible labels, and pointer/label geometry for diagnostics. |
+| `viewport` | `width`, `height`, optional `pixels_per_point` | Resize the headless logical viewport (800–4096 by 600–4096 points) and display density (0.75–3). |
+| `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
 | `open` | `path` | Open a saved project through File → Open's state barrier, preserving the outgoing session in recovery. |
 | `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero. |
-| `pointer` | `x`, `y`, `phase` (`click` or `drag`), drag `to_x`, `to_y` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
-| `scroll` | `x`, `y`, `delta` | Scroll at viewport coordinates; negative delta moves down the content. |
+| `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
+| `scroll` | `x`, `y`, `delta`; optional `delta_x` and modifiers | Scroll at viewport coordinates; negative delta moves down the content. |
 | `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd` | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. |
+| `focused` | `focused` boolean | Change window focus for held-note release tests. |
 | `text` | `text` | Send text input to the focused control. |
 | `drop` | `paths`, optional `track`, `beat` | Drop files onto a visible audio track by project index, or omit `track` to create new tracks in empty arrangement space. Beat must be visible and align to current snap. |
 | `export` | `path` | Start the application's background WAV export. |
@@ -73,3 +76,32 @@ File → Quit also closes the process through the application's normal viewport 
 Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
 
 With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit` test in `features_e2e` drives the complete production app: direct instrument creation, automatic native editor opening, note editing, last-touched automation, Undo/Redo protection, saved state restoration, cached thumbnails, two independent VST tracks with audible export, New/Open recovery, and shutdown. The regular suite separately covers keyboard and double-click creation using metadata fixtures.
+
+The `library_e2e` target drives the large device browser through actual UI controls: name/category search, developer filtering, MIDI instrument creation and assignment, cached instrument/effect previews, insertion into the active chain, creation of routed send returns, and returning from the routing browser with Escape. Its drag test loads stateful effect slots, reorders them by pointer gesture, checks stable IDs/state/parameter overrides/automation, exercises Undo/Redo, and saves/reopens a `.rill` bundle. These metadata fixtures need neither installed plugins nor an audio device and run in containers. Real native preview capture remains covered by the opt-in installed-plugin tests.
+
+```sh
+cargo test --locked -p daw-app --test library_e2e
+```
+
+The editor suites (`audio_editor_e2e`, `midi_editor_e2e`, `timeline_e2e`) exercise shared gestures and Fit, audio edits/transient previews with rendered-sample oracles, MIDI note/chord/velocity editing, and audition release on mouse/focus/view changes. `audio_setup_e2e` switches conversion quality and sample rate through Setup and verifies real exported bandwidth, rate, persistence, and project preservation. `plugin_recall_e2e` covers failed effect-editor launches plus an opt-in CHOW workflow for automatic state, automation, portable save/reopen, audible recall, and helper crash recovery.
+
+Headless runs disable automatic physical-device startup for held-note previews. `RILL_E2E_AUDIO_DEVICE=1` enables it for a deliberate native-device test. The ordinary suite observes audition intent through `audition_request`; a native Surge renderer test verifies actual sound and note release without a hardware device.
+
+The `project_io_e2e` target covers background bundle saving and loading, later edits remaining dirty, failure preserving the previous archive/current document, Quit waiting for a save, deduplicated waveform preparation, and rejecting oversized WAV declarations before allocation. On Unix it uses a small OS pipe to hold a project read open while exercising real menus, then verifies ordered Save/New completion and outgoing recovery. It needs no device, display, or installed plugin.
+
+Headless `open` and `save` continue to wait for native state acknowledgements and file completion by default. Add `"wait":false` to return after dispatch; `{"command":"wait_project","timeout_ms":120000}` waits for queued document actions and native barriers. `project_pending`, `modified`, `project_path`, `waveform_count`, and `waveform_warning` expose completion and recovery state. Failed operations cancel queued destructive transitions and leave the current document open. The driver accepts a bounded project wait of at most 120 seconds; a timed-out wait does not cancel filesystem work.
+
+The `history_e2e` target checks named multi-step History jumps, saved checkpoints, redo branching, new-project reset, one-step multi-frame note drags, and actual clicks on labelled vector-icon tools in both arranger and piano roll. CI runs every application test target automatically, including tests added in future changes.
+
+
+`typography_e2e` edits a Unicode/emoji track name, checks readable visible text
+across Light/Dark and 1×/2× display density in a 1100×760 window, and saves/reopens
+its portable project. A long Unicode device name is searched in the real library,
+wraps in the detail title, remains intact in the catalog, and can still be added.
+Shared typography tests verify actual glyph availability, proportional/monospace
+fallbacks, full wrapped bounds, ellipsis, and dense-row label suppression.
+
+```sh
+cargo test --locked -p daw-ui --test typography
+cargo test --locked -p daw-app --test typography_e2e
+```

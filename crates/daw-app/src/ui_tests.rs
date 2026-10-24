@@ -197,21 +197,20 @@ fn note_position(output: &FullOutput, text: &str) -> Pos2 {
     output
         .shapes
         .iter()
-        .find_map(|shape| {
+        .filter_map(|shape| {
             if let egui::epaint::Shape::Text(shape) = &shape.shape
                 && shape.galley.job.text == text
-                && shape
-                    .galley
-                    .job
-                    .sections
-                    .first()
-                    .is_some_and(|section| section.format.font_id.size == 9.0)
+                && shape.galley.job.sections.first().is_some_and(|section| {
+                    section.format.font_id.size == daw_ui::tokens::FONT_CANVAS
+                })
             {
                 Some(shape.pos)
             } else {
                 None
             }
         })
+        // Piano keys share the same readable font; notes are to their right.
+        .max_by(|left, right| left.x.total_cmp(&right.x))
         .unwrap_or_else(|| panic!("Could not find rendered note {text:?}"))
 }
 
@@ -323,8 +322,29 @@ fn cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input() {
     assert!(harness.notes().iter().all(|note| note.length == 0.5));
 
     harness.app.tool = Tool::Glue;
-    let output = harness.settle(true);
-    let first_half = note_position(&output, "C4") + Vec2::new(5.0, 5.0);
+    harness.settle(true);
+    // Both halves have the same label, and Cut selects the second half. Clicking
+    // the first adds it to Glue's selection; clicking the second again does not.
+    let first_id = harness
+        .notes()
+        .iter()
+        .find(|note| note.start == 1.0)
+        .unwrap()
+        .id;
+    let diagnostics = harness.ctx.data(|data| {
+        data.get_temp::<serde_json::Value>(egui::Id::new("midi_editor_diagnostics"))
+            .unwrap()
+    });
+    let rect = &diagnostics["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["id"] == first_id)
+        .unwrap()["rect"];
+    let first_half = Pos2::new(
+        ((rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5) as f32,
+        ((rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5) as f32,
+    );
     harness.pointer(first_half, true, true);
     harness.pointer(first_half, false, true);
     assert_eq!(harness.notes().len(), 1);
@@ -519,10 +539,12 @@ fn canceling_setup_discards_a_buffer_dropdown_change_without_touching_active_set
     harness.app.setup_open = true;
     let output = harness.settle_full();
     let current = format!("{} samples", harness.app.settings.buffer_frames);
-    let chosen = if harness.app.settings.buffer_frames == 2048 {
-        64
+    // This test exercises Cancel, not scrolling the buffer menu. Choose a
+    // visible alternative: larger shared controls can scroll its last row.
+    let chosen = if harness.app.settings.buffer_frames == 64 {
+        128
     } else {
-        2048
+        64
     };
     let dropdown = text_position(&output, &current, 0.0) + Vec2::new(12.0, 8.0);
     harness.full_click(dropdown);
@@ -578,6 +600,150 @@ fn escape_from_the_clip_editor_clears_note_selection_before_arrangement_edits() 
     assert!(harness.app.selected_notes.is_empty());
     harness.full_key(egui::Key::D, egui::Modifiers::COMMAND);
     assert_eq!(harness.app.project.tracks[0].clips.len(), 2);
+}
+
+#[test]
+fn nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll() {
+    let mut harness = Harness::new(0.0);
+    harness.app.open_workspace(WorkspaceView::Clip);
+    let output = harness.settle_full();
+    harness.full_click(note_position(&output, "C4") + Vec2::new(8.0, 5.0));
+    let selected = harness.app.selected_notes.clone();
+    let track = harness.app.selected_track;
+    let clip = harness.app.selected_clip;
+    harness.full_frame(RawInput {
+        events: vec![
+            Event::PointerMoved(Pos2::new(650.0, 500.0)),
+            Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0.0, -72.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+        ..Default::default()
+    });
+    for _ in 0..30 {
+        harness.full_frame(RawInput::default());
+    }
+    let scrolled = note_position(&harness.settle_full(), "C4");
+    harness.menu("Window", "Properties");
+    assert_eq!(harness.app.view, WorkspaceView::Arrangement);
+    assert!(harness.app.inspector_open);
+    harness.menu("Window", "Routing");
+    assert!(harness.app.routing_open);
+    assert!(!harness.app.inspector_open);
+    harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(harness.app.inspector_open);
+    assert!(!harness.app.routing_open);
+    harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(harness.app.view, WorkspaceView::Clip);
+    assert_eq!(harness.app.selected_track, track);
+    assert_eq!(harness.app.selected_clip, clip);
+    assert_eq!(harness.app.selected_notes, selected);
+    let restored = note_position(&harness.settle_full(), "C4");
+    assert!(
+        restored.distance(scrolled) < 1.0,
+        "Returning must retain piano-roll scroll"
+    );
+
+    // A utility's own close action follows the same return path as Escape.
+    harness.menu("Window", "Setup");
+    let output = harness.settle_full();
+    harness.full_click(text_position(&output, "Cancel", 0.0) + Vec2::new(8.0, 6.0));
+    assert_eq!(harness.app.view, WorkspaceView::Clip);
+    assert_eq!(harness.app.selected_notes, selected);
+}
+
+#[test]
+fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
+    let mut harness = Harness::new(0.0);
+    harness.app.open_workspace(WorkspaceView::Clip);
+    let output = harness.settle_full();
+    harness.full_click(note_position(&output, "C4") + Vec2::new(8.0, 5.0));
+    let selected = harness.app.selected_notes.clone();
+    let output = harness.settle_full();
+    harness.full_click(text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0));
+    assert!(egui::Popup::is_any_open(&harness.ctx));
+    harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(!egui::Popup::is_any_open(&harness.ctx));
+    assert_eq!(harness.app.view, WorkspaceView::Clip);
+    assert_eq!(harness.app.selected_notes, selected);
+    harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(harness.app.view, WorkspaceView::Arrangement);
+    assert!(harness.app.selected_notes.is_empty());
+}
+
+#[test]
+fn document_changes_and_explicit_arrangement_clear_utility_return_paths() {
+    for reset in 0..3 {
+        let mut harness = Harness::new(0.0);
+        harness.app.open_workspace(WorkspaceView::Clip);
+        harness.app.open_popup(PopupKind::Inspector);
+        harness.app.open_popup(PopupKind::Routing);
+        match reset {
+            0 => harness.app.open_workspace(WorkspaceView::Arrangement),
+            1 => harness.app.finish_new_session(),
+            _ => harness.app.finish_open_project(
+                Project::new().into(),
+                std::path::PathBuf::from("another-session.rill"),
+                false,
+            ),
+        }
+        harness.app.close_popup();
+        assert_eq!(harness.app.view, WorkspaceView::Arrangement);
+        assert!(!harness.app.inspector_open);
+        assert!(!harness.app.routing_open);
+        assert!(harness.app.effect_editor_target.is_none());
+    }
+}
+
+#[test]
+fn returning_from_an_effect_utility_restores_its_slot_and_mixer_context() {
+    let mut harness = Harness::new(0.0);
+    let track = harness.app.selected_track.unwrap();
+    let slot = daw_core::EffectSlot::new(
+        "Test effect",
+        daw_core::Effect::Vst3 {
+            path: "unused-fixture.vst3".into(),
+            class_id: None,
+        },
+    );
+    let effect = slot.id;
+    harness
+        .app
+        .project
+        .track_mut(track)
+        .unwrap()
+        .inserts
+        .push(slot);
+    harness.app.vst_paths.push("unused-fixture.vst3".into());
+    harness.app.open_workspace(WorkspaceView::Mixer);
+    harness.app.open_popup(PopupKind::Instrument);
+    harness.app.effect_editor_target = Some((track, effect));
+    harness.app.open_popup(PopupKind::Inspector);
+    harness.app.close_popup();
+    assert!(harness.app.instrument_open);
+    assert_eq!(harness.app.effect_editor_target, Some((track, effect)));
+    harness.app.close_popup();
+    assert_eq!(harness.app.view, WorkspaceView::Mixer);
+    assert_eq!(harness.app.effect_editor_target, None);
+
+    harness.app.open_popup(PopupKind::Instrument);
+    harness.app.effect_editor_target = Some((track, effect));
+    harness.app.open_popup(PopupKind::Inspector);
+    harness
+        .app
+        .project
+        .track_mut(track)
+        .unwrap()
+        .inserts
+        .clear();
+    harness.app.close_popup();
+    assert_eq!(harness.app.view, WorkspaceView::Mixer);
+    assert!(
+        !harness.app.instrument_open,
+        "Do not reopen a removed effect as an instrument"
+    );
 }
 
 #[test]

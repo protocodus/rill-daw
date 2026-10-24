@@ -19,6 +19,14 @@ def main():
     notices.mkdir(parents=True, exist_ok=True)
     rows = []
     inventory = []
+    # Fonts embedded by the workspace are not Cargo dependencies. Include their
+    # source/attribution and OFL notices in every platform's release archive.
+    font_source = Path(__file__).resolve().parents[1] / "crates/daw-ui/assets/fonts"
+    font_notices = notices / "rill-fonts"
+    font_notices.mkdir(parents=True, exist_ok=True)
+    for path in sorted(font_source.iterdir()):
+        if path.suffix.lower() in {".txt", ".md"}:
+            shutil.copyfile(path, font_notices / path.name)
     for package in sorted(metadata["packages"], key=lambda p: (p["name"], p["version"])):
         if package["id"] in workspace:
             continue
@@ -55,6 +63,7 @@ def main():
         "# Third-party Rust dependencies\n\n"
         "This inventory records the locked Cargo dependency graph, including platform and development dependencies that may not be linked into this archive. "
         "Available license and notice files from downloaded package sources are included under `licenses/`. "
+        "Embedded Inter and Noto Sans CJK fonts use SIL OFL 1.1; their licenses and source attribution are in `licenses/rill-fonts/`. "
         "For packages without bundled license text, consult the linked package source. VST3 plug-ins installed separately are not included.\n\n"
         "| Package | Declared license | Source |\n| --- | --- | --- |\n" + "\n".join(rows) + "\n",
         encoding="utf-8",

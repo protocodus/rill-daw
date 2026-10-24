@@ -81,7 +81,7 @@ impl DawApp {
         let popup = if existing {
             daw_ui::workspace_popup("Automation", ctx)
         } else {
-            daw_ui::popup("Automation").default_width(540.0)
+            daw_ui::popup("Automation", ctx).default_width(540.0)
         };
         popup
             .id(egui::Id::new("automation_editor"))
@@ -244,7 +244,7 @@ impl DawApp {
         // Probe results must not move the Add action while a manual-ID click is
         // in progress. Keep asynchronous diagnostics below the stable controls.
         if vst_parameter && let Some(error) = &state.load_error {
-            ui.colored_label(crate::theme::ORANGE, error);
+            ui.colored_label(crate::theme::palette(ui.ctx()).orange, error);
         }
     }
 

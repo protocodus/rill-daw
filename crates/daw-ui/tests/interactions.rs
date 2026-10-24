@@ -23,7 +23,7 @@ fn frame(
     let mut response = None;
     let output = context.run(input, |ctx| {
         egui::CentralPanel::default()
-            .frame(widgets::panel())
+            .frame(widgets::panel(ctx))
             .show(ctx, |ui| {
                 response = Some(add(ui));
             });
@@ -345,7 +345,7 @@ fn disabled_canvas_picker_ignores_pointer_and_keyboard_input() {
 }
 
 #[test]
-fn application_palette_stays_dark_when_system_appearance_changes() {
+fn application_palette_follows_system_appearance_without_losing_shared_style() {
     let context = Context::default();
     // eframe can supply the system appearance before the app is created.
     let _ = context.run(
@@ -363,12 +363,13 @@ fn application_palette_stays_dark_when_system_appearance_changes() {
                 ..Default::default()
             },
             |ctx| {
-                assert!(ctx.style().visuals.dark_mode);
                 assert_eq!(
-                    ctx.style().visuals.override_text_color,
-                    Some(widgets::theme::TEXT)
+                    ctx.style().visuals.dark_mode,
+                    system_theme == egui::Theme::Dark
                 );
-                assert_eq!(ctx.style().visuals.panel_fill, widgets::theme::PANEL);
+                let colors = widgets::theme::palette(ctx);
+                assert_eq!(ctx.style().visuals.override_text_color, Some(colors.text));
+                assert_eq!(ctx.style().visuals.panel_fill, colors.panel);
                 assert_eq!(
                     ctx.style().spacing.interact_size.y,
                     widgets::tokens::CONTROL_HEIGHT
@@ -424,10 +425,12 @@ fn closed_popup_does_not_render_contents() {
     let mut open = false;
     let mut rendered = false;
     let _ = context.run(RawInput::default(), |ctx| {
-        widgets::popup("Inspector").open(&mut open).show(ctx, |ui| {
-            rendered = true;
-            widgets::button(ui, "Remove");
-        });
+        widgets::popup("Inspector", ctx)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                rendered = true;
+                widgets::button(ui, "Remove");
+            });
     });
     assert!(!rendered);
 }

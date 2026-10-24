@@ -20,6 +20,9 @@ for executable in rill daw-plugin-host; do
   mv -f "$staged_executable" "$bundle/MacOS/$executable"
 done
 cp LICENSE "$bundle/Resources/LICENSE"
+# This bundle can also be distributed independently of the release archive.
+mkdir -p "$bundle/Resources/licenses/rill-fonts"
+cp crates/daw-ui/assets/fonts/*.txt crates/daw-ui/assets/fonts/README.md "$bundle/Resources/licenses/rill-fonts/"
 cat > "$bundle/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

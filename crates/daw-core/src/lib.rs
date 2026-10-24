@@ -1,14 +1,23 @@
 //! Persistent musical data and non-destructive editing, independent of the UI
 //! and audio device. All arrangement and source positions are quarter-note beats.
 
+mod archive;
 mod audio;
+mod audio_edit;
 mod automation;
+mod chords;
 mod demo;
+mod history;
 mod midi;
+mod midi_edit;
 mod model;
 mod routing;
 
 pub use audio::AudioData;
+pub use audio_edit::*;
 pub use automation::*;
+pub use chords::*;
+pub use history::*;
 pub use midi::{MidiImport, export_midi, import_midi};
+pub use midi_edit::*;
 pub use model::*;

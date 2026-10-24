@@ -25,14 +25,20 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Parallel processing of independent instrument/effect chains, with persistent workers, ordered buses, and a serial path for lightweight sessions.
 - Non-destructive clip movement, trimming, splitting, duplication, cross-track movement, and undo/redo.
 - Drag WAV files onto an existing audio track or empty arrangement space to create a track. Dropping on a MIDI/bus/folder track creates a new audio track.
-- Audio waveforms, clip gain, and fade controls.
-- Piano-roll keyboard with selectable root/scale highlighting; select, pencil, duplicate, cut, and glue tools; box/Shift selection, group movement, resizing, and velocity editing.
-- Ordered VST3 insert chains. Reorder, bypass, or remove slots.
+- Non-destructive audio gain, normalization, reverse, curve fades, clipboard editing, and transient split preview.
+- Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; quantize preview, legato, transpose, and note clipboard.
+- Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
 - Nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
+- System-following light/dark themes, bundled Inter typography with Unicode fallbacks, shared text components, and vector toolbar icons.
+- Named undo/redo history with grouped gestures, saved checkpoints, and bounded memory.
 - One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
 - Output-device, sample-rate, and buffer-size setup; writable scratch directory and custom VST3 scan directories.
-- Versioned project save/open, 30-second scratch recovery snapshots, MIDI import/export, and background stereo WAV mixdown including effect tails.
+- Portable `.rill` ZIP projects with a JSON manifest and source WAV assets, automatic plugin-state recall, scratch recovery, MIDI import/export, and background stereo WAV mixdown.
+
+![Rill piano roll in dark mode](artifacts/rill-piano-dark.png)
+
+[View the light theme](artifacts/rill-piano-light.png). Appearance follows the system by default; change it in **Setup → Appearance**.
 
 ## Working with the editors
 
@@ -50,9 +56,9 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Automation** | Create parameter tracks and edit curves for channel, send, insert, and VST3 controls. |
 | **Properties** | Edit names, levels, audio fades, colors, folder membership, and compact/collapsed state; inspect clip timing. |
 | **Library** | Search, scan, and assign instruments. |
-| **Setup** | Configure Audio, Storage, and Plug-ins on separate pages. |
+| **Setup** | Configure Audio, Storage, Plug-ins, and Appearance on separate pages. |
 
-Each tool opens as a popup over Arrangement. Close it, press Escape, or choose **Window → Arrangement** to return. Opening another tool replaces the current popup.
+Each tool opens as a popup over Arrangement. Close it, press Escape, or choose **Window → Arrangement** to return. Nested tools return to their caller when dismissed.
 
 Arrangement channel headers match Mixer channel numbers and show the destination, such as `Ch 1 > Master` or `Ch 1 > Drum bus`. Expanded audio, MIDI, and bus rows expose **M**ute, **S**olo, volume in dB, and pan from −100 (left) to 100 (right). Drag the numeric controls or double-click to type; −60 dB silences the channel. Click the destination to choose Master or an output bus directly; routes that would create feedback are excluded. MIDI headers also show the assigned instrument: click it to choose or replace the VST and open its native editor. Both pickers remain available in compact rows. Folders and automation tracks do not consume audio channel numbers; folder mute/solo controls their descendants.
 
@@ -62,19 +68,23 @@ In Arrangement, double-click an empty MIDI lane to create a four-beat pattern. S
 | --- | --- |
 | Space / Home | Play-pause / return to start |
 | Cmd/Ctrl + S / O | Save / open session |
-| Cmd/Ctrl + Z / Shift + Z | Undo / redo |
+| Cmd/Ctrl + Z / Shift + Z | Undo / redo; named steps under Edit → History |
 | Cmd/Ctrl + A | Select all notes in Clip Editor |
 | Cmd/Ctrl + D | Duplicate selected notes, or the selected clip |
 | Delete / Backspace | Delete selected notes or clip |
-| 1 / 2 / 3 / 4 / 5 | Select / pencil / duplicate / cut / glue in Clip Editor |
+| Q / W / E / R / T / Z / U / I / O / P | Select / pencil / split / duplicate / glue / erase / multi-draw / fade in / fade out / cursor (where applicable) |
+| F / Fit | Fit content on both axes |
+| Middle drag / Alt + left drag | Pan |
+| Ctrl + wheel / Ctrl + Shift + wheel | Horizontal / vertical zoom around the pointer |
+| + / −, with Shift | Horizontal zoom, or vertical zoom with Shift |
 | Shift + click | Add/remove a note from selection |
 | Right-click a note | Delete the note |
 
-The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and right edges to change length. The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. Double-click empty space to create a note or a note to delete it. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](docs/EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
 
 ## Effects, sends, and folders
 
-Select a track and choose **Window → Effects**, or use its Effects button in Mixer. Add and reorder inserts in that popup. To create a shared effect return:
+Select a track and choose **Window → Effects**, or use its Effects button in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
 
 1. Choose **Track → Add bus**, then rename it in **Window → Properties**.
 2. Open **Window → Effects** and add a VST3 effect to that bus; use 100% wet when appropriate.
@@ -88,7 +98,7 @@ Select a channel, then choose **Track → Add automation track…**. Pick Volume
 
 Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. Choose **Step**, **Linear**, or **Smooth** interpolation; Smooth uses a bounded cubic spline without overshoot. The first and last values hold beyond the curve endpoints. Disable or mute a lane to return to the channel's manual value. Curves save with the project and support undo/redo.
 
-For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Insert parameters are available through **Read parameters** in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
+For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Effects provide the same native editor, searchable parameter list, and last-touched automation workflow from their insert chain; parameters are also available in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
 
 ## VST3 instruments
 
@@ -96,17 +106,17 @@ Open **Window → Setup → Plug-ins**, add folders, apply the settings, and sca
 
 The library captures real native editors in isolated helpers and caches their images as thumbnails. Cache entries are invalidated when the plug-in bundle changes. A failed editor or screenshot leaves the instrument listed with a preview error; it does not close Rill. Plug-ins without classification metadata are labelled **Unverified VST3** and checked when loaded.
 
-Instrument edits persist normalized parameter values and opaque plug-in state in the project. Native editors use a separate instance from audio rendering; parameter gestures update the playing instance, while saving or closing the editor applies its full state. Full state changes rebuild playback. The native editor and instrument parameter list provide access to the plug-in's controls; Rill does not supply instruments, effects, or a separate preset browser.
+Instrument and effect edits automatically persist normalized parameters and opaque plugin state. Native editors use a separate instance from audio rendering; parameter gestures update the playing instance and debounced state snapshots capture preset changes. Save, export, device changes, and document transitions flush the editor first. Full state changes rebuild playback and can briefly interrupt audio. The native editor and instrument parameter list provide access to the plug-in's controls; Rill does not supply instruments, effects, or a separate preset browser.
 
 Thumbnails live in `~/Library/Caches/Rill` on macOS, `%LOCALAPPDATA%/Rill/Cache` on Windows, and `$XDG_CACHE_HOME/rill` (default `~/.cache/rill`) on Linux. Set `RILL_CACHE_DIR` to override this location. Native editor capture needs a desktop session; Linux uses X11/XWayland with the XRes and Composite extensions.
 
 ## Setup and recovery
 
-**Window → Setup → Audio** lists output devices and supported sample rates and lets you request a buffer size. **Storage** selects the scratch directory; **Plug-ins** adds VST3 scan roots. Unsupported device settings report an error rather than silently substituting a configuration. The render queue holds two requested buffers, with a minimum of 512 frames; hover the device buffer latency to see its contribution. Setup edits apply only after **Apply**; Cancel, Escape, and closing the popup discard them.
+**Window → Setup → Audio** lists output devices and supported sample rates, buffer sizes, and High quality/Fast sample conversion. Rill defaults to 48 kHz, 32-bit float audio buffers, and 64-bit summing. High quality uses filtered source-rate conversion; Fast trades alias rejection for preparation speed. Changes flush native editor state, stop and retire old device/plugin workers, then initialize replacements in the background. Failed device initialization restores the previous settings and reports the error. A restart includes a brief pause. **Storage** selects the scratch directory; **Plug-ins** adds VST3 scan roots. Unsupported device settings report an error rather than silently substituting a configuration. The render queue holds two requested buffers, with a minimum of 512 frames; hover the device buffer latency to see its contribution. Setup edits apply only after **Apply**; Cancel, Escape, and closing the popup discard them.
 
 Setup persists at `~/Library/Application Support/Rill/settings.json` on macOS, `%APPDATA%/Rill/settings.json` on Windows, or `$XDG_CONFIG_HOME/rill/settings.json` (default `~/.config/rill`) on Linux. The scratch directory holds demo audio and `recovery.daw.json`. Unsaved edits are also saved to recovery on a normal close or before switching sessions. Use **Setup → Storage → Recover session**; recovery opens without an existing document save path.
 
-Projects reference audio and plug-in files externally. Keep those files available; this version does not collect assets into a portable project package.
+New projects save as `.rill` ZIP archives containing `manifest.json` and source WAV files; edits, MIDI, routing, automation, and instrument/effect state live in the manifest. Extracted audio uses the configured scratch directory. Plugins and their own sample libraries must remain installed. Legacy `.daw.json` files stay supported. See [project format and limits](docs/PROJECT_FORMAT.md).
 
 ## Plug-in stability
 
@@ -114,7 +124,7 @@ Each VST3 instrument/effect instance runs in a separate `daw-plugin-host` proces
 
 This is crash isolation. Helpers retain the user's filesystem and network permissions; they are not an OS permission sandbox. Plug-in IPC runs on the render worker, away from the lock-free device callback. The helper must be next to `rill`, or specified by `DAW_PLUGIN_HOST`.
 
-VST3 audio, MIDI, latency, transport, effect inputs, native instrument windows, and project-persisted instrument state are supported. Sidechains, a standalone preset browser, and VST2/AU hosting are not included. Insert chains currently expose parameter automation but do not persist opaque effect presets.
+VST3 audio, MIDI, latency, transport, effect inputs, native instrument/effect editors, parameter automation, and instrument/effect state recall are supported. Sidechains, a standalone preset browser, and CLAP/VST2/AU/AAX hosting are not included.
 
 ## Rendering and verification
 
@@ -122,7 +132,7 @@ Run the subprocess end-to-end suite with `./scripts/test-e2e.sh`. It launches th
 
 ```sh
 ./target/release/rill --render-demo /tmp/rill-demo.wav
-./target/release/rill --render session.daw.json /tmp/mixdown.wav
+./target/release/rill --render session.rill /tmp/mixdown.wav
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release -p daw-engine --example render_bench

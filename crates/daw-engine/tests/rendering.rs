@@ -118,7 +118,8 @@ fn audio_resamples_and_applies_clip_fades() {
     let audio = render(&project, 8_000, 1.0).unwrap();
     assert_eq!(audio[0], 0.0);
     assert!((audio[1_000] - 0.5).abs() < 1e-6);
-    assert!((audio[4_000] - 1.0).abs() < 1e-6);
+    // The f32 FFT converter introduces a few ulps of rounding at unity.
+    assert!((audio[4_000] - 1.0).abs() < 5e-6, "center {}", audio[4_000]);
     assert!(audio[7_998] < 0.002);
 }
 
@@ -214,12 +215,7 @@ fn audio_track(wav: &TestWav, gain: f32) -> Track {
 }
 
 fn effect(effect: Effect) -> EffectSlot {
-    EffectSlot {
-        id: daw_core::new_id(),
-        name: "Test insert".into(),
-        enabled: true,
-        effect,
-    }
+    EffectSlot::new("Test insert", effect)
 }
 
 #[test]

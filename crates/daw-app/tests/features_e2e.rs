@@ -41,7 +41,15 @@ fn menu(app: &mut Harness, menu: &str, item: &str) -> Value {
             app.command(json!({"command":"text","text":"Rill Fixture"}));
         }
     }
-    click_front(app, item)
+    if menu == "+ Insert" {
+        common::wait_visible(app, "Add to effect chain");
+    }
+    let state = click_front(app, item);
+    if menu == "+ Insert" {
+        app.click("Add to effect chain")
+    } else {
+        state
+    }
 }
 
 fn assert_only_popup(state: &Value, popup: &str) {
@@ -50,6 +58,128 @@ fn assert_only_popup(state: &Value, popup: &str) {
     }
     assert_eq!(state["view"], "Arrangement");
     assert_eq!(state["device_open"], false);
+}
+
+#[test]
+fn nested_utilities_return_to_the_selected_notes_and_scroll_position() {
+    let mut app = Harness::new();
+    menu(&mut app, "Track", "Add MIDI track");
+    app.key("Escape");
+    menu(&mut app, "Window", "Clip Editor");
+    click_front(&mut app, "Pencil");
+    let state = app.inspect();
+    let key = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["text"] == "C4")
+        .unwrap();
+    let x = key["max"][0].as_f64().unwrap() + 28.0;
+    let y = (key["min"][1].as_f64().unwrap() + key["max"][1].as_f64().unwrap()) * 0.5;
+    let state = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_eq!(
+        state["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|note| note["selected"] == true)
+            .count(),
+        1
+    );
+    app.command(json!({"command":"scroll","x":x+200.0,"y":y,"delta":-72.0}));
+    for _ in 0..12 {
+        app.inspect();
+    }
+    let before = app.inspect();
+    let key_before = before["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["text"] == "C4")
+        .unwrap()
+        .clone();
+
+    // Properties is opened from the editor, then Routing is nested above it.
+    assert_only_popup(&app.click("Properties"), "properties");
+    assert_only_popup(&menu(&mut app, "Window", "Routing"), "routing");
+    assert_only_popup(&app.key("Escape"), "properties");
+    let restored = app.key("Escape");
+    assert_eq!(restored["view"], "Clip");
+    assert_eq!(restored["selected_track"], before["selected_track"]);
+    assert_eq!(restored["selected_clip"], before["selected_clip"]);
+    assert_eq!(restored["project"], before["project"]);
+    assert_eq!(
+        restored["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|note| note["selected"] == true)
+            .count(),
+        1
+    );
+    let key_after = restored["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["text"] == "C4")
+        .unwrap();
+    assert_eq!(
+        key_after, &key_before,
+        "Returning must preserve piano-roll scroll"
+    );
+
+    menu(&mut app, "Window", "Setup");
+    let canceled = app.click("Cancel");
+    assert_eq!(canceled["view"], "Clip");
+    assert_eq!(
+        canceled["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|note| note["selected"] == true)
+            .count(),
+        1
+    );
+    app.click("Properties");
+    assert_only_popup(&menu(&mut app, "Window", "Arrangement"), "none");
+    assert_only_popup(&app.key("Escape"), "none");
+    let reopened = menu(&mut app, "Window", "Clip Editor");
+    assert!(
+        reopened["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|note| note["selected"] == false),
+        "Explicit Arrangement clears note selection"
+    );
+    app.quit();
+}
+
+#[test]
+fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_paths() {
+    let mut app = Harness::new();
+    menu(&mut app, "Track", "Add MIDI track");
+    app.key("Escape");
+    menu(&mut app, "Window", "Clip Editor");
+    let open = app.click("Natural minor");
+    assert!(visible(&open, "Dorian"));
+    let closed = app.key("Escape");
+    assert_eq!(closed["view"], "Clip");
+    assert!(!visible(&closed, "Dorian"));
+    let menu_open = app.click("Edit");
+    assert!(visible(&menu_open, "Split at cursor"));
+    let menu_closed = app.key("Escape");
+    assert_eq!(menu_closed["view"], "Clip");
+    assert!(!visible(&menu_closed, "Split at cursor"));
+
+    app.click("Properties");
+    let cleared = menu(&mut app, "File", "New");
+    assert_only_popup(&cleared, "none");
+    assert!(cleared["project"]["tracks"].as_array().unwrap().is_empty());
+    let escaped = app.key("Escape");
+    assert_only_popup(&escaped, "none");
+    assert!(!visible(&escaped, "Clip Editor"));
+    app.quit();
 }
 
 #[test]
@@ -324,7 +454,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     let state = menu(&mut app, "Window", "Clip Editor");
     assert_eq!(state["view"], "Clip", "{state}");
-    app.click("Pencil");
+    click_front(&mut app, "Pencil");
     let state = app.inspect();
     let key = state["label_rects"]
         .as_array()
@@ -447,7 +577,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     assert_eq!(state["project"]["tracks"][2]["kind"], "Midi");
     common::wait_visible(&mut app, "Automate parameter");
     menu(&mut app, "Window", "Clip Editor");
-    app.click("Pencil");
+    click_front(&mut app, "Pencil");
     let state = app.inspect();
     let key = state["label_rects"]
         .as_array()

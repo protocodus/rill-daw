@@ -16,11 +16,26 @@ use std::{
 };
 
 const SIZE: Vec2 = Vec2::new(1600.0, 1200.0);
+fn default_pixels_per_point() -> f32 {
+    1.0
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
     Inspect,
+    Focused {
+        focused: bool,
+    },
+    SystemTheme {
+        dark: bool,
+    },
+    Viewport {
+        width: f32,
+        height: f32,
+        #[serde(default = "default_pixels_per_point")]
+        pixels_per_point: f32,
+    },
     Click {
         label: String,
         #[serde(default)]
@@ -32,11 +47,31 @@ enum Command {
         phase: PointerPhase,
         to_x: Option<f32>,
         to_y: Option<f32>,
+        #[serde(default)]
+        button: TestPointerButton,
+        #[serde(default)]
+        shift: bool,
+        #[serde(default)]
+        ctrl: bool,
+        #[serde(default)]
+        alt: bool,
+        #[serde(default)]
+        cmd: bool,
     },
     Scroll {
         x: f32,
         y: f32,
         delta: f32,
+        #[serde(default)]
+        delta_x: f32,
+        #[serde(default)]
+        shift: bool,
+        #[serde(default)]
+        ctrl: bool,
+        #[serde(default)]
+        alt: bool,
+        #[serde(default)]
+        cmd: bool,
     },
     Key {
         key: String,
@@ -61,9 +96,17 @@ enum Command {
     },
     Open {
         path: PathBuf,
+        #[serde(default = "wait_by_default")]
+        wait: bool,
     },
     Save {
         path: PathBuf,
+        #[serde(default = "wait_by_default")]
+        wait: bool,
+    },
+    WaitProject {
+        #[serde(default = "project_timeout")]
+        timeout_ms: u64,
     },
     Export {
         path: PathBuf,
@@ -79,7 +122,47 @@ enum Command {
 #[serde(rename_all = "snake_case")]
 enum PointerPhase {
     Click,
+    DoubleClick,
     Drag,
+    Down,
+    Move,
+    Up,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum TestPointerButton {
+    #[default]
+    Primary,
+    Middle,
+    Secondary,
+}
+
+impl From<TestPointerButton> for PointerButton {
+    fn from(button: TestPointerButton) -> Self {
+        match button {
+            TestPointerButton::Primary => Self::Primary,
+            TestPointerButton::Middle => Self::Middle,
+            TestPointerButton::Secondary => Self::Secondary,
+        }
+    }
+}
+
+fn input_modifiers(shift: bool, ctrl: bool, alt: bool, cmd: bool) -> egui::Modifiers {
+    egui::Modifiers {
+        shift,
+        ctrl,
+        alt,
+        mac_cmd: cmd && cfg!(target_os = "macos"),
+        command: cmd || ctrl,
+    }
+}
+
+fn wait_by_default() -> bool {
+    true
+}
+fn project_timeout() -> u64 {
+    120_000
 }
 
 fn default_timeout() -> u64 {
@@ -92,6 +175,9 @@ struct Harness {
     time: f64,
     labels: Vec<(String, Rect)>,
     close_requested: bool,
+    focused: bool,
+    system_theme: egui::Theme,
+    size: Vec2,
 }
 
 impl Harness {
@@ -127,9 +213,10 @@ impl Harness {
         std::fs::create_dir_all(&scratch_dir)?;
         let ctx = egui::Context::default();
         let mut app = DawApp::with_context(&ctx, Project::new(), None);
+        app.audio_device_enabled = std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
         app.settings = Settings {
             scratch_dir,
-            ..Settings::default()
+            ..app.settings.clone()
         };
         app.setup_draft = app.settings.clone();
         let mut harness = Self {
@@ -138,6 +225,9 @@ impl Harness {
             time: 0.0,
             labels: Vec::new(),
             close_requested: false,
+            focused: true,
+            system_theme: egui::Theme::Dark,
+            size: SIZE,
         };
         harness.settle();
         Ok(harness)
@@ -145,8 +235,10 @@ impl Harness {
 
     fn frame(&mut self, mut input: RawInput) {
         self.time += 1.0 / 60.0;
-        input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, SIZE));
+        input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, self.size));
         input.time = Some(self.time);
+        input.focused = self.focused;
+        input.system_theme = Some(self.system_theme);
         // Periodic recovery is wall-clock driven in the native app. Closing still
         // exercises recovery normally, within the isolated automation directory.
         self.app.last_recovery = Instant::now();
@@ -200,46 +292,61 @@ impl Harness {
         Ok(())
     }
 
-    fn pointer(&mut self, from: Pos2, to: Pos2, drag: bool) -> Result<()> {
+    fn pointer(
+        &mut self,
+        from: Pos2,
+        to: Pos2,
+        phase: PointerPhase,
+        button: PointerButton,
+        modifiers: egui::Modifiers,
+    ) -> Result<()> {
         ensure!(
             [from.x, from.y, to.x, to.y]
                 .iter()
                 .all(|value| value.is_finite())
-                && Rect::from_min_size(Pos2::ZERO, SIZE).contains(from)
-                && Rect::from_min_size(Pos2::ZERO, SIZE).contains(to),
+                && Rect::from_min_size(Pos2::ZERO, self.size).contains(from)
+                && Rect::from_min_size(Pos2::ZERO, self.size).contains(to),
             "Pointer coordinates must be finite and within the viewport"
         );
-        self.frame(RawInput {
-            events: vec![Event::PointerMoved(from)],
-            ..Default::default()
-        });
-        self.frame(RawInput {
-            events: vec![Event::PointerButton {
-                pos: from,
-                button: PointerButton::Primary,
-                pressed: true,
-                modifiers: Default::default(),
-            }],
-            ..Default::default()
-        });
-        if drag {
-            for step in 1..=8 {
-                self.frame(RawInput {
-                    events: vec![Event::PointerMoved(from.lerp(to, step as f32 / 8.0))],
-                    ..Default::default()
+        let send = |this: &mut Self, pos: Pos2, pressed: Option<bool>| {
+            let mut events = vec![Event::PointerMoved(pos)];
+            if let Some(pressed) = pressed {
+                events.push(Event::PointerButton {
+                    pos,
+                    button,
+                    pressed,
+                    modifiers,
                 });
             }
+            this.frame(RawInput {
+                events,
+                modifiers,
+                ..Default::default()
+            });
+        };
+        match phase {
+            PointerPhase::Down => send(self, from, Some(true)),
+            PointerPhase::Move => send(self, from, None),
+            PointerPhase::Up => send(self, from, Some(false)),
+            PointerPhase::Click | PointerPhase::DoubleClick | PointerPhase::Drag => {
+                let count = if matches!(phase, PointerPhase::DoubleClick) {
+                    2
+                } else {
+                    1
+                };
+                for _ in 0..count {
+                    send(self, from, None);
+                    send(self, from, Some(true));
+                    if matches!(phase, PointerPhase::Drag) {
+                        for step in 1..=8 {
+                            send(self, from.lerp(to, step as f32 / 8.0), None);
+                        }
+                    }
+                    send(self, to, Some(false));
+                }
+                self.settle();
+            }
         }
-        self.frame(RawInput {
-            events: vec![Event::PointerButton {
-                pos: to,
-                button: PointerButton::Primary,
-                pressed: false,
-                modifiers: Default::default(),
-            }],
-            ..Default::default()
-        });
-        self.settle();
         Ok(())
     }
 
@@ -279,7 +386,7 @@ impl Harness {
         };
         // Locate the requested beat using the arrangement's own hit testing. This
         // avoids duplicating its header, scroll, zoom, and snap geometry here.
-        let (mut low, mut high) = (0.0, SIZE.x - 1.0);
+        let (mut low, mut high) = (0.0, self.size.x - 1.0);
         let mut position = None;
         for _ in 0..24 {
             let pos = Pos2::new((low + high) * 0.5, y);
@@ -334,7 +441,36 @@ impl Harness {
 
     fn execute(&mut self, command: Command) -> Result<bool> {
         match command {
+            Command::SystemTheme { dark } => {
+                self.system_theme = if dark {
+                    egui::Theme::Dark
+                } else {
+                    egui::Theme::Light
+                };
+                self.settle();
+            }
+            Command::Viewport {
+                width,
+                height,
+                pixels_per_point,
+            } => {
+                ensure!(
+                    width.is_finite()
+                        && height.is_finite()
+                        && (800.0..=4096.0).contains(&width)
+                        && (600.0..=4096.0).contains(&height)
+                        && (0.75..=3.0).contains(&pixels_per_point),
+                    "Invalid test viewport"
+                );
+                self.size = Vec2::new(width, height);
+                self.ctx.set_pixels_per_point(pixels_per_point);
+                self.settle();
+            }
             Command::Inspect => self.settle(),
+            Command::Focused { focused } => {
+                self.focused = focused;
+                self.settle();
+            }
             Command::Click { label, occurrence } => self.click(&label, occurrence)?,
             Command::Pointer {
                 x,
@@ -342,6 +478,11 @@ impl Harness {
                 phase,
                 to_x,
                 to_y,
+                button,
+                shift,
+                ctrl,
+                alt,
+                cmd,
             } => {
                 let from = Pos2::new(x, y);
                 let drag = matches!(phase, PointerPhase::Drag);
@@ -353,13 +494,29 @@ impl Harness {
                 } else {
                     from
                 };
-                self.pointer(from, to, drag)?;
+                self.pointer(
+                    from,
+                    to,
+                    phase,
+                    button.into(),
+                    input_modifiers(shift, ctrl, alt, cmd),
+                )?;
             }
-            Command::Scroll { x, y, delta } => {
+            Command::Scroll {
+                x,
+                y,
+                delta,
+                delta_x,
+                shift,
+                ctrl,
+                alt,
+                cmd,
+            } => {
+                let modifiers = input_modifiers(shift, ctrl, alt, cmd);
                 let pos = Pos2::new(x, y);
                 ensure!(
-                    [x, y, delta].iter().all(|value| value.is_finite())
-                        && Rect::from_min_size(Pos2::ZERO, SIZE).contains(pos),
+                    [x, y, delta, delta_x].iter().all(|value| value.is_finite())
+                        && Rect::from_min_size(Pos2::ZERO, self.size).contains(pos),
                     "Scroll coordinates must be finite and within the viewport"
                 );
                 self.frame(RawInput {
@@ -367,10 +524,11 @@ impl Harness {
                         Event::PointerMoved(pos),
                         Event::MouseWheel {
                             unit: egui::MouseWheelUnit::Point,
-                            delta: Vec2::new(0.0, delta),
-                            modifiers: Default::default(),
+                            delta: Vec2::new(delta_x, delta),
+                            modifiers,
                         },
                     ],
+                    modifiers,
                     ..Default::default()
                 });
                 self.settle();
@@ -413,27 +571,20 @@ impl Harness {
                 self.settle();
             }
             Command::Drop { paths, track, beat } => self.drop_files(paths, track, beat)?,
-            Command::Open { path } => {
+            Command::Open { path, wait } => {
                 self.app.request_open_project(path, false);
-                let deadline = Instant::now() + Duration::from_secs(35);
-                while self.app.state_sync_pending() {
-                    ensure!(Instant::now() < deadline, "Instrument state save timed out");
-                    self.frame(RawInput::default());
-                    std::thread::sleep(Duration::from_millis(1));
+                if wait {
+                    self.wait_project(project_timeout())?;
+                    self.settle();
                 }
-                self.settle();
-                ensure!(!self.app.error, "{}", self.app.status);
             }
-            Command::Save { path } => {
+            Command::Save { path, wait } => {
                 self.app.save_to(path);
-                let deadline = Instant::now() + Duration::from_secs(35);
-                while self.app.state_sync_pending() {
-                    ensure!(Instant::now() < deadline, "Instrument state save timed out");
-                    self.frame(RawInput::default());
-                    std::thread::sleep(Duration::from_millis(1));
+                if wait {
+                    self.wait_project(project_timeout())?;
                 }
-                ensure!(!self.app.error, "{}", self.app.status);
             }
+            Command::WaitProject { timeout_ms } => self.wait_project(timeout_ms)?,
             Command::Export { path } => {
                 ensure!(
                     self.app.export_job.is_none(),
@@ -449,7 +600,10 @@ impl Harness {
                     "Export timeout must be between 1 and 60000 ms"
                 );
                 let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-                while self.app.export_job.is_some() || self.app.state_sync_pending() {
+                while self.app.export_job.is_some()
+                    || self.app.state_sync_pending()
+                    || self.app.project_io_pending()
+                {
                     ensure!(Instant::now() < deadline, "Export timed out");
                     self.frame(RawInput::default());
                     std::thread::sleep(Duration::from_millis(1));
@@ -472,6 +626,21 @@ impl Harness {
         Ok(false)
     }
 
+    fn wait_project(&mut self, timeout_ms: u64) -> Result<()> {
+        ensure!(
+            (1..=120_000).contains(&timeout_ms),
+            "Project timeout must be between 1 and 120000 ms"
+        );
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        while self.app.state_sync_pending() || self.app.project_io_pending() {
+            ensure!(Instant::now() < deadline, "Project operation timed out");
+            self.frame(RawInput::default());
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        ensure!(!self.app.error, "{}", self.app.status);
+        Ok(())
+    }
+
     fn close(&mut self) -> Result<()> {
         let mut input = RawInput::default();
         input
@@ -481,20 +650,33 @@ impl Harness {
             .events
             .push(egui::ViewportEvent::Close);
         self.frame(input);
-        let deadline = Instant::now() + Duration::from_secs(35);
-        while self.app.state_sync_pending() {
-            ensure!(Instant::now() < deadline, "Instrument close timed out");
-            self.frame(RawInput::default());
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        ensure!(!self.app.error, "{}", self.app.status);
+        self.wait_project(project_timeout())?;
+        ensure!(self.app.close_ready, "Project shutdown did not complete");
         Ok(())
     }
 
     fn state(&self) -> Value {
         json!({
+            "effective_theme": format!("{:?}", self.ctx.theme()),
+            "theme_colors": {
+                "background": daw_ui::theme::palette(&self.ctx).bg.to_array(),
+                "text": daw_ui::theme::palette(&self.ctx).text.to_array(),
+                "panel": self.ctx.style().visuals.panel_fill.to_array(),
+            },
             "project": self.app.project,
+            "project_pending": self.app.project_io_pending() || self.app.state_sync_pending(),
+            "modified": self.app.modified,
+            "history": { "undo": self.app.history.undo_labels().collect::<Vec<_>>(),
+                "redo": self.app.history.redo_labels().collect::<Vec<_>>(),
+                "bytes": self.app.history.memory_bytes(), "saved": self.app.history.is_saved() },
+            "project_path": self.app.project_path,
+            "waveform_count": self.app.waveforms.len(),
+            "waveform_warning": self.app.waveform_warning,
             "native_editor": self.app.instrument_diagnostics(),
+            "audition_request": self.app.audition_request,
+            "midi_editor": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("midi_editor_diagnostics"))),
+            "audio_editor": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("audio_editor_diagnostics"))),
+            "timeline": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("timeline_diagnostics"))),
             "plugin_catalog": self.app.vst_catalog.iter().map(|entry| json!({
                 "name": entry.plugin.name, "class_id": entry.plugin.class_id,
                 "thumbnail": entry.thumbnail, "status": format!("{:?}", entry.status),
@@ -507,18 +689,20 @@ impl Harness {
                 "library": self.app.library_open, "setup": self.app.setup_open,
                 "properties": self.app.inspector_open, "instrument": self.app.instrument_open,
                 "effects": self.app.effects_open, "routing": self.app.routing_open,
-                "automation": self.app.automation_open,
+                "automation": self.app.automation_open, "history": self.app.history_open,
             },
             "automation_plot_rect": self.ctx.data(|data| data.get_temp::<Rect>(egui::Id::new("automation_plot_rect"))).map(|rect| json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})),
             "settings": self.app.settings,
             "setup_draft": self.app.setup_draft,
             "status": self.app.status,
             "error": self.app.error,
-            "export_pending": self.app.export_job.is_some() || self.app.state_sync_pending(),
+            "export_pending": self.app.export_job.is_some() || self.app.state_sync_pending() || self.app.project_io_pending(),
             "device_open": self.app.engine.is_some(),
             "scratch_dir": self.app.settings.scratch_dir,
             "drop_target": self.app.drop_target,
             "pointer_position": self.ctx.input(|input| input.pointer.hover_pos().map(|point| [point.x, point.y])),
+            "viewport": [self.size.x, self.size.y],
+            "text_sizes": { "body": daw_ui::tokens::FONT_BODY, "note": daw_ui::tokens::FONT_SMALL, "canvas": daw_ui::tokens::FONT_CANVAS },
             "visible_labels": self.labels.iter().map(|(label, _)| label.trim()).collect::<Vec<_>>(),
             "label_rects": self.labels.iter().map(|(label, rect)| json!({
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
@@ -573,8 +757,8 @@ pub fn run() -> Result<()> {
             return Ok(());
         }
     }
-    if harness.app.export_job.is_some() {
-        bail!("Input closed while an export was running");
+    if harness.app.export_job.is_some() || harness.app.project_io_pending() {
+        bail!("Input closed while a project operation was running");
     }
     Ok(())
 }

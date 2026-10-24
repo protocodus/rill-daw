@@ -41,6 +41,8 @@ const MAX_WIRE_BYTES: u64 = 256 * 1024 * 1024 + 4096;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum EditorEvent {
+    /// Initial metadata, and refreshed values following a changed state
+    /// snapshot. Preserve a selected parameter while its ID remains present.
     Ready {
         parameters: Vec<ParameterInfo>,
     },
@@ -49,6 +51,8 @@ pub enum EditorEvent {
         value: f64,
     },
     StateSaved {
+        /// `None` is automatic/native-window-close state, never an explicit Save
+        /// acknowledgement. Match the ID returned by `save_state` or `close`.
         request_id: Option<u64>,
         state: Vec<u8>,
     },
@@ -83,6 +87,11 @@ pub(crate) enum EditorCommand {
     },
     SaveState {
         request_id: u64,
+    },
+    /// Debug-only regression hook for an opaque preset change without callbacks.
+    #[cfg(debug_assertions)]
+    RestoreStateWithoutNotifications {
+        state: Vec<u8>,
     },
     Capture {
         path: PathBuf,
@@ -409,7 +418,7 @@ pub(crate) fn helper_main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
+    #[cfg(any(unix, debug_assertions))]
     use super::*;
 
     #[test]
@@ -508,7 +517,9 @@ while IFS= read -r command; do
     id=${command##*:}
     id=${id%\}}
     case "$command" in
-        *'"command":"save_state"'*) printf '{"event":"state_saved","request_id":%s,"state":[1]}\n' "$id" ;;
+        *'"command":"save_state"'*)
+            printf '%s\n' '{"event":"state_saved","request_id":null,"state":[1]}'
+            printf '{"event":"state_saved","request_id":%s,"state":[1]}\n' "$id" ;;
         *'"command":"close"'*)
             printf '{"event":"state_saved","request_id":%s,"state":[2]}\n' "$id"
             printf '{"event":"closed","request_id":%s}\n' "$id"
@@ -556,7 +567,9 @@ done
         assert_eq!(
             snapshots,
             vec![
+                (None, vec![1]),
                 (Some(first), vec![1]),
+                (None, vec![1]),
                 (Some(second), vec![1]),
                 (Some(closing), vec![2])
             ]
@@ -587,6 +600,106 @@ exec sleep 30
         assert_eq!(wait_for_failure(&mut session), "state failed");
         assert!(session.try_recv().is_none());
         assert!(session.close().is_err());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[ignore = "Requires installed CHOWTapeModel in RILL_TEST_VST_EFFECT and a desktop"]
+    fn opaque_effect_preset_without_notifications_is_automatically_saved() {
+        fn next(session: &mut EditorSession, wanted: impl Fn(&EditorEvent) -> bool) -> EditorEvent {
+            let deadline = Instant::now() + DEADLINE;
+            loop {
+                assert!(
+                    Instant::now() < deadline,
+                    "Missing automatic preset snapshot"
+                );
+                if let Some(event) = session.try_recv() {
+                    if let EditorEvent::Error { message } = &event {
+                        panic!("{message}");
+                    }
+                    assert!(
+                        !matches!(event, EditorEvent::ParameterChanged { .. }),
+                        "This preset regression must not depend on parameter callbacks"
+                    );
+                    if wanted(&event) {
+                        return event;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        let path = PathBuf::from(std::env::var("RILL_TEST_VST_EFFECT").unwrap());
+        let mut effect = crate::VstEffect::load(&path, 48_000.0, 256).unwrap();
+        let parameter = effect
+            .parameters()
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == "Output Gain")
+            .unwrap();
+        let baseline = effect.save_state().unwrap();
+        effect.set_parameter(parameter.id, 0.73).unwrap();
+        // A processor block makes the effect's opaque component state current.
+        let input = [0.0; 256];
+        effect
+            .process(&input, &input, &mut [0.0; 256], &mut [0.0; 256])
+            .unwrap();
+        let preset = effect.save_state().unwrap();
+        drop(effect);
+        let mut session = EditorSession::open(&path, &baseline, &[]).unwrap();
+        next(&mut session, |e| matches!(e, EditorEvent::Ready { .. }));
+        session
+            .send(EditorCommand::RestoreStateWithoutNotifications { state: preset })
+            .unwrap();
+        let EditorEvent::StateSaved { state, .. } = next(&mut session, |e| {
+            matches!(
+                e,
+                EditorEvent::StateSaved {
+                    request_id: None,
+                    ..
+                }
+            )
+        }) else {
+            unreachable!()
+        };
+        let EditorEvent::Ready { parameters } =
+            next(&mut session, |e| matches!(e, EditorEvent::Ready { .. }))
+        else {
+            unreachable!()
+        };
+        assert!(
+            (parameters
+                .iter()
+                .find(|p| p.id == parameter.id)
+                .unwrap()
+                .value
+                - 0.73)
+                .abs()
+                < 1e-5
+        );
+        let mut restored = crate::VstEffect::load(&path, 48_000.0, 256).unwrap();
+        restored.load_state(&state).unwrap();
+        assert!(
+            (restored
+                .parameters()
+                .unwrap()
+                .iter()
+                .find(|p| p.id == parameter.id)
+                .unwrap()
+                .value
+                - 0.73)
+                .abs()
+                < 1e-5
+        );
+        let requested = session.save_state().unwrap();
+        next(
+            &mut session,
+            |e| matches!(e, EditorEvent::StateSaved { request_id: Some(id), .. } if *id == requested),
+        );
+        let closing = session.close().unwrap();
+        next(
+            &mut session,
+            |e| matches!(e, EditorEvent::Closed { request_id: Some(id) } if *id == closing),
+        );
     }
 
     #[cfg(all(debug_assertions, target_os = "macos"))]

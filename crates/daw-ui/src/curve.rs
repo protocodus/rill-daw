@@ -73,24 +73,24 @@ pub fn curve_editor(
         Sense::click(),
     );
     let plot = Rect::from_min_max(
-        rect.min + Vec2::new(42.0, 12.0),
+        rect.min + Vec2::new(46.0, 12.0),
         rect.max - Vec2::new(14.0, 28.0),
     );
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 4.0, theme::BG);
+    painter.rect_filled(rect, 4.0, theme::palette(ui.ctx()).bg);
     for index in 0..=4 {
         let value = index as f32 / 4.0;
         let y = plot.bottom() - value * plot.height();
         painter.line_segment(
             [Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)],
-            Stroke::new(1.0_f32, theme::LINE),
+            Stroke::new(1.0_f32, theme::palette(ui.ctx()).line),
         );
         painter.text(
             Pos2::new(plot.left() - 6.0, y),
             Align2::RIGHT_CENTER,
             format!("{}%", index * 25),
-            FontId::monospace(10.0),
-            theme::MUTED,
+            FontId::monospace(crate::tokens::FONT_CANVAS),
+            theme::palette(ui.ctx()).muted,
         );
     }
     let tick = ((end - start) / 12.0).ceil().max(1.0);
@@ -102,18 +102,25 @@ pub fn curve_editor(
                 Pos2::new(position, plot.top()),
                 Pos2::new(position, plot.bottom()),
             ],
-            Stroke::new(1.0_f32, theme::LINE),
+            Stroke::new(1.0_f32, theme::palette(ui.ctx()).line),
         );
         painter.text(
             Pos2::new(position, plot.bottom() + 12.0),
             Align2::CENTER_CENTER,
             format!("{x:.0}"),
-            FontId::monospace(10.0),
-            theme::MUTED,
+            FontId::monospace(crate::tokens::FONT_CANVAS),
+            theme::palette(ui.ctx()).muted,
         );
         x += tick;
     }
-    paint_curve(&painter, plot, start, end, theme::ACCENT, evaluate);
+    paint_curve(
+        &painter,
+        plot,
+        start,
+        end,
+        theme::palette(ui.ctx()).accent,
+        evaluate,
+    );
     let to_screen = |point: CurvePoint| {
         Pos2::new(
             plot.left() + ((point.x - start) / (end - start)) as f32 * plot.width(),
@@ -175,10 +182,14 @@ pub fn curve_editor(
             } else {
                 4.0
             },
-            theme::ACCENT,
+            theme::palette(ui.ctx()).accent,
         );
         if *selected == Some(point.id) {
-            painter.circle_stroke(position, 8.0, Stroke::new(1.0_f32, theme::TEXT));
+            painter.circle_stroke(
+                position,
+                8.0,
+                Stroke::new(1.0_f32, theme::palette(ui.ctx()).text),
+            );
         }
     }
     if response.clicked()

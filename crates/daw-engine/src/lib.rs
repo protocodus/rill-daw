@@ -2,10 +2,16 @@
 //! locking, file access, or plugin processing. A bounded atomic queue connects it to a
 //! render worker, so plugin work cannot block the hardware callback.
 mod device;
+mod quality;
 mod render;
 
+pub use quality::{RenderOptions, ResampleQuality};
+
 pub use device::{AudioEngine, DeviceInfo, DeviceSettings, EngineSnapshot, list_output_devices};
-pub use render::{CompensationDelay, export_project_wav, export_wav, render, render_with_workers};
+pub use render::{
+    CompensationDelay, export_project_wav, export_project_wav_with_options, export_wav,
+    export_wav_with_options, render, render_with_options, render_with_workers,
+};
 
 #[cfg(test)]
 mod allocation_test_support {

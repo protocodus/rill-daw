@@ -8,14 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Tool {
-    Select,
-    Pencil,
-    Duplicate,
-    Cut,
-    Glue,
-}
+pub use daw_ui::EditorTool as Tool;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WorkspaceView {
@@ -33,11 +26,28 @@ pub enum PopupKind {
     Effects,
     Routing,
     Automation,
+    History,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FocusedView {
+    Workspace(WorkspaceView),
+    Popup(PopupKind),
+}
+
+struct NavigationSnapshot {
+    view: FocusedView,
+    selected_track: Option<u64>,
+    selected_clip: Option<u64>,
+    selected_notes: HashSet<u64>,
+    last_editor_clip: Option<u64>,
+    effect_editor_target: Option<(u64, u64)>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SetupPage {
     Audio,
+    Appearance,
     Storage,
     Plugins,
 }
@@ -51,13 +61,6 @@ pub enum Drag {
         length: f64,
         resize: bool,
     },
-    Notes {
-        notes: Vec<Note>,
-        resize: bool,
-    },
-    Marquee {
-        origin: egui::Pos2,
-    },
 }
 
 pub struct DawApp {
@@ -67,7 +70,13 @@ pub struct DawApp {
     pub selected_clip: Option<u64>,
     pub selected_notes: HashSet<u64>,
     pub engine: Option<AudioEngine>,
+    pub audio_device_enabled: bool,
+    pub(crate) audition_request: Option<(u64, u8, u8)>,
     pub loading: Option<std::sync::mpsc::Receiver<(u64, anyhow::Result<AudioEngine>)>>,
+    loading_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    settings_rollback: Option<Settings>,
+    retiring: Option<std::sync::mpsc::Receiver<()>>,
+    pub(crate) project_io: crate::project_io::ProjectIo,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
     pub revision: u64,
     pub desired_playing: bool,
@@ -80,12 +89,16 @@ pub struct DawApp {
     pub inspector_open: bool,
     pub setup_open: bool,
     pub instrument_open: bool,
+    pub effect_editor_target: Option<(u64, u64)>,
+    navigation: Vec<NavigationSnapshot>,
     pub close_ready: bool,
     screenshot_requested: bool,
+    reset_views: bool,
     pub instrument_ui: crate::plugin_ui::InstrumentUi,
     pub effects_open: bool,
     pub routing_open: bool,
     pub automation_open: bool,
+    pub history_open: bool,
     pub last_render_errors: u64,
     pub devices: Vec<DeviceInfo>,
     pub status: String,
@@ -94,14 +107,18 @@ pub struct DawApp {
     pub modified: bool,
     pub edit_dirty: bool,
     pub before_edit: Option<Project>,
+    pub(crate) edit_label: Option<String>,
+    pub(crate) edit_group: Option<String>,
     pub zoom: f32,
     pub note_zoom: f32,
+    pub midi_editor: crate::midi_editor::MidiEditorState,
     pub snap: f64,
     pub root: u8,
     pub scale: Scale,
     pub tool: Tool,
     pub drag: Option<Drag>,
     pub waveforms: HashMap<String, AudioData>,
+    pub(crate) waveform_warning: Option<String>,
     pub drop_target: Option<(Option<u64>, f64)>,
     pub vst_paths: Vec<PathBuf>,
     pub vst_catalog: Vec<daw_plugins::catalog::CatalogEntry>,
@@ -110,6 +127,7 @@ pub struct DawApp {
     pub plugin_filter: String,
     pub plugin_search_focus: bool,
     pub plugin_assign_target: Option<u64>,
+    pub(crate) library_target: crate::library::LibraryTarget,
     pub instrument_autolaunch: Option<u64>,
     pub last_editor_clip: Option<u64>,
     pub frame_count: usize,
@@ -132,6 +150,7 @@ impl DawApp {
     ) -> Self {
         crate::theme::apply(ctx);
         let settings = Settings::load();
+        crate::theme::set_appearance(ctx, settings.appearance);
         let selected_track = project.tracks.first().map(|t| t.id);
         let selected_clip = project
             .tracks
@@ -145,7 +164,13 @@ impl DawApp {
             selected_clip,
             selected_notes: HashSet::new(),
             engine: None,
+            audio_device_enabled: true,
+            audition_request: None,
             loading: None,
+            loading_cancel: None,
+            settings_rollback: None,
+            retiring: None,
+            project_io: Default::default(),
             export_job: None,
             revision: 0,
             desired_playing: false,
@@ -158,12 +183,16 @@ impl DawApp {
             inspector_open: false,
             setup_open: false,
             instrument_open: false,
+            effect_editor_target: None,
+            navigation: Vec::new(),
             close_ready: false,
             screenshot_requested: false,
+            reset_views: false,
             instrument_ui: Default::default(),
             effects_open: false,
             routing_open: false,
             automation_open: false,
+            history_open: false,
             last_render_errors: 0,
             devices: Vec::new(),
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
@@ -172,14 +201,18 @@ impl DawApp {
             modified: false,
             edit_dirty: false,
             before_edit: None,
+            edit_label: None,
+            edit_group: None,
             zoom: 48.0,
             note_zoom: 78.0,
+            midi_editor: Default::default(),
             snap: 0.25,
             root: 0,
             scale: Scale::Minor,
             tool: Tool::Select,
             drag: None,
             waveforms: HashMap::new(),
+            waveform_warning: None,
             drop_target: None,
             vst_paths: Vec::new(),
             vst_catalog: Vec::new(),
@@ -187,6 +220,7 @@ impl DawApp {
             plugin_filter: String::new(),
             plugin_search_focus: false,
             plugin_assign_target: None,
+            library_target: crate::library::LibraryTarget::Browse,
             instrument_autolaunch: None,
             last_editor_clip: None,
             frame_count: 0,
@@ -197,10 +231,25 @@ impl DawApp {
         app
     }
 
-    pub fn close_popups(&mut self) {
-        if self.view == WorkspaceView::Clip {
-            self.selected_notes.clear();
+    fn focused_view(&self) -> FocusedView {
+        for (open, kind) in [
+            (self.library_open, PopupKind::Library),
+            (self.setup_open, PopupKind::Setup),
+            (self.inspector_open, PopupKind::Inspector),
+            (self.instrument_open, PopupKind::Instrument),
+            (self.effects_open, PopupKind::Effects),
+            (self.routing_open, PopupKind::Routing),
+            (self.automation_open, PopupKind::Automation),
+            (self.history_open, PopupKind::History),
+        ] {
+            if open {
+                return FocusedView::Popup(kind);
+            }
         }
+        FocusedView::Workspace(self.view)
+    }
+
+    fn hide_focused_view(&mut self) {
         self.library_open = false;
         self.setup_open = false;
         self.inspector_open = false;
@@ -208,35 +257,135 @@ impl DawApp {
         self.effects_open = false;
         self.routing_open = false;
         self.automation_open = false;
+        self.history_open = false;
         self.view = WorkspaceView::Arrangement;
     }
 
+    /// Return to Arrangement deliberately, discarding all utility return paths.
+    /// Document changes also use this to prevent restoring stale selections.
+    pub fn close_popups(&mut self) {
+        self.hide_focused_view();
+        self.navigation.clear();
+        self.selected_notes.clear();
+        self.effect_editor_target = None;
+    }
+
+    /// Dismiss only the focused utility, restoring its caller when still valid.
+    pub fn close_popup(&mut self) {
+        self.hide_focused_view();
+        self.effect_editor_target = None;
+        while let Some(previous) = self.navigation.pop() {
+            if previous
+                .selected_track
+                .is_some_and(|id| self.project.track(id).is_none())
+                || previous
+                    .effect_editor_target
+                    .is_some_and(|(track, effect)| {
+                        self.project
+                            .track(track)
+                            .is_none_or(|track| !track.inserts.iter().any(|slot| slot.id == effect))
+                    })
+            {
+                continue;
+            }
+            let clip = previous
+                .selected_track
+                .zip(previous.selected_clip)
+                .and_then(|(track, clip)| self.project.clip(track, clip));
+            if previous.view == FocusedView::Workspace(WorkspaceView::Clip) && clip.is_none() {
+                continue;
+            }
+            self.selected_notes = match clip.map(|clip| &clip.content) {
+                Some(ClipContent::Midi { notes }) => previous
+                    .selected_notes
+                    .into_iter()
+                    .filter(|id| notes.iter().any(|note| note.id == *id))
+                    .collect(),
+                _ => HashSet::new(),
+            };
+            self.selected_track = previous.selected_track;
+            self.selected_clip = clip.map(|clip| clip.id);
+            self.last_editor_clip = previous.last_editor_clip;
+            self.effect_editor_target = previous.effect_editor_target;
+            match previous.view {
+                FocusedView::Workspace(view) => self.view = view,
+                FocusedView::Popup(kind) => self.show_popup(kind),
+            }
+            return;
+        }
+        self.selected_notes.clear();
+    }
+
+    fn show_popup(&mut self, kind: PopupKind) {
+        match kind {
+            PopupKind::Library => self.library_open = true,
+            PopupKind::Setup => self.setup_open = true,
+            PopupKind::Inspector => self.inspector_open = true,
+            PopupKind::Instrument => self.instrument_open = true,
+            PopupKind::Effects => {
+                self.effects_open = true;
+                if self.vst_paths.is_empty() && self.vst_scan.is_none() {
+                    self.scan_plugins();
+                }
+            }
+            PopupKind::Routing => self.routing_open = true,
+            PopupKind::Automation => self.automation_open = true,
+            PopupKind::History => self.history_open = true,
+        }
+    }
+
     pub fn open_popup(&mut self, kind: PopupKind) {
-        self.close_popups();
+        let current = self.focused_view();
+        if current != FocusedView::Workspace(WorkspaceView::Arrangement)
+            && current != FocusedView::Popup(kind)
+        {
+            self.navigation.push(NavigationSnapshot {
+                view: current,
+                selected_track: self.selected_track,
+                selected_clip: self.selected_clip,
+                selected_notes: self.selected_notes.clone(),
+                last_editor_clip: self.last_editor_clip,
+                effect_editor_target: self.effect_editor_target,
+            });
+        }
+        self.replace_popup(kind);
+    }
+
+    /// Complete a chooser flow without returning to that chooser on dismissal.
+    pub fn replace_popup(&mut self, kind: PopupKind) {
+        self.hide_focused_view();
+        if self
+            .navigation
+            .last()
+            .is_some_and(|previous| previous.view == FocusedView::Popup(kind))
+        {
+            self.navigation.pop();
+        }
+        self.show_popup(kind);
         match kind {
             PopupKind::Library => {
-                self.library_open = true;
                 self.plugin_search_focus = true;
                 self.plugin_assign_target = None;
+                self.library_target = crate::library::LibraryTarget::Browse;
                 if self.vst_paths.is_empty() && self.vst_scan.is_none() {
                     self.scan_plugins();
                 }
             }
             PopupKind::Setup => {
                 self.setup_draft = self.settings.clone();
-                self.setup_open = true;
                 self.refresh_devices();
             }
-            PopupKind::Inspector => self.inspector_open = true,
             PopupKind::Instrument => {
-                self.instrument_open = true;
+                self.effect_editor_target = None;
                 if self.vst_paths.is_empty() && self.vst_scan.is_none() {
                     self.scan_plugins();
                 }
             }
-            PopupKind::Effects => self.effects_open = true,
-            PopupKind::Routing => self.routing_open = true,
-            PopupKind::Automation => self.automation_open = true,
+            PopupKind::Inspector
+            | PopupKind::Effects
+            | PopupKind::Routing
+            | PopupKind::Automation
+            | PopupKind::History => {}
         }
     }
 
@@ -303,55 +452,116 @@ impl DawApp {
             self.desired_playing = !e.snapshot().playing;
             e.set_playing(self.desired_playing);
         } else {
-            self.desired_playing = true;
-            let project = self.project.clone();
-            let settings = self.settings.audio();
-            let revision = self.revision;
-            let (tx, rx) = std::sync::mpsc::channel();
-            self.loading = Some(rx);
-            std::thread::spawn(move || {
-                let result = AudioEngine::start(&project, settings);
-                let _ = tx.send((revision, result));
-            });
-            self.status = "Preparing audio and isolated plug-ins…".into();
-            self.error = false;
+            self.prepare_engine(true);
+        }
+    }
+
+    fn prepare_engine(&mut self, playing: bool) {
+        self.desired_playing = playing;
+        let previous = self.engine.take();
+        if let Some(engine) = &previous {
+            engine.set_playing(false);
+            let _ = engine.audition_note(None);
+        }
+        let preparing = self.loading.take();
+        let retiring = self.retiring.take();
+        if let Some(cancel) = self.loading_cancel.take() {
+            cancel.store(true, std::sync::atomic::Ordering::Release);
+        }
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.loading_cancel = Some(std::sync::Arc::clone(&cancel));
+        let project = self.project.clone();
+        let settings = self.settings.audio();
+        let revision = self.revision;
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.loading = Some(rx);
+        std::thread::spawn(move || {
+            // Device changes are serialized: release every old stream and sandbox
+            // before constructing the replacement. The GUI remains responsive.
+            crate::engine_lifecycle::retire(previous, preparing, retiring);
+            if cancel.load(std::sync::atomic::Ordering::Acquire) {
+                return;
+            }
+            let result = AudioEngine::start_cancellable(&project, settings, cancel);
+            let _ = tx.send((revision, result));
+        });
+        self.status = "Preparing audio and isolated plug-ins…".into();
+        self.error = false;
+    }
+
+    fn update_note_audition(&mut self, ctx: &egui::Context) {
+        let note = self.midi_audition(ctx).filter(|(track, _, _)| {
+            self.project
+                .track(*track)
+                .is_some_and(|track| matches!(track.instrument, Instrument::Vst3 { .. }))
+                && !self.library_open
+                && !self.instrument_open
+                && !self.effects_open
+                && !self.setup_open
+                && !self.routing_open
+                && !self.inspector_open
+                && !self.automation_open
+                && !self.history_open
+        });
+        if note != self.audition_request {
+            self.audition_request = note;
+            if note.is_some()
+                && self.engine.is_none()
+                && self.loading.is_none()
+                && self.audio_device_enabled
+            {
+                self.prepare_engine(false);
+            }
+        }
+        if let Some(engine) = &self.engine
+            && let Err(error) = engine.audition_note(note)
+        {
+            self.message(Err(error), "");
         }
     }
     pub fn retire_engine(&mut self) {
-        if let Some(engine) = self.engine.take() {
+        let previous = self.engine.take();
+        if let Some(engine) = &previous {
             engine.set_playing(false);
-            std::thread::spawn(move || drop(engine));
+            let _ = engine.audition_note(None);
         }
+        let preparing = self.loading.take();
+        if let Some(cancel) = self.loading_cancel.take() {
+            cancel.store(true, std::sync::atomic::Ordering::Release);
+        }
+        let retiring = self.retiring.take();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.retiring = Some(rx);
+        std::thread::spawn(move || {
+            crate::engine_lifecycle::retire(previous, preparing, retiring);
+            let _ = tx.send(());
+        });
     }
     fn poll_engine(&mut self) {
         let ready = match self.loading.as_ref().map(|rx| rx.try_recv()) {
             Some(Ok(value)) => Some(value),
-            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
-                self.loading = None;
-                self.desired_playing = false;
-                self.message(
-                    Err(anyhow::anyhow!(
-                        "Audio preparation stopped unexpectedly; press Play to retry"
-                    )),
-                    "",
-                );
-                None
-            }
+            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => Some((
+                self.revision,
+                Err(anyhow::anyhow!(
+                    "Audio preparation stopped unexpectedly; press Play to retry"
+                )),
+            )),
             _ => None,
         };
         if let Some((revision, result)) = ready {
             self.loading = None;
             if revision != self.revision {
-                if let Ok(engine) = result {
-                    std::thread::spawn(move || drop(engine));
-                }
-                if self.desired_playing {
-                    self.play();
-                }
+                // A stale preparation still owns a stream. Send it through the
+                // same retirement chain before opening the current graph, even
+                // when the transport is paused during a settings change.
+                self.engine = result.ok();
+                self.prepare_engine(self.desired_playing);
                 return;
             }
             match result {
                 Ok(engine) => {
+                    self.settings_rollback = None;
+                    self.loading_cancel = None;
                     self.last_render_errors = 0;
                     engine.seek(self.cursor);
                     engine.set_playing(self.desired_playing);
@@ -362,11 +572,27 @@ impl DawApp {
                 }
                 Err(error) => {
                     self.desired_playing = false;
-                    self.message(Err(error), "");
+                    if let Some(previous) = self.settings_rollback.take() {
+                        self.settings = previous;
+                        self.setup_draft = self.settings.clone();
+                        let _ = self.settings.save();
+                        self.prepare_engine(false);
+                        self.message(Err(anyhow::anyhow!("Audio setup failed; restoring the previous device settings: {error:#}")), "");
+                    } else {
+                        self.message(Err(error), "");
+                    }
                 }
             }
         }
     }
+    fn stop(&mut self) {
+        self.desired_playing = false;
+        self.audition_request = None;
+        self.retire_engine();
+        self.revision = self.revision.wrapping_add(1);
+        self.seek(0.0);
+    }
+
     pub fn seek(&mut self, beat: f64) {
         self.cursor = beat.max(0.0);
         if let Some(e) = &self.engine {
@@ -374,31 +600,75 @@ impl DawApp {
         }
     }
     pub fn rebuild(&mut self) {
-        if self.loading.is_some() {
-            return;
+        let playing = self.playing() || self.desired_playing;
+        if let Some(engine) = &self.engine {
+            self.cursor = engine.position_beats();
         }
-        let playing = self.playing();
-        if let Some(e) = &self.engine {
-            self.cursor = e.position_beats();
-        }
-        self.retire_engine();
-        if playing {
-            self.play();
+        if self.engine.is_some() || self.loading.is_some() {
+            self.prepare_engine(playing);
         }
     }
+    pub(crate) fn finish_settings_apply(&mut self, settings: Settings) {
+        if let Err(error) = settings.save() {
+            self.message(Err(error), "");
+            return;
+        }
+        let restart = self.engine.is_some() || self.loading.is_some();
+        let previous = std::mem::replace(&mut self.settings, settings);
+        if restart {
+            // Several Apply actions can arrive before preparation completes.
+            // Keep the last verified settings, not an unverified intermediate.
+            self.settings_rollback.get_or_insert(previous);
+        }
+        self.revision = self.revision.wrapping_add(1);
+        self.rebuild();
+        self.scan_plugins();
+        self.setup_open = false;
+        if !restart {
+            self.message(Ok(()), "Setup saved");
+        }
+    }
+
+    pub(crate) fn apply_appearance_settings(&mut self, settings: Settings) {
+        match settings.save() {
+            Ok(()) => {
+                // A device preparation already in progress may still roll back
+                // its audio settings. Preserve the independent appearance choice.
+                if let Some(previous) = &mut self.settings_rollback {
+                    previous.appearance = settings.appearance;
+                }
+                self.settings = settings;
+                self.setup_open = false;
+                self.message(Ok(()), "Setup saved");
+            }
+            Err(error) => self.message(Err(error), ""),
+        }
+    }
+
     pub fn cache_audio(&mut self) {
+        use crate::project_io::{WAVEFORM_CACHE_BYTES, WAVEFORM_FILE_BYTES};
+        let mut used = self
+            .waveforms
+            .values()
+            .map(|audio| audio.samples.len() * std::mem::size_of::<f32>())
+            .sum::<usize>();
         for t in &self.project.tracks {
             for c in &t.clips {
                 if let ClipContent::Audio { path, .. } = &c.content
                     && !self.waveforms.contains_key(path)
-                    && let Ok(data) = AudioData::load_wav(path)
+                    && let Ok(data) = AudioData::load_wav_with_limit(
+                        path,
+                        WAVEFORM_FILE_BYTES.min(WAVEFORM_CACHE_BYTES.saturating_sub(used)),
+                    )
                 {
+                    used += data.samples.len() * std::mem::size_of::<f32>();
                     self.waveforms.insert(path.clone(), data);
                 }
             }
         }
     }
     pub fn import_audio(&mut self, path: &Path, track_id: Option<u64>, beat: f64) {
+        let mut preview_limited = false;
         self.begin_edit();
         let result = (|| -> anyhow::Result<()> {
             let source = AudioData::load_wav(path)?;
@@ -421,14 +691,37 @@ impl DawApp {
             self.selected_track = Some(id);
             self.selected_clip = Some(clip.id);
             self.selected_notes.clear();
-            self.waveforms.insert(path, source);
+            let bytes = source.samples.len() * std::mem::size_of::<f32>();
+            let used = self
+                .waveforms
+                .values()
+                .map(|audio| audio.samples.len() * std::mem::size_of::<f32>())
+                .sum::<usize>();
+            let previous = self
+                .waveforms
+                .get(&path)
+                .map_or(0, |audio| audio.samples.len() * std::mem::size_of::<f32>());
+            if bytes <= crate::project_io::WAVEFORM_FILE_BYTES
+                && bytes
+                    <= crate::project_io::WAVEFORM_CACHE_BYTES
+                        .saturating_sub(used.saturating_sub(previous))
+            {
+                self.waveforms.insert(path, source);
+            } else {
+                self.waveforms.remove(&path);
+                preview_limited = true;
+            }
             self.project.track_mut(id).unwrap().clips.push(clip);
             self.changed();
             Ok(())
         })();
         self.message(
             result,
-            "Audio imported · Drag clip to move, drag its right edge to trim",
+            if preview_limited {
+                "Audio imported · Waveform preview exceeds cache limit"
+            } else {
+                "Audio imported · Drag clip to move, drag its right edge to trim"
+            },
         );
     }
     pub(crate) fn autosave_recovery(&mut self) {
@@ -470,21 +763,14 @@ impl DawApp {
         }
         .or_else(|| {
             rfd::FileDialog::new()
-                .set_file_name(format!("{}.daw.json", self.project.name))
-                .add_filter("Rill session", &["json"])
+                .set_file_name(format!("{}.rill", self.project.name))
+                .add_filter("Rill project", &["rill"])
+                .add_filter("Legacy Rill session", &["json"])
                 .save_file()
         });
         if let Some(path) = path {
             self.save_to(path);
         }
-    }
-    pub(crate) fn finish_project_save(&mut self, path: PathBuf) {
-        let result = self.project.save(&path);
-        if result.is_ok() {
-            self.modified = false;
-            self.project_path = Some(path);
-        }
-        self.message(result, "Session saved");
     }
     pub(crate) fn finish_new_session(&mut self) {
         self.autosave_recovery();
@@ -492,10 +778,17 @@ impl DawApp {
         self.retire_engine();
         self.loading = None;
         self.desired_playing = false;
+        self.audition_request = None;
+        self.settings_rollback = None;
+        self.midi_editor = Default::default();
+        self.reset_views = true;
         self.project = Project::new();
+        self.waveform_warning = None;
         self.project_path = None;
         self.history.clear();
         self.before_edit = None;
+        self.edit_label = None;
+        self.edit_group = None;
         self.modified = false;
         self.edit_dirty = false;
         self.revision = self.revision.wrapping_add(1);
@@ -522,29 +815,46 @@ impl DawApp {
     }
     fn open(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Rill session", &["json"])
+            .add_filter("Rill project", &["rill"])
+            .add_filter("Legacy Rill session", &["json"])
             .pick_file()
         {
             self.request_open_project(path, false);
         }
     }
-    pub(crate) fn finish_open_project(&mut self, project: Project, path: PathBuf, recovery: bool) {
+    pub(crate) fn finish_open_project(
+        &mut self,
+        loaded: crate::project_io::LoadedProject,
+        path: PathBuf,
+        recovery: bool,
+    ) {
         self.autosave_recovery();
         self.reset_instrument_ui();
         self.retire_engine();
         self.loading = None;
         self.desired_playing = false;
+        self.audition_request = None;
+        self.settings_rollback = None;
+        self.midi_editor = Default::default();
+        self.reset_views = true;
         self.history.clear();
         self.before_edit = None;
-        self.project = project;
+        self.edit_label = None;
+        self.edit_group = None;
+        self.project = loaded.project;
+        self.waveform_warning = loaded.waveform_warning;
+        let old_waveforms = std::mem::replace(&mut self.waveforms, loaded.waveforms);
+        std::thread::spawn(move || drop(old_waveforms));
         self.project_path = if recovery { None } else { Some(path) };
         self.cursor = 0.0;
         self.selected_track = self.project.tracks.first().map(|t| t.id);
         self.selected_clip = None;
         self.selected_notes.clear();
-        self.cache_audio();
         self.revision = self.revision.wrapping_add(1);
         self.modified = recovery;
+        if recovery {
+            self.history.mark_unsaved();
+        }
         self.edit_dirty = false;
         self.close_popups();
         self.status = if recovery {
@@ -576,12 +886,17 @@ impl DawApp {
         }
         let project = self.project.clone();
         let rate = self.settings.sample_rate;
+        let options = daw_engine::RenderOptions {
+            resample_quality: self.settings.resample_quality,
+        };
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
         self.status = "Rendering stereo mixdown in background…".into();
         self.error = false;
         std::thread::spawn(move || {
-            let result = daw_engine::export_project_wav(&project, &path, rate).map(|_| path);
+            let result =
+                daw_engine::export_project_wav_with_options(&project, &path, rate, options)
+                    .map(|_| path);
             let _ = tx.send(result);
         });
     }
@@ -668,16 +983,31 @@ impl DawApp {
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.close_popups();
+            // Native menus and dropdowns process Escape during their own draw.
+            // Leave the containing workspace intact until that inner popup closes.
+            if !egui::Popup::is_any_open(ctx) {
+                if self.midi_editor.cancel_quantize() {
+                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+                    return;
+                }
+                self.close_popup();
+            }
+            return;
         }
         let curve_focused = self.automation_open
             && ctx
                 .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
                 .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
-        if curve_focused && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z)) {
-            self.undo_redo(ctx.input(|i| i.modifiers.shift));
+        if (!ctx.wants_keyboard_input() || curve_focused)
+            && ctx.input(|i| {
+                i.modifiers.command && (i.key_pressed(egui::Key::Z) || i.key_pressed(egui::Key::Y))
+            })
+        {
+            self.undo_redo(ctx.input(|i| i.modifiers.shift || i.key_pressed(egui::Key::Y)));
+            return;
         }
         if self.library_open
+            && !egui::Popup::is_any_open(ctx)
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
         {
             ctx.data_mut(|data| data.insert_temp(egui::Id::new("instrument_chooser_enter"), true));
@@ -689,6 +1019,7 @@ impl DawApp {
             || self.effects_open
             || self.routing_open
             || self.automation_open
+            || self.history_open
         {
             return;
         }
@@ -716,13 +1047,15 @@ impl DawApp {
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
             self.open();
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z)) {
-            self.undo_redo(ctx.input(|i| i.modifiers.shift));
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+        if !self.midi_editor.quantize_active()
+            && ctx
+                .input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
+        {
             self.delete_selection();
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::D)) {
+        if !self.midi_editor.quantize_active()
+            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::D))
+        {
             self.duplicate_selection();
         }
         for (key, tool) in [
@@ -732,20 +1065,27 @@ impl DawApp {
             (egui::Key::Num4, Tool::Cut),
             (egui::Key::Num5, Tool::Glue),
         ] {
-            if self.view == WorkspaceView::Clip && ctx.input(|i| i.key_pressed(key)) {
+            if self.view == WorkspaceView::Clip
+                && ctx.input(|i| !i.modifiers.any() && i.key_pressed(key))
+            {
                 self.tool = tool;
             }
         }
     }
     fn transport(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("transport")
-            .frame(daw_ui::panel().inner_margin(12))
+            .frame(daw_ui::panel(ctx).inner_margin(12))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("R I L L").size(18.0).strong().color(ACCENT));
+                    ui.label(
+                        RichText::new("R I L L")
+                            .size(18.0)
+                            .strong()
+                            .color(palette(ui.ctx()).accent),
+                    );
                     ui.separator();
                     ui.add_space(12.0);
-                    if daw_ui::button(ui, "|◀")
+                    if daw_ui::button(ui, "Start")
                         .on_hover_text("Return to start · Home")
                         .clicked()
                     {
@@ -753,21 +1093,17 @@ impl DawApp {
                     }
                     let playing =
                         self.playing() || (self.loading.is_some() && self.desired_playing);
-                    if daw_ui::primary_button(ui, if playing { "Ⅱ Pause" } else { "▶ Play" })
+                    if daw_ui::primary_button(ui, if playing { "Pause" } else { "Play" })
                         .on_hover_text("Space")
                         .clicked()
                     {
                         self.play();
                     }
-                    if daw_ui::button(ui, "■")
+                    if daw_ui::button(ui, "Stop")
                         .on_hover_text("Stop and reset instruments")
                         .clicked()
                     {
-                        self.desired_playing = false;
-                        self.loading = None;
-                        self.retire_engine();
-                        self.revision = self.revision.wrapping_add(1);
-                        self.seek(0.0);
+                        self.stop();
                     }
                     let mut looping = self.project.loop_enabled;
                     if daw_ui::toggle(ui, &mut looping, "Loop").changed() {
@@ -785,7 +1121,7 @@ impl DawApp {
                         ))
                         .monospace()
                         .size(20.0)
-                        .color(ACCENT),
+                        .color(palette(ui.ctx()).accent),
                     );
                     ui.separator();
                     let mut tempo = self.project.tempo;
@@ -803,7 +1139,8 @@ impl DawApp {
                         self.changed();
                     }
                     ui.label(
-                        RichText::new(format!("{}/4", self.project.beats_per_bar)).color(MUTED),
+                        RichText::new(format!("{}/4", self.project.beats_per_bar))
+                            .color(palette(ui.ctx()).muted),
                     );
                 });
             });
@@ -811,7 +1148,7 @@ impl DawApp {
 
     fn menus(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("application-menu")
-            .frame(daw_ui::panel().inner_margin(6))
+            .frame(daw_ui::panel(ctx).inner_margin(6))
             .show(ctx, |ui| {
                 daw_ui::menu_bar(ui, |ui| {
                     daw_ui::menu_button(ui, "File", |ui| {
@@ -858,21 +1195,40 @@ impl DawApp {
                     });
                     daw_ui::menu_button(ui, "Edit", |ui| {
                         if ui
-                            .add_enabled(self.history.can_undo(), daw_ui::button_widget("Undo"))
+                            .add_enabled(
+                                self.history.can_undo() && !self.state_sync_pending(),
+                                daw_ui::button_widget("Undo"),
+                            )
+                            .on_hover_text(format!(
+                                "Undo {} · Ctrl/Cmd+Z",
+                                self.history.undo_labels().next().unwrap_or("")
+                            ))
                             .clicked()
                         {
                             self.undo_redo(false);
                             ui.close();
                         }
                         if ui
-                            .add_enabled(self.history.can_redo(), daw_ui::button_widget("Redo"))
+                            .add_enabled(
+                                self.history.can_redo() && !self.state_sync_pending(),
+                                daw_ui::button_widget("Redo"),
+                            )
+                            .on_hover_text(format!(
+                                "Redo {} · Ctrl/Cmd+Shift+Z",
+                                self.history.redo_labels().next().unwrap_or("")
+                            ))
                             .clicked()
                         {
                             self.undo_redo(true);
                             ui.close();
                         }
                         ui.separator();
-                        let has_clip = self.selected().is_some();
+                        if daw_ui::button(ui, "History…").clicked() {
+                            self.open_popup(PopupKind::History);
+                            ui.close();
+                        }
+                        let has_clip =
+                            self.selected().is_some() && !self.midi_editor.quantize_active();
                         if ui
                             .add_enabled(has_clip, daw_ui::button_widget("Duplicate"))
                             .clicked()
@@ -991,23 +1347,81 @@ impl DawApp {
                                 self.project.name,
                                 if self.modified { " •" } else { "" }
                             ))
-                            .color(MUTED),
+                            .color(palette(ui.ctx()).muted),
                         );
                     });
                 });
             });
     }
 
-    fn undo_redo(&mut self, redo: bool) {
+    pub(crate) fn undo_redo(&mut self, redo: bool) {
+        self.undo_redo_steps(redo, 1);
+    }
+
+    pub(crate) fn undo_redo_steps(&mut self, redo: bool, steps: usize) {
+        self.midi_editor.cancel_quantize();
+        if self.state_sync_pending() {
+            return;
+        }
+        self.flush_pending_edit();
         let editor_state = self.editor_state_signature();
-        let changed = if redo {
-            self.history.redo(&mut self.project)
-        } else {
-            self.history.undo(&mut self.project)
-        };
+        let selected_start = self
+            .selected()
+            .map(|clip| clip.start)
+            .unwrap_or(self.cursor);
+        let mut changed = false;
+        for _ in 0..steps {
+            let step = if redo {
+                self.history.redo(&mut self.project)
+            } else {
+                self.history.undo(&mut self.project)
+            };
+            changed |= step;
+            if !step {
+                break;
+            }
+        }
         if changed {
             self.reconcile_editor_history(editor_state);
-            self.modified = true;
+            if self
+                .selected_track
+                .is_some_and(|id| self.project.track(id).is_none())
+            {
+                self.selected_track = self
+                    .project
+                    .tracks
+                    .iter()
+                    .find(|track| !matches!(track.kind, TrackKind::Folder | TrackKind::Automation))
+                    .map(|track| track.id);
+            }
+            if self.selected_clip.is_some() && self.selected().is_none() {
+                self.selected_clip = self
+                    .selected_track
+                    .and_then(|id| self.project.track(id))
+                    .and_then(|track| {
+                        track
+                            .clips
+                            .iter()
+                            .min_by(|a, b| {
+                                (a.start - selected_start)
+                                    .abs()
+                                    .total_cmp(&(b.start - selected_start).abs())
+                            })
+                            .map(|clip| clip.id)
+                    });
+            }
+            let valid_notes: HashSet<u64> = self
+                .selected()
+                .and_then(|clip| {
+                    if let ClipContent::Midi { notes } = &clip.content {
+                        Some(notes.iter().map(|note| note.id).collect())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            self.selected_notes.retain(|id| valid_notes.contains(id));
+            self.modified = !self.history.is_saved();
             self.revision = self.revision.wrapping_add(1);
             self.rebuild();
             self.cache_audio();
@@ -1091,15 +1505,23 @@ impl DawApp {
             return;
         }
         let mut open = true;
-        daw_ui::popup("Setup").open(&mut open).default_width(520.0).show(ctx, |ui| {
+        daw_ui::popup("Setup", ctx).open(&mut open).default_width(520.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Audio, "Audio");
+                daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Appearance, "Appearance");
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Storage, "Storage");
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Plugins, "Plug-ins");
             });
             ui.separator();
             ui.add_space(8.0);
             match self.setup_page {
+                SetupPage::Appearance => {
+                    daw_ui::select_labeled("Theme", self.setup_draft.appearance.name()).show_ui(ui, |ui| {
+                        for appearance in [Appearance::System, Appearance::Light, Appearance::Dark] {
+                            daw_ui::selectable_value(ui, &mut self.setup_draft.appearance, appearance, appearance.name());
+                        }
+                    }).response.on_hover_text("System follows the operating system appearance.");
+                }
                 SetupPage::Audio => {
                     let previous_device = self.setup_draft.device_name.clone();
                     daw_ui::select_labeled("Output", self.setup_draft.device_name.as_deref().unwrap_or("System default")).width(320.0).show_ui(ui, |ui| {
@@ -1116,8 +1538,12 @@ impl DawApp {
                     daw_ui::select_labeled("Buffer", format!("{} samples", self.setup_draft.buffer_frames)).show_ui(ui, |ui| {
                         for size in [64, 128, 256, 512, 1024, 2048] { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
                     });
+                    daw_ui::select_labeled("Sample conversion", match self.setup_draft.resample_quality { daw_engine::ResampleQuality::High => "High quality", daw_engine::ResampleQuality::Fast => "Fast" }).show_ui(ui, |ui| {
+                        daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::High, "High quality");
+                        daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::Fast, "Fast");
+                    }).response.on_hover_text("High quality filters sample-rate conversion; Fast prepares mixed-rate audio sooner. Audio uses 32-bit float with 64-bit summing.");
                     let rate = self.setup_draft.sample_rate.max(1) as f64;
-                    ui.label(RichText::new(format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate)).small().color(MUTED))
+                    ui.label(RichText::new(format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate)).small().color(palette(ui.ctx()).muted))
                         .on_hover_text(format!("The render queue adds up to {:.1} ms. Device and plug-in latency may add more.", self.setup_draft.buffer_frames.saturating_mul(2).max(512) as f64 * 1000.0 / rate));
                     ui.add_space(8.0);
                     if daw_ui::button(ui, "Refresh devices").clicked() { self.refresh_devices(); }
@@ -1134,7 +1560,7 @@ impl DawApp {
                 }
                 SetupPage::Plugins => {
                     label(ui, "VST3 SCAN DIRECTORIES");
-                    ui.label(RichText::new("System folders included").small().color(MUTED)).on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
+                    ui.label(RichText::new("System folders included").small().color(palette(ui.ctx()).muted)).on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
                     let mut remove = None;
                     egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                         for (index, path) in self.setup_draft.vst_dirs.iter().enumerate() {
@@ -1165,12 +1591,7 @@ impl DawApp {
             ui.separator();
             ui.horizontal(|ui| {
                 if daw_ui::primary_button(ui, "Apply").clicked() {
-                    let result = self.setup_draft.save();
-                    if result.is_ok() {
-                        self.settings = self.setup_draft.clone();
-                        self.revision = self.revision.wrapping_add(1); self.rebuild(); self.scan_plugins(); self.setup_open = false;
-                    }
-                    self.message(result, "Setup saved");
+                    self.request_settings_apply();
                 }
                 if daw_ui::button(ui, "Cancel").clicked() { self.setup_open = false; }
             });
@@ -1181,7 +1602,19 @@ impl DawApp {
 
 impl DawApp {
     pub fn ui_frame(&mut self, ctx: &egui::Context) {
+        crate::theme::set_appearance(ctx, self.settings.appearance);
         self.frame_count += 1;
+        if std::mem::take(&mut self.reset_views) {
+            ctx.data_mut(|data| {
+                data.remove::<daw_ui::TimelineViewport>(egui::Id::new(
+                    "arrangement_timeline_viewport",
+                ));
+                for id in ["timeline_diagnostics", "midi_editor_diagnostics"] {
+                    data.remove::<serde_json::Value>(egui::Id::new(id));
+                }
+            });
+            crate::audio_editor::reset_audio_editor(ctx);
+        }
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.request_quit(ctx);
@@ -1196,11 +1629,24 @@ impl DawApp {
                 })
         }) {
             self.begin_edit();
+            if ctx.wants_keyboard_input()
+                && ctx.input(|i| {
+                    i.events
+                        .iter()
+                        .any(|event| matches!(event, egui::Event::Text(_) | egui::Event::Paste(_)))
+                })
+            {
+                self.edit_group = ctx
+                    .memory(|memory| memory.focused())
+                    .map(|id| format!("text:{id:?}"));
+            }
         }
         self.keyboard(ctx);
         self.poll_engine();
         self.poll_instrument_editor(ctx);
+        self.poll_project_io(ctx);
         self.poll_export();
+        self.update_note_audition(ctx);
         if let Some(e) = &self.engine {
             self.cursor = e.position_beats();
             let s = e.snapshot();
@@ -1240,18 +1686,30 @@ impl DawApp {
             || self.loading.is_some()
             || self.export_job.is_some()
             || self.state_sync_pending()
+            || self.project_io_pending()
+            || self.waveform_warning.is_some()
         {
             egui::TopBottomPanel::bottom("status")
-                .frame(daw_ui::panel().inner_margin(8))
+                .frame(daw_ui::panel(ctx).inner_margin(8))
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        if !self.error {
+                        if !self.error && self.waveform_warning.is_none() {
                             ui.spinner();
                         }
-                        ui.label(RichText::new(&self.status).size(12.0).color(if self.error {
-                            ORANGE
+                        let status = if !self.error
+                            && self.loading.is_none()
+                            && self.export_job.is_none()
+                            && !self.state_sync_pending()
+                            && !self.project_io_pending()
+                        {
+                            self.waveform_warning.as_deref().unwrap_or(&self.status)
                         } else {
-                            MUTED
+                            &self.status
+                        };
+                        ui.label(RichText::new(status).size(12.0).color(if self.error {
+                            palette(ui.ctx()).orange
+                        } else {
+                            palette(ui.ctx()).muted
                         }));
                         if self.error && daw_ui::small_button(ui, "Dismiss").clicked() {
                             self.error = false;
@@ -1268,15 +1726,17 @@ impl DawApp {
             || self.instrument_open
             || self.effects_open
             || self.routing_open
-            || self.automation_open;
+            || self.automation_open
+            || self.history_open;
         egui::CentralPanel::default()
-            .frame(daw_ui::inset().inner_margin(0))
+            .frame(daw_ui::inset(ctx).inner_margin(0))
             .show(ctx, |ui| {
                 ui.add_enabled_ui(
                     self.view == WorkspaceView::Arrangement && !utility_open,
                     |ui| self.arrangement(ui),
                 );
             });
+        let focused_before_draw = self.focused_view();
         let workspace = self.view;
         if workspace != WorkspaceView::Arrangement {
             let mut open = true;
@@ -1298,7 +1758,7 @@ impl DawApp {
                 }
             });
             if !open && self.view == workspace {
-                self.close_popups();
+                self.close_popup();
             }
         }
         self.browser(ctx);
@@ -1308,6 +1768,15 @@ impl DawApp {
         self.channel_rack(ctx);
         self.routing_popup(ctx);
         self.automation_editor(ctx);
+        self.history_popup(ctx);
+        self.update_note_audition(ctx);
+        // Utility windows own their close button and Apply/Cancel flags. Restore
+        // their caller only on dismissal, never on a transition to another tool.
+        if matches!(focused_before_draw, FocusedView::Popup(_))
+            && self.focused_view() == FocusedView::Workspace(WorkspaceView::Arrangement)
+        {
+            self.close_popup();
+        }
         let files = ctx.input(|i| i.raw.dropped_files.clone());
         for file in files {
             if let Some(path) = file.path {
@@ -1316,41 +1785,19 @@ impl DawApp {
                 } else {
                     (None, self.cursor)
                 };
-                self.view = WorkspaceView::Arrangement;
+                self.close_popups();
                 self.import_audio(&path, track, beat);
             }
         }
         if !ctx.input(|i| i.pointer.any_down()) {
-            if self.edit_dirty {
-                let audio_changed = self
-                    .before_edit
-                    .as_ref()
-                    .is_none_or(|before| !audio_equivalent(before, &self.project));
-                if let Some(before) = self.before_edit.take()
-                    && before != self.project
-                {
-                    self.history.commit(&before);
-                }
-                self.edit_dirty = false;
-                if audio_changed {
-                    self.revision = self.revision.wrapping_add(1);
-                    self.rebuild();
-                }
-            } else {
-                self.before_edit = None;
-            }
+            self.flush_pending_edit();
             self.drag = None;
         }
-        if self.modified && self.last_recovery.elapsed() > Duration::from_secs(30) {
-            if let Err(e) = std::fs::create_dir_all(&self.settings.scratch_dir)
-                .map_err(anyhow::Error::from)
-                .and_then(|_| {
-                    self.project
-                        .save(self.settings.scratch_dir.join("recovery.daw.json"))
-                })
-            {
-                self.message(Err(e), "");
-            }
+        if self.modified
+            && self.last_recovery.elapsed() > Duration::from_secs(30)
+            && !self.state_sync_pending()
+        {
+            self.request_recovery_save();
             self.last_recovery = Instant::now();
         }
         if let Some(path) = &self.screenshot {
@@ -1386,6 +1833,7 @@ impl DawApp {
             if self.playing()
                 || self.loading.is_some()
                 || self.export_job.is_some()
+                || self.project_io_pending()
                 || self.screenshot.is_some()
             {
                 16
@@ -1397,7 +1845,7 @@ impl DawApp {
 }
 
 /// Cosmetic edits never rebuild the audio graph or restart plug-in processes.
-fn audio_equivalent(a: &Project, b: &Project) -> bool {
+pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
     a.tempo == b.tempo
         && a.beats_per_bar == b.beats_per_bar
         && a.loop_enabled == b.loop_enabled
@@ -1435,3 +1883,7 @@ impl eframe::App for DawApp {
         self.ui_frame(ctx);
     }
 }
+
+#[cfg(test)]
+#[path = "engine_lifecycle_tests.rs"]
+mod engine_lifecycle_tests;

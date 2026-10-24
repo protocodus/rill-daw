@@ -66,7 +66,7 @@ jobs:
       - name: App state and UI interaction tests
         run: cargo test --locked -p daw-app --bin rill
       - name: Headless end-to-end tests
-        run: cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e --test mixer_e2e -- --nocapture
+        run: cargo test --locked -p daw-app --tests -- --nocapture
       - name: Native application startup, rendering, and shutdown
         if: runner.os == 'Linux'
         run: xvfb-run -a -s "-screen 0 1600x1200x24" cargo test --locked -p daw-app --test e2e native_window_renders_and_exits_after_screenshot -- --ignored --nocapture
@@ -83,7 +83,7 @@ jobs:
         shell: bash
         run: |
           test -n "$RILL_E2E_BINARY"
-          cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e --test mixer_e2e -- --nocapture
+          cargo test --locked -p daw-app --tests -- --nocapture
       - name: Upload native distribution and checksum
         uses: actions/upload-artifact@v4
         with:

@@ -1,15 +1,15 @@
 use crate::render::{BLOCK, Renderer};
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use daw_core::Project;
 use std::{
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
         mpsc,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[derive(Clone, Debug)]
@@ -17,6 +17,7 @@ pub struct DeviceSettings {
     pub device_name: Option<String>,
     pub sample_rate: u32,
     pub buffer_frames: u32,
+    pub resample_quality: crate::ResampleQuality,
 }
 impl Default for DeviceSettings {
     fn default() -> Self {
@@ -24,6 +25,7 @@ impl Default for DeviceSettings {
             device_name: None,
             sample_rate: 48_000,
             buffer_frames: 256,
+            resample_quality: crate::ResampleQuality::High,
         }
     }
 }
@@ -83,6 +85,7 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
 
 struct Controls {
     playing: AtomicBool,
+    auditioning: AtomicBool,
     shutdown: AtomicBool,
     generation: AtomicU64,
     seek_beat: AtomicU64,
@@ -97,6 +100,7 @@ impl Controls {
     fn new() -> Self {
         Self {
             playing: AtomicBool::new(false),
+            auditioning: AtomicBool::new(false),
             shutdown: AtomicBool::new(false),
             generation: AtomicU64::new(0),
             seek_beat: AtomicU64::new(0),
@@ -195,13 +199,36 @@ pub struct AudioEngine {
     controls: Arc<Controls>,
     sample_rate: u32,
     parameters: mpsc::SyncSender<ParameterChange>,
+    audition: Arc<Mutex<Option<(u64, u8, u8)>>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct ParameterChange {
     track: u64,
+    effect: Option<u64>,
     parameter: u32,
     value: f64,
+}
+
+fn collect_parameter_changes(
+    receiver: &mpsc::Receiver<ParameterChange>,
+    pending: &mut Vec<ParameterChange>,
+) {
+    pending.clear();
+    for _ in 0..128 {
+        let Ok(change) = receiver.try_recv() else {
+            break;
+        };
+        if let Some(previous) = pending.iter_mut().find(|previous| {
+            previous.track == change.track
+                && previous.effect == change.effect
+                && previous.parameter == change.parameter
+        }) {
+            *previous = change;
+        } else {
+            pending.push(change);
+        }
+    }
 }
 
 /// A fatal graph error must not be retried on every worker tick. A new transport
@@ -230,13 +257,62 @@ impl RenderFailureLatch {
             .finished_generation
             .store(generation, Ordering::Release);
         controls.playing.store(false, Ordering::Release);
+        controls.auditioning.store(false, Ordering::Release);
         false
     }
+}
+
+fn wait_for_renderer(
+    ready: mpsc::Receiver<Result<()>>,
+    controls: &Controls,
+    worker: JoinHandle<()>,
+    cancel: &AtomicBool,
+    timeout: Duration,
+) -> Result<JoinHandle<()>> {
+    let deadline = Instant::now() + timeout;
+    let error = loop {
+        if cancel.load(Ordering::Acquire) {
+            break anyhow::anyhow!("Audio preparation cancelled");
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break anyhow::anyhow!("Audio renderer initialization timed out");
+        }
+        match ready.recv_timeout(remaining.min(Duration::from_millis(25))) {
+            Ok(Ok(())) if !cancel.load(Ordering::Acquire) => return Ok(worker),
+            Ok(Ok(())) => break anyhow::anyhow!("Audio preparation cancelled"),
+            Ok(Err(error)) => break error,
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                break anyhow::anyhow!("Audio renderer initialization stopped unexpectedly");
+            }
+        }
+    };
+    cancel.store(true, Ordering::Release);
+    controls.shutdown.store(true, Ordering::Release);
+    // A failed/timed-out preparation cannot release ownership while a plugin
+    // host is still loading. Individual native calls have bounded IPC deadlines.
+    let _ = worker.join();
+    Err(error)
 }
 
 impl AudioEngine {
     /// Opens the selected output and prepares all clips and instruments before returning.
     pub fn start(project: &Project, settings: DeviceSettings) -> Result<Self> {
+        Self::start_cancellable(project, settings, Arc::new(AtomicBool::new(false)))
+    }
+
+    /// Cancel preparation between assets and isolated plugin loads. The caller
+    /// still owns this operation until all resources have been released.
+    pub fn start_cancellable(
+        project: &Project,
+        settings: DeviceSettings,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<Self> {
+        ensure!(
+            !cancel.load(Ordering::Acquire),
+            "Audio preparation cancelled"
+        );
         ensure!(
             (16..=8192).contains(&settings.buffer_frames),
             "Buffer size must be between 16 and 8192 frames"
@@ -292,13 +368,25 @@ impl AudioEngine {
         let worker_controls = Arc::clone(&controls);
         let worker_queue = Arc::clone(&queue);
         let sample_rate = settings.sample_rate;
+        let render_options = crate::RenderOptions {
+            resample_quality: settings.resample_quality,
+        };
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         let (parameter_tx, parameter_rx) = mpsc::sync_channel::<ParameterChange>(128);
+        let audition = Arc::new(Mutex::new(None));
+        let worker_audition = Arc::clone(&audition);
+        let worker_cancel = Arc::clone(&cancel);
         let worker = thread::Builder::new()
             .name("daw-render".into())
             .spawn(move || {
                 // Plugins are created, processed, and destroyed on this owning thread.
-                let mut renderer = match Renderer::new(&project, sample_rate, true) {
+                let mut renderer = match Renderer::new_with_options_cancelled(
+                    &project,
+                    sample_rate,
+                    true,
+                    render_options,
+                    &worker_cancel,
+                ) {
                     Ok(renderer) => {
                         let _ = ready_tx.send(Ok(()));
                         renderer
@@ -313,30 +401,50 @@ impl AudioEngine {
                 let mut positions = [0.0; BLOCK];
                 let mut pending_parameters: Vec<ParameterChange> = Vec::with_capacity(128);
                 let mut render_failure = RenderFailureLatch::default();
+                let mut preview = false;
                 while !worker_controls.shutdown.load(Ordering::Acquire) {
                     // UI edits never touch the callback. Coalesce rapid drags before
                     // issuing bounded IPC on the render worker, including while paused.
-                    pending_parameters.clear();
-                    for _ in 0..128 {
-                        let Ok(change) = parameter_rx.try_recv() else {
-                            break;
-                        };
-                        if let Some(previous) = pending_parameters.iter_mut().find(|previous| {
-                            previous.track == change.track && previous.parameter == change.parameter
-                        }) {
-                            *previous = change;
-                        } else {
-                            pending_parameters.push(change);
-                        }
-                    }
+                    collect_parameter_changes(&parameter_rx, &mut pending_parameters);
                     for change in &pending_parameters {
+                        if worker_controls.shutdown.load(Ordering::Acquire) {
+                            break;
+                        }
                         if renderer
-                            .set_instrument_parameter(change.track, change.parameter, change.value)
+                            .set_plugin_parameter(
+                                change.track,
+                                change.effect,
+                                change.parameter,
+                                change.value,
+                            )
                             .is_err()
                         {
                             worker_controls
                                 .render_errors
                                 .fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                    if worker_controls.shutdown.load(Ordering::Acquire) {
+                        break;
+                    }
+                    let held = *worker_audition
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner());
+                    let next_preview =
+                        !worker_controls.playing.load(Ordering::Acquire) && held.is_some();
+                    if preview != next_preview {
+                        worker_controls.auditioning.store(false, Ordering::Release);
+                        preview = next_preview;
+                        generation = worker_controls
+                            .generation
+                            .fetch_add(1, Ordering::AcqRel)
+                            .wrapping_add(1);
+                        let beat = f64::from_bits(worker_controls.position.load(Ordering::Acquire));
+                        if !render_failure.attempt(&worker_controls, generation, || {
+                            renderer.set_preview(preview, beat)
+                        }) {
+                            thread::sleep(Duration::from_micros(250));
+                            continue;
                         }
                     }
                     let next_generation = worker_controls.generation.load(Ordering::Acquire);
@@ -354,11 +462,27 @@ impl AudioEngine {
                             .finished_generation
                             .store(u64::MAX, Ordering::Release);
                     }
+                    if !render_failure
+                        .attempt(&worker_controls, generation, || renderer.set_audition(held))
+                    {
+                        worker_controls.auditioning.store(false, Ordering::Release);
+                        thread::sleep(Duration::from_micros(250));
+                        continue;
+                    }
+                    {
+                        let current = worker_audition
+                            .lock()
+                            .unwrap_or_else(|error| error.into_inner());
+                        worker_controls.auditioning.store(
+                            preview && current.is_some() && *current == held,
+                            Ordering::Release,
+                        );
+                    }
                     if worker_queue.free() < BLOCK {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
-                    if renderer.finished() {
+                    if !preview && renderer.finished() {
                         worker_controls
                             .finished_generation
                             .store(generation, Ordering::Release);
@@ -366,7 +490,11 @@ impl AudioEngine {
                         continue;
                     }
                     if !render_failure.attempt(&worker_controls, generation, || {
-                        renderer.render(&mut frames, &mut positions)
+                        if preview {
+                            renderer.render_preview(&mut frames, &mut positions)
+                        } else {
+                            renderer.render(&mut frames, &mut positions)
+                        }
                     }) {
                         thread::sleep(Duration::from_micros(250));
                         continue;
@@ -382,17 +510,13 @@ impl AudioEngine {
                     }
                 }
             })?;
-        match ready_rx.recv_timeout(Duration::from_secs(35)) {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                let _ = worker.join();
-                return Err(error);
-            }
-            Err(error) => {
-                controls.shutdown.store(true, Ordering::Release);
-                bail!("Audio renderer initialization failed: {error}");
-            }
-        }
+        let worker = wait_for_renderer(
+            ready_rx,
+            &controls,
+            worker,
+            &cancel,
+            Duration::from_secs(35),
+        )?;
         let stream_result = match format {
             cpal::SampleFormat::F32 => {
                 build_stream::<f32>(&device, &config, queue, Arc::clone(&controls))
@@ -427,12 +551,32 @@ impl AudioEngine {
             controls,
             sample_rate,
             parameters: parameter_tx,
+            audition,
         };
         if let Err(error) = engine.stream.as_ref().unwrap().play() {
             engine.stop();
             return Err(error.into());
         }
         Ok(engine)
+    }
+
+    /// Replace the held preview note. This bounded shared command is read only by
+    /// the render worker; neither the UI nor the device callback touches plugins.
+    pub fn audition_note(&self, note: Option<(u64, u8, u8)>) -> Result<()> {
+        if let Some((_, pitch, velocity)) = note {
+            ensure!(
+                pitch < 128 && velocity > 0 && velocity < 128,
+                "Invalid audition note"
+            );
+        }
+        *self
+            .audition
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = note;
+        if note.is_none() {
+            self.controls.auditioning.store(false, Ordering::Release);
+        }
+        Ok(())
     }
 
     pub fn set_playing(&self, playing: bool) {
@@ -466,6 +610,19 @@ impl AudioEngine {
     /// Queue a normalized instrument edit for the render worker. This is
     /// nonblocking and leaves the hardware callback and transport untouched.
     pub fn set_instrument_parameter(&self, track: u64, parameter: u32, value: f64) -> Result<()> {
+        self.set_plugin_parameter(track, None, parameter, value)
+    }
+    /// Queue a normalized parameter edit for an instrument (`None`) or insert
+    /// (`Some` stable slot ID). The bounded render-worker queue never blocks the UI
+    /// or touches the hardware callback. Opaque presets require graph preparation
+    /// because they can change plug-in latency and bus layout.
+    pub fn set_plugin_parameter(
+        &self,
+        track: u64,
+        effect: Option<u64>,
+        parameter: u32,
+        value: f64,
+    ) -> Result<()> {
         ensure!(
             value.is_finite() && (0.0..=1.0).contains(&value),
             "Parameter value must be normalized to 0..=1"
@@ -473,10 +630,11 @@ impl AudioEngine {
         self.parameters
             .try_send(ParameterChange {
                 track,
+                effect,
                 parameter,
                 value,
             })
-            .map_err(|error| anyhow::anyhow!("Instrument parameter queue unavailable: {error}"))
+            .map_err(|error| anyhow::anyhow!("Plug-in parameter queue unavailable: {error}"))
     }
     pub fn snapshot(&self) -> EngineSnapshot {
         EngineSnapshot {
@@ -490,6 +648,7 @@ impl AudioEngine {
     }
     pub fn stop(&mut self) {
         self.controls.playing.store(false, Ordering::Release);
+        self.controls.auditioning.store(false, Ordering::Release);
         self.controls.shutdown.store(true, Ordering::Release);
         self.stream.take();
         if let Some(worker) = self.worker.take() {
@@ -533,19 +692,22 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
     controls: &Controls,
 ) {
     let playing = controls.playing.load(Ordering::Acquire);
+    let auditioning = controls.auditioning.load(Ordering::Acquire);
     let generation = controls.generation.load(Ordering::Acquire);
     queue.discard_stale(generation);
     let mut peak = [0.0_f32; 2];
     let mut underrun = false;
     for frame in data.chunks_mut(channels) {
         let mut stereo = [0.0; 2];
-        if playing {
+        if playing || auditioning {
             // At most one queue's worth of stale samples can exist following a seek.
             for _ in 0..=queue.slots.len() {
                 match queue.pop() {
                     Some((samples, beat, epoch)) if epoch == generation => {
                         stereo = samples;
-                        controls.position.store(beat.to_bits(), Ordering::Relaxed);
+                        if playing {
+                            controls.position.store(beat.to_bits(), Ordering::Relaxed);
+                        }
                         break;
                     }
                     Some(_) => continue,
@@ -590,6 +752,137 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::bail;
+
+    #[test]
+    fn cancelled_or_timed_out_initialization_keeps_ownership_until_worker_cleanup() {
+        for timed_out in [false, true] {
+            let controls = Arc::new(Controls::new());
+            let cancel = Arc::new(AtomicBool::new(!timed_out));
+            let (release, gate) = mpsc::channel();
+            let (ready_tx, ready) = mpsc::channel();
+            let cleaned = Arc::new(AtomicBool::new(false));
+            let worker_cleaned = Arc::clone(&cleaned);
+            let worker = thread::spawn(move || {
+                // Represents a native call already in progress when cancelled.
+                gate.recv().unwrap();
+                drop(ready_tx);
+                worker_cleaned.store(true, Ordering::Release);
+            });
+            let (done, completion) = mpsc::channel();
+            let waiter_controls = Arc::clone(&controls);
+            let waiter_cancel = Arc::clone(&cancel);
+            let waiter = thread::spawn(move || {
+                let result = wait_for_renderer(
+                    ready,
+                    &waiter_controls,
+                    worker,
+                    &waiter_cancel,
+                    if timed_out {
+                        Duration::ZERO
+                    } else {
+                        Duration::from_secs(5)
+                    },
+                );
+                done.send(result.is_err()).unwrap();
+            });
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !controls.shutdown.load(Ordering::Acquire) {
+                assert!(Instant::now() < deadline);
+                thread::yield_now();
+            }
+            assert!(cancel.load(Ordering::Acquire));
+            assert!(
+                matches!(completion.try_recv(), Err(mpsc::TryRecvError::Empty)),
+                "Failed initialization returned while its worker still owned resources"
+            );
+            release.send(()).unwrap();
+            assert!(completion.recv_timeout(Duration::from_secs(5)).unwrap());
+            assert!(cleaned.load(Ordering::Acquire));
+            waiter.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn audition_callback_plays_without_moving_the_transport_and_stops_on_release() {
+        let queue = AudioQueue::new(8);
+        let controls = Controls::new();
+        controls
+            .position
+            .store(7.0_f64.to_bits(), Ordering::Relaxed);
+        controls.auditioning.store(true, Ordering::Release);
+        queue.push([0.25, -0.25], 9.0, 0);
+        let mut output = [0.0_f32; 2];
+        fill_output(&mut output, 2, &queue, &controls);
+        assert_eq!(output, [0.25, -0.25]);
+        assert_eq!(
+            f64::from_bits(controls.position.load(Ordering::Relaxed)),
+            7.0
+        );
+        assert!(!controls.playing.load(Ordering::Relaxed));
+        controls.auditioning.store(false, Ordering::Release);
+        queue.push([0.25, 0.25], 9.0, 0);
+        fill_output(&mut output, 2, &queue, &controls);
+        assert_eq!(output, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn live_parameter_queue_keeps_instruments_and_stable_effect_slots_separate() {
+        let (parameters, receiver) = mpsc::sync_channel(128);
+        let engine = AudioEngine {
+            stream: None,
+            worker: None,
+            controls: Arc::new(Controls::new()),
+            sample_rate: 48_000,
+            parameters,
+            audition: Arc::new(Mutex::new(None)),
+        };
+        engine.set_instrument_parameter(1, 7, 0.1).unwrap();
+        engine.set_plugin_parameter(1, Some(10), 7, 0.2).unwrap();
+        engine.set_plugin_parameter(1, Some(11), 7, 0.3).unwrap();
+        engine.set_plugin_parameter(2, Some(12), 7, 0.4).unwrap();
+        engine.set_plugin_parameter(1, Some(10), 7, 0.9).unwrap();
+        assert!(
+            engine
+                .set_plugin_parameter(1, Some(10), 7, f64::NAN)
+                .is_err()
+        );
+        let mut pending = Vec::with_capacity(128);
+        collect_parameter_changes(&receiver, &mut pending);
+        assert_eq!(
+            pending,
+            vec![
+                ParameterChange {
+                    track: 1,
+                    effect: None,
+                    parameter: 7,
+                    value: 0.1
+                },
+                ParameterChange {
+                    track: 1,
+                    effect: Some(10),
+                    parameter: 7,
+                    value: 0.9
+                },
+                ParameterChange {
+                    track: 1,
+                    effect: Some(11),
+                    parameter: 7,
+                    value: 0.3
+                },
+                ParameterChange {
+                    track: 2,
+                    effect: Some(12),
+                    parameter: 7,
+                    value: 0.4
+                },
+            ]
+        );
+        for _ in 0..128 {
+            engine.set_plugin_parameter(1, Some(10), 7, 0.5).unwrap();
+        }
+        assert!(engine.set_plugin_parameter(1, Some(10), 7, 0.6).is_err());
+    }
 
     #[test]
     fn fatal_graph_error_is_not_retried_until_an_explicit_transport_reset() {

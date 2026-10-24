@@ -205,6 +205,112 @@ fn dropping_into_empty_arrangement_creates_audio_tracks() {
     app.quit();
 }
 
+#[test]
+fn portable_project_survives_moving_the_bundle_and_removing_original_audio() {
+    let mut app = Harness::new();
+    let mut source_bytes = Vec::new();
+    for (index, (folder, rate, duration, frequency)) in [
+        ("first", 44_100, 0.6, 400.0),
+        ("second", 32_000, 0.95, 800.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let directory = app.directory.path().join(folder);
+        std::fs::create_dir(&directory).unwrap();
+        // Identical basenames must not overwrite one another in the bundle.
+        let path = directory.join("loop.wav");
+        write_audio(&path, rate, duration, index == 0, frequency);
+        source_bytes.push(std::fs::read(&path).unwrap());
+        app.command(json!({"command":"drop","paths":[path],"beat":index as f64 * 0.5}));
+    }
+    let before_path = app.directory.path().join("before.wav");
+    app.command(json!({"command":"export","path":before_path}));
+    app.command(json!({"command":"wait_export"}));
+    let before = AudioData::load_wav(&before_path).unwrap();
+    assert_float_wav(&before_path);
+    // Both sources overlap here. The two distinct tones prove the reference
+    // itself contains both tracks before comparing the portable round trip.
+    for frequency in [400.0, 800.0] {
+        let start = (0.35 * f64::from(before.sample_rate)).round() as usize;
+        let count = before.sample_rate as usize / 10;
+        let (mut real, mut imaginary) = (0.0, 0.0);
+        for frame in 0..count {
+            let phase =
+                std::f64::consts::TAU * frequency * frame as f64 / f64::from(before.sample_rate);
+            let sample = f64::from(before.samples[(start + frame) * 2]);
+            real += sample * phase.cos();
+            imaginary += sample * phase.sin();
+        }
+        assert!(
+            2.0 * real.hypot(imaginary) / count as f64 > 0.025,
+            "The {frequency} Hz source must be audible"
+        );
+    }
+
+    let bundle = app.directory.path().join("song.rill");
+    app.command(json!({"command":"save","path":bundle}));
+    assert!(std::fs::read(&bundle).unwrap().starts_with(b"PK\x03\x04"));
+    let delivery = app.directory.path().join("delivery");
+    std::fs::create_dir(&delivery).unwrap();
+    let moved = delivery.join("moved-song.rill");
+    std::fs::rename(&bundle, &moved).unwrap();
+    for folder in ["first", "second"] {
+        std::fs::remove_dir_all(app.directory.path().join(folder)).unwrap();
+    }
+    app.click("File");
+    app.click("New");
+    let state = app.command(json!({"command":"open","path":moved}));
+    let project: Project = serde_json::from_value(state["project"].clone()).unwrap();
+    assert_eq!(project.tracks.len(), 2);
+    let scratch = app.directory.path().join("scratch").canonicalize().unwrap();
+    let mut extracted = std::collections::HashSet::new();
+    for (track, original) in project.tracks.iter().zip(&source_bytes) {
+        let ClipContent::Audio { path, .. } = &track.clips[0].content else {
+            panic!("Expected restored audio clip");
+        };
+        let path = Path::new(path).canonicalize().unwrap();
+        assert!(
+            path.starts_with(&scratch),
+            "Extract media into configured scratch"
+        );
+        assert!(
+            extracted.insert(path.clone()),
+            "Distinct sources need distinct assets"
+        );
+        assert_eq!(&std::fs::read(path).unwrap(), original);
+    }
+    let restored_path = app.directory.path().join("restored.wav");
+    app.command(json!({"command":"export","path":restored_path}));
+    app.command(json!({"command":"wait_export"}));
+    let restored = AudioData::load_wav(&restored_path).unwrap();
+    assert_eq!(restored.sample_rate, before.sample_rate);
+    assert_eq!(restored.channels, before.channels);
+    assert_eq!(restored.samples, before.samples);
+
+    let resaved = app.directory.path().join("resaved.rill");
+    app.command(json!({"command":"save","path":resaved}));
+    let portable_bytes = std::fs::read(resaved).unwrap();
+    app.quit(); // Removes the first process's scratch and every original path.
+
+    let mut reopened = Harness::new();
+    let final_bundle = reopened.directory.path().join("received.rill");
+    std::fs::write(&final_bundle, portable_bytes).unwrap();
+    reopened.command(json!({"command":"open","path":final_bundle}));
+    let final_wav = reopened.directory.path().join("received.wav");
+    reopened.command(json!({"command":"export","path":final_wav}));
+    reopened.command(json!({"command":"wait_export"}));
+    assert_float_wav(&final_wav);
+    let final_audio = AudioData::load_wav(final_wav).unwrap();
+    assert_eq!(final_audio.sample_rate, 48_000);
+    assert_eq!(final_audio.channels, 2);
+    assert_eq!(
+        final_audio.samples, before.samples,
+        "A resaved archive must remain self-contained in a fresh application"
+    );
+    reopened.quit();
+}
+
 fn write_audio(path: &Path, sample_rate: u32, duration: f64, stereo: bool, frequency: f32) {
     let channels = if stereo { 2 } else { 1 };
     let frames = (duration * f64::from(sample_rate)).round() as usize;

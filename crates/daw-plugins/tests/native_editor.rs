@@ -92,11 +92,53 @@ fn exercise(variable: &str, parameter_name: &str) {
         old != new,
         "Snapshot after the parameter edit must contain the newer state"
     );
+    let EditorEvent::Ready { parameters } =
+        next(&mut session, |e| matches!(e, EditorEvent::Ready { .. }))
+    else {
+        unreachable!()
+    };
+    assert!(
+        (parameters.iter().find(|p| p.id == id).unwrap().value - value).abs() < 1e-5,
+        "An explicit snapshot must refresh values before suppressing the automatic snapshot"
+    );
+    // Ordinary edits must persist without a separate Save state action. The
+    // helper also refreshes metadata so preset changes cannot leave stale values.
+    let automatic_value = 0.61;
+    session.set_parameter(id, automatic_value).unwrap();
+    next(
+        &mut session,
+        |e| matches!(e,EditorEvent::ParameterChanged {id:changed,value:actual} if *changed == id && (*actual - automatic_value).abs() < 1e-5),
+    );
+    let EditorEvent::StateSaved {
+        state: automatic, ..
+    } = next(&mut session, |e| {
+        matches!(
+            e,
+            EditorEvent::StateSaved {
+                request_id: None,
+                ..
+            }
+        )
+    })
+    else {
+        unreachable!()
+    };
+    assert_ne!(
+        automatic, new,
+        "Automatic snapshot must contain the new edit"
+    );
+    let EditorEvent::Ready { parameters } =
+        next(&mut session, |e| matches!(e, EditorEvent::Ready { .. }))
+    else {
+        unreachable!()
+    };
+    assert!((parameters.iter().find(|p| p.id == id).unwrap().value - automatic_value).abs() < 1e-5);
     let close_id = session.close().unwrap();
     assert_eq!(session.close().unwrap(), close_id);
-    let EditorEvent::StateSaved { request_id, state } = next(&mut session, |e| {
-        matches!(e, EditorEvent::StateSaved { .. })
-    }) else {
+    let EditorEvent::StateSaved { request_id, state } = next(
+        &mut session,
+        |e| matches!(e, EditorEvent::StateSaved { request_id: Some(request), .. } if *request == close_id),
+    ) else {
         unreachable!()
     };
     assert_eq!(request_id, Some(close_id));
@@ -105,7 +147,7 @@ fn exercise(variable: &str, parameter_name: &str) {
     assert!(matches!(closed, EditorEvent::Closed { request_id: Some(id) } if id == close_id));
     drop(session);
 
-    let mut restored = EditorSession::open_info(&info, &new, &[]).unwrap();
+    let mut restored = EditorSession::open_info(&info, &automatic, &[]).unwrap();
     let EditorEvent::Ready { parameters } =
         next(&mut restored, |e| matches!(e, EditorEvent::Ready { .. }))
     else {
@@ -113,8 +155,8 @@ fn exercise(variable: &str, parameter_name: &str) {
     };
     let actual = parameters.iter().find(|p| p.id == id).unwrap().value;
     assert!(
-        (actual - value).abs() < 1e-5,
-        "State restored {actual}, expected {value}"
+        (actual - automatic_value).abs() < 1e-5,
+        "State restored {actual}, expected {automatic_value}"
     );
     restored.close().unwrap();
     next(&mut restored, |e| matches!(e, EditorEvent::Closed { .. }));

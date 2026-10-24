@@ -6,6 +6,7 @@ use crate::{
     editor::{EditorCommand, EditorEvent},
 };
 use anyhow::{Result, ensure};
+use sha2::{Digest, Sha256};
 use std::{
     io::{BufRead, Write},
     path::PathBuf,
@@ -13,9 +14,69 @@ use std::{
     time::{Duration, Instant},
 };
 use vst3_host::{
-    BusAudioBuffers, ParameterEditKind, Plugin, PluginWindow, Vst3Host,
+    BusAudioBuffers, HostNotification, ParameterEditKind, Plugin, PluginWindow, Vst3Host,
     process_isolation::ProtocolChannel,
 };
+
+const SNAPSHOT_DEBOUNCE: Duration = Duration::from_millis(350);
+const SNAPSHOT_MIN_INTERVAL: Duration = Duration::from_secs(1);
+const SNAPSHOT_FALLBACK: Duration = Duration::from_secs(2);
+
+/// Runs only on the isolated editor's control thread. The fallback covers preset
+/// changes which update opaque state without sending parameter/dirty callbacks.
+struct SnapshotSchedule {
+    last_snapshot: Instant,
+    last_edit: Option<Instant>,
+    digest: Option<[u8; 32]>,
+}
+
+impl SnapshotSchedule {
+    fn new(now: Instant, state: &[u8]) -> Self {
+        Self {
+            last_snapshot: now,
+            last_edit: None,
+            digest: (!state.is_empty()).then(|| Sha256::digest(state).into()),
+        }
+    }
+
+    fn edited(&mut self, now: Instant) {
+        self.last_edit = Some(now);
+    }
+
+    fn due(&self, now: Instant) -> bool {
+        let elapsed = now.saturating_duration_since(self.last_snapshot);
+        elapsed >= SNAPSHOT_MIN_INTERVAL
+            && (elapsed >= SNAPSHOT_FALLBACK
+                || self
+                    .last_edit
+                    .is_some_and(|edit| now.saturating_duration_since(edit) >= SNAPSHOT_DEBOUNCE))
+    }
+
+    fn captured(&mut self, now: Instant, state: &[u8]) -> bool {
+        let digest = Sha256::digest(state).into();
+        let changed = self.digest != Some(digest);
+        self.digest = Some(digest);
+        self.last_snapshot = now;
+        self.last_edit = None;
+        changed
+    }
+}
+
+fn current_parameters(plugin: &Plugin) -> Result<Vec<ParameterInfo>> {
+    Ok(plugin
+        .get_parameters()?
+        .into_iter()
+        .map(|p| ParameterInfo {
+            id: p.id,
+            name: p.name,
+            value: p.value,
+            default: p.default,
+            unit: p.unit,
+            steps: p.step_count,
+            read_only: p.is_read_only,
+        })
+        .collect())
+}
 
 pub(crate) fn run() -> Result<()> {
     let mut protocol = ProtocolChannel::claim();
@@ -55,7 +116,9 @@ fn save_state(
     plugin: &Arc<Mutex<Plugin>>,
     buffers: &mut BusAudioBuffers,
     output: &mut impl Write,
+    snapshots: &mut SnapshotSchedule,
     request_id: Option<u64>,
+    automatic: bool,
 ) -> Result<()> {
     let mut plugin = plugin
         .lock()
@@ -68,7 +131,24 @@ fn save_state(
         state.len() <= 64 * 1024 * 1024,
         "Plugin state exceeds 64 MiB"
     );
-    emit(output, &EditorEvent::StateSaved { request_id, state })
+    let changed = snapshots.captured(Instant::now(), &state);
+    // Explicit save/close always acknowledges its own request, even when an
+    // automatic snapshot already published these bytes.
+    if !automatic || changed {
+        emit(output, &EditorEvent::StateSaved { request_id, state })?;
+        // An explicit save can arrive before the fallback sees a preset change.
+        // Refresh metadata here too, otherwise digest dedup would suppress the
+        // later automatic refresh and leave the owner's values stale.
+        if changed {
+            emit(
+                output,
+                &EditorEvent::Ready {
+                    parameters: current_parameters(&plugin)?,
+                },
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn run_inner(output: &mut impl Write) -> Result<()> {
@@ -124,19 +204,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         );
         plugin.set_parameter(id, value)?;
     }
-    let parameters = plugin
-        .get_parameters()?
-        .into_iter()
-        .map(|p| ParameterInfo {
-            id: p.id,
-            name: p.name,
-            value: p.value,
-            default: p.default,
-            unit: p.unit,
-            steps: p.step_count,
-            read_only: p.is_read_only,
-        })
-        .collect();
+    let parameters = current_parameters(&plugin)?;
     let mut buffers = plugin.create_bus_audio_buffers(256)?;
     plugin.start_processing()?;
     let title = format!("{} - VST3", plugin.info().name);
@@ -145,6 +213,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
     window.open()?;
     platform.configure(&title, visible)?;
     emit(output, &EditorEvent::Ready { parameters })?;
+    let mut snapshots = SnapshotSchedule::new(Instant::now(), &state);
     let mut heartbeat = Instant::now();
     let mut next_process = Instant::now();
     let mut capture: Option<(PathBuf, Instant)> = None;
@@ -158,10 +227,31 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                         "Invalid normalized parameter value"
                     );
                     plugin.lock().unwrap().set_parameter(id, value)?;
+                    snapshots.edited(Instant::now());
                     emit(output, &EditorEvent::ParameterChanged { id, value })?;
                 }
-                Ok(EditorCommand::SaveState { request_id }) => {
-                    save_state(&plugin, &mut buffers, output, Some(request_id))?
+                Ok(EditorCommand::SaveState { request_id }) => save_state(
+                    &plugin,
+                    &mut buffers,
+                    output,
+                    &mut snapshots,
+                    Some(request_id),
+                    false,
+                )?,
+                #[cfg(debug_assertions)]
+                Ok(EditorCommand::RestoreStateWithoutNotifications { state }) => {
+                    ensure!(
+                        state.len() <= 64 * 1024 * 1024,
+                        "Plugin state exceeds 64 MiB"
+                    );
+                    let mut plugin = plugin.lock().unwrap();
+                    plugin.load_state(&state)?;
+                    // Deliberately suppress signals to prove the periodic opaque
+                    // state fallback works independently of automation callbacks.
+                    let _ = plugin.take_parameter_edits();
+                    let _ = plugin.get_parameter_changes();
+                    let _ = plugin.take_host_notifications();
+                    let _ = plugin.take_restart_flags();
                 }
                 Ok(EditorCommand::Capture { path }) => {
                     capture = Some((path, Instant::now() + Duration::from_millis(700)))
@@ -202,6 +292,12 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
             // changes also contain processor meters/LFOs, so drain those separately.
             let _ = plugin.get_parameter_changes();
             for edit in plugin.take_parameter_edits() {
+                if matches!(
+                    edit.kind,
+                    ParameterEditKind::ValueChange | ParameterEditKind::EndGesture
+                ) {
+                    snapshots.edited(Instant::now());
+                }
                 if edit.kind == ParameterEditKind::ValueChange
                     && let Some(value) = edit.value
                     && value.is_finite()
@@ -213,6 +309,29 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                     )?;
                 }
             }
+            for notification in plugin.take_host_notifications() {
+                if matches!(
+                    notification,
+                    HostNotification::DirtyChanged(true)
+                        | HostNotification::ProgramListChanged { .. }
+                        | HostNotification::GroupEditFinished
+                ) {
+                    snapshots.edited(Instant::now());
+                }
+            }
+            let flags = plugin.service_host_requests()?;
+            if flags.param_values_changed()
+                || flags.param_titles_changed()
+                || flags.reload_component()
+            {
+                snapshots.edited(Instant::now());
+            }
+            if flags.io_changed() {
+                buffers = plugin.create_bus_audio_buffers(256)?;
+            }
+        }
+        if visible && closing.is_none() && snapshots.due(Instant::now()) {
+            save_state(&plugin, &mut buffers, output, &mut snapshots, None, true)?;
         }
         if capture
             .as_ref()
@@ -237,10 +356,51 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
     }
     let (save_requested, request_id) = closing.expect("editor close was requested");
     if save_requested {
-        save_state(&plugin, &mut buffers, output, request_id)?;
+        save_state(
+            &plugin,
+            &mut buffers,
+            output,
+            &mut snapshots,
+            request_id,
+            false,
+        )?;
     }
     window.close();
     plugin.lock().unwrap().stop_processing()?;
     emit(output, &EditorEvent::Closed { request_id })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn automatic_snapshots_debounce_gestures_and_limit_save_frequency() {
+        let start = Instant::now();
+        let mut schedule = SnapshotSchedule::new(start, b"initial");
+        for millis in [100, 200, 600, 850] {
+            schedule.edited(start + Duration::from_millis(millis));
+            assert!(!schedule.due(start + Duration::from_millis(millis)));
+        }
+        assert!(!schedule.due(start + Duration::from_millis(1199)));
+        assert!(schedule.due(start + Duration::from_millis(1200)));
+        assert!(schedule.captured(start + Duration::from_millis(1200), b"edited"));
+        schedule.edited(start + Duration::from_millis(1300));
+        assert!(!schedule.due(start + Duration::from_millis(2199)));
+        assert!(schedule.due(start + Duration::from_millis(2200)));
+    }
+
+    #[test]
+    fn fallback_detects_opaque_changes_without_callbacks_and_suppresses_identical_bytes() {
+        let start = Instant::now();
+        let mut schedule = SnapshotSchedule::new(start, b"original preset");
+        assert!(!schedule.due(start + Duration::from_millis(1999)));
+        assert!(schedule.due(start + SNAPSHOT_FALLBACK));
+        assert!(!schedule.captured(start + SNAPSHOT_FALLBACK, b"original preset"));
+        let later = start + SNAPSHOT_FALLBACK * 2;
+        assert!(schedule.due(later));
+        assert!(schedule.captured(later, b"opaque preset edit"));
+        assert!(!schedule.captured(later + SNAPSHOT_FALLBACK, b"opaque preset edit"));
+    }
 }

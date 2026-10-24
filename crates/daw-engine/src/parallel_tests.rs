@@ -521,7 +521,7 @@ fn native_helper_crash_restores_parallel_nodes_and_contains_the_failed_live_path
             panic!("native instrument missing")
         };
         let pid = if fail_insert {
-            let Insert::Vst(effect, _) = &failed_track.inserts[0];
+            let Insert::Vst { effect, .. } = &failed_track.inserts[0];
             effect.isolation_pid().unwrap()
         } else {
             plugin.isolation_pid().unwrap()

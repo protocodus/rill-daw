@@ -6,14 +6,14 @@ Arrangement remains the base canvas. Clip Editor, Instrument, Effects, Mixer, Ro
 
 ## Theme and tokens
 
-Call `daw_ui::theme::apply(ctx)` when creating the application. Palette constants—including arrangement and piano-roll colors—come from `daw_ui::theme`. Logical dimensions and typography come from `daw_ui::tokens`:
+Call `daw_ui::theme::apply(ctx)` when creating the application. It configures both native egui palettes. `theme::set_appearance(ctx, Appearance)` selects System, Light, or Dark; System is the default and follows operating-system changes. Read `theme::palette(ctx)` for the current canvas colors. Logical dimensions and typography come from `daw_ui::tokens`:
 
 | Token family | Values |
 | --- | --- |
 | Spacing | `SPACE_XS` 4, `SPACE_SM` 8, `SPACE_MD` 12, `SPACE_LG` 16, `SPACE_XL` 24 |
-| Controls | `CONTROL_HEIGHT` 28, `COMPACT_HEIGHT` 22, `SELECT_WIDTH` 160 |
+| Controls | `CONTROL_HEIGHT` 30, `COMPACT_HEIGHT` 24, `SELECT_WIDTH` 160 |
 | Corners | `RADIUS` 4 |
-| Typography | Caption 10, small 11, button 12, body 13, heading 22 |
+| Typography | Caption 13, note 14, button/body 15, subtitle 16, title 20; canvas 12, track title 14 |
 
 Sizes are logical screen points and follow egui's display scaling. The theme also supplies hover, active, selection, and focus styling. Avoid introducing a second app-specific palette or copied spacing scale.
 
@@ -36,9 +36,11 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | Generic `slider`, `number` |
 | Track color | `color_edit` |
+| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
 | Interactive parameter curves | `curve_editor`, `CurvePoint`, `CurveView`, `CurveEdit` |
 | Plug-in library entries and previews | `catalog_item`, `image_preview` |
 | Surfaces | `panel`, `card`, `inset` |
+| Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
 
@@ -48,7 +50,7 @@ Use native response composition rather than adding a second event system:
 use daw_ui as controls;
 
 fn channel_controls(ui: &mut egui::Ui, enabled: &mut bool, name: &mut String, gain: &mut f32) {
-    controls::card().show(ui, |ui| {
+    controls::card(ui.ctx()).show(ui, |ui| {
         controls::text_field(ui, name, "Channel name", 220.0);
         controls::switch(ui, enabled, "Enabled");
         ui.add(controls::slider(gain, 0.0..=2.0).text("Gain"));
@@ -75,7 +77,9 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 }
 ```
 
-Use `popup(title).open(&mut open).show(ctx, ...)` for utility windows. The builder supplies a common frame, spacing, and initial width. It defaults to fixed sizing and no collapse triangle; an individual tool may explicitly override `.resizable(true)` or its width when its content needs it. An `open = false` popup renders no content.
+Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder supplies a common frame, spacing, and initial width. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. It defaults to fixed sizing and no collapse triangle; an individual tool may explicitly override `.resizable(true)` or its width when its content needs it. An `open = false` popup renders no content.
+
+**Setup → Appearance** applies and persists System, Light, or Dark. Cancel discards the draft. Changing only appearance leaves playback and native editors running. Piano-roll black-key rows remain darker than white-key rows in both modes; blue scale and chord tints preserve that distinction. Note labels select a contrasting foreground for their velocity-dependent fill.
 
 `selectable_at(ui, rect, id_salt, selected, label)` is for controls drawn inside an existing arrangement canvas. It supplies a compact native button in the given rectangle without advancing or enlarging the parent's layout. It requires a stable semantic ID such as `(track.id, "mute")` and retains native hover, focus, keyboard, and accessibility behavior. It does not own arrangement geometry.
 
@@ -87,11 +91,17 @@ Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers sho
 
 **Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. Selecting an instrument assigns that existing track and opens its native editor. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
 
-Arrangement and piano-roll canvases reserve pointer drags for editing. Their scroll areas disable background drag scrolling with `ScrollSource { drag: false, ..Default::default() }`, retaining wheel and scrollbar navigation. This prevents a canvas from scrolling a target away while a clip, note, or track header is being pressed.
+Arrangement and clip editors share `TimelineViewport` and `TimelinePane`. Call `navigate` before domain hit testing and suppress edits while its `navigating` flag is true. Middle drag or Alt+left drag pans; Ctrl+wheel zooms horizontally around the pointer, Ctrl+Shift+wheel vertically; Ctrl+right or Ctrl+middle drag zooms around the initial pointer position, with Shift selecting the vertical axis. Plain wheel scrolls vertically and Shift+wheel horizontally. Plus/minus zoom horizontally; Shift+plus/minus vertically. `Fit` or F fits the earliest-to-latest event interval and every relevant row on both axes. The shared ruler shows musical bars and elapsed clock time using the same mapping. Text entry, disabled background canvases, and open menus do not consume editor shortcuts.
+
+Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut, R Duplicate, T Glue, Z Erase, U Multi-draw, I Fade in, O Fade out, P Cursor. Each editor exposes only its applicable subset. The arranger retains fixed track headers and a fixed ruler while the musical canvas pans; its native vertical scrollbar remains available.
 
 ## State, focus, and accessibility
 
 State stays with the caller. Boolean and choice components mark `Response::changed()` only when their value changes. Use `.clicked()` for actions and `.changed()` for committing edits. Shared components do not create undo history, mutate project state indirectly, or rebuild audio themselves.
+
+The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels.
+
+**Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views and utility popups; text fields retain their native text undo. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A new edit discards redo. History is session-local and limited to 128 steps or an estimated 128 MiB of snapshots, including opaque plugin state. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
 
 Disable a group with `ui.add_enabled_ui(false, |ui| ...)`, or use `ui.add_enabled(enabled, button_widget(...))`. Disabled components do not change values from pointer or keyboard input. Scope repeated rows using `ui.push_id(model_id, ...)`; repeated labels alone are not sufficient persistent identity for every control.
 
@@ -109,3 +119,37 @@ cargo clippy -p daw-ui --all-targets -- -D warnings
 `workspace_popup(title, ctx)` sizes a canvas tool below the transport within the current viewport. The app disables the background arrangement while a tool is open. Menu commands, Escape, and window close all use the same state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
 
 `curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.
+
+## Device library and effect chains
+
+**Window → Library** opens a large browser with Instruments and Effects tabs. Search matches names, developers, and category metadata; the developer selector narrows results independently. The details pane shows available category, developer, format, and cached native editor image. A tooltip includes the plugin location and class identity. Add/Assign actions remain above preview content, so a background capture cannot move them under the pointer.
+
+The instrument tab creates a MIDI track and pattern or assigns the selected MIDI track, then opens its native editor. **Effects → + Insert** opens this same browser pinned to that channel. **Add to effect chain** returns to the channel's inserts. **Create send track** creates a bus containing the effect and a post-fader send from the source at 25%; configure the plugin's wet/dry control for the desired return. Routing also offers **Create send track**. Escape returns to the caller without inserting anything.
+
+Plugin discovery stays metadata-only. After discovery, one isolated helper at a time initializes verified instruments and effects and captures native previews into Rill's fingerprinted cache. A selected device is prioritized. Failures are retained and retried only with **Capture preview**; **Refresh preview** explicitly updates a cached image. Existing cache entries display immediately. The browser limits resident small textures to 128 and scales the selected preview to at most 1000×600 pixels.
+
+Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
+
+
+## Typography and international names
+
+The shared `daw_ui::text` module defines Title, Subtitle, Body, Label and Note
+roles. `title`, `subtitle`, `body`, `label`, and `note` wrap to available width and
+expand vertically. Use `truncated` only for intentional single-row layouts; it
+retains the complete name in a tooltip. Canvas-owned catalog and track labels use
+`paint_row` / `paint_single_line` with ellipsis and a caller-owned hover target.
+Keep layout spacing in the shared tokens instead of padding text with spaces.
+
+Inter 4.1 Regular and Semibold are embedded for interface text, with Noto Sans CJK
+2.004 for Chinese, Japanese and Korean names. Numeric readouts retain Hack;
+egui's Noto Emoji fallback renders monochrome emoji. No runtime font downloads or
+system-font lookup is needed. Fonts rasterize at the current display density;
+canvas labels use at least 12 logical points and hide when a zoomed row cannot fit
+them. Interface text is 15 points, notes 14, subtitles 16, and titles 20.
+
+Font coverage does not imply full Unicode shaping: colored emoji, joined emoji
+sequences, bidirectional layout and complex-script shaping are not guaranteed by
+the current renderer. Stored project names remain Unicode strings regardless of
+glyph availability. Font versions, exact hashes, OFL notices and sources live in
+[`crates/daw-ui/assets/fonts`](../crates/daw-ui/assets/fonts/README.md), and notices
+are included in release archives and the standalone macOS application bundle.

@@ -10,10 +10,23 @@ pub struct AudioData {
 }
 
 impl AudioData {
+    /// Decode at most 512 MiB of samples. Streaming long assets is a separate
+    /// operation; malformed headers must not reserve unbounded process memory.
     pub fn load_wav(path: impl AsRef<Path>) -> Result<Self> {
+        Self::load_wav_with_limit(path, 512 * 1024 * 1024)
+    }
+
+    /// Check declared sample count before collecting or allocating PCM samples.
+    pub fn load_wav_with_limit(path: impl AsRef<Path>, max_decoded_bytes: usize) -> Result<Self> {
         let path = path.as_ref();
         let mut reader =
             hound::WavReader::open(path).with_context(|| format!("Open WAV {}", path.display()))?;
+        let decoded_bytes = u64::from(reader.len()) * std::mem::size_of::<f32>() as u64;
+        ensure!(
+            decoded_bytes <= max_decoded_bytes as u64,
+            "WAV exceeds decoded audio limit ({} MiB)",
+            max_decoded_bytes / (1024 * 1024)
+        );
         let spec = reader.spec();
         ensure!(
             spec.channels > 0 && spec.sample_rate > 0,
@@ -93,5 +106,54 @@ impl AudioData {
         }
         writer.finalize()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declared_sample_limit_is_checked_before_allocation_or_decode() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("declared.wav");
+        let mut header = Vec::new();
+        header.extend_from_slice(b"RIFF");
+        header.extend_from_slice(&(36u32 + 1024 * 1024 * 1024).to_le_bytes());
+        header.extend_from_slice(b"WAVEfmt ");
+        header.extend_from_slice(&16u32.to_le_bytes());
+        header.extend_from_slice(&1u16.to_le_bytes());
+        header.extend_from_slice(&1u16.to_le_bytes());
+        header.extend_from_slice(&48_000u32.to_le_bytes());
+        header.extend_from_slice(&48_000u32.to_le_bytes());
+        header.extend_from_slice(&1u16.to_le_bytes());
+        header.extend_from_slice(&8u16.to_le_bytes());
+        header.extend_from_slice(b"data");
+        header.extend_from_slice(&(1024u32 * 1024 * 1024).to_le_bytes());
+        std::fs::write(&path, header).unwrap();
+        assert!(
+            AudioData::load_wav_with_limit(&path, 1024)
+                .unwrap_err()
+                .to_string()
+                .contains("decoded audio limit")
+        );
+    }
+
+    #[test]
+    fn exact_decoded_limit_accepts_finite_audio_and_lower_limit_rejects_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("valid.wav");
+        AudioData {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![0.25; 8],
+        }
+        .write_wav(&path)
+        .unwrap();
+        assert_eq!(
+            AudioData::load_wav_with_limit(&path, 32).unwrap().samples,
+            vec![0.25; 8]
+        );
+        assert!(AudioData::load_wav_with_limit(&path, 31).is_err());
     }
 }

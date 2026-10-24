@@ -22,7 +22,9 @@ impl DawApp {
         }
         let track_name = track.name.clone();
         let mut open = true;
-        widgets::popup(format!("Effects · {track_name}"))
+        let mut edit_effect = None;
+        let mut add_effect = false;
+        widgets::popup(format!("Effects · {track_name}"), ctx)
             .id(egui::Id::new("effects"))
             .open(&mut open)
             .default_width(620.0)
@@ -31,13 +33,15 @@ impl DawApp {
                 let mut remove = None;
                 let mut move_up = None;
                 let mut move_down = None;
+                let mut dragged = None;
                 let mut changed = false;
                 let track = self.project.track_mut(track_id).unwrap();
                 let count = track.inserts.len();
                 for (index, slot) in track.inserts.iter_mut().enumerate() {
                     ui.push_id(slot.id, |ui| {
-                        widgets::card().show(ui, |ui| {
+                        let row = widgets::card(ui.ctx()).show(ui, |ui| {
                             ui.horizontal(|ui| {
+                                widgets::reorder_handle(ui, (track_id, slot.id));
                                 changed |= widgets::switch(
                                     ui,
                                     &mut slot.enabled,
@@ -47,6 +51,12 @@ impl DawApp {
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
+                                        if widgets::small_button(ui, "Open editor")
+                                            .on_hover_text("Open native effect editor")
+                                            .clicked()
+                                        {
+                                            edit_effect = Some(slot.id);
+                                        }
                                         if widgets::small_button(ui, "×")
                                             .on_hover_text("Remove insert")
                                             .clicked()
@@ -77,9 +87,16 @@ impl DawApp {
                                 );
                             });
                             let Effect::Vst3 { path, .. } = &slot.effect;
-                            ui.label(RichText::new("VST3").small().color(MUTED))
+                            ui.label(RichText::new("VST3").small().color(palette(ui.ctx()).muted))
                                 .on_hover_text(path);
                         });
+                        if let Some(payload) =
+                            widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
+                            && payload.0 == track_id
+                            && payload.1 != slot.id
+                        {
+                            dragged = Some((payload.1, index));
+                        }
                     });
                 }
                 if let Some(index) = remove {
@@ -92,52 +109,26 @@ impl DawApp {
                     track.inserts.swap(index, index + 1);
                     changed = true;
                 }
-                let mut add = None;
-                widgets::picker_button(ui, "+ Insert", |ui| {
-                    if !self.vst_paths.is_empty() {
-                        let key = ui.id().with("effect_search");
-                        let mut filter = ui
-                            .ctx()
-                            .data_mut(|data| data.get_temp::<String>(key))
-                            .unwrap_or_default();
-                        widgets::text_field(ui, &mut filter, "Search effects", 240.0);
-                        ui.ctx()
-                            .data_mut(|data| data.insert_temp(key, filter.clone()));
-                        let filter = filter.to_lowercase();
-                        ui.separator();
-                        egui::ScrollArea::vertical()
-                            .max_height(250.0)
-                            .show(ui, |ui| {
-                                for entry in self.vst_catalog.iter().filter(|entry| {
-                                    entry.plugin.is_effect() != Some(false)
-                                        && entry.plugin.name.to_lowercase().contains(&filter)
-                                }) {
-                                    let path = &entry.plugin.path;
-                                    let name = &entry.plugin.name;
-                                    if widgets::button(ui, name.as_str()).clicked() {
-                                        add = Some(EffectSlot::new(
-                                            name.as_str(),
-                                            Effect::Vst3 {
-                                                path: path.to_string_lossy().to_string(),
-                                                class_id: entry.plugin.class_id.clone(),
-                                            },
-                                        ));
-                                        ui.close();
-                                    }
-                                }
-                            });
-                    }
-                });
-                if let Some(slot) = add {
-                    track.inserts.push(slot);
+                if let Some((id, destination)) = dragged
+                    && let Some(source) = track.inserts.iter().position(|slot| slot.id == id)
+                {
+                    let slot = track.inserts.remove(source);
+                    track.inserts.insert(destination, slot);
                     changed = true;
                 }
+                add_effect = widgets::button(ui, "+ Insert").clicked();
                 if changed {
                     self.changed();
                 }
             });
         if !open {
             self.effects_open = false;
+        }
+        if add_effect {
+            self.open_effect_library(track_id, false);
+        }
+        if let Some(effect) = edit_effect {
+            self.open_effect_editor(track_id, effect);
         }
     }
 
@@ -158,6 +149,7 @@ impl DawApp {
             return;
         }
         let track_name = track.name.clone();
+        let mut create_send = false;
         let buses: Vec<_> = self
             .project
             .tracks
@@ -166,7 +158,7 @@ impl DawApp {
             .map(|track| (track.id, track.name.clone()))
             .collect();
         let mut open = true;
-        widgets::popup(format!("Routing · {track_name}"))
+        widgets::popup(format!("Routing · {track_name}"), ctx)
             .id(egui::Id::new("routing"))
             .open(&mut open)
             .default_width(620.0)
@@ -233,6 +225,8 @@ impl DawApp {
                     self.message(result, "Send added");
                 }
 
+                create_send = widgets::button(ui, "Create send track").clicked();
+
                 ui.add_space(16.0);
                 label(ui, "OUTPUT");
                 let current = self.project.track(track_id).unwrap().output_bus;
@@ -264,6 +258,9 @@ impl DawApp {
             });
         if !open {
             self.routing_open = false;
+        }
+        if create_send {
+            self.open_effect_library(track_id, true);
         }
     }
 }
