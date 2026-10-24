@@ -1142,7 +1142,12 @@ impl DawApp {
         let (Some(track), Some(clip)) = (self.selected_track, self.selected_clip) else {
             return;
         };
+        let Some(original) = self.project.clip(track, clip).cloned() else {
+            return;
+        };
+        let selection = self.selected_notes.clone();
         self.begin_edit();
+        let mut edit_label = None;
         let extend = matches!(
             action,
             NoteEdit::Add(_)
@@ -1153,25 +1158,12 @@ impl DawApp {
         );
         let result = match action {
             NoteEdit::Replace(edited, selected, label) => {
-                let original = self.project.clip(track, clip).cloned();
-                let selection = self.selected_notes.clone();
                 if let Some(notes) = self.project.midi_notes_mut(track, clip) {
                     *notes = edited;
                     self.selected_notes = selected;
                 }
-                self.extend_selected_clip();
-                let result = self.project.validate();
-                if result.is_err() {
-                    if let (Some(original), Some(destination)) =
-                        (original, self.project.clip_mut(track, clip))
-                    {
-                        *destination = original;
-                    }
-                    self.selected_notes = selection;
-                } else {
-                    self.edit_label = Some(label.into());
-                }
-                result
+                edit_label = Some(label);
+                Ok(())
             }
             NoteEdit::Add(drawn) => {
                 if let Some(notes) = self.project.midi_notes_mut(track, clip) {
@@ -1272,14 +1264,7 @@ impl DawApp {
                 Ok(())
             }
         };
-        if result.is_ok() {
-            if extend {
-                self.extend_selected_clip();
-            }
-            self.changed();
-        } else {
-            self.message(result, "");
-        }
+        self.finish_midi_edit(track, original, selection, result, extend, edit_label);
     }
 }
 
@@ -1300,6 +1285,67 @@ fn pitch_class(pitch: u8) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn linked_clip_at_limit(remaining: f64) -> (DawApp, u64, Note) {
+        let mut project = daw_core::Project::new();
+        let track = project.add_midi_track("Linked patterns");
+        let note = Note::new(60, 0.0, 1.0, 100);
+        let clip = daw_core::Clip::midi("Last beat", 0.0, 1.0, vec![note.clone()]);
+        let clip_id = clip.id;
+        project.track_mut(track).unwrap().clips.push(clip);
+        let clone = project.clone_clip(track, clip_id).unwrap();
+        project.clone_clip(track, clone).unwrap();
+        project.clip_mut(track, clip_id).unwrap().start = daw_core::MAX_BEAT - remaining;
+        project.validate().unwrap();
+        let mut app = DawApp::with_context(&egui::Context::default(), project, None);
+        app.selected_track = Some(track);
+        app.selected_clip = Some(clip_id);
+        app.selected_notes = HashSet::from([note.id]);
+        (app, track, note)
+    }
+
+    #[test]
+    fn note_add_move_resize_and_duplicate_reject_bounds_atomically_across_links() {
+        let (mut app, _, note) = linked_clip_at_limit(1.0);
+        let before = app.project.clone();
+        for action in [
+            NoteEdit::Add(vec![Note::new(64, 1.0, 1.0, 100)]),
+            NoteEdit::Move(vec![note.clone()], 1.0, 0),
+            NoteEdit::Resize(vec![note.clone()], 1.0, false),
+            NoteEdit::Duplicate(note.id),
+        ] {
+            app.apply_note_edit(action);
+            assert!(app.error);
+            assert_eq!(app.project, before, "no peer retains a rejected source");
+            assert_eq!(app.selected_notes, HashSet::from([note.id]));
+            app.project.validate().unwrap();
+            app.flush_pending_edit();
+            assert!(!app.history.can_undo());
+        }
+    }
+
+    #[test]
+    fn invalid_note_drag_frame_keeps_last_valid_source_and_original_undo_checkpoint() {
+        let (mut app, track, note) = linked_clip_at_limit(3.0);
+        let before = app.project.clone();
+        app.apply_note_edit(NoteEdit::Move(vec![note.clone()], 0.5, 0));
+        let last_valid = app.project.clone();
+        app.apply_note_edit(NoteEdit::Move(vec![note.clone()], 3.0, 0));
+        assert_eq!(app.project, last_valid);
+        assert_eq!(app.selected_notes, HashSet::from([note.id]));
+        app.apply_note_edit(NoteEdit::Move(vec![note], 1.0, 0));
+        for clip in &app.project.track(track).unwrap().clips {
+            let ClipContent::Midi { notes } = &clip.content else {
+                unreachable!()
+            };
+            assert_eq!(notes[0].start, 1.0);
+        }
+        app.project.validate().unwrap();
+        app.flush_pending_edit();
+        assert_eq!(app.history.undo_labels().count(), 1);
+        app.undo_redo(false);
+        assert_eq!(app.project, before);
+    }
 
     #[test]
     fn note_transform_rolls_back_when_clip_extension_exceeds_project_bounds() {

@@ -12,6 +12,8 @@ pub enum Icon {
     Copy,
     Paste,
     Duplicate,
+    Link,
+    Unlink,
     Glue,
     Erase,
     Stack,
@@ -63,6 +65,8 @@ impl Icon {
             "Copy" | "Copy notes" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
             "Duplicate" | "Duplicate clip" => Self::Duplicate,
+            "Create linked clone" => Self::Link,
+            "Make independent" => Self::Unlink,
             "Glue" | "Glue selected" | "Legato" | "Join" | "Join clips…" => Self::Glue,
             "Erase" => Self::Erase,
             "Multi-draw" => Self::Stack,
@@ -162,6 +166,50 @@ impl Icon {
                     line(&[(11., 14.), (17., 14.)]);
                     line(&[(14., 11.), (14., 17.)]);
                 }
+            }
+            Self::Link => {
+                line(&[
+                    (9., 15.),
+                    (7., 17.),
+                    (4., 17.),
+                    (2., 15.),
+                    (2., 12.),
+                    (8., 6.),
+                    (11., 6.),
+                    (13., 8.),
+                    (13., 11.),
+                ]);
+                line(&[
+                    (15., 9.),
+                    (17., 7.),
+                    (20., 7.),
+                    (22., 9.),
+                    (22., 12.),
+                    (16., 18.),
+                    (13., 18.),
+                    (11., 16.),
+                    (11., 13.),
+                ]);
+                line(&[(8., 16.), (16., 8.)]);
+            }
+            Self::Unlink => {
+                line(&[
+                    (8., 12.),
+                    (4., 16.),
+                    (4., 19.),
+                    (6., 21.),
+                    (9., 21.),
+                    (13., 17.),
+                ]);
+                line(&[
+                    (11., 7.),
+                    (15., 3.),
+                    (18., 3.),
+                    (20., 5.),
+                    (20., 8.),
+                    (16., 12.),
+                ]);
+                line(&[(3., 3.), (21., 21.)]);
             }
             Self::Paste => {
                 box_at(5., 5., 14., 16.);

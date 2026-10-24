@@ -445,6 +445,20 @@ impl DawApp {
         }
     }
     pub fn changed(&mut self) {
+        if let Some((track, clip)) = self.selected_track.zip(self.selected_clip)
+            && self.project.clip(track, clip).is_some()
+            && let Err(error) = self.project.synchronize_linked_clip(track, clip)
+        {
+            if let Some(before) = self.before_edit.take() {
+                self.project = before;
+            }
+            self.edit_dirty = false;
+            self.edit_label = None;
+            self.edit_group = None;
+            self.modified = !self.history.is_saved();
+            self.message(Err(error), "");
+            return;
+        }
         self.project.prune_automation();
         self.modified = true;
         self.edit_dirty = true;
@@ -836,6 +850,68 @@ impl DawApp {
             clip.length = end;
         }
     }
+
+    /// Accept one MIDI gesture update only after its source and instance bounds
+    /// are valid. A rejected frame restores the preceding valid frame, including
+    /// peers already updated by a core note operation, without losing the drag's
+    /// original undo checkpoint. This scans only the edited source's notes.
+    pub(crate) fn finish_midi_edit(
+        &mut self,
+        track: u64,
+        before: Clip,
+        selection: HashSet<u64>,
+        result: anyhow::Result<()>,
+        extend: bool,
+        label: Option<&str>,
+    ) {
+        let clip_id = before.id;
+        let result = result.and_then(|()| {
+            if extend {
+                self.extend_selected_clip();
+            }
+            let clip = self
+                .project
+                .clip(track, clip_id)
+                .ok_or_else(|| anyhow::anyhow!("Clip not found"))?;
+            let valid_range = |start: f64, length: f64| {
+                start.is_finite()
+                    && start >= 0.0
+                    && length.is_finite()
+                    && length > 0.0
+                    && start + length <= MAX_BEAT
+                    && start + length > start
+            };
+            anyhow::ensure!(
+                valid_range(clip.start, clip.length) && valid_range(clip.offset, clip.length),
+                "Note edit exceeds the supported clip range"
+            );
+            let ClipContent::Midi { notes } = &clip.content else {
+                anyhow::bail!("Select a MIDI clip");
+            };
+            for note in notes {
+                validate_note(note)?;
+            }
+            self.project.synchronize_linked_clip(track, clip_id)
+        });
+        match result {
+            Ok(()) => {
+                if let Some(label) = label {
+                    self.edit_label = Some(label.into());
+                }
+                self.changed();
+            }
+            Err(error) => {
+                if let Some(clip) = self.project.clip_mut(track, clip_id) {
+                    *clip = before;
+                }
+                // Cut/Duplicate/Glue publish their source immediately. Restore
+                // that shared source as well, retaining every peer's placement.
+                let rollback = self.project.synchronize_linked_clip(track, clip_id);
+                self.selected_notes = selection;
+                self.message(rollback.and(Err(error)), "");
+            }
+        }
+    }
     fn open(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter("Rill project", &["rill"])
@@ -968,6 +1044,7 @@ impl DawApp {
         self.begin_edit();
         if !self.selected_notes.is_empty() {
             let selected = self.selected_notes.clone();
+            let original = self.selected().cloned();
             if let Some(Clip {
                 content: ClipContent::Midi { notes },
                 ..
@@ -991,8 +1068,9 @@ impl DawApp {
                     notes.push(n);
                 }
                 self.selected_notes = ids;
-                self.extend_selected_clip();
-                self.changed();
+                if let Some((track, original)) = self.selected_track.zip(original) {
+                    self.finish_midi_edit(track, original, selected, Ok(()), true, None);
+                }
             }
         } else if let (Some(t), Some(c)) = (self.selected_track, self.selected_clip) {
             match self.project.duplicate_clip(t, c) {
@@ -1002,6 +1080,36 @@ impl DawApp {
                 }
                 Err(e) => self.message(Err(e), ""),
             }
+        }
+    }
+    pub(crate) fn create_linked_clone(&mut self) {
+        let Some((track, clip)) = self.selected_track.zip(self.selected_clip) else {
+            return;
+        };
+        self.begin_edit();
+        match self.project.clone_clip(track, clip) {
+            Ok(id) => {
+                self.selected_clip = Some(id);
+                self.selected_notes.clear();
+                self.edit_label = Some("Create linked clone".into());
+                self.changed();
+            }
+            Err(error) => self.message(Err(error), ""),
+        }
+    }
+
+    pub(crate) fn make_clip_independent(&mut self) {
+        let Some((track, clip)) = self.selected_track.zip(self.selected_clip) else {
+            return;
+        };
+        self.begin_edit();
+        match self.project.make_clip_independent(track, clip) {
+            Ok(()) => {
+                self.selected_notes.clear();
+                self.edit_label = Some("Make clip independent".into());
+                self.changed();
+            }
+            Err(error) => self.message(Err(error), ""),
         }
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
@@ -1309,9 +1417,21 @@ impl DawApp {
                             self.selected().is_some() && !self.midi_editor.quantize_active();
                         if ui
                             .add_enabled(has_clip, daw_ui::button_widget("Duplicate"))
+                            .on_hover_text("Duplicate the selection as an independent copy · Ctrl/Cmd+D")
                             .clicked()
                         {
                             self.duplicate_selection();
+                            ui.close();
+                        }
+                        if ui.add_enabled(has_clip, daw_ui::button_widget("Create linked clone"))
+                            .on_hover_text("Create another instance of the whole clip. Name, notes, audio edits, fades and clip volume stay linked.")
+                            .clicked() {
+                            self.create_linked_clone();
+                            ui.close();
+                        }
+                        if self.selected().is_some_and(|clip| clip.link_group.is_some())
+                            && ui.add_enabled(has_clip, daw_ui::button_widget("Make independent")).clicked() {
+                            self.make_clip_independent();
                             ui.close();
                         }
                         if ui
@@ -1852,6 +1972,13 @@ impl DawApp {
                 };
                 let header = daw_ui::workspace_header(ui, &title, |ui| {
                     if workspace == WorkspaceView::Clip
+                        && self
+                            .selected()
+                            .is_some_and(|clip| clip.link_group.is_some())
+                    {
+                        daw_ui::clip_label(ui, "Linked", true);
+                    }
+                    if workspace == WorkspaceView::Clip
                         && daw_ui::button(ui, "Properties").clicked()
                     {
                         self.open_popup(PopupKind::Inspector);
@@ -1981,7 +2108,18 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                     a.start == b.start
                         && a.length == b.length
                         && a.offset == b.offset
-                        && a.content == b.content
+                        && match (&a.content, &b.content) {
+                            (ClipContent::Midi { notes: a }, ClipContent::Midi { notes: b }) => {
+                                a.len() == b.len()
+                                    && a.iter().zip(b).all(|(a, b)| {
+                                        a.pitch == b.pitch
+                                            && a.start == b.start
+                                            && a.length == b.length
+                                            && a.velocity == b.velocity
+                                    })
+                            }
+                            (a, b) => a == b,
+                        }
                 })
         })
 }

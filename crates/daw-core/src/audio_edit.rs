@@ -278,26 +278,38 @@ impl Project {
             anyhow::bail!("Select an audio clip");
         };
         *value = gain;
-        Ok(())
+        self.synchronize_linked_clip(track, clip)
     }
 
     pub fn set_audio_fades(
         &mut self,
         track: u64,
-        clip: u64,
+        clip_id: u64,
         fade_in: f64,
         fade_out: f64,
         in_curve: FadeCurve,
         out_curve: FadeCurve,
     ) -> Result<()> {
-        let clip = self.clip_mut(track, clip).context("Clip not found")?;
+        let clip = self.clip_mut(track, clip_id).context("Clip not found")?;
+        let linked = clip.link_group.is_some();
+        let fade_limit = if linked {
+            match &clip.content {
+                ClipContent::Audio {
+                    envelope: Some(region),
+                    ..
+                } => region.length,
+                _ => clip.length,
+            }
+        } else {
+            clip.length
+        };
         ensure!(
             fade_in.is_finite()
                 && fade_out.is_finite()
                 && fade_in >= 0.0
                 && fade_out >= 0.0
-                && fade_in <= clip.length
-                && fade_out <= clip.length,
+                && fade_in <= fade_limit
+                && fade_out <= fade_limit,
             "Fades must fit inside the clip"
         );
         let ClipContent::Audio {
@@ -315,8 +327,10 @@ impl Project {
         *release = fade_out;
         *fade_in_curve = in_curve;
         *fade_out_curve = out_curve;
-        *envelope = None;
-        Ok(())
+        if !linked {
+            *envelope = None;
+        }
+        self.synchronize_linked_clip(track, clip_id)
     }
 
     pub fn reverse_audio_clip(&mut self, track: u64, clip: u64) -> Result<()> {
@@ -328,7 +342,7 @@ impl Project {
             anyhow::bail!("Select an audio clip");
         };
         *reverse = !*reverse;
-        Ok(())
+        self.synchronize_linked_clip(track, clip)
     }
 
     pub fn paste_audio_clip(&mut self, track: u64, original: &Clip, start: f64) -> Result<u64> {
@@ -347,6 +361,7 @@ impl Project {
         );
         let mut clip = original.clone();
         clip.id = new_id();
+        clip.link_group = None;
         clip.start = start;
         let id = clip.id;
         let track_id = track.id;

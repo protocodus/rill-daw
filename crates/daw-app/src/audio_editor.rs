@@ -34,7 +34,7 @@ struct AudioView {
     transients_open: bool,
     settings: TransientSettings,
     preview: Vec<f64>,
-    preview_source: Option<Clip>,
+    preview_source: Option<(Clip, f64)>,
     pending: Option<Pending>,
     error: String,
     amplitude_reference: f32,
@@ -59,6 +59,8 @@ impl Default for AudioView {
 }
 #[derive(Clone)]
 enum Edit {
+    Clone,
+    Unlink,
     Gain(f32),
     Fades(f64, f64, FadeCurve, FadeCurve),
     Reverse,
@@ -92,6 +94,7 @@ impl DawApp {
             fade_in_curve,
             fade_out_curve,
             reverse,
+            envelope,
             ..
         } = &clip.content
         else {
@@ -112,7 +115,7 @@ impl DawApp {
         if state
             .preview_source
             .as_ref()
-            .is_some_and(|source| source != &clip)
+            .is_some_and(|(source, tempo)| source != &clip || *tempo != self.project.tempo)
         {
             state.preview.clear();
             state.preview_source = None;
@@ -134,7 +137,7 @@ impl DawApp {
                         Ok(Analysis::Gain(gain)) => edit = Some(Edit::Gain(gain)),
                         Ok(Analysis::Transients(points)) if state.transients_open => {
                             state.preview = points;
-                            state.preview_source = Some(clip.clone());
+                            state.preview_source = Some((clip.clone(), self.project.tempo));
                         }
                         Ok(Analysis::Transients(_)) => {}
                         Err(error) => state.error = error,
@@ -154,6 +157,17 @@ impl DawApp {
         let mut fo = *fade_out;
         let mut fic = *fade_in_curve;
         let mut foc = *fade_out_curve;
+        // Linked fades retain source coordinates when this instance is trimmed.
+        // Independent fade edits keep their established local reanchor behavior.
+        let local_region = AudioEnvelope {
+            offset: 0.0,
+            length: clip.length,
+        };
+        let fade_region = if clip.link_group.is_some() {
+            envelope.unwrap_or(local_region)
+        } else {
+            local_region
+        };
         daw_ui::toolbar(ui, |ui| {
             daw_ui::editor_tools(ui, &mut state.tool, TOOLS);
             fit = daw_ui::timeline_fit_button(ui).clicked();
@@ -242,6 +256,14 @@ impl DawApp {
                     edit = Some(Edit::Duplicate);
                     ui.close();
                 }
+                if daw_ui::button(ui, "Create linked clone").clicked() {
+                    edit = Some(Edit::Clone);
+                    ui.close();
+                }
+                if clip.link_group.is_some() && daw_ui::button(ui, "Make independent").clicked() {
+                    edit = Some(Edit::Unlink);
+                    ui.close();
+                }
             });
             daw_ui::action_menu(ui, "Process", |ui| {
                 let mut reversed = *reverse;
@@ -286,7 +308,8 @@ impl DawApp {
                 let mut changed = ui
                     .add(
                         daw_ui::number(duration)
-                            .range(0.0..=clip.length)
+                            .range(0.0..=fade_region.length)
+                            .clamp_existing_to_range(false)
                             .speed(0.05)
                             .suffix(" beats"),
                     )
@@ -300,7 +323,14 @@ impl DawApp {
                         }
                     });
                 if changed {
-                    edit = Some(Edit::Fades(fi, fo, fic, foc));
+                    // Only an intentional independent edit reanchors both
+                    // fades to this visible window; merely viewing never does.
+                    edit = Some(Edit::Fades(
+                        fi.min(fade_region.length),
+                        fo.min(fade_region.length),
+                        fic,
+                        foc,
+                    ));
                 }
             });
         }
@@ -493,16 +523,17 @@ impl DawApp {
                 EditorTool::Cut if response.clicked() => edit = Some(Edit::Split(beat)),
                 EditorTool::FadeIn => {
                     edit = Some(Edit::Fades(
-                        beat - clip.start,
-                        fo.min(clip.length),
+                        (fade_region.offset + beat - clip.start).clamp(0.0, fade_region.length),
+                        fo.min(fade_region.length),
                         fic,
                         foc,
                     ))
                 }
                 EditorTool::FadeOut => {
                     edit = Some(Edit::Fades(
-                        fi.min(clip.length),
-                        clip.end() - beat,
+                        fi.min(fade_region.length),
+                        (fade_region.length - fade_region.offset - (beat - clip.start))
+                            .clamp(0.0, fade_region.length),
                         fic,
                         foc,
                     ))
@@ -513,6 +544,16 @@ impl DawApp {
         if let Some(edit) = edit {
             self.begin_edit();
             let result = match edit {
+                Edit::Clone => self.project.clone_clip(track, clip.id).map(|id| {
+                    self.selected_clip = Some(id);
+                    self.edit_label = Some("Create linked clone".into());
+                }),
+                Edit::Unlink => self
+                    .project
+                    .make_clip_independent(track, clip.id)
+                    .map(|()| {
+                        self.edit_label = Some("Make clip independent".into());
+                    }),
                 Edit::Gain(gain) => self.project.set_audio_gain(track, clip.id, gain),
                 Edit::Fades(fi, fo, fic, foc) => self
                     .project
@@ -688,5 +729,182 @@ mod tests {
             ..data
         };
         assert_eq!(visible_peak(&silence, &clip, 120.0), 1.0);
+    }
+
+    fn linked_audio_editor(tool: EditorTool) -> (egui::Context, DawApp, u64, u64) {
+        let ctx = egui::Context::default();
+        let mut project = Project::new();
+        let track = project.add_audio_track("Audio");
+        let clip = Clip::audio("Source", 0.0, 4.0, "unused.wav");
+        let original = clip.id;
+        project.track_mut(track).unwrap().clips.push(clip);
+        project
+            .set_audio_fades(
+                track,
+                original,
+                3.0,
+                3.0,
+                FadeCurve::Linear,
+                FadeCurve::Linear,
+            )
+            .unwrap();
+        let clone = project.clone_clip(track, original).unwrap();
+        project.trim_clip(track, clone, 5.0, 2.0).unwrap();
+        let mut app = DawApp::with_context(&ctx, project, None);
+        app.selected_track = Some(track);
+        app.selected_clip = Some(clone);
+        app.snap = 0.0;
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("audio_editor_state"),
+                AudioView {
+                    owner: clone,
+                    tool,
+                    ..Default::default()
+                },
+            )
+        });
+        (ctx, app, track, original)
+    }
+
+    fn audio_frame(ctx: &egui::Context, app: &mut DawApp, events: Vec<egui::Event>) {
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1200.0, 700.0))),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.audio_editor(ui));
+        });
+    }
+
+    #[test]
+    fn viewing_trimmed_linked_fades_does_not_clamp_shared_source_values() {
+        for tool in [EditorTool::FadeIn, EditorTool::FadeOut] {
+            let (ctx, mut app, _, _) = linked_audio_editor(tool);
+            let before = app.project.clone();
+            for _ in 0..3 {
+                audio_frame(&ctx, &mut app, vec![]);
+            }
+            assert_eq!(app.project, before);
+            assert!(!app.edit_dirty);
+        }
+    }
+
+    #[test]
+    fn viewing_independent_copies_preserves_long_source_fades() {
+        for tool in [EditorTool::FadeIn, EditorTool::FadeOut] {
+            for duplicate in [false, true] {
+                let (ctx, mut app, track, _) = linked_audio_editor(tool);
+                let selected = app.selected_clip.unwrap();
+                if duplicate {
+                    app.selected_clip = Some(app.project.duplicate_clip(track, selected).unwrap());
+                } else {
+                    app.project.make_clip_independent(track, selected).unwrap();
+                }
+                let before = app.project.clone();
+                for _ in 0..3 {
+                    audio_frame(&ctx, &mut app, vec![]);
+                }
+                assert_eq!(app.project, before);
+                assert!(!app.edit_dirty);
+                app.project.validate().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn linked_fade_pointer_edits_use_source_coordinates_and_preserve_opposite_fade() {
+        for (tool, local_beat, expected) in [
+            (EditorTool::FadeIn, 0.5, (1.5, 3.0)),
+            (EditorTool::FadeOut, 1.5, (3.0, 1.5)),
+        ] {
+            let (ctx, mut app, track, original) = linked_audio_editor(tool);
+            for _ in 0..3 {
+                audio_frame(&ctx, &mut app, vec![]);
+            }
+            let state = ctx
+                .data(|data| data.get_temp::<AudioView>(egui::Id::new("audio_editor_state")))
+                .unwrap();
+            let diagnostics = ctx
+                .data(|data| {
+                    data.get_temp::<serde_json::Value>(egui::Id::new("audio_editor_diagnostics"))
+                })
+                .unwrap();
+            let values = diagnostics["rect"].as_array().unwrap();
+            let canvas = Rect::from_min_max(
+                Pos2::new(
+                    values[0].as_f64().unwrap() as f32,
+                    values[1].as_f64().unwrap() as f32,
+                ),
+                Pos2::new(
+                    values[2].as_f64().unwrap() as f32,
+                    values[3].as_f64().unwrap() as f32,
+                ),
+            );
+            let position = Pos2::new(state.view.x_at(canvas, 5.0 + local_beat), canvas.center().y);
+            for pressed in [true, false] {
+                audio_frame(
+                    &ctx,
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(position),
+                        egui::Event::PointerButton {
+                            pos: position,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: Default::default(),
+                        },
+                    ],
+                );
+            }
+            let clone = app.selected_clip.unwrap();
+            for (id, offset) in [(original, 0.0), (clone, 1.0)] {
+                let ClipContent::Audio {
+                    fade_in,
+                    fade_out,
+                    envelope: Some(envelope),
+                    ..
+                } = app.project.clip(track, id).unwrap().content
+                else {
+                    panic!("expected audio");
+                };
+                assert!((fade_in - expected.0).abs() < 1e-5, "{tool:?}: {fade_in}");
+                assert!((fade_out - expected.1).abs() < 1e-5, "{tool:?}: {fade_out}");
+                assert_eq!(
+                    envelope,
+                    AudioEnvelope {
+                        offset,
+                        length: 4.0
+                    }
+                );
+            }
+            app.project.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn completed_transient_preview_is_discarded_after_tempo_changes() {
+        let (ctx, mut app, _, _) = linked_audio_editor(EditorTool::Cursor);
+        let source = app.selected().unwrap().clone();
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("audio_editor_state"),
+                AudioView {
+                    owner: source.id,
+                    transients_open: true,
+                    preview: vec![0.5, 1.5],
+                    preview_source: Some((source, app.project.tempo)),
+                    ..Default::default()
+                },
+            )
+        });
+        app.project.tempo = 130.0;
+        audio_frame(&ctx, &mut app, vec![]);
+        let state = ctx
+            .data(|data| data.get_temp::<AudioView>(egui::Id::new("audio_editor_state")))
+            .unwrap();
+        assert!(state.preview.is_empty());
+        assert!(state.preview_source.is_none());
     }
 }

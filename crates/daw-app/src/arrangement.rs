@@ -13,6 +13,8 @@ enum Edit {
     Trim(u64, u64, f64, f64),
     Split(u64, u64, f64),
     Duplicate(u64, u64),
+    Clone(u64, u64),
+    Unlink(u64, u64),
     Delete(u64, u64),
     New(u64, f64),
     Mute(u64),
@@ -122,6 +124,7 @@ impl DawApp {
         let mut popup = None;
         let mut instrument_target = None;
         let mut open_editor = false;
+        let mut clip_diagnostics = Vec::new();
         let channels: std::collections::HashMap<_, _> = self
             .project
             .tracks
@@ -480,10 +483,12 @@ impl DawApp {
                         );
                         let cp = p.with_clip_rect(rect.shrink(3.0).intersect(Rect::from_min_max(
                             Pos2::new(grid_left, row.top()), row.max)));
-                        daw_ui::text::paint_single_line(&cp,
+                        let title = daw_ui::clip_title(&cp,
                             Rect::from_min_max(rect.min + Vec2::new(8.0, 0.0),
                                 Pos2::new(rect.right() - 3.0, rect.top() + rect.height().min(20.0))),
-                            FontId::proportional(daw_ui::tokens::FONT_CANVAS), palette(ui.ctx()).text, &clip.name);
+                            FontId::proportional(daw_ui::tokens::FONT_CANVAS), palette(ui.ctx()).text, &clip.name, clip.link_group.is_some());
+                        let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
+                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"linked":clip.link_group.is_some(),"link_icon":title.icon.map(rect_json)}));
                         if !compact && row_height >= 44.0 {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
@@ -532,7 +537,8 @@ impl DawApp {
                         }
                         let response =
                             ui.interact(rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), row.max)),
-                                ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() });
+                                ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() })
+                                .on_hover_text(if clip.link_group.is_some() { format!("{} · Linked clip\nEdits and name are shared. Position and trim are independent.", clip.name) } else { clip.name.clone() });
                         if response.clicked() || response.drag_started() {
                             self.selected_track = Some(track.id);
                             self.selected_clip = Some(clip.id);
@@ -563,8 +569,7 @@ impl DawApp {
                             }
                         }
                         if response.drag_started() && self.tool == daw_ui::EditorTool::Select {
-                            let resize = response
-                                .interact_pointer_pos()
+                            let resize = ui.input(|input| input.pointer.press_origin())
                                 .is_some_and(|pos| pos.x > rect.right() - 10.0);
                             self.drag = Some(Drag::Clip {
                                 track: track.id,
@@ -602,6 +607,14 @@ impl DawApp {
                             }
                         }
                         response.context_menu(|ui| {
+                            if daw_ui::button(ui, "Create linked clone").clicked() {
+                                edits.push(Edit::Clone(track.id, clip.id));
+                                ui.close();
+                            }
+                            if clip.link_group.is_some() && daw_ui::button(ui, "Make independent").clicked() {
+                                edits.push(Edit::Unlink(track.id, clip.id));
+                                ui.close();
+                            }
                             if daw_ui::button(ui, "Join clips…").clicked() {
                                 self.selected_track = Some(track.id);
                                 self.selected_clip = Some(clip.id);
@@ -710,7 +723,7 @@ impl DawApp {
                 "canvas": {"min": [canvas.min.x, canvas.min.y], "max": [canvas.max.x, canvas.max.y]},
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
                     "start_row": bounds.start_row, "end_row": bounds.end_row},
-                "tool": format!("{:?}", self.tool), "cursor": self.cursor,
+                "tool": format!("{:?}", self.tool), "cursor": self.cursor, "clips": clip_diagnostics,
             }));
         });
         if let Some(beat) = new_cursor {
@@ -752,6 +765,18 @@ impl DawApp {
                 Edit::Trim(t, c, s, l) => self.project.trim_clip(t, c, s, l),
                 Edit::Split(t, c, b) => self.project.split_clip(t, c, b).map(|_| ()),
                 Edit::Duplicate(t, c) => self.project.duplicate_clip(t, c).map(|_| ()),
+                Edit::Clone(t, c) => self.project.clone_clip(t, c).map(|id| {
+                    self.selected_track = Some(t);
+                    self.selected_clip = Some(id);
+                    self.selected_notes.clear();
+                    self.edit_label = Some("Create linked clone".into());
+                }),
+                Edit::Unlink(t, c) => self.project.make_clip_independent(t, c).map(|()| {
+                    self.selected_track = Some(t);
+                    self.selected_clip = Some(c);
+                    self.selected_notes.clear();
+                    self.edit_label = Some("Make clip independent".into());
+                }),
                 Edit::Delete(t, c) => self.project.delete_clip(t, c).map(|_| ()),
                 Edit::DeleteTrack(id) => self.project.delete_track(id).map(|_| {
                     if self.selected_track == Some(id) {
@@ -838,6 +863,86 @@ impl DawApp {
                     );
                     return;
                 };
+                let mut changed = false;
+                let linked = self.selected().and_then(|clip| clip.link_group);
+                let count = linked.map(|group| {
+                    self.project
+                        .tracks
+                        .iter()
+                        .flat_map(|track| &track.clips)
+                        .filter(|clip| clip.link_group == Some(group))
+                        .count()
+                });
+                let mut make_independent = false;
+                if let Some(clip) = self.selected_mut() {
+                    label(ui, "CLIP");
+                    if let Some(count) = count {
+                        daw_ui::clip_label(ui, &format!("{count} linked instances"), true);
+                    }
+                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 220.0)
+                        .on_hover_text(if linked.is_some() {
+                            "Shared name · renaming any instance renames every linked clip"
+                        } else {
+                            "Name of this independent clip"
+                        });
+                    ctx.data_mut(|data| {
+                        data.insert_temp(egui::Id::new("clip_name_rect"), name.rect)
+                    });
+                    changed |= name.changed();
+                    if linked.is_some() {
+                        make_independent = daw_ui::button(ui, "Make independent").clicked();
+                    }
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Start  {:.2} beats\nLength  {:.2} beats\nSource offset  {:.2}",
+                            clip.start, clip.length, clip.offset
+                        ))
+                        .small()
+                        .color(palette(ui.ctx()).muted),
+                    );
+                    if let ClipContent::Audio {
+                        gain,
+                        fade_in,
+                        fade_out,
+                        envelope,
+                        ..
+                    } = &mut clip.content
+                    {
+                        let fade_length = envelope.map_or(clip.length, |region| region.length);
+                        label(ui, "CLIP GAIN");
+                        changed |= ui
+                            .add(daw_ui::slider(gain, 0.0..=2.0).show_value(false))
+                            .changed();
+                        label(ui, "FADES / BEATS");
+                        changed |= ui
+                            .add(
+                                daw_ui::number(fade_in)
+                                    .range(0.0..=fade_length)
+                                    .clamp_existing_to_range(false)
+                                    .speed(0.05)
+                                    .prefix("In  "),
+                            )
+                            .changed();
+                        changed |= ui
+                            .add(
+                                daw_ui::number(fade_out)
+                                    .range(0.0..=fade_length)
+                                    .clamp_existing_to_range(false)
+                                    .speed(0.05)
+                                    .prefix("Out  "),
+                            )
+                            .changed();
+                    }
+                }
+                if changed {
+                    self.changed();
+                }
+                if make_independent {
+                    self.make_clip_independent();
+                }
+                ui.add_space(14.0);
+                ui.separator();
+                label(ui, "TRACK");
                 let folders: Vec<_> = self
                     .project
                     .tracks
@@ -925,53 +1030,6 @@ impl DawApp {
                         Ok(()) => self.changed(),
                         Err(error) => self.message(Err(error), ""),
                     }
-                }
-                ui.add_space(14.0);
-                ui.separator();
-                let mut changed = false;
-                if let Some(clip) = self.selected_mut() {
-                    label(ui, "CLIP");
-                    changed |= daw_ui::text_field(ui, &mut clip.name, "Clip name", 165.0).changed();
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Start  {:.2} beats\nLength  {:.2} beats\nSource offset  {:.2}",
-                            clip.start, clip.length, clip.offset
-                        ))
-                        .small()
-                        .color(palette(ui.ctx()).muted),
-                    );
-                    if let ClipContent::Audio {
-                        gain,
-                        fade_in,
-                        fade_out,
-                        ..
-                    } = &mut clip.content
-                    {
-                        label(ui, "CLIP GAIN");
-                        changed |= ui
-                            .add(daw_ui::slider(gain, 0.0..=2.0).show_value(false))
-                            .changed();
-                        label(ui, "FADES / BEATS");
-                        changed |= ui
-                            .add(
-                                daw_ui::number(fade_in)
-                                    .range(0.0..=clip.length)
-                                    .speed(0.05)
-                                    .prefix("In  "),
-                            )
-                            .changed();
-                        changed |= ui
-                            .add(
-                                daw_ui::number(fade_out)
-                                    .range(0.0..=clip.length)
-                                    .speed(0.05)
-                                    .prefix("Out  "),
-                            )
-                            .changed();
-                    }
-                }
-                if changed {
-                    self.changed();
                 }
             });
         self.inspector_open = open;

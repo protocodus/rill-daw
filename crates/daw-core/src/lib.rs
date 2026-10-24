@@ -7,6 +7,7 @@ mod audio_edit;
 mod audio_overlap;
 mod automation;
 mod chords;
+mod clip_links;
 mod demo;
 mod history;
 mod join;

@@ -4,6 +4,7 @@
 //! stay outside it. Components return native egui responses/builders so callers
 //! retain keyboard focus, tooltips, disabled state, and layout composition.
 
+pub mod clip;
 pub mod crossfade;
 pub mod curve;
 pub mod icons;
@@ -16,6 +17,7 @@ pub mod tokens;
 pub mod waveform;
 pub mod widgets;
 
+pub use clip::*;
 pub use crossfade::*;
 pub use curve::*;
 pub use icons::*;

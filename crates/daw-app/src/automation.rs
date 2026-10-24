@@ -656,7 +656,7 @@ impl Harness {
     }
 
     fn state(&self) -> Value {
-        json!({
+        let mut state = json!({
             "effective_theme": format!("{:?}", self.ctx.theme()),
             "theme_colors": {
                 "background": daw_ui::theme::palette(&self.ctx).bg.to_array(),
@@ -710,7 +710,13 @@ impl Harness {
             "label_rects": self.labels.iter().map(|(label, rect)| json!({
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
-        })
+        });
+        state["clip_name_rect"] = json!(
+            self.ctx
+                .data(|data| data.get_temp::<Rect>(egui::Id::new("clip_name_rect")))
+                .map(|rect| [rect.left(), rect.top(), rect.right(), rect.bottom()])
+        );
+        state
     }
 }
 

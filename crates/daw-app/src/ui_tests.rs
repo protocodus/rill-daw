@@ -841,3 +841,180 @@ fn unassigned_instrument_popup_opens_library_without_changing_the_session() {
     assert!(!harness.app.instrument_open);
     assert_eq!(harness.app.project, before);
 }
+
+fn linked_midi_harness(note_start: f64) -> (Harness, u64, [u64; 3]) {
+    let mut harness = Harness::new(0.0);
+    let track = harness.app.selected_track.unwrap();
+    let original = harness.app.selected_clip.unwrap();
+    harness.app.project.midi_notes_mut(track, original).unwrap()[0].start = note_start;
+    let second = harness.app.project.clone_clip(track, original).unwrap();
+    let third = harness.app.project.clone_clip(track, second).unwrap();
+    harness.app.selected_clip = Some(second);
+    harness.app.open_workspace(WorkspaceView::Clip);
+    (harness, track, [original, second, third])
+}
+
+fn assert_linked_note_start(harness: &Harness, track: u64, clips: [u64; 3], start: f64) {
+    let selected = harness.app.selected().unwrap();
+    for clip in clips {
+        let instance = harness.app.project.clip(track, clip).unwrap();
+        assert_eq!(instance.content, selected.content);
+        let ClipContent::Midi { notes } = &instance.content else {
+            panic!("expected MIDI instance");
+        };
+        assert!((notes[0].start - start).abs() < 1e-10);
+    }
+    harness.app.project.validate().unwrap();
+}
+
+#[test]
+fn linked_midi_note_drag_updates_every_instance_on_each_frame_and_undoes_once() {
+    let (mut harness, track, clips) = linked_midi_harness(1.0);
+    let before = harness.app.project.clone();
+    let output = harness.settle_full();
+    let start = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
+    let distance = harness.app.note_zoom;
+    harness.full_pointer(start, PointerButton::Primary, true);
+    for (fraction, expected) in [(0.5, 1.5), (1.0, 2.0), (1.5, 2.5)] {
+        harness.full_frame(RawInput {
+            events: vec![Event::PointerMoved(
+                start + Vec2::new(distance * fraction, 0.0),
+            )],
+            ..Default::default()
+        });
+        assert_linked_note_start(&harness, track, clips, expected);
+        assert!(
+            !harness.app.history.can_undo(),
+            "held gesture is not yet committed"
+        );
+    }
+    harness.full_pointer(
+        start + Vec2::new(distance * 1.5, 0.0),
+        PointerButton::Primary,
+        false,
+    );
+    assert_eq!(harness.app.history.undo_labels().count(), 1);
+    harness.full_key(egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(harness.app.project, before);
+    assert!(!harness.app.history.can_undo());
+    assert!(harness.app.history.can_redo());
+}
+
+#[test]
+fn linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_instance() {
+    let (mut harness, track, clips) = linked_midi_harness(1.13);
+    let note = harness.notes()[0].id;
+    harness.app.selected_notes.insert(note);
+    let before = harness.app.project.clone();
+    let output = harness.menu("Notes", "Quantize...");
+    assert!(has_text(&output, "Quantize preview"));
+    assert_eq!(harness.app.project, before);
+    assert!(!harness.app.history.can_undo());
+    let cancel = text_position(&output, "Cancel quantize", 0.0) + Vec2::new(8.0, 8.0);
+    harness.full_click(cancel);
+    assert!(!has_text(&harness.settle_full(), "Quantize preview"));
+    assert_eq!(harness.app.project, before);
+    assert!(!harness.app.history.can_undo());
+
+    let output = harness.menu("Notes", "Quantize...");
+    let apply = text_position(&output, "Apply quantize", 0.0) + Vec2::new(8.0, 8.0);
+    harness.full_click(apply);
+    assert!(!has_text(&harness.settle_full(), "Quantize preview"));
+    assert_linked_note_start(&harness, track, clips, 1.25);
+    assert_eq!(
+        harness.app.history.undo_labels().collect::<Vec<_>>(),
+        ["Quantize notes"]
+    );
+    harness.full_key(egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(harness.app.project, before);
+}
+
+#[test]
+fn failed_midi_paste_rolls_back_every_linked_instance_and_creates_no_history() {
+    let (mut harness, track, clips) = linked_midi_harness(0.0);
+    harness.app.selected_clip = Some(clips[0]);
+    let clip = harness.app.project.clip_mut(track, clips[0]).unwrap();
+    clip.start = daw_core::MAX_BEAT - 1.0;
+    clip.length = 1.0;
+    harness.app.project.validate().unwrap();
+    let selected_note = harness.notes()[0].id;
+    harness.app.selected_notes.insert(selected_note);
+    harness.app.cursor = daw_core::MAX_BEAT;
+    let before = harness.app.project.clone();
+    harness.settle_full();
+    harness.menu("Notes", "Copy notes");
+    harness.menu("Notes", "Paste notes at cursor");
+    assert!(
+        harness.app.error,
+        "extending beyond the project bound must fail"
+    );
+    assert_eq!(
+        harness.app.project, before,
+        "propagated notes and clip bounds all roll back"
+    );
+    assert_eq!(
+        harness.app.selected_notes,
+        std::collections::HashSet::from([selected_note])
+    );
+    assert!(!harness.app.history.can_undo());
+    harness.app.project.validate().unwrap();
+}
+
+#[test]
+fn command_d_rejects_linked_note_duplication_past_timeline_end_without_changing_selection() {
+    let (mut harness, track, clips) = linked_midi_harness(0.0);
+    harness.app.selected_clip = Some(clips[0]);
+    let clip = harness.app.project.clip_mut(track, clips[0]).unwrap();
+    clip.start = daw_core::MAX_BEAT - 1.0;
+    clip.length = 1.0;
+    let selected = harness.notes()[0].id;
+    harness.app.selected_notes.insert(selected);
+    let before = harness.app.project.clone();
+    harness.settle_full();
+    harness.full_key(egui::Key::D, egui::Modifiers::COMMAND);
+    assert!(harness.app.error);
+    assert_eq!(harness.app.project, before);
+    assert_eq!(
+        harness.app.selected_notes,
+        std::collections::HashSet::from([selected])
+    );
+    assert!(!harness.app.history.can_undo());
+    harness.app.project.validate().unwrap();
+}
+
+#[test]
+fn detaching_a_midi_instance_keeps_audio_equivalent_and_does_not_rebuild_graph() {
+    let (mut harness, track, clips) = linked_midi_harness(1.0);
+    let before = harness.app.project.clone();
+    let revision = harness.app.revision;
+    harness.menu("Edit", "Make independent");
+    assert!(
+        harness
+            .app
+            .project
+            .clip(track, clips[1])
+            .unwrap()
+            .link_group
+            .is_none()
+    );
+    assert_ne!(harness.app.project, before);
+    assert!(crate::app::audio_equivalent(&before, &harness.app.project));
+    assert_eq!(
+        harness.app.revision, revision,
+        "identity-only edit must not reinitialize plugins"
+    );
+    assert_eq!(harness.app.history.undo_labels().count(), 1);
+
+    // Every musical field must still invalidate the compiled playback graph.
+    for field in 0..4 {
+        let mut changed = before.clone();
+        let note = &mut changed.midi_notes_mut(track, clips[0]).unwrap()[0];
+        match field {
+            0 => note.pitch += 1,
+            1 => note.start += 0.25,
+            2 => note.length += 0.25,
+            _ => note.velocity -= 1,
+        }
+        assert!(!crate::app::audio_equivalent(&before, &changed));
+    }
+}

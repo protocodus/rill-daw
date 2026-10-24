@@ -119,3 +119,15 @@ WAV after portable saving. Loop settings do not truncate offline export.
 ```sh
 cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins_e2e
 ```
+
+The `clones_e2e` suite creates linked MIDI/audio instances through menus, edits
+notes and Unicode names from different members, and checks chain indicators.
+It exercises independent duplication, detaching, original deletion, local
+moving/trimming/splitting, undo/redo, shared gain/fades/reverse/normalization,
+and portable save/reopen after deleting the source WAV. An analytic rendered
+sample oracle verifies the shared audio edits. App interaction regressions also
+cover live note drags, quantize preview/cancel/apply, and rejected boundary edits.
+
+```sh
+cargo test --locked -p daw-app --test clones_e2e
+```

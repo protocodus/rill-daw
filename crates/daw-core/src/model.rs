@@ -168,6 +168,9 @@ fn validate_plugin_state(state: &[u8], parameters: &[PluginParameterValue]) -> R
 pub struct Clip {
     pub id: u64,
     pub name: String,
+    /// Shared source identity. Arrangement bounds remain local to this instance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_group: Option<u64>,
     pub start: f64,
     pub length: f64,
     /// Source beat at the clip's left edge. Trimming never destroys source notes.
@@ -225,6 +228,7 @@ impl Clip {
         Self {
             id: new_id(),
             name: name.into(),
+            link_group: None,
             start,
             length,
             offset: 0.0,
@@ -241,6 +245,7 @@ impl Clip {
         Self {
             id: new_id(),
             name: name.into(),
+            link_group: None,
             start,
             length,
             offset: 0.0,
@@ -264,6 +269,7 @@ impl Clip {
 
     fn refresh_ids(&mut self) {
         self.id = new_id();
+        self.link_group = None;
         if let ClipContent::Midi { notes } = &mut self.content {
             for note in notes {
                 note.id = new_id();
@@ -420,6 +426,7 @@ impl Project {
         note.length = at_source_beat - note.start;
         let id = right.id;
         notes.insert(index + 1, right);
+        self.synchronize_linked_clip(track_id, clip_id)?;
         Ok(id)
     }
 
@@ -437,6 +444,7 @@ impl Project {
         duplicate.id = new_id();
         let id = duplicate.id;
         notes.push(duplicate);
+        self.synchronize_linked_clip(track_id, clip_id)?;
         Ok(id)
     }
 
@@ -448,7 +456,9 @@ impl Project {
             .iter()
             .position(|note| note.id == note_id)
             .context("Note not found")?;
-        Ok(notes.remove(index))
+        let note = notes.remove(index);
+        self.synchronize_linked_clip(track_id, clip_id)?;
+        Ok(note)
     }
 
     /// Glue same-pitch notes into one sustained note, including gaps between them.
@@ -485,6 +495,7 @@ impl Project {
         notes.retain(|note| !selected.contains(&note.id));
         notes.push(glued);
         notes.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.pitch.cmp(&b.pitch)));
+        self.synchronize_linked_clip(track_id, clip_id)?;
         Ok(id)
     }
 
@@ -535,7 +546,11 @@ impl Project {
             );
         }
         let mut right = clip.clone();
-        right.refresh_ids();
+        if right.link_group.is_some() {
+            right.id = new_id();
+        } else {
+            right.refresh_ids();
+        }
         right.start = at_beat;
         if let ClipContent::Audio { crossfade, .. } = &mut right.content {
             *crossfade = None;
@@ -659,7 +674,10 @@ impl Project {
                 && self.loop_end > self.loop_start,
             "Invalid loop range"
         );
+        self.validate_linked_clips()?;
         let mut ids = HashSet::new();
+        let mut link_groups = HashSet::new();
+        let mut midi_groups = HashSet::new();
         let mut automation_targets = HashSet::new();
         let mut check_id = |id| -> Result<()> {
             ensure!(
@@ -718,6 +736,11 @@ impl Project {
             }
             for clip in &track.clips {
                 check_id(clip.id)?;
+                if let Some(group) = clip.link_group
+                    && link_groups.insert(group)
+                {
+                    check_id(group)?;
+                }
                 ensure!(valid_range(clip.start, clip.length), "Invalid clip bounds");
                 ensure!(
                     valid_range(clip.offset, clip.length),
@@ -729,8 +752,13 @@ impl Project {
                             track.kind == TrackKind::Midi,
                             "MIDI clip is on an audio track"
                         );
+                        let shared_notes = clip
+                            .link_group
+                            .is_some_and(|group| !midi_groups.insert(group));
                         for note in notes {
-                            check_id(note.id)?;
+                            if !shared_notes {
+                                check_id(note.id)?;
+                            }
                             ensure!(
                                 note.pitch <= 127 && (1..=127).contains(&note.velocity),
                                 "Invalid MIDI pitch or velocity"
@@ -886,7 +914,7 @@ impl Project {
                 }
             }
             for clip in &mut track.clips {
-                max_id = max_id.max(clip.id);
+                max_id = max_id.max(clip.id).max(clip.link_group.unwrap_or(0));
                 match &mut clip.content {
                     ClipContent::Midi { notes } => {
                         for note in notes {
