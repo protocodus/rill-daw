@@ -211,7 +211,10 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
             .filter(|row| row["text"] == "Channel")
             .all(|row| row["max"][1].as_f64().unwrap() < 720.0)
     );
-    assert_eq!(app.click("Drums")["selected_track"], drums);
+    let channel = app.click("Drums");
+    assert_eq!(channel["selected_track"], drums);
+    assert_eq!(channel["popups"]["properties"], true);
+    app.key("Escape");
     let routing = app.click("Ch 1 > Master");
     assert_eq!(routing["selected_track"], bass);
     assert_eq!(routing["popups"]["routing"], true);

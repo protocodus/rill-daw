@@ -197,6 +197,7 @@ struct Harness {
     app: DawApp,
     time: f64,
     labels: Vec<(String, Rect)>,
+    menu_labels: Vec<(String, Rect)>,
     clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
@@ -238,6 +239,7 @@ impl Harness {
         let ctx = egui::Context::default();
         let mut app = DawApp::with_context(&ctx, Project::new(), None);
         app.audio_device_enabled = std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
+        app.automatic_plugin_previews = false;
         app.settings = Settings {
             scratch_dir,
             ..app.settings.clone()
@@ -248,6 +250,7 @@ impl Harness {
             app,
             time: 0.0,
             labels: Vec::new(),
+            menu_labels: Vec::new(),
             clipboard_text: None,
             close_requested: false,
             focused: true,
@@ -267,7 +270,40 @@ impl Harness {
         // Periodic recovery is wall-clock driven in the native app. Closing still
         // exercises recovery normally, within the isolated automation directory.
         self.app.last_recovery = Instant::now();
-        let output = self.ctx.run(input, |ctx| self.app.ui_frame(ctx));
+        self.menu_labels.clear();
+        let app = &mut self.app;
+        let menu_labels = &mut self.menu_labels;
+        let output = self.ctx.run(input, |ctx| {
+            app.ui_frame(ctx);
+            // A menu can repeat a persistent toolbar destination. Resolve the
+            // default click to the actual foreground menu, without changing
+            // explicit occurrence indexing for repeated channel/library rows.
+            if egui::Popup::is_any_open(ctx) {
+                let layers = ctx.memory(|memory| {
+                    memory
+                        .layer_ids()
+                        .filter(|layer| {
+                            layer.order == egui::Order::Foreground
+                                && memory.areas().is_visible(layer)
+                        })
+                        .collect::<Vec<_>>()
+                });
+                for layer in layers {
+                    let transform = ctx.layer_transform_to_global(layer);
+                    ctx.graphics(|graphics| {
+                        if let Some(list) = graphics.get(layer) {
+                            for original in list.all_entries() {
+                                let mut shape = original.clone();
+                                if let Some(transform) = transform {
+                                    shape.transform(transform);
+                                }
+                                collect_labels(&shape.shape, shape.clip_rect, menu_labels);
+                            }
+                        }
+                    });
+                }
+            }
+        });
         for command in &output.platform_output.commands {
             if let egui::OutputCommand::CopyText(text) = command {
                 self.clipboard_text = Some(text.clone());
@@ -292,6 +328,15 @@ impl Harness {
     }
 
     fn label_rect(&self, label: &str, occurrence: usize) -> Result<Rect> {
+        if occurrence == 0
+            && let Some((_, rect)) = self
+                .menu_labels
+                .iter()
+                .rev()
+                .find(|(text, _)| text.trim() == label)
+        {
+            return Ok(*rect);
+        }
         self.labels
             .iter()
             .filter(|(text, _)| text.trim() == label)
@@ -803,6 +848,8 @@ impl Harness {
             })
             .into();
         state["exported_file"] = json!(self.app.exported_file);
+        state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
+        state["popup_context"] = self.app.popup_context_diagnostics();
         state["popups"]["export"] = json!(self.app.export_open);
         state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
         state["clipboard_text"] = json!(self.clipboard_text);

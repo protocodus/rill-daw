@@ -75,11 +75,11 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
             // No Escape or blur first: a menu must still work with text focus.
             let instrument = window(&mut app, "Instrument");
             assert_eq!(instrument["popups"]["instrument"], true);
-            let restored = close(&mut app, "Instrument");
+            let restored = close(&mut app, "Instrument of Popup synth");
             assert_eq!(restored["popups"]["instrument"], false);
             assert_eq!(restored["popups"]["properties"], true);
             app.click(&name);
-            let restored = close(&mut app, "Properties");
+            let restored = close(&mut app, &format!("Properties of {name}"));
             assert_eq!(restored["popups"]["properties"], false);
             assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["selected_clip"], editor["selected_clip"]);

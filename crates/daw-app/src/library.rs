@@ -112,7 +112,8 @@ impl DawApp {
             state.capture = Some(start_capture(plugin));
             ctx.request_repaint_after(Duration::from_millis(100));
         }
-        if state.capture.is_none()
+        if self.automatic_plugin_previews
+            && state.capture.is_none()
             && !self.state_sync_pending()
             && let Some(entry) = self
                 .vst_catalog

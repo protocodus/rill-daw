@@ -27,12 +27,34 @@ impl Harness {
         Self::launch(Some(path))
     }
 
+    /// A real CPAL/ALSA stream that discards all samples. The child sees only
+    /// this isolated null PCM configuration, never a host sound device.
+    #[cfg(target_os = "linux")]
+    pub fn with_null_audio() -> Self {
+        let directory = tempfile::tempdir().expect("create isolated audio E2E directory");
+        let config = directory.path().join("alsa-null.conf");
+        std::fs::write(
+            &config,
+            "pcm.!default { type null hint { show on description \"Rill null output\" } }\n",
+        )
+        .expect("write isolated ALSA configuration");
+        Self::launch_configured(None, directory, Some(&config))
+    }
+
     fn launch(vst_path: Option<&std::path::Path>) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
         Self::launch_in(vst_path, directory)
     }
 
     fn launch_in(vst_path: Option<&std::path::Path>, directory: TempDir) -> Self {
+        Self::launch_configured(vst_path, directory, None)
+    }
+
+    fn launch_configured(
+        vst_path: Option<&std::path::Path>,
+        directory: TempDir,
+        null_audio: Option<&std::path::Path>,
+    ) -> Self {
         let binary = std::env::var_os("RILL_E2E_BINARY")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
         let mut command = Command::new(binary);
@@ -48,6 +70,11 @@ impl Harness {
             .stderr(Stdio::inherit());
         if let Some(path) = vst_path {
             command.env("VST3_PATH", path);
+        }
+        if let Some(path) = null_audio {
+            command
+                .env("ALSA_CONFIG_PATH", path)
+                .env("RILL_E2E_AUDIO_DEVICE", "1");
         }
         let mut child = command
             .spawn()

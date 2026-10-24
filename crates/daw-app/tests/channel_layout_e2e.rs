@@ -61,7 +61,8 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         app.command(json!({"command":"system_theme","dark":dark}));
         app.click("Layout phrase");
         let state = window(&mut app, "Effects");
-        for label in ["Effects", "More", "Open editor", "+ Insert"] {
+        let effects_title = format!("Effects of {}", project.track(track).unwrap().name);
+        for label in [effects_title.as_str(), "More", "Open editor", "+ Insert"] {
             visible(&state, label);
         }
         let state = app.click(&format!("01  {effect_name}"));
@@ -86,8 +87,9 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
             state["project"]["tracks"][0]["sends"][0]["gain"], 2.5,
             "opening Routing must preserve a valid send above the slider's edit range"
         );
+        let routing_title = format!("Routing of {}", project.track(track).unwrap().name);
         for label in [
-            "Routing",
+            routing_title.as_str(),
             "Level",
             "Pre",
             "Post",
@@ -160,11 +162,14 @@ fn long_insert_chain_scrolls_to_actions_and_shrinks_after_removal() {
     }
     visible(&state, "+ Insert");
     let labels = state["label_rects"].as_array().unwrap();
-    let title = labels.iter().find(|row| row["text"] == "Effects").unwrap();
+    let title = labels
+        .iter()
+        .find(|row| row["text"] == "Effects of Compact effects")
+        .unwrap();
     let action = labels.iter().find(|row| row["text"] == "+ Insert").unwrap();
     assert!(
-        action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap() < 180.0,
-        "an empty chain should hug its remaining controls"
+        action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap() < 240.0,
+        "an empty chain should hug its context links and remaining controls"
     );
     app.click("Edit");
     let restored = app.click("Undo");

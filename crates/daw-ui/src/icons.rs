@@ -533,6 +533,10 @@ impl IconButton {
         self.button = self.button.truncate();
         self
     }
+    pub fn wrap_mode(mut self, wrap_mode: egui::TextWrapMode) -> Self {
+        self.button = self.button.wrap_mode(wrap_mode);
+        self
+    }
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self.button = self.button.selected(selected);

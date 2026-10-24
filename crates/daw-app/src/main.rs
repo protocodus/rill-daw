@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup|properties|crossfade|join|unsaved-changes]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|channel|instrument|effects|routing|automation|library|setup|properties|crossfade|join|unsaved-changes]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -121,6 +121,11 @@ fn main() -> anyhow::Result<()> {
                     app.open_popup(app::PopupKind::Setup);
                 }
                 Some("mixer") => app.view = app::WorkspaceView::Mixer,
+                Some("channel") => {
+                    if let Some(track) = app.selected_track {
+                        app.open_channel(track);
+                    }
+                }
                 Some("clip") => app.view = app::WorkspaceView::Clip,
                 Some("library") => app.open_popup(app::PopupKind::Library),
                 Some("automation") => app.open_popup(app::PopupKind::Automation),

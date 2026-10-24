@@ -3,6 +3,7 @@
 //! render worker, so plugin work cannot block the hardware callback.
 mod device;
 mod join;
+mod meter;
 mod quality;
 mod render;
 

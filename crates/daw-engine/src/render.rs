@@ -1,3 +1,4 @@
+use crate::meter::{ChannelMeter, ChannelMeters};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
 use daw_core::{
@@ -340,6 +341,7 @@ struct RenderTrack {
     insert_left: Vec<f32>,
     insert_right: Vec<f32>,
     routes: Vec<Route>,
+    meter: Option<Arc<ChannelMeter>>,
     #[cfg(test)]
     observer: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
@@ -351,6 +353,7 @@ struct BlockContext {
     sample_rate: u32,
     tempo: f64,
     timeline: bool,
+    meter_decay: f32,
 }
 
 fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool) -> Result<u64> {
@@ -360,6 +363,9 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
         }
         track.plugin_failed = true;
         track.delay.reset();
+        if let Some(meter) = &track.meter {
+            meter.clear();
+        }
         return Ok(1);
     }
     Ok(0)
@@ -509,6 +515,7 @@ impl RenderTrack {
                 }
             }
         }
+        let mut channel_peaks = [0.0_f32; 2];
         for index in 0..count {
             let delayed = self.delay.process([self.left[index], self.right[index]]);
             self.left[index] = delayed[0];
@@ -525,6 +532,12 @@ impl RenderTrack {
             // fader factors so multiple sends evaluate the lane only once.
             self.insert_left[index] = gain * (1.0 - pan.max(0.0));
             self.insert_right[index] = gain * (1.0 + pan.min(0.0));
+            if self.meter.is_some() {
+                channel_peaks[0] =
+                    channel_peaks[0].max((self.left[index] * self.insert_left[index]).abs());
+                channel_peaks[1] =
+                    channel_peaks[1].max((self.right[index] * self.insert_right[index]).abs());
+            }
         }
         for route in &mut self.routes {
             for index in 0..count {
@@ -549,6 +562,9 @@ impl RenderTrack {
                 ]);
             }
         }
+        if let Some(meter) = &self.meter {
+            meter.publish(channel_peaks, context.meter_decay);
+        }
         Ok(())
     }
 }
@@ -568,6 +584,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    metering: bool,
 }
 
 impl Renderer {
@@ -914,6 +931,7 @@ impl Renderer {
                 insert_left: vec![0.0; BLOCK],
                 insert_right: vec![0.0; BLOCK],
                 routes,
+                meter: None,
                 #[cfg(test)]
                 observer: None,
             });
@@ -1021,10 +1039,19 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            metering: false,
         };
         renderer.seek_sample(0)?;
         check_cancelled()?;
         Ok(renderer)
+    }
+
+    /// Realtime-only telemetry; offline renders do not calculate or publish meters.
+    pub(crate) fn attach_channel_meters(&mut self, meters: &ChannelMeters) {
+        for track in self.tracks.iter_mut().flatten() {
+            track.meter = meters.channel(track.id).cloned();
+        }
+        self.metering = true;
     }
 
     pub(crate) fn set_plugin_parameter(
@@ -1153,6 +1180,13 @@ impl Renderer {
             self.segment(&mut discard[..count])?;
             remaining -= count;
         }
+        // Priming feeds latency compensation, not audible playback. Do not let
+        // discarded audio or a previous seek leave the visible meter ringing.
+        for track in self.tracks.iter().flatten() {
+            if let Some(meter) = &track.meter {
+                meter.clear();
+            }
+        }
         Ok(())
     }
 
@@ -1267,6 +1301,13 @@ impl Renderer {
             sample_rate: self.sample_rate,
             tempo: self.tempo,
             timeline: !self.preview,
+            meter_decay: if self.metering {
+                // Instant attack, 24 dB/second release, independent of block size.
+                (-std::f32::consts::LN_10 * 1.2 * output.len() as f32 / self.sample_rate as f32)
+                    .exp()
+            } else {
+                0.0
+            },
         };
         for track in self.tracks.iter_mut().flatten() {
             track.left[..context.count].fill(0.0);
@@ -1729,3 +1770,7 @@ mod parallel_tests;
 #[cfg(test)]
 #[path = "audition_tests.rs"]
 mod audition_tests;
+
+#[cfg(test)]
+#[path = "meter_tests.rs"]
+mod meter_tests;

@@ -67,6 +67,45 @@ fn one_workspace_at_a_time_and_back_preserve_the_project_and_editor_view() {
         assert_eq!(properties["popups"]["properties"], true);
         assert_eq!(labels(&properties, "Fit"), 0);
         assert_eq!(labels(&properties, "TRACKS"), 0);
+        assert_eq!(
+            properties["popup_context"]["source"],
+            "Clip Editor · Focused phrase"
+        );
+        assert!(properties["popup_context"]["shapes"].as_u64().unwrap() > 0);
+        assert_eq!(properties["popup_context"]["interactive"], false);
+
+        // The caller is painted, but its previous Back target cannot navigate
+        // beneath the utility or change the editor selection/view state.
+        let back = editor["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rect| rect["text"] == "Back")
+            .unwrap();
+        let clicked_background = app.command(json!({
+            "command":"pointer", "phase":"click",
+            "x":(back["min"][0].as_f64().unwrap()+back["max"][0].as_f64().unwrap())*0.5,
+            "y":(back["min"][1].as_f64().unwrap()+back["max"][1].as_f64().unwrap())*0.5,
+        }));
+        assert_eq!(clicked_background["popups"]["properties"], true);
+        assert_eq!(clicked_background["selected_clip"], selected);
+        assert_eq!(clicked_background["project"], original);
+
+        let nested = window(&mut app, "Routing");
+        assert!(
+            nested["popup_context"]["source"]
+                .as_str()
+                .unwrap()
+                .contains("Properties")
+        );
+        assert!(nested["popup_context"]["shapes"].as_u64().unwrap() > 0);
+        assert!(nested["popup_context"]["depth"].as_u64().unwrap() >= 2);
+        let caller = app.key("Escape");
+        assert_eq!(caller["popups"]["properties"], true);
+        assert_eq!(
+            caller["popup_context"]["source"],
+            "Clip Editor · Focused phrase"
+        );
         let restored = app.key("Escape");
         assert_eq!(restored["view"], "Clip");
         assert_eq!(restored["selected_clip"], selected);

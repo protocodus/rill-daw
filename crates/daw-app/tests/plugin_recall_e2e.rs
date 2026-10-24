@@ -72,6 +72,18 @@ fn effect_editor_failure_preserves_insert_and_returns_to_its_chain() {
     app.quit();
 }
 
+fn show_plugin_parameters(app: &mut Harness) {
+    let state = app.inspect();
+    if !state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|label| label == "Search parameters")
+    {
+        app.click("Automate…");
+    }
+}
+
 fn rms(path: &std::path::Path) -> f64 {
     let audio = daw_core::AudioData::load_wav(path).unwrap();
     assert!(audio.samples.iter().all(|x| x.is_finite()));
@@ -125,6 +137,7 @@ fn native_effect_edit_autosnapshot_automation_archive_recall_and_crash_recovery(
                 > 0
     });
     assert_eq!(state["native_editor"]["effect"], slot);
+    show_plugin_parameters(&mut app);
     app.click("Search parameters");
     app.command(json!({"command":"text","text":"Output Gain"}));
     common::wait_visible(&mut app, "Output Gain");
@@ -226,6 +239,7 @@ fn insert_editor_after_reopen(app: &mut Harness, slot: &Value, value: f64) {
                 > 0
     });
     assert_eq!(&state["native_editor"]["effect"], slot);
+    show_plugin_parameters(app);
     app.click("Search parameters");
     app.command(json!({"command":"text","text":"Output Gain"}));
     common::wait_visible(app, "Output Gain");

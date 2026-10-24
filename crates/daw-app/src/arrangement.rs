@@ -1,12 +1,13 @@
 use crate::{
-    app::{DawApp, Drag, PopupKind, WorkspaceView},
+    app::{ChannelDestination, DawApp, Drag, InspectorPage, PopupKind, WorkspaceView},
     theme::*,
 };
 use daw_core::*;
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
 const HEADER: f32 = 248.0;
-const ROW: f32 = 84.0;
+const ROW: f32 = 96.0;
+const COMPACT_ROW: f32 = 72.0;
 
 enum Edit {
     Move(u64, u64, f64),
@@ -81,7 +82,7 @@ impl DawApp {
             .map(|(index, _)| {
                 let track = &self.project.tracks[*index];
                 if track.collapsed && track.kind != TrackKind::Folder {
-                    44.0 / ROW
+                    COMPACT_ROW / ROW
                 } else {
                     1.0
                 }
@@ -122,6 +123,8 @@ impl DawApp {
         let mut edits = Vec::new();
         let mut new_cursor = None;
         let mut popup = None;
+        let mut channel_target = None;
+        let mut channel_controls = Vec::new();
         let mut instrument_target = None;
         let mut open_editor = false;
         let mut clip_diagnostics = Vec::new();
@@ -193,7 +196,7 @@ impl DawApp {
                 for (index, depth) in visible_tracks {
                     let track = &self.project.tracks[index];
                     let compact = track.collapsed && track.kind != TrackKind::Folder;
-                    let row_height = viewport.row_height * if compact { 44.0 / ROW } else { 1.0 };
+                    let row_height = viewport.row_height * if compact { COMPACT_ROW / ROW } else { 1.0 };
                     let (row, row_response) = ui
                         .allocate_exact_size(Vec2::new(content_width, row_height), Sense::click());
                     if !ui.is_rect_visible(row) {
@@ -296,7 +299,7 @@ impl DawApp {
                         );
                     }
                     }
-                    if !compact && row_height >= 74.0 && track.kind != TrackKind::Automation {
+                    if row_height >= 68.0 && track.kind != TrackKind::Automation {
                         for (i, name, active) in [(0, "M", track.mute), (1, "S", track.solo)] {
                             let rect = Rect::from_min_size(
                                 row.min + Vec2::new(14.0 + i as f32 * 30.0, 51.0),
@@ -314,25 +317,33 @@ impl DawApp {
                             }
                         }
                         if channels.contains_key(&track.id) {
-                            let mut db = 20.0 * track.gain.max(0.001).log10();
-                            if daw_ui::number_at(ui,
-                                Rect::from_min_size(row.min + Vec2::new(78.0, 51.0), Vec2::new(78.0, 21.0)),
-                                (track.id, "gain"),
-                                daw_ui::number(&mut db).range(-60.0..=20.0 * 1.5_f32.log10())
-                                    .clamp_existing_to_range(false)
-                                    .speed(0.1).fixed_decimals(1).suffix(" dB"),
-                            ).on_hover_text("Volume · drag or double-click to type · −60 dB silences the channel").changed() {
-                                edits.push(Edit::Gain(track.id, if db <= -60.0 { 0.0 } else { 10.0_f32.powf(db / 20.0) }));
+                            let compact_controls = compact || row_height < 92.0;
+                            let controls_rect = Rect::from_min_size(
+                                row.min + Vec2::new(78.0, 44.0),
+                                Vec2::new(162.0, if compact_controls { 24.0 } else { 44.0 }),
+                            );
+                            let mut gain = track.gain;
+                            let mut pan = track.pan;
+                            let peaks = self.engine.as_ref()
+                                .map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
+                            let controls = daw_ui::channel_controls_at(
+                                ui, controls_rect, (track.id, "channel_controls"),
+                                &mut gain, &mut pan, peaks, compact_controls,
+                            );
+                            if controls.gain.changed() {
+                                edits.push(Edit::Gain(track.id, gain));
                             }
-                            let mut pan = track.pan * 100.0;
-                            if daw_ui::number_at(ui,
-                                Rect::from_min_size(row.min + Vec2::new(162.0, 51.0), Vec2::new(78.0, 21.0)),
-                                (track.id, "pan"),
-                                daw_ui::number(&mut pan).range(-100.0..=100.0).clamp_existing_to_range(false).speed(1.0)
-                                    .fixed_decimals(0).prefix("Pan "),
-                            ).on_hover_text("Pan · −100 left · 0 center · 100 right").changed() {
-                                edits.push(Edit::Pan(track.id, pan / 100.0));
+                            if controls.pan.changed() {
+                                edits.push(Edit::Pan(track.id, pan));
                             }
+                            channel_controls.push(serde_json::json!({
+                                "track": track.id,
+                                "gain": {"min": [controls.gain_slider.min.x, controls.gain_slider.min.y], "max": [controls.gain_slider.max.x, controls.gain_slider.max.y]},
+                                "pan": {"min": [controls.pan_slider.min.x, controls.pan_slider.min.y], "max": [controls.pan_slider.max.x, controls.pan_slider.max.y]},
+                                "meter": {"min": [controls.meter.rect.min.x, controls.meter.rect.min.y], "max": [controls.meter.rect.max.x, controls.meter.rect.max.y]},
+                                "peaks": peaks,
+                                "compact": compact_controls,
+                            }));
                         }
                     }
                     let grid_step = (8.0 / self.zoom).ceil().max(1.0) as usize;
@@ -371,7 +382,14 @@ impl DawApp {
                         }
                         if daw_ui::button(ui, "Properties").clicked() {
                             self.selected_track = Some(track.id);
+                            self.selected_clip = None;
                             popup = Some(PopupKind::Inspector);
+                            ui.close();
+                        }
+                        if matches!(track.kind, TrackKind::Audio | TrackKind::Midi | TrackKind::Bus)
+                            && daw_ui::button(ui, "Channel").clicked()
+                        {
+                            channel_target = Some(track.id);
                             ui.close();
                         }
                         if daw_ui::button(
@@ -725,6 +743,7 @@ impl DawApp {
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
                     "start_row": bounds.start_row, "end_row": bounds.end_row},
                 "tool": format!("{:?}", self.tool), "cursor": self.cursor, "clips": clip_diagnostics,
+                "channels": channel_controls,
             }));
         });
         if let Some(beat) = new_cursor {
@@ -732,6 +751,9 @@ impl DawApp {
         }
         if let Some(popup) = popup {
             self.open_popup(popup);
+        }
+        if let Some(track) = channel_target {
+            self.open_channel(track);
         }
         if let Some(track) = instrument_target {
             self.selected_track = Some(track);
@@ -848,22 +870,52 @@ impl DawApp {
         }
     }
     pub fn inspector(&mut self, ctx: &egui::Context) {
-        let page_id = egui::Id::new("properties_page");
         let mut open = self.inspector_open;
         if !open {
-            ctx.data_mut(|data| data.remove::<(Option<u64>, Option<u64>, bool)>(page_id));
             return;
         }
         let selection = (self.selected_track, self.selected().map(|clip| clip.id));
-        let mut clip_page = ctx
-            .data_mut(|data| data.get_temp::<(Option<u64>, Option<u64>, bool)>(page_id))
-            .filter(|(track, clip, _)| (*track, *clip) == selection)
-            .map_or(selection.1.is_some(), |(_, _, clip_page)| clip_page);
-        clip_page &= selection.1.is_some();
-        daw_ui::popup("Properties", ctx)
+        if selection != self.inspector_selection {
+            self.inspector_page = if selection.1.is_some() {
+                InspectorPage::Clip
+            } else {
+                InspectorPage::Track
+            };
+            self.inspector_selection = selection;
+        }
+        let has_clip = self.selected().is_some();
+        let has_channel = self
+            .selected_track
+            .and_then(|id| self.project.track(id))
+            .is_some_and(|track| {
+                matches!(
+                    track.kind,
+                    TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+                )
+            });
+        if (self.inspector_page == InspectorPage::Clip && !has_clip)
+            || (self.inspector_page == InspectorPage::Channel && !has_channel)
+        {
+            self.inspector_page = InspectorPage::Track;
+        }
+        let title = match self.inspector_page {
+            InspectorPage::Clip => self
+                .selected()
+                .map(|clip| format!("Properties of {}", clip.name)),
+            InspectorPage::Track => self
+                .selected_track
+                .and_then(|id| self.project.track(id))
+                .map(|track| format!("Track · {}", track.name)),
+            InspectorPage::Channel => self
+                .selected_track
+                .and_then(|id| self.project.track(id))
+                .map(|track| format!("Channel · {}", track.name)),
+        }
+        .unwrap_or_else(|| "Properties".into());
+        let mut navigated = false;
+        daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
-            .default_width(520.0)
-            // Keep page navigation stationary, including after density changes.
+            .default_width(540.0)
             .min_height(420.0)
             .vscroll(false)
             .open(&mut open)
@@ -873,14 +925,27 @@ impl DawApp {
                     return;
                 };
                 ui.horizontal(|ui| {
-                    ui.add_enabled_ui(selection.1.is_some(), |ui| {
-                        daw_ui::selectable_value(ui, &mut clip_page, true, "Clip");
-                    });
-                    daw_ui::selectable_value(ui, &mut clip_page, false, "Track");
+                    if has_clip {
+                        daw_ui::selectable_value(ui, &mut self.inspector_page, InspectorPage::Clip, "Clip");
+                    }
+                    daw_ui::selectable_value(ui, &mut self.inspector_page, InspectorPage::Track, "Track");
+                    if has_channel {
+                        daw_ui::selectable_value(ui, &mut self.inspector_page, InspectorPage::Channel, "Channel");
+                    }
                 });
                 ui.separator();
+                if self.inspector_page == InspectorPage::Channel {
+                    if self.channel_navigation(ui, ChannelDestination::Channel) {
+                        navigated = true;
+                        return;
+                    }
+                    daw_ui::scroll_body(ui, "channel_properties_body", |ui| {
+                        self.channel_properties(ui, id);
+                    });
+                    return;
+                }
                 daw_ui::scroll_body(ui, "properties_body", |ui| {
-                    if clip_page {
+                    if self.inspector_page == InspectorPage::Clip {
                         let mut changed = false;
                         let linked = self.selected().and_then(|clip| clip.link_group);
                         let count = linked.map(|group| {
@@ -933,7 +998,7 @@ impl DawApp {
                                 } = &mut clip.content
                                 {
                                     let fade_length = envelope.map_or(clip.length, |region| region.length);
-                                    let label = daw_ui::text::label(ui, "Gain");
+                                    let label = daw_ui::text::label(ui, "Clip gain");
                                     ui.horizontal(|ui| {
                                         changed |= ui
                                             .add(daw_ui::slider(gain, 0.0..=2.0)
@@ -1015,39 +1080,13 @@ impl DawApp {
                                 daw_ui::text::label(ui, "Playback");
                                 changed |= daw_ui::toggle(ui, &mut track.mute, "Bypass automation").changed();
                                 ui.end_row();
-                            } else {
-                                if track.kind != TrackKind::Folder {
-                                    let label = daw_ui::text::label(ui, "Gain");
-                                    ui.horizontal(|ui| {
-                                        changed |= ui.add(daw_ui::slider(&mut track.gain, 0.0..=1.5)
-                                            .clamping(egui::SliderClamping::Edits).show_value(false))
-                                            .labelled_by(label.id).changed();
-                                        daw_ui::text::body(ui, if track.gain <= 0.0 {
-                                            "−∞ dB".to_string()
-                                        } else {
-                                            format!("{:.1} dB", 20.0 * track.gain.log10())
-                                        });
-                                    });
-                                    ui.end_row();
-                                    let label = daw_ui::text::label(ui, "Pan");
-                                    changed |= ui.add(daw_ui::slider(&mut track.pan, -1.0..=1.0)
-                                        .clamping(egui::SliderClamping::Edits).fixed_decimals(2))
-                                        .labelled_by(label.id).on_hover_text("Left −1 · Center 0 · Right 1").changed();
-                                    ui.end_row();
-                                }
+                            } else if track.kind == TrackKind::Folder {
                                 daw_ui::text::label(ui, "Playback");
                                 ui.horizontal(|ui| {
                                     changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
                                     changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
                                 });
                                 ui.end_row();
-                                if track.kind != TrackKind::Folder {
-                                    let label = daw_ui::text::label(ui, "Path latency");
-                                    changed |= ui.add(daw_ui::number(&mut track.latency_samples)
-                                        .range(0..=192_000).clamp_existing_to_range(false).suffix(" samples"))
-                                        .labelled_by(label.id).changed();
-                                    ui.end_row();
-                                }
                             }
                         });
                     }
@@ -1062,7 +1101,68 @@ impl DawApp {
                     }
                 });
             });
-        ctx.data_mut(|data| data.insert_temp(page_id, (selection.0, selection.1, clip_page)));
-        self.inspector_open = open;
+        if !navigated {
+            self.inspector_open = open;
+        }
+    }
+
+    fn channel_properties(&mut self, ui: &mut egui::Ui, id: u64) {
+        let mut changed = false;
+        if let Some(track) = self.project.track_mut(id) {
+            daw_ui::form_grid(ui, "channel_properties", |ui| {
+                let label = daw_ui::text::label(ui, "Gain");
+                ui.horizontal(|ui| {
+                    changed |= ui
+                        .add(
+                            daw_ui::slider(&mut track.gain, 0.0..=1.5)
+                                .clamping(egui::SliderClamping::Edits)
+                                .show_value(false),
+                        )
+                        .labelled_by(label.id)
+                        .on_hover_text("Mixer channel gain")
+                        .changed();
+                    daw_ui::text::body(
+                        ui,
+                        if track.gain <= 0.0 {
+                            "−∞ dB".to_string()
+                        } else {
+                            format!("{:.1} dB", 20.0 * track.gain.log10())
+                        },
+                    );
+                });
+                ui.end_row();
+                let label = daw_ui::text::label(ui, "Pan");
+                changed |= ui
+                    .add(
+                        daw_ui::slider(&mut track.pan, -1.0..=1.0)
+                            .clamping(egui::SliderClamping::Edits)
+                            .fixed_decimals(2),
+                    )
+                    .labelled_by(label.id)
+                    .on_hover_text("Mixer channel pan · Left −1 · Center 0 · Right 1")
+                    .changed();
+                ui.end_row();
+                daw_ui::text::label(ui, "Playback");
+                ui.horizontal(|ui| {
+                    changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
+                    changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                });
+                ui.end_row();
+                let label = daw_ui::text::label(ui, "Path latency");
+                changed |= ui
+                    .add(
+                        daw_ui::number(&mut track.latency_samples)
+                            .range(0..=192_000)
+                            .clamp_existing_to_range(false)
+                            .suffix(" samples"),
+                    )
+                    .labelled_by(label.id)
+                    .changed();
+                ui.end_row();
+            });
+        }
+        if changed {
+            self.changed();
+        }
     }
 }

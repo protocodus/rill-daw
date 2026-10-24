@@ -201,13 +201,7 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             let properties = window(&mut app, "Properties");
             accessible(
                 &properties,
-                &[
-                    "Calm controls",
-                    "Compact track",
-                    "Top level",
-                    "Mute",
-                    "Solo",
-                ],
+                &["Calm controls", "Compact track", "Top level"],
             );
             assert_eq!(
                 app.click("Compact track")["project"]["tracks"][0]["collapsed"],
@@ -217,8 +211,11 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
                 app.click("Compact track")["project"]["tracks"][0]["collapsed"],
                 false
             );
+            let channel = app.click("Channel");
+            accessible(&channel, &["Gain", "Pan", "Mute", "Solo"]);
             assert_eq!(app.click("Mute")["project"]["tracks"][0]["mute"], true);
             assert_eq!(app.click("Mute")["project"]["tracks"][0]["mute"], false);
+            front(&mut app, "Track");
             front(&mut app, "Calm controls");
             app.command(json!({"command":"key","key":"A","cmd":true}));
             let edited = app.command(json!({"command":"text","text":"Calm 🎹 東京"}));

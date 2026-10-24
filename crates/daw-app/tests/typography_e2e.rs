@@ -48,7 +48,8 @@ fn unicode_emoji_names_edit_display_and_recall_at_both_densities_and_appearances
                 .find(|row| row["text"] == name)
                 .unwrap();
             assert!(row["max"][1].as_f64().unwrap() - row["min"][1].as_f64().unwrap() >= 14.0);
-            let props = menu(&mut app, "Window", "Properties");
+            menu(&mut app, "Window", "Properties");
+            let props = app.click("Channel");
             assert!(
                 props["visible_labels"]
                     .as_array()

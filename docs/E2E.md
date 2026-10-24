@@ -19,7 +19,15 @@ Header-picker scenarios change the output bus directly from the sequencer, retur
 
 The headless tests cover application behavior, UI event handling, model changes, decoding, rendering, export, and shutdown. Metadata-only VST fixtures verify folder setup, scans, search, multi-class instrument assignment, insert chains, and automation without claiming to execute a real plug-in. Native window tests are separate; platform file dialogs and hardware drivers still need manual testing.
 
-`focus_e2e` checks that only one workspace renders its controls, Back returns to Arrangement, nested Properties restores the editor viewport, and navigation leaves the project unchanged. It exercises both themes at 1100×760. Editor and library scenarios also exercise their on-demand menus through real pointer events.
+`focus_e2e` checks that only the foreground view exposes interactive controls, while retained caller paint remains visible beneath utilities. It checks backdrop source/depth, ignores clicks on a former background Back target, restores nested Properties and the editor viewport, and keeps navigation out of project history. It exercises both themes at 1100×760. Editor and library scenarios also exercise their on-demand menus through real pointer events.
+
+`workspace_switch_e2e` exercises the persistent Arranger/Mixer switch from both workspaces, Clip Editor, and contextual utilities, including selecting the already active caller to dismiss a popup. It checks bounds at 800×600 and 1100×720, both appearances and densities, and preserves project/history/selection. `channel_properties_e2e` verifies separate Clip/Track/Channel scopes, audio-only clip gain, channel gain/pan, and navigation among Mixer, Channel, Effects, Instrument, and Routing. `instrument_context_e2e` checks concise native-editor overviews, the on-demand **Automate…** parameter page, contextual titles, effect-editor-to-instrument navigation, and clean failure of metadata-only plugin fixtures.
+
+`header_channel_controls_e2e` drags the graphical gain/pan sliders in normal and compact track headers, verifies the same mixer values and undo/redo, preserves clip data, saves/reopens the project, and checks the exported audio level/balance. On Linux, `channel_meter_e2e` runs a real render worker and CPAL stream against an isolated ALSA null PCM. Its child-only `ALSA_CONFIG_PATH` cannot choose host audio hardware. It validates distinct source, silent-channel, and bus levels after gain/pan, then zero readings on pause/stop. This target requires no display or physical sound device; non-Linux builds skip it.
+
+```sh
+cargo test --locked -p daw-app --test workspace_switch_e2e --test channel_properties_e2e --test instrument_context_e2e --test header_channel_controls_e2e --test channel_meter_e2e
+```
 
 Run the native application test on a desktop (or prefix with `xvfb-run -a` on Linux):
 
@@ -64,7 +72,7 @@ Supported commands:
 | `open` | `path` | Execute an already-approved open through the document pipeline, preserving the outgoing session in recovery. Use `file_dialog` and File → Open to test the unsaved-change decision. |
 | `file_dialog` | `kind` (`save`, `open`, or `export`), `path` (or `null`) | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. |
 | `close_window` | — | Deliver a native viewport close request and return the resulting guard or exit state. Unsaved work requires an explicit UI choice. |
-| `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero. |
+| `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an open foreground menu over an identically named toolbar control. |
 | `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
 | `scroll` | `x`, `y`, `delta`; optional `delta_x` and modifiers | Scroll at viewport coordinates; negative delta moves down the content. |
 | `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd`, `release_modifiers`, `repetitions` (1–32) | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. `release_modifiers: true` delivers the complete chord in one frame with no modifiers held at repaint; repeated presses are also delivered in one frame. Defaults preserve separate press/release frames. |
@@ -77,7 +85,7 @@ Supported commands:
 
 File → Quit closes the process through the application's normal viewport command after any unsaved-change decision. Native file picker presentation requires a windowing environment; the driver can supply Open/Save/Export picker results, or start a default export with an explicit path. These are automated UI regressions, not a replacement for native mouse-and-keyboard testing. `--headless` is an opt-in test driver, not a network service. Commands can operate on files with the current user's permissions, so feed it trusted input.
 
-Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
+Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.channels` reports the actual header slider/meter rectangles and engine peak readings. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
 
 With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit` test in `features_e2e` drives the complete production app: direct instrument creation, automatic native editor opening, note editing, last-touched automation, Undo/Redo protection, saved state restoration, cached thumbnails, two independent VST tracks with audible export, New/Open recovery, and shutdown. The regular suite separately covers keyboard and double-click creation using metadata fixtures.
 
@@ -90,6 +98,8 @@ cargo test --locked -p daw-app --test library_e2e
 The editor suites (`audio_editor_e2e`, `midi_editor_e2e`, `timeline_e2e`) exercise shared gestures and Fit, audio edits/transient previews with rendered-sample oracles, MIDI note/chord/velocity editing, and audition release on mouse/focus/view changes. `audio_setup_e2e` switches conversion quality and sample rate through Setup and verifies real exported bandwidth, rate, persistence, and project preservation. `plugin_recall_e2e` covers failed effect-editor launches plus an opt-in CHOW workflow for automatic state, automation, portable save/reopen, audible recall, and helper crash recovery.
 
 Headless runs disable automatic physical-device startup for held-note previews. `RILL_E2E_AUDIO_DEVICE=1` enables it for a deliberate native-device test. The ordinary suite observes audition intent through `audition_request`; a native Surge renderer test verifies actual sound and note release without a hardware device.
+
+Headless automation and app unit tests also disable automatic native plugin preview capture. Scanning remains metadata-only and cached previews still display. **Capture preview** and **Refresh preview** remain explicit actions for opted-in native tests; normal desktop use still captures previews automatically. `library_e2e` verifies that merely scanning and drawing frames leaves previews missing, while an explicitly requested capture of its metadata-only fixture fails safely without executable plugin code.
 
 The `project_io_e2e` target covers background bundle saving and loading, later edits remaining dirty, failure preserving the previous archive/current document, Quit waiting for a save, deduplicated waveform preparation, and rejecting oversized WAV declarations before allocation. On Unix it uses a small OS pipe to hold a project read open while exercising real menus, then verifies ordered Save/New completion and outgoing recovery. It needs no device, display, or installed plugin.
 
@@ -173,7 +183,7 @@ Join checks distinguish linked instances by their visible one-based beat ranges;
 mixer checks align master/channel controls and verify vertical overflow access.
 These automated UI regressions are separate from an interactive desktop walkthrough.
 
-`properties_e2e` checks focused Clip/Track pages across both themes and densities,
+`properties_e2e` checks focused Clip/Track/Channel pages across both themes and densities,
 all track types, linked gain/fade edits, independence, and undo/redo. Valid stored
 gains and latency above UI ranges survive loading and opening Arrangement,
 Properties, Clip Editor, and Mixer without dirtying the project; Routing tests

@@ -2,7 +2,7 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Automation, Library, Setup, and Properties open on demand as one centered utility at a time, with a quiet background instead of an obscured arranger. Transport and the File, Edit, Track, and Window menus remain available. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as inactive context; only the foreground utility accepts editing input. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 ## Theme and tokens
 
@@ -28,11 +28,12 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
-| Mixer channels and metering | `mixer_strip`, `stereo_meter` |
+| Mixer channels and metering | `mixer_strip`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
 | Selected navigation/item | `selectable` |
+| Related-view navigation and inactive context | `view_links`, `ViewLink`, `ViewBackdrop` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
@@ -55,6 +56,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
 
 `paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases remain flat. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
+
+`view_links` presents a wrapping row of related destinations with the active one marked. The caller supplies destinations and handles the returned selection. `ViewBackdrop` retains the caller's paint for a utility background without creating widgets, hit targets, or keyboard focus; cached context cannot edit the project or duplicate active accessibility controls. Nested utilities keep their parent context and restore the prior selection and inspector page when dismissed.
 
 `scroll_body` inside a window with `.vscroll(false)` lets short utility content fit naturally while long chains remain bounded and scrollable. Use a stable height for tabbed forms and reserve footer space before sizing inner lists.
 
@@ -109,7 +112,7 @@ Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The 
 
 `button_at` places a compact action in a canvas rectangle, truncating long labels without changing the row geometry. `picker_at` uses the same action with an anchored choice popup; it returns the action response and optional popup result. Both require stable IDs and retain native keyboard/focus behavior. Add a tooltip when the full label may be clipped, and use `ui.close()` when a choice is accepted.
 
-Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Click this label to choose Master or an eligible output bus; self-routing and feedback through outputs or sends are excluded. MIDI headers also show their assigned instrument (or `Choose instrument…`); clicking it opens the VST chooser for that track and choosing a plugin opens its native editor. Both pickers remain available in compact rows. Expanded rows reuse `selectable_at` for mute/solo and `number_at` for dB volume and −100..100 pan. Folders and automation lanes have no audio channel number or fader/pan; folder mute/solo acts on descendants.
+Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Click this label to choose Master or an eligible output bus; self-routing and feedback through outputs or sends are excluded. MIDI headers also show their assigned instrument (or `Choose instrument…`); clicking it opens the VST chooser for that track and choosing a plugin opens its native editor. Both pickers remain available in compact rows. Rows reuse `selectable_at` for mute/solo and `channel_controls_at` for volume and pan slider rails with a stereo level meter. Expanded rows retain editable dB volume and −100..100 pan readouts; compact rows keep both rails and expose their precise values in tooltips. Meters read each channel's post-insert, post-fader, post-pan engine output, including buses and routed audio. Peaks attack immediately, release at 24 dB/s, and clear when stopped; channel meters do not copy the master level. Folders and automation lanes have no audio channel number, gain/pan rails, or meter; folder mute/solo acts on descendants.
 
 **Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. Selecting an instrument assigns that existing track and opens its native editor. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
 
@@ -117,7 +120,7 @@ Arrangement and clip editors share `TimelineViewport` and `TimelinePane`. Call `
 
 Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut, R Duplicate, T Glue, Z Erase, U Multi-draw, I Fade in, O Fade out, P Cursor. Each editor exposes only its applicable subset. The arranger retains fixed track headers and a fixed ruler while the musical canvas pans; its native vertical scrollbar remains available.
 
-`clip_title` paints an elided clip name and optional chain icon inside a timeline rectangle, returning the icon/text bounds for diagnostics. It adds no hit target. `clip_label` shows the same link identity in editor headers and Properties. Names remain ordinary Unicode text in the project; the link indicator is a vector icon, not a name prefix. Properties uses separate Clip and Track pages, opening Clip for a valid selected clip and Track otherwise. Start uses one-based beats; duration and source offset remain distances in beats. Folders omit gain, pan, and latency controls. Every linked group member displays the shared name and exposes **Make independent**.
+`clip_title` paints an elided clip name and optional chain icon inside a timeline rectangle, returning the icon/text bounds for diagnostics. It adds no hit target. `clip_label` shows the same link identity in editor headers and Properties. Names remain ordinary Unicode text in the project; the link indicator is a vector icon, not a name prefix. Properties separates Clip, Track, and Channel pages, opening Clip for a valid selected clip and Track otherwise. Start uses one-based beats; duration and source offset remain distances in beats. Only audio clips expose **Clip gain**; MIDI clips have no gain or pan. Track holds naming, color, hierarchy, and display options. Channel holds mixer gain, pan, mute, solo, and latency for audio, MIDI, and bus channels. Folders and automation tracks have no Channel page. Every linked group member displays the shared name and exposes **Make independent**.
 
 ## State, focus, and accessibility
 
@@ -146,7 +149,7 @@ cargo test -p daw-ui
 cargo clippy -p daw-ui --all-targets -- -D warnings
 ```
 
-`workspace_popup(title, ctx)` remains available for a large utility canvas such as automation, bounded below the transport. Clip Editor and Mixer use the central workspace and `workspace_header` instead. Utilities do not paint an inactive arranger behind them. Menu commands, Back, Escape, and window close use the same navigation state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
+`workspace_popup(title, ctx)` remains available for a large utility canvas such as automation, bounded below the transport. Clip Editor and Mixer use the central workspace and `workspace_header` instead. Utilities retain the calling screen as inactive visual context. Menu commands, Back, Escape, and window close use the same navigation state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
 
 `curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.
 
@@ -185,7 +188,9 @@ Plugin discovery stays metadata-only. After discovery, one isolated helper at a 
 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
 
-Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to select it or its destination to open Routing. **Channel** reveals Instrument, Effects and Routing actions. Master shows the stereo output meter; its readings come from the running engine.
+Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The **Channel** menu also provides **Open channel**, Instrument, Effects, and Routing actions where applicable. Channel, Effects, Instrument, and Routing share navigation links that keep the same channel selected. The links omit the current destination, whose context is already shown in the title; closing a utility returns to its caller. Each channel shows its own post-fader stereo meter beside the fader, and Master shows the stereo output meter. Readings come from the running engine.
+
+Instrument opens a concise device overview with the native **Open editor** action. **Automate…** reveals searchable parameter controls on demand; the last-touched parameter remains a direct automation shortcut when available. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their existing isolated plugin state and undo behavior.
 
 
 ## Typography and international names

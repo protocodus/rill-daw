@@ -25,6 +25,7 @@ impl DawApp {
     pub(crate) fn mixer(&mut self, ui: &mut egui::Ui) {
         let mut changed = false;
         let mut popup = None;
+        let mut channel_target = None;
         let names: std::collections::HashMap<_, _> = self
             .project
             .tracks
@@ -79,10 +80,10 @@ impl DawApp {
                                         )
                                         .truncate(),
                                     )
-                                    .on_hover_text(&track.name)
+                                    .on_hover_text(format!("Open channel · {}", track.name))
                                     .clicked()
                                 {
-                                    self.selected_track = Some(track.id);
+                                    channel_target = Some(track.id);
                                 }
                                 if ui
                                     .add_sized(
@@ -105,16 +106,30 @@ impl DawApp {
                                         .monospace(),
                                     );
                                     ui.spacing_mut().slider_width = fader_height;
-                                    changed |= ui
-                                        .add_sized(
-                                            Vec2::new(30.0, fader_height),
-                                            daw_ui::slider(&mut track.gain, 0.0..=1.5)
-                                                .clamping(egui::SliderClamping::Edits)
-                                                .vertical()
-                                                .show_value(false),
+                                    ui.horizontal(|ui| {
+                                        ui.add_space((content_width - 52.0) * 0.5);
+                                        changed |= ui
+                                            .add_sized(
+                                                Vec2::new(30.0, fader_height),
+                                                daw_ui::slider(&mut track.gain, 0.0..=1.5)
+                                                    .clamping(egui::SliderClamping::Edits)
+                                                    .vertical()
+                                                    .show_value(false),
+                                            )
+                                            .on_hover_text("Channel volume")
+                                            .changed();
+                                        let peaks = self
+                                            .engine
+                                            .as_ref()
+                                            .map(|engine| engine.channel_peaks(track.id))
+                                            .unwrap_or([0.0; 2]);
+                                        daw_ui::stereo_meter(
+                                            ui,
+                                            peaks,
+                                            Vec2::new(14.0, fader_height),
                                         )
-                                        .on_hover_text("Channel volume")
-                                        .changed();
+                                        .on_hover_text("Channel output level · post-fader");
+                                    });
                                 });
                                 ui.spacing_mut().slider_width = content_width - 38.0;
                                 changed |= ui
@@ -133,6 +148,10 @@ impl DawApp {
                                         daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
                                 });
                                 daw_ui::action_menu(ui, "Channel", |ui| {
+                                    if daw_ui::button(ui, "Open channel").clicked() {
+                                        channel_target = Some(track.id);
+                                        ui.close();
+                                    }
                                     for (label, kind, visible) in [
                                         (
                                             "Instrument",
@@ -187,6 +206,9 @@ impl DawApp {
         }
         if let Some(popup) = popup {
             self.open_popup(popup);
+        }
+        if let Some(track) = channel_target {
+            self.open_channel(track);
         }
     }
 
