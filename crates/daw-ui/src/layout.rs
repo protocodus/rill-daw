@@ -150,11 +150,12 @@ pub fn workspace_header<R>(
 }
 
 /// A uniform mixer channel. Color identifies the track without enclosing each
-/// strip in another outlined card. Width includes the internal side margins.
+/// strip in another outlined card. Size includes the internal margins; all
+/// channels can share the viewport height while their controls remain stacked.
 pub fn mixer_strip<R>(
     ui: &mut Ui,
     id: impl Hash,
-    width: f32,
+    size: egui::Vec2,
     color: Option<egui::Color32>,
     selected: bool,
     contents: impl FnOnce(&mut Ui) -> R,
@@ -170,7 +171,8 @@ pub fn mixer_strip<R>(
             .inner_margin(tokens::SPACE_MD);
         let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.set_width((width - 2.0 * tokens::SPACE_MD).max(0.0));
+                ui.set_width((size.x - 2.0 * tokens::SPACE_MD).max(0.0));
+                ui.set_height((size.y - 2.0 * tokens::SPACE_MD).max(0.0));
                 contents(ui)
             })
             .inner

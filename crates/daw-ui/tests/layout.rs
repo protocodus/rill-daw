@@ -239,12 +239,20 @@ fn mixer_strips_stack_their_contents_and_meter_rejects_nonfinite_readings() {
                     .into_iter()
                     .enumerate()
                 {
-                    let strip = controls::mixer_strip(ui, id, 180.0, None, false, |ui| {
-                        let label = ui.label("Channel");
-                        let meter = controls::stereo_meter(ui, peaks, egui::vec2(40.0, 100.0));
-                        assert!(meter.rect.top() > label.rect.bottom());
-                    });
+                    let strip = controls::mixer_strip(
+                        ui,
+                        id,
+                        egui::vec2(180.0, 400.0),
+                        None,
+                        false,
+                        |ui| {
+                            let label = ui.label("Channel");
+                            let meter = controls::stereo_meter(ui, peaks, egui::vec2(40.0, 100.0));
+                            assert!(meter.rect.top() > label.rect.bottom());
+                        },
+                    );
                     assert!((strip.response.rect.width() - 180.0).abs() <= 0.1);
+                    assert!((strip.response.rect.height() - 400.0).abs() <= 0.1);
                 }
             });
         });

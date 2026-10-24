@@ -39,10 +39,19 @@ impl DawApp {
             .unwrap_or_default();
         let strip_width = 180.0;
         let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
-        let fader_height = 180.0;
+        // Names, routing, readouts and footer controls keep their natural size.
+        // Give the remaining viewport height to the faders and meters, with a
+        // usable minimum on short windows where the scroll area takes over.
+        let fixed_height = 2.0 * daw_ui::tokens::SPACE_MD
+            + 5.0 * ui.spacing().interact_size.y
+            + ui.text_style_height(&egui::TextStyle::Monospace)
+            + 6.0 * ui.spacing().item_spacing.y;
         egui::ScrollArea::both()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
+            .show_viewport(ui, |ui, viewport| {
+                let strip_height = viewport.height().max(fixed_height + 120.0);
+                let strip_size = Vec2::new(strip_width, strip_height);
+                let fader_height = strip_height - fixed_height;
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     for (channel, track) in self
@@ -66,11 +75,10 @@ impl DawApp {
                         daw_ui::mixer_strip(
                             ui,
                             track.id,
-                            strip_width,
+                            strip_size,
                             Some(color(track.color)),
                             self.selected_track == Some(track.id),
                             |ui| {
-                                ui.set_min_height(420.0);
                                 if ui
                                     .add_sized(
                                         Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
@@ -171,8 +179,7 @@ impl DawApp {
                             },
                         );
                     }
-                    daw_ui::mixer_strip(ui, "master", strip_width, None, false, |ui| {
-                        ui.set_min_height(420.0);
+                    daw_ui::mixer_strip(ui, "master", strip_size, None, false, |ui| {
                         ui.allocate_ui_with_layout(
                             Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                             egui::Layout::centered_and_justified(egui::Direction::TopDown),
