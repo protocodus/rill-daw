@@ -1,0 +1,96 @@
+name: Test and package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.target }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    env:
+      RILL_TARGET: ${{ matrix.target }}
+      RUSTFLAGS: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '-C target-feature=+crt-static' || '' }}
+      RUST_BACKTRACE: "1"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolate application settings
+        shell: bash
+        run: |
+          echo "RILL_CONFIG_DIR=$RUNNER_TEMP/rill-ci-config" >> "$GITHUB_ENV"
+          echo "RILL_CACHE_DIR=$RUNNER_TEMP/rill-ci-cache" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}-${{ runner.os == 'Windows' && 'crt-static' || 'default' }}
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
+            libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxkbcommon-x11-0 \
+            libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Build application and isolated plug-in host
+        run: cargo build --locked --workspace
+      - name: Core, engine, plug-in, and component tests
+        run: cargo test --locked --workspace --exclude daw-app
+      - name: Native X11 editor capture
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test --locked -p daw-plugins --lib captures_real_x11_window_pixels -- --ignored --nocapture
+      - name: App state and UI interaction tests
+        run: cargo test --locked -p daw-app --bin rill
+      - name: Headless end-to-end tests
+        run: cargo test --locked -p daw-app --tests -- --nocapture
+      - name: Native application startup, rendering, and shutdown
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s "-screen 0 1600x1200x24" cargo test --locked -p daw-app --test e2e native_window_renders_and_exits_after_screenshot -- --ignored --nocapture
+      - name: Strict Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Package macOS and Linux
+        if: runner.os != 'Windows'
+        run: bash scripts/package-release.sh
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/package-windows.ps1
+      - name: Verify extracted distribution with end-to-end tests
+        shell: bash
+        run: |
+          test -n "$RILL_E2E_BINARY"
+          cargo test --locked -p daw-app --tests -- --nocapture
+      - name: Upload native distribution and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: rill-${{ matrix.target }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
