@@ -174,6 +174,7 @@ struct Harness {
     app: DawApp,
     time: f64,
     labels: Vec<(String, Rect)>,
+    clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
     system_theme: egui::Theme,
@@ -224,6 +225,7 @@ impl Harness {
             app,
             time: 0.0,
             labels: Vec::new(),
+            clipboard_text: None,
             close_requested: false,
             focused: true,
             system_theme: egui::Theme::Dark,
@@ -243,6 +245,11 @@ impl Harness {
         // exercises recovery normally, within the isolated automation directory.
         self.app.last_recovery = Instant::now();
         let output = self.ctx.run(input, |ctx| self.app.ui_frame(ctx));
+        for command in &output.platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                self.clipboard_text = Some(text.clone());
+            }
+        }
         self.close_requested |= output.viewport_output.values().any(|viewport| {
             viewport
                 .commands
@@ -711,6 +718,8 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["exported_file"] = json!(self.app.exported_file);
+        state["clipboard_text"] = json!(self.clipboard_text);
         state["clip_name_rect"] = json!(
             self.ctx
                 .data(|data| data.get_temp::<Rect>(egui::Id::new("clip_name_rect")))
@@ -719,6 +728,13 @@ impl Harness {
         state["library"] = if self.app.library_open {
             self.ctx
                 .data(|data| data.get_temp::<Value>(egui::Id::new("library_diagnostics")))
+                .unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
+        state["automation_editor"] = if self.app.automation_open {
+            self.ctx
+                .data(|data| data.get_temp::<Value>(egui::Id::new("automation_editor_diagnostics")))
                 .unwrap_or(Value::Null)
         } else {
             Value::Null

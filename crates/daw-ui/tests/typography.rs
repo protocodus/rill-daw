@@ -46,6 +46,85 @@ fn timeline_bar_and_clock_labels_have_separate_readable_rows() {
 }
 
 #[test]
+fn timeline_ruler_omits_partial_edge_labels_after_panning_and_in_narrow_views() {
+    for density in [1.0, 2.0] {
+        let context = Context::default();
+        theme::apply(&context);
+        context.set_pixels_per_point(density);
+        let input = || RawInput {
+            screen_rect: Some(Rect::from_min_size(
+                egui::Pos2::ZERO,
+                Vec2::new(800.0, 300.0),
+            )),
+            ..Default::default()
+        };
+        let _ = context.run(input(), |_| {});
+        for (start, width, present, absent) in [
+            (
+                32.0,
+                393.0,
+                &["9", "10", "0:16.00", "0:18.00"][..],
+                &["11", "0:20.00"][..],
+            ),
+            (
+                32.2,
+                389.0,
+                &["10", "0:18.00"][..],
+                &["9", "11", "0:16.00", "0:20.00"][..],
+            ),
+            (0.0, 44.0, &["1"][..], &["0:00.00"][..]),
+            (0.2, 44.0, &[][..], &["1", "0:00.00"][..]),
+        ] {
+            let rect = Rect::from_min_size(
+                egui::pos2(30.0, 30.0),
+                Vec2::new(width, tokens::TIMELINE_RULER_HEIGHT),
+            );
+            let view = daw_ui::TimelineViewport {
+                start_beat: start,
+                ..Default::default()
+            };
+            let output = context.run(input(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    daw_ui::paint_timeline_ruler(ui.painter(), rect, view, 120.0, 4);
+                });
+            });
+            let labels: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => {
+                        let painted = text
+                            .galley
+                            .rect
+                            .union(text.galley.mesh_bounds)
+                            .translate(text.pos.to_vec2());
+                        assert!(
+                            rect.intersect(shape.clip_rect).contains_rect(painted),
+                            "partial {} at {density}x, start {start}, width {width}: {painted:?}",
+                            text.galley.text()
+                        );
+                        if text.galley.text() == "10" {
+                            assert!((text.pos.x - (view.x_at(rect, 36.0) + 4.0)).abs() < 0.01);
+                        }
+                        Some(text.galley.text())
+                    }
+                    _ => None,
+                })
+                .collect();
+            for label in present {
+                assert!(
+                    labels.contains(label),
+                    "missing whole label {label}: {labels:?}"
+                );
+            }
+            for label in absent {
+                assert!(!labels.contains(label), "partial label {label}: {labels:?}");
+            }
+        }
+    }
+}
+
+#[test]
 fn embedded_fonts_cover_names_and_emoji_in_every_text_role_and_numeric_digits_align() {
     let context = Context::default();
     theme::apply(&context);

@@ -114,23 +114,37 @@ pub fn paint_timeline_ruler(
     let start = (view.start_beat.max(0.0) as usize / step) * step;
     let end = view.beat_at(rect, rect.right()).ceil().max(0.0) as usize;
     let painter = painter.with_clip_rect(rect);
+    let palette = crate::theme::palette(painter.ctx());
+    let font = egui::FontId::monospace(crate::tokens::FONT_CANVAS);
     for beat in (start..=end).step_by(step) {
         let x = view.x_at(rect, beat as f64);
         let seconds = beat as f64 * 60.0 / tempo.max(1.0);
-        painter.text(
-            egui::pos2(x + 4.0, rect.top() + 2.0),
-            egui::Align2::LEFT_TOP,
-            format!("{}", beat / bar + 1),
-            egui::FontId::monospace(crate::tokens::FONT_CANVAS),
-            crate::theme::palette(painter.ctx()).text,
-        );
-        painter.text(
-            egui::pos2(x + 4.0, rect.bottom() - 2.0),
-            egui::Align2::LEFT_BOTTOM,
-            format!("{}:{:05.2}", seconds as u64 / 60, seconds % 60.0),
-            egui::FontId::monospace(crate::tokens::FONT_CANVAS),
-            crate::theme::palette(painter.ctx()).muted,
-        );
+        for (text, anchor, alignment, color) in [
+            (
+                format!("{}", beat / bar + 1),
+                egui::pos2(x + 4.0, rect.top() + 2.0),
+                egui::Align2::LEFT_TOP,
+                palette.text,
+            ),
+            (
+                format!("{}:{:05.2}", seconds as u64 / 60, seconds % 60.0),
+                egui::pos2(x + 4.0, rect.bottom() - 2.0),
+                egui::Align2::LEFT_BOTTOM,
+                palette.muted,
+            ),
+        ] {
+            let galley = painter.layout_no_wrap(text, font.clone(), color);
+            let position = alignment.anchor_size(anchor, galley.size()).min;
+            let bounds = galley
+                .rect
+                .union(galley.mesh_bounds)
+                .translate(position.to_vec2());
+            // Partial bar/time glyphs can imply a different position. Preserve
+            // their time anchors and omit labels that do not fit in full.
+            if painter.clip_rect().contains_rect(bounds) {
+                painter.galley(position, galley, color);
+            }
+        }
     }
 }
 
@@ -217,6 +231,8 @@ struct Gesture {
 pub struct TimelinePane {
     id: Id,
     rect: Rect,
+    horizontal_only: bool,
+    keyboard_focus: Option<Id>,
 }
 
 impl TimelinePane {
@@ -224,7 +240,23 @@ impl TimelinePane {
         Self {
             id: Id::new(id),
             rect,
+            horizontal_only: false,
+            keyboard_focus: None,
         }
+    }
+
+    /// A normalized parameter curve keeps its complete vertical range visible.
+    /// Horizontal gestures stay identical to music editors; vertical gestures
+    /// are consumed without changing its value scale.
+    pub fn horizontal_only(mut self) -> Self {
+        self.horizontal_only = true;
+        self
+    }
+
+    /// Allow shortcuts while this non-text canvas owns native keyboard focus.
+    pub fn keyboard_focus(mut self, id: Id) -> Self {
+        self.keyboard_focus = Some(id);
+        self
     }
 
     /// Call before canvas hit testing. Navigation never claims ordinary left clicks.
@@ -338,7 +370,10 @@ impl TimelinePane {
         }
         let focused = ui.ctx().data_mut(|data| data.get_temp::<Id>(focus_id)) == Some(self.id);
         if (hovered || focused)
-            && !ui.ctx().wants_keyboard_input()
+            && (!ui.ctx().wants_keyboard_input()
+                || self
+                    .keyboard_focus
+                    .is_some_and(|id| ui.memory(|memory| memory.has_focus(id))))
             && !egui::Popup::is_any_open(ui.ctx())
         {
             ui.input_mut(|i| {
@@ -368,6 +403,10 @@ impl TimelinePane {
                     );
                 }
             });
+        }
+        if self.horizontal_only {
+            view.row_offset = before.row_offset;
+            view.row_height = before.row_height;
         }
         result.changed = before != *view;
         result

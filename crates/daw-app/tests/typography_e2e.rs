@@ -54,7 +54,7 @@ fn unicode_emoji_names_edit_display_and_recall_at_both_densities_and_appearances
                     .as_array()
                     .unwrap()
                     .iter()
-                    .any(|label| label == "LEVEL")
+                    .any(|label| label == "Gain")
             );
             app.key("Escape");
         }

@@ -7,7 +7,7 @@ docker build -f Dockerfile.e2e -t rill-e2e .
 docker run --rm rill-e2e
 ```
 
-The suite runs on macOS and in a Linux arm64 container with Rust 1.92. The headless app tests need no display server, audio device, or installed VST plug-in. The container also starts a temporary Xvfb display for native tests that check real window pixels, offscreen embedded-child pixels, and full application startup/rendering/shutdown across Arrangement, Instrument, Mixer, and Setup. Xvfb uses software OpenGL; the container and Linux CI explicitly install the dynamically loaded X11 input/cursor and GL/EGL runtime libraries.
+The suite runs on macOS and in a Linux arm64 container with Rust 1.92. The headless app tests need no display server, audio device, or installed VST plug-in. The container also starts a temporary Xvfb display for native tests that check real window pixels, offscreen embedded-child pixels, and full application startup/rendering/shutdown across Arrangement, Instrument, Mixer, Setup, and Properties. Xvfb uses software OpenGL; the container and Linux CI explicitly install the dynamically loaded X11 input/cursor and GL/EGL runtime libraries.
 
 The integration tests launch the production `rill --headless` executable as a separate process. It runs the real application and egui frame processing without opening a native window or audio device. Pointer clicks use visible labels, and WAV imports use normal hover and file-drop events. Mixdown uses the same asynchronous export worker as File → Export WAV. Each test supplies a separate temporary configuration, cache, and scratch directory; closing exercises the application's session recovery path there.
 
@@ -153,3 +153,18 @@ creation actions remain fixed while scrolling or using arrow-key selection.
 Join checks distinguish linked instances by their visible one-based beat ranges;
 mixer checks align master/channel controls and verify vertical overflow access.
 These automated UI regressions are separate from an interactive desktop walkthrough.
+
+`properties_e2e` checks focused Clip/Track pages across both themes and densities,
+all track types, linked gain/fade edits, independence, and undo/redo. Valid stored
+gains and latency above UI ranges survive loading and opening Arrangement,
+Properties, Clip Editor, and Mixer without dirtying the project; Routing tests
+cover the same rule for sends. Automation tests cover shared navigation/Fit,
+one-based numeric point edits, point gestures and undo, bounded controls, and
+refitting a reopened lane with the same ID but different content.
+
+`export_feedback_e2e` verifies visible completion with long Unicode filenames,
+Copy path through native clipboard output, dismissal, navigation, failure/retry,
+and no project/history edits. It validates the rendered WAV as well. State
+includes `exported_file`, `clipboard_text`, and `automation_editor` geometry for
+observing these interactions. Clipboard diagnostics observe output emitted by
+the headless app; they do not read the operating system clipboard.

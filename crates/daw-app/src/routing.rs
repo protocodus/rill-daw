@@ -205,6 +205,7 @@ impl DawApp {
                                     changed |= ui
                                         .add(
                                             widgets::slider(&mut send.gain, 0.0..=1.5)
+                                                .clamping(egui::SliderClamping::Edits)
                                                 .text("Level"),
                                         )
                                         .changed();

@@ -289,6 +289,7 @@ impl DawApp {
             let response = ui.add(
                 daw_ui::number(&mut db)
                     .range(-100.0..=36.0)
+                    .clamp_existing_to_range(false)
                     .speed(0.1)
                     .suffix(" dB"),
             );

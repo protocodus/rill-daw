@@ -489,10 +489,10 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     let mut harness = Harness::new(0.0);
     let before = harness.app.project.clone();
     let output = harness.settle_full();
-    assert!(!has_text(&output, "Clip / track"));
+    assert!(!has_text(&output, "Properties"));
     let output = harness.menu("Window", "Properties");
     assert!(harness.app.inspector_open);
-    assert!(has_text(&output, "Clip / track"));
+    assert!(has_text(&output, "Properties"));
     // Global edit shortcuts must never delete the selected clip behind a popup.
     harness.full_key(egui::Key::Delete, egui::Modifiers::NONE);
     assert_eq!(harness.app.project, before);
@@ -529,6 +529,52 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!harness.app.routing_open);
     assert!(!has_text(&output, "Routing"));
     assert_eq!(harness.app.project, before);
+}
+
+#[test]
+fn properties_follows_selection_and_never_leaves_an_unavailable_clip_page() {
+    let mut harness = Harness::new(4.0);
+    let clip_track = harness.app.selected_track;
+    let clip = harness.app.selected_clip;
+    let output = harness.menu("Window", "Properties");
+    assert!(has_text(&output, "Beat 5.00"));
+    assert!(has_text(&output, "Duration"));
+    assert!(!has_text(&output, "Compact track"));
+
+    let track_tab = output
+        .shapes
+        .iter()
+        .rev()
+        .find_map(|shape| {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.job.text == "Track"
+            {
+                Some(text.pos + Vec2::new(8.0, 8.0))
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    harness.full_click(track_tab);
+    let output = harness.settle_full();
+    assert!(has_text(&output, "Compact track"));
+    assert!(!has_text(&output, "Duration"));
+
+    let folder = harness.app.project.add_folder("Folder");
+    harness.app.selected_track = Some(folder);
+    // Keep a stale clip ID to exercise selection reconciliation while open.
+    harness.app.selected_clip = clip;
+    let output = harness.settle_full();
+    assert!(has_text(&output, "Collapse folder"));
+    assert!(has_text(&output, "Mute"));
+    assert!(!has_text(&output, "Path latency"));
+    assert!(!has_text(&output, "Duration"));
+
+    harness.app.selected_track = clip_track;
+    harness.app.selected_clip = clip;
+    let output = harness.settle_full();
+    assert!(has_text(&output, "Beat 5.00"));
+    assert!(!has_text(&output, "Compact track"));
 }
 
 #[test]

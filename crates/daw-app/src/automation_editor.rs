@@ -2,7 +2,7 @@ use crate::app::DawApp;
 use daw_core::{
     AutomationParameter, AutomationTarget, Effect, Instrument, Interpolation, TrackKind,
 };
-use daw_ui::{CurveEdit, CurvePoint, CurveView};
+use daw_ui::{CurveEdit, CurvePoint, CurveTimeline, TimelineViewport};
 use eframe::egui;
 use std::{
     path::PathBuf,
@@ -18,7 +18,8 @@ struct EditorState {
     source: Option<u64>,
     parameter: usize,
     point: Option<u64>,
-    end: f64,
+    viewport: TimelineViewport,
+    fitted: bool,
     vst_id: u32,
     initial: f32,
     parameter_path: Option<String>,
@@ -36,7 +37,8 @@ impl Default for EditorState {
             source: None,
             parameter: 0,
             point: None,
-            end: 8.0,
+            viewport: TimelineViewport::default(),
+            fitted: false,
             vst_id: 0,
             initial: 0.5,
             parameter_path: None,
@@ -47,6 +49,15 @@ impl Default for EditorState {
             manual_id: false,
         }
     }
+}
+
+pub(crate) fn reset_automation_editor(ctx: &egui::Context) {
+    ctx.data_mut(|data| {
+        data.remove::<EditorState>(egui::Id::new("automation_editor_state"));
+        data.remove::<serde_json::Value>(egui::Id::new("automation_editor_diagnostics"));
+        data.remove::<egui::Rect>(egui::Id::new("automation_plot_rect"));
+        data.remove::<egui::Id>(egui::Id::new("automation_curve_focus"));
+    });
 }
 
 impl DawApp {
@@ -70,7 +81,6 @@ impl DawApp {
                 .and_then(|t| t.automation.as_ref())
             {
                 state.point = lane.points.first().map(|p| p.id);
-                state.end = lane.points.last().map(|p| p.beat).unwrap_or(8.0).max(8.0);
             }
         }
         let existing = self
@@ -115,19 +125,30 @@ impl DawApp {
             return;
         };
         let mut selected_source = Some(source);
-        daw_ui::select_labeled(
-            "Track",
-            tracks
-                .iter()
-                .find(|(id, _)| *id == source)
-                .unwrap()
-                .1
-                .as_str(),
-        )
-        .show_ui(ui, |ui| {
-            for (id, name) in &tracks {
-                daw_ui::selectable_value(ui, &mut selected_source, Some(*id), name);
-            }
+        let control_width =
+            (ui.available_width() - daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG)
+                .clamp(160.0, 320.0);
+        daw_ui::form_grid(ui, "automation_source", |ui| {
+            daw_ui::text::label(ui, "Track");
+            daw_ui::select(
+                "automation_source_choice",
+                tracks
+                    .iter()
+                    .find(|(id, _)| *id == source)
+                    .unwrap()
+                    .1
+                    .as_str(),
+            )
+            .width(control_width)
+            .truncate()
+            .show_ui(ui, |ui| {
+                ui.set_max_width(control_width);
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                for (id, name) in &tracks {
+                    daw_ui::selectable_value(ui, &mut selected_source, Some(*id), name);
+                }
+            });
+            ui.end_row();
         });
         if selected_source != state.source {
             state.source = selected_source;
@@ -173,10 +194,19 @@ impl DawApp {
             ));
         }
         state.parameter = state.parameter.min(choices.len() - 1);
-        daw_ui::select_labeled("Parameter", &choices[state.parameter].1).show_ui(ui, |ui| {
-            for (index, (_, label)) in choices.iter().enumerate() {
-                daw_ui::selectable_value(ui, &mut state.parameter, index, label);
-            }
+        daw_ui::form_grid(ui, "automation_parameter", |ui| {
+            daw_ui::text::label(ui, "Parameter");
+            daw_ui::select("automation_parameter_choice", &choices[state.parameter].1)
+                .width(control_width)
+                .truncate()
+                .show_ui(ui, |ui| {
+                    ui.set_max_width(control_width);
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                    for (index, (_, label)) in choices.iter().enumerate() {
+                        daw_ui::selectable_value(ui, &mut state.parameter, index, label);
+                    }
+                });
+            ui.end_row();
         });
         let (mut parameter, mut label) = choices[state.parameter].clone();
         if let AutomationParameter::VstParameter { effect, .. } = parameter {
@@ -258,11 +288,12 @@ impl DawApp {
         let Some(lane) = track.automation.clone() else {
             return;
         };
-        ui.label(&track.name);
+        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
         let mut interpolation = lane.interpolation;
         let mut enabled = !track.mute;
         let mut add_parameter = false;
-        ui.horizontal(|ui| {
+        let mut fit = !state.fitted;
+        daw_ui::toolbar(ui, |ui| {
             for (value, name) in [
                 (Interpolation::Step, "Step"),
                 (Interpolation::Linear, "Linear"),
@@ -272,12 +303,7 @@ impl DawApp {
             }
             ui.separator();
             daw_ui::checkbox(ui, &mut enabled, "Enabled");
-            ui.label("End beat");
-            ui.add(
-                daw_ui::number(&mut state.end)
-                    .range(1.0..=daw_core::MAX_BEAT)
-                    .speed(1.0),
-            );
+            fit |= daw_ui::timeline_fit_button(ui).clicked();
             add_parameter = daw_ui::button(ui, "Add parameter").clicked();
         });
         if add_parameter {
@@ -300,19 +326,22 @@ impl DawApp {
                 value: p.value,
             })
             .collect();
-        let response = daw_ui::curve_editor(
+        let response = daw_ui::curve_timeline_editor(
             ui,
             egui::Id::new(("automation_curve", id)),
             &points,
             &mut state.point,
-            CurveView {
-                start: 0.0,
-                end: state.end,
+            &mut state.viewport,
+            CurveTimeline {
                 snap: self.snap,
-                height: (ui.available_height() - 66.0).max(180.0),
+                height: (ui.available_height() - 66.0).max(160.0),
+                tempo: self.project.tempo,
+                beats_per_bar: self.project.beats_per_bar,
+                fit,
             },
             |beat| lane.value_at(beat).unwrap_or(0.5),
         );
+        state.fitted = true;
         ui.ctx().data_mut(|data| {
             data.insert_temp(egui::Id::new("automation_plot_rect"), response.plot_rect);
             data.insert_temp(
@@ -321,31 +350,56 @@ impl DawApp {
             );
         });
         let mut edit = response.edit;
-        ui.horizontal(|ui| {
+        let mut point_beat_rect = None;
+        let mut displayed_beat = None;
+        daw_ui::toolbar(ui, |ui| {
             if let Some(point) = state
                 .point
                 .and_then(|selected| lane.points.iter().find(|p| p.id == selected))
             {
-                let mut beat = point.beat;
+                let mut beat = point.beat + 1.0;
                 let mut value = lane.target.parameter.denormalize(point.value);
-                ui.label("Beat");
-                let beat_changed = ui
+                let beat_response = ui
                     .add(
                         daw_ui::number(&mut beat)
-                            .range(0.0..=daw_core::MAX_BEAT)
+                            .prefix("Beat ")
+                            .range(1.0..=(daw_core::MAX_BEAT + 1.0))
+                            .min_decimals(2)
+                            .max_decimals(3)
                             .speed(self.snap.max(0.01)),
                     )
-                    .changed();
-                ui.label("Value");
+                    .on_hover_text("Musical beat number from one · drag or double-click to type");
+                point_beat_rect = Some(beat_response.rect);
+                displayed_beat = Some(beat);
                 let range = lane.target.parameter.range();
                 let speed = (*range.end() - *range.start()) as f64 / 200.0;
+                let (prefix, suffix, tooltip) = match lane.target.parameter {
+                    AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => (
+                        "Gain ",
+                        " ×",
+                        "Linear gain multiplier: 1× is unity, 0× is silence",
+                    ),
+                    AutomationParameter::TrackPan => ("Pan ", "", "−1 left · 0 center · 1 right"),
+                    AutomationParameter::VstParameter { .. } => (
+                        "Value ",
+                        "",
+                        "Normalized plug-in parameter value from 0 to 1",
+                    ),
+                };
                 let value_changed = ui
-                    .add(daw_ui::number(&mut value).range(range).speed(speed))
+                    .add(
+                        daw_ui::number(&mut value)
+                            .range(range)
+                            .speed(speed)
+                            .prefix(prefix)
+                            .suffix(suffix),
+                    )
+                    .on_hover_text(tooltip)
                     .changed();
-                if beat_changed || value_changed {
+                if beat_response.changed() || value_changed {
                     edit = Some(CurveEdit::Move {
                         id: point.id,
-                        x: beat,
+                        x: beat - 1.0,
                         value: lane.target.parameter.normalize(value),
                     });
                 }
@@ -355,6 +409,16 @@ impl DawApp {
             } else {
                 ui.label("Click the curve to add a point");
             }
+        });
+        let rect = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(egui::Id::new("automation_editor_diagnostics"), serde_json::json!({
+            "plot":rect(response.plot_rect), "start_beat":state.viewport.start_beat,
+            "pixels_per_beat":state.viewport.pixels_per_beat,
+            "end_beat":state.viewport.beat_at(response.plot_rect,response.plot_rect.right()),
+            "point_beat_rect":point_beat_rect.map(rect), "point_beat":displayed_beat,
+            "navigating":response.navigation.navigating,
+        }))
         });
         if let Some(edit) = edit {
             self.begin_edit();
@@ -421,7 +485,7 @@ fn plugin_parameters(
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
     }
-    ui.horizontal(|ui| {
+    daw_ui::toolbar(ui, |ui| {
         daw_ui::picker_button(ui, "Manual ID", |ui| {
             daw_ui::checkbox(ui, &mut state.manual_id, "Use manual ID");
             ui.label("VST parameter ID");
@@ -451,15 +515,32 @@ fn plugin_parameters(
             .find(|p| p.id == state.vst_id)
             .map(|p| p.name.as_str())
             .unwrap_or("Choose plug-in parameter");
-        daw_ui::select_labeled("Plug-in parameter", selected).show_ui(ui, |ui| {
-            for parameter in &state.parameters {
-                if daw_ui::selectable_value(ui, &mut state.vst_id, parameter.id, &parameter.name)
-                    .changed()
-                {
-                    state.initial = parameter.value as f32;
-                    state.manual_id = false;
-                }
-            }
+        let width =
+            (ui.available_width() - daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG)
+                .clamp(160.0, 320.0);
+        daw_ui::form_grid(ui, "plugin_parameter", |ui| {
+            daw_ui::text::label(ui, "Plug-in parameter");
+            daw_ui::select("plugin_parameter_choice", selected)
+                .width(width)
+                .truncate()
+                .show_ui(ui, |ui| {
+                    ui.set_max_width(width);
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                    for parameter in &state.parameters {
+                        if daw_ui::selectable_value(
+                            ui,
+                            &mut state.vst_id,
+                            parameter.id,
+                            &parameter.name,
+                        )
+                        .changed()
+                        {
+                            state.initial = parameter.value as f32;
+                            state.manual_id = false;
+                        }
+                    }
+                });
+            ui.end_row();
         });
     }
     ui.add(daw_ui::slider(&mut state.initial, 0.0..=1.0).text("Initial value"));

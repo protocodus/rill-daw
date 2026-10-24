@@ -109,6 +109,7 @@ impl DawApp {
                                         .add_sized(
                                             Vec2::new(30.0, fader_height),
                                             daw_ui::slider(&mut track.gain, 0.0..=1.5)
+                                                .clamping(egui::SliderClamping::Edits)
                                                 .vertical()
                                                 .show_value(false),
                                         )
@@ -119,6 +120,7 @@ impl DawApp {
                                 changed |= ui
                                     .add(
                                         daw_ui::slider(&mut track.pan, -1.0..=1.0)
+                                            .clamping(egui::SliderClamping::Edits)
                                             .show_value(false)
                                             .text("Pan"),
                                     )

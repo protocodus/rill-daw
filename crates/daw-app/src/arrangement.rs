@@ -319,6 +319,7 @@ impl DawApp {
                                 Rect::from_min_size(row.min + Vec2::new(78.0, 51.0), Vec2::new(78.0, 21.0)),
                                 (track.id, "gain"),
                                 daw_ui::number(&mut db).range(-60.0..=20.0 * 1.5_f32.log10())
+                                    .clamp_existing_to_range(false)
                                     .speed(0.1).fixed_decimals(1).suffix(" dB"),
                             ).on_hover_text("Volume · drag or double-click to type · −60 dB silences the channel").changed() {
                                 edits.push(Edit::Gain(track.id, if db <= -60.0 { 0.0 } else { 10.0_f32.powf(db / 20.0) }));
@@ -327,7 +328,7 @@ impl DawApp {
                             if daw_ui::number_at(ui,
                                 Rect::from_min_size(row.min + Vec2::new(162.0, 51.0), Vec2::new(78.0, 21.0)),
                                 (track.id, "pan"),
-                                daw_ui::number(&mut pan).range(-100.0..=100.0).speed(1.0)
+                                daw_ui::number(&mut pan).range(-100.0..=100.0).clamp_existing_to_range(false).speed(1.0)
                                     .fixed_decimals(0).prefix("Pan "),
                             ).on_hover_text("Pan · −100 left · 0 center · 100 right").changed() {
                                 edits.push(Edit::Pan(track.id, pan / 100.0));
@@ -847,191 +848,221 @@ impl DawApp {
         }
     }
     pub fn inspector(&mut self, ctx: &egui::Context) {
+        let page_id = egui::Id::new("properties_page");
         let mut open = self.inspector_open;
         if !open {
+            ctx.data_mut(|data| data.remove::<(Option<u64>, Option<u64>, bool)>(page_id));
             return;
         }
-        daw_ui::popup("Clip / track", ctx)
+        let selection = (self.selected_track, self.selected().map(|clip| clip.id));
+        let mut clip_page = ctx
+            .data_mut(|data| data.get_temp::<(Option<u64>, Option<u64>, bool)>(page_id))
+            .filter(|(track, clip, _)| (*track, *clip) == selection)
+            .map_or(selection.1.is_some(), |(_, _, clip_page)| clip_page);
+        clip_page &= selection.1.is_some();
+        daw_ui::popup("Properties", ctx)
             .id(egui::Id::new("inspector"))
-            .default_width(300.0)
+            .default_width(520.0)
+            // Keep page navigation stationary, including after density changes.
+            .min_height(420.0)
+            .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 let Some(id) = self.selected_track else {
-                    ui.label(
-                        egui::RichText::new("Select a track or clip")
-                            .color(palette(ui.ctx()).muted),
-                    );
+                    daw_ui::text::note(ui, "Select a track or clip");
                     return;
                 };
-                let mut changed = false;
-                let linked = self.selected().and_then(|clip| clip.link_group);
-                let count = linked.map(|group| {
-                    self.project
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(selection.1.is_some(), |ui| {
+                        daw_ui::selectable_value(ui, &mut clip_page, true, "Clip");
+                    });
+                    daw_ui::selectable_value(ui, &mut clip_page, false, "Track");
+                });
+                ui.separator();
+                daw_ui::scroll_body(ui, "properties_body", |ui| {
+                    if clip_page {
+                        let mut changed = false;
+                        let linked = self.selected().and_then(|clip| clip.link_group);
+                        let count = linked.map(|group| {
+                            self.project
+                                .tracks
+                                .iter()
+                                .flat_map(|track| &track.clips)
+                                .filter(|clip| clip.link_group == Some(group))
+                                .count()
+                        });
+                        let mut make_independent = false;
+                        if let Some(clip) = self.selected_mut() {
+                            if let Some(count) = count {
+                                ui.horizontal_wrapped(|ui| {
+                                    daw_ui::clip_label(ui, &format!("{count} linked instances"), true);
+                                    make_independent = daw_ui::button(ui, "Make independent").clicked();
+                                });
+                                ui.add_space(daw_ui::tokens::SPACE_SM);
+                            }
+                            daw_ui::form_grid(ui, "clip_properties", |ui| {
+                                let label = daw_ui::text::label(ui, "Name");
+                                let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 260.0)
+                                    .labelled_by(label.id)
+                                    .on_hover_text(if linked.is_some() {
+                                        "Shared name · renaming any instance renames every linked clip"
+                                    } else {
+                                        "Name of this independent clip"
+                                    });
+                                ctx.data_mut(|data| {
+                                    data.insert_temp(egui::Id::new("clip_name_rect"), name.rect)
+                                });
+                                changed |= name.changed();
+                                ui.end_row();
+                                daw_ui::text::label(ui, "Start");
+                                daw_ui::text::body(ui, format!("Beat {:.2}", clip.start + 1.0));
+                                ui.end_row();
+                                daw_ui::text::label(ui, "Duration");
+                                daw_ui::text::body(ui, format!("{:.2} beats", clip.length));
+                                ui.end_row();
+                                daw_ui::text::label(ui, "Source offset");
+                                daw_ui::text::body(ui, format!("{:.2} beats", clip.offset))
+                                    .on_hover_text("Distance from the beginning of the source to this clip's first beat");
+                                ui.end_row();
+                                if let ClipContent::Audio {
+                                    gain,
+                                    fade_in,
+                                    fade_out,
+                                    envelope,
+                                    ..
+                                } = &mut clip.content
+                                {
+                                    let fade_length = envelope.map_or(clip.length, |region| region.length);
+                                    let label = daw_ui::text::label(ui, "Gain");
+                                    ui.horizontal(|ui| {
+                                        changed |= ui
+                                            .add(daw_ui::slider(gain, 0.0..=2.0)
+                                                .clamping(egui::SliderClamping::Edits).show_value(false))
+                                            .labelled_by(label.id)
+                                            .changed();
+                                        daw_ui::text::body(ui, if *gain <= 0.0 {
+                                            "−∞ dB".to_string()
+                                        } else {
+                                            format!("{:.1} dB", 20.0 * gain.log10())
+                                        });
+                                    });
+                                    ui.end_row();
+                                    for (name, value) in [("Fade in", fade_in), ("Fade out", fade_out)] {
+                                        let label = daw_ui::text::label(ui, name);
+                                        changed |= ui
+                                            .add(daw_ui::number(value)
+                                                .range(0.0..=fade_length)
+                                                .clamp_existing_to_range(false)
+                                                .speed(0.05)
+                                                .suffix(" beats"))
+                                            .labelled_by(label.id)
+                                            .changed();
+                                        ui.end_row();
+                                    }
+                                }
+                            });
+                        }
+                        if changed {
+                            self.changed();
+                        }
+                        if make_independent {
+                            self.make_clip_independent();
+                        }
+                        return;
+                    }
+                    let folders: Vec<_> = self
+                        .project
                         .tracks
                         .iter()
-                        .flat_map(|track| &track.clips)
-                        .filter(|clip| clip.link_group == Some(group))
-                        .count()
-                });
-                let mut make_independent = false;
-                if let Some(clip) = self.selected_mut() {
-                    label(ui, "CLIP");
-                    if let Some(count) = count {
-                        daw_ui::clip_label(ui, &format!("{count} linked instances"), true);
-                    }
-                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 220.0)
-                        .on_hover_text(if linked.is_some() {
-                            "Shared name · renaming any instance renames every linked clip"
-                        } else {
-                            "Name of this independent clip"
-                        });
-                    ctx.data_mut(|data| {
-                        data.insert_temp(egui::Id::new("clip_name_rect"), name.rect)
-                    });
-                    changed |= name.changed();
-                    if linked.is_some() {
-                        make_independent = daw_ui::button(ui, "Make independent").clicked();
-                    }
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Start  {:.2} beats\nLength  {:.2} beats\nSource offset  {:.2}",
-                            clip.start, clip.length, clip.offset
-                        ))
-                        .small()
-                        .color(palette(ui.ctx()).muted),
-                    );
-                    if let ClipContent::Audio {
-                        gain,
-                        fade_in,
-                        fade_out,
-                        envelope,
-                        ..
-                    } = &mut clip.content
-                    {
-                        let fade_length = envelope.map_or(clip.length, |region| region.length);
-                        label(ui, "CLIP GAIN");
-                        changed |= ui
-                            .add(daw_ui::slider(gain, 0.0..=2.0).show_value(false))
-                            .changed();
-                        label(ui, "FADES / BEATS");
-                        changed |= ui
-                            .add(
-                                daw_ui::number(fade_in)
-                                    .range(0.0..=fade_length)
-                                    .clamp_existing_to_range(false)
-                                    .speed(0.05)
-                                    .prefix("In  "),
-                            )
-                            .changed();
-                        changed |= ui
-                            .add(
-                                daw_ui::number(fade_out)
-                                    .range(0.0..=fade_length)
-                                    .clamp_existing_to_range(false)
-                                    .speed(0.05)
-                                    .prefix("Out  "),
-                            )
-                            .changed();
-                    }
-                }
-                if changed {
-                    self.changed();
-                }
-                if make_independent {
-                    self.make_clip_independent();
-                }
-                ui.add_space(14.0);
-                ui.separator();
-                label(ui, "TRACK");
-                let folders: Vec<_> = self
-                    .project
-                    .tracks
-                    .iter()
-                    .filter(|track| track.kind == TrackKind::Folder && track.id != id)
-                    .map(|track| (track.id, track.name.clone()))
-                    .collect();
-                let mut changed = false;
-                let mut parent_change = None;
-                if let Some(track) = self.project.track_mut(id) {
-                    daw_ui::text_field(ui, &mut track.name, "Track name", 165.0)
-                        .changed()
-                        .then(|| changed = true);
-                    ui.horizontal(|ui| {
-                        changed |= daw_ui::color_edit(ui, &mut track.color).changed();
-                        changed |= daw_ui::checkbox(
-                            ui,
-                            &mut track.collapsed,
-                            if track.kind == TrackKind::Folder {
+                        .filter(|track| track.kind == TrackKind::Folder && track.id != id)
+                        .map(|track| (track.id, track.name.clone()))
+                        .collect();
+                    let mut changed = false;
+                    let mut parent_change = None;
+                    if let Some(track) = self.project.track_mut(id) {
+                        daw_ui::form_grid(ui, "track_properties", |ui| {
+                            let label = daw_ui::text::label(ui, "Name");
+                            changed |= daw_ui::text_field(ui, &mut track.name, "Track name", 260.0)
+                                .labelled_by(label.id).changed();
+                            ui.end_row();
+                            let label = daw_ui::text::label(ui, "Color");
+                            changed |= daw_ui::color_edit(ui, &mut track.color).labelled_by(label.id).changed();
+                            ui.end_row();
+                            daw_ui::text::label(ui, "Display");
+                            changed |= daw_ui::checkbox(ui, &mut track.collapsed, if track.kind == TrackKind::Folder {
                                 "Collapse folder"
                             } else {
                                 "Compact track"
-                            },
-                        )
-                        .changed();
-                    });
-                    let mut parent = track.parent_folder;
-                    daw_ui::select_labeled(
-                        "Folder",
-                        parent
-                            .and_then(|id| folders.iter().find(|(folder, _)| *folder == id))
-                            .map(|(_, name)| name.as_str())
-                            .unwrap_or("Top level"),
-                    )
-                    .show_ui(ui, |ui| {
-                        daw_ui::selectable_value(ui, &mut parent, None, "Top level");
-                        for (id, name) in &folders {
-                            daw_ui::selectable_value(ui, &mut parent, Some(*id), name);
-                        }
-                    });
-                    if parent != track.parent_folder {
-                        parent_change = Some(parent);
-                    }
-                    if track.kind == TrackKind::Automation {
-                        changed |=
-                            daw_ui::toggle(ui, &mut track.mute, "Bypass automation").changed();
-                    } else {
-                        ui.add_space(14.0);
-                        label(ui, "LEVEL");
-                        changed |= ui
-                            .add(daw_ui::slider(&mut track.gain, 0.0..=1.5).show_value(false))
-                            .changed();
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "{:.1} dB",
-                                20.0 * track.gain.max(0.00001).log10()
-                            ))
-                            .monospace()
-                            .color(palette(ui.ctx()).accent),
-                        );
-                        label(ui, "PAN");
-                        changed |= ui
-                            .add(daw_ui::slider(&mut track.pan, -1.0..=1.0).show_value(false))
-                            .changed();
-                        ui.horizontal(|ui| {
-                            changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
-                            changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                            }).changed();
+                            ui.end_row();
+                            let label = daw_ui::text::label(ui, "Folder");
+                            let mut parent = track.parent_folder;
+                            daw_ui::select("properties_folder", parent
+                                .and_then(|id| folders.iter().find(|(folder, _)| *folder == id))
+                                .map(|(_, name)| name.as_str())
+                                .unwrap_or("Top level"))
+                                .width(260.0).truncate().show_ui(ui, |ui| {
+                                    daw_ui::selectable_value(ui, &mut parent, None, "Top level");
+                                    for (id, name) in &folders {
+                                        daw_ui::selectable_value(ui, &mut parent, Some(*id), name);
+                                    }
+                                }).response.labelled_by(label.id);
+                            ui.end_row();
+                            if parent != track.parent_folder {
+                                parent_change = Some(parent);
+                            }
+                            if track.kind == TrackKind::Automation {
+                                daw_ui::text::label(ui, "Playback");
+                                changed |= daw_ui::toggle(ui, &mut track.mute, "Bypass automation").changed();
+                                ui.end_row();
+                            } else {
+                                if track.kind != TrackKind::Folder {
+                                    let label = daw_ui::text::label(ui, "Gain");
+                                    ui.horizontal(|ui| {
+                                        changed |= ui.add(daw_ui::slider(&mut track.gain, 0.0..=1.5)
+                                            .clamping(egui::SliderClamping::Edits).show_value(false))
+                                            .labelled_by(label.id).changed();
+                                        daw_ui::text::body(ui, if track.gain <= 0.0 {
+                                            "−∞ dB".to_string()
+                                        } else {
+                                            format!("{:.1} dB", 20.0 * track.gain.log10())
+                                        });
+                                    });
+                                    ui.end_row();
+                                    let label = daw_ui::text::label(ui, "Pan");
+                                    changed |= ui.add(daw_ui::slider(&mut track.pan, -1.0..=1.0)
+                                        .clamping(egui::SliderClamping::Edits).fixed_decimals(2))
+                                        .labelled_by(label.id).on_hover_text("Left −1 · Center 0 · Right 1").changed();
+                                    ui.end_row();
+                                }
+                                daw_ui::text::label(ui, "Playback");
+                                ui.horizontal(|ui| {
+                                    changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
+                                    changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                                });
+                                ui.end_row();
+                                if track.kind != TrackKind::Folder {
+                                    let label = daw_ui::text::label(ui, "Path latency");
+                                    changed |= ui.add(daw_ui::number(&mut track.latency_samples)
+                                        .range(0..=192_000).clamp_existing_to_range(false).suffix(" samples"))
+                                        .labelled_by(label.id).changed();
+                                    ui.end_row();
+                                }
+                            }
                         });
-                        ui.add_space(14.0);
-                        label(ui, "PATH LATENCY");
-                        changed |= ui
-                            .add(
-                                daw_ui::number(&mut track.latency_samples)
-                                    .range(0..=192_000)
-                                    .suffix(" samples"),
-                            )
-                            .changed();
                     }
-                }
-                if changed {
-                    self.changed();
-                }
-                if let Some(parent) = parent_change {
-                    match self.project.set_parent_folder(id, parent) {
-                        Ok(()) => self.changed(),
-                        Err(error) => self.message(Err(error), ""),
+                    if changed {
+                        self.changed();
                     }
-                }
+                    if let Some(parent) = parent_change {
+                        match self.project.set_parent_folder(id, parent) {
+                            Ok(()) => self.changed(),
+                            Err(error) => self.message(Err(error), ""),
+                        }
+                    }
+                });
             });
+        ctx.data_mut(|data| data.insert_temp(page_id, (selection.0, selection.1, clip_page)));
         self.inspector_open = open;
     }
 }

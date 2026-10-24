@@ -53,7 +53,7 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
             .clips
             .push(Clip::midi("Layout phrase", 0.0, 4.0, vec![]));
         let bus = project.add_bus("A shared reverb return with a very long descriptive name for the atmospheric synth instruments in this arrangement");
-        project.add_send(track, bus, 0.25, false).unwrap();
+        project.add_send(track, bus, 2.5, false).unwrap();
         let path = app.directory.path().join("channels.daw.json");
         project.save(&path).unwrap();
         app.command(json!({"command":"open","path":path}));
@@ -82,6 +82,10 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
             1
         );
         let state = window(&mut app, "Routing");
+        assert_eq!(
+            state["project"]["tracks"][0]["sends"][0]["gain"], 2.5,
+            "opening Routing must preserve a valid send above the slider's edit range"
+        );
         for label in [
             "Routing",
             "Level",
@@ -96,6 +100,7 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         }
         let state = app.click("Pre");
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["pre_fader"], true);
+        assert_eq!(state["project"]["tracks"][0]["sends"][0]["gain"], 2.5);
         let state = app.click("×");
         assert!(
             state["project"]["tracks"][0]["sends"]

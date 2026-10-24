@@ -48,10 +48,11 @@ fn position(state: &Value, beat: f64, value: f64) -> (f64, f64) {
     let rect = &state["automation_plot_rect"];
     let left = rect["min"][0].as_f64().expect("curve must be visible");
     let top = rect["min"][1].as_f64().unwrap();
-    let right = rect["max"][0].as_f64().unwrap();
     let bottom = rect["max"][1].as_f64().unwrap();
+    let view = &state["automation_editor"];
     (
-        left + beat / 8.0 * (right - left),
+        left + (beat - view["start_beat"].as_f64().unwrap())
+            * view["pixels_per_beat"].as_f64().unwrap(),
         bottom - value * (bottom - top),
     )
 }
@@ -66,6 +67,264 @@ fn drag(app: &mut Harness, from: (f64, f64), to: (f64, f64)) -> Value {
     let (x, y) = position(&state, from.0, from.1);
     let (to_x, to_y) = position(&state, to.0, to.1);
     app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,"to_x":to_x,"to_y":to_y}))
+}
+
+fn bounded_actions(state: &Value, names: &[&str]) {
+    for name in names {
+        let rect = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == *name)
+            .unwrap_or_else(|| panic!("Missing {name}: {}", state["visible_labels"]));
+        assert!(rect["min"][0].as_f64().unwrap() >= 0.0);
+        assert!(rect["max"][0].as_f64().unwrap() <= 1100.0);
+        assert!(rect["max"][1].as_f64().unwrap() <= 720.0);
+        assert!(rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap() >= 13.0);
+    }
+}
+
+#[test]
+fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
+    use daw_core::{AutomationParameter, AutomationPoint, AutomationTarget};
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let source = project.add_audio_track(
+        "Long source name 🎹 with enough detail to exercise the aligned bounded selector",
+    );
+    let lane_name = "Long automation lane 🎹 with enough detail to remain readable without pushing its editing controls off screen";
+    let lane = project
+        .add_automation_track(
+            lane_name,
+            AutomationTarget {
+                track: source,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    project
+        .track_mut(lane)
+        .unwrap()
+        .automation
+        .as_mut()
+        .unwrap()
+        .points = vec![
+        AutomationPoint::new(32.0, 0.25),
+        AutomationPoint::new(40.0, 0.5),
+        AutomationPoint::new(64.0, 0.75),
+    ];
+    let path = app.directory.path().join("navigation.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.click(lane_name);
+    menu(&mut app, "Window", "Automation");
+    let baseline = app.inspect();
+    let fit_contains = |state: &Value| {
+        let view = &state["automation_editor"];
+        assert!(view["start_beat"].as_f64().unwrap() <= 32.0);
+        assert!(view["start_beat"].as_f64().unwrap() > 30.0);
+        assert!(view["end_beat"].as_f64().unwrap() >= 64.0);
+        assert!(view["end_beat"].as_f64().unwrap() < 66.0);
+    };
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        app.command(
+            json!({"command":"viewport","width":1100,"height":720,"pixels_per_point":density}),
+        );
+        app.command(json!({"command":"system_theme","dark":dark}));
+        let fitted = app.click("Fit");
+        fit_contains(&fitted);
+        bounded_actions(
+            &fitted,
+            &[
+                "Step",
+                "Linear",
+                "Smooth",
+                "Enabled",
+                "Fit",
+                "Add parameter",
+                "Delete point",
+            ],
+        );
+        for (button, alt, ctrl) in [
+            ("middle", false, false),
+            ("primary", true, false),
+            ("secondary", false, true),
+        ] {
+            let fitted = app.click("Fit");
+            let (x, y) = position(&fitted, 40.0, 0.5);
+            let moved = app.command(
+                json!({"command":"pointer","phase":"drag","button":button,"alt":alt,"ctrl":ctrl,
+                "x":x,"y":y,"to_x":x + if ctrl { 90.0 } else { -90.0 },"to_y":y-25.0}),
+            );
+            assert_ne!(
+                moved["automation_editor"]["start_beat"],
+                fitted["automation_editor"]["start_beat"]
+            );
+            assert_eq!(
+                moved["project"], baseline["project"],
+                "Navigation starting on a point must not edit it"
+            );
+            assert_eq!(moved["history"], baseline["history"]);
+        }
+        let fitted = app.click("Fit");
+        let (x, y) = position(&fitted, 40.0, 0.5);
+        let zoomed = app.command(json!({"command":"scroll","x":x,"y":y,"delta":120.0,"ctrl":true}));
+        assert!(
+            zoomed["automation_editor"]["pixels_per_beat"]
+                .as_f64()
+                .unwrap()
+                > fitted["automation_editor"]["pixels_per_beat"]
+                    .as_f64()
+                    .unwrap()
+        );
+        let unchanged = app.command(
+            json!({"command":"scroll","x":x,"y":y,"delta":120.0,"ctrl":true,"shift":true}),
+        );
+        assert_eq!(
+            unchanged["automation_editor"]["pixels_per_beat"],
+            zoomed["automation_editor"]["pixels_per_beat"]
+        );
+        assert_eq!(
+            unchanged["automation_editor"]["plot"],
+            zoomed["automation_editor"]["plot"]
+        );
+        assert_eq!(unchanged["project"], baseline["project"]);
+        let fitted = app.click("Fit");
+        let (x, y) = position(&fitted, 40.0, 0.5);
+        let selected = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+        assert_eq!(selected["automation_editor"]["point_beat"], 41.0);
+        let zoomed = app.key("Equals");
+        assert!(
+            zoomed["automation_editor"]["pixels_per_beat"]
+                .as_f64()
+                .unwrap()
+                > fitted["automation_editor"]["pixels_per_beat"]
+                    .as_f64()
+                    .unwrap()
+        );
+        fit_contains(&app.key("F"));
+    }
+    let state = app.inspect();
+    let rect = &state["automation_editor"]["point_beat_rect"];
+    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    app.command(json!({"command":"text","text":"45"}));
+    let typed = app.key("Enter");
+    assert_eq!(
+        typed["project"]["tracks"][1]["automation"]["points"][1]["beat"],
+        44.0
+    );
+    assert_eq!(typed["automation_editor"]["point_beat"], 45.0);
+    menu(&mut app, "Edit", "Undo");
+    assert_eq!(app.inspect()["project"], baseline["project"]);
+    let dragged = drag(&mut app, (40.0, 0.5), (44.0, 0.8));
+    assert_eq!(
+        dragged["project"]["tracks"][1]["automation"]["points"][1]["beat"],
+        44.0
+    );
+    assert!(
+        (dragged["project"]["tracks"][1]["automation"]["points"][1]["value"]
+            .as_f64()
+            .unwrap()
+            - 0.8)
+            .abs()
+            < 0.001
+    );
+    let deleted = app.key("Delete");
+    assert_eq!(
+        deleted["project"]["tracks"][1]["automation"]["points"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    menu(&mut app, "Edit", "Undo");
+    menu(&mut app, "Edit", "Undo");
+    assert_eq!(app.inspect()["project"], baseline["project"]);
+    let creation = app.click("Add parameter");
+    bounded_actions(
+        &creation,
+        &["Track", "Parameter", "Volume", "Add automation track"],
+    );
+    app.key("Escape");
+    app.quit();
+}
+
+#[test]
+fn reopening_same_lane_id_refits_changed_points_and_restores_a_valid_selection() {
+    use daw_core::{AutomationParameter, AutomationPoint, AutomationTarget};
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let source = project.add_audio_track("Source");
+    let lane = project
+        .add_automation_track(
+            "Volume lane",
+            AutomationTarget {
+                track: source,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    project
+        .track_mut(lane)
+        .unwrap()
+        .automation
+        .as_mut()
+        .unwrap()
+        .points = vec![
+        AutomationPoint::new(32.0, 0.25),
+        AutomationPoint::new(64.0, 0.75),
+    ];
+    let path = app.directory.path().join("reopened.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.click("Volume lane");
+    let fitted = menu(&mut app, "Window", "Automation");
+    let (x, y) = position(&fitted, 64.0, 0.75);
+    let selected = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_eq!(selected["automation_editor"]["point_beat"], 65.0);
+    let zoomed = app.key("Equals");
+    assert!(
+        zoomed["automation_editor"]["pixels_per_beat"]
+            .as_f64()
+            .unwrap()
+            > fitted["automation_editor"]["pixels_per_beat"]
+                .as_f64()
+                .unwrap()
+    );
+
+    // External edits retain the lane ID but replace its point IDs and range.
+    project
+        .track_mut(lane)
+        .unwrap()
+        .automation
+        .as_mut()
+        .unwrap()
+        .points = vec![
+        AutomationPoint::new(96.0, 0.4),
+        AutomationPoint::new(104.0, 0.6),
+    ];
+    project.save(&path).unwrap();
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert!(reopened["automation_editor"].is_null());
+    assert!(reopened["automation_plot_rect"].is_null());
+    app.click("Volume lane");
+    let refitted = menu(&mut app, "Window", "Automation");
+    let view = &refitted["automation_editor"];
+    assert!(view["start_beat"].as_f64().unwrap() <= 96.0);
+    assert!(view["start_beat"].as_f64().unwrap() > 95.0);
+    assert!(view["end_beat"].as_f64().unwrap() >= 104.0);
+    assert!(view["end_beat"].as_f64().unwrap() < 105.0);
+    assert_eq!(view["point_beat"], 97.0);
+    let deleted = app.click("Delete point");
+    let points = deleted["project"]["tracks"][1]["automation"]["points"]
+        .as_array()
+        .unwrap();
+    assert_eq!(points.len(), 1);
+    assert_eq!(points[0]["beat"], 104.0);
+    app.quit();
 }
 
 #[test]

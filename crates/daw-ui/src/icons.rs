@@ -33,6 +33,7 @@ pub enum Icon {
     Delete,
     Close,
     Check,
+    Warning,
     Settings,
     Folder,
     Library,
@@ -64,7 +65,7 @@ impl Icon {
             "Select" => Self::Select,
             "Pencil" => Self::Pencil,
             "Cut" | "Split at cursor" | "Split transients" => Self::Cut,
-            "Copy" | "Copy notes" => Self::Copy,
+            "Copy" | "Copy notes" | "Copy path" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
             "Duplicate" | "Duplicate clip" => Self::Duplicate,
             "Create linked clone" => Self::Link,
@@ -144,6 +145,11 @@ impl Icon {
             painter.circle_stroke(point(x, y), r * size / 24.0, stroke);
         };
         match self {
+            Self::Warning => {
+                line(&[(12., 3.), (22., 21.), (2., 21.), (12., 3.)]);
+                line(&[(12., 9.), (12., 14.)]);
+                painter.circle_filled(point(12., 17.5), size / 24.0, color);
+            }
             Self::Select => line(&[(5., 3.), (19., 13.), (12., 14.), (9., 21.), (5., 3.)]),
             Self::Pencil => {
                 line(&[

@@ -829,6 +829,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     // must still affect the first track while the second track is selected.
     app.key("Escape");
     menu(&mut app, "Window", "Properties");
+    click_front(&mut app, "Track");
     app.click("Compact track");
     app.key("Escape");
     let state = app.command(json!({"command":"click","label":"New instrument","occurrence":1}));

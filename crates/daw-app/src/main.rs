@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup|crossfade|join]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup|properties|crossfade|join]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -125,6 +125,7 @@ fn main() -> anyhow::Result<()> {
                 Some("crossfade") => app.open_popup(app::PopupKind::Crossfade),
                 Some("join") => app.open_popup(app::PopupKind::Join),
                 Some("routing") => app.open_popup(app::PopupKind::Routing),
+                Some("properties") => app.open_popup(app::PopupKind::Inspector),
                 Some("instrument") => app.open_popup(app::PopupKind::Instrument),
                 Some("rack" | "effects") => app.open_popup(app::PopupKind::Effects),
                 _ => {}

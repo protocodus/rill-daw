@@ -80,6 +80,7 @@ pub struct DawApp {
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
+    pub(crate) exported_file: Option<PathBuf>,
     pub revision: u64,
     pub desired_playing: bool,
     pub cursor: f64,
@@ -177,6 +178,7 @@ impl DawApp {
             retiring: None,
             project_io: Default::default(),
             export_job: None,
+            exported_file: None,
             revision: 0,
             desired_playing: false,
             cursor: 0.0,
@@ -820,6 +822,7 @@ impl DawApp {
         self.midi_editor = Default::default();
         self.reset_views = true;
         self.project = Project::new();
+        self.exported_file = None;
         self.waveform_warning = None;
         self.project_path = None;
         self.history.clear();
@@ -941,6 +944,7 @@ impl DawApp {
         self.edit_label = None;
         self.edit_group = None;
         self.project = loaded.project;
+        self.exported_file = None;
         self.waveform_warning = loaded.waveform_warning;
         let old_waveforms = std::mem::replace(&mut self.waveforms, loaded.waveforms);
         std::thread::spawn(move || drop(old_waveforms));
@@ -990,6 +994,7 @@ impl DawApp {
         };
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
+        self.exported_file = None;
         self.status = "Rendering stereo mixdown in background…".into();
         self.error = false;
         std::thread::spawn(move || {
@@ -1004,7 +1009,17 @@ impl DawApp {
             Some(Ok(result)) => {
                 self.export_job = None;
                 match result {
-                    Ok(path) => self.message(Ok(()), &format!("Exported {}", path.display())),
+                    Ok(path) => {
+                        // A finished render must not erase an unrelated error.
+                        if !self.error
+                            && self.loading.is_none()
+                            && !self.state_sync_pending()
+                            && !self.project_io_pending()
+                        {
+                            self.status = format!("Exported {}", path.display());
+                        }
+                        self.exported_file = Some(path);
+                    }
                     Err(e) => self.message(Err(e), ""),
                 }
             }
@@ -1016,6 +1031,59 @@ impl DawApp {
                 );
             }
             _ => {}
+        }
+    }
+
+    fn status_notice(&mut self, ctx: &egui::Context) {
+        use daw_ui::NoticeKind;
+        let busy = self.loading.is_some()
+            || self.export_job.is_some()
+            || self.state_sync_pending()
+            || self.project_io_pending();
+        let (kind, message) = if self.error {
+            (NoticeKind::Error, self.status.clone())
+        } else if busy {
+            (NoticeKind::Busy, self.status.clone())
+        } else if let Some(path) = &self.exported_file {
+            let name = path
+                .file_name()
+                .unwrap_or(path.as_os_str())
+                .to_string_lossy();
+            (NoticeKind::Success, format!("Exported · {name}"))
+        } else if let Some(warning) = &self.waveform_warning {
+            (NoticeKind::Warning, warning.clone())
+        } else {
+            return;
+        };
+        let mut dismiss = false;
+        egui::TopBottomPanel::bottom("status")
+            .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
+            .show(ctx, |ui| {
+                let response = daw_ui::notice(ui, kind, &message, |ui| {
+                    if matches!(kind, NoticeKind::Error | NoticeKind::Success) {
+                        dismiss = daw_ui::small_button(ui, "Dismiss").clicked();
+                    }
+                    if kind == NoticeKind::Success
+                        && daw_ui::button(ui, "Copy path")
+                            .on_hover_text("Copy the full export path")
+                            .clicked()
+                        && let Some(path) = &self.exported_file
+                    {
+                        ctx.copy_text(path.to_string_lossy().into_owned());
+                    }
+                });
+                if kind == NoticeKind::Success
+                    && let Some(path) = &self.exported_file
+                {
+                    response.response.on_hover_text(path.display().to_string());
+                }
+            });
+        if dismiss {
+            if kind == NoticeKind::Error {
+                self.error = false;
+            } else {
+                self.exported_file = None;
+            }
         }
     }
     pub fn delete_selection(&mut self) {
@@ -1851,6 +1919,7 @@ impl DawApp {
                 }
             });
             crate::audio_editor::reset_audio_editor(ctx);
+            crate::automation_editor::reset_automation_editor(ctx);
         }
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -1920,41 +1989,7 @@ impl DawApp {
         self.poll_plugin_previews(ctx);
         self.menus(ctx);
         self.transport(ctx);
-        if self.error
-            || self.loading.is_some()
-            || self.export_job.is_some()
-            || self.state_sync_pending()
-            || self.project_io_pending()
-            || self.waveform_warning.is_some()
-        {
-            egui::TopBottomPanel::bottom("status")
-                .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
-                .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        if !self.error && self.waveform_warning.is_none() {
-                            ui.spinner();
-                        }
-                        let status = if !self.error
-                            && self.loading.is_none()
-                            && self.export_job.is_none()
-                            && !self.state_sync_pending()
-                            && !self.project_io_pending()
-                        {
-                            self.waveform_warning.as_deref().unwrap_or(&self.status)
-                        } else {
-                            &self.status
-                        };
-                        ui.label(RichText::new(status).size(12.0).color(if self.error {
-                            palette(ui.ctx()).orange
-                        } else {
-                            palette(ui.ctx()).muted
-                        }));
-                        if self.error && daw_ui::small_button(ui, "Dismiss").clicked() {
-                            self.error = false;
-                        }
-                    });
-                });
-        }
+        self.status_notice(ctx);
         if self.view == WorkspaceView::Clip && self.selected().is_none() {
             self.close_popups();
         }
@@ -2156,3 +2191,25 @@ impl eframe::App for DawApp {
 #[cfg(test)]
 #[path = "engine_lifecycle_tests.rs"]
 mod engine_lifecycle_tests;
+
+#[cfg(test)]
+mod export_feedback_tests {
+    use super::*;
+
+    #[test]
+    fn completed_export_preserves_an_unrelated_error_and_pending_feedback() {
+        let ctx = egui::Context::default();
+        let mut app = DawApp::with_context(&ctx, Project::new(), None);
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.export_job = Some(rx);
+        app.error = true;
+        app.status = "Audio device disconnected".into();
+        let path = PathBuf::from("Finished.wav");
+        tx.send(Ok(path.clone())).unwrap();
+        app.poll_export();
+        assert!(app.export_job.is_none());
+        assert!(app.error);
+        assert_eq!(app.status, "Audio device disconnected");
+        assert_eq!(app.exported_file, Some(path));
+    }
+}
