@@ -226,7 +226,8 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     menu(&mut app, "Window", "Arrangement");
     app.click("New instrument");
     menu(&mut app, "Window", "Effects");
-    let state = app.click("×");
+    app.click("More");
+    let state = app.click("Remove insert");
     assert!(
         state["project"]["tracks"][0]["inserts"]
             .as_array()

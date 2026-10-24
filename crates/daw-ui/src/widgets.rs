@@ -27,6 +27,27 @@ pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     )
 }
 
+/// Reserve trailing actions before laying out a flexible label or control.
+/// Actions are supplied right to left; long names wrap inside the remaining
+/// width instead of pushing controls out of their window.
+pub fn action_row<A, C>(
+    ui: &mut Ui,
+    actions: impl FnOnce(&mut Ui) -> A,
+    content: impl FnOnce(&mut Ui) -> C,
+) -> InnerResponse<(A, C)> {
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let actions = actions(ui);
+            ui.add_space(tokens::SPACE_SM);
+            let content = ui
+                .with_layout(egui::Layout::left_to_right(egui::Align::Center), content)
+                .inner;
+            (actions, content)
+        })
+        .inner
+    })
+}
+
 pub fn menu_button<R>(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
@@ -556,7 +577,10 @@ pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) ->
 /// A dedicated drag affordance keeps row switches and editor buttons clickable.
 pub fn reorder_handle<T: Send + Sync + 'static>(ui: &mut Ui, payload: T) -> Response {
     let response = ui
-        .add(button_widget("⋮⋮").sense(egui::Sense::drag()))
+        .add(
+            crate::IconButton::icon_only(crate::Icon::Grip, "Reorder insert")
+                .sense(egui::Sense::drag()),
+        )
         .on_hover_cursor(egui::CursorIcon::Grab)
         .on_hover_text("Drag to reorder");
     response.dnd_set_drag_payload(payload);

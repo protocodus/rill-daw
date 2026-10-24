@@ -37,16 +37,19 @@ fn effect(app: &mut Harness, action: &str) -> Value {
     }
     app.click(action)
 }
-fn rect(state: &Value, label: &str, occurrence: usize) -> (f64, f64) {
+fn insert_grip(state: &Value, label: &str) -> (f64, f64) {
+    use daw_ui::tokens::{CONTROL_HEIGHT, SPACE_SM, SWITCH_WIDTH};
     let rect = state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|item| item["text"] == label)
-        .nth(occurrence)
+        .find(|item| item["text"] == label)
         .unwrap_or_else(|| panic!("Missing {label}: {state}"));
+    // The grip is vector-only. Aim beside the labeled enable switch using the
+    // shared control dimensions, then verify the actual drag reorders slots.
     (
-        (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+        rect["min"][0].as_f64().unwrap()
+            - f64::from(SWITCH_WIDTH + 2.0 * SPACE_SM + CONTROL_HEIGHT * 0.5),
         (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
     )
 }
@@ -161,8 +164,8 @@ fn effect_insertion_send_returns_drag_reorder_and_archive_recall_preserve_identi
     app.command(json!({"command":"open","path":seed}));
     app.click("New audio");
     let before = menu(&mut app, "Window", "Effects");
-    let from = rect(&before, "⋮⋮", 0);
-    let to = rect(&before, "⋮⋮", 1);
+    let from = insert_grip(&before, "01  Rill Fixture FX");
+    let to = insert_grip(&before, "02  Rill Fixture FX");
     let after = app.command(
         json!({"command":"pointer","phase":"drag","x":from.0,"y":from.1,"to_x":to.0,"to_y":to.1}),
     );

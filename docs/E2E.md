@@ -145,3 +145,11 @@ compact wrapped toolbar at a narrow desktop viewport.
 cargo test --locked -p daw-ui
 cargo test --locked -p daw-app --test components_e2e
 ```
+
+Layout regression coverage also includes eight long Unicode plug-in folders in
+`setup_layout_e2e`, long effect/channel names with reorder and routing actions in
+`channel_layout_e2e` (including twenty-insert growth/removal), and an 80-device catalog in `components_e2e`. Search and
+creation actions remain fixed while scrolling or using arrow-key selection.
+Join checks distinguish linked instances by their visible one-based beat ranges;
+mixer checks align master/channel controls and verify vertical overflow access.
+These automated UI regressions are separate from an interactive desktop walkthrough.

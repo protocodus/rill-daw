@@ -175,7 +175,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     let path = app.directory.path().join("mixer.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
-    app.command(json!({"command":"viewport","width":1100,"height":760}));
+    app.command(json!({"command":"viewport","width":1100,"height":720}));
     let state = menu(&mut app, "Window", "Mixer");
     assert_eq!(label_count(&state, "Channel"), 3);
     assert!(!visible(&state, "Effects"));
@@ -190,6 +190,27 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     assert!(route_rows.windows(2).all(|rows| {
         (rows[0]["min"][1].as_f64().unwrap() - rows[1]["min"][1].as_f64().unwrap()).abs() <= 1.0
     }));
+    let levels: Vec<_> = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["text"].as_str().unwrap().ends_with(" dB"))
+        .collect();
+    assert_eq!(levels.len(), 4, "three channel gains and the master peak");
+    assert!(
+        levels.windows(2).all(|rows| {
+            (rows[0]["min"][1].as_f64().unwrap() - rows[1]["min"][1].as_f64().unwrap()).abs() <= 1.0
+        }),
+        "channel gain readouts and master peak must align"
+    );
+    assert!(
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["text"] == "Channel")
+            .all(|row| row["max"][1].as_f64().unwrap() < 720.0)
+    );
     assert_eq!(app.click("Drums")["selected_track"], drums);
     let routing = app.click("Ch 1 > Master");
     assert_eq!(routing["selected_track"], bass);
@@ -212,6 +233,26 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     assert_eq!(muted["project"]["tracks"][0]["mute"], false);
     let undone = menu(&mut app, "Edit", "Undo");
     assert_eq!(undone["project"]["tracks"][1]["mute"], false);
+    // Retain usable fader height on shorter displays and let the channel area
+    // scroll; the workspace Back action remains fixed above it.
+    app.command(json!({"command":"viewport","width":800,"height":600}));
+    app.command(json!({"command":"scroll","x":90.0,"y":350.0,"delta":-1000.0}));
+    let mut scrolled = app.inspect();
+    for _ in 0..20 {
+        scrolled = app.inspect();
+    }
+    assert!(visible(&scrolled, "Channel"));
+    assert!(visible(&scrolled, "Back"));
+    assert!(
+        scrolled["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["text"] == "Channel")
+            .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
+    );
+    app.click("Channel");
+    assert!(visible(&app.inspect(), "Effects"));
     app.quit();
 }
 

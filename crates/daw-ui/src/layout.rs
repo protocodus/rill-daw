@@ -46,6 +46,59 @@ pub fn context_section<R>(
     })
 }
 
+/// A utility body that hugs short content and scrolls when it reaches the
+/// window's available height. Use inside a window with its own scrolling off.
+pub fn scroll_body<R>(
+    ui: &mut Ui,
+    id: impl Hash,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::scroll_area::ScrollAreaOutput<R> {
+    egui::ScrollArea::vertical()
+        .id_salt(id)
+        .min_scrolled_height(0.0)
+        .max_height(ui.available_height().max(0.0))
+        .auto_shrink([false, true])
+        .show(ui, contents)
+}
+
+/// Two equal, bounded content panes. Each pane owns its scrolling; headers can
+/// stay fixed while only the long list or preview beneath them scrolls.
+pub fn bounded_columns<R>(
+    ui: &mut Ui,
+    id: impl Hash,
+    height: f32,
+    mut contents: impl FnMut(usize, &mut Ui) -> R,
+) -> InnerResponse<[R; 2]> {
+    ui.push_id(id, |ui| {
+        let height = if height.is_finite() {
+            height.max(0.0).min(ui.available_height().max(0.0))
+        } else {
+            0.0
+        };
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width().max(0.0), height),
+            egui::Sense::hover(),
+        );
+        let gap = tokens::SPACE_LG.min(rect.width());
+        let width = (rect.width() - gap) * 0.5;
+        [0, 1].map(|index| {
+            let pane = egui::Rect::from_min_size(
+                rect.min + egui::vec2(index as f32 * (width + gap), 0.0),
+                egui::vec2(width, height),
+            );
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(index)
+                    .max_rect(pane)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            child.set_clip_rect(ui.clip_rect().intersect(pane));
+            child.set_width(width);
+            contents(index, &mut child)
+        })
+    })
+}
+
 pub struct WorkspaceHeaderResponse<R> {
     pub back: Response,
     pub inner: R,

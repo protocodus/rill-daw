@@ -659,7 +659,7 @@ impl DawApp {
                 },
                 active,
             );
-            key_diagnostics.push(serde_json::json!({"pitch":pitch,"rect":rect_json(key),"scale":scale,"chord":chord,"black":black,"row_color":row_color.to_array()}));
+            key_diagnostics.push(serde_json::json!({"pitch":pitch,"rect":rect_json(key),"scale":scale,"chord":chord,"black":black,"row_color":row_color.to_array(),"outside_color":row_color.blend(palette(ui.ctx()).inactive_clip_tint()).to_array()}));
         }
         let grid = if snap > 0.0 { snap.max(0.0625) } else { 1.0 };
         let grid = grid.max((12.0 / view.pixels_per_beat) as f64);
@@ -691,13 +691,7 @@ impl DawApp {
         );
 
         let end_x = view.x_at(plot, clip_length);
-        if end_x < plot.right() {
-            row_painter.rect_filled(
-                Rect::from_min_max(Pos2::new(end_x.max(plot.left()), plot.top()), plot.max),
-                0.0,
-                egui::Color32::from_black_alpha(100),
-            );
-        }
+        let outside_clip = daw_ui::paint_clip_tail(&row_painter, plot, end_x);
         painter.line_segment(
             [
                 Pos2::new(canvas.left(), plot.bottom()),
@@ -1147,6 +1141,7 @@ impl DawApp {
         }
         ui.ctx().data_mut(|data|data.insert_temp(egui::Id::new("midi_editor_diagnostics"),serde_json::json!({
             "plot":rect_json(plot),"velocity":rect_json(velocity_rect),"keys":key_diagnostics,"notes":note_diagnostics,
+            "outside_clip":outside_clip.map(rect_json),
             "start_beat":view.start_beat,"pixels_per_beat":view.pixels_per_beat,"row_offset":view.row_offset,"row_height":view.row_height,
             "tool":format!("{:?}",self.tool),"cursor":self.cursor,"chord":state.chord.name(),"stack":state.stack.name(),"audition":state.audition,
             "quantize":quantize_controls,"preview_notes":if state.quantize.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),

@@ -1731,32 +1731,46 @@ impl DawApp {
             ui.add_space(8.0);
             match self.setup_page {
                 SetupPage::Appearance => {
-                    daw_ui::select_labeled("Theme", self.setup_draft.appearance.name()).show_ui(ui, |ui| {
-                        for appearance in [Appearance::System, Appearance::Light, Appearance::Dark] {
-                            daw_ui::selectable_value(ui, &mut self.setup_draft.appearance, appearance, appearance.name());
-                        }
-                    }).response.on_hover_text("System follows the operating system appearance.");
+                    daw_ui::form_grid(ui, "appearance_settings", |ui| {
+                        let theme_label = daw_ui::text::label(ui, "Theme");
+                        daw_ui::select("appearance", self.setup_draft.appearance.name()).show_ui(ui, |ui| {
+                            for appearance in [Appearance::System, Appearance::Light, Appearance::Dark] {
+                                daw_ui::selectable_value(ui, &mut self.setup_draft.appearance, appearance, appearance.name());
+                            }
+                        }).response.labelled_by(theme_label.id).on_hover_text("System follows the operating system appearance.");
+                        ui.end_row();
+                    });
                 }
                 SetupPage::Audio => {
-                    let previous_device = self.setup_draft.device_name.clone();
-                    daw_ui::select_labeled("Output", self.setup_draft.device_name.as_deref().unwrap_or("System default")).width(320.0).show_ui(ui, |ui| {
-                        daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, None, "System default");
-                        for device in &self.devices { daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, Some(device.name.clone()), &device.name); }
+                    daw_ui::form_grid(ui, "audio_settings", |ui| {
+                        let previous_device = self.setup_draft.device_name.clone();
+                        let output_label = daw_ui::text::label(ui, "Output");
+                        daw_ui::select("output", self.setup_draft.device_name.as_deref().unwrap_or("System default")).width(320.0).truncate().show_ui(ui, |ui| {
+                            daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, None, "System default");
+                            for device in &self.devices { daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, Some(device.name.clone()), &device.name); }
+                        }).response.labelled_by(output_label.id).on_hover_text(self.setup_draft.device_name.as_deref().unwrap_or("System default"));
+                        ui.end_row();
+                        let rates = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).map(|d| d.supported_sample_rates.clone()).unwrap_or_else(|| vec![44_100, 48_000, 88_200, 96_000]);
+                        if self.setup_draft.device_name != previous_device && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
+                            self.setup_draft.sample_rate = if rates.contains(&48_000) { 48_000 } else { rates[0] };
+                        }
+                        let sample_rate_label = daw_ui::text::label(ui, "Sample rate");
+                        daw_ui::select("sample_rate", format!("{} Hz", self.setup_draft.sample_rate)).show_ui(ui, |ui| {
+                            for rate in rates { daw_ui::selectable_value(ui, &mut self.setup_draft.sample_rate, rate, format!("{rate} Hz")); }
+                        }).response.labelled_by(sample_rate_label.id);
+                        ui.end_row();
+                        let buffer_label = daw_ui::text::label(ui, "Buffer");
+                        daw_ui::select("buffer", format!("{} samples", self.setup_draft.buffer_frames)).show_ui(ui, |ui| {
+                            for size in [64, 128, 256, 512, 1024, 2048] { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
+                        }).response.labelled_by(buffer_label.id);
+                        ui.end_row();
+                        let conversion_label = daw_ui::text::label(ui, "Sample conversion");
+                        daw_ui::select("sample_conversion", match self.setup_draft.resample_quality { daw_engine::ResampleQuality::High => "High quality", daw_engine::ResampleQuality::Fast => "Fast" }).show_ui(ui, |ui| {
+                            daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::High, "High quality");
+                            daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::Fast, "Fast");
+                        }).response.labelled_by(conversion_label.id).on_hover_text("High quality filters sample-rate conversion; Fast prepares mixed-rate audio sooner. Audio uses 32-bit float with 64-bit summing.");
+                        ui.end_row();
                     });
-                    let rates = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).map(|d| d.supported_sample_rates.clone()).unwrap_or_else(|| vec![44_100, 48_000, 88_200, 96_000]);
-                    if self.setup_draft.device_name != previous_device && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
-                        self.setup_draft.sample_rate = if rates.contains(&48_000) { 48_000 } else { rates[0] };
-                    }
-                    daw_ui::select_labeled("Sample rate", format!("{} Hz", self.setup_draft.sample_rate)).show_ui(ui, |ui| {
-                        for rate in rates { daw_ui::selectable_value(ui, &mut self.setup_draft.sample_rate, rate, format!("{rate} Hz")); }
-                    });
-                    daw_ui::select_labeled("Buffer", format!("{} samples", self.setup_draft.buffer_frames)).show_ui(ui, |ui| {
-                        for size in [64, 128, 256, 512, 1024, 2048] { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
-                    });
-                    daw_ui::select_labeled("Sample conversion", match self.setup_draft.resample_quality { daw_engine::ResampleQuality::High => "High quality", daw_engine::ResampleQuality::Fast => "Fast" }).show_ui(ui, |ui| {
-                        daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::High, "High quality");
-                        daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::Fast, "Fast");
-                    }).response.on_hover_text("High quality filters sample-rate conversion; Fast prepares mixed-rate audio sooner. Audio uses 32-bit float with 64-bit summing.");
                     let rate = self.setup_draft.sample_rate.max(1) as f64;
                     ui.label(RichText::new(format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate)).small().color(palette(ui.ctx()).muted))
                         .on_hover_text(format!("The render queue adds up to {:.1} ms. Device and plug-in latency may add more.", self.setup_draft.buffer_frames.saturating_mul(2).max(512) as f64 * 1000.0 / rate));
@@ -1777,10 +1791,16 @@ impl DawApp {
                     label(ui, "VST3 SCAN DIRECTORIES");
                     ui.label(RichText::new("System folders included").small().color(palette(ui.ctx()).muted)).on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
                     let mut remove = None;
-                    egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                    // Keep the wrapped folder field/actions and Apply/Cancel
+                    // outside the scrolling list even in a small viewport.
+                    let controls_height = 3.0 * daw_ui::tokens::CONTROL_HEIGHT
+                        + daw_ui::tokens::SPACE_LG + 6.0 * daw_ui::tokens::SPACE_SM;
+                    let list_height = (ui.available_height() - controls_height)
+                        .clamp(daw_ui::tokens::COMPACT_HEIGHT, 220.0);
+                    egui::ScrollArea::vertical().max_height(list_height)
+                        .min_scrolled_height(daw_ui::tokens::COMPACT_HEIGHT).show(ui, |ui| {
                         for (index, path) in self.setup_draft.vst_dirs.iter().enumerate() {
-                            ui.push_id(index, |ui| { ui.horizontal(|ui| {
-                                ui.label(path.display().to_string());
+                            ui.push_id(index, |ui| { daw_ui::path_row(ui, path, |ui| {
                                 if daw_ui::small_button(ui, "Remove").clicked() { remove = Some(index); }
                             }); });
                         }
@@ -1788,16 +1808,18 @@ impl DawApp {
                     if let Some(index) = remove { self.setup_draft.vst_dirs.remove(index); }
                     let path_key = egui::Id::new("plugin_scan_folder_input");
                     let mut folder = ctx.data_mut(|data| data.get_temp::<String>(path_key)).unwrap_or_default();
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         daw_ui::text_field(ui, &mut folder, "Folder path", 310.0);
-                        if daw_ui::button(ui, "Add folder").clicked() {
-                            let path = PathBuf::from(folder.trim());
-                            if path.is_dir() {
-                                if !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
-                                folder.clear();
-                            } else { self.message(Err(anyhow::anyhow!("Choose an existing plug-in folder")), ""); }
-                        }
-                        if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                        daw_ui::toolbar_group(ui, |ui| {
+                            if daw_ui::button(ui, "Add folder").clicked() {
+                                let path = PathBuf::from(folder.trim());
+                                if path.is_dir() {
+                                    if !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                                    folder.clear();
+                                } else { self.message(Err(anyhow::anyhow!("Choose an existing plug-in folder")), ""); }
+                            }
+                            if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                        });
                     });
                     ctx.data_mut(|data| data.insert_temp(path_key, folder));
                 }

@@ -215,7 +215,8 @@ impl DawApp {
             .id(egui::Id::new("library"))
             .open(&mut open)
             .default_width(940.0)
-            .min_height(550.0)
+            .default_height(550.0)
+            .vscroll(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let mut kind = state.kind;
@@ -249,7 +250,12 @@ impl DawApp {
                         }
                     });
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
+                    let search_width = (ui.available_width()
+                        - daw_ui::tokens::SELECT_WIDTH
+                        - daw_ui::tokens::SPACE_SM
+                        - 2.0 * daw_ui::tokens::BUTTON_PADDING_X)
+                        .clamp(80.0, 460.0);
                     let search = daw_ui::text_field(
                         ui,
                         &mut self.plugin_filter,
@@ -258,7 +264,7 @@ impl DawApp {
                         } else {
                             "Search effects"
                         },
-                        460.0,
+                        search_width,
                     );
                     if self.plugin_search_focus {
                         if search.has_focus() {
@@ -359,12 +365,14 @@ impl DawApp {
                 {
                     action = Some((entry.plugin.clone(), default_action));
                 }
-                ui.columns(2, |columns| {
-                    egui::ScrollArea::vertical()
+                daw_ui::bounded_columns(ui, "library_panes", ui.available_height(), |pane, ui| {
+                    if pane == 0 {
+                    let catalog = egui::ScrollArea::vertical()
                         .id_salt("device_catalog")
-                        .min_scrolled_height(420.0)
-                        .max_height(420.0)
-                        .show(&mut columns[0], |ui| {
+                        .min_scrolled_height(0.0)
+                        .max_height(ui.available_height().max(0.0))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
                             for entry in &matches {
                                 let plugin = &entry.plugin;
                                 let detail = if !plugin.vendor.is_empty() {
@@ -408,6 +416,11 @@ impl DawApp {
                                     &detail,
                                     state.thumbnails.get(&entry.fingerprint),
                                 );
+                                if step != 0
+                                    && state.selected.as_ref() == Some(&entry.fingerprint)
+                                {
+                                    response.scroll_to_me(Some(egui::Align::Center));
+                                }
                                 if response.clicked() {
                                     state.selected = Some(entry.fingerprint.clone());
                                 }
@@ -419,13 +432,37 @@ impl DawApp {
                                 ui.label("No matching devices");
                             }
                         });
-                    let ui = &mut columns[1];
+                    ctx.data_mut(|data| data.insert_temp(egui::Id::new("library_diagnostics"), serde_json::json!({
+                        "catalog": {"min": [catalog.inner_rect.min.x, catalog.inner_rect.min.y], "max": [catalog.inner_rect.max.x, catalog.inner_rect.max.y]},
+                        "scroll_offset": catalog.state.offset.y,
+                        "selected": state.selected,
+                    })));
+                    return;
+                    }
+                    ctx.data_mut(|data| {
+                        if let Some(value) = data.get_temp_mut_or_default::<serde_json::Value>(egui::Id::new("library_diagnostics")).as_object_mut() {
+                            let rect = ui.max_rect();
+                            value.insert("details".into(), serde_json::json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]}));
+                        }
+                    });
                     if let Some(entry) = state.selected.as_ref().and_then(|selected| {
                         matches.iter().find(|entry| &entry.fingerprint == selected)
                     }) {
-                        daw_ui::text::title(ui, &entry.plugin.name);
+                        let reserved_controls = 2.0 * daw_ui::tokens::CONTROL_HEIGHT
+                            + 4.0 * daw_ui::tokens::SPACE_SM
+                            + 2.0 * daw_ui::tokens::FONT_SMALL
+                            + 2.0 * daw_ui::tokens::SPACE_MD;
+                        let title_rows = ((ui.available_height() - reserved_controls)
+                            / (daw_ui::tokens::FONT_HEADING * 1.2))
+                            .clamp(1.0, 4.0) as usize;
+                        daw_ui::text::bounded_block(
+                            ui,
+                            daw_ui::text::TextRole::Title,
+                            &entry.plugin.name,
+                            title_rows,
+                        );
                         if !entry.plugin.vendor.is_empty() {
-                            daw_ui::text::note(ui, &entry.plugin.vendor);
+                            daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, &entry.plugin.vendor);
                         }
                         if entry.plugin.is_instrument().is_none() {
                             daw_ui::text::note(ui, "Unverified VST3");
@@ -450,7 +487,7 @@ impl DawApp {
                             DeviceAction::Send => "Create send track",
                         };
                         let enabled = state.kind == DeviceKind::Instrument || source.is_some();
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.add_enabled_ui(enabled, |ui| {
                                 if daw_ui::primary_button(ui, primary_label).clicked() {
                                     action = Some((entry.plugin.clone(), primary));
@@ -518,8 +555,9 @@ impl DawApp {
                         });
                         if state.kind == DeviceKind::Effect {
                             if let Some(track) = source.and_then(|id| self.project.track(id)) {
-                                daw_ui::text::note(
+                                daw_ui::text::truncated(
                                     ui,
+                                    daw_ui::text::TextRole::Note,
                                     if primary == DeviceAction::Send {
                                         format!("Send from {}", track.name)
                                     } else {
@@ -531,6 +569,12 @@ impl DawApp {
                             }
                         }
                         ui.add_space(10.0);
+                        egui::ScrollArea::vertical()
+                            .id_salt(("device_preview", &entry.fingerprint))
+                            .min_scrolled_height(0.0)
+                            .max_height(ui.available_height().max(0.0))
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
                         if let Some(path) = &entry.thumbnail {
                             if state
                                 .preview
@@ -567,6 +611,7 @@ impl DawApp {
                         if let ThumbnailStatus::Failed { message } = &entry.status {
                             daw_ui::text::note(ui, "Preview unavailable").on_hover_text(message);
                         }
+                            });
                     }
                 });
             });

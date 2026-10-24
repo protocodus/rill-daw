@@ -62,6 +62,25 @@ fn appearance(app: &mut Harness, density: f64, dark: bool) {
     assert!(state["text_sizes"]["body"].as_f64().unwrap() >= 15.0);
 }
 
+fn text_rect(state: &Value, label: &str) -> Value {
+    state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["text"] == label)
+        .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]))
+        .clone()
+}
+
+fn label_count(state: &Value, label: &str) -> usize {
+    state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|text| *text == label)
+        .count()
+}
+
 #[test]
 fn setup_tabs_selects_and_folder_input_stay_accessible_and_cancel_discards_drafts() {
     let mut app = Harness::new();
@@ -247,6 +266,147 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             assert_eq!(back["view"], "Arrangement");
             assert_eq!(back["project"], original);
             assert_eq!(back["settings"]["appearance"], "System");
+        }
+    }
+    app.quit();
+}
+
+#[test]
+fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
+    let fixture = common::plugin_fixture();
+    let name = |index: usize| {
+        format!("Catalog item {index:03} — Spacious instrument with a long descriptive name 🎹")
+    };
+    let classes: Vec<_> = (0..80)
+        .map(|index| {
+            json!({
+                "CID":format!("{:032X}", 10_000 + index),
+                "Category":"Audio Module Class", "Name":name(index),
+                "Sub Categories":["Instrument"], "Version":"1.0",
+                "SDKVersion":"VST3.7.9", "Cardinality":2147483647,
+            })
+        })
+        .collect();
+    std::fs::write(
+        fixture
+            .path()
+            .join("RillFixture.vst3/Contents/Resources/moduleinfo.json"),
+        json!({
+            "Name":"Component catalog", "Version":"1.0",
+            "Factory Info":{"Vendor":"000 Rill component catalog"},
+            "Classes":classes,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut app = Harness::with_vst_path(fixture.path());
+    let original = app.inspect()["project"].clone();
+
+    for density in [1.0, 2.0] {
+        for dark in [false, true] {
+            appearance(&mut app, density, dark);
+            window(&mut app, "Library");
+            let current_search = if visible(&app.inspect(), "Search instruments") {
+                "Search instruments"
+            } else {
+                "Catalog item 013"
+            };
+            app.click(current_search);
+            app.command(json!({"command":"key","key":"A","cmd":true}));
+            // Reducing the result set first resets a previous catalog scroll.
+            app.command(json!({"command":"text","text":"Catalog item 000"}));
+            common::wait_visible(&mut app, &name(0));
+            app.click("Catalog item 000");
+            app.command(json!({"command":"key","key":"A","cmd":true}));
+            app.command(json!({"command":"text","text":"Catalog item"}));
+            let before = app.inspect();
+            accessible(
+                &before,
+                &[
+                    "Catalog item",
+                    "All developers",
+                    "Manage",
+                    "Add instrument track",
+                    "More",
+                ],
+            );
+            assert_eq!(
+                label_count(&before, &name(0)),
+                2,
+                "First device is shown in catalog and details"
+            );
+
+            let catalog = &before["library"]["catalog"];
+            let x =
+                (catalog["min"][0].as_f64().unwrap() + catalog["max"][0].as_f64().unwrap()) * 0.5;
+            let y =
+                (catalog["min"][1].as_f64().unwrap() + catalog["max"][1].as_f64().unwrap()) * 0.5;
+            let scrolled = app.command(json!({"command":"scroll","x":x,"y":y,"delta":-10000.0}));
+            assert!(scrolled["library"]["scroll_offset"].as_f64().unwrap() > 0.0);
+            assert_eq!(
+                label_count(&scrolled, &name(0)),
+                1,
+                "Selected detail stays while its catalog row scrolls away"
+            );
+            assert!(
+                visible(&scrolled, &name(79)),
+                "Last catalog row must be reachable"
+            );
+            for label in [
+                "Instruments",
+                "Effects",
+                "Catalog item",
+                "All developers",
+                "Manage",
+                "Add instrument track",
+            ] {
+                assert_eq!(
+                    text_rect(&scrolled, label),
+                    text_rect(&before, label),
+                    "Scrolling catalog moved {label}"
+                );
+            }
+            accessible(&scrolled, &["Catalog item", "Add instrument track", "More"]);
+            let selected = app.click(&name(79));
+            assert_eq!(
+                label_count(&selected, &name(79)),
+                2,
+                "Click must select the last device"
+            );
+            accessible(&selected, &["Add instrument track", "More"]);
+
+            // Keyboard browsing must reveal a device beyond the visible rows.
+            for _ in 0..12 {
+                app.key("ArrowUp");
+            }
+            let mut keyboard = app.inspect();
+            for _ in 0..20 {
+                if label_count(&keyboard, &name(67)) == 2 {
+                    break;
+                }
+                keyboard = app.inspect();
+            }
+            assert_eq!(
+                label_count(&keyboard, &name(67)),
+                2,
+                "Arrow selection must scroll into view"
+            );
+            accessible(&keyboard, &["Catalog item", "Add instrument track", "More"]);
+
+            app.click("Catalog item");
+            app.command(json!({"command":"key","key":"A","cmd":true}));
+            let filtered = app.command(json!({"command":"text","text":"Catalog item 013"}));
+            assert_eq!(label_count(&filtered, &name(13)), 2);
+            assert!(!visible(&filtered, &name(79)));
+            accessible(
+                &filtered,
+                &["Catalog item 013", "Add instrument track", "More"],
+            );
+            assert_eq!(
+                filtered["project"], original,
+                "Browsing must not instantiate a device"
+            );
+            app.key("Escape");
         }
     }
     app.quit();

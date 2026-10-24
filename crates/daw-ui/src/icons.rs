@@ -43,6 +43,7 @@ pub enum Icon {
     Automation,
     Save,
     Open,
+    Editor,
     Export,
     Search,
     Refresh,
@@ -54,6 +55,7 @@ pub enum Icon {
     Down,
     Back,
     More,
+    Grip,
 }
 
 impl Icon {
@@ -99,7 +101,8 @@ impl Icon {
                 Self::Automation
             }
             "Save" | "Save as…" => Self::Save,
-            "Open…" | "Open editor" | "Show editor" => Self::Open,
+            "Open…" => Self::Open,
+            "Open editor" | "Show editor" => Self::Editor,
             "Export WAV…" | "Export MIDI…" => Self::Export,
             "Search" => Self::Search,
             "Scan" | "Rescan" | "Refresh" | "Refresh preview" | "Refresh parameters" => {
@@ -113,7 +116,7 @@ impl Icon {
             "Semitone down" | "Octave down" => Self::Down,
             "Back" => Self::Back,
             "More" => Self::More,
-            "+ Insert" | "+ Send" | "Add point" | "Add parameter" | "New" => Self::Add,
+            "Add point" | "Add parameter" | "New" => Self::Add,
             _ => return None,
         })
     }
@@ -328,6 +331,13 @@ impl Icon {
                 (2., 21.),
                 (2., 6.),
             ]),
+            Self::Editor => {
+                box_at(3., 4., 18., 16.);
+                line(&[(3., 9.), (21., 9.)]);
+                circle(8., 14.5, 2.5);
+                line(&[(14., 13.), (18., 13.)]);
+                line(&[(14., 17.), (18., 17.)]);
+            }
             Self::Library => {
                 box_at(3., 3., 7., 7.);
                 box_at(14., 3., 7., 7.);
@@ -428,6 +438,13 @@ impl Icon {
                     circle(x, 12., 1.3);
                 }
             }
+            Self::Grip => {
+                for x in [8., 16.] {
+                    for y in [5., 12., 19.] {
+                        painter.circle_filled(point(x, y), 1.5 * size / 24.0, color);
+                    }
+                }
+            }
         }
     }
 }
@@ -439,6 +456,7 @@ pub struct IconButton {
     icon: Option<Icon>,
     id: Id,
     selected: bool,
+    accessible_label: Option<String>,
 }
 impl IconButton {
     pub fn new(label: impl Into<WidgetText>) -> Self {
@@ -449,10 +467,21 @@ impl IconButton {
     pub fn with_icon(icon: Icon, label: impl Into<WidgetText>) -> Self {
         Self::from_parts(label.into(), Some(icon))
     }
+    /// An icon-only control still exposes its action to assistive technology.
+    pub fn icon_only(icon: Icon, accessible_label: impl Into<String>) -> Self {
+        let mut button = Self::from_parts("".into(), Some(icon));
+        button.accessible_label = Some(accessible_label.into());
+        button
+    }
     fn from_parts(label: WidgetText, icon: Option<Icon>) -> Self {
         let id = Id::new("rill-button-icon");
         let button = if icon.is_some() {
-            Button::new((Atom::custom(id, Vec2::splat(18.0)), label))
+            let atom = Atom::custom(id, Vec2::splat(18.0));
+            if label.text().is_empty() {
+                Button::new(atom)
+            } else {
+                Button::new((atom, label))
+            }
         } else {
             Button::new(label)
         };
@@ -463,6 +492,7 @@ impl IconButton {
             icon,
             id,
             selected: false,
+            accessible_label: None,
         }
     }
     pub fn fill(mut self, fill: Color32) -> Self {
@@ -510,8 +540,28 @@ impl Widget for IconButton {
         let previous_style = ui.style().clone();
         ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
         ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::NONE;
+        let native_event_index = self
+            .accessible_label
+            .as_ref()
+            .map(|_| ui.output(|output| output.events.len()));
         let output = self.button.atom_ui(ui);
         ui.set_style(previous_style);
+        if let (Some(label), Some(index)) = (self.accessible_label, native_event_index) {
+            // A custom atom has no text, so native Button emits an unlabelled
+            // activation/focus event. Replace that event while retaining every
+            // earlier event, then update the native accessibility node as well.
+            ui.output_mut(|output| {
+                if output.events.get(index).is_some_and(|event| {
+                    let info = event.widget_info();
+                    info.typ == egui::WidgetType::Button && info.label.is_none()
+                }) {
+                    output.events.remove(index);
+                }
+            });
+            output.response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &label)
+            });
+        }
         if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {
             let color = if self.selected {
                 ui.visuals().selection.stroke.color

@@ -27,7 +27,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `menu_button` |
-| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `action_menu`, `context_section` |
+| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
 | Mixer channels and metering | `mixer_strip`, `stereo_meter` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
@@ -35,7 +35,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Selected navigation/item | `selectable` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
-| Linked clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `Icon::Link`, `Icon::Unlink` |
+| Aligned settings and paths | `form_grid`, `path_row` |
+| Linked clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | Generic `slider`, `number` |
 | Track color | `color_edit` |
@@ -43,6 +44,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Interactive parameter curves | `curve_editor`, `CurvePoint`, `CurveView`, `CurveEdit` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
 | Plug-in library entries and previews | `catalog_item`, `image_preview` |
+| Bounded context titles | `text::bounded_block` |
+| Inactive clip regions | `paint_clip_tail` |
 | Surfaces | `panel`, `card`, `inset`, `soft_surface`, `paint_ambient` |
 | Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
 | On-demand windows | `popup`, `workspace_popup` |
@@ -51,6 +54,10 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point inner margins and scroll within the available viewport. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
 
 `paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases remain flat. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
+
+`scroll_body` inside a window with `.vscroll(false)` lets short utility content fit naturally while long chains remain bounded and scrollable. Use a stable height for tabbed forms and reserve footer space before sizing inner lists.
+
+Long names and paths must stay within their window. `action_row` reserves trailing controls before flexible content; `path_row` adds path truncation and a full-path tooltip. `form_grid` aligns label/control columns; associate a separate label with its control using `.labelled_by(label_response.id)`. `bounded_columns` gives each library pane a fixed viewport so catalog and preview scrolling leave search and primary actions visible. `text::bounded_block` wraps within a row limit and exposes the full source on hover. Task names belong in native window titles; long track and device names belong in bounded content headings. `clip_choice` includes visible instance metadata to distinguish linked copies with shared names.
 
 Use native response composition rather than adding a second event system:
 
@@ -113,7 +120,7 @@ Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut,
 
 State stays with the caller. Boolean and choice components mark `Response::changed()` only when their value changes. Use `.clicked()` for actions and `.changed()` for committing edits. Shared components do not create undo history, mutate project state indirectly, or rebuild audio themselves.
 
-The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels.
+The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; `IconButton::icon_only` requires an accessible action label. Reorder handles use the vector `Grip`, and native editor actions use `Editor`. Call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels.
 
 **Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views and utility popups; text fields retain their native text undo. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A new edit discards redo. History is session-local and limited to 128 steps or an estimated 128 MiB of snapshots, including opaque plugin state. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
 

@@ -288,7 +288,8 @@ fn effects_routing_and_mixer_controls_update_the_same_channel_graph() {
         state["project"]["tracks"][0]["inserts"][0]["enabled"],
         false
     );
-    let state = app.command(json!({"command": "click", "label": "Up", "occurrence": 1}));
+    app.command(json!({"command": "click", "label": "More", "occurrence": 1}));
+    let state = app.click("Up");
     assert_eq!(
         state["project"]["tracks"][0]["inserts"][0]["name"],
         "Rill Fixture FX"
@@ -297,7 +298,8 @@ fn effects_routing_and_mixer_controls_update_the_same_channel_graph() {
         state["project"]["tracks"][0]["inserts"][1]["name"],
         "Rill Fixture FX"
     );
-    let state = app.click("×");
+    app.click("More");
+    let state = app.click("Remove insert");
     assert_eq!(
         state["project"]["tracks"][0]["inserts"]
             .as_array()

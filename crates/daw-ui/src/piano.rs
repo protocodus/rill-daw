@@ -2,6 +2,28 @@
 use crate::theme;
 use egui::{Align2, Color32, FontId, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
 
+/// Soften the grid beyond a clip and retain a precise visible end boundary.
+/// This paint-only component neither changes layout nor captures editor input.
+pub fn paint_clip_tail(painter: &Painter, plot: Rect, end_x: f32) -> Option<Rect> {
+    if !plot.is_positive() || !plot.is_finite() || !end_x.is_finite() || end_x >= plot.right() {
+        return None;
+    }
+    let colors = theme::palette(painter.ctx());
+    let tail = Rect::from_min_max(Pos2::new(end_x.max(plot.left()), plot.top()), plot.max);
+    let painter = painter.with_clip_rect(plot);
+    painter.rect_filled(tail, 0.0, colors.inactive_clip_tint());
+    if end_x >= plot.left() {
+        painter.line_segment(
+            [
+                Pos2::new(end_x, plot.top()),
+                Pos2::new(end_x, plot.bottom()),
+            ],
+            Stroke::new(1.5_f32, colors.grid_bar),
+        );
+    }
+    Some(tail)
+}
+
 pub fn piano_key(
     painter: &Painter,
     rect: Rect,

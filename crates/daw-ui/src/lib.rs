@@ -7,6 +7,7 @@
 pub mod clip;
 pub mod crossfade;
 pub mod curve;
+pub mod form;
 pub mod icons;
 pub mod layout;
 pub mod piano;
@@ -21,6 +22,7 @@ pub mod widgets;
 pub use clip::*;
 pub use crossfade::*;
 pub use curve::*;
+pub use form::*;
 pub use icons::*;
 pub use layout::*;
 pub use piano::*;

@@ -141,7 +141,7 @@ impl DawApp {
                     return;
                 };
                 let busy = self.join_ui.pending();
-                daw_ui::text::subtitle(ui, &track.name);
+                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
                 ui.add_enabled_ui(!busy, |ui| {
                     egui::ScrollArea::vertical()
                         .max_height(300.0)
@@ -151,13 +151,18 @@ impl DawApp {
                             for clip in clips {
                                 ui.push_id(clip.id, |ui| {
                                     let mut selected = self.join_ui.selected.contains(&clip.id);
-                                    if daw_ui::checkbox(ui, &mut selected, &clip.name)
-                                        .on_hover_text(format!(
-                                            "Beat {:.2} → {:.2}",
+                                    if daw_ui::clip_choice(
+                                        ui,
+                                        &mut selected,
+                                        &clip.name,
+                                        clip.link_group.is_some(),
+                                        &format!(
+                                            "Beats {:.2} – {:.2}",
                                             clip.start + 1.0,
                                             clip.end() + 1.0
-                                        ))
-                                        .changed()
+                                        ),
+                                    )
+                                    .changed()
                                     {
                                         if selected {
                                             self.join_ui.selected.insert(clip.id);

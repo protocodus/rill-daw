@@ -132,6 +132,12 @@ pub fn contrast_text(background: Color32) -> Color32 {
     }
 }
 impl Palette {
+    /// Quietly desaturate content outside a clip toward its surrounding canvas.
+    /// Light canvases remain light instead of receiving a fixed black veil.
+    pub fn inactive_clip_tint(self) -> Color32 {
+        self.bg.gamma_multiply(0.32)
+    }
+
     /// Velocity changes brightness without making the label's background transparent.
     pub fn note_fill(self, selected: bool, velocity: u8) -> Color32 {
         let base = if selected {

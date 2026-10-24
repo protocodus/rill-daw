@@ -716,6 +716,13 @@ impl Harness {
                 .data(|data| data.get_temp::<Rect>(egui::Id::new("clip_name_rect")))
                 .map(|rect| [rect.left(), rect.top(), rect.right(), rect.bottom()])
         );
+        state["library"] = if self.app.library_open {
+            self.ctx
+                .data(|data| data.get_temp::<Value>(egui::Id::new("library_diagnostics")))
+                .unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
         state
     }
 }

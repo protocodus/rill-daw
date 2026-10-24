@@ -39,7 +39,7 @@ impl DawApp {
         let strip_width = 180.0;
         let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
         let fader_height = 180.0;
-        egui::ScrollArea::horizontal()
+        egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
@@ -72,7 +72,7 @@ impl DawApp {
                                 ui.set_min_height(420.0);
                                 if ui
                                     .add_sized(
-                                        Vec2::new(content_width, 30.0),
+                                        Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                                         daw_ui::button_widget(
                                             daw_ui::text::TextRole::Label
                                                 .rich(ui.ctx(), &track.name),
@@ -86,7 +86,7 @@ impl DawApp {
                                 }
                                 if ui
                                     .add_sized(
-                                        Vec2::new(content_width, 30.0),
+                                        Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                                         daw_ui::button_widget(egui::RichText::new(&route).small())
                                             .truncate(),
                                     )
@@ -153,13 +153,13 @@ impl DawApp {
                     daw_ui::mixer_strip(ui, "master", strip_width, None, false, |ui| {
                         ui.set_min_height(420.0);
                         ui.allocate_ui_with_layout(
-                            Vec2::new(content_width, 30.0),
+                            Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                             egui::Layout::centered_and_justified(egui::Direction::TopDown),
                             |ui| {
                                 daw_ui::text::label(ui, "Master");
                             },
                         );
-                        ui.allocate_space(Vec2::new(content_width, 30.0));
+                        ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT));
                         ui.vertical_centered(|ui| {
                             let peak = meter.peak_left.max(meter.peak_right);
                             ui.label(

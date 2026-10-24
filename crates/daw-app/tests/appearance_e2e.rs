@@ -107,6 +107,10 @@ fn piano_rows_preserve_black_white_contrast_with_blue_scale_and_chord_tints_in_b
                     luma(&black["row_color"]) + 8.0 < luma(&white["row_color"]),
                     "{black} must stay darker than {white}"
                 );
+                assert!(
+                    luma(&black["outside_color"]) + 6.0 < luma(&white["outside_color"]),
+                    "Pitch contrast must survive the outside-clip tint"
+                );
             }
         }
         assert!(keys.iter().any(|key| key["chord"] == true));
@@ -121,6 +125,30 @@ fn piano_rows_preserve_black_white_contrast_with_blue_scale_and_chord_tints_in_b
         assert!(
             keys.iter()
                 .any(|key| key["scale"] == true && key["chord"] == false)
+        );
+        let tail = &state["midi_editor"]["outside_clip"];
+        let plot = &state["midi_editor"]["plot"];
+        assert!(tail["min"][0].as_f64().unwrap() > plot["min"][0].as_f64().unwrap());
+        assert_eq!(tail["max"], plot["max"]);
+        for key in keys {
+            let original = luma(&key["row_color"]);
+            let outside = luma(&key["outside_color"]);
+            assert!(
+                (original - outside).abs() < 25.0,
+                "Clip tint must remain subtle"
+            );
+            if !dark {
+                assert!(
+                    outside >= original - 1.0,
+                    "Light mode must not darken into a gray block"
+                );
+            }
+        }
+        assert!(
+            keys.iter().any(|key| {
+                (luma(&key["outside_color"]) - luma(&key["row_color"])).abs() >= 3.0
+            }),
+            "Outside-clip rows must remain visually distinct"
         );
         for key in keys
             .iter()

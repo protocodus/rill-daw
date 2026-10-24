@@ -62,3 +62,32 @@ pub fn clip_label(ui: &mut Ui, title: &str, linked: bool) -> Response {
         .inner;
     response.on_hover_text(format!("{title}\nLinked clip — edits and name are shared"))
 }
+
+/// A clip choice with visible instance metadata, so linked copies with the same
+/// name remain distinguishable. Native checkbox focus and interaction are kept.
+pub fn clip_choice(
+    ui: &mut Ui,
+    selected: &mut bool,
+    title: &str,
+    linked: bool,
+    detail: &str,
+) -> Response {
+    let response = crate::checkbox(ui, selected, title);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(tokens::SPACE_LG), Sense::hover());
+        if linked {
+            Icon::Link.paint(ui.painter(), rect, crate::theme::palette(ui.ctx()).muted);
+        }
+        text::note(ui, detail);
+    });
+    response.on_hover_text(format!(
+        "{title}\n{detail}{}",
+        if linked {
+            "\nLinked clip — edits and name are shared"
+        } else {
+            ""
+        }
+    ))
+}

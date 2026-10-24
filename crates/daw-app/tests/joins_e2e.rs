@@ -362,3 +362,54 @@ fn cancel_running_audio_join_retires_worker_cleans_output_and_allows_next_join()
     assert_eq!(AudioData::load_wav(path).unwrap().frames(), 72000);
     app.quit();
 }
+
+#[test]
+fn join_identifies_linked_instances_by_visible_one_based_beat_ranges() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let track = project.add_midi_track("Linked sections");
+    let clip = Clip::midi("Shared phrase", 0.0, 4.0, vec![Note::new(60, 0.0, 1.0, 90)]);
+    let original = clip.id;
+    project.track_mut(track).unwrap().clips.push(clip);
+    let second = project.clone_clip(track, original).unwrap();
+    project.clone_clip(track, second).unwrap();
+    open(&mut app, &project, "Shared phrase");
+    app.command(json!({"command":"viewport","width":1100,"height":720}));
+    join_dialog(&mut app);
+    let state = app.inspect();
+    for label in [
+        "Beats 1.00 – 5.00",
+        "Beats 5.00 – 9.00",
+        "Beats 9.00 – 13.00",
+        "Join",
+        "Cancel",
+    ] {
+        let rect = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rect| rect["text"] == label)
+            .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
+        assert!(rect["max"][1].as_f64().unwrap() < 696.0, "{rect}");
+    }
+    app.command(json!({"command":"click","label":"Shared phrase","occurrence":1}));
+    assert!(
+        app.inspect()["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Select at least two clips")
+    );
+    app.command(json!({"command":"click","label":"Shared phrase","occurrence":2}));
+    let state = app.click("Join");
+    let joined = document(&state);
+    let clips = &joined.track(track).unwrap().clips;
+    assert_eq!(clips.len(), 2);
+    assert!(clips.iter().any(|clip| clip.id == second));
+    assert!(
+        clips
+            .iter()
+            .any(|clip| clip.length == 12.0 && clip.link_group.is_none())
+    );
+    app.quit();
+}

@@ -515,19 +515,19 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!harness.app.inspector_open);
     assert!(!harness.app.library_open);
     assert!(!harness.app.setup_open);
-    assert!(has_text(&output, "Effects · Test instrument"));
+    assert!(has_text(&output, "Effects"));
 
     harness.app.open_popup(PopupKind::Routing);
     let output = harness.settle_full();
     assert!(harness.app.routing_open);
     assert!(!harness.app.effects_open);
-    assert!(!has_text(&output, "Effects · Test instrument"));
-    assert!(has_text(&output, "Routing · Test instrument"));
+    assert!(!has_text(&output, "Effects"));
+    assert!(has_text(&output, "Routing"));
     harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
     let output = harness.settle_full();
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
     assert!(!harness.app.routing_open);
-    assert!(!has_text(&output, "Routing · Test instrument"));
+    assert!(!has_text(&output, "Routing"));
     assert_eq!(harness.app.project, before);
 }
 
@@ -833,7 +833,8 @@ fn unassigned_instrument_popup_opens_library_without_changing_the_session() {
     harness.app.vst_paths.push("unused-fixture.vst3".into());
     harness.app.open_popup(PopupKind::Instrument);
     let output = harness.settle_full();
-    assert!(has_text(&output, "Instrument · Test instrument"));
+    assert!(has_text(&output, "Instrument"));
+    assert!(has_text(&output, "Test instrument"));
     assert!(has_text(&output, "No instrument assigned"));
     let choose = text_position(&output, "Choose instrument", 0.0) + Vec2::new(8.0, 6.0);
     harness.full_click(choose);

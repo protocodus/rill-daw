@@ -87,6 +87,29 @@ pub fn block(ui: &mut Ui, role: TextRole, value: impl Into<String>) -> Response 
     ui.add(egui::Label::new(role.rich(ui.ctx(), value)).wrap())
 }
 
+/// A wrapping context heading with a bounded number of rows. The full source
+/// remains available to native accessibility and the hover tooltip.
+pub fn bounded_block(
+    ui: &mut Ui,
+    role: TextRole,
+    value: impl Into<String>,
+    max_rows: usize,
+) -> Response {
+    let value = value.into();
+    let mut job = egui::text::LayoutJob::simple(
+        value.clone(),
+        role.font(),
+        if role == TextRole::Note {
+            theme::palette(ui.ctx()).muted
+        } else {
+            theme::palette(ui.ctx()).text
+        },
+        ui.available_width().max(0.0),
+    );
+    job.wrap.max_rows = max_rows.max(1);
+    ui.add(egui::Label::new(job).wrap()).on_hover_text(value)
+}
+
 /// Use only where a fixed single row is intentional (names in a catalog, etc.).
 pub fn truncated(ui: &mut Ui, role: TextRole, value: impl Into<String>) -> Response {
     let value = value.into();
