@@ -1,0 +1,109 @@
+# Rill architecture
+
+Rill is a native Rust desktop DAW with separate project, rendering, plugin, and UI crates. It currently targets editing and playback of WAV audio and MIDI notes. The implementation deliberately keeps mutable editing state and third-party plugin calls outside the hardware callback.
+
+## Crate boundaries
+
+| Crate | Responsibility |
+| --- | --- |
+| `daw-core` | Serializable projects, validation, source-preserving editing, undo/redo, WAV and Standard MIDI File I/O, scales, and routing topology. |
+| `daw-engine` | Compile a project into a playback graph; render built-in instruments, clips, insert chains, sends, and buses; compensate path latency; expose device playback and offline export. |
+| `daw-plugins` | Discover VST3 metadata without loading native code into the app; host selected instruments and effects in separate `daw-plugin-host` processes. |
+| `daw-ui` | Shared egui component library, accessible controls, surfaces, popup windows, and design tokens; no audio or application dependencies. |
+| `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Library, Setup, and Properties windows; persistence and transport UI. |
+
+```mermaid
+flowchart LR
+    UI[Native UI / editable project] -->|validated snapshot| Worker[Render worker]
+    Worker <-->|bounded synchronous IPC| Plugins[VST3 child processes]
+    Worker -->|stereo frames and positions| Queue[Preallocated SPSC queue]
+    Queue --> Callback[CPAL device callback]
+    Callback --> Device[Audio device]
+    UI -->|offline snapshot| Export[Offline renderer / WAV writer]
+```
+
+The UI owns the editable project. Starting playback prepares a separate renderer; committed edits that affect audio rebuild it. Renaming, colors, and collapsed state do not rebuild the graph. This simplifies ownership and prevents the audio callback from traversing concurrently mutated UI data. Rebuilding can interrupt playback and recreate plugin instances; this is not a seamless incremental graph swap.
+
+Arrangement is the base canvas. The File/Edit/Track/Window menus open one requested tool at a time as a popup; the background arrangement is disabled while a tool is open. Track/clip selection and transport state carry between tools. Note selection is cleared when leaving Clip Editor so subsequent arrangement commands act on clips. Shared controls, window frames, and design tokens come from `daw-ui`; new components are implemented there before application views use them.
+
+## Project and editing model
+
+Arrangement time, clip lengths, source offsets, and MIDI note positions use quarter-note beats. A clip's `start` is its arrangement position. Its `offset` identifies the source beat exposed at its left edge. A MIDI note is audible only where its source interval intersects `[clip.offset, clip.offset + clip.length)`.
+
+Moving a clip changes its arrangement position. Trimming changes bounds and source offset without deleting notes or rewriting source audio. Splitting produces two independently editable clips with the right clip's source offset advanced by the split distance. Duplicates receive fresh object IDs. Splitting and duplicating currently copy MIDI note vectors; audio clips continue to reference the same external file. Audio fades belong to clip bounds and are reapplied after split/trim, so edits to an already faded clip are not guaranteed to preserve the original envelope sample for sample.
+
+The arrangement UI exposes clip movement and right-edge length trimming. Properties displays start, length, and source offset; these timing fields are not directly editable there. The core trimming API can adjust both bounds and source offset. The audio Clip Editor displays the waveform and supports seeking; gain and fades are edited in Properties.
+
+MIDI cut operates in source time. Glue requires at least two notes of the same pitch, spans their earliest start through latest end, fills any intervening gaps, and preserves the earliest note's velocity. Keyboard scale highlighting is a view concern backed by pitch-class utilities in `daw-core`.
+
+Undo/redo keeps up to 128 project snapshots on the control/UI side. The UI commits one pre-edit snapshot per gesture. Starting a new edit invalidates redo history. Audio sample buffers are not part of these snapshots.
+
+Project JSON has a versioned envelope. Saving validates first, writes a sibling temporary file, flushes and syncs it, and replaces the destination. Audio and plugin files remain external references. Loading resolves relative paths against the project directory, validates object IDs and graphs, and reserves loaded IDs before subsequent edits. The routing fields have Serde defaults, so earlier version-1 projects without those fields remain readable. There is no asset collection/package operation yet; moving a project without its referenced files can break playback.
+
+Validation rejects nonfinite values, invalid note ranges, duplicate object IDs, invalid routing, and positions beyond 1,000,000 beats. This generous timeline limit prevents malformed files from saturating integer sample positions. A project has a single tempo between 20 and 400 BPM and a constant meter with quarter-note denominator.
+
+## Tracks, folders, and routing
+
+Audio and MIDI tracks are signal sources. Bus tracks sum incoming signal and have their own insert chain, fader, pan, main output, and sends. Folders are organizational: they may contain nested tracks and folders but have no clips, insert processing, or audio output. Folder placement does not implicitly route a child's audio into any bus.
+
+The per-channel signal order is:
+
+```text
+Source / summed bus input
+  → ordered enabled inserts
+  → pre-fader sends
+  → fader and pan
+  → main output and post-fader sends
+```
+
+`output_bus = None` routes the main output to the master. Send destinations and explicit outputs must name bus tracks. Audio edges form a directed acyclic graph; both main outputs and sends participate in cycle detection, including muted or zero-gain paths. Parallel main-output and send edges to one bus are allowed and contribute separately. Duplicate sends to the same destination are rejected. `routing_order` returns all nonfolder tracks in source-before-destination order.
+
+Folder hierarchy is validated independently from the signal graph. Parent pointers must reference folders, cannot form cycles, and persist together with collapsed state. Folder mute is inherited and wins over solo. Soloing a folder selects its descendants; soloing a bus includes its upstream signal sources. Selected sources keep their downstream buses audible while unrelated sources remain excluded.
+
+Deleting a bus restores incoming main outputs to the master and removes sends targeting that bus. Deleting a folder promotes its direct children to its own parent, preserving deeper hierarchy. The complete deletion candidate is validated before it replaces the current project.
+
+Built-in insert types are gain and a stereo delay. Delay feedback is bounded below unity. VST3 inserts use the same isolated hosting boundary as instruments. Disabled insert slots bypass processing. Inserts are ordered, and reordering them changes the signal path.
+
+## Audio execution and timing
+
+The renderer uses 256-frame processing blocks. WAV files are decoded before processing; a path-keyed shared cache reuses decoded samples for split or duplicated audio clips. MIDI intervals compile into sample-positioned note-on/off events. Seeking chases notes that span the destination and resets built-in oscillator voices and delay buffers.
+
+Built-in instruments are sine, triangle, and a PolyBLEP saw, with bounded voice storage and short attack/release ramps. Audio clips use linear interpolation when their file sample rate differs from the output rate. Mono clips are duplicated to stereo; channels beyond the first two are not spatially mixed. There is no time stretching or pitch-preserving tempo adaptation. Audio source offsets are expressed in beats at the current project tempo.
+
+Path latency includes declared channel latency and plugin-reported processing latency. For each node, cumulative latency is the longest incoming path plus its instrument, enabled inserts, and declared latency. Incoming edges delay shorter paths to match the bus's longest input; master routes receive the corresponding final alignment. Declared latency is explicitly simulated, and common master latency is primed and discarded so it is removed from transport/export timing. Cumulative processing latency is capped at ten seconds. Latency is captured when the graph is prepared; live plugin latency changes require rebuilding. Musical delay effects are audible delays, not scheduling latency to subtract. Device and queue latency remain audible and are separate from plugin delay compensation.
+
+The render worker owns plugin instances and performs file-independent DSP and plugin IPC. A preallocated single-producer/single-consumer queue transfers stereo frames and their musical positions to the CPAL callback. Its capacity is two requested device buffers, with a minimum of 512 frames. Generation tags discard queued audio after a seek.
+
+The callback only consumes queued frames, converts to the configured device sample format, and updates atomic meters/counters. It does not acquire mutexes, decode files, call plugins, or allocate memory. Missing frames produce silence and increment the underrun counter. Nonfinite output is silenced and device samples are hard-clamped to `[-1, 1]`; there is no mastering limiter. Preparation and plugin processing are not claimed to be allocation-free.
+
+Looping wraps at the configured beat boundaries. Seek/loop resets clear the engine's delay and oscillator state. Instrument reset sends a MIDI panic; effect reset stops and restarts processing while retaining parameters. Neither guarantees clearing every third-party plugin's internal tails. Loops therefore do not promise seamless state continuity for every plugin. Automatic playback completion sums reported/estimated tails along signal paths, with a 0.2-second minimum and a 30-second global cap; offline export writes the explicit requested duration.
+
+Offline export uses the same renderer and ignores looping. `export_project_wav` exports the full arrangement including calculated graph tails; `export_wav` exports an explicit duration. Both stream 32-bit floating-point stereo data through a temporary file and atomically replace the destination only after a successful render. Nonfinite rendered samples produce an error and leave an existing destination intact. WAV size limits are checked before export. The convenience in-memory render API has a four-hour duration limit and uses fallible reservation. Floating-point export preserves headroom instead of applying the device clamp.
+
+## VST3 process boundary
+
+Each selected VST3 instance runs in its own `daw-plugin-host` child via `vst3-host` 0.10.0. The parent loads no third-party native plugin code during metadata scanning. Discovery reads standard/custom folders and optional `moduleinfo.json`; missing metadata remains an unknown classification until load-time validation.
+
+The host exposes sample-offset MIDI note on/off on channel 1 for instruments, stereo audio inputs for effects, transport position/tempo, normalized parameter access, opaque state APIs, and reported latency. It selects the first active audio output bus; mono is duplicated to stereo. Effects feed the first active input bus, downmix to mono when necessary, and leave other inputs—including sidechains—silent.
+
+IPC uses synchronous commands and serialized audio, with allocation and waiting on the render worker. Normal command response timeouts are bounded at 100 ms; upstream load/state operations have longer timeouts. This design contains plugin process crashes but adds overhead and does not establish a maximum-throughput benchmark against an in-process host. A plugin failure silences its path during live playback; offline export reports an error. Recovery APIs restart the child, after which a caller may restore saved state.
+
+Child processes run with the user's permissions. Process isolation is crash containment, not an OS security sandbox. Build the complete workspace so `daw-plugin-host` is available beside the application, or set `DAW_PLUGIN_HOST` to its path.
+
+Native plugin editors, exposed automation/CC/pitch-bend/MPE, sidechain routing, and live latency renegotiation are not implemented. Parameter and opaque-state APIs exist in the plugin layer, but the project/UI does not yet persist plugin presets or expose a parameter editor; newly constructed instances use their default state.
+
+## Scope and verification
+
+This implementation supplies editing/playback, file MIDI import/export, output-device selection, insert/send/bus processing, hierarchy, and float WAV mixdown. It does not yet record audio or live MIDI input, stream media from disk, provide tempo maps, support multichannel surround routing, or host VST2/AU plugins.
+
+WAV input supports integer PCM and 32-bit float files. MIDI import handles note events from metrical type-0/type-1 Standard MIDI Files; it rejects SMPTE timing, sequential-pattern files, variable tempos, and changing/non-quarter-note meters. Controllers and MIDI automation are not imported. MIDI export crops notes to each clip's visible source range and emits a constant-tempo file.
+
+`cargo test --workspace` covers project/NLE invariants, MIDI timing and roundtrips, routing and folder cycles, persistence compatibility, audio rendering, queue behavior, and callback allocation checks. `cargo clippy --workspace --all-targets -- -D warnings` checks the workspace. Plugin native-code smoke tests are opt-in and require an installed plugin; they exercise real audio, state restoration, child termination, and recovery. These checks establish tested behavior, not complete compatibility with every driver or VST3 implementation.
+
+On 2026-10-24, the release benchmark on an Apple M1 Max rendered 16 seconds of 48 kHz stereo audio from 32 triangle-instrument tracks (128 simultaneous voices) in 0.263 seconds, or 60.9× realtime. This includes renderer preparation and output allocation and excludes VST3 IPC. Reproduce the scenario with:
+
+```sh
+cargo run --release -p daw-engine --example render_bench
+```
+
+A separate 250 ms playback smoke check on the available 48 kHz CPAL device reported zero underruns and zero render errors. That short check verifies device integration; it is not a sustained driver stability test or a plugin throughput benchmark.

@@ -1,0 +1,10 @@
+/target/
+/dist/
+.DS_Store
+*.wav
+*.daw.json
+!fixtures/**
+
+
+__pycache__/
+*.pyc

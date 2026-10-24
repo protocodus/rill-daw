@@ -1,0 +1,14 @@
+FROM rust:1.92-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY scripts/test-e2e.sh ./scripts/test-e2e.sh
+
+# No display server, GPU, audio device, user home, or VST installation is needed.
+RUN cargo test --locked -p daw-app --tests --no-run
+CMD ["bash", "scripts/test-e2e.sh"]
