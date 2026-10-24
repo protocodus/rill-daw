@@ -161,10 +161,10 @@ impl DawApp {
         if state.quantize.is_none() {
             daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         }
-        ui.horizontal_wrapped(|ui| {
+        daw_ui::toolbar(ui, |ui| {
             daw_ui::editor_tools(ui, &mut self.tool, &supported);
             fit = daw_ui::timeline_fit_button(ui).clicked();
-            daw_ui::menu_button(ui, "Notes", |ui| {
+            daw_ui::action_menu(ui, "Notes", |ui| {
                 ui.add_enabled_ui(
                     !self.selected_notes.is_empty() && state.quantize.is_none(),
                     |ui| {
@@ -239,75 +239,122 @@ impl DawApp {
                     }
                     ui.close();
                 }
+                if self.selected_notes.len() > 1
+                    && ui
+                        .add_enabled(
+                            state.quantize.is_none(),
+                            daw_ui::button_widget("Glue selected"),
+                        )
+                        .clicked()
+                {
+                    actions.push(NoteEdit::Glue(
+                        self.selected_notes.iter().copied().collect(),
+                    ));
+                    ui.close();
+                }
+                if !self.selected_notes.is_empty()
+                    || matches!(self.tool, Tool::Pencil | Tool::MultiDraw)
+                {
+                    ui.separator();
+                    let mut velocity = notes
+                        .iter()
+                        .find(|n| self.selected_notes.contains(&n.id))
+                        .map_or(state.velocity, |n| n.velocity);
+                    if ui
+                        .add_enabled(
+                            state.quantize.is_none(),
+                            daw_ui::slider(&mut velocity, 1..=127).text("Velocity"),
+                        )
+                        .changed()
+                    {
+                        state.velocity = velocity;
+                        actions.push(NoteEdit::Velocity(
+                            notes
+                                .iter()
+                                .filter(|n| self.selected_notes.contains(&n.id))
+                                .map(|n| (n.id, velocity))
+                                .collect(),
+                        ));
+                    }
+                }
             });
-            if self.selected_notes.len() > 1
-                && ui
-                    .add_enabled(
-                        state.quantize.is_none(),
-                        daw_ui::button_widget("Glue selected"),
-                    )
-                    .clicked()
-            {
-                actions.push(NoteEdit::Glue(
-                    self.selected_notes.iter().copied().collect(),
-                ));
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            daw_ui::select("midi_root", pitch_class(self.root))
-                .width(48.0)
-                .show_ui(ui, |ui| {
+            daw_ui::action_menu(ui, "Pitch", |ui| {
+                daw_ui::action_menu(ui, pitch_class(self.root), |ui| {
                     for root in 0..12 {
-                        daw_ui::selectable_value(ui, &mut self.root, root, pitch_class(root));
+                        if daw_ui::selectable_value(ui, &mut self.root, root, pitch_class(root))
+                            .changed()
+                        {
+                            ui.close();
+                        }
                     }
                 })
                 .response
                 .on_hover_text("Scale and chord root");
-            daw_ui::select("midi_scale", self.scale.name())
-                .show_ui(ui, |ui| {
+                daw_ui::action_menu(ui, self.scale.name(), |ui| {
                     for scale in Scale::ALL {
-                        daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name());
+                        if daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name())
+                            .changed()
+                        {
+                            ui.close();
+                        }
                     }
                 })
                 .response
                 .on_hover_text("Blue scale highlights");
-            daw_ui::select("midi_chord", state.chord.name())
-                .show_ui(ui, |ui| {
+                daw_ui::action_menu(ui, state.chord.name(), |ui| {
                     for chord in Chord::ALL {
-                        daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name());
+                        if daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name())
+                            .changed()
+                        {
+                            ui.close();
+                        }
                     }
                 })
                 .response
                 .on_hover_text("Bright blue chord highlights");
-            daw_ui::select("midi_stack", state.stack.name())
-                .show_ui(ui, |ui| {
-                    for stack in [NoteStack::Chord, NoteStack::Scale] {
-                        daw_ui::selectable_value(ui, &mut state.stack, stack, stack.name());
-                    }
-                })
-                .response
-                .on_hover_text("Multi-draw fills the clicked octave");
-            let mut velocity = notes
-                .iter()
-                .find(|n| self.selected_notes.contains(&n.id))
-                .map_or(state.velocity, |n| n.velocity);
-            if ui
-                .add_enabled(
-                    state.quantize.is_none(),
-                    daw_ui::slider(&mut velocity, 1..=127).text("Velocity"),
-                )
-                .changed()
-            {
-                state.velocity = velocity;
-                actions.push(NoteEdit::Velocity(
-                    notes
-                        .iter()
-                        .filter(|n| self.selected_notes.contains(&n.id))
-                        .map(|n| (n.id, velocity))
-                        .collect(),
-                ));
-            }
+            })
+            .response
+            .on_hover_text(format!(
+                "{} {} · {}",
+                pitch_class(self.root),
+                self.scale.name(),
+                state.chord.name()
+            ));
+            daw_ui::text::truncated(
+                ui,
+                daw_ui::text::TextRole::Note,
+                format!("{} · {}", pitch_class(self.root), self.scale.name()),
+            );
         });
+        if self.tool == Tool::MultiDraw {
+            daw_ui::toolbar(ui, |ui| {
+                daw_ui::select("midi_stack", state.stack.name())
+                    .show_ui(ui, |ui| {
+                        for stack in [NoteStack::Chord, NoteStack::Scale] {
+                            daw_ui::selectable_value(ui, &mut state.stack, stack, stack.name());
+                        }
+                    })
+                    .response
+                    .on_hover_text("Multi-draw fills the clicked octave");
+                match state.stack {
+                    NoteStack::Single => {}
+                    NoteStack::Chord => {
+                        daw_ui::select("active_midi_chord", state.chord.name()).show_ui(ui, |ui| {
+                            for chord in Chord::ALL {
+                                daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name());
+                            }
+                        });
+                    }
+                    NoteStack::Scale => {
+                        daw_ui::select("active_midi_scale", self.scale.name()).show_ui(ui, |ui| {
+                            for scale in Scale::ALL {
+                                daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name());
+                            }
+                        });
+                    }
+                }
+            });
+        }
         let mut quantize_controls = serde_json::Value::Null;
         if let Some(preview) = &mut state.quantize {
             let mut apply = false;

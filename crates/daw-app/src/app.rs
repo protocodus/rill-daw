@@ -1074,17 +1074,9 @@ impl DawApp {
     }
     fn transport(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("transport")
-            .frame(daw_ui::panel(ctx).inner_margin(12))
+            .frame(daw_ui::panel(ctx).inner_margin(8))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new("R I L L")
-                            .size(18.0)
-                            .strong()
-                            .color(palette(ui.ctx()).accent),
-                    );
-                    ui.separator();
-                    ui.add_space(12.0);
                     if daw_ui::button(ui, "Start")
                         .on_hover_text("Return to start · Home")
                         .clicked()
@@ -1120,8 +1112,8 @@ impl DawApp {
                             (self.cursor.fract() * 100.0) as u64
                         ))
                         .monospace()
-                        .size(20.0)
-                        .color(palette(ui.ctx()).accent),
+                        .size(daw_ui::tokens::FONT_SUBTITLE)
+                        .color(palette(ui.ctx()).text),
                     );
                     ui.separator();
                     let mut tempo = self.project.tempo;
@@ -1728,39 +1720,47 @@ impl DawApp {
             || self.routing_open
             || self.automation_open
             || self.history_open;
+        let focused_before_draw = self.focused_view();
+        let workspace = self.view;
         egui::CentralPanel::default()
             .frame(daw_ui::inset(ctx).inner_margin(0))
             .show(ctx, |ui| {
-                ui.add_enabled_ui(
-                    self.view == WorkspaceView::Arrangement && !utility_open,
-                    |ui| self.arrangement(ui),
-                );
-            });
-        let focused_before_draw = self.focused_view();
-        let workspace = self.view;
-        if workspace != WorkspaceView::Arrangement {
-            let mut open = true;
-            daw_ui::workspace_popup(
-                if workspace == WorkspaceView::Clip {
-                    "Clip Editor"
+                // Only the active task owns the canvas. Keeping a disabled
+                // arrangement underneath tools adds visual noise and duplicate
+                // controls to accessibility/automation trees.
+                if utility_open {
+                    self.drop_target = None;
+                    return;
+                }
+                if workspace == WorkspaceView::Arrangement {
+                    self.arrangement(ui);
+                    return;
+                }
+                self.drop_target = None;
+                let title = if workspace == WorkspaceView::Clip {
+                    self.selected()
+                        .map(|clip| format!("Clip Editor · {}", clip.name))
+                        .unwrap_or_else(|| "Clip Editor".into())
                 } else {
-                    "Mixer"
-                },
-                ctx,
-            )
-            .id(egui::Id::new("workspace-tool"))
-            .open(&mut open)
-            .show(ctx, |ui| {
-                if workspace == WorkspaceView::Clip {
-                    self.editor(ui);
-                } else {
-                    self.mixer(ui);
+                    "Mixer".into()
+                };
+                let header = daw_ui::workspace_header(ui, &title, |ui| {
+                    if workspace == WorkspaceView::Clip
+                        && daw_ui::button(ui, "Properties").clicked()
+                    {
+                        self.open_popup(PopupKind::Inspector);
+                    }
+                });
+                if header.back.clicked() {
+                    self.close_popup();
+                } else if self.view == workspace {
+                    if workspace == WorkspaceView::Clip {
+                        self.editor(ui);
+                    } else {
+                        self.mixer(ui);
+                    }
                 }
             });
-            if !open && self.view == workspace {
-                self.close_popup();
-            }
-        }
         self.browser(ctx);
         self.setup(ctx);
         self.inspector(ctx);

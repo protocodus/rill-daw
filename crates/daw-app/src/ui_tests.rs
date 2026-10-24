@@ -480,7 +480,7 @@ fn double_clicking_a_clip_opens_the_focused_editor_without_changing_the_project(
     let output = harness.settle_full();
     assert_eq!(harness.app.view, WorkspaceView::Clip);
     assert!(has_text(&output, "C4"));
-    assert!(has_text(&output, "Clip Editor"));
+    assert!(has_text(&output, "Clip Editor · Pattern"));
     assert_eq!(harness.app.project, before);
 }
 
@@ -502,6 +502,9 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!harness.app.inspector_open);
     let output = harness.menu("Window", "Mixer");
     assert_eq!(harness.app.view, WorkspaceView::Mixer);
+    let channel = text_position(&output, "Channel", 0.0) + Vec2::new(12.0, 8.0);
+    harness.full_click(channel);
+    let output = harness.settle_full();
     let effects = text_position(&output, "Effects", 0.0) + Vec2::new(12.0, 8.0);
     harness.full_click(effects);
     let output = harness.settle_full();
@@ -662,9 +665,21 @@ fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
     harness.full_click(note_position(&output, "C4") + Vec2::new(8.0, 5.0));
     let selected = harness.app.selected_notes.clone();
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0));
-    assert!(egui::Popup::is_any_open(&harness.ctx));
+    harness.full_click(text_position(&output, "Pitch", 0.0) + Vec2::new(8.0, 6.0));
+    let output = harness.settle_full();
+    harness.full_frame(RawInput {
+        events: vec![Event::PointerMoved(
+            text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0),
+        )],
+        ..Default::default()
+    });
+    let output = harness.settle_full();
+    assert!(has_text(&output, "Dorian"));
     harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
+    if egui::Popup::is_any_open(&harness.ctx) {
+        assert_eq!(harness.app.view, WorkspaceView::Clip);
+        harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
+    }
     assert!(!egui::Popup::is_any_open(&harness.ctx));
     assert_eq!(harness.app.view, WorkspaceView::Clip);
     assert_eq!(harness.app.selected_notes, selected);

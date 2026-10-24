@@ -50,6 +50,8 @@ pub enum Icon {
     History,
     Up,
     Down,
+    Back,
+    More,
 }
 
 impl Icon {
@@ -79,14 +81,14 @@ impl Icon {
             "Delete" | "Delete point" | "Delete track" | "Remove" => Self::Delete,
             "Cancel" | "Cancel quantize" | "Close" | "Dismiss" => Self::Close,
             "Apply" | "Apply quantize" | "Assign to selected track" => Self::Check,
-            "Setup" | "Properties" => Self::Settings,
+            "Setup" | "Properties" | "Manage" => Self::Settings,
             "Add folder" | "Browse…" => Self::Folder,
             "Library" | "Browse effects" => Self::Library,
             "Instrument" | "Notes" | "Add instrument…" | "Create instrument track" => {
                 Self::Instrument
             }
             "Effects" | "Add to effect chain" => Self::Effect,
-            "Mixer" => Self::Mixer,
+            "Mixer" | "Channel" => Self::Mixer,
             "Routing" | "Create send effect" => Self::Routing,
             "Edit automation" | "Add automation track" | "Add automation track…" | "Automate" => {
                 Self::Automation
@@ -104,6 +106,8 @@ impl Icon {
             "History…" => Self::History,
             "Semitone up" | "Octave up" => Self::Up,
             "Semitone down" | "Octave down" => Self::Down,
+            "Back" => Self::Back,
+            "More" => Self::More,
             "+ Insert" | "+ Send" | "Add point" | "Add parameter" | "New" => Self::Add,
             _ => return None,
         })
@@ -367,6 +371,14 @@ impl Icon {
                 line(&[(12., 3.), (12., 21.)]);
                 line(&[(5., 14.), (12., 21.), (19., 14.)]);
             }
+            Self::Back => {
+                line(&[(15., 5.), (8., 12.), (15., 19.)]);
+            }
+            Self::More => {
+                for x in [5., 12., 19.] {
+                    circle(x, 12., 1.3);
+                }
+            }
         }
     }
 }
@@ -444,7 +456,12 @@ impl IconButton {
 }
 impl Widget for IconButton {
     fn ui(self, ui: &mut Ui) -> Response {
+        // Keep this native widget in its parent's layout: a nested `scope`
+        // prevents horizontal_wrapped from wrapping individual buttons.
+        let previous_style = ui.style().clone();
+        ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
         let output = self.button.atom_ui(ui);
+        ui.set_style(previous_style);
         if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {
             let color = if self.selected {
                 ui.visuals().selection.stroke.color

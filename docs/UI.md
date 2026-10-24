@@ -2,7 +2,7 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
-Arrangement remains the base canvas. Clip Editor, Instrument, Effects, Mixer, Routing, Automation, Library, Setup, and Properties open on demand as one focused popup at a time. Application commands live in File, Edit, Track, and Window menus. Components keep their labels short; explanations belong in tooltips or the relevant popup rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Automation, Library, Setup, and Properties open on demand as one centered utility at a time, with a quiet background instead of an obscured arranger. Transport and the File, Edit, Track, and Window menus remain available. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 ## Theme and tokens
 
@@ -12,10 +12,10 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | --- | --- |
 | Spacing | `SPACE_XS` 4, `SPACE_SM` 8, `SPACE_MD` 12, `SPACE_LG` 16, `SPACE_XL` 24 |
 | Controls | `CONTROL_HEIGHT` 30, `COMPACT_HEIGHT` 24, `SELECT_WIDTH` 160 |
-| Corners | `RADIUS` 4 |
+| Corners | `RADIUS` 3 |
 | Typography | Caption 13, note 14, button/body 15, subtitle 16, title 20; canvas 12, track title 14 |
 
-Sizes are logical screen points and follow egui's display scaling. The theme also supplies hover, active, selection, and focus styling. Avoid introducing a second app-specific palette or copied spacing scale.
+Sizes are logical screen points and follow egui's display scaling. Surfaces use neutral grays and a restrained luminance hierarchy. Action buttons have a quiet fill; inputs retain visible boundaries. Accent color identifies active choices and keyboard focus. Cards and utility windows have no shadows, and sections use spacing rather than nested outlines. Body and button text remain 15 points, with 30-point action targets. Avoid introducing a second app-specific palette or copied spacing scale.
 
 ## Components
 
@@ -27,6 +27,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `menu_button` |
+| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `action_menu`, `context_section` |
+| Mixer channels and metering | `mixer_strip`, `stereo_meter` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
@@ -77,7 +79,11 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 }
 ```
 
-Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder supplies a common frame, spacing, and initial width. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. It defaults to fixed sizing and no collapse triangle; an individual tool may explicitly override `.resizable(true)` or its width when its content needs it. An `open = false` popup renders no content.
+Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. The native close control remains visible. It supplies a common frame, spacing, and initial width, with fixed sizing and no collapse triangle. Callers may override width, `.resizable(true)`, or `.fixed_pos(...)`; the default pivot is the center. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
+
+`workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `action_menu` is a native menu for secondary commands; use nested action menus for submenus rather than a ComboBox inside a menu, because those share egui's popup state. `context_section` groups a quiet label and controls without another panel outline.
+
+`mixer_strip(ui, id, width, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Width includes its side margins; callers choose a common height. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
 **Setup → Appearance** applies and persists System, Light, or Dark. Cancel discards the draft. Changing only appearance leaves playback and native editors running. Piano-roll black-key rows remain darker than white-key rows in both modes; blue scale and chord tints preserve that distinction. Note labels select a contrasting foreground for their velocity-dependent fill.
 
@@ -116,19 +122,21 @@ cargo test -p daw-ui
 cargo clippy -p daw-ui --all-targets -- -D warnings
 ```
 
-`workspace_popup(title, ctx)` sizes a canvas tool below the transport within the current viewport. The app disables the background arrangement while a tool is open. Menu commands, Escape, and window close all use the same state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
+`workspace_popup(title, ctx)` remains available for a large utility canvas such as automation, bounded below the transport. Clip Editor and Mixer use the central workspace and `workspace_header` instead. Utilities do not paint an inactive arranger behind them. Menu commands, Back, Escape, and window close use the same navigation state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
 
 `curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.
 
 ## Device library and effect chains
 
-**Window → Library** opens a large browser with Instruments and Effects tabs. Search matches names, developers, and category metadata; the developer selector narrows results independently. The details pane shows available category, developer, format, and cached native editor image. A tooltip includes the plugin location and class identity. Add/Assign actions remain above preview content, so a background capture cannot move them under the pointer.
+**Window → Library** opens a large browser with Instruments and Effects tabs. Search matches names, developers, and category metadata; the developer selector narrows results independently. The selected device shows its cached native editor image and one primary action appropriate to the insertion context. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. A tooltip includes the plugin location and class identity. Actions remain above preview content, so a background capture cannot move them under the pointer.
 
 The instrument tab creates a MIDI track and pattern or assigns the selected MIDI track, then opens its native editor. **Effects → + Insert** opens this same browser pinned to that channel. **Add to effect chain** returns to the channel's inserts. **Create send track** creates a bus containing the effect and a post-fader send from the source at 25%; configure the plugin's wet/dry control for the desired return. Routing also offers **Create send track**. Escape returns to the caller without inserting anything.
 
 Plugin discovery stays metadata-only. After discovery, one isolated helper at a time initializes verified instruments and effects and captures native previews into Rill's fingerprinted cache. A selected device is prioritized. Failures are retained and retried only with **Capture preview**; **Refresh preview** explicitly updates a cached image. Existing cache entries display immediately. The browser limits resident small textures to 128 and scales the selected preview to at most 1000×600 pixels.
 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
+
+Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to select it or its destination to open Routing. **Channel** reveals Instrument, Effects and Routing actions. Master shows the stereo output meter; its readings come from the running engine.
 
 
 ## Typography and international names

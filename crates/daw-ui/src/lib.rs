@@ -6,6 +6,7 @@
 
 pub mod curve;
 pub mod icons;
+pub mod layout;
 pub mod piano;
 pub mod text;
 pub mod theme;
@@ -16,6 +17,7 @@ pub mod widgets;
 
 pub use curve::*;
 pub use icons::*;
+pub use layout::*;
 pub use piano::*;
 pub use timeline::*;
 pub use waveform::*;

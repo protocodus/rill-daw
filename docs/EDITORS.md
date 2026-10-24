@@ -6,6 +6,8 @@ Double-click a clip, or select it and choose **Window > Clip Editor**. Each edit
 
 The audio editor changes source references and playback parameters. Source WAV files remain unchanged. The arrangement overview and exported audio use the same reverse and envelope settings.
 
+The **Clip** menu contains cursor jumps, trimming, splitting and clipboard actions. **Process** contains reversal, normalization and transient analysis. Gain stays beside the tools; fade duration and curve controls appear only with the corresponding fade tool. **Close transients** dismisses the analysis settings and markers, including a preview still being calculated.
+
 - **Cursor (P)** seeks by clicking or dragging the waveform. **Clip start** and **Clip end** jump to its bounds. **Set start** and **Set end** trim to the cursor; **Snap end** moves the end to the nearest selected grid division. Trimming cannot expose samples before the source begins.
 - **Cut (E)** splits at the clicked grid position. **Split at cursor** uses the current playback position. Splits and trims preserve the original fade envelope and source samples, including reversed regions.
 - **Fade in (I)** and **Fade out (O)** set the duration by clicking or dragging the waveform. Durations can also be entered in beats. Each fade offers **Linear**, **Equal power**, and **S curve** shapes. Editing a fade explicitly anchors a new envelope to the current clip bounds.
@@ -31,7 +33,7 @@ The piano roll uses **Select (Q)**, **Pencil (W)**, **Cut (E)**, **Duplicate (R)
 
 Shift-dragging a selected note body makes one copy of the selection and moves the copies. Shift-dragging an edge temporarily bypasses the resize grid; ordinary resizing stays snapped. Alt and middle-drag remain reserved for panning.
 
-Root and Scale highlight the matching keyboard keys and pitch rows in blue. The Chord selector offers fourteen chord types and highlights their members more brightly. Multi-draw places the selected chord or scale stack in the clicked octave. Fit and F reveal the earliest note start, latest note end, and full pitch range on both axes.
+**Pitch** opens root, scale and chord choices. The current root and scale remain visible beside it. Scale members tint the keyboard keys and pitch rows blue; fourteen chord types highlight their members more brightly. Multi-draw reveals its stack and chord/scale controls, then places that stack in the clicked octave. **Notes** also provides selected-note velocity and glue controls. Fit and F reveal the earliest note start, latest note end, and full pitch range on both axes.
 
 The velocity lane shares note timing and selection. Pencil paints velocities across notes. Select sets a velocity with a click; dragging selected stems applies a relative change to the selection. Holding a keyboard key or note auditions the assigned VST instrument. Releasing the pointer, losing focus, or leaving the editor stops the audition. An unassigned MIDI track remains silent.
 

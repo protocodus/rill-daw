@@ -166,6 +166,56 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
 }
 
 #[test]
+fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let bass = project.add_midi_track("Bass");
+    let drums = project.add_audio_track("Drums");
+    project.add_bus("Aux");
+    let path = app.directory.path().join("mixer.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.command(json!({"command":"viewport","width":1100,"height":760}));
+    let state = menu(&mut app, "Window", "Mixer");
+    assert_eq!(label_count(&state, "Channel"), 3);
+    assert!(!visible(&state, "Effects"));
+    assert!(!visible(&state, "Instrument"));
+    let route_rows: Vec<_> = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["text"].as_str().unwrap().starts_with("Ch "))
+        .collect();
+    assert_eq!(route_rows.len(), 3);
+    assert!(route_rows.windows(2).all(|rows| {
+        (rows[0]["min"][1].as_f64().unwrap() - rows[1]["min"][1].as_f64().unwrap()).abs() <= 1.0
+    }));
+    assert_eq!(app.click("Drums")["selected_track"], drums);
+    let routing = app.click("Ch 1 > Master");
+    assert_eq!(routing["selected_track"], bass);
+    assert_eq!(routing["popups"]["routing"], true);
+    menu(&mut app, "Window", "Mixer");
+    app.click("Channel");
+    let effects = app.click("Effects");
+    assert_eq!(effects["selected_track"], bass);
+    assert_eq!(effects["popups"]["effects"], true);
+    menu(&mut app, "Window", "Mixer");
+    app.command(json!({"command":"click","label":"Channel","occurrence":1}));
+    let menu_state = app.inspect();
+    assert!(
+        !visible(&menu_state, "Instrument"),
+        "audio channels have no instrument editor"
+    );
+    app.key("Escape");
+    let muted = app.command(json!({"command":"click","label":"Mute","occurrence":1}));
+    assert_eq!(muted["project"]["tracks"][1]["mute"], true);
+    assert_eq!(muted["project"]["tracks"][0]["mute"], false);
+    let undone = menu(&mut app, "Edit", "Undo");
+    assert_eq!(undone["project"]["tracks"][1]["mute"], false);
+    app.quit();
+}
+
+#[test]
 fn output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks() {
     let mut app = Harness::new();
     for name in ["Bus A", "Bus B", "Bus C"] {

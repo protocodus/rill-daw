@@ -89,8 +89,10 @@ fn piano_rows_preserve_black_white_contrast_with_blue_scale_and_chord_tints_in_b
     app.click("Clip Editor");
     for dark in [true, false, true] {
         if !dark {
+            app.click("Pitch");
             app.click("C");
             app.click("C♯");
+            app.click("Pitch");
             app.click("Major triad");
             app.click("Minor triad");
         }

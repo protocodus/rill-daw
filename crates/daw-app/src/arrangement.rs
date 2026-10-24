@@ -47,9 +47,7 @@ impl DawApp {
         ];
         daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         let mut fit = false;
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            ui.add_space(16.0);
+        daw_ui::toolbar(ui, |ui| {
             daw_ui::editor_tools(ui, &mut self.tool, &supported);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 fit = daw_ui::timeline_fit_button(ui).clicked();
@@ -74,7 +72,6 @@ impl DawApp {
                 });
             });
         });
-        ui.add_space(8.0);
         let end = (self.project.end_beat() + 16.0).max(48.0);
         let visible_tracks = crate::routing::visible_tracks(&self.project);
         let row_units: f32 = visible_tracks
@@ -103,7 +100,11 @@ impl DawApp {
             end_row: row_units.max(1.0),
         };
         let canvas = Rect::from_min_max(
-            ui.available_rect_before_wrap().min + Vec2::new(HEADER, 32.0),
+            ui.available_rect_before_wrap().min
+                + Vec2::new(
+                    HEADER,
+                    daw_ui::tokens::TIMELINE_RULER_HEIGHT + ui.spacing().item_spacing.y,
+                ),
             ui.available_rect_before_wrap().max - Vec2::new(12.0, 0.0),
         );
         if fit {

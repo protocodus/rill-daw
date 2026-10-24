@@ -3,23 +3,10 @@ use crate::{
     theme::*,
 };
 use daw_core::*;
-use eframe::egui::{self, Pos2, Rect, Sense, Vec2};
+use eframe::egui::{self, Vec2};
 
 impl DawApp {
     pub fn editor(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.add_space(10.0);
-            if let Some(clip) = self.selected() {
-                ui.label(egui::RichText::new(&clip.name).color(palette(ui.ctx()).accent));
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if daw_ui::button(ui, "Properties").clicked() {
-                    self.open_popup(PopupKind::Inspector);
-                }
-            });
-        });
-        ui.separator();
         let Some(clip) = self.selected() else {
             ui.centered_and_justified(|ui| {
                 ui.label(
@@ -42,147 +29,155 @@ impl DawApp {
             .project
             .tracks
             .iter()
-            .map(|t| (t.id, t.name.clone()))
+            .map(|track| (track.id, track.name.clone()))
             .collect();
         let meter = self
             .engine
             .as_ref()
-            .map(|e| e.snapshot())
+            .map(|engine| engine.snapshot())
             .unwrap_or_default();
+        let strip_width = 180.0;
+        let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
+        let fader_height = 180.0;
         egui::ScrollArea::horizontal()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
                     for (channel, track) in self
                         .project
                         .tracks
                         .iter_mut()
-                        .filter(|t| !matches!(t.kind, TrackKind::Folder | TrackKind::Automation))
+                        .filter(|track| {
+                            !matches!(track.kind, TrackKind::Folder | TrackKind::Automation)
+                        })
                         .enumerate()
                     {
-                        daw_ui::card(ui.ctx()).inner_margin(12).show(ui, |ui| {
-                            ui.vertical(|ui| {
-                                ui.set_width(148.0);
-                                ui.spacing_mut().slider_width = 116.0;
-                                ui.label(
-                                    egui::RichText::new(&track.name)
-                                        .color(readable_track_color(ui.ctx(), track.color))
-                                        .strong(),
-                                );
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "Ch {} > {}",
-                                        channel + 1,
-                                        track
-                                            .output_bus
-                                            .and_then(|id| names.get(&id))
-                                            .map(String::as_str)
-                                            .unwrap_or("Master")
-                                    ))
-                                    .small()
-                                    .color(palette(ui.ctx()).muted),
-                                );
-                                ui.horizontal(|ui| {
+                        let route = format!(
+                            "Ch {} > {}",
+                            channel + 1,
+                            track
+                                .output_bus
+                                .and_then(|id| names.get(&id))
+                                .map(String::as_str)
+                                .unwrap_or("Master")
+                        );
+                        daw_ui::mixer_strip(
+                            ui,
+                            track.id,
+                            strip_width,
+                            Some(color(track.color)),
+                            self.selected_track == Some(track.id),
+                            |ui| {
+                                ui.set_min_height(420.0);
+                                if ui
+                                    .add_sized(
+                                        Vec2::new(content_width, 30.0),
+                                        daw_ui::button_widget(
+                                            daw_ui::text::TextRole::Label
+                                                .rich(ui.ctx(), &track.name),
+                                        )
+                                        .truncate(),
+                                    )
+                                    .on_hover_text(&track.name)
+                                    .clicked()
+                                {
+                                    self.selected_track = Some(track.id);
+                                }
+                                if ui
+                                    .add_sized(
+                                        Vec2::new(content_width, 30.0),
+                                        daw_ui::button_widget(egui::RichText::new(&route).small())
+                                            .truncate(),
+                                    )
+                                    .on_hover_text("Output and sends")
+                                    .clicked()
+                                {
+                                    self.selected_track = Some(track.id);
+                                    popup = Some(PopupKind::Routing);
+                                }
+                                ui.vertical_centered(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "{:.1} dB",
+                                            20.0 * track.gain.max(0.00001).log10()
+                                        ))
+                                        .monospace(),
+                                    );
+                                    ui.spacing_mut().slider_width = fader_height;
                                     changed |= ui
-                                        .add(
+                                        .add_sized(
+                                            Vec2::new(30.0, fader_height),
                                             daw_ui::slider(&mut track.gain, 0.0..=1.5)
                                                 .vertical()
                                                 .show_value(false),
                                         )
+                                        .on_hover_text("Channel volume")
                                         .changed();
-                                    ui.vertical(|ui| {
-                                        ui.label(
-                                            egui::RichText::new(format!(
-                                                "{:.1} dB",
-                                                20.0 * track.gain.max(0.00001).log10()
-                                            ))
-                                            .monospace(),
-                                        );
-                                        changed |=
-                                            daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
-                                        changed |=
-                                            daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
-                                    });
                                 });
+                                ui.spacing_mut().slider_width = content_width - 38.0;
                                 changed |= ui
                                     .add(
                                         daw_ui::slider(&mut track.pan, -1.0..=1.0)
                                             .show_value(false)
                                             .text("Pan"),
                                     )
+                                    .on_hover_text("Stereo balance")
                                     .changed();
-                                for (name, kind, visible) in [
-                                    (
-                                        "Instrument",
-                                        PopupKind::Instrument,
-                                        track.kind == TrackKind::Midi,
-                                    ),
-                                    ("Effects", PopupKind::Effects, true),
-                                    ("Routing", PopupKind::Routing, true),
-                                ] {
-                                    if visible && daw_ui::button(ui, name).clicked() {
-                                        self.selected_track = Some(track.id);
-                                        popup = Some(kind);
-                                    }
-                                }
-                            });
-                        });
-                    }
-                    daw_ui::card(ui.ctx())
-                        .fill(palette(ui.ctx()).panel)
-                        .inner_margin(12)
-                        .show(ui, |ui| {
-                            ui.vertical(|ui| {
-                                ui.set_width(110.0);
-                                ui.label(
-                                    egui::RichText::new("Master")
-                                        .strong()
-                                        .color(palette(ui.ctx()).accent),
-                                );
-                                let (rect, _) =
-                                    ui.allocate_exact_size(Vec2::new(78.0, 116.0), Sense::hover());
-                                let p = ui.painter_at(rect);
-                                for (index, peak) in
-                                    [meter.peak_left, meter.peak_right].iter().enumerate()
-                                {
-                                    let bar = Rect::from_min_size(
-                                        rect.min + Vec2::new(index as f32 * 28.0 + 8.0, 0.0),
-                                        Vec2::new(18.0, rect.height()),
-                                    );
-                                    p.rect_filled(bar, 2.0, palette(ui.ctx()).bg);
-                                    let level = ((20.0 * peak.max(0.001).log10() + 60.0) / 60.0)
-                                        .clamp(0.0, 1.0);
-                                    p.rect_filled(
-                                        Rect::from_min_max(
-                                            Pos2::new(
-                                                bar.left(),
-                                                bar.bottom() - bar.height() * level,
-                                            ),
-                                            bar.max,
+                                ui.horizontal(|ui| {
+                                    changed |=
+                                        daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
+                                    changed |=
+                                        daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                                });
+                                daw_ui::action_menu(ui, "Channel", |ui| {
+                                    for (label, kind, visible) in [
+                                        (
+                                            "Instrument",
+                                            PopupKind::Instrument,
+                                            track.kind == TrackKind::Midi,
                                         ),
-                                        2.0,
-                                        if *peak >= 1.0 {
-                                            palette(ui.ctx()).orange
-                                        } else {
-                                            palette(ui.ctx()).accent
-                                        },
-                                    );
-                                }
-                                ui.label(
-                                    egui::RichText::new("L      R")
-                                        .monospace()
-                                        .color(palette(ui.ctx()).muted),
-                                );
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "{} Hz",
-                                        self.settings.sample_rate
-                                    ))
-                                    .small()
-                                    .color(palette(ui.ctx()).muted),
-                                );
-                            });
+                                        ("Effects", PopupKind::Effects, true),
+                                        ("Routing", PopupKind::Routing, true),
+                                    ] {
+                                        if visible && daw_ui::button(ui, label).clicked() {
+                                            self.selected_track = Some(track.id);
+                                            popup = Some(kind);
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            },
+                        );
+                    }
+                    daw_ui::mixer_strip(ui, "master", strip_width, None, false, |ui| {
+                        ui.set_min_height(420.0);
+                        ui.allocate_ui_with_layout(
+                            Vec2::new(content_width, 30.0),
+                            egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                            |ui| {
+                                daw_ui::text::label(ui, "Master");
+                            },
+                        );
+                        ui.allocate_space(Vec2::new(content_width, 30.0));
+                        ui.vertical_centered(|ui| {
+                            let peak = meter.peak_left.max(meter.peak_right);
+                            ui.label(
+                                egui::RichText::new(if peak > 0.00001 {
+                                    format!("{:.1} dB", 20.0 * peak.log10())
+                                } else {
+                                    "−∞ dB".to_owned()
+                                })
+                                .monospace(),
+                            );
+                            daw_ui::stereo_meter(
+                                ui,
+                                [meter.peak_left, meter.peak_right],
+                                Vec2::new(56.0, fader_height),
+                            );
+                            daw_ui::text::note(ui, "Stereo output");
                         });
+                    });
                 });
             });
         if changed {

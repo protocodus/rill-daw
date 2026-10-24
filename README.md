@@ -58,7 +58,9 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Library** | Search, scan, and assign instruments. |
 | **Setup** | Configure Audio, Storage, Plug-ins, and Appearance on separate pages. |
 
-Each tool opens as a popup over Arrangement. Close it, press Escape, or choose **Window → Arrangement** to return. Nested tools return to their caller when dismissed.
+Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups on a quiet canvas; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
+
+Editing tools stay in a single shared strip. Audio **Clip** and **Process** menus reveal trimming, copy/paste, normalization, reversal, and transient analysis; fade settings appear with the selected fade tool. MIDI **Notes** and **Pitch** menus hold note transformations and scale/chord settings. Secondary controls appear when needed, leaving the waveform or notes in focus.
 
 Arrangement channel headers match Mixer channel numbers and show the destination, such as `Ch 1 > Master` or `Ch 1 > Drum bus`. Expanded audio, MIDI, and bus rows expose **M**ute, **S**olo, volume in dB, and pan from −100 (left) to 100 (right). Drag the numeric controls or double-click to type; −60 dB silences the channel. Click the destination to choose Master or an output bus directly; routes that would create feedback are excluded. MIDI headers also show the assigned instrument: click it to choose or replace the VST and open its native editor. Both pickers remain available in compact rows. Folders and automation tracks do not consume audio channel numbers; folder mute/solo controls their descendants.
 
@@ -84,7 +86,7 @@ The select tool supports dragging a rectangle around notes. Drag note bodies to 
 
 ## Effects, sends, and folders
 
-Select a track and choose **Window → Effects**, or use its Effects button in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
+Select a track and choose **Window → Effects**, or use **Channel → Effects** in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
 
 1. Choose **Track → Add bus**, then rename it in **Window → Properties**.
 2. Open **Window → Effects** and add a VST3 effect to that bus; use 100% wet when appropriate.

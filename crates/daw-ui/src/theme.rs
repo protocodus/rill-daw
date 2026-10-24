@@ -57,20 +57,20 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 pub const DARK: Palette = Palette {
-    bg: rgb(17, 20, 25),
-    panel: rgb(23, 27, 33),
-    raised: rgb(31, 36, 43),
-    line: rgb(54, 63, 74),
-    text: rgb(225, 232, 239),
-    muted: rgb(153, 166, 180),
-    accent: rgb(93, 222, 178),
+    bg: rgb(28, 29, 31),
+    panel: rgb(35, 36, 38),
+    raised: rgb(42, 43, 46),
+    line: rgb(57, 59, 62),
+    text: rgb(225, 227, 230),
+    muted: rgb(163, 168, 174),
+    accent: rgb(115, 205, 178),
     orange: rgb(245, 178, 108),
-    track_selected: rgb(35, 45, 53),
-    track_alternate: rgb(24, 29, 35),
-    grid_minor: rgb(48, 57, 69),
-    grid_bar: rgb(85, 101, 119),
-    control_fill: rgb(48, 58, 68),
-    control_hover: rgb(58, 70, 81),
+    track_selected: rgb(47, 58, 58),
+    track_alternate: rgb(32, 33, 35),
+    grid_minor: rgb(45, 47, 51),
+    grid_bar: rgb(71, 75, 81),
+    control_fill: rgb(49, 51, 54),
+    control_hover: rgb(58, 61, 65),
     piano_black: rgb(27, 33, 41),
     piano_white: rgb(207, 215, 224),
     note: rgb(83, 156, 238),
@@ -80,20 +80,20 @@ pub const DARK: Palette = Palette {
     piano_rows_white: [rgb(42, 48, 56), rgb(40, 57, 76), rgb(44, 65, 88)],
 };
 pub const LIGHT: Palette = Palette {
-    bg: rgb(244, 247, 250),
-    panel: rgb(235, 240, 245),
-    raised: rgb(255, 255, 255),
-    line: rgb(171, 184, 199),
-    text: rgb(25, 38, 51),
-    muted: rgb(76, 94, 112),
-    accent: rgb(0, 111, 78),
+    bg: rgb(247, 247, 246),
+    panel: rgb(239, 240, 239),
+    raised: rgb(250, 250, 249),
+    line: rgb(211, 214, 213),
+    text: rgb(38, 42, 43),
+    muted: rgb(91, 99, 101),
+    accent: rgb(20, 105, 81),
     orange: rgb(153, 77, 0),
-    track_selected: rgb(209, 228, 237),
-    track_alternate: rgb(229, 235, 242),
-    grid_minor: rgb(202, 213, 225),
-    grid_bar: rgb(143, 162, 183),
-    control_fill: rgb(222, 231, 240),
-    control_hover: rgb(204, 220, 234),
+    track_selected: rgb(217, 230, 225),
+    track_alternate: rgb(236, 238, 237),
+    grid_minor: rgb(222, 225, 224),
+    grid_bar: rgb(178, 186, 184),
+    control_fill: rgb(226, 230, 228),
+    control_hover: rgb(215, 222, 219),
     piano_black: rgb(49, 59, 72),
     piano_white: rgb(255, 255, 255),
     note: rgb(34, 105, 183),
@@ -173,19 +173,27 @@ pub fn apply(ctx: &egui::Context) {
         style.visuals.override_text_color = Some(colors.text);
         style.visuals.selection.bg_fill = colors.track_selected;
         style.visuals.selection.stroke = Stroke::new(1.0_f32, colors.accent);
+        style.visuals.window_shadow = egui::epaint::Shadow::NONE;
+        style.visuals.popup_shadow = egui::epaint::Shadow::NONE;
+        style.visuals.window_stroke = Stroke::new(1.0_f32, colors.line);
+        style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, colors.line);
+        style.visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, colors.muted);
         style.visuals.widgets.inactive.bg_fill = colors.control_fill;
         style.visuals.widgets.inactive.weak_bg_fill = colors.raised;
         style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
         style.visuals.widgets.hovered.bg_fill = colors.control_hover;
-        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.muted);
+        style.visuals.widgets.hovered.weak_bg_fill = colors.control_hover;
+        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.line);
         style.visuals.widgets.active.bg_fill = colors.track_selected;
+        style.visuals.widgets.active.weak_bg_fill = colors.track_selected;
         style.visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, colors.accent);
         style.visuals.widgets.inactive.corner_radius = tokens::RADIUS.into();
         style.visuals.widgets.hovered.corner_radius = tokens::RADIUS.into();
         style.visuals.widgets.active.corner_radius = tokens::RADIUS.into();
         style.visuals.window_corner_radius = tokens::RADIUS.into();
+        style.visuals.menu_corner_radius = tokens::RADIUS.into();
         style.spacing.item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
-        style.spacing.button_padding = egui::vec2(tokens::SPACE_MD, tokens::SPACE_XS);
+        style.spacing.button_padding = egui::vec2(tokens::BUTTON_PADDING_X, tokens::SPACE_XS);
         style.spacing.interact_size.y = tokens::CONTROL_HEIGHT;
         style.spacing.combo_width = tokens::SELECT_WIDTH;
         for (text_style, size) in [

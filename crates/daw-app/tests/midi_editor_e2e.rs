@@ -161,10 +161,10 @@ fn chord_and_scale_stacks_highlight_keys_and_velocity_lane_edits_multiple_notes(
     assert_eq!(chord, vec![60, 64, 67]);
     let keys = state["midi_editor"]["keys"].as_array().unwrap();
     assert!(keys.iter().any(|k| k["pitch"] == 64 && k["chord"] == true));
-    app.click("Natural minor");
-    app.click("Major");
     app.click("Chord stack");
     app.click("Scale stack");
+    app.click("Natural minor");
+    app.click("Major");
     let state = app.inspect();
     let state = pointer(&mut app, "click", point(&state, 5.0, 60), None);
     let scale: Vec<_> = notes(&state)
@@ -215,6 +215,7 @@ fn shared_tools_split_glue_duplicate_erase_cursor_and_keyboard_shortcuts() {
     assert_eq!(notes(&state).len(), 2);
     app.key("Q");
     app.command(json!({"command":"key","key":"A","cmd":true}));
+    app.click("Notes");
     app.click("Glue selected");
     assert_eq!(notes(&app.inspect()).len(), 1);
     app.key("R");
@@ -449,6 +450,62 @@ fn quantize_preview_strength_swing_ends_apply_cancel_and_history() {
     let undone = undo(&mut app, false);
     assert_eq!(notes(&undone), before);
     assert!(undone["midi_editor"]["preview_notes"].is_null());
+    app.quit();
+}
+
+#[test]
+fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
+    let mut app = open(vec![
+        Note::new(60, 1.0, 1.0, 90),
+        Note::new(64, 1.0, 1.0, 100),
+    ]);
+    app.command(json!({"command":"viewport","width":1100.0,"height":760.0}));
+    app.key("Q");
+    let before = app.inspect();
+    let visible = |state: &Value, label: &str| {
+        state["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == label)
+    };
+    for label in [
+        "Natural minor",
+        "Major triad",
+        "Chord stack",
+        "Glue selected",
+    ] {
+        assert!(!visible(&before, label), "{label} should be contextual");
+    }
+    let pitch = app.click("Pitch");
+    assert!(visible(&pitch, "Natural minor"));
+    assert!(visible(&pitch, "Major triad"));
+    assert_eq!(app.key("Escape")["view"], "Clip");
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    let selected = app.click("Notes");
+    assert!(visible(&selected, "Glue selected"));
+    assert_eq!(
+        selected["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|value| *value == "Velocity")
+            .count(),
+        2,
+        "Selected velocity control appears alongside the existing velocity lane label"
+    );
+    app.key("Escape");
+    let multi = app.key("U");
+    assert!(visible(&multi, "Chord stack"));
+    assert!(visible(&multi, "Major triad"), "{}", multi["label_rects"]);
+    assert!(visible(&multi, "C · Natural minor"));
+    assert!(
+        multi["midi_editor"]["plot"]["min"][1].as_f64().unwrap() < 330.0,
+        "Context controls wrap without crowding out the editor"
+    );
+    let select = app.key("Q");
+    assert!(!visible(&select, "Chord stack"));
+    assert_eq!(select["project"], before["project"]);
     app.quit();
 }
 

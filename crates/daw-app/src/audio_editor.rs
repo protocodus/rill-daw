@@ -132,10 +132,11 @@ impl DawApp {
                 {
                     match result {
                         Ok(Analysis::Gain(gain)) => edit = Some(Edit::Gain(gain)),
-                        Ok(Analysis::Transients(points)) => {
+                        Ok(Analysis::Transients(points)) if state.transients_open => {
                             state.preview = points;
                             state.preview_source = Some(clip.clone());
                         }
+                        Ok(Analysis::Transients(_)) => {}
                         Err(error) => state.error = error,
                     }
                 }
@@ -149,25 +150,13 @@ impl DawApp {
         let mut analyze = None;
         let mut gain_rect = Rect::NOTHING;
         let mut sensitivity_rect = Rect::NOTHING;
-        ui.horizontal_wrapped(|ui| {
+        let mut fi = *fade_in;
+        let mut fo = *fade_out;
+        let mut fic = *fade_in_curve;
+        let mut foc = *fade_out_curve;
+        daw_ui::toolbar(ui, |ui| {
             daw_ui::editor_tools(ui, &mut state.tool, TOOLS);
-            ui.separator();
             fit = daw_ui::timeline_fit_button(ui).clicked();
-            if daw_ui::button(ui, "Clip start").clicked() {
-                self.seek(clip.start);
-            }
-            if daw_ui::button(ui, "Clip end").clicked() {
-                self.seek(clip.end());
-            }
-            if daw_ui::button(ui, "Snap end")
-                .on_hover_text("Move the clip end to the nearest grid division")
-                .clicked()
-            {
-                let end = self
-                    .snapped(clip.end())
-                    .max(clip.start + self.snap.max(0.001));
-                edit = Some(Edit::Trim(clip.start, end - clip.start));
-            }
             daw_ui::select(
                 "audio_snap",
                 if self.snap > 0.0 {
@@ -191,47 +180,88 @@ impl DawApp {
                     );
                 }
             });
-        });
-        let mut fi = *fade_in;
-        let mut fo = *fade_out;
-        let mut fic = *fade_in_curve;
-        let mut foc = *fade_out_curve;
-        ui.horizontal_wrapped(|ui| {
-            if daw_ui::button(ui, "Set start")
-                .on_hover_text("Trim the clip start to the cursor")
-                .clicked()
-                && self.cursor < clip.end()
-            {
-                edit = Some(Edit::Trim(self.cursor, clip.end() - self.cursor));
-            }
-            if daw_ui::button(ui, "Set end")
-                .on_hover_text("Trim the clip end to the cursor")
-                .clicked()
-                && self.cursor > clip.start
-            {
-                edit = Some(Edit::Trim(clip.start, self.cursor - clip.start));
-            }
-            if daw_ui::button(ui, "Split at cursor").clicked() {
-                edit = Some(Edit::Split(self.cursor));
-            }
-            if daw_ui::button(ui, "Copy").clicked() {
-                state.clipboard = Some(clip.clone());
-            }
-            if ui
-                .add_enabled(state.clipboard.is_some(), daw_ui::button_widget("Paste"))
-                .clicked()
-            {
-                edit = Some(Edit::Paste(state.clipboard.clone().unwrap(), self.cursor));
-            }
-            if daw_ui::button(ui, "Duplicate clip").clicked() {
-                edit = Some(Edit::Duplicate);
-            }
-            let mut reversed = *reverse;
-            if daw_ui::toggle(ui, &mut reversed, "Reverse").changed() {
-                edit = Some(Edit::Reverse);
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
+            daw_ui::action_menu(ui, "Clip", |ui| {
+                if daw_ui::button(ui, "Clip start").clicked() {
+                    self.seek(clip.start);
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Clip end").clicked() {
+                    self.seek(clip.end());
+                    ui.close();
+                }
+                ui.separator();
+                if ui
+                    .add_enabled(self.cursor < clip.end(), daw_ui::button_widget("Set start"))
+                    .on_hover_text("Trim the clip start to the cursor")
+                    .clicked()
+                {
+                    edit = Some(Edit::Trim(self.cursor, clip.end() - self.cursor));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(self.cursor > clip.start, daw_ui::button_widget("Set end"))
+                    .on_hover_text("Trim the clip end to the cursor")
+                    .clicked()
+                {
+                    edit = Some(Edit::Trim(clip.start, self.cursor - clip.start));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Snap end")
+                    .on_hover_text("Move the clip end to the nearest grid division")
+                    .clicked()
+                {
+                    let end = self
+                        .snapped(clip.end())
+                        .max(clip.start + self.snap.max(0.001));
+                    edit = Some(Edit::Trim(clip.start, end - clip.start));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        self.cursor > clip.start && self.cursor < clip.end(),
+                        daw_ui::button_widget("Split at cursor"),
+                    )
+                    .clicked()
+                {
+                    edit = Some(Edit::Split(self.cursor));
+                    ui.close();
+                }
+                ui.separator();
+                if daw_ui::button(ui, "Copy").clicked() {
+                    state.clipboard = Some(clip.clone());
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(state.clipboard.is_some(), daw_ui::button_widget("Paste"))
+                    .clicked()
+                {
+                    edit = Some(Edit::Paste(state.clipboard.clone().unwrap(), self.cursor));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Duplicate clip").clicked() {
+                    edit = Some(Edit::Duplicate);
+                    ui.close();
+                }
+            });
+            daw_ui::action_menu(ui, "Process", |ui| {
+                let mut reversed = *reverse;
+                if daw_ui::checkbox(ui, &mut reversed, "Reverse").changed() {
+                    edit = Some(Edit::Reverse);
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(state.pending.is_none(), daw_ui::button_widget("Normalize"))
+                    .on_hover_text("Set the source peak to -1 dBFS before fades")
+                    .clicked()
+                {
+                    analyze = Some(false);
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Transients").clicked() {
+                    state.transients_open = true;
+                    ui.close();
+                }
+            });
             let mut db = 20.0 * gain.max(0.00001).log10();
             ui.label("Gain");
             let response = ui.add(
@@ -244,55 +274,38 @@ impl DawApp {
             if response.changed() {
                 edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
             }
-            if ui
-                .add_enabled(state.pending.is_none(), daw_ui::button_widget("Normalize"))
-                .on_hover_text("Set the source peak to -1 dBFS before fades")
-                .clicked()
-            {
-                analyze = Some(false);
-            }
-            ui.separator();
-            ui.label("In");
-            let mut changed = ui
-                .add(
-                    daw_ui::number(&mut fi)
-                        .range(0.0..=clip.length)
-                        .speed(0.05)
-                        .suffix(" beats"),
-                )
-                .changed();
-            daw_ui::select("fade_in_curve", fic.name())
-                .width(105.0)
-                .show_ui(ui, |ui| {
-                    for curve in FadeCurve::ALL {
-                        changed |=
-                            daw_ui::selectable_value(ui, &mut fic, curve, curve.name()).changed();
-                    }
-                });
-            ui.label("Out");
-            changed |= ui
-                .add(
-                    daw_ui::number(&mut fo)
-                        .range(0.0..=clip.length)
-                        .speed(0.05)
-                        .suffix(" beats"),
-                )
-                .changed();
-            daw_ui::select("fade_out_curve", foc.name())
-                .width(105.0)
-                .show_ui(ui, |ui| {
-                    for curve in FadeCurve::ALL {
-                        changed |=
-                            daw_ui::selectable_value(ui, &mut foc, curve, curve.name()).changed();
-                    }
-                });
-            if changed {
-                edit = Some(Edit::Fades(fi, fo, fic, foc));
-            }
-            daw_ui::toggle(ui, &mut state.transients_open, "Transients");
         });
+        if matches!(state.tool, EditorTool::FadeIn | EditorTool::FadeOut) {
+            daw_ui::toolbar(ui, |ui| {
+                let (duration, curve, label) = if state.tool == EditorTool::FadeIn {
+                    (&mut fi, &mut fic, "Fade in")
+                } else {
+                    (&mut fo, &mut foc, "Fade out")
+                };
+                ui.label(label);
+                let mut changed = ui
+                    .add(
+                        daw_ui::number(duration)
+                            .range(0.0..=clip.length)
+                            .speed(0.05)
+                            .suffix(" beats"),
+                    )
+                    .changed();
+                daw_ui::select("audio_fade_curve", curve.name())
+                    .width(105.0)
+                    .show_ui(ui, |ui| {
+                        for value in FadeCurve::ALL {
+                            changed |=
+                                daw_ui::selectable_value(ui, curve, value, value.name()).changed();
+                        }
+                    });
+                if changed {
+                    edit = Some(Edit::Fades(fi, fo, fic, foc));
+                }
+            });
+        }
         if state.transients_open {
-            ui.horizontal_wrapped(|ui| {
+            daw_ui::toolbar(ui, |ui| {
                 let previous = state.settings;
                 daw_ui::select("transient_algorithm", state.settings.algorithm.name())
                     .width(135.0)
@@ -338,6 +351,11 @@ impl DawApp {
                     edit = Some(Edit::Transients(state.preview.clone()));
                 }
                 ui.label(format!("{} markers", state.preview.len()));
+                if daw_ui::button(ui, "Close transients").clicked() {
+                    state.transients_open = false;
+                    state.preview.clear();
+                    state.preview_source = None;
+                }
             });
         }
         // Async feedback occupies a stable row below all actions, so completion

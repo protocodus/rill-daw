@@ -93,48 +93,88 @@ fn export(app: &mut Harness, name: &str) -> AudioData {
     app.command(json!({"command":"wait_export"}));
     AudioData::load_wav(path).unwrap()
 }
+fn clip_action(app: &mut Harness, label: &str) -> Value {
+    app.click("Clip");
+    app.click(label)
+}
+fn process_action(app: &mut Harness, label: &str) -> Value {
+    app.click("Process");
+    app.click(label)
+}
 fn near(actual: f64, expected: f64) {
     assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+}
+
+#[test]
+fn audio_secondary_actions_and_fade_controls_appear_only_on_demand() {
+    let mut app = open(4.0, false);
+    app.command(json!({"command":"viewport","width":1100.0,"height":760.0}));
+    let before = app.inspect();
+    let visible = |state: &Value, label: &str| {
+        state["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == label)
+    };
+    for label in ["Set start", "Normalize", "Reverse", "Linear", "Analyze"] {
+        assert!(!visible(&before, label), "{label} should be secondary");
+    }
+    assert!(visible(&app.click("Clip"), "Set start"));
+    assert_eq!(app.key("Escape")["view"], "Clip");
+    assert!(visible(&app.click("Process"), "Normalize"));
+    let analysis = app.click("Transients");
+    assert!(visible(&analysis, "Analyze"));
+    assert!(visible(&analysis, "Close transients"));
+    assert!(!visible(&app.click("Close transients"), "Analyze"));
+    assert!(visible(&app.key("I"), "Linear"));
+    assert!(!visible(&app.key("P"), "Linear"));
+    assert_eq!(app.inspect()["project"], before["project"]);
+    app.quit();
 }
 
 #[test]
 fn cursor_clip_bounds_snap_cut_copy_paste_duplicate_and_undo() {
     let mut app = open(4.13, false);
     near(
-        app.click("Clip end")["audio_editor"]["cursor"]
+        clip_action(&mut app, "Clip end")["audio_editor"]["cursor"]
             .as_f64()
             .unwrap(),
         4.13,
     );
     near(
-        app.click("Clip start")["audio_editor"]["cursor"]
+        clip_action(&mut app, "Clip start")["audio_editor"]["cursor"]
             .as_f64()
             .unwrap(),
         0.0,
     );
     near(
-        clips(&app.click("Snap end"))[0]["length"].as_f64().unwrap(),
+        clips(&clip_action(&mut app, "Snap end"))[0]["length"]
+            .as_f64()
+            .unwrap(),
         4.25,
     );
     undo(&mut app);
     at(&mut app, 1.0);
-    let trimmed = app.click("Set start");
+    let trimmed = clip_action(&mut app, "Set start");
     near(clips(&trimmed)[0]["start"].as_f64().unwrap(), 1.0);
     near(clips(&trimmed)[0]["offset"].as_f64().unwrap(), 1.0);
     undo(&mut app);
     at(&mut app, 2.0);
     near(
-        clips(&app.click("Set end"))[0]["length"].as_f64().unwrap(),
+        clips(&clip_action(&mut app, "Set end"))[0]["length"]
+            .as_f64()
+            .unwrap(),
         2.0,
     );
     undo(&mut app);
-    app.click("Copy");
-    app.click("Clip end");
-    let pasted = app.click("Paste");
+    clip_action(&mut app, "Copy");
+    clip_action(&mut app, "Clip end");
+    let pasted = clip_action(&mut app, "Paste");
     assert_eq!(clips(&pasted).len(), 2);
     near(clips(&pasted)[1]["start"].as_f64().unwrap(), 4.13);
     assert_ne!(clips(&pasted)[0]["id"], clips(&pasted)[1]["id"]);
-    let duplicate = app.click("Duplicate clip");
+    let duplicate = clip_action(&mut app, "Duplicate clip");
     assert_eq!(clips(&duplicate).len(), 3);
     undo(&mut app);
     undo(&mut app);
@@ -145,7 +185,7 @@ fn cursor_clip_bounds_snap_cut_copy_paste_duplicate_and_undo() {
     undo(&mut app);
     app.key("P");
     at(&mut app, 2.0);
-    assert_eq!(clips(&app.click("Split at cursor")).len(), 2);
+    assert_eq!(clips(&clip_action(&mut app, "Split at cursor")).len(), 2);
     app.quit();
 }
 
@@ -160,7 +200,7 @@ fn fades_curves_reverse_gain_normalize_and_export_match_source() {
     near(audio(&at(&mut app, 3.0))["fade_out"].as_f64().unwrap(), 1.0);
     app.click("Linear");
     app.click("S curve");
-    let reversed = app.click("Reverse");
+    let reversed = process_action(&mut app, "Reverse");
     assert_eq!(audio(&reversed)["reverse"], true);
     let rect = &reversed["audio_editor"]["gain_rect"];
     let x = (rect[0].as_f64().unwrap() + rect[2].as_f64().unwrap()) / 2.0;
@@ -170,11 +210,11 @@ fn fades_curves_reverse_gain_normalize_and_export_match_source() {
     app.command(json!({"command":"text","text":"-6"}));
     let gain = app.key("Enter");
     near(audio(&gain)["gain"].as_f64().unwrap(), 10.0_f64.powf(-0.3));
-    app.click("Normalize");
+    process_action(&mut app, "Normalize");
     let normalized = wait(&mut app);
     let gain = audio(&normalized)["gain"].as_f64().unwrap();
     near(gain * (0.1 + 95999.0 / 400000.0), 10.0_f64.powf(-0.05));
-    app.click("Normalize");
+    process_action(&mut app, "Normalize");
     near(audio(&wait(&mut app))["gain"].as_f64().unwrap(), gain);
     let rendered = export(&mut app, "edited.wav");
     assert_eq!(rendered.channels, 2);
@@ -207,7 +247,7 @@ fn fades_curves_reverse_gain_normalize_and_export_match_source() {
 fn transient_algorithm_sensitivity_preview_and_split_are_undoable_and_preserve_audio() {
     let mut app = open(4.0, true);
     let original = export(&mut app, "before.wav");
-    app.click("Transients");
+    process_action(&mut app, "Transients");
     app.click("Analyze");
     let low = wait(&mut app);
     assert_eq!(low["audio_editor"]["preview"].as_array().unwrap().len(), 2);
@@ -252,11 +292,7 @@ fn audio_pan_zoom_and_fit_reset_both_axes_without_changing_clip() {
     );
     app.command(json!({"command":"pointer","phase":"drag","button":"middle","x":x,"y":y,"to_x":x-100.0,"to_y":y-40.0}));
     for fit in [false, true] {
-        let state = if fit {
-            app.command(json!({"command":"click","label":"Fit","occurrence":1}))
-        } else {
-            app.key("F")
-        };
+        let state = if fit { app.click("Fit") } else { app.key("F") };
         let view = &state["audio_editor"];
         let width = view["rect"][2].as_f64().unwrap() - view["rect"][0].as_f64().unwrap();
         let height = view["rect"][3].as_f64().unwrap() - view["rect"][1].as_f64().unwrap();
@@ -288,7 +324,7 @@ fn audio_pan_zoom_and_fit_reset_both_axes_without_changing_clip() {
             .unwrap(),
         initial_reference,
     );
-    let fitted = app.command(json!({"command":"click","label":"Fit","occurrence":1}));
+    let fitted = app.click("Fit");
     near(
         fitted["audio_editor"]["amplitude_reference"]
             .as_f64()

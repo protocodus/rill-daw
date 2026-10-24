@@ -221,7 +221,9 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
         assert_eq!(lane["target"]["parameter"], parameter);
     }
     let before = app.inspect()["project"].clone();
-    app.key("Escape");
+    // Escape restores Routing, the caller of the parameter picker. Return to
+    // the arranger explicitly before selecting a track on its canvas.
+    menu(&mut app, "Window", "Arrangement");
     app.click("New instrument");
     menu(&mut app, "Window", "Effects");
     let state = app.click("×");
@@ -294,6 +296,7 @@ fn installed_vst_parameter_discovery_creates_named_lane_with_current_value() {
         .filter(|label| *label == name.as_ref())
         .count();
     app.command(json!({"command":"click","label":name,"occurrence":count-1}));
+    app.click("More");
     let state = app.click("Assign to selected track");
     assert_eq!(
         std::path::Path::new(

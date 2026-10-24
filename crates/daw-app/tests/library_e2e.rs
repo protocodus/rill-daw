@@ -32,6 +32,9 @@ fn effect(app: &mut Harness, action: &str) -> Value {
     app.command(json!({"command":"text","text":"Rill Fixture FX"}));
     common::wait_visible(app, "Add to effect chain");
     front(app, "Rill Fixture FX");
+    if action != "Add to effect chain" {
+        app.click("More");
+    }
     app.click(action)
 }
 fn rect(state: &Value, label: &str, occurrence: usize) -> (f64, f64) {
@@ -88,7 +91,10 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
         visible(&state, "Other Keys"),
         "Category metadata is searchable"
     );
-    assert!(visible(&state, "VST3 · Instrument · Piano"));
+    assert!(!visible(&state, "VST3 · Instrument · Piano"));
+    let details = app.click("More");
+    assert!(visible(&details, "VST3 · Instrument · Piano"));
+    app.key("Escape");
     let created = app.click("Add instrument track");
     assert_eq!(created["project"]["tracks"].as_array().unwrap().len(), 1);
     assert_eq!(created["project"]["tracks"][0]["name"], "Other Keys");
@@ -101,6 +107,7 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
     app.command(json!({"command":"key","key":"A","cmd":true}));
     app.command(json!({"command":"text","text":"Rill Fixture"}));
     front(&mut app, "Rill Fixture B");
+    app.click("More");
     let assigned = app.click("Assign to selected track");
     assert_eq!(assigned["project"]["tracks"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -222,13 +229,48 @@ fn library_reuses_cached_native_preview_records_for_instruments_and_effects() {
         assert_eq!(entry["status"], "Ready");
         assert!(std::path::Path::new(entry["thumbnail"].as_str().unwrap()).exists());
     }
-    assert!(visible(&state, "Refresh preview"));
+    assert!(!visible(&state, "Refresh preview"));
+    let details = app.click("More");
+    assert!(visible(&details, "Refresh preview"));
+    app.key("Escape");
     app.click("Effects");
     app.click("Search effects");
     app.command(json!({"command":"text","text":"Rill Fixture FX"}));
     let state = app.inspect();
     assert!(visible(&state, "Rill Fixture FX"));
     assert!(!visible(&state, "Rill Fixture A"));
-    assert!(visible(&state, "Refresh preview"));
+    assert!(!visible(&state, "Refresh preview"));
+    let details = app.click("More");
+    assert!(visible(&details, "Refresh preview"));
+    app.key("Escape");
+    app.quit();
+}
+
+#[test]
+fn send_browser_has_one_contextual_action_and_library_management_is_on_demand() {
+    let fixture = common::plugin_fixture();
+    let mut app = Harness::with_vst_path(fixture.path());
+    menu(&mut app, "Track", "Add audio track");
+    menu(&mut app, "Window", "Routing");
+    app.click("Create send track");
+    app.click("Search effects");
+    app.command(json!({"command":"text","text":"Rill Fixture FX"}));
+    common::wait_visible(&mut app, "Create send track");
+    let state = app.inspect();
+    assert!(visible(&state, "Scan"));
+    assert!(!visible(&state, "Add to effect chain"));
+    assert!(!visible(&state, "Capture preview"));
+    let added = app.click("Create send track");
+    assert_eq!(added["project"]["tracks"][1]["kind"], "Bus");
+    assert_eq!(
+        added["project"]["tracks"][0]["sends"][0]["target_bus"],
+        added["project"]["tracks"][1]["id"]
+    );
+    menu(&mut app, "Window", "Library");
+    let managed = app.click("Manage");
+    assert!(visible(&managed, "Folders"));
+    let setup = app.click("Folders");
+    assert_eq!(setup["popups"]["setup"], true);
+    assert_eq!(setup["popups"]["library"], false);
     app.quit();
 }

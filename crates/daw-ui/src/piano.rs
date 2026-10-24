@@ -53,7 +53,7 @@ pub fn piano_key(
             color,
         );
     }
-    if !label.is_empty() && rect.height() >= 14.0 {
+    if !label.is_empty() && rect.height() >= 14.0 && painter.clip_rect().contains_rect(rect) {
         painter.text(
             rect.right_center() - Vec2::new(11.0, 0.0),
             Align2::RIGHT_CENTER,

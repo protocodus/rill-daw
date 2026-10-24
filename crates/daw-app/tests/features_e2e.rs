@@ -161,11 +161,16 @@ fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_p
     menu(&mut app, "Track", "Add MIDI track");
     app.key("Escape");
     menu(&mut app, "Window", "Clip Editor");
+    app.click("Pitch");
     let open = app.click("Natural minor");
     assert!(visible(&open, "Dorian"));
     let closed = app.key("Escape");
     assert_eq!(closed["view"], "Clip");
     assert!(!visible(&closed, "Dorian"));
+    // Finish the local Pitch menu before opening a different menu bar action.
+    if visible(&closed, "Major triad") {
+        assert_eq!(app.key("Escape")["view"], "Clip");
+    }
     let menu_open = app.click("Edit");
     assert!(visible(&menu_open, "Split at cursor"));
     let menu_closed = app.key("Escape");
@@ -237,6 +242,7 @@ fn instrument_and_library_selection_are_undoable_and_escape_closes_the_popup() {
     );
     common::fixture_library(&mut app);
     app.click("Rill Fixture B");
+    app.click("More");
     let state = app.click("Assign to selected track");
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
     assert_eq!(

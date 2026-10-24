@@ -437,6 +437,9 @@ impl DawApp {
             .id(egui::Id::new("instrument_editor"))
             .open(&mut open)
             .default_width(600.0)
+            // The parameter list owns scrolling. An outer window scroller
+            // would hide actions when asynchronous metadata grows the body.
+            .vscroll(false)
             .show(ctx, |ui| match &instrument {
                 Instrument::None => {
                     ui.label("No instrument assigned");
@@ -495,24 +498,6 @@ impl DawApp {
                             )
                             .clicked();
                     });
-                    let filter = self.instrument_ui.filter.to_lowercase();
-                    egui::ScrollArea::vertical()
-                        .id_salt("instrument_parameters")
-                        .max_height(260.0)
-                        .show(ui, |ui| {
-                            for parameter in
-                                self.instrument_ui.parameters.iter().filter(|p| {
-                                    !p.read_only && p.name.to_lowercase().contains(&filter)
-                                })
-                            {
-                                daw_ui::selectable_value(
-                                    ui,
-                                    &mut self.instrument_ui.selected,
-                                    Some(parameter.id),
-                                    &parameter.name,
-                                );
-                            }
-                        });
                     if let Some(parameter) = self
                         .instrument_ui
                         .selected
@@ -549,6 +534,30 @@ impl DawApp {
                     if let Some(error) = &self.instrument_ui.error {
                         ui.colored_label(palette(ui.ctx()).orange, error);
                     }
+                    // Keep the current value and automation commands visible;
+                    // only the potentially thousands of parameter names scroll.
+                    let filter = self.instrument_ui.filter.to_lowercase();
+                    egui::ScrollArea::vertical()
+                        .id_salt("instrument_parameters")
+                        .min_scrolled_height(daw_ui::tokens::CONTROL_HEIGHT)
+                        .max_height(
+                            ui.available_height()
+                                .clamp(daw_ui::tokens::CONTROL_HEIGHT, 260.0),
+                        )
+                        .show(ui, |ui| {
+                            for parameter in
+                                self.instrument_ui.parameters.iter().filter(|p| {
+                                    !p.read_only && p.name.to_lowercase().contains(&filter)
+                                })
+                            {
+                                daw_ui::selectable_value(
+                                    ui,
+                                    &mut self.instrument_ui.selected,
+                                    Some(parameter.id),
+                                    &parameter.name,
+                                );
+                            }
+                        });
                 }
             });
         self.instrument_open &= open;
@@ -1016,6 +1025,121 @@ mod tests {
         app.modified = true;
         app.instrument_ui.owner = Some((id.into(), instrument));
         app
+    }
+
+    #[test]
+    fn late_parameter_metadata_keeps_automation_actions_visible_and_clickable() {
+        for (size, appearance, last_touched) in [
+            (
+                egui::vec2(1100.0, 720.0),
+                daw_ui::theme::Appearance::Dark,
+                false,
+            ),
+            (
+                egui::vec2(1100.0, 720.0),
+                daw_ui::theme::Appearance::Light,
+                true,
+            ),
+            (
+                egui::vec2(1600.0, 1200.0),
+                daw_ui::theme::Appearance::Dark,
+                true,
+            ),
+            (
+                egui::vec2(1600.0, 1200.0),
+                daw_ui::theme::Appearance::Light,
+                false,
+            ),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let ctx = egui::Context::default();
+            let mut app = pending_app(&ctx, directory.path());
+            daw_ui::theme::set_appearance(&ctx, appearance);
+            app.instrument_open = true;
+            let draw = |app: &mut DawApp, events| {
+                ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| app.plugin_instrument_editor(ctx),
+                )
+            };
+            // Real editors open before their asynchronous metadata arrives.
+            for _ in 0..3 {
+                draw(&mut app, vec![]);
+            }
+            app.instrument_ui.parameters = (0..2855)
+                .map(|id| ParameterInfo {
+                    id,
+                    name: format!("Parameter {id}"),
+                    value: 0.5,
+                    default: 0.5,
+                    unit: String::new(),
+                    steps: 0,
+                    read_only: false,
+                })
+                .collect();
+            app.instrument_ui.selected = Some(100);
+            app.instrument_ui.last_touched = Some(101);
+            let mut output = draw(&mut app, vec![]);
+            for _ in 0..3 {
+                output = draw(&mut app, vec![]);
+            }
+            let label = if last_touched {
+                "Automate last touched · Parameter 101"
+            } else {
+                "Automate parameter"
+            };
+            let rect = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => {
+                        let rect = text.galley.rect.translate(text.pos.to_vec2());
+                        shape.clip_rect.contains_rect(rect).then_some(rect)
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{label} must remain fully visible after2855 parameters arrive at {size:?}"
+                    )
+                });
+            assert!(
+                egui::Rect::from_min_size(egui::pos2(0.0, 104.0), size - egui::vec2(0.0, 104.0))
+                    .contains_rect(rect)
+            );
+            for pressed in [true, false] {
+                draw(
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(rect.center()),
+                        egui::Event::PointerButton {
+                            pos: rect.center(),
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert_eq!(app.project.tracks.len(), 2);
+            assert_eq!(
+                app.project.tracks[1]
+                    .automation
+                    .as_ref()
+                    .unwrap()
+                    .target
+                    .parameter,
+                AutomationParameter::VstParameter {
+                    effect: None,
+                    id: if last_touched { 101 } else { 100 }
+                }
+            );
+            assert!(app.automation_open);
+        }
     }
 
     #[test]

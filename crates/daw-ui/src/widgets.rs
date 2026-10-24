@@ -6,6 +6,8 @@ use egui::{Button, ComboBox, DragValue, Frame, InnerResponse, Response, Slider, 
 use std::{hash::Hash, ops::RangeInclusive};
 
 pub fn button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
+    // A quiet filled action retains its hit target and native focus outline.
+    // Input widgets continue to use the theme's visible boundary stroke.
     crate::IconButton::new(label)
 }
 
@@ -14,11 +16,7 @@ pub fn button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
 }
 
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
-    ui.add(
-        button_widget(label)
-            .fill(theme::palette(ui.ctx()).accent.gamma_multiply(0.24))
-            .stroke(egui::Stroke::new(1.0_f32, theme::palette(ui.ctx()).accent)),
-    )
+    ui.add(button_widget(label).fill(theme::palette(ui.ctx()).track_selected))
 }
 
 pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
@@ -341,8 +339,8 @@ pub fn color_edit(ui: &mut Ui, value: &mut [u8; 3]) -> Response {
     ui.color_edit_button_srgb(value)
 }
 
-/// Search-result row with an optional real preview image. A missing image leaves
-/// the row compact; callers do not need to invent an instrument thumbnail.
+/// Search-result row with an optional real preview image. Missing images reserve
+/// the same space so titles stay aligned as asynchronous previews arrive.
 pub fn catalog_item(
     ui: &mut Ui,
     selected: bool,
@@ -368,20 +366,20 @@ pub fn catalog_item(
         rect,
         tokens::RADIUS,
         if selected {
-            theme::palette(ui.ctx()).accent.gamma_multiply(0.15)
+            theme::palette(ui.ctx()).track_selected
         } else if response.hovered() {
             theme::palette(ui.ctx()).raised
         } else {
             theme::palette(ui.ctx()).panel
         },
     );
-    let mut x = rect.left() + tokens::SPACE_MD;
+    let image_x = rect.left() + tokens::SPACE_MD;
+    let image_size = egui::vec2(58.0, height - 8.0);
     if let Some(texture) = thumbnail {
-        let size = egui::vec2(58.0, height - 8.0);
         let original = texture.size_vec2();
-        let scale = (size.x / original.x).min(size.y / original.y);
+        let scale = (image_size.x / original.x).min(image_size.y / original.y);
         let image_rect = egui::Rect::from_center_size(
-            egui::pos2(x + size.x * 0.5, rect.center().y),
+            egui::pos2(image_x + image_size.x * 0.5, rect.center().y),
             original * scale,
         );
         painter.image(
@@ -390,8 +388,8 @@ pub fn catalog_item(
             egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
             egui::Color32::WHITE,
         );
-        x += size.x + tokens::SPACE_MD;
     }
+    let x = image_x + image_size.x + tokens::SPACE_MD;
     crate::text::paint_row(
         &painter,
         egui::Rect::from_min_max(
@@ -458,7 +456,6 @@ pub fn card(ctx: &egui::Context) -> Frame {
         .fill(theme::palette(ctx).raised)
         .inner_margin(tokens::SPACE_MD)
         .corner_radius(tokens::RADIUS)
-        .stroke(egui::Stroke::new(1.0_f32, theme::palette(ctx).line))
 }
 
 pub fn inset(ctx: &egui::Context) -> Frame {
@@ -471,9 +468,23 @@ pub fn inset(ctx: &egui::Context) -> Frame {
 /// On-demand property/utility window with the same surfaces and spacing as the
 /// main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
 pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
+    let viewport = ctx.content_rect();
+    let available = egui::Rect::from_min_max(
+        viewport.min + egui::vec2(tokens::SPACE_XL, 104.0),
+        viewport.max - egui::Vec2::splat(tokens::SPACE_XL),
+    );
     egui::Window::new(title)
         .frame(panel(ctx).stroke(egui::Stroke::new(1.0_f32, theme::palette(ctx).line)))
         .default_width(480.0)
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(available.center())
+        .max_size(
+            (available.size() - egui::Vec2::splat(2.0 * tokens::SPACE_LG))
+                .max(egui::vec2(160.0, 120.0)),
+        )
+        .constrain_to(available)
+        .movable(false)
+        .scroll([false, true])
         .collapsible(false)
         .resizable(false)
 }
@@ -487,6 +498,7 @@ pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) ->
         (viewport.height() - 196.0).max(240.0),
     );
     popup(title, ctx)
+        .pivot(egui::Align2::LEFT_TOP)
         .fixed_pos(viewport.min + egui::vec2(24.0, 112.0))
         .fixed_size(size)
         .movable(false)

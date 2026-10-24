@@ -176,6 +176,19 @@ fn fixed_catalog_names_use_ellipsis_and_dense_piano_rows_hide_labels() {
                 1,
                 false,
             );
+            // A full-size key can still be only partly visible at a scrolled
+            // viewport edge. Do not paint a cut-off fragment of its pitch name.
+            daw_ui::piano_key(
+                &ui.painter().with_clip_rect(Rect::from_min_size(
+                    egui::pos2(20.0, 110.0),
+                    Vec2::new(60.0, 20.0),
+                )),
+                Rect::from_min_size(egui::pos2(20.0, 100.0), Vec2::new(60.0, 18.0)),
+                "C5",
+                false,
+                1,
+                false,
+            );
         });
     });
     let rows: Vec<_> = output
@@ -186,7 +199,11 @@ fn fixed_catalog_names_use_ellipsis_and_dense_piano_rows_hide_labels() {
             _ => None,
         })
         .collect();
-    assert_eq!(rows.len(), 1, "tiny piano labels must be hidden");
+    assert_eq!(
+        rows.len(),
+        1,
+        "tiny and partly clipped piano labels must be hidden"
+    );
     assert!(rows[0].galley.elided);
     assert_eq!(rows[0].galley.rows.len(), 1);
     assert!(rows[0].galley.size().x <= 120.0);

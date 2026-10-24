@@ -19,6 +19,8 @@ Header-picker scenarios change the output bus directly from the sequencer, retur
 
 The headless tests cover application behavior, UI event handling, model changes, decoding, rendering, export, and shutdown. Metadata-only VST fixtures verify folder setup, scans, search, multi-class instrument assignment, insert chains, and automation without claiming to execute a real plug-in. Native window tests are separate; platform file dialogs and hardware drivers still need manual testing.
 
+`focus_e2e` checks that only one workspace renders its controls, Back returns to Arrangement, nested Properties restores the editor viewport, and navigation leaves the project unchanged. It exercises both themes at 1100×760. Editor and library scenarios also exercise their on-demand menus through real pointer events.
+
 Run the native application test on a desktop (or prefix with `xvfb-run -a` on Linux):
 
 ```sh
