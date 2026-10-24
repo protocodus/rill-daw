@@ -79,6 +79,8 @@ pub struct DawApp {
     settings_rollback: Option<Settings>,
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
+    pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
+    pub(crate) next_document_dialog: Option<(crate::document_ui::DocumentDialog, Option<PathBuf>)>,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
     pub(crate) exported_file: Option<PathBuf>,
     pub revision: u64,
@@ -177,6 +179,8 @@ impl DawApp {
             settings_rollback: None,
             retiring: None,
             project_io: Default::default(),
+            document_guard: None,
+            next_document_dialog: None,
             export_job: None,
             exported_file: None,
             revision: 0,
@@ -533,6 +537,7 @@ impl DawApp {
             self.project
                 .track(*track)
                 .is_some_and(|track| matches!(track.instrument, Instrument::Vst3 { .. }))
+                && self.document_guard.is_none()
                 && !self.library_open
                 && !self.instrument_open
                 && !self.effects_open
@@ -800,13 +805,7 @@ impl DawApp {
         } else {
             self.project_path.clone()
         }
-        .or_else(|| {
-            rfd::FileDialog::new()
-                .set_file_name(format!("{}.rill", self.project.name))
-                .add_filter("Rill project", &["rill"])
-                .add_filter("Legacy Rill session", &["json"])
-                .save_file()
-        });
+        .or_else(|| self.pick_document_path(crate::document_ui::DocumentDialog::Save));
         if let Some(path) = path {
             self.save_to(path);
         }
@@ -916,12 +915,11 @@ impl DawApp {
         }
     }
     fn open(&mut self) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Rill project", &["rill"])
-            .add_filter("Legacy Rill session", &["json"])
-            .pick_file()
-        {
-            self.request_open_project(path, false);
+        if let Some(path) = self.pick_document_path(crate::document_ui::DocumentDialog::Open) {
+            self.request_document_transition(crate::document_ui::DocumentTransition::Open {
+                path,
+                recovery: false,
+            });
         }
     }
     pub(crate) fn finish_open_project(
@@ -1181,6 +1179,9 @@ impl DawApp {
         }
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
+        if self.document_guard.is_some() {
+            return;
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             // Native menus and dropdowns process Escape during their own draw.
             // Leave the containing workspace intact until that inner popup closes.
@@ -1189,8 +1190,31 @@ impl DawApp {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
+                if self.automation_open && crate::automation_editor::cancel_automation_creation(ctx)
+                {
+                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+                    return;
+                }
                 self.close_popup();
             }
+            return;
+        }
+        // Document shortcuts remain available from every focused workspace.
+        if ctx.input_mut(|i| {
+            i.consume_key(
+                egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                egui::Key::S,
+            )
+        }) {
+            self.save(true);
+            return;
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+            self.save(false);
+            return;
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
+            self.open();
             return;
         }
         let curve_focused = (self.crossfade_open
@@ -1239,9 +1263,6 @@ impl DawApp {
         if ctx.input(|i| i.key_pressed(egui::Key::Home)) {
             self.seek(0.0);
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
-            self.save(ctx.input(|i| i.modifiers.shift));
-        }
         if self.view == WorkspaceView::Clip
             && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A))
             && let Some(Clip {
@@ -1250,9 +1271,6 @@ impl DawApp {
             }) = self.selected()
         {
             self.selected_notes = notes.iter().map(|n| n.id).collect();
-        }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
-            self.open();
         }
         if !self.midi_editor.quantize_active()
             && ctx
@@ -1404,10 +1422,11 @@ impl DawApp {
         egui::TopBottomPanel::top("application-menu")
             .frame(daw_ui::panel(ctx).inner_margin(6).corner_radius(0))
             .show(ctx, |ui| {
+                if self.document_guard.is_some() { ui.disable(); }
                 daw_ui::menu_bar(ui, |ui| {
                     daw_ui::menu_button(ui, "File", |ui| {
                         if daw_ui::button(ui, "New").clicked() {
-                            self.new_session();
+                            self.request_document_transition(crate::document_ui::DocumentTransition::New);
                             ui.close();
                         }
                         if daw_ui::button(ui, "Open…").on_hover_text("⌘O").clicked() {
@@ -1443,7 +1462,7 @@ impl DawApp {
                         }
                         ui.separator();
                         if daw_ui::button(ui, "Quit").clicked() {
-                            self.request_quit(ctx);
+                            self.request_document_transition(crate::document_ui::DocumentTransition::Quit);
                             ui.close();
                         }
                     });
@@ -1623,16 +1642,15 @@ impl DawApp {
                             ui.close();
                         }
                     });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            RichText::new(format!(
-                                "{}{}",
-                                self.project.name,
-                                if self.modified { " •" } else { "" }
-                            ))
-                            .color(palette(ui.ctx()).muted),
-                        );
-                    });
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width().max(0.0), daw_ui::tokens::CONTROL_HEIGHT),
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, format!(
+                                "{}{}", self.project.name, if self.modified { " •" } else { "" }
+                            ));
+                        },
+                    );
                 });
             });
     }
@@ -1757,14 +1775,7 @@ impl DawApp {
             }
             ui.separator();
             if daw_ui::button(ui, "Add automation track…").clicked() {
-                if let Some(target) = self
-                    .selected_track
-                    .and_then(|id| self.project.track(id))
-                    .and_then(|track| track.automation.as_ref())
-                    .map(|lane| lane.target.track)
-                {
-                    self.selected_track = Some(target);
-                }
+                self.start_automation_creation(ui.ctx());
                 self.open_popup(PopupKind::Automation);
                 ui.close();
             }
@@ -1851,7 +1862,7 @@ impl DawApp {
                     ui.horizontal(|ui| {
                         if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() { self.setup_draft.scratch_dir = path; }
                         if daw_ui::button(ui, "Recover session").clicked() {
-                            self.request_open_project(self.setup_draft.scratch_dir.join("recovery.daw.json"), true);
+                            self.request_document_transition(crate::document_ui::DocumentTransition::Open { path: self.setup_draft.scratch_dir.join("recovery.daw.json"), recovery: true });
                         }
                     });
                 }
@@ -1923,17 +1934,19 @@ impl DawApp {
         }
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.request_quit(ctx);
+            self.request_document_transition(crate::document_ui::DocumentTransition::Quit);
         }
-        if ctx.input(|i| {
-            i.pointer.any_pressed()
-                || i.events.iter().any(|e| {
-                    matches!(
-                        e,
-                        egui::Event::Text(_) | egui::Event::Paste(_) | egui::Event::Key { .. }
-                    )
-                })
-        }) {
+        if self.document_guard.is_none()
+            && ctx.input(|i| {
+                i.pointer.any_pressed()
+                    || i.events.iter().any(|e| {
+                        matches!(
+                            e,
+                            egui::Event::Text(_) | egui::Event::Paste(_) | egui::Event::Key { .. }
+                        )
+                    })
+            })
+        {
             self.begin_edit();
             if ctx.wants_keyboard_input()
                 && ctx.input(|i| {
@@ -1987,7 +2000,13 @@ impl DawApp {
             self.vst_scan = None;
         }
         self.poll_plugin_previews(ctx);
+        self.poll_document_guard(ctx);
         self.menus(ctx);
+        if self.document_guard.is_some() {
+            self.document_guard_frame(ctx);
+            self.capture_screenshot(ctx);
+            return;
+        }
         self.transport(ctx);
         self.status_notice(ctx);
         if self.view == WorkspaceView::Clip && self.selected().is_none() {
@@ -2093,6 +2112,21 @@ impl DawApp {
             self.request_recovery_save();
             self.last_recovery = Instant::now();
         }
+        self.capture_screenshot(ctx);
+        ctx.request_repaint_after(Duration::from_millis(
+            if self.playing()
+                || self.loading.is_some()
+                || self.export_job.is_some()
+                || self.project_io_pending()
+                || self.screenshot.is_some()
+            {
+                16
+            } else {
+                100
+            },
+        ));
+    }
+    fn capture_screenshot(&mut self, ctx: &egui::Context) {
         if let Some(path) = &self.screenshot {
             if self.frame_count >= 8 && self.vst_scan.is_none() && !self.screenshot_requested {
                 self.screenshot_requested = true;
@@ -2122,18 +2156,9 @@ impl DawApp {
                 self.request_quit(ctx);
             }
         }
-        ctx.request_repaint_after(Duration::from_millis(
-            if self.playing()
-                || self.loading.is_some()
-                || self.export_job.is_some()
-                || self.project_io_pending()
-                || self.screenshot.is_some()
-            {
-                16
-            } else {
-                100
-            },
-        ));
+        if self.screenshot.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        }
     }
 }
 

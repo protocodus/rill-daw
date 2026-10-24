@@ -18,7 +18,15 @@ fn native_window_renders_and_exits_after_screenshot() {
     project.save(&session).unwrap();
     let binary =
         std::env::var_os("RILL_E2E_BINARY").unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
-    for view in ["arrangement", "instrument", "mixer", "setup", "properties"] {
+    for view in [
+        "arrangement",
+        "instrument",
+        "mixer",
+        "setup",
+        "properties",
+        "automation",
+        "unsaved-changes",
+    ] {
         let screenshot = directory.path().join(format!("{view}.png"));
         let mut child = Command::new(&binary)
             .arg("--screenshot")

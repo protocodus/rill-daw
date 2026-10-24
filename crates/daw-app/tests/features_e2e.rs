@@ -178,7 +178,8 @@ fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_p
     assert!(!visible(&menu_closed, "Split at cursor"));
 
     app.click("Properties");
-    let cleared = menu(&mut app, "File", "New");
+    menu(&mut app, "File", "New");
+    let cleared = app.click("Don't save");
     assert_only_popup(&cleared, "none");
     assert!(cleared["project"]["tracks"].as_array().unwrap().is_empty());
     let escaped = app.key("Escape");
@@ -637,6 +638,10 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     let deadline = Instant::now() + Duration::from_secs(35);
     loop {
         let state = app.inspect();
+        if state["document_guard"]["phase"] == "confirm" {
+            app.click("Don't save");
+            continue;
+        }
         if state["project"]["tracks"].as_array().unwrap().is_empty() {
             break;
         }

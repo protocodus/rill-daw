@@ -24,6 +24,13 @@ fn default_pixels_per_point() -> f32 {
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
     Inspect,
+    /// Supply only the next native file picker's result; application menus still
+    /// execute the complete document guard and background I/O path.
+    FileDialog {
+        kind: TestDocumentDialog,
+        path: Option<PathBuf>,
+    },
+    CloseWindow,
     Focused {
         focused: bool,
     },
@@ -116,6 +123,13 @@ enum Command {
         timeout_ms: u64,
     },
     Quit,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum TestDocumentDialog {
+    Save,
+    Open,
 }
 
 #[derive(Deserialize)]
@@ -448,6 +462,27 @@ impl Harness {
 
     fn execute(&mut self, command: Command) -> Result<bool> {
         match command {
+            Command::FileDialog { kind, path } => {
+                use crate::document_ui::DocumentDialog;
+                self.app.next_document_dialog = Some((
+                    match kind {
+                        TestDocumentDialog::Save => DocumentDialog::Save,
+                        TestDocumentDialog::Open => DocumentDialog::Open,
+                    },
+                    path,
+                ));
+            }
+            Command::CloseWindow => {
+                let mut input = RawInput::default();
+                input
+                    .viewports
+                    .get_mut(&egui::ViewportId::ROOT)
+                    .context("Missing root viewport")?
+                    .events
+                    .push(egui::ViewportEvent::Close);
+                self.frame(input);
+                self.settle();
+            }
             Command::SystemTheme { dark } => {
                 self.system_theme = if dark {
                     egui::Theme::Dark
@@ -639,7 +674,12 @@ impl Harness {
             "Project timeout must be between 1 and 120000 ms"
         );
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-        while self.app.state_sync_pending() || self.app.project_io_pending() {
+        while self.app.state_sync_pending()
+            || self.app.project_io_pending()
+            || self.app.document_guard_diagnostics()["phase"]
+                .as_str()
+                .is_some_and(|phase| phase != "confirm")
+        {
             ensure!(Instant::now() < deadline, "Project operation timed out");
             self.frame(RawInput::default());
             std::thread::sleep(Duration::from_millis(1));
@@ -649,14 +689,12 @@ impl Harness {
     }
 
     fn close(&mut self) -> Result<()> {
-        let mut input = RawInput::default();
-        input
-            .viewports
-            .get_mut(&egui::ViewportId::ROOT)
-            .context("Missing root viewport")?
-            .events
-            .push(egui::ViewportEvent::Close);
-        self.frame(input);
+        // Explicit protocol shutdown has already elected to leave the test
+        // document. `close_window` separately exercises the user's close event
+        // and unsaved-change choice without silently accepting the prompt.
+        if !self.app.close_ready {
+            self.app.request_quit(&self.ctx);
+        }
         self.wait_project(project_timeout())?;
         ensure!(self.app.close_ready, "Project shutdown did not complete");
         Ok(())
@@ -720,6 +758,8 @@ impl Harness {
         });
         state["exported_file"] = json!(self.app.exported_file);
         state["clipboard_text"] = json!(self.clipboard_text);
+        state["document_guard"] = self.app.document_guard_diagnostics();
+        state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());
         state["clip_name_rect"] = json!(
             self.ctx
                 .data(|data| data.get_temp::<Rect>(egui::Id::new("clip_name_rect")))
@@ -746,7 +786,11 @@ impl Harness {
 fn collect_labels(shape: &egui::Shape, clip: Rect, labels: &mut Vec<(String, Rect)>) {
     match shape {
         egui::Shape::Text(text) => {
-            let rect = Rect::from_min_size(text.pos, text.galley.size()).intersect(clip);
+            let rect = text
+                .galley
+                .rect
+                .translate(text.pos.to_vec2())
+                .intersect(clip);
             if rect.is_positive() {
                 labels.push((text.galley.job.text.clone(), rect));
             }
@@ -800,4 +844,41 @@ fn write_response(output: &mut impl Write, value: &Value) -> Result<()> {
     writeln!(output)?;
     output.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod label_geometry_tests {
+    use super::*;
+
+    #[test]
+    fn right_aligned_labels_keep_their_full_visible_hit_rectangle() {
+        let ctx = egui::Context::default();
+        let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
+        let output = ctx.run(
+            RawInput {
+                screen_rect: Some(bounds),
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add(egui::Label::new("Right aligned project title").truncate());
+                    });
+                });
+            },
+        );
+        let mut labels = Vec::new();
+        for shape in output.shapes {
+            collect_labels(&shape.shape, shape.clip_rect, &mut labels);
+        }
+        let (_, rect) = labels
+            .iter()
+            .find(|(text, _)| text == "Right aligned project title")
+            .unwrap();
+        assert!(
+            rect.width() > 100.0,
+            "Full text must be clickable: {rect:?}"
+        );
+        assert!(bounds.contains_rect(*rect));
+    }
 }

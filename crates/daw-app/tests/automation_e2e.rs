@@ -246,9 +246,125 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
     let creation = app.click("Add parameter");
     bounded_actions(
         &creation,
-        &["Track", "Parameter", "Volume", "Add automation track"],
+        &["Track", "Parameter", "Volume", "Edit automation"],
     );
     app.key("Escape");
+    app.quit();
+}
+
+#[test]
+fn parameter_chooser_returns_to_its_curve_without_losing_selection_or_zoom() {
+    use daw_core::{AutomationParameter, AutomationPoint, AutomationTarget};
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let source = project.add_audio_track("Synth source");
+    let lane = project
+        .add_automation_track(
+            "Synth volume",
+            AutomationTarget {
+                track: source,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    project
+        .track_mut(lane)
+        .unwrap()
+        .automation
+        .as_mut()
+        .unwrap()
+        .points = vec![
+        AutomationPoint::new(32.0, 0.25),
+        AutomationPoint::new(40.0, 0.5),
+        AutomationPoint::new(64.0, 0.75),
+    ];
+    let path = app.directory.path().join("chooser.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.command(json!({"command":"viewport","width":1100,"height":720}));
+    app.click("Synth volume");
+    menu(&mut app, "Window", "Properties");
+    let fitted = menu(&mut app, "Window", "Automation");
+    let (x, y) = position(&fitted, 40.0, 0.5);
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    let before = app.key("Equals");
+    assert_eq!(before["automation_editor"]["point_beat"], 41.0);
+    for use_menu in [false, true] {
+        for escape in [false, true] {
+            let chooser = if use_menu {
+                menu(&mut app, "Track", "Add automation track…")
+            } else {
+                app.click("Add parameter")
+            };
+            bounded_actions(&chooser, &["Track", "Parameter", "Edit automation", "Back"]);
+            let footer = |label| {
+                chooser["label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|rect| rect["text"] == label)
+                    .unwrap()
+            };
+            let edit = footer("Edit automation");
+            let back = footer("Back");
+            assert!(
+                (edit["min"][1].as_f64().unwrap() - back["min"][1].as_f64().unwrap()).abs() < 1.0
+            );
+            assert!(back["max"][0].as_f64().unwrap() < edit["min"][0].as_f64().unwrap());
+            assert_eq!(chooser["selected_track"], lane);
+            assert!(chooser["automation_editor"].is_null());
+            let returned = if escape {
+                app.key("Escape")
+            } else {
+                app.click("Back")
+            };
+            assert_eq!(returned["popups"]["automation"], true);
+            assert_eq!(returned["selected_track"], lane);
+            assert_eq!(returned["project"], before["project"]);
+            assert_eq!(returned["history"], before["history"]);
+            for field in ["start_beat", "pixels_per_beat", "point_beat"] {
+                assert_eq!(
+                    returned["automation_editor"][field],
+                    before["automation_editor"][field]
+                );
+            }
+        }
+    }
+    app.click("Add parameter");
+    let existing = app.click("Edit automation");
+    assert_eq!(existing["selected_track"], lane);
+    assert_eq!(existing["project"], before["project"]);
+    assert_eq!(existing["history"], before["history"]);
+    assert_eq!(existing["automation_editor"]["point_beat"], 41.0);
+    assert_eq!(
+        existing["automation_editor"]["start_beat"],
+        before["automation_editor"]["start_beat"]
+    );
+    app.click("Add parameter");
+    app.click("Volume");
+    app.click("Pan");
+    let created = app.click("Add automation track");
+    assert_eq!(created["project"]["tracks"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        created["project"]["tracks"][2]["automation"]["target"]["parameter"],
+        "TrackPan"
+    );
+    assert_eq!(
+        created["selected_track"],
+        created["project"]["tracks"][2]["id"]
+    );
+    assert!(!created["automation_editor"].is_null());
+    let caller = app.key("Escape");
+    assert_eq!(caller["popups"]["properties"], true);
+    assert_eq!(caller["selected_track"], lane);
+    assert_eq!(app.key("Escape")["popups"]["automation"], false);
+    app.click("Synth source");
+    let chooser = menu(&mut app, "Window", "Automation");
+    bounded_actions(&chooser, &["Edit automation", "Cancel"]);
+    let canceled = app.click("Cancel");
+    assert_eq!(canceled["popups"]["automation"], false);
+    assert_eq!(canceled["selected_track"], source);
+    assert_eq!(canceled["history"], created["history"]);
     app.quit();
 }
 

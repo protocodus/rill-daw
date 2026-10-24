@@ -43,7 +43,8 @@ fn named_history_jumps_saved_checkpoint_and_branching_work_through_ui() {
     assert!(state["history"]["redo"].as_array().unwrap().is_empty());
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 3);
     app.click("File");
-    let state = app.click("New");
+    app.click("New");
+    let state = app.click("Don't save");
     assert!(state["history"]["undo"].as_array().unwrap().is_empty());
     assert!(state["history"]["redo"].as_array().unwrap().is_empty());
     app.quit();

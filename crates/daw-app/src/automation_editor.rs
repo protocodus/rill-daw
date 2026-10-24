@@ -15,6 +15,7 @@ type ParameterResult = Arc<Mutex<Option<Result<Vec<daw_plugins::ParameterInfo>, 
 #[derive(Clone)]
 struct EditorState {
     track: Option<u64>,
+    creating: bool,
     source: Option<u64>,
     parameter: usize,
     point: Option<u64>,
@@ -34,6 +35,7 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             track: None,
+            creating: false,
             source: None,
             parameter: 0,
             point: None,
@@ -60,7 +62,47 @@ pub(crate) fn reset_automation_editor(ctx: &egui::Context) {
     });
 }
 
+/// A parameter chooser is a page of the current editor, so dismissing it must
+/// restore that editor before closing the containing utility.
+pub(crate) fn cancel_automation_creation(ctx: &egui::Context) -> bool {
+    ctx.data_mut(|data| {
+        let key = egui::Id::new("automation_editor_state");
+        let Some(mut state) = data.get_temp::<EditorState>(key) else {
+            return false;
+        };
+        if !state.creating {
+            return false;
+        }
+        state.creating = false;
+        data.insert_temp(key, state);
+        true
+    })
+}
+
 impl DawApp {
+    pub(crate) fn start_automation_creation(&mut self, ctx: &egui::Context) {
+        let Some(lane) = self
+            .selected_track
+            .and_then(|id| self.project.track(id))
+            .and_then(|track| track.automation.as_ref())
+        else {
+            return;
+        };
+        let key = egui::Id::new("automation_editor_state");
+        let mut state = ctx
+            .data_mut(|data| data.get_temp::<EditorState>(key))
+            .filter(|state| state.track == self.selected_track)
+            .unwrap_or_else(|| EditorState {
+                track: self.selected_track,
+                point: lane.points.first().map(|point| point.id),
+                ..Default::default()
+            });
+        state.creating = true;
+        state.source = Some(lane.target.track);
+        state.parameter = 0;
+        ctx.data_mut(|data| data.insert_temp(key, state));
+    }
+
     pub fn automation_editor(&mut self, ctx: &egui::Context) {
         if !self.automation_open {
             return;
@@ -87,29 +129,46 @@ impl DawApp {
             .selected_track
             .and_then(|id| self.project.track(id))
             .is_some_and(|t| t.kind == TrackKind::Automation);
+        let editing = existing && !state.creating;
         let mut open = true;
-        let popup = if existing {
-            daw_ui::workspace_popup("Automation", ctx)
+        let mut cancel = false;
+        let popup = if editing {
+            daw_ui::workspace_popup("Automation", ctx).id(egui::Id::new("automation_editor"))
         } else {
-            daw_ui::popup("Automation", ctx).default_width(540.0)
+            daw_ui::popup("Add automation", ctx)
+                .id(egui::Id::new("automation_create"))
+                .default_width(540.0)
+                .vscroll(false)
         };
-        popup
-            .id(egui::Id::new("automation_editor"))
-            .open(&mut open)
-            .show(ctx, |ui| {
-                if existing {
-                    self.edit_automation_curve(ui, &mut state);
-                } else {
-                    self.create_automation_lane(ui, &mut state);
-                }
-            });
-        if !open {
-            self.automation_open = false;
+        popup.open(&mut open).show(ctx, |ui| {
+            if editing {
+                self.edit_automation_curve(ui, &mut state);
+            } else {
+                ctx.data_mut(|data| {
+                    data.remove::<serde_json::Value>(egui::Id::new(
+                        "automation_editor_diagnostics",
+                    ));
+                    data.remove::<egui::Rect>(egui::Id::new("automation_plot_rect"));
+                    data.remove::<egui::Id>(egui::Id::new("automation_curve_focus"));
+                });
+                cancel = daw_ui::scroll_body(ui, "automation_create_body", |ui| {
+                    self.create_automation_lane(ui, &mut state)
+                })
+                .inner;
+            }
+        });
+        if !open || cancel {
+            if existing && state.creating {
+                state.creating = false;
+            } else {
+                self.automation_open = false;
+            }
         }
         ctx.data_mut(|data| data.insert_temp(key, state));
     }
 
-    fn create_automation_lane(&mut self, ui: &mut egui::Ui, state: &mut EditorState) {
+    fn create_automation_lane(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> bool {
+        let back = if state.creating { "Back" } else { "Cancel" };
         let tracks: Vec<_> = self
             .project
             .tracks
@@ -122,7 +181,8 @@ impl DawApp {
         }
         let Some(source) = state.source else {
             ui.label("Add an audio, instrument, or bus track first.");
-            return;
+            ui.add_space(daw_ui::tokens::SPACE_LG);
+            return daw_ui::button(ui, back).clicked();
         };
         let mut selected_source = Some(source);
         let control_width =
@@ -240,19 +300,44 @@ impl DawApp {
                 format!("{label} · ID {}", state.vst_id)
             };
         }
-        ui.add_space(10.0);
+        ui.add_space(daw_ui::tokens::SPACE_LG);
         let vst_parameter = matches!(parameter, AutomationParameter::VstParameter { .. });
         let ready = !vst_parameter
             || state.manual_id
             || (state.loading.is_none() && state.parameters.iter().any(|p| p.id == state.vst_id));
-        if ui
-            .add_enabled(ready, daw_ui::button_widget("Add automation track"))
-            .clicked()
-        {
-            let target = AutomationTarget {
-                track: source,
-                parameter,
-            };
+        let target = AutomationTarget {
+            track: source,
+            parameter,
+        };
+        let existing = self.project.tracks.iter().find_map(|track| {
+            track
+                .automation
+                .as_ref()
+                .filter(|lane| lane.target == target)
+                .map(|_| track.id)
+        });
+        let action = if existing.is_some() {
+            "Edit automation"
+        } else {
+            "Add automation track"
+        };
+        let (activate, cancel) = daw_ui::action_row(
+            ui,
+            |ui| {
+                ui.add_enabled_ui(ready, |ui| daw_ui::primary_button(ui, action))
+                    .inner
+                    .clicked()
+            },
+            |ui| daw_ui::button(ui, back).clicked(),
+        )
+        .inner;
+        if activate {
+            if let Some(id) = existing {
+                self.selected_track = Some(id);
+                self.selected_clip = None;
+                state.creating = false;
+                return false;
+            }
             let name = format!("{} · {}", track.name, label);
             self.begin_edit();
             let result = if matches!(target.parameter, AutomationParameter::VstParameter { .. }) {
@@ -271,11 +356,19 @@ impl DawApp {
                 Err(error) => self.message(Err(error), ""),
             }
         }
-        // Probe results must not move the Add action while a manual-ID click is
-        // in progress. Keep asynchronous diagnostics below the stable controls.
-        if vst_parameter && let Some(error) = &state.load_error {
-            ui.colored_label(crate::theme::palette(ui.ctx()).orange, error);
+        // Keep space for a bounded probe diagnostic while loading. Otherwise a
+        // centered popup would move its footer under an in-flight pointer click.
+        if vst_parameter {
+            ui.allocate_ui(
+                egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT),
+                |ui| {
+                    if let Some(error) = &state.load_error {
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error);
+                    }
+                },
+            );
         }
+        cancel
     }
 
     fn edit_automation_curve(&mut self, ui: &mut egui::Ui, state: &mut EditorState) {
@@ -307,7 +400,9 @@ impl DawApp {
             add_parameter = daw_ui::button(ui, "Add parameter").clicked();
         });
         if add_parameter {
-            self.selected_track = Some(lane.target.track);
+            state.creating = true;
+            state.source = Some(lane.target.track);
+            state.parameter = 0;
             return;
         }
         if interpolation != lane.interpolation || enabled == track.mute {
@@ -632,6 +727,62 @@ mod tests {
                 modifiers: egui::Modifiers::NONE,
             },
         ]
+    }
+
+    #[test]
+    fn creation_popup_hugs_short_content_and_aligns_its_footer() {
+        for appearance in [
+            daw_ui::theme::Appearance::Light,
+            daw_ui::theme::Appearance::Dark,
+        ] {
+            let ctx = egui::Context::default();
+            daw_ui::theme::set_appearance(&ctx, appearance);
+            let mut project = daw_core::Project::new();
+            let source = project.add_audio_track("Glass keys");
+            let mut app = DawApp::with_context(&ctx, project, None);
+            app.selected_track = Some(source);
+            app.automation_open = true;
+            let mut output = egui::FullOutput::default();
+            for _ in 0..4 {
+                output = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1100.0, 720.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| app.automation_editor(ctx),
+                );
+            }
+            let window = ctx
+                .memory(|memory| memory.area_rect(egui::Id::new("automation_create")))
+                .expect("creation window");
+            assert!(
+                window.height() < 300.0,
+                "Short form must hug its content: {window:?}"
+            );
+            let label_rect = |label| {
+                output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) if text.galley.text() == label => {
+                            Some(text.galley.rect.translate(text.pos.to_vec2()))
+                        }
+                        _ => None,
+                    })
+                    .unwrap()
+            };
+            let add = label_rect("Add automation track");
+            let cancel = label_rect("Cancel");
+            assert!((add.center().y - cancel.center().y).abs() < 1.0);
+            assert!(cancel.right() < add.left());
+            assert!(
+                window.bottom() - add.bottom() < 50.0,
+                "No large blank region below the footer"
+            );
+        }
     }
 
     #[test]

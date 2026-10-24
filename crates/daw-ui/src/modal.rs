@@ -1,0 +1,29 @@
+//! Focused decisions that block background input without replacing app navigation.
+use crate::{panel, text, tokens};
+use egui::{Context, Id, ModalResponse, Ui};
+
+/// A centered, bounded dialog with shared typography and window treatment.
+/// Callers decide which dismissals mean Cancel; backdrop clicks never approve
+/// an action. Applications must gate raw keyboard/drop handlers while visible,
+/// and skip background edits in the frame that requests the modal.
+pub fn modal<R>(
+    ctx: &Context,
+    id: Id,
+    title: &str,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> ModalResponse<R> {
+    let width = (ctx.content_rect().width() - 4.0 * tokens::POPUP_MARGIN).clamp(180.0, 460.0);
+    egui::Modal::new(id)
+        .frame(
+            panel(ctx)
+                .inner_margin(tokens::POPUP_MARGIN)
+                .stroke(ctx.style().visuals.window_stroke)
+                .shadow(ctx.style().visuals.window_shadow),
+        )
+        .show(ctx, |ui| {
+            ui.set_width(width);
+            text::title(ui, title);
+            ui.add_space(tokens::SPACE_MD);
+            contents(ui)
+        })
+}

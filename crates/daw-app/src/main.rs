@@ -4,6 +4,7 @@ mod audio_editor;
 mod automation;
 mod automation_editor;
 mod crossfade_ui;
+mod document_ui;
 mod editor;
 mod engine_lifecycle;
 mod history_ui;
@@ -34,7 +35,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup|properties|crossfade|join]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view clip|mixer|instrument|effects|routing|automation|library|setup|properties|crossfade|join|unsaved-changes]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -126,6 +127,11 @@ fn main() -> anyhow::Result<()> {
                 Some("join") => app.open_popup(app::PopupKind::Join),
                 Some("routing") => app.open_popup(app::PopupKind::Routing),
                 Some("properties") => app.open_popup(app::PopupKind::Inspector),
+                Some("unsaved-changes") if app.screenshot.is_some() => {
+                    app.modified = true;
+                    app.history.mark_unsaved();
+                    app.request_document_transition(document_ui::DocumentTransition::New);
+                }
                 Some("instrument") => app.open_popup(app::PopupKind::Instrument),
                 Some("rack" | "effects") => app.open_popup(app::PopupKind::Effects),
                 _ => {}

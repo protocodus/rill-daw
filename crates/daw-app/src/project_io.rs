@@ -194,6 +194,7 @@ impl DawApp {
                                 "Session saved"
                             },
                         );
+                        self.document_save_finished(true);
                     }
                     Ok(Completion::Loaded {
                         loaded,
@@ -207,6 +208,7 @@ impl DawApp {
                     Err(error) => {
                         self.project_io.queue.clear();
                         self.message(Err(error.context("Project operation failed")), "");
+                        self.document_save_finished(false);
                     }
                 }
             }
@@ -217,6 +219,7 @@ impl DawApp {
                     Err(anyhow::anyhow!("Project worker stopped unexpectedly")),
                     "",
                 );
+                self.document_save_finished(false);
             }
             _ => {}
         }

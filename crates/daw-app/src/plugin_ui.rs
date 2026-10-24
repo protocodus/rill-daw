@@ -38,6 +38,9 @@ enum PendingAction {
     Quit,
     New,
     Recovery,
+    DocumentSnapshot {
+        close: bool,
+    },
     ApplySettings(crate::settings::Settings),
     Open {
         loaded: Box<LoadedProject>,
@@ -50,7 +53,11 @@ impl PendingAction {
     fn closes_editor(&self) -> bool {
         matches!(
             self,
-            Self::Quit | Self::New | Self::Open { .. } | Self::ApplySettings(_)
+            Self::Quit
+                | Self::New
+                | Self::Open { .. }
+                | Self::ApplySettings(_)
+                | Self::DocumentSnapshot { close: true }
         )
     }
 }
@@ -295,6 +302,16 @@ impl DawApp {
         self.status = "Saving plugin state…".into();
         self.error = false;
         None
+    }
+
+    pub(crate) fn request_document_snapshot(&mut self, close: bool) {
+        if let Some(PendingAction::DocumentSnapshot { .. }) =
+            self.defer_for_editor(PendingAction::DocumentSnapshot { close })
+        {
+            self.document_snapshot_ready();
+        } else if !self.state_sync_pending() {
+            self.document_snapshot_failed(self.status.clone());
+        }
     }
 
     pub(crate) fn new_session(&mut self) {
@@ -889,12 +906,16 @@ impl DawApp {
                     self.instrument_ui.closing = false;
                     self.autosave_recovery();
                     self.message(Err(anyhow::anyhow!("Plugin state could not be saved. The operation was cancelled; the last known session was saved to recovery. Retry after reopening the plugin.")), "");
+                    if matches!(pending.action, PendingAction::DocumentSnapshot { .. }) {
+                        self.document_snapshot_failed(self.status.clone());
+                    }
                 } else {
                     match pending.action {
                         PendingAction::Save(path) => self.finish_project_save(path),
                         PendingAction::Export(path) => self.start_export(path),
                         PendingAction::New => self.finish_new_session(),
                         PendingAction::Recovery => self.autosave_recovery(),
+                        PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),
                         PendingAction::ApplySettings(settings) => {
                             self.finish_settings_apply(settings)
                         }

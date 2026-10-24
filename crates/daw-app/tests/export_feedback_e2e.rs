@@ -111,7 +111,8 @@ fn failed_export_replaces_old_completion_and_retry_shows_the_new_file() {
     assert!(has(&finished, "Exported · Retry.wav"));
     assert_eq!(finished["exported_file"], json!(retry));
     app.click("File");
-    let new = app.click("New");
+    app.click("New");
+    let new = app.click("Don't save");
     assert!(new["exported_file"].is_null());
     assert!(!has(&new, "Copy path"));
     app.quit();
