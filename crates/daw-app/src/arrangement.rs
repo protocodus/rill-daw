@@ -19,6 +19,7 @@ enum Edit {
     Solo(u64),
     Gain(u64, f32),
     Pan(u64, f32),
+    Output(u64, Option<u64>),
     Collapse(u64),
     DeleteTrack(u64),
     Transfer(u64, u64, u64),
@@ -63,6 +64,7 @@ impl DawApp {
         let mut edits = Vec::new();
         let mut new_cursor = None;
         let mut popup = None;
+        let mut instrument_target = None;
         let mut open_editor = false;
         let channels: std::collections::HashMap<_, _> = self
             .project
@@ -187,23 +189,68 @@ impl DawApp {
                         FontId::proportional(12.0),
                         TEXT,
                     );
-                    let route = if let Some(channel) = channels.get(&track.id) {
+                    if let Some(channel) = channels.get(&track.id) {
                         let destination = track.output_bus.and_then(|id| self.project.track(id))
                             .map(|bus| bus.name.as_str()).unwrap_or("Master");
-                        format!("Ch {channel} > {destination}")
-                    } else {
-                        match track.kind {
-                            TrackKind::Folder => "FOLDER".to_owned(),
-                            _ => "AUTOMATION".to_owned(),
+                        let route = format!("Ch {channel} > {destination}");
+                        let midi = track.kind == TrackKind::Midi;
+                        daw_ui::picker_at(
+                            ui,
+                            Rect::from_min_size(row.min + Vec2::new(14.0, 25.0),
+                                Vec2::new(if midi { 110.0 } else { 226.0 }, 18.0)),
+                            (track.id, "output"),
+                            egui::RichText::new(&route).size(10.0).color(MUTED),
+                            |ui| {
+                                ui.set_min_width(160.0);
+                                egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+                                    if daw_ui::selectable(ui, track.output_bus.is_none(), "Master").clicked() {
+                                        if track.output_bus.is_some() {
+                                            edits.push(Edit::Output(track.id, None));
+                                        }
+                                        ui.close();
+                                    }
+                                    if let Ok(buses) = self.project.eligible_output_buses(track.id) {
+                                        for bus in buses {
+                                            ui.push_id(bus.id, |ui| {
+                                                if daw_ui::selectable(ui, track.output_bus == Some(bus.id), &bus.name).clicked() {
+                                                    if track.output_bus != Some(bus.id) {
+                                                        edits.push(Edit::Output(track.id, Some(bus.id)));
+                                                    }
+                                                    ui.close();
+                                                }
+                                            });
+                                        }
+                                    }
+                                });
+                            },
+                        ).0.on_hover_text(format!("{route}\nChange output bus"));
+                        if midi {
+                            let instrument = match &track.instrument {
+                                Instrument::None => "Choose instrument…".to_owned(),
+                                Instrument::Vst3 { path, class_id } => self.vst_catalog.iter()
+                                    .find(|entry| entry.plugin.path == std::path::Path::new(path)
+                                        && entry.plugin.class_id == *class_id)
+                                    .map(|entry| entry.plugin.name.clone())
+                                    .unwrap_or_else(|| std::path::Path::new(path).file_stem()
+                                        .unwrap_or_default().to_string_lossy().into_owned()),
+                            };
+                            if daw_ui::button_at(ui,
+                                Rect::from_min_size(row.min + Vec2::new(128.0, 25.0), Vec2::new(112.0, 18.0)),
+                                (track.id, "instrument"),
+                                egui::RichText::new(&instrument).size(10.0).color(MUTED),
+                            ).on_hover_text(format!("{instrument}\nChoose VST instrument")).clicked() {
+                                instrument_target = Some(track.id);
+                            }
                         }
-                    };
-                    header_painter.text(
-                        row.min + Vec2::new(14.0, 36.0),
-                        Align2::LEFT_CENTER,
-                        route,
-                        FontId::proportional(9.0),
-                        MUTED,
-                    );
+                    } else {
+                        header_painter.text(
+                            row.min + Vec2::new(14.0, 36.0),
+                            Align2::LEFT_CENTER,
+                            if track.kind == TrackKind::Folder { "FOLDER" } else { "AUTOMATION" },
+                            FontId::proportional(9.0),
+                            MUTED,
+                        );
+                    }
                     if !compact && track.kind != TrackKind::Automation {
                         for (i, name, active) in [(0, "M", track.mute), (1, "S", track.solo)] {
                             let rect = Rect::from_min_size(
@@ -567,6 +614,12 @@ impl DawApp {
         if let Some(popup) = popup {
             self.open_popup(popup);
         }
+        if let Some(track) = instrument_target {
+            self.selected_track = Some(track);
+            self.selected_clip = None;
+            self.selected_notes.clear();
+            self.open_instrument_chooser(true);
+        }
         if open_editor {
             self.open_workspace(WorkspaceView::Clip);
         }
@@ -632,6 +685,7 @@ impl DawApp {
                     }
                     Ok(())
                 }
+                Edit::Output(id, output) => self.project.set_output(id, output),
                 Edit::Collapse(id) => {
                     if let Some(t) = self.project.track_mut(id) {
                         t.collapsed = !t.collapsed;

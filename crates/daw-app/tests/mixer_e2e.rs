@@ -18,6 +18,30 @@ fn visible(state: &Value, text: &str) -> bool {
         .any(|label| label == text)
 }
 
+fn label_count(state: &Value, text: &str) -> usize {
+    state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|label| *label == text)
+        .count()
+}
+
+fn click_front(app: &mut Harness, label: &str) -> Value {
+    let occurrence = label_count(&app.inspect(), label)
+        .checked_sub(1)
+        .expect("visible picker item");
+    app.command(json!({"command":"click","label":label,"occurrence":occurrence}))
+}
+
+fn rename_selected_track(app: &mut Harness, current: &str, name: &str) {
+    menu(app, "Window", "Properties");
+    click_front(app, current);
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    app.command(json!({"command":"text","text":name}));
+    app.key("Escape");
+}
+
 fn drag(app: &mut Harness, label: &str, distance: f64) -> Value {
     let state = app.inspect();
     let rect = state["label_rects"]
@@ -54,20 +78,27 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
         "Folders must not consume mixer channels"
     );
 
-    app.click("New audio");
-    menu(&mut app, "Window", "Routing");
-    app.click("Master output");
-    let state = app.inspect();
-    let occurrence = state["visible_labels"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|label| *label == "New bus")
-        .count()
-        - 1;
-    app.command(json!({"command":"click","label":"New bus","occurrence":occurrence}));
+    let before_routing = state["project"].clone();
+    app.click("Ch 1 > Master");
     let state = app.key("Escape");
+    assert_eq!(
+        state["project"], before_routing,
+        "Cancel must preserve routing"
+    );
+    app.click("Ch 1 > Master");
+    let state = click_front(&mut app, "New bus");
+    let bus = state["project"]["tracks"][2]["id"].clone();
+    assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
     assert!(visible(&state, "Ch 1 > New bus"));
+    let state = menu(&mut app, "Edit", "Undo");
+    assert!(state["project"]["tracks"][0]["output_bus"].is_null());
+    let state = menu(&mut app, "Edit", "Redo");
+    assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
+    app.click("Ch 1 > New bus");
+    let state = click_front(&mut app, "Master");
+    assert!(state["project"]["tracks"][0]["output_bus"].is_null());
+    let state = menu(&mut app, "Edit", "Undo");
+    assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
 
     let original_gain = state["project"]["tracks"][0]["gain"].as_f64().unwrap();
     let db_label = format!("{:.1} dB", 20.0 * original_gain.log10());
@@ -102,6 +133,7 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     let saved = app.directory.path().join("mix.daw.json");
     app.command(json!({"command":"save","path":saved}));
     let project = Project::load(&saved).unwrap();
+    assert_eq!(project.tracks[0].output_bus, Some(project.tracks[2].id));
     assert!((f64::from(project.tracks[0].gain) - gain).abs() < 1e-6);
     assert!((f64::from(project.tracks[0].pan) - pan).abs() < 1e-6);
     app.command(json!({"command":"open","path":saved}));
@@ -130,5 +162,72 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
         f64::from(peak) <= 0.2 * gain + 0.001,
         "The arranger gain must affect the export"
     );
+    app.quit();
+}
+
+#[test]
+fn output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks() {
+    let mut app = Harness::new();
+    for name in ["Bus A", "Bus B", "Bus C"] {
+        menu(&mut app, "Track", "Add bus");
+        rename_selected_track(&mut app, "New bus", name);
+    }
+    menu(&mut app, "Track", "Add audio track");
+    let before = app.inspect();
+    let opened = app.click("Ch 1 > Master");
+    assert_eq!(
+        label_count(&opened, "Bus A"),
+        label_count(&before, "Bus A"),
+        "A bus cannot feed itself"
+    );
+    assert_eq!(
+        label_count(&opened, "New audio"),
+        label_count(&before, "New audio"),
+        "Audio tracks cannot be bus destinations"
+    );
+    assert_eq!(
+        label_count(&opened, "Bus B"),
+        label_count(&before, "Bus B") + 1
+    );
+    let state = click_front(&mut app, "Bus B");
+    assert_eq!(
+        state["project"]["tracks"][0]["output_bus"],
+        state["project"]["tracks"][1]["id"]
+    );
+    app.click("Ch 2 > Master");
+    let state = click_front(&mut app, "Bus C");
+    assert_eq!(
+        state["project"]["tracks"][1]["output_bus"],
+        state["project"]["tracks"][2]["id"]
+    );
+
+    let before = app.inspect();
+    let opened = app.click("Ch 3 > Master");
+    for name in ["Bus A", "Bus B", "Bus C"] {
+        assert_eq!(
+            label_count(&opened, name),
+            label_count(&before, name),
+            "{name} would create feedback"
+        );
+    }
+    assert!(visible(&opened, "Master"));
+    let state = app.key("Escape");
+    assert_eq!(state["project"], before["project"]);
+
+    app.click("Bus B");
+    menu(&mut app, "Window", "Properties");
+    app.click("Compact track");
+    app.key("Escape");
+    let state = app.click("Ch 2 > Bus C");
+    assert!(visible(&state, "Master"));
+    let state = click_front(&mut app, "Master");
+    assert!(state["project"]["tracks"][1]["output_bus"].is_null());
+    assert_eq!(state["project"]["tracks"][1]["collapsed"], true);
+    let state = menu(&mut app, "Edit", "Undo");
+    assert_eq!(
+        state["project"]["tracks"][1]["output_bus"],
+        state["project"]["tracks"][2]["id"]
+    );
+    assert_eq!(state["project"]["tracks"][1]["collapsed"], true);
     app.quit();
 }

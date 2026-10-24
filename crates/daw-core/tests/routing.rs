@@ -110,6 +110,84 @@ fn output_and_send_cycles_are_rejected_atomically() {
 }
 
 #[test]
+fn output_choices_exclude_feedback_through_main_and_send_paths() {
+    let mut project = Project::new();
+    let current = project.add_bus("Current output");
+    let source = project.add_bus("Source");
+    let upstream = project.add_bus("Upstream output");
+    let ancestor = project.add_bus("Upstream send");
+    let parallel = project.add_bus("Existing send");
+    let independent = project.add_bus("Independent");
+    let folder = project.add_folder("Group");
+    project.add_audio_track("Audio");
+    project.add_midi_track("MIDI");
+    project.set_output(upstream, Some(source)).unwrap();
+    // A silent send and a muted bus still participate in routing validation.
+    project.add_send(ancestor, upstream, 0.0, true).unwrap();
+    project.track_mut(ancestor).unwrap().mute = true;
+    project.set_output(source, Some(current)).unwrap();
+    project.add_send(source, parallel, 0.5, false).unwrap();
+    project.set_output(parallel, Some(current)).unwrap();
+    project.set_parent_folder(source, Some(folder)).unwrap();
+    let before = project.clone();
+    let eligible: Vec<_> = project
+        .eligible_output_buses(source)
+        .unwrap()
+        .into_iter()
+        .map(|track| track.id)
+        .collect();
+    assert_eq!(eligible, vec![current, parallel, independent]);
+    assert_eq!(project, before, "Query must not edit the routing graph");
+    // The picker and final mutation must agree, including an existing output or
+    // parallel send as a valid choice and transitive feedback as an invalid one.
+    for bus in [current, source, upstream, ancestor, parallel, independent] {
+        let mut candidate = project.clone();
+        assert_eq!(
+            candidate.set_output(source, Some(bus)).is_ok(),
+            eligible.contains(&bus)
+        );
+    }
+    project.set_output(source, None).unwrap();
+    assert_eq!(project.track(source).unwrap().output_bus, None);
+}
+
+#[test]
+fn output_choices_accept_signal_tracks_and_reject_non_signal_sources() {
+    let mut project = Project::new();
+    let audio = project.add_audio_track("Audio");
+    let midi = project.add_midi_track("MIDI");
+    let first = project.add_bus("First");
+    let second = project.add_bus("Second");
+    let folder = project.add_folder("Folder");
+    let automation_id = project
+        .add_automation_track(
+            "Automation",
+            daw_core::AutomationTarget {
+                track: audio,
+                parameter: daw_core::AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    for source in [audio, midi] {
+        let eligible: Vec<_> = project
+            .eligible_output_buses(source)
+            .unwrap()
+            .into_iter()
+            .map(|track| track.id)
+            .collect();
+        assert_eq!(eligible, vec![first, second]);
+    }
+    let before = project.clone();
+    for source in [folder, automation_id, u64::MAX] {
+        assert!(project.eligible_output_buses(source).is_err());
+        assert!(project.set_output(source, None).is_err());
+        assert!(project.set_output(source, Some(first)).is_err());
+    }
+    assert_eq!(project, before);
+    project.validate().unwrap();
+}
+
+#[test]
 fn invalid_destinations_and_folder_cycles_leave_project_unchanged() {
     let mut project = Project::new();
     let audio = project.add_audio_track("Audio");

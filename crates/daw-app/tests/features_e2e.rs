@@ -642,3 +642,86 @@ fn adding_midi_track_immediately_assigns_instrument_and_cancel_keeps_ready_patte
     assert_only_popup(&state, "instrument");
     app.quit();
 }
+
+#[test]
+fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_tracks() {
+    let fixture = common::plugin_fixture();
+    let mut app = Harness::with_vst_path(fixture.path());
+    for _ in 0..2 {
+        menu(&mut app, "Track", "Add MIDI track");
+        app.key("Escape");
+    }
+    let original = app.inspect();
+    let first = original["project"]["tracks"][0]["id"].clone();
+    let second = original["project"]["tracks"][1]["id"].clone();
+    assert_eq!(original["selected_track"], second);
+
+    // Both rows are unassigned. Clicking the first row's instrument control
+    // must target that row, regardless of which track was selected beforehand.
+    let state = app.click("Choose instrument…");
+    assert_only_popup(&state, "library");
+    assert_eq!(state["selected_track"], first);
+    let state = app.key("Escape");
+    assert_eq!(
+        state["project"], original["project"],
+        "Cancel preserves the unassigned tracks"
+    );
+    app.command(json!({"command":"click","label":"New instrument","occurrence":1}));
+    app.click("Choose instrument…");
+    app.command(json!({"command":"text","text":"Fixture A"}));
+    common::wait_visible(&mut app, "Rill Fixture A");
+    assert!(visible(&app.inspect(), "Assign instrument"));
+    let assigned = app.key("Enter");
+    assert_eq!(assigned["project"]["tracks"].as_array().unwrap().len(), 2);
+    assert_eq!(assigned["selected_track"], first);
+    assert_eq!(
+        assigned["project"]["tracks"][0]["instrument"]["Vst3"]["class_id"],
+        "11111111111111111111111111111111"
+    );
+    assert_eq!(
+        assigned["project"]["tracks"][1],
+        original["project"]["tracks"][1]
+    );
+    assert_eq!(
+        assigned["project"]["tracks"][0]["clips"],
+        original["project"]["tracks"][0]["clips"]
+    );
+
+    // The compact row keeps its instrument control. Replacing from that row
+    // must still affect the first track while the second track is selected.
+    app.key("Escape");
+    menu(&mut app, "Window", "Properties");
+    app.click("Compact track");
+    app.key("Escape");
+    let state = app.command(json!({"command":"click","label":"New instrument","occurrence":1}));
+    assert_eq!(state["selected_track"], second);
+    assert!(visible(&state, "Rill Fixture A"));
+    let before_replacement = state["project"].clone();
+    let state = app.click("Rill Fixture A");
+    assert_only_popup(&state, "library");
+    assert_eq!(state["selected_track"], first);
+    app.command(json!({"command":"text","text":"Fixture B"}));
+    common::wait_visible(&mut app, "Rill Fixture B");
+    let replaced = app.key("Enter");
+    assert_eq!(replaced["project"]["tracks"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        replaced["project"]["tracks"][0]["instrument"]["Vst3"]["class_id"],
+        "22222222222222222222222222222222"
+    );
+    assert_eq!(replaced["project"]["tracks"][0]["collapsed"], true);
+    assert_eq!(
+        replaced["project"]["tracks"][0]["clips"],
+        original["project"]["tracks"][0]["clips"]
+    );
+    assert_eq!(
+        replaced["project"]["tracks"][1],
+        original["project"]["tracks"][1]
+    );
+    let state = menu(&mut app, "Edit", "Undo");
+    assert_eq!(state["project"], before_replacement);
+    let state = menu(&mut app, "Edit", "Redo");
+    assert_eq!(state["project"], replaced["project"]);
+    app.key("Escape");
+    assert!(visible(&app.inspect(), "Rill Fixture B"));
+    app.quit();
+}

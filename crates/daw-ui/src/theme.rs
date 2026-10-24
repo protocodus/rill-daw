@@ -25,6 +25,9 @@ pub const CONTROL_FILL: Color32 = Color32::from_rgb(48, 58, 68);
 pub const CONTROL_HOVER: Color32 = Color32::from_rgb(48, 58, 65);
 
 pub fn apply(ctx: &egui::Context) {
+    // Canvas colors are fixed, so native controls must retain the same palette
+    // when the operating system reports or changes its appearance.
+    ctx.set_theme(egui::Theme::Dark);
     let mut style = (*ctx.style()).clone();
     style.visuals = egui::Visuals::dark();
     style.visuals.panel_fill = PANEL;

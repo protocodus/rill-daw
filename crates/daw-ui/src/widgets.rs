@@ -202,6 +202,46 @@ pub fn selectable_at(
     )
 }
 
+/// A compact, truncated action in a canvas-owned rectangle. The full label stays
+/// available to accessibility; callers can add a tooltip for clipped text.
+pub fn button_at(
+    ui: &mut Ui,
+    rect: egui::Rect,
+    id_salt: impl Hash,
+    label: impl Into<WidgetText>,
+) -> Response {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(id_salt)
+            .max_rect(rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    child.spacing_mut().button_padding = egui::vec2(3.0, 0.0);
+    child.spacing_mut().interact_size = egui::Vec2::ZERO;
+    child.add(
+        button_widget(label)
+            .small()
+            .frame(true)
+            .frame_when_inactive(false)
+            .truncate()
+            .min_size(rect.size()),
+    )
+}
+
+/// A canvas action with an anchored, on-demand choice popup. Neither the action
+/// nor its popup advances or enlarges the parent canvas layout.
+pub fn picker_at<R>(
+    ui: &mut Ui,
+    rect: egui::Rect,
+    id_salt: impl Hash,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> (Response, Option<InnerResponse<R>>) {
+    let response = button_at(ui, rect, id_salt, label);
+    let inner = egui::Popup::menu(&response).show(contents);
+    (response, inner)
+}
+
 pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Response {
     ui.add(
         egui::TextEdit::singleline(value)

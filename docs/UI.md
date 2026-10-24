@@ -31,7 +31,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
 | Selected navigation/item | `selectable` |
-| Arrangement overlay controls | `selectable_at`, `number_at` |
+| Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | Generic `slider`, `number` |
@@ -81,7 +81,9 @@ Use `popup(title).open(&mut open).show(ctx, ...)` for utility windows. The build
 
 `number_at(ui, rect, id_salt, number(&mut value))` places a shared `DragValue` inside a canvas rectangle without advancing the parent layout. Configure its range, speed, precision, prefix, and suffix through the `number` builder. Drag to adjust or double-click to type; use a stable ID such as `(track.id, "gain")`, and commit when the returned response reports `changed()`.
 
-Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Expanded rows reuse `selectable_at` for mute/solo and `number_at` for dB volume and −100..100 pan. Compact rows retain channel routing text. Folders and automation lanes have no audio channel number or fader/pan; folder mute/solo acts on descendants.
+`button_at` places a compact action in a canvas rectangle, truncating long labels without changing the row geometry. `picker_at` uses the same action with an anchored choice popup; it returns the action response and optional popup result. Both require stable IDs and retain native keyboard/focus behavior. Add a tooltip when the full label may be clipped, and use `ui.close()` when a choice is accepted.
+
+Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Click this label to choose Master or an eligible output bus; self-routing and feedback through outputs or sends are excluded. MIDI headers also show their assigned instrument (or `Choose instrument…`); clicking it opens the VST chooser for that track and choosing a plugin opens its native editor. Both pickers remain available in compact rows. Expanded rows reuse `selectable_at` for mute/solo and `number_at` for dB volume and −100..100 pan. Folders and automation lanes have no audio channel number or fader/pan; folder mute/solo acts on descendants.
 
 **Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. Selecting an instrument assigns that existing track and opens its native editor. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
 

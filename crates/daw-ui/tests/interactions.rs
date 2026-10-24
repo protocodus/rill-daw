@@ -179,6 +179,206 @@ fn canvas_control_preserves_parent_layout_and_fits_compact_bounds() {
 }
 
 #[test]
+fn canvas_button_truncates_without_expanding_or_clicking_its_row() {
+    let context = context();
+    let draw = |ui: &mut Ui, label: &str| {
+        let (row, row_response) =
+            ui.allocate_exact_size(egui::vec2(248.0, 44.0), egui::Sense::click());
+        let rect =
+            egui::Rect::from_min_size(row.min + egui::vec2(128.0, 25.0), egui::vec2(112.0, 18.0));
+        let cursor = ui.cursor();
+        let minimum = ui.min_rect();
+        let response = widgets::button_at(
+            ui,
+            rect,
+            (7_u64, "instrument"),
+            egui::RichText::new(label).size(10.0),
+        );
+        assert_eq!(ui.cursor(), cursor);
+        assert_eq!(ui.min_rect(), minimum);
+        assert!(rect.contains_rect(response.rect));
+        assert!(row.contains_rect(response.rect));
+        assert!(
+            !row_response.clicked(),
+            "button input must not select its row"
+        );
+        response
+    };
+    let long_label = "An instrument name much longer than the available channel header";
+    let (initial, _) = frame(&context, vec![], |ui| draw(ui, "Choose instrument…"));
+    let position = initial.rect.center();
+    frame(&context, pointer(position, true), |ui| draw(ui, long_label));
+    let (clicked, output) = frame(&context, pointer(position, false), |ui| {
+        draw(ui, long_label)
+    });
+    assert!(clicked.clicked());
+    assert_eq!(
+        clicked.id, initial.id,
+        "changing the label must preserve input identity"
+    );
+    assert_eq!(clicked.rect, initial.rect);
+    assert!(
+        output.platform_output.events.iter().any(|event| {
+            let info = event.widget_info();
+            info.typ == egui::WidgetType::Button && info.label.as_deref() == Some(long_label)
+        }),
+        "accessibility must retain the complete truncated label"
+    );
+}
+
+struct PickerSnapshot {
+    button: Response,
+    choice: Option<Response>,
+    open: bool,
+}
+
+fn canvas_picker_frame(
+    context: &Context,
+    events: Vec<Event>,
+    value: &mut i32,
+    enabled: bool,
+) -> PickerSnapshot {
+    let mut choice = None;
+    let mut open = false;
+    let (button, _) = frame(context, events, |ui| {
+        if !enabled {
+            ui.disable();
+        }
+        let (row, row_response) =
+            ui.allocate_exact_size(egui::vec2(248.0, 44.0), egui::Sense::click());
+        let rect =
+            egui::Rect::from_min_size(row.min + egui::vec2(14.0, 25.0), egui::vec2(110.0, 18.0));
+        let cursor = ui.cursor();
+        let minimum = ui.min_rect();
+        let (button, popup) = widgets::picker_at(
+            ui,
+            rect,
+            (7_u64, "output"),
+            egui::RichText::new(if *value == 0 {
+                "Ch 1 > Master"
+            } else {
+                "Ch 1 > A long bus name"
+            })
+            .size(10.0),
+            |ui| {
+                ui.set_min_width(160.0);
+                if widgets::selectable_value(ui, value, 0, "Master").clicked() {
+                    ui.close();
+                }
+                let response = widgets::selectable_value(ui, value, 1, "A long bus name");
+                if response.clicked() {
+                    ui.close();
+                }
+                choice = Some(response);
+            },
+        );
+        open = popup.is_some();
+        assert_eq!(
+            ui.cursor(),
+            cursor,
+            "opening the picker must not advance the canvas"
+        );
+        assert_eq!(
+            ui.min_rect(),
+            minimum,
+            "a popup must not expand its canvas row"
+        );
+        assert!(rect.contains_rect(button.rect));
+        assert!(row.contains_rect(button.rect));
+        assert!(
+            !row_response.clicked(),
+            "picker input must not reach the underlying row"
+        );
+        let (next_row, _) = ui.allocate_exact_size(egui::vec2(248.0, 44.0), egui::Sense::hover());
+        assert_eq!(next_row.top(), row.bottom() + ui.spacing().item_spacing.y);
+        button
+    });
+    PickerSnapshot {
+        button,
+        choice,
+        open,
+    }
+}
+
+#[test]
+fn canvas_picker_supports_keyboard_selection_and_escape_without_expanding_rows() {
+    let context = context();
+    let mut value = 0;
+    let initial = canvas_picker_frame(&context, vec![], &mut value, true);
+    assert!(!initial.open);
+    assert!(
+        initial.choice.is_none(),
+        "closed pickers must not render their contents"
+    );
+    initial.button.request_focus();
+    let opened = canvas_picker_frame(&context, key(Key::Enter, true), &mut value, true);
+    assert!(opened.open, "a focused picker must open from the keyboard");
+    let settled = canvas_picker_frame(&context, key(Key::Enter, false), &mut value, true);
+    settled.choice.unwrap().request_focus();
+    canvas_picker_frame(&context, key(Key::Enter, true), &mut value, true);
+    assert_eq!(value, 1);
+    let closed = canvas_picker_frame(&context, key(Key::Enter, false), &mut value, true);
+    assert!(!closed.open, "choosing an output must close the picker");
+    assert_eq!(closed.button.id, initial.button.id);
+    assert_eq!(closed.button.rect, initial.button.rect);
+
+    closed.button.request_focus();
+    assert!(canvas_picker_frame(&context, key(Key::Space, true), &mut value, true).open);
+    canvas_picker_frame(&context, key(Key::Space, false), &mut value, true);
+    canvas_picker_frame(&context, key(Key::Escape, true), &mut value, true);
+    assert!(!canvas_picker_frame(&context, key(Key::Escape, false), &mut value, true).open);
+    assert_eq!(value, 1, "Escape must leave the current output unchanged");
+}
+
+#[test]
+fn disabled_canvas_picker_ignores_pointer_and_keyboard_input() {
+    let context = context();
+    let mut value = 0;
+    let initial = canvas_picker_frame(&context, vec![], &mut value, false);
+    assert!(!initial.button.enabled());
+    let position = initial.button.rect.center();
+    canvas_picker_frame(&context, pointer(position, true), &mut value, false);
+    assert!(!canvas_picker_frame(&context, pointer(position, false), &mut value, false).open);
+    initial.button.request_focus();
+    assert!(!canvas_picker_frame(&context, key(Key::Enter, true), &mut value, false).open);
+    assert_eq!(value, 0);
+}
+
+#[test]
+fn application_palette_stays_dark_when_system_appearance_changes() {
+    let context = Context::default();
+    // eframe can supply the system appearance before the app is created.
+    let _ = context.run(
+        RawInput {
+            system_theme: Some(egui::Theme::Light),
+            ..Default::default()
+        },
+        |_| {},
+    );
+    widgets::theme::apply(&context);
+    for system_theme in [egui::Theme::Light, egui::Theme::Dark, egui::Theme::Light] {
+        let _ = context.run(
+            RawInput {
+                system_theme: Some(system_theme),
+                ..Default::default()
+            },
+            |ctx| {
+                assert!(ctx.style().visuals.dark_mode);
+                assert_eq!(
+                    ctx.style().visuals.override_text_color,
+                    Some(widgets::theme::TEXT)
+                );
+                assert_eq!(ctx.style().visuals.panel_fill, widgets::theme::PANEL);
+                assert_eq!(
+                    ctx.style().spacing.interact_size.y,
+                    widgets::tokens::CONTROL_HEIGHT
+                );
+            },
+        );
+    }
+}
+
+#[test]
 fn select_builder_opens_choices_and_selects_a_value() {
     let context = context();
     let mut value = 0;
