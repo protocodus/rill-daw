@@ -122,7 +122,7 @@ pub struct DawApp {
     pub instrument_open: bool,
     pub effect_editor_target: Option<(u64, u64)>,
     navigation: Vec<NavigationSnapshot>,
-    last_scene: daw_ui::ViewBackdrop,
+    pub(crate) last_scene: daw_ui::ViewBackdrop,
     popup_backdrop: daw_ui::ViewBackdrop,
     backdrop_title: String,
     pub close_ready: bool,
@@ -2333,6 +2333,7 @@ impl DawApp {
         } else {
             daw_ui::ViewBackdrop::capture(ctx, scene_bounds)
         };
+        daw_ui::paint_popup_backdrop(ctx, utility_open);
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.

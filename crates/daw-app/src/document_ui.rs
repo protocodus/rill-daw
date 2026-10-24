@@ -222,7 +222,11 @@ impl DawApp {
         egui::CentralPanel::default()
             .frame(daw_ui::inset(ctx).inner_margin(0).corner_radius(0))
             .show(ctx, |ui| {
-                daw_ui::paint_ambient(ui.painter(), ui.max_rect());
+                if self.last_scene.shape_count() > 0 {
+                    self.last_scene.paint(ui);
+                } else {
+                    daw_ui::paint_ambient(ui.painter(), ui.max_rect());
+                }
             });
         let Some(guard) = self.document_guard.as_ref() else {
             return;

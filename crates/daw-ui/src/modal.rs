@@ -14,6 +14,7 @@ pub fn modal<R>(
 ) -> ModalResponse<R> {
     let width = (ctx.content_rect().width() - 4.0 * tokens::POPUP_MARGIN).clamp(180.0, 460.0);
     egui::Modal::new(id)
+        .backdrop_color(crate::theme::palette(ctx).popup_scrim)
         .frame(
             panel(ctx)
                 .inner_margin(tokens::POPUP_MARGIN)

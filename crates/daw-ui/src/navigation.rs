@@ -82,6 +82,7 @@ impl ViewBackdrop {
             background.map_or_else(Vec::new, |background| background.shapes.as_ref().clone());
         for layer in layers {
             if layer.order > egui::Order::Middle
+                || crate::popup_backdrop::is_popup_backdrop_layer(layer)
                 || (background.is_some() && layer.order == egui::Order::Background)
             {
                 continue;
