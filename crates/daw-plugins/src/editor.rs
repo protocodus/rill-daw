@@ -50,6 +50,12 @@ pub enum EditorEvent {
         id: u32,
         value: f64,
     },
+    /// The user chose the host automation action in a native parameter menu.
+    /// The value is sampled in the editor sandbox when the action is selected.
+    AutomateParameter {
+        id: u32,
+        value: f64,
+    },
     StateSaved {
         /// `None` is automatic/native-window-close state, never an explicit Save
         /// acknowledgement. Match the ID returned by `save_state` or `close`.

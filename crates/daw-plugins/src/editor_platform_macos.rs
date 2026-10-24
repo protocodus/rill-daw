@@ -33,7 +33,13 @@ impl Platform {
             self.app
                 .setActivationPolicy(NSApplicationActivationPolicy::Accessory);
             window.makeKeyAndOrderFront(None);
-            self.app.activate();
+            use objc2_foundation::NSObjectProtocol;
+            if self.app.respondsToSelector(objc2::sel!(activate)) {
+                self.app.activate();
+            } else {
+                #[allow(deprecated)]
+                self.app.activateIgnoringOtherApps(true);
+            }
         } else {
             window.orderOut(None);
         }
@@ -59,6 +65,30 @@ impl Platform {
     }
     pub fn closed_by_user(&self) -> bool {
         false
+    }
+
+    pub fn context_menu_position(&self, title: &str, x: i32, y: i32) -> Result<[f64; 2]> {
+        use objc2_foundation::NSPoint;
+        let point = if let Some(window) = self
+            .app
+            .windows()
+            .iter()
+            .find(|window| window.title().to_string() == title)
+            && let Some(view) = window.contentView()
+        {
+            // VST uses the editor's top-left origin; AppKit views may be flipped.
+            let bounds = view.bounds();
+            let y = if view.isFlipped() {
+                f64::from(y)
+            } else {
+                bounds.size.height - f64::from(y)
+            };
+            let local = NSPoint::new(f64::from(x), y);
+            window.convertPointToScreen(view.convertPoint_toView(local, None))
+        } else {
+            objc2_app_kit::NSEvent::mouseLocation()
+        };
+        Ok([point.x, point.y])
     }
     pub fn capture(&self, title: &str, path: &Path) -> Result<(u32, u32)> {
         autoreleasepool(|_| capture_view(&self.app, title, path))

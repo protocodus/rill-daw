@@ -87,6 +87,22 @@ impl Platform {
         })
     }
 
+    pub fn context_menu_position(&self, title: &str, x: i32, y: i32) -> Result<[f64; 2]> {
+        let window = self
+            .window
+            .get()
+            .map(Ok)
+            .unwrap_or_else(|| self.find_window(Some(title)))?;
+        let root = self.connection.get_geometry(window)?.reply()?.root;
+        let x = i16::try_from(x).context("Context menu x coordinate exceeds X11 limits")?;
+        let y = i16::try_from(y).context("Context menu y coordinate exceeds X11 limits")?;
+        let point = self
+            .connection
+            .translate_coordinates(window, root, x, y)?
+            .reply()?;
+        Ok([f64::from(point.dst_x), f64::from(point.dst_y)])
+    }
+
     pub fn capture(&self, title: &str, path: &Path) -> Result<(u32, u32)> {
         let window = self.find_window(Some(title))?;
         self.window.set(Some(window));

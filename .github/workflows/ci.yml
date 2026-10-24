@@ -60,9 +60,16 @@ jobs:
         run: cargo build --locked --workspace
       - name: Core, engine, plug-in, and component tests
         run: cargo test --locked --workspace --exclude daw-app
+      - name: Native VST parameter context-menu contracts
+        run: |
+          cargo test --locked -p vst3-host --lib component_handler_tests
+          cargo test --locked -p vst3-host --lib host_notifications_and_restart_requests_round_trip_across_the_wire
       - name: Native X11 editor capture
         if: runner.os == 'Linux'
         run: xvfb-run -a cargo test --locked -p daw-plugins --lib captures_real_x11_window_pixels -- --ignored --nocapture
+      - name: Native parameter menu on a private Xvfb display
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p daw-plugins --test native_context_menu -- --ignored --nocapture
       - name: App state and UI interaction tests
         run: cargo test --locked -p daw-app --bin rill
       - name: Headless end-to-end tests

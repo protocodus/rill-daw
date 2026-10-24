@@ -25,6 +25,8 @@ use vst3_host::{BusAudioBuffers, MidiChannel, MidiEvent, Plugin, TransportPositi
 pub mod catalog;
 mod editor;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+mod editor_context_menu;
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod editor_native;
 #[cfg(target_os = "macos")]
 #[path = "editor_platform_macos.rs"]
