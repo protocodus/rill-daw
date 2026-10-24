@@ -149,9 +149,43 @@ pub fn workspace_header<R>(
     }
 }
 
-/// A uniform mixer channel. Color identifies the track without enclosing each
-/// strip in another outlined card. Size includes the internal margins; all
-/// channels can share the viewport height while their controls remain stacked.
+/// A channel name action that keeps the arranger's exact track color. Text
+/// contrast follows the user-chosen color rather than the application theme.
+pub fn mixer_channel_button(ui: &mut Ui, name: &str, width: f32, color: egui::Color32) -> Response {
+    let foreground = theme::contrast_text(color);
+    let response = ui.add_sized(
+        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::Button::new(
+            crate::text::TextRole::Label
+                .rich(ui.ctx(), name)
+                .color(foreground),
+        )
+        .fill(color)
+        .corner_radius(tokens::RADIUS)
+        .truncate(),
+    );
+    // A fixed identity fill needs its own hover/focus cue without changing hue.
+    if response.hovered() || response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect,
+            tokens::RADIUS,
+            egui::Stroke::new(
+                if response.has_focus() {
+                    2.0_f32
+                } else {
+                    1.0_f32
+                },
+                foreground.gamma_multiply(0.65),
+            ),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response
+}
+
+/// A uniform mixer channel with a quiet wash of its arranger track color.
+/// Size includes the internal margins; all channels can share the viewport
+/// height while their controls remain stacked. Uncolored channels stay neutral.
 pub fn mixer_strip<R>(
     ui: &mut Ui,
     id: impl Hash,
@@ -162,13 +196,21 @@ pub fn mixer_strip<R>(
 ) -> InnerResponse<R> {
     ui.push_id(id, |ui| {
         let colors = theme::palette(ui.ctx());
-        let frame = egui::Frame::new()
-            .fill(if selected {
-                colors.track_selected
-            } else {
-                colors.panel
-            })
-            .inner_margin(tokens::SPACE_MD);
+        let base = if selected {
+            colors.track_selected
+        } else {
+            colors.panel
+        };
+        let fill = color.map_or(base, |color| {
+            let amount = match (ui.ctx().theme(), selected) {
+                (egui::Theme::Dark, false) => 0.14,
+                (egui::Theme::Dark, true) => 0.22,
+                (egui::Theme::Light, false) => 0.10,
+                (egui::Theme::Light, true) => 0.18,
+            };
+            base.lerp_to_gamma(color, amount)
+        });
+        let frame = egui::Frame::new().fill(fill).inner_margin(tokens::SPACE_MD);
         let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_width((size.x - 2.0 * tokens::SPACE_MD).max(0.0));

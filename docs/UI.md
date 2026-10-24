@@ -29,7 +29,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
 | Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
-| Mixer channels and metering | `mixer_strip`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
+| Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
@@ -122,7 +122,7 @@ Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers sho
 
 New tracks advance through a shared palette of distinct colors, preferring unused colors before reusing one. This applies to menu additions, imported tracks, and instrument or send creation. Existing and manually chosen colors remain unchanged; undo/redo and saved projects retain each assignment.
 
-Click the color strip at the left of an arranger track header to open its color picker. Edits update the shared track color used by its clips and mixer channel; other tracks retain their colors. The strip remains usable on compact tracks and folders, and opening the picker does not change selection or collapse a folder. Color changes support Undo/Redo and project recall.
+Click the color strip at the left of an arranger track header to open its color picker. Edits update the shared track color used by its clips and mixer channel; other tracks retain their colors. Mixer channel names use the exact track color with contrasting text, and the full strip carries a quiet tint of that color in both themes. Master stays neutral. The strip remains usable on compact tracks and folders, and opening the picker does not change selection or collapse a folder. Color changes support Undo/Redo and project recall.
 
 Arrangement and clip editors share `TimelineViewport` and `TimelinePane`. Call `navigate` before domain hit testing and suppress edits while its `navigating` flag is true. Middle drag or Alt+left drag pans; Ctrl+wheel zooms horizontally around the pointer, Ctrl+Shift+wheel vertically; Ctrl+right or Ctrl+middle drag zooms around the initial pointer position, with Shift selecting the vertical axis. Plain wheel scrolls vertically and Shift+wheel horizontally. Plus/minus zoom horizontally; Shift+plus/minus vertically. `Fit` or F fits the earliest-to-latest event interval and every relevant row on both axes. The shared ruler shows musical bars and elapsed clock time using the same mapping. Text entry, disabled background canvases, and open menus do not consume editor shortcuts.
 

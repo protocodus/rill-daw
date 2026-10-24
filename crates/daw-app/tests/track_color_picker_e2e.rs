@@ -51,7 +51,7 @@ fn rgb(state: &Value, id: u64) -> [u8; 3] {
     serde_json::from_value(track(state, id)["color"].clone()).unwrap()
 }
 
-fn fixture(app: &mut Harness) -> (u64, u64, u64) {
+fn fixture(app: &mut Harness) -> (u64, u64, u64, u64) {
     let source = app.directory.path().join("color-source.wav");
     AudioData {
         sample_rate: 48_000,
@@ -80,11 +80,12 @@ fn fixture(app: &mut Harness) -> (u64, u64, u64) {
         vec![Note::new(60, 0.0, 1.0, 100)],
     ));
     project.set_parent_folder(midi, Some(folder)).unwrap();
+    let bus = project.add_bus("Color bus");
     let path = app.directory.path().join("color-picker.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open", "path":path}));
     app.click("Color take A");
-    (audio, midi, folder)
+    (audio, midi, folder, bus)
 }
 
 fn choose_red(app: &mut Harness, id: u64, red: u8) -> (Value, Value) {
@@ -191,26 +192,73 @@ fn assert_arranger_paint(state: &Value, id: u64) {
     }
 }
 
-fn assert_mixer_paint(app: &mut Harness, id: u64, name: &str) {
-    app.click("Mixer");
-    let state = painted(app);
-    assert_eq!(state["view"], "Mixer");
+fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
     let name = state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
         .find(|label| label["text"] == name)
-        .unwrap();
+        .unwrap_or_else(|| panic!("Missing mixer channel {name}"));
     let (x, y) = center(name);
-    let color = rgb(&state, id);
-    assert!(
-        state["painted_rects"]
+    state["painted_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|shape| {
+            let [left, top, right, bottom] = bounds(&shape["rect"]);
+            left < x
+                && right > x
+                && top < y
+                && bottom > y
+                && (right - left - 180.0).abs() < 0.1
+                && bottom - top > 250.0
+        })
+        .unwrap_or_else(|| panic!("Missing full-height mixer strip for {name:?}"))
+}
+
+fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
+    app.click("Mixer");
+    let state = painted(app);
+    assert_eq!(state["view"], "Mixer");
+    let palette = if state["effective_theme"] == "Dark" {
+        daw_ui::theme::DARK
+    } else {
+        daw_ui::theme::LIGHT
+    };
+    let shapes = state["painted_rects"].as_array().unwrap();
+    for channel in state["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|track| matches!(track["kind"].as_str(), Some("Audio" | "Midi" | "Bus")))
+    {
+        let name = channel["name"].as_str().unwrap();
+        let label = state["label_rects"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|shape| {
+            .find(|label| label["text"] == name)
+            .unwrap();
+        let (x, y) = center(label);
+        let color = rgb(&state, channel["id"].as_u64().unwrap());
+        let color = json!([color[0], color[1], color[2], 255]);
+        assert!(
+            shapes.iter().any(|shape| {
                 let [left, top, right, bottom] = bounds(&shape["rect"]);
-                shape["fill"] == json!([color[0], color[1], color[2], 255])
+                shape["fill"] == color
+                    && left < x
+                    && right > x
+                    && top < y
+                    && bottom > y
+                    && bottom - top >= 33.0
+                    && right - left > 140.0
+            }),
+            "{name}: the whole channel-name header must keep the arranger RGB color"
+        );
+        assert!(
+            shapes.iter().any(|shape| {
+                let [left, top, right, bottom] = bounds(&shape["rect"]);
+                shape["fill"] == color
                     && left < x
                     && right > x
                     && top < y
@@ -218,9 +266,29 @@ fn assert_mixer_paint(app: &mut Harness, id: u64, name: &str) {
                     && (bottom - top - 2.0).abs() < 0.1
                     && right - left > 140.0
             }),
-        "mixer channel marker must actually paint the chosen color"
+            "{name}: the channel marker must keep the arranger RGB color"
+        );
+        let fill = &mixer_body(&state, name)["fill"];
+        assert_ne!(fill, &color, "{name}: the full strip uses a subdued tint");
+        assert_ne!(
+            fill,
+            &json!(palette.panel.to_array()),
+            "{name}: tint is visible on unselected channels"
+        );
+        assert_ne!(
+            fill,
+            &json!(palette.track_selected.to_array()),
+            "{name}: selected channels retain their own color"
+        );
+    }
+    assert_eq!(
+        mixer_body(&state, "Master")["fill"],
+        json!(palette.panel.to_array()),
+        "Master retains its neutral surface"
     );
+    let fill = mixer_body(&state, track(&state, id)["name"].as_str().unwrap())["fill"].clone();
     app.click("Arranger");
+    fill
 }
 
 #[test]
@@ -231,25 +299,36 @@ fn arranger_color_picker_updates_clip_and_mixer_paint_with_undo_and_recall() {
         app.command(
             json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
         );
-        let (audio, _, _) = fixture(&mut app);
+        let (audio, _, _, _) = fixture(&mut app);
+        let original_tint = assert_mixer_paint(&mut app, audio);
         let (before, changed) = choose_red(&mut app, audio, 213);
         assert_arranger_paint(&painted(&mut app), audio);
-        assert_mixer_paint(&mut app, audio, "Color audio");
+        let changed_tint = assert_mixer_paint(&mut app, audio);
+        assert_ne!(
+            changed_tint, original_tint,
+            "The strip tint follows color edits"
+        );
         let undone = app.command(json!({"command":"key", "key":"Z", "cmd":true}));
         assert_eq!(
             undone["project"], before["project"],
             "One undo restores a complete color edit"
         );
         assert_arranger_paint(&painted(&mut app), audio);
+        assert_eq!(assert_mixer_paint(&mut app, audio), original_tint);
         let redone = app.command(json!({"command":"key", "key":"Z", "cmd":true, "shift":true}));
         assert_eq!(redone["project"], changed["project"]);
+        assert_eq!(assert_mixer_paint(&mut app, audio), changed_tint);
         let saved = app.directory.path().join("chosen-colors.rill");
         app.command(json!({"command":"save", "path":saved}));
         app = app.restart();
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.command(
+            json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
+        );
         let loaded = app.command(json!({"command":"open", "path":saved}));
         assert_eq!(rgb(&loaded, audio), rgb(&changed, audio));
         assert_arranger_paint(&painted(&mut app), audio);
-        assert_mixer_paint(&mut app, audio, "Color audio");
+        assert_eq!(assert_mixer_paint(&mut app, audio), changed_tint);
         app.quit();
     }
 }
@@ -258,14 +337,14 @@ fn arranger_color_picker_updates_clip_and_mixer_paint_with_undo_and_recall() {
 fn compact_and_folder_color_strips_do_not_select_tracks_or_collapse_folders() {
     let mut app = Harness::new();
     app.command(json!({"command":"viewport", "width":1100, "height":720}));
-    let (_, midi, folder) = fixture(&mut app);
-    for (id, red) in [(midi, 227), (folder, 71)] {
+    let (_, midi, folder, bus) = fixture(&mut app);
+    for (id, red) in [(midi, 227), (folder, 71), (bus, 19)] {
         let (_, changed) = choose_red(&mut app, id, red);
         assert_eq!(track(&changed, midi)["collapsed"], true);
         assert_eq!(track(&changed, folder)["collapsed"], false);
         assert_arranger_paint(&painted(&mut app), id);
-        if id == midi {
-            assert_mixer_paint(&mut app, midi, "Color MIDI");
+        if id != folder {
+            assert_mixer_paint(&mut app, id);
         }
     }
     app.quit();
