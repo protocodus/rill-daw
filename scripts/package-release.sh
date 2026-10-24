@@ -82,6 +82,7 @@ if [ -n "${GITHUB_ENV:-}" ]; then
       ;;
   esac
   test -x "$verified_executable"
+  test -x "$(dirname "$verified_executable")/daw-plugin-host"
   printf 'RILL_E2E_BINARY=%s\n' "$verified_executable" >> "$GITHUB_ENV"
 fi
 echo "Packaged $archive"

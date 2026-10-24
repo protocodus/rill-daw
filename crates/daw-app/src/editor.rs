@@ -82,14 +82,14 @@ impl DawApp {
                 rect.left_bottom(),
                 Pos2::new(rect.left() + fade_in as f32, rect.top()),
             ],
-            Stroke::new(2.0, ORANGE),
+            Stroke::new(2.0_f32, ORANGE),
         );
         p.line_segment(
             [
                 Pos2::new(rect.right() - fade_out as f32, rect.top()),
                 rect.right_bottom(),
             ],
-            Stroke::new(2.0, ORANGE),
+            Stroke::new(2.0_f32, ORANGE),
         );
         if response.clicked()
             && let Some(pos) = response.interact_pointer_pos()
@@ -117,11 +117,10 @@ impl DawApp {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
-                    for track in self
-                        .project
-                        .tracks
-                        .iter_mut()
-                        .filter(|t| t.kind != TrackKind::Folder)
+                    for track in
+                        self.project.tracks.iter_mut().filter(|t| {
+                            !matches!(t.kind, TrackKind::Folder | TrackKind::Automation)
+                        })
                     {
                         daw_ui::card().inner_margin(12).show(ui, |ui| {
                             ui.vertical(|ui| {
@@ -312,8 +311,11 @@ impl DawApp {
             .is_some_and(|track| track.instrument != instrument)
         {
             self.begin_edit();
-            self.project.track_mut(id).unwrap().instrument = instrument;
-            self.changed();
+            let result = self.project.set_instrument(id, instrument);
+            if result.is_ok() {
+                self.changed();
+            }
+            self.message(result, "Instrument updated");
         }
     }
     fn piano_roll(&mut self, ui: &mut egui::Ui) {
@@ -480,7 +482,7 @@ impl DawApp {
                 );
                 p.line_segment(
                     [row.left_bottom(), row.right_bottom()],
-                    Stroke::new(0.5, LINE.gamma_multiply(0.7)),
+                    Stroke::new(0.5_f32, LINE.gamma_multiply(0.7)),
                 );
                 let black = matches!(pitch % 12, 1 | 3 | 6 | 8 | 10);
                 let key = Rect::from_min_size(
@@ -529,7 +531,7 @@ impl DawApp {
                 p.line_segment(
                     [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
                     Stroke::new(
-                        1.0,
+                        1.0_f32,
                         if bar {
                             GRID_BAR
                         } else {
@@ -603,7 +605,7 @@ impl DawApp {
                     p.rect_stroke(
                         rect,
                         3.0,
-                        Stroke::new(1.2, egui::Color32::WHITE),
+                        Stroke::new(1.2_f32, egui::Color32::WHITE),
                         StrokeKind::Inside,
                     );
                 }
@@ -758,7 +760,12 @@ impl DawApp {
             {
                 let selection = Rect::from_two_pos(start, pos);
                 p.rect_filled(selection, 0.0, ACCENT.gamma_multiply(0.12));
-                p.rect_stroke(selection, 0.0, Stroke::new(1.0, ACCENT), StrokeKind::Inside);
+                p.rect_stroke(
+                    selection,
+                    0.0,
+                    Stroke::new(1.0_f32, ACCENT),
+                    StrokeKind::Inside,
+                );
                 let mut ids = if ui.input(|i| i.modifiers.shift) {
                     self.selected_notes.clone()
                 } else {
@@ -791,7 +798,7 @@ impl DawApp {
                         Pos2::new(play_x, canvas.top()),
                         Pos2::new(play_x, canvas.bottom()),
                     ],
-                    Stroke::new(1.5, ORANGE),
+                    Stroke::new(1.5_f32, ORANGE),
                 );
             }
         });

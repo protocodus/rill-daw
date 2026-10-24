@@ -1,3 +1,4 @@
+use crate::AutomationLane;
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -56,6 +57,8 @@ pub struct Track {
     pub parent_folder: Option<u64>,
     #[serde(default)]
     pub collapsed: bool,
+    #[serde(default)]
+    pub automation: Option<AutomationLane>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +67,7 @@ pub enum TrackKind {
     Midi,
     Bus,
     Folder,
+    Automation,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -229,6 +233,7 @@ impl Track {
                 TrackKind::Midi => [169, 132, 255],
                 TrackKind::Bus => [227, 164, 95],
                 TrackKind::Folder => [131, 143, 166],
+                TrackKind::Automation => [234, 185, 96],
             },
             gain: if matches!(kind, TrackKind::Bus | TrackKind::Folder) {
                 1.0
@@ -246,6 +251,7 @@ impl Track {
             output_bus: None,
             parent_folder: None,
             collapsed: false,
+            automation: None,
         }
     }
 }
@@ -533,6 +539,7 @@ impl Project {
             "Invalid loop range"
         );
         let mut ids = HashSet::new();
+        let mut automation_targets = HashSet::new();
         let mut check_id = |id| -> Result<()> {
             ensure!(
                 id > 0 && id < u64::MAX && ids.insert(id),
@@ -542,6 +549,26 @@ impl Project {
         };
         for track in &self.tracks {
             check_id(track.id)?;
+            if let Some(lane) = &track.automation {
+                ensure!(
+                    track.kind == TrackKind::Automation,
+                    "Only automation tracks may contain automation lanes"
+                );
+                lane.validate()?;
+                lane.target.validate(self)?;
+                ensure!(
+                    automation_targets.insert(lane.target),
+                    "More than one track automates the same parameter"
+                );
+                for point in &lane.points {
+                    check_id(point.id)?;
+                }
+            } else {
+                ensure!(
+                    track.kind != TrackKind::Automation,
+                    "Automation track has no lane"
+                );
+            }
             ensure!(
                 track.gain.is_finite() && track.gain >= 0.0,
                 "Invalid track gain"
@@ -673,6 +700,11 @@ impl Project {
         let mut max_id = 0;
         for track in &mut project.tracks {
             max_id = max_id.max(track.id);
+            if let Some(lane) = &track.automation {
+                for point in &lane.points {
+                    max_id = max_id.max(point.id);
+                }
+            }
             if let Instrument::Vst3 { path } = &mut track.instrument {
                 absolutize(path, &base);
             }

@@ -19,7 +19,7 @@ pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(
         button_widget(label)
             .fill(theme::ACCENT.gamma_multiply(0.24))
-            .stroke(egui::Stroke::new(1.0, theme::ACCENT)),
+            .stroke(egui::Stroke::new(1.0_f32, theme::ACCENT)),
     )
 }
 
@@ -127,7 +127,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
             ui.painter().rect_stroke(
                 rect.expand(2.0),
                 tokens::RADIUS,
-                egui::Stroke::new(1.5, theme::ACCENT),
+                egui::Stroke::new(1.5_f32, theme::ACCENT),
                 egui::StrokeKind::Outside,
             );
         }
@@ -235,7 +235,7 @@ pub fn card() -> Frame {
         .fill(theme::RAISED)
         .inner_margin(tokens::SPACE_MD)
         .corner_radius(tokens::RADIUS)
-        .stroke(egui::Stroke::new(1.0, theme::LINE))
+        .stroke(egui::Stroke::new(1.0_f32, theme::LINE))
 }
 
 pub fn inset() -> Frame {
@@ -249,7 +249,7 @@ pub fn inset() -> Frame {
 /// main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
 pub fn popup<'a>(title: impl Into<WidgetText>) -> egui::Window<'a> {
     egui::Window::new(title)
-        .frame(panel().stroke(egui::Stroke::new(1.0, theme::LINE)))
+        .frame(panel().stroke(egui::Stroke::new(1.0_f32, theme::LINE)))
         .default_width(480.0)
         .collapsible(false)
         .resizable(false)

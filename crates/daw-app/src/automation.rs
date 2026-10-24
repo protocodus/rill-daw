@@ -26,6 +26,13 @@ enum Command {
         #[serde(default)]
         occurrence: usize,
     },
+    Pointer {
+        x: f32,
+        y: f32,
+        phase: PointerPhase,
+        to_x: Option<f32>,
+        to_y: Option<f32>,
+    },
     Key {
         key: String,
         #[serde(default)]
@@ -55,6 +62,13 @@ enum Command {
         timeout_ms: u64,
     },
     Quit,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum PointerPhase {
+    Click,
+    Drag,
 }
 
 fn default_timeout() -> u64 {
@@ -175,6 +189,49 @@ impl Harness {
         Ok(())
     }
 
+    fn pointer(&mut self, from: Pos2, to: Pos2, drag: bool) -> Result<()> {
+        ensure!(
+            [from.x, from.y, to.x, to.y]
+                .iter()
+                .all(|value| value.is_finite())
+                && Rect::from_min_size(Pos2::ZERO, SIZE).contains(from)
+                && Rect::from_min_size(Pos2::ZERO, SIZE).contains(to),
+            "Pointer coordinates must be finite and within the viewport"
+        );
+        self.frame(RawInput {
+            events: vec![Event::PointerMoved(from)],
+            ..Default::default()
+        });
+        self.frame(RawInput {
+            events: vec![Event::PointerButton {
+                pos: from,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+            ..Default::default()
+        });
+        if drag {
+            for step in 1..=8 {
+                self.frame(RawInput {
+                    events: vec![Event::PointerMoved(from.lerp(to, step as f32 / 8.0))],
+                    ..Default::default()
+                });
+            }
+        }
+        self.frame(RawInput {
+            events: vec![Event::PointerButton {
+                pos: to,
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+            ..Default::default()
+        });
+        self.settle();
+        Ok(())
+    }
+
     fn drop_files(&mut self, paths: Vec<PathBuf>, track: Option<usize>, beat: f64) -> Result<()> {
         ensure!(!paths.is_empty(), "Provide at least one audio file");
         ensure!(
@@ -268,6 +325,25 @@ impl Harness {
         match command {
             Command::Inspect => self.settle(),
             Command::Click { label, occurrence } => self.click(&label, occurrence)?,
+            Command::Pointer {
+                x,
+                y,
+                phase,
+                to_x,
+                to_y,
+            } => {
+                let from = Pos2::new(x, y);
+                let drag = matches!(phase, PointerPhase::Drag);
+                let to = if drag {
+                    Pos2::new(
+                        to_x.context("Drag requires to_x")?,
+                        to_y.context("Drag requires to_y")?,
+                    )
+                } else {
+                    from
+                };
+                self.pointer(from, to, drag)?;
+            }
             Command::Key {
                 key,
                 shift,
@@ -367,7 +443,9 @@ impl Harness {
                 "library": self.app.library_open, "setup": self.app.setup_open,
                 "properties": self.app.inspector_open, "instrument": self.app.instrument_open,
                 "effects": self.app.effects_open, "routing": self.app.routing_open,
+                "automation": self.app.automation_open,
             },
+            "automation_plot_rect": self.ctx.data(|data| data.get_temp::<Rect>(egui::Id::new("automation_plot_rect"))).map(|rect| json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})),
             "settings": self.app.settings,
             "setup_draft": self.app.setup_draft,
             "status": self.app.status,

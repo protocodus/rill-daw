@@ -32,6 +32,7 @@ pub enum PopupKind {
     Instrument,
     Effects,
     Routing,
+    Automation,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -81,6 +82,7 @@ pub struct DawApp {
     pub instrument_open: bool,
     pub effects_open: bool,
     pub routing_open: bool,
+    pub automation_open: bool,
     pub last_render_errors: u64,
     pub devices: Vec<DeviceInfo>,
     pub status: String,
@@ -150,6 +152,7 @@ impl DawApp {
             instrument_open: false,
             effects_open: false,
             routing_open: false,
+            automation_open: false,
             last_render_errors: 0,
             devices: Vec::new(),
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
@@ -189,6 +192,7 @@ impl DawApp {
         self.instrument_open = false;
         self.effects_open = false;
         self.routing_open = false;
+        self.automation_open = false;
         self.view = WorkspaceView::Arrangement;
     }
 
@@ -215,6 +219,7 @@ impl DawApp {
             }
             PopupKind::Effects => self.effects_open = true,
             PopupKind::Routing => self.routing_open = true,
+            PopupKind::Automation => self.automation_open = true,
         }
     }
 
@@ -251,6 +256,7 @@ impl DawApp {
         }
     }
     pub fn changed(&mut self) {
+        self.project.prune_automation();
         self.modified = true;
         self.edit_dirty = true;
     }
@@ -644,6 +650,7 @@ impl DawApp {
             || self.instrument_open
             || self.effects_open
             || self.routing_open
+            || self.automation_open
         {
             return;
         }
@@ -901,12 +908,21 @@ impl DawApp {
                         ui.separator();
                         let track = self.selected_track.and_then(|id| self.project.track(id));
                         let midi = track.is_some_and(|track| track.kind == TrackKind::Midi);
-                        let audio_channel =
-                            track.is_some_and(|track| track.kind != TrackKind::Folder);
+                        let audio_channel = track.is_some_and(|track| {
+                            matches!(
+                                track.kind,
+                                TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+                            )
+                        });
                         for (name, kind, enabled) in [
                             ("Instrument", PopupKind::Instrument, midi),
                             ("Effects", PopupKind::Effects, audio_channel),
                             ("Routing", PopupKind::Routing, audio_channel),
+                            (
+                                "Automation",
+                                PopupKind::Automation,
+                                track.is_some_and(|track| track.kind != TrackKind::Folder),
+                            ),
                             (
                                 "Properties",
                                 PopupKind::Inspector,
@@ -974,6 +990,9 @@ impl DawApp {
                         TrackKind::Audio => self.project.add_audio_track("New audio"),
                         TrackKind::Bus => self.project.add_bus("New bus"),
                         TrackKind::Folder => self.project.add_folder("New folder"),
+                        TrackKind::Automation => {
+                            unreachable!("Automation requires a parameter target")
+                        }
                     });
                     self.selected_clip = None;
                     self.selected_notes.clear();
@@ -981,6 +1000,19 @@ impl DawApp {
                     self.changed();
                     ui.close();
                 }
+            }
+            ui.separator();
+            if daw_ui::button(ui, "Add automation track…").clicked() {
+                if let Some(target) = self
+                    .selected_track
+                    .and_then(|id| self.project.track(id))
+                    .and_then(|track| track.automation.as_ref())
+                    .map(|lane| lane.target.track)
+                {
+                    self.selected_track = Some(target);
+                }
+                self.open_popup(PopupKind::Automation);
+                ui.close();
             }
         });
     }
@@ -997,7 +1029,11 @@ impl DawApp {
             self.project.add_midi_track(name)
         });
         self.selected_track = Some(track);
-        self.project.track_mut(track).unwrap().instrument = instrument;
+        let result = self.project.set_instrument(track, instrument);
+        if let Err(error) = result {
+            self.message(Err(error), "");
+            return;
+        }
         self.changed();
         self.library_open = false;
     }
@@ -1245,7 +1281,8 @@ impl DawApp {
             || self.inspector_open
             || self.instrument_open
             || self.effects_open
-            || self.routing_open;
+            || self.routing_open
+            || self.automation_open;
         egui::CentralPanel::default()
             .frame(daw_ui::inset().inner_margin(0))
             .show(ctx, |ui| {
@@ -1284,6 +1321,7 @@ impl DawApp {
         self.instrument_editor(ctx);
         self.channel_rack(ctx);
         self.routing_popup(ctx);
+        self.automation_editor(ctx);
         let files = ctx.input(|i| i.raw.dropped_files.clone());
         for file in files {
             if let Some(path) = file.path {
@@ -1388,6 +1426,7 @@ fn audio_equivalent(a: &Project, b: &Project) -> bool {
                 && a.solo == b.solo
                 && a.instrument == b.instrument
                 && a.latency_samples == b.latency_samples
+                && a.automation == b.automation
                 && a.inserts == b.inserts
                 && a.sends == b.sends
                 && a.output_bus == b.output_bus

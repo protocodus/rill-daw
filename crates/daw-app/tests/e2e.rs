@@ -79,7 +79,7 @@ fn five_audio_tracks_drop_export_stereo_song_and_exit() {
     assert!(audio.samples.iter().all(|sample| sample.is_finite()));
     let mut channel_peaks = [0.0_f32; 2];
     let mut stereo_difference = 0.0_f32;
-    for frame in audio.samples.chunks_exact(2) {
+    for frame in audio.samples.as_chunks::<2>().0.iter() {
         for channel in 0..2 {
             channel_peaks[channel] = channel_peaks[channel].max(frame[channel].abs());
         }

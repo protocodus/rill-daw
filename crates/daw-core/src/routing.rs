@@ -71,6 +71,7 @@ impl Project {
                 track.parent_folder = removed.parent_folder;
             }
         }
+        candidate.prune_automation();
         candidate.validate()?;
         *self = candidate;
         Ok(removed)
@@ -131,7 +132,7 @@ impl Project {
     }
 
     /// Stable source-before-destination audio processing order. Includes empty
-    /// buses, excludes folders, and validates both signal and folder graphs.
+    /// buses, excludes folders/automation, and validates both signal and folder graphs.
     /// This is a control-thread operation, not an audio callback operation.
     pub fn routing_order(&self) -> Result<Vec<u64>> {
         let mut indices = HashMap::with_capacity(self.tracks.len());
@@ -144,13 +145,13 @@ impl Project {
         let mut incoming = vec![0usize; self.tracks.len()];
         let mut targets = vec![Vec::new(); self.tracks.len()];
         for (index, track) in self.tracks.iter().enumerate() {
-            if track.kind == TrackKind::Folder {
+            if matches!(track.kind, TrackKind::Folder | TrackKind::Automation) {
                 ensure!(
                     track.output_bus.is_none()
                         && track.sends.is_empty()
                         && track.inserts.is_empty()
                         && track.clips.is_empty(),
-                    "Folders organize tracks and cannot contain audio, inserts, or routing"
+                    "Folders and automation tracks cannot contain audio, inserts, or routing"
                 );
             }
             if track.kind == TrackKind::Bus {
@@ -197,14 +198,16 @@ impl Project {
         let signal_tracks = self
             .tracks
             .iter()
-            .filter(|track| track.kind != TrackKind::Folder)
+            .filter(|track| !matches!(track.kind, TrackKind::Folder | TrackKind::Automation))
             .count();
         let mut ready: VecDeque<_> = self
             .tracks
             .iter()
             .enumerate()
             .filter_map(|(index, track)| {
-                (track.kind != TrackKind::Folder && incoming[index] == 0).then_some(index)
+                (!matches!(track.kind, TrackKind::Folder | TrackKind::Automation)
+                    && incoming[index] == 0)
+                    .then_some(index)
             })
             .collect();
         let mut ordered = Vec::with_capacity(signal_tracks);

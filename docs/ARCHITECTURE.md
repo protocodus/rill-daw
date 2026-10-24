@@ -10,7 +10,7 @@ Rill is a native Rust desktop DAW with separate project, rendering, plugin, and 
 | `daw-engine` | Compile a project into a playback graph; render built-in instruments, clips, insert chains, sends, and buses; compensate path latency; expose device playback and offline export. |
 | `daw-plugins` | Discover VST3 metadata without loading native code into the app; host selected instruments and effects in separate `daw-plugin-host` processes. |
 | `daw-ui` | Shared egui component library, accessible controls, surfaces, popup windows, and design tokens; no audio or application dependencies. |
-| `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Library, Setup, and Properties windows; persistence and transport UI. |
+| `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Automation, Library, Setup, and Properties windows; persistence and transport UI. |
 
 ```mermaid
 flowchart LR
@@ -42,6 +42,14 @@ Project JSON has a versioned envelope. Saving validates first, writes a sibling 
 
 Validation rejects nonfinite values, invalid note ranges, duplicate object IDs, invalid routing, and positions beyond 1,000,000 beats. This generous timeline limit prevents malformed files from saturating integer sample positions. A project has a single tempo between 20 and 400 BPM and a constant meter with quarter-note denominator.
 
+## Parameter automation
+
+`TrackKind::Automation` owns one `AutomationLane` targeting a stable track ID and parameter (with stable insert or bus IDs where needed). Lanes have ordered beat/value points, unique IDs, normalized values in 0–1, and Step, Linear, or Smooth interpolation. Smooth uses monotone cubic Hermite interpolation (PCHIP), bounded to neighboring values. Endpoint values hold outside the point range; an empty or muted lane leaves the manual parameter unchanged. Duplicate lanes for one parameter are rejected. Automation tracks carry no audio edges, clips, inserts, or sends, and do not extend song duration.
+
+The render graph binds curves during preparation. Gain, pan, send gain, and native insert controls evaluate at sample positions corrected for each processing stage's upstream latency. VST3 parameters update between 256-frame processing blocks on the render worker; they are not sample-accurate. Neither curve evaluation nor plug-in IPC runs in the device callback. Delay rings reserve the supported maximum delay when automation is bound.
+
+Curves persist with the project and use normal snapshot undo. Removing a target channel, insert, or send removes dependent lanes. Replacing a VST instrument clears its old parameter lanes to avoid applying old parameter IDs to another plug-in. The editor uses the shared, model-independent `daw-ui::curve_editor`; asynchronous parameter discovery loads a temporary isolated helper, reads parameter metadata, and closes it.
+
 ## Tracks, folders, and routing
 
 Audio and MIDI tracks are signal sources. Bus tracks sum incoming signal and have their own insert chain, fader, pan, main output, and sends. Folders are organizational: they may contain nested tracks and folders but have no clips, insert processing, or audio output. Folder placement does not implicitly route a child's audio into any bus.
@@ -56,7 +64,7 @@ Source / summed bus input
   → main output and post-fader sends
 ```
 
-`output_bus = None` routes the main output to the master. Send destinations and explicit outputs must name bus tracks. Audio edges form a directed acyclic graph; both main outputs and sends participate in cycle detection, including muted or zero-gain paths. Parallel main-output and send edges to one bus are allowed and contribute separately. Duplicate sends to the same destination are rejected. `routing_order` returns all nonfolder tracks in source-before-destination order.
+`output_bus = None` routes the main output to the master. Send destinations and explicit outputs must name bus tracks. Audio edges form a directed acyclic graph; both main outputs and sends participate in cycle detection, including muted or zero-gain paths. Parallel main-output and send edges to one bus are allowed and contribute separately. Duplicate sends to the same destination are rejected. `routing_order` returns all audio, MIDI, and bus tracks in source-before-destination order.
 
 Folder hierarchy is validated independently from the signal graph. Parent pointers must reference folders, cannot form cycles, and persist together with collapsed state. Folder mute is inherited and wins over solo. Soloing a folder selects its descendants; soloing a bus includes its upstream signal sources. Selected sources keep their downstream buses audible while unrelated sources remain excluded.
 
@@ -90,7 +98,7 @@ IPC uses synchronous commands and serialized audio, with allocation and waiting 
 
 Child processes run with the user's permissions. Process isolation is crash containment, not an OS security sandbox. Build the complete workspace so `daw-plugin-host` is available beside the application, or set `DAW_PLUGIN_HOST` to its path.
 
-Native plugin editors, exposed automation/CC/pitch-bend/MPE, sidechain routing, and live latency renegotiation are not implemented. Parameter and opaque-state APIs exist in the plugin layer, but the project/UI does not yet persist plugin presets or expose a parameter editor; newly constructed instances use their default state.
+Native plugin editors, MIDI CC/pitch-bend/MPE, sidechain routing, and live latency renegotiation are not implemented. Parameter and opaque-state APIs exist in the plugin layer, but the project/UI does not yet persist plugin presets or expose a full preset editor; newly constructed instances use their default state.
 
 ## Scope and verification
 

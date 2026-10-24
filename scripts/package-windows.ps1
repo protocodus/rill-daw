@@ -52,6 +52,7 @@ No installer, registry changes, or administrator privileges are needed.
         Expand-Archive -Path $archive -DestinationPath $verifyDir -Force
         $verifiedExecutable = Join-Path $verifyDir "$name/rill.exe"
         if (-not (Test-Path $verifiedExecutable)) { throw 'Extracted archive is missing rill.exe' }
+        if (-not (Test-Path (Join-Path $verifyDir "$name/daw-plugin-host.exe"))) { throw 'Extracted archive is missing daw-plugin-host.exe' }
         [IO.File]::AppendAllText($env:GITHUB_ENV, "RILL_E2E_BINARY=$verifiedExecutable`n", [Text.UTF8Encoding]::new($false))
     }
     Write-Output "Packaged $archive"

@@ -7,11 +7,11 @@ docker build -f Dockerfile.e2e -t rill-e2e .
 docker run --rm rill-e2e
 ```
 
-Verified on macOS and in the Linux arm64 container with Rust 1.92: all 19 application/UI tests and all 9 subprocess E2E tests pass. The container run needs no display server, audio device, or installed VST plug-in.
+The suite runs on macOS and in a Linux arm64 container with Rust 1.92. The container run needs no display server, audio device, or installed VST plug-in.
 
 The integration tests launch the production `rill --headless` executable as a separate process. It runs the real application and egui frame processing without opening a native window or audio device. Pointer clicks use visible labels, and WAV imports use normal hover and file-drop events. Mixdown uses the same asynchronous export worker as File → Export WAV. Each test supplies a separate temporary configuration and scratch directory; closing exercises the application's session recovery path there.
 
-By default the tests launch Cargo's application binary. Set `RILL_E2E_BINARY` to an absolute executable path to test a packaged build instead. CI runs the nine subprocess scenarios again against the executable extracted from each native distribution before uploading the archive.
+By default the tests launch Cargo's application binary. Set `RILL_E2E_BINARY` to an absolute executable path to test a packaged build instead. CI runs all subprocess scenarios again against the executable extracted from each native distribution before uploading the archive.
 
 The audio scenario creates five tracks through the Track menu, drops generated WAV files with different lengths and sample rates onto their rows, exports the complete arrangement, and checks duration including the release tail, finite samples, nonzero stereo content, a distinct audible frequency from each of the five sources, 48 kHz / 32-bit floating-point format, recovered session contents, and successful process exit. Another scenario drops multiple files into empty arrangement space and checks that new tracks appear. Launch-and-quit and File → Quit scenarios verify display-free startup and shutdown. Five further subprocess scenarios cover track creation and Undo/Redo, instrument/library selection, effect insertion/bypass/reordering and bus routing, mixer mute/solo, folder membership/collapse, and Setup Apply/Cancel persistence. All subprocess scenarios share `crates/daw-app/tests/common/mod.rs`.
 
@@ -36,6 +36,7 @@ Supported commands:
 | --- | --- | --- |
 | `inspect` | — | Advance frames and return the project, selection, popup state, settings, status, visible labels, and pointer/label geometry for diagnostics. |
 | `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero. |
+| `pointer` | `x`, `y`, `phase` (`click` or `drag`), drag `to_x`, `to_y` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
 | `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd` | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. |
 | `text` | `text` | Send text input to the focused control. |
 | `drop` | `paths`, optional `track`, `beat` | Drop files onto a visible audio track by project index, or omit `track` to create new tracks in empty arrangement space. Beat must be visible and align to current snap. |

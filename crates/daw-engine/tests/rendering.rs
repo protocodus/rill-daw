@@ -1,5 +1,6 @@
 use daw_core::{
-    AudioData, Clip, ClipContent, Effect, EffectSlot, Note, Project, Send, Track, TrackKind,
+    AudioData, AutomationLane, AutomationParameter, AutomationPoint, AutomationTarget, Clip,
+    ClipContent, Effect, EffectSlot, Interpolation, Note, Project, Send, Track, TrackKind,
 };
 use daw_engine::{CompensationDelay, export_project_wav, export_wav, render};
 use std::{
@@ -178,8 +179,14 @@ fn mute_solo_and_pan_are_applied() {
     inaudible.pan = 1.0;
     project.tracks.extend([audible, inaudible]);
     let audio = render(&project, 8_000, 1.0).unwrap();
-    assert!(audio.chunks_exact(2).any(|frame| frame[0].abs() > 0.01));
-    assert!(audio.chunks_exact(2).all(|frame| frame[1] == 0.0));
+    assert!(
+        audio
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .any(|frame| frame[0].abs() > 0.01)
+    );
+    assert!(audio.as_chunks::<2>().0.iter().all(|frame| frame[1] == 0.0));
     project.tracks[0].mute = true;
     assert!(
         render(&project, 8_000, 1.0)
@@ -420,4 +427,244 @@ fn failed_export_preserves_the_existing_destination() {
     project.tracks.push(track);
     assert!(export_project_wav(&project, &output.0, 8_000).is_err());
     assert_eq!(std::fs::read(&output.0).unwrap(), before);
+}
+
+fn automate(
+    project: &mut Project,
+    target: u64,
+    parameter: AutomationParameter,
+    points: &[(f64, f32)],
+    interpolation: Interpolation,
+) -> u64 {
+    let mut track = Track::new("Automation", TrackKind::Automation);
+    track.automation = Some(AutomationLane {
+        target: AutomationTarget {
+            track: target,
+            parameter,
+        },
+        points: points
+            .iter()
+            .map(|&(beat, value)| AutomationPoint::new(beat, parameter.normalize(value)))
+            .collect(),
+        interpolation,
+    });
+    let id = track.id;
+    project.tracks.push(track);
+    id
+}
+
+#[test]
+fn gain_and_pan_automation_are_sample_accurate() {
+    let wav = TestWav::new(vec![0.25; 4_000], 8_000);
+    let track = audio_track(&wav, 1.0);
+    let target = track.id;
+    let mut project = empty_project();
+    project.tracks.push(track);
+    automate(
+        &mut project,
+        target,
+        AutomationParameter::TrackGain,
+        &[(0.0, 0.0), (1.0, 1.0)],
+        Interpolation::Linear,
+    );
+    automate(
+        &mut project,
+        target,
+        AutomationParameter::TrackPan,
+        &[(0.0, -1.0), (1.0, 1.0)],
+        Interpolation::Linear,
+    );
+    let output = render(&project, 8_000, 1.0).unwrap();
+    for (index, frame) in output.as_chunks::<2>().0.iter().enumerate() {
+        let beat = index as f32 / 4_000.0;
+        let pan = beat * 2.0 - 1.0;
+        let expected = [
+            0.25 * beat * (1.0 - pan.max(0.0)),
+            0.25 * beat * (1.0 + pan.min(0.0)),
+        ];
+        assert!((frame[0] - expected[0]).abs() < 1e-6, "Left frame {index}");
+        assert!((frame[1] - expected[1]).abs() < 1e-6, "Right frame {index}");
+    }
+}
+
+#[test]
+fn step_and_smooth_automation_render_the_requested_curve() {
+    let wav = TestWav::new(vec![0.25; 4_000], 8_000);
+    for interpolation in [Interpolation::Step, Interpolation::Smooth] {
+        let track = audio_track(&wav, 1.0);
+        let target = track.id;
+        let mut project = empty_project();
+        project.tracks.push(track);
+        automate(
+            &mut project,
+            target,
+            AutomationParameter::TrackGain,
+            &[(0.0, 0.0), (0.5, 1.0), (1.0, 1.0)],
+            interpolation,
+        );
+        let output = render(&project, 8_000, 1.0).unwrap();
+        assert!(output.iter().all(|value| (0.0..=0.250_001).contains(value)));
+        assert!((output[4_000] - 0.25).abs() < 1e-6);
+        match interpolation {
+            Interpolation::Step => assert!(output[..4_000].iter().all(|value| *value == 0.0)),
+            // PCHIP between (0,0), (.5,1), (1,1): its midpoint is .6875.
+            Interpolation::Smooth => assert!((output[2_000] - 0.25 * 0.6875).abs() < 1e-6),
+            Interpolation::Linear => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn muted_empty_and_folder_muted_lanes_restore_manual_values() {
+    let wav = TestWav::new(vec![1.0; 4_000], 8_000);
+    let track = audio_track(&wav, 0.3);
+    let target = track.id;
+    let mut project = empty_project();
+    project.tracks.push(track);
+    let lane = automate(
+        &mut project,
+        target,
+        AutomationParameter::TrackGain,
+        &[(0.0, 0.0)],
+        Interpolation::Linear,
+    );
+    project.track_mut(lane).unwrap().mute = true;
+    // Solo on a control lane must not silence the audio graph.
+    project.track_mut(lane).unwrap().solo = true;
+    let assert_manual = |project: &Project| {
+        assert!(
+            render(project, 8_000, 1.0)
+                .unwrap()
+                .iter()
+                .all(|value| (*value - 0.3).abs() < 1e-6)
+        )
+    };
+    assert_manual(&project);
+    let folder = project.add_folder("Muted controls");
+    project.track_mut(folder).unwrap().mute = true;
+    project.track_mut(lane).unwrap().mute = false;
+    project.set_parent_folder(lane, Some(folder)).unwrap();
+    assert_manual(&project);
+    project.track_mut(folder).unwrap().mute = false;
+    project
+        .track_mut(lane)
+        .unwrap()
+        .automation
+        .as_mut()
+        .unwrap()
+        .points
+        .clear();
+    assert_manual(&project);
+}
+
+#[test]
+fn automated_inserts_sends_and_bus_faders_follow_compensated_musical_time() {
+    let wav = TestWav::new(vec![0.1; 4_000], 8_000);
+    for pre_fader in [false, true] {
+        let mut source = audio_track(&wav, 1.0);
+        source.latency_samples = 37;
+        let slot = effect(Effect::Gain { gain: 1.0 });
+        let slot_id = slot.id;
+        source.inserts.push(slot);
+        let target = source.id;
+        let mut bus = Track::new("Automated bus", TrackKind::Bus);
+        bus.latency_samples = 53;
+        let bus_id = bus.id;
+        // A zero manual send must still exist when its automation is active.
+        source.sends.push(Send {
+            target_bus: bus_id,
+            gain: 0.0,
+            pre_fader,
+        });
+        let mut parallel = audio_track(&wav, 2.0);
+        parallel.latency_samples = 257;
+        let mut project = empty_project();
+        project.tracks.extend([bus, source, parallel]);
+        for (track, parameter, from, to) in [
+            (target, AutomationParameter::TrackGain, 0.0, 1.0),
+            (
+                target,
+                AutomationParameter::InsertGain { effect: slot_id },
+                1.0,
+                2.0,
+            ),
+            (
+                target,
+                AutomationParameter::SendGain { bus: bus_id },
+                0.0,
+                1.0,
+            ),
+            (bus_id, AutomationParameter::TrackGain, 1.0, 0.5),
+        ] {
+            automate(
+                &mut project,
+                track,
+                parameter,
+                &[(0.0, from), (1.0, to)],
+                Interpolation::Linear,
+            );
+        }
+        let output = render(&project, 8_000, 1.0).unwrap();
+        for (index, frame) in output.as_chunks::<2>().0.iter().enumerate() {
+            let beat = index as f32 / 4_000.0;
+            let main = 0.1 * (1.0 + beat) * beat;
+            let send =
+                0.1 * (1.0 + beat) * beat * (1.0 - beat * 0.5) * if pre_fader { 1.0 } else { beat };
+            let expected = 0.2 + main + send;
+            assert!(
+                (frame[0] - expected).abs() < 2e-6,
+                "Frame {index}: {} vs {expected}",
+                frame[0]
+            );
+            assert!((frame[1] - expected).abs() < 2e-6);
+        }
+    }
+}
+
+#[test]
+fn automated_delay_time_feedback_and_mix_change_the_echoes() {
+    let mut samples = vec![0.0; 4_000];
+    samples[0] = 0.5;
+    samples[1_200] = 0.5;
+    let wav = TestWav::new(samples, 8_000);
+    let mut source = audio_track(&wav, 1.0);
+    let target = source.id;
+    let slot = effect(Effect::Delay {
+        time_ms: 10.0,
+        feedback: 0.5,
+        mix: 1.0,
+    });
+    let effect = slot.id;
+    source.inserts.push(slot);
+    let mut project = empty_project();
+    project.tracks.push(source);
+    for (parameter, from, to) in [
+        (AutomationParameter::DelayTime { effect }, 10.0, 20.0),
+        (AutomationParameter::DelayFeedback { effect }, 0.5, 0.0),
+        (AutomationParameter::DelayMix { effect }, 1.0, 0.5),
+    ] {
+        automate(
+            &mut project,
+            target,
+            parameter,
+            &[(0.0, from), (0.25, to)],
+            Interpolation::Step,
+        );
+    }
+    let output = render(&project, 8_000, 1.0).unwrap();
+    for (frame, expected) in [
+        (0, 0.0),
+        (80, 0.5),
+        (160, 0.25),
+        (1_200, 0.25),
+        (1_280, 0.0),
+        (1_360, 0.25),
+        (1_520, 0.0),
+    ] {
+        assert!(
+            (output[frame * 2] - expected).abs() < 1e-4,
+            "Frame {frame}: {} vs {expected}",
+            output[frame * 2]
+        );
+    }
 }

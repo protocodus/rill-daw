@@ -29,6 +29,7 @@ The initial session contains three MIDI instruments and an original generated dr
 - Ordered insert chains with gain, stereo delay, and isolated VST3 effects. Reorder, bypass, or remove slots.
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
 - Nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
+- One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
 - Output-device, sample-rate, and buffer-size setup; writable scratch directory and custom VST3 scan directories.
 - Versioned project save/open, 30-second scratch recovery snapshots, MIDI import/export, and background stereo WAV mixdown including effect tails.
 
@@ -45,6 +46,7 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Effects** | Add, reorder, bypass, and edit the selected channel's inserts. |
 | **Mixer** | Balance channels, with shortcuts to their instruments, effects, and routing. |
 | **Routing** | Choose the output bus and configure pre/post-fader sends. |
+| **Automation** | Create parameter tracks and edit curves for channel, send, insert, and VST3 controls. |
 | **Properties** | Edit names, levels, audio fades, colors, folder membership, and compact/collapsed state; inspect clip timing. |
 | **Library** | Search, scan, and assign instruments. |
 | **Setup** | Configure Audio, Storage, and Plug-ins on separate pages. |
@@ -77,6 +79,14 @@ Select a track and choose **Window → Effects**, or use its Effects button in M
 
 To group channels for shared processing, choose their output bus in **Window → Routing**. A bus can feed another bus. Folder membership is independent of audio routing: set **Folder** in Properties to organize tracks. Folder mute/solo applies to descendants. Track color is available in Properties; track-header context menus provide collapse/expand.
 
+## Automation
+
+Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, an insert control, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
+
+Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. Choose **Step**, **Linear**, or **Smooth** interpolation; Smooth uses a bounded cubic spline without overshoot. The first and last values hold beyond the curve endpoints. Disable or mute a lane to return to the channel's manual value. Curves save with the project and support undo/redo.
+
+For a VST3 parameter, select the instrument or insert, click **Read parameters**, and choose its named parameter. Discovery runs in a separate helper process. Built-in parameters render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
+
 ## Setup and recovery
 
 **Window → Setup → Audio** lists output devices and supported sample rates and lets you request a buffer size. **Storage** selects the scratch directory; **Plug-ins** adds VST3 scan roots. Unsupported device settings report an error rather than silently substituting a configuration. The render queue holds two requested buffers, with a minimum of 512 frames; hover the device buffer latency to see its contribution. Setup edits apply only after **Apply**; Cancel, Escape, and closing the popup discard them.
@@ -91,7 +101,7 @@ Each VST3 instrument/effect instance runs in a separate `daw-plugin-host` proces
 
 This is crash isolation. Helpers retain the user's filesystem and network permissions; they are not an OS permission sandbox. Plug-in IPC runs on the render worker, away from the lock-free device callback. The helper must be next to `rill`, or specified by `DAW_PLUGIN_HOST`.
 
-VST3 audio, MIDI, latency, transport, and effect inputs work. Native plug-in windows, a parameter/preset UI, project-persisted plug-in state, automation, sidechains, and VST2/AU hosting are not included. Instances currently use their default preset. The plug-in crate exposes parameter/state/recovery APIs for further integration.
+VST3 audio, MIDI, latency, transport, and effect inputs work. Native plug-in windows, a preset UI, project-persisted plug-in state, sidechains, and VST2/AU hosting are not included. Instances currently use their default preset. The plug-in crate exposes parameter/state/recovery APIs for further integration.
 
 ## Rendering and verification
 

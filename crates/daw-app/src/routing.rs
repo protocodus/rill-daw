@@ -16,7 +16,7 @@ impl DawApp {
             self.effects_open = false;
             return;
         };
-        if track.kind == TrackKind::Folder {
+        if matches!(track.kind, TrackKind::Folder | TrackKind::Automation) {
             self.effects_open = false;
             return;
         }
@@ -188,7 +188,7 @@ impl DawApp {
             self.routing_open = false;
             return;
         };
-        if track.kind == TrackKind::Folder {
+        if matches!(track.kind, TrackKind::Folder | TrackKind::Automation) {
             self.routing_open = false;
             return;
         }

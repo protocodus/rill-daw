@@ -2,7 +2,7 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
-Arrangement remains the base canvas. Clip Editor, Instrument, Effects, Mixer, Routing, Library, Setup, and Properties open on demand as one focused popup at a time. Application commands live in File, Edit, Track, and Window menus. Components keep their labels short; explanations belong in tooltips or the relevant popup rather than permanent interface text.
+Arrangement remains the base canvas. Clip Editor, Instrument, Effects, Mixer, Routing, Automation, Library, Setup, and Properties open on demand as one focused popup at a time. Application commands live in File, Edit, Track, and Window menus. Components keep their labels short; explanations belong in tooltips or the relevant popup rather than permanent interface text.
 
 ## Theme and tokens
 
@@ -19,7 +19,7 @@ Sizes are logical screen points and follow egui's display scaling. The theme als
 
 ## Components
 
-All functions are available at the crate root and through `daw_ui::widgets`.
+Standard controls are available at the crate root and through `daw_ui::widgets`. The curve editor is exported at the crate root.
 
 | Purpose | API |
 | --- | --- |
@@ -35,6 +35,7 @@ All functions are available at the crate root and through `daw_ui::widgets`.
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | Generic `slider`, `number` |
 | Track color | `color_edit` |
+| Interactive parameter curves | `curve_editor`, `CurvePoint`, `CurveView`, `CurveEdit` |
 | Surfaces | `panel`, `card`, `inset` |
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
@@ -96,3 +97,5 @@ cargo clippy -p daw-ui --all-targets -- -D warnings
 ```
 
 `workspace_popup(title, ctx)` sizes a canvas tool below the transport within the current viewport. The app disables the background arrangement while a tool is open. Menu commands, Escape, and window close all use the same state transitions. Every added user-facing feature requires a subprocess E2E test; component interaction tests complement those scenarios.
+
+`curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.

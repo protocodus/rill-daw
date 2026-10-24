@@ -57,7 +57,7 @@ jobs:
       - name: App state and UI interaction tests
         run: cargo test --locked -p daw-app --bin rill
       - name: Headless end-to-end tests
-        run: cargo test --locked -p daw-app --test e2e --test features_e2e -- --nocapture
+        run: cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e -- --nocapture
       - name: Strict Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Package macOS and Linux
@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           test -n "$RILL_E2E_BINARY"
-          cargo test --locked -p daw-app --test e2e --test features_e2e -- --nocapture
+          cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e -- --nocapture
       - name: Upload native distribution and checksum
         uses: actions/upload-artifact@v4
         with:

@@ -557,7 +557,9 @@ impl VstInstrument {
             .collect())
     }
 
-    /// Set a controller parameter on the original control thread, with playback stopped.
+    /// Set a normalized parameter serially between processing blocks on the owning
+    /// render/control thread. The isolated helper applies it before the next block;
+    /// this bounded IPC call must never run in the hardware audio callback.
     pub fn set_parameter(&mut self, id: u32, value: f64) -> Result<()> {
         ensure!(
             value.is_finite() && (0.0..=1.0).contains(&value),

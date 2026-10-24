@@ -147,7 +147,7 @@ impl DawApp {
                     );
                     p.line_segment(
                         [row.left_bottom(), row.right_bottom()],
-                        Stroke::new(1.0, LINE),
+                        Stroke::new(1.0_f32, LINE),
                     );
                     let header = Rect::from_min_size(row.min, Vec2::new(HEADER - 1.0, row_height));
                     p.rect_filled(header, 0.0, if selected { RAISED } else { PANEL });
@@ -179,11 +179,12 @@ impl DawApp {
                             TrackKind::Midi => "MIDI / INSTRUMENT",
                             TrackKind::Bus => "BUS / RETURN",
                             TrackKind::Folder => "FOLDER",
+                            TrackKind::Automation => "AUTOMATION",
                         },
                         FontId::proportional(9.0),
                         MUTED,
                     );
-                    if !compact {
+                    if !compact && track.kind != TrackKind::Automation {
                         for (i, name, active) in [(0, "M", track.mute), (1, "S", track.solo)] {
                             let rect = Rect::from_min_size(
                                 row.min + Vec2::new(14.0 + i as f32 * 30.0, 51.0),
@@ -213,7 +214,7 @@ impl DawApp {
                         let bar = beat % self.project.beats_per_bar as usize == 0;
                         p.line_segment(
                             [Pos2::new(x, row.top()), Pos2::new(x, row.bottom())],
-                            Stroke::new(1.0, if bar { LINE } else { GRID_MINOR }),
+                            Stroke::new(1.0_f32, if bar { LINE } else { GRID_MINOR }),
                         );
                     }
                     if row_response.clicked() {
@@ -229,6 +230,13 @@ impl DawApp {
                         }
                     }
                     row_response.context_menu(|ui| {
+                        if track.kind == TrackKind::Automation
+                            && daw_ui::button(ui, "Edit automation").clicked()
+                        {
+                            self.selected_track = Some(track.id);
+                            popup = Some(PopupKind::Automation);
+                            ui.close();
+                        }
                         if daw_ui::button(ui, "Properties").clicked() {
                             self.selected_track = Some(track.id);
                             popup = Some(PopupKind::Inspector);
@@ -252,6 +260,44 @@ impl DawApp {
                             ui.close();
                         }
                     });
+                    if let Some(lane) = &track.automation {
+                        let left = origin.max(ui.clip_rect().left());
+                        let right = row.right().min(ui.clip_rect().right());
+                        if right > left {
+                            let curve_rect = Rect::from_min_max(
+                                Pos2::new(left, row.top() + 10.0),
+                                Pos2::new(right, row.bottom() - 10.0),
+                            );
+                            let start = ((left - origin) / self.zoom) as f64;
+                            let end = ((right - origin) / self.zoom) as f64;
+                            daw_ui::paint_curve(
+                                &p,
+                                curve_rect,
+                                start,
+                                end,
+                                color(track.color),
+                                |beat| lane.value_at(beat).unwrap_or(0.5),
+                            );
+                            for point in &lane.points {
+                                let x = origin + point.beat as f32 * self.zoom;
+                                if x >= left && x <= right {
+                                    p.circle_filled(
+                                        Pos2::new(
+                                            x,
+                                            curve_rect.bottom() - point.value * curve_rect.height(),
+                                        ),
+                                        3.0,
+                                        color(track.color),
+                                    );
+                                }
+                            }
+                        }
+                        if row_response.double_clicked() {
+                            self.selected_track = Some(track.id);
+                            self.selected_clip = None;
+                            popup = Some(PopupKind::Automation);
+                        }
+                    }
                     if row_response.double_clicked()
                         && track.kind == TrackKind::Midi
                         && let Some(pos) = row_response.interact_pointer_pos()
@@ -289,7 +335,7 @@ impl DawApp {
                             rect,
                             4.0,
                             Stroke::new(
-                                if is_selected { 1.8 } else { 0.8 },
+                                if is_selected { 1.8_f32 } else { 0.8_f32 },
                                 col.gamma_multiply(if is_selected { 1.0 } else { 0.65 }),
                             ),
                             StrokeKind::Inside,
@@ -434,7 +480,7 @@ impl DawApp {
                             p.rect_filled(row, 0.0, ACCENT.gamma_multiply(0.08));
                             p.line_segment(
                                 [Pos2::new(x, row.top()), Pos2::new(x, row.bottom())],
-                                Stroke::new(3.0, ACCENT),
+                                Stroke::new(3.0_f32, ACCENT),
                             );
                         }
                     }
@@ -442,7 +488,7 @@ impl DawApp {
                     if x >= origin && x <= row.right() {
                         p.line_segment(
                             [Pos2::new(x, row.top()), Pos2::new(x, row.bottom())],
-                            Stroke::new(1.5, ACCENT),
+                            Stroke::new(1.5_f32, ACCENT),
                         );
                     }
                 }
@@ -478,7 +524,7 @@ impl DawApp {
                     let x = origin + beat as f32 * self.zoom;
                     p.line_segment(
                         [Pos2::new(x, y), Pos2::new(x, y + ROW)],
-                        Stroke::new(3.0, ACCENT),
+                        Stroke::new(3.0_f32, ACCENT),
                     );
                 }
             });
@@ -624,36 +670,41 @@ impl DawApp {
                     if parent != track.parent_folder {
                         parent_change = Some(parent);
                     }
-                    ui.add_space(14.0);
-                    label(ui, "LEVEL");
-                    changed |= ui
-                        .add(daw_ui::slider(&mut track.gain, 0.0..=1.5).show_value(false))
-                        .changed();
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{:.1} dB",
-                            20.0 * track.gain.max(0.00001).log10()
-                        ))
-                        .monospace()
-                        .color(ACCENT),
-                    );
-                    label(ui, "PAN");
-                    changed |= ui
-                        .add(daw_ui::slider(&mut track.pan, -1.0..=1.0).show_value(false))
-                        .changed();
-                    ui.horizontal(|ui| {
-                        changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
-                        changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
-                    });
-                    ui.add_space(14.0);
-                    label(ui, "PATH LATENCY");
-                    changed |= ui
-                        .add(
-                            daw_ui::number(&mut track.latency_samples)
-                                .range(0..=192_000)
-                                .suffix(" samples"),
-                        )
-                        .changed();
+                    if track.kind == TrackKind::Automation {
+                        changed |=
+                            daw_ui::toggle(ui, &mut track.mute, "Bypass automation").changed();
+                    } else {
+                        ui.add_space(14.0);
+                        label(ui, "LEVEL");
+                        changed |= ui
+                            .add(daw_ui::slider(&mut track.gain, 0.0..=1.5).show_value(false))
+                            .changed();
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{:.1} dB",
+                                20.0 * track.gain.max(0.00001).log10()
+                            ))
+                            .monospace()
+                            .color(ACCENT),
+                        );
+                        label(ui, "PAN");
+                        changed |= ui
+                            .add(daw_ui::slider(&mut track.pan, -1.0..=1.0).show_value(false))
+                            .changed();
+                        ui.horizontal(|ui| {
+                            changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
+                            changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                        });
+                        ui.add_space(14.0);
+                        label(ui, "PATH LATENCY");
+                        changed |= ui
+                            .add(
+                                daw_ui::number(&mut track.latency_samples)
+                                    .range(0..=192_000)
+                                    .suffix(" samples"),
+                            )
+                            .changed();
+                    }
                 }
                 if changed {
                     self.changed();
@@ -779,7 +830,7 @@ pub fn paint_waveform(
                 Pos2::new(px, center - height),
                 Pos2::new(px, center + height),
             ],
-            Stroke::new(1.0, col.gamma_multiply(0.8)),
+            Stroke::new(1.0_f32, col.gamma_multiply(0.8)),
         );
     }
 }

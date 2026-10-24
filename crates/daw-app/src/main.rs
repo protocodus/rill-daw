@@ -1,6 +1,7 @@
 mod app;
 mod arrangement;
 mod automation;
+mod automation_editor;
 mod editor;
 mod routing;
 mod settings;
@@ -24,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.daw.json]\nrill --render-demo output.wav\nrill --render session.daw.json output.wav\nrill --screenshot output.png [--view clip|mixer|instrument|effects|routing|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nBuild all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.daw.json]\nrill --render-demo output.wav\nrill --render session.daw.json output.wav\nrill --screenshot output.png [--view clip|mixer|instrument|effects|routing|automation|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nBuild all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -88,6 +89,7 @@ fn main() -> anyhow::Result<()> {
                 Some("mixer") => app.view = app::WorkspaceView::Mixer,
                 Some("clip") => app.view = app::WorkspaceView::Clip,
                 Some("library") => app.open_popup(app::PopupKind::Library),
+                Some("automation") => app.open_popup(app::PopupKind::Automation),
                 Some("routing") => app.open_popup(app::PopupKind::Routing),
                 Some("instrument") => app.open_popup(app::PopupKind::Instrument),
                 Some("rack" | "effects") => {

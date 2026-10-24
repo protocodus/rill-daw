@@ -5,7 +5,10 @@
 //! cargo test -p daw-engine --test isolated_graph -- --ignored --nocapture`.
 
 use anyhow::{Context, Result};
-use daw_core::{Clip, Effect, EffectSlot, Instrument, Note, Project};
+use daw_core::{
+    AutomationParameter, AutomationPoint, AutomationTarget, Clip, Effect, EffectSlot, Instrument,
+    Interpolation, Note, Project,
+};
 
 #[test]
 #[ignore = "requires installed instrument/effect in DAW_TEST_VST3 and DAW_TEST_VST3_EFFECT"]
@@ -48,7 +51,9 @@ fn isolated_instrument_insert_and_parallel_buses_render_aligned_audio() -> Resul
     // A tiny threshold tolerates a modelled analog effect's idle noise floor.
     let first = |channel: usize| {
         output
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .position(|frame| frame[channel].abs() > 0.000_1)
             .expect("Both routed branches must produce audible output")
     };
@@ -72,4 +77,97 @@ fn isolated_instrument_insert_and_parallel_buses_render_aligned_audio() -> Resul
     assert!(peak > 0.001);
     eprintln!("Isolated graph: peak={peak:.4}, left onset={left_start}, right onset={right_start}");
     Ok(())
+}
+
+/// CHOWTapeModel exposes an Output Gain parameter. This test drives that parameter
+/// through the engine's automation lane, including its muted/manual fallback.
+#[test]
+#[ignore = "requires CHOWTapeModel in DAW_TEST_VST3_EFFECT"]
+fn isolated_vst_effect_parameter_automation_changes_rendered_audio() -> Result<()> {
+    let effect = std::env::var("DAW_TEST_VST3_EFFECT").context("Set DAW_TEST_VST3_EFFECT")?;
+    let probe = daw_plugins::VstEffect::load(std::path::Path::new(&effect), 48_000.0, 256)?;
+    assert!(probe.isolation_pid().is_some());
+    let parameter = probe
+        .parameters()?
+        .into_iter()
+        .find(|parameter| {
+            parameter.name.eq_ignore_ascii_case("Output Gain") && !parameter.read_only
+        })
+        .context("This native automation test requires an Output Gain parameter (CHOWTapeModel)")?;
+    drop(probe);
+    let mut project = Project::new();
+    project.tempo = 120.0;
+    project.loop_enabled = false;
+    let source = project.add_midi_track("Steady tone");
+    let slot = EffectSlot::new("Automated native gain", Effect::Vst3 { path: effect });
+    let slot_id = slot.id;
+    let track = project.track_mut(source).unwrap();
+    track.instrument = Instrument::Sine;
+    track.gain = 0.25;
+    track.clips.push(Clip::midi(
+        "Held note",
+        0.0,
+        3.0,
+        vec![Note::new(69, 0.0, 3.0, 100)],
+    ));
+    track.inserts.push(slot);
+    let lane = project.add_automation_track_with_value(
+        "Native output level",
+        AutomationTarget {
+            track: source,
+            parameter: AutomationParameter::VstParameter {
+                effect: Some(slot_id),
+                id: parameter.id,
+            },
+        },
+        0.1,
+    )?;
+    let automation = project.automation_lane_mut(lane).unwrap();
+    automation.interpolation = Interpolation::Step;
+    automation.points = vec![
+        AutomationPoint::new(0.0, 0.1),
+        AutomationPoint::new(1.0, 0.9),
+        AutomationPoint::new(2.0, 0.1),
+    ];
+    let automated = daw_engine::render(&project, 48_000, 3.0)?;
+    assert!(automated.iter().all(|sample| sample.is_finite()));
+    let levels = [
+        window_rms(&automated, 0.25, 0.4),
+        window_rms(&automated, 0.75, 0.9),
+        window_rms(&automated, 1.25, 1.4),
+    ];
+    assert!(
+        levels[1] > levels[0] * 4.0,
+        "Native gain did not rise: {levels:?}"
+    );
+    assert!(
+        levels[1] > levels[2] * 4.0,
+        "Native gain did not fall: {levels:?}"
+    );
+    project.track_mut(lane).unwrap().mute = true;
+    let manual = daw_engine::render(&project, 48_000, 3.0)?;
+    let manual_levels = [
+        window_rms(&manual, 0.25, 0.4),
+        window_rms(&manual, 0.75, 0.9),
+        window_rms(&manual, 1.25, 1.4),
+    ];
+    assert!(manual_levels[0] > 0.001);
+    assert!(
+        (0.8..1.25).contains(&(manual_levels[1] / manual_levels[0])),
+        "Muted lane changed gain: {manual_levels:?}"
+    );
+    assert!((0.8..1.25).contains(&(manual_levels[2] / manual_levels[0])));
+    eprintln!(
+        "Isolated VST output automation RMS low/high/low={levels:?}; muted={manual_levels:?}"
+    );
+    Ok(())
+}
+
+fn window_rms(samples: &[f32], start: f64, end: f64) -> f64 {
+    let start = (start * 48_000.0) as usize;
+    let end = (end * 48_000.0) as usize;
+    let sum: f64 = (start..end)
+        .map(|frame| f64::from(samples[frame * 2]).powi(2))
+        .sum();
+    (sum / (end - start) as f64).sqrt()
 }
