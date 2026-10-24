@@ -11,8 +11,8 @@ pub use quality::{RenderOptions, ResampleQuality};
 
 pub use device::{AudioEngine, DeviceInfo, DeviceSettings, EngineSnapshot, list_output_devices};
 pub use render::{
-    CompensationDelay, export_project_wav, export_project_wav_with_options, export_wav,
-    export_wav_with_options, render, render_with_options, render_with_workers,
+    CompensationDelay, ExportOptions, export_project_wav, export_project_wav_with_options,
+    export_wav, export_wav_with_options, render, render_with_options, render_with_workers,
 };
 
 #[cfg(test)]

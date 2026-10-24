@@ -7,6 +7,7 @@ mod crossfade_ui;
 mod document_ui;
 mod editor;
 mod engine_lifecycle;
+mod export_ui;
 mod history_ui;
 mod join_ui;
 mod library;

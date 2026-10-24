@@ -19,6 +19,9 @@ const SIZE: Vec2 = Vec2::new(1600.0, 1200.0);
 fn default_pixels_per_point() -> f32 {
     1.0
 }
+fn one_key_press() -> usize {
+    1
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
@@ -90,6 +93,11 @@ enum Command {
         alt: bool,
         #[serde(default)]
         cmd: bool,
+        /// Deliver the chord and its release before the same UI frame.
+        #[serde(default)]
+        release_modifiers: bool,
+        #[serde(default = "one_key_press")]
+        repetitions: usize,
     },
     Text {
         text: String,
@@ -130,6 +138,7 @@ enum Command {
 enum TestDocumentDialog {
     Save,
     Open,
+    Export,
 }
 
 #[derive(Deserialize)]
@@ -468,6 +477,7 @@ impl Harness {
                     match kind {
                         TestDocumentDialog::Save => DocumentDialog::Save,
                         TestDocumentDialog::Open => DocumentDialog::Open,
+                        TestDocumentDialog::Export => DocumentDialog::Export,
                     },
                     path,
                 ));
@@ -581,7 +591,13 @@ impl Harness {
                 ctrl,
                 alt,
                 cmd,
+                release_modifiers,
+                repetitions,
             } => {
+                ensure!(
+                    (1..=32).contains(&repetitions),
+                    "Key repetitions must be between 1 and 32"
+                );
                 let key = egui::Key::from_name(&key).context("Unknown keyboard key")?;
                 let modifiers = egui::Modifiers {
                     alt,
@@ -590,18 +606,33 @@ impl Harness {
                     mac_cmd: cmd && cfg!(target_os = "macos"),
                     command: cmd || ctrl,
                 };
-                for pressed in [true, false] {
+                let event = |pressed| Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers,
+                };
+                if release_modifiers || repetitions > 1 {
                     self.frame(RawInput {
-                        modifiers,
-                        events: vec![Event::Key {
-                            key,
-                            physical_key: None,
-                            pressed,
-                            repeat: false,
-                            modifiers,
-                        }],
+                        modifiers: if release_modifiers {
+                            egui::Modifiers::NONE
+                        } else {
+                            modifiers
+                        },
+                        events: (0..repetitions)
+                            .flat_map(|_| [event(true), event(false)])
+                            .collect(),
                         ..Default::default()
                     });
+                } else {
+                    for pressed in [true, false] {
+                        self.frame(RawInput {
+                            modifiers,
+                            events: vec![event(pressed)],
+                            ..Default::default()
+                        });
+                    }
                 }
                 self.settle();
             }
@@ -756,7 +787,24 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["window_rects"] = self
+            .ctx
+            .memory(|memory| {
+                memory
+                    .layer_ids()
+                    .filter(|layer| {
+                        layer.order == egui::Order::Middle && memory.areas().is_visible(layer)
+                    })
+                    .filter_map(|layer| memory.area_rect(layer.id))
+                    .map(|rect| {
+                        json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .into();
         state["exported_file"] = json!(self.app.exported_file);
+        state["popups"]["export"] = json!(self.app.export_open);
+        state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
         state["clipboard_text"] = json!(self.clipboard_text);
         state["document_guard"] = self.app.document_guard_diagnostics();
         state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());

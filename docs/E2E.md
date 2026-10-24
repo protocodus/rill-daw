@@ -62,12 +62,12 @@ Supported commands:
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
 | `open` | `path` | Execute an already-approved open through the document pipeline, preserving the outgoing session in recovery. Use `file_dialog` and File → Open to test the unsaved-change decision. |
-| `file_dialog` | `kind` (`save` or `open`), `path` (or `null`) | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. |
+| `file_dialog` | `kind` (`save`, `open`, or `export`), `path` (or `null`) | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. |
 | `close_window` | — | Deliver a native viewport close request and return the resulting guard or exit state. Unsaved work requires an explicit UI choice. |
 | `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero. |
 | `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
 | `scroll` | `x`, `y`, `delta`; optional `delta_x` and modifiers | Scroll at viewport coordinates; negative delta moves down the content. |
-| `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd` | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. |
+| `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd`, `release_modifiers`, `repetitions` (1–32) | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. `release_modifiers: true` delivers the complete chord in one frame with no modifiers held at repaint; repeated presses are also delivered in one frame. Defaults preserve separate press/release frames. |
 | `focused` | `focused` boolean | Change window focus for held-note release tests. |
 | `text` | `text` | Send text input to the focused control. |
 | `drop` | `paths`, optional `track`, `beat` | Drop files onto a visible audio track by project index, or omit `track` to create new tracks in empty arrangement space. Beat must be visible and align to current snap. |
@@ -75,7 +75,7 @@ Supported commands:
 | `wait_export` | optional `timeout_ms` | Pump application frames until export completes; maximum timeout is 60 seconds. |
 | `quit` | — | Explicitly finish the isolated test session through the approved shutdown pipeline, retaining native state barriers and recovery. It bypasses the unsaved-change decision; use `close_window` or File → Quit to test that decision. Wait for export before quitting. |
 
-File → Quit closes the process through the application's normal viewport command after any unsaved-change decision. Native file picker presentation requires a windowing environment; the driver can supply Open/Save picker results, while export receives its path explicitly. These are automated UI regressions, not a replacement for native mouse-and-keyboard testing. `--headless` is an opt-in test driver, not a network service. Commands can operate on files with the current user's permissions, so feed it trusted input.
+File → Quit closes the process through the application's normal viewport command after any unsaved-change decision. Native file picker presentation requires a windowing environment; the driver can supply Open/Save/Export picker results, or start a default export with an explicit path. These are automated UI regressions, not a replacement for native mouse-and-keyboard testing. `--headless` is an opt-in test driver, not a network service. Commands can operate on files with the current user's permissions, so feed it trusted input.
 
 Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
 
@@ -94,6 +94,14 @@ Headless runs disable automatic physical-device startup for held-note previews. 
 The `project_io_e2e` target covers background bundle saving and loading, later edits remaining dirty, failure preserving the previous archive/current document, Quit waiting for a save, deduplicated waveform preparation, and rejecting oversized WAV declarations before allocation. On Unix it uses a small OS pipe to hold a project read open while exercising real menus, then verifies ordered Save/New completion and outgoing recovery. It needs no device, display, or installed plugin.
 
 `document_guard_e2e` covers New/Open/Quit and native close requests, Cancel/Escape preserving the previous workspace, blocked background edits, native picker cancellation, failed-save retry, and Save completing the actual archive before a transition. It exercises global Save/Open shortcuts from Properties and long Unicode project names in Light/Dark at 1×/2×. `document_guard` exposes the current intent, phase and error; `file_dialog_pending` reports an unconsumed picker result. The `--screenshot ... --view unsaved-changes` preview allows native rendering of the shared decision dialog with an isolated configuration.
+
+It also checks Unicode names and Select All after completed/cancelled pickers.
+`cargo test --locked -p daw-ui --test native_dialog_menu` checks the macOS native
+menu key equivalent against an AppKit text view and verifies cancellation,
+nested-scope and unwind cleanup. It runs on the process main thread without
+opening a window, taking focus, or changing the clipboard. On Linux/Windows the
+same target checks the platform-neutral callback behavior; actual native picker
+keyboard behavior still requires macOS verification.
 
 Headless `open` and `save` continue to wait for native state acknowledgements and file completion by default. Add `"wait":false` to return after dispatch; `{"command":"wait_project","timeout_ms":120000}` waits for queued document actions and native barriers. `project_pending`, `modified`, `project_path`, `waveform_count`, and `waveform_warning` expose completion and recovery state. Failed operations cancel queued destructive transitions and leave the current document open. The driver accepts a bounded project wait of at most 120 seconds; a timed-out wait does not cancel filesystem work.
 
@@ -145,9 +153,16 @@ menu regressions cover fast nested-menu clicks, leaf selection, keyboard access,
 Escape, and outside-click dismissal. Existing MIDI scenarios also enforce a
 compact wrapped toolbar at a narrow desktop viewport.
 
+`popup_close_e2e` clicks native popup close controls after text entry and checks
+that Properties, Instrument, Automation, and Library restore their caller in
+both themes and densities. It derives the click from rendered title and window
+bounds (`window_rects` in driver snapshots). Shared component tests also click
+the complete close target, including its corners, on small and large windows.
+
 ```sh
 cargo test --locked -p daw-ui
 cargo test --locked -p daw-app --test components_e2e
+cargo test --locked -p daw-app --test popup_close_e2e
 ```
 
 Layout regression coverage also includes eight long Unicode plug-in folders in
@@ -172,3 +187,10 @@ and no project/history edits. It validates the rendered WAV as well. State
 includes `exported_file`, `clipboard_text`, and `automation_editor` geometry for
 observing these interactions. Clipboard diagnostics observe output emitted by
 the headless app; they do not read the operating system clipboard.
+
+`export_options_e2e` opens File → Export WAV, checks the displayed duration,
+toggles Include effect tails, and validates an exact 60-second WAV versus the
+default release tail. Popup and destination-picker cancellation preserve the
+project and caller. Its opt-in native test uses `RILL_TEST_VST_INSTRUMENT`
+(Surge XT) to verify both choices against an actual isolated plugin tail;
+ordinary container runs require no installed plugins.

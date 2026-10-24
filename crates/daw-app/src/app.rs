@@ -29,6 +29,7 @@ pub enum PopupKind {
     History,
     Crossfade,
     Join,
+    Export,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -83,6 +84,8 @@ pub struct DawApp {
     pub(crate) next_document_dialog: Option<(crate::document_ui::DocumentDialog, Option<PathBuf>)>,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
     pub(crate) exported_file: Option<PathBuf>,
+    pub(crate) export_open: bool,
+    pub(crate) export_include_effect_tails: bool,
     pub revision: u64,
     pub desired_playing: bool,
     pub cursor: f64,
@@ -183,6 +186,8 @@ impl DawApp {
             next_document_dialog: None,
             export_job: None,
             exported_file: None,
+            export_open: false,
+            export_include_effect_tails: true,
             revision: 0,
             desired_playing: false,
             cursor: 0.0,
@@ -257,6 +262,7 @@ impl DawApp {
             (self.history_open, PopupKind::History),
             (self.crossfade_open, PopupKind::Crossfade),
             (self.join_open, PopupKind::Join),
+            (self.export_open, PopupKind::Export),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -277,6 +283,7 @@ impl DawApp {
         self.history_open = false;
         self.crossfade_open = false;
         self.join_open = false;
+        self.export_open = false;
         self.view = WorkspaceView::Arrangement;
     }
 
@@ -352,6 +359,7 @@ impl DawApp {
             PopupKind::History => self.history_open = true,
             PopupKind::Crossfade => self.crossfade_open = true,
             PopupKind::Join => self.join_open = true,
+            PopupKind::Export => self.export_open = true,
         }
     }
 
@@ -408,7 +416,8 @@ impl DawApp {
             | PopupKind::Effects
             | PopupKind::Routing
             | PopupKind::Automation
-            | PopupKind::History => {}
+            | PopupKind::History
+            | PopupKind::Export => {}
         }
     }
 
@@ -546,6 +555,7 @@ impl DawApp {
                 && !self.inspector_open
                 && !self.automation_open
                 && !self.history_open
+                && !self.export_open
         });
         if note != self.audition_request {
             self.audition_request = note;
@@ -783,10 +793,11 @@ impl DawApp {
         }
     }
     fn import_dialog(&mut self) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Audio / MIDI", &["wav", "mid", "midi"])
-            .pick_file()
-        {
+        if let Some(path) = daw_ui::with_native_dialog_menu(|| {
+            rfd::FileDialog::new()
+                .add_filter("Audio / MIDI", &["wav", "mid", "midi"])
+                .pick_file()
+        }) {
             if path.extension().is_some_and(|e| e == "mid" || e == "midi") {
                 self.begin_edit();
                 let result = self.project.import_midi(&path, self.cursor).map(|_| ());
@@ -966,29 +977,18 @@ impl DawApp {
         .into();
         self.error = false;
     }
-    fn export(&mut self) {
-        if self.export_job.is_some() {
-            self.status = "A mixdown is already rendering".into();
-            return;
-        }
-        if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("mixdown.wav")
-            .add_filter("Wave audio", &["wav"])
-            .save_file()
-        {
-            self.export_to(path);
-        }
-    }
-
-    pub(crate) fn start_export(&mut self, path: PathBuf) {
+    pub(crate) fn start_export(&mut self, path: PathBuf, include_effect_tails: bool) {
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
         }
         let project = self.project.clone();
         let rate = self.settings.sample_rate;
-        let options = daw_engine::RenderOptions {
-            resample_quality: self.settings.resample_quality,
+        let options = daw_engine::ExportOptions {
+            render: daw_engine::RenderOptions {
+                resample_quality: self.settings.resample_quality,
+            },
+            include_effect_tails,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
@@ -1227,13 +1227,36 @@ impl DawApp {
                 && ctx
                     .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
                     .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
-        if (!ctx.wants_keyboard_input() || curve_focused)
-            && ctx.input(|i| {
-                i.modifiers.command && (i.key_pressed(egui::Key::Z) || i.key_pressed(egui::Key::Y))
-            })
-        {
-            self.undo_redo(ctx.input(|i| i.modifiers.shift || i.key_pressed(egui::Key::Y)));
-            return;
+        if !ctx.wants_keyboard_input() || curve_focused {
+            // A chord may be pressed and released between repaints. Match the
+            // modifiers captured by each key event, not the final held state.
+            // Preserve arrival order when several undo/redo keys share a frame.
+            let actions = ctx.input_mut(|input| {
+                let mut actions = Vec::new();
+                input.events.retain(|event| {
+                    if let egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } = event
+                        && modifiers.command
+                        && matches!(key, egui::Key::Z | egui::Key::Y)
+                    {
+                        actions.push(modifiers.shift || *key == egui::Key::Y);
+                        false
+                    } else {
+                        true
+                    }
+                });
+                actions
+            });
+            if !actions.is_empty() {
+                for redo in actions {
+                    self.undo_redo(redo);
+                }
+                return;
+            }
         }
         if self.library_open
             && !egui::Popup::is_any_open(ctx)
@@ -1251,6 +1274,7 @@ impl DawApp {
             || self.history_open
             || self.crossfade_open
             || self.join_open
+            || self.export_open
         {
             return;
         }
@@ -1264,7 +1288,7 @@ impl DawApp {
             self.seek(0.0);
         }
         if self.view == WorkspaceView::Clip
-            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A))
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A))
             && let Some(Clip {
                 content: ClipContent::Midi { notes },
                 ..
@@ -1278,10 +1302,12 @@ impl DawApp {
         {
             self.delete_selection();
         }
-        if !self.midi_editor.quantize_active()
-            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::D))
-        {
-            self.duplicate_selection();
+        if !self.midi_editor.quantize_active() {
+            let presses =
+                ctx.input_mut(|i| i.count_and_consume_key(egui::Modifiers::COMMAND, egui::Key::D));
+            for _ in 0..presses {
+                self.duplicate_selection();
+            }
         }
         for (key, tool) in [
             (egui::Key::Num1, Tool::Select),
@@ -1451,9 +1477,11 @@ impl DawApp {
                             ui.close();
                         }
                         if daw_ui::button(ui, "Export MIDI…").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .set_file_name("session.mid")
-                                .save_file()
+                            if let Some(path) = daw_ui::with_native_dialog_menu(|| {
+                                rfd::FileDialog::new()
+                                    .set_file_name("session.mid")
+                                    .save_file()
+                            })
                             {
                                 let result = self.project.export_midi(path);
                                 self.message(result, "MIDI exported");
@@ -1860,7 +1888,7 @@ impl DawApp {
                     label(ui, "SCRATCH DIRECTORY");
                     ui.label(self.setup_draft.scratch_dir.display().to_string()).on_hover_text("Recovery snapshots are saved here every 30 seconds while editing.");
                     ui.horizontal(|ui| {
-                        if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() { self.setup_draft.scratch_dir = path; }
+                        if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) { self.setup_draft.scratch_dir = path; }
                         if daw_ui::button(ui, "Recover session").clicked() {
                             self.request_document_transition(crate::document_ui::DocumentTransition::Open { path: self.setup_draft.scratch_dir.join("recovery.daw.json"), recovery: true });
                         }
@@ -1897,7 +1925,7 @@ impl DawApp {
                                     folder.clear();
                                 } else { self.message(Err(anyhow::anyhow!("Choose an existing plug-in folder")), ""); }
                             }
-                            if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                            if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
                         });
                     });
                     ctx.data_mut(|data| data.insert_temp(path_key, folder));
@@ -2021,7 +2049,8 @@ impl DawApp {
             || self.automation_open
             || self.history_open
             || self.crossfade_open
-            || self.join_open;
+            || self.join_open
+            || self.export_open;
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
         egui::CentralPanel::default()
@@ -2081,6 +2110,7 @@ impl DawApp {
         self.history_popup(ctx);
         self.crossfade_popup(ctx);
         self.join_popup(ctx);
+        self.export_popup(ctx);
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.

@@ -34,7 +34,7 @@ pub(crate) type EditorStateSignature =
 
 enum PendingAction {
     Save(PathBuf),
-    Export(PathBuf),
+    Export(PathBuf, bool),
     Quit,
     New,
     Recovery,
@@ -359,17 +359,22 @@ impl DawApp {
     }
 
     pub(crate) fn export_to(&mut self, path: PathBuf) {
-        if self.defer_document_request(DocumentRequest::Export(path.clone())) {
+        self.export_to_with_tails(path, true);
+    }
+
+    pub(crate) fn export_to_with_tails(&mut self, path: PathBuf, include_effect_tails: bool) {
+        if self.defer_document_request(DocumentRequest::Export(path.clone(), include_effect_tails))
+        {
             return;
         }
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
         }
-        if let Some(PendingAction::Export(path)) =
-            self.defer_for_editor(PendingAction::Export(path))
+        if let Some(PendingAction::Export(path, include_effect_tails)) =
+            self.defer_for_editor(PendingAction::Export(path, include_effect_tails))
         {
-            self.start_export(path);
+            self.start_export(path, include_effect_tails);
         }
     }
 
@@ -912,7 +917,9 @@ impl DawApp {
                 } else {
                     match pending.action {
                         PendingAction::Save(path) => self.finish_project_save(path),
-                        PendingAction::Export(path) => self.start_export(path),
+                        PendingAction::Export(path, include_effect_tails) => {
+                            self.start_export(path, include_effect_tails)
+                        }
                         PendingAction::New => self.finish_new_session(),
                         PendingAction::Recovery => self.autosave_recovery(),
                         PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),

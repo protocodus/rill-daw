@@ -1445,15 +1445,51 @@ pub fn export_project_wav(
     export_project_wav_with_options(project, path, sample_rate, RenderOptions::default())
 }
 
-/// Export the arrangement and finite tails with explicit source-conversion quality.
+/// Project mixdown choices, independent of realtime playback preparation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExportOptions {
+    pub render: RenderOptions,
+    /// Include instrument releases and effect tails after the last clip.
+    /// When false, stop at the arrangement end rounded to the nearest sample.
+    pub include_effect_tails: bool,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        Self {
+            render: RenderOptions::default(),
+            include_effect_tails: true,
+        }
+    }
+}
+
+impl From<RenderOptions> for ExportOptions {
+    fn from(render: RenderOptions) -> Self {
+        Self {
+            render,
+            ..Self::default()
+        }
+    }
+}
+
+/// Export the arrangement with explicit conversion quality and optional effect tails.
+/// Passing `RenderOptions` alone preserves the default of including finite tails.
+/// Delay compensation is primed and removed in both modes; looping is ignored.
 pub fn export_project_wav_with_options(
     project: &Project,
     path: impl AsRef<Path>,
     sample_rate: u32,
-    options: RenderOptions,
+    options: impl Into<ExportOptions>,
 ) -> Result<()> {
-    let renderer = Renderer::new_with_options(project, sample_rate, false, options)?;
-    let frames = renderer.end_sample;
+    let options = options.into();
+    let renderer = Renderer::new_with_options(project, sample_rate, false, options.render)?;
+    let frames = if options.include_effect_tails {
+        renderer.end_sample
+    } else {
+        // Use the same beat-to-sample conversion as prepared clip boundaries.
+        let samples_per_beat = sample_rate as f64 * 60.0 / project.tempo;
+        (project.end_beat() * samples_per_beat).round() as u64
+    };
     ensure!(
         frames * 8 < u32::MAX as u64 - 128,
         "Export exceeds the WAV 4 GiB size limit"

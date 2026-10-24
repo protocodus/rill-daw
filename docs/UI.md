@@ -52,7 +52,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
 
-Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point inner margins and scroll within the available viewport. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
+Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
 
 `paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases remain flat. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
 
@@ -168,6 +168,13 @@ The current range remains visible beside the picker. Range edits and enabling
 Loop are undoable and saved with the project. WAV export renders the complete
 song regardless of the transport loop.
 
+File → **Export WAV…** shows the arrangement duration and **Include effect
+tails**, initially enabled. Turn it off for a WAV that ends exactly at the last
+clip, rounded to the nearest sample. **Export…** then opens the destination
+picker; **Cancel**, Escape, and the close button return to the previous view.
+The tail choice is retained for the app session and captured with each export
+request. Existing command-line exports continue to include tails.
+
 ## Device library and effect chains
 
 **Window → Library** opens a large browser with Instruments and Effects tabs. Search matches names, developers, and category metadata; the developer selector narrows results independently. The selected device shows its cached native editor image and one primary action appropriate to the insertion context. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. A tooltip includes the plugin location and class identity. Actions remain above preview content, so a background capture cannot move them under the pointer.
@@ -203,3 +210,10 @@ the current renderer. Stored project names remain Unicode strings regardless of
 glyph availability. Font versions, exact hashes, OFL notices and sources live in
 [`crates/daw-ui/assets/fonts`](../crates/daw-ui/assets/fonts/README.md), and notices
 are included in release archives and the standalone macOS application bundle.
+
+Native file and folder pickers use `daw_ui::with_native_dialog_menu`. On macOS
+the helper temporarily adds responder-chain Cut, Copy, Paste and Select All
+menu actions, enabling standard shortcuts in native filename/path fields. It
+removes its menu on return, cancellation or unwinding so egui retains its own
+shortcuts. Other platforms execute the picker directly; injected headless picker
+results bypass native UI entirely.

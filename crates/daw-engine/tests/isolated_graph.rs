@@ -11,6 +11,65 @@ use daw_core::{
 };
 
 #[test]
+#[ignore = "requires an instrument with a reported release tail in DAW_TEST_VST3 (Surge XT)"]
+fn isolated_instrument_export_can_trim_its_reported_tail_at_the_arrangement_end() -> Result<()> {
+    use daw_engine::{ExportOptions, export_project_wav, export_project_wav_with_options};
+
+    let instrument = std::env::var("DAW_TEST_VST3").context("Set DAW_TEST_VST3")?;
+    let probe = daw_plugins::VstInstrument::load(std::path::Path::new(&instrument), 48_000.0, 256)?;
+    assert!(probe.isolation_pid().is_some());
+    let tail_frames = (probe.tail_samples() as usize).min(48_000 * 30);
+    assert!(
+        tail_frames > 48_000 / 5,
+        "This fixture must report a plugin tail"
+    );
+    drop(probe);
+
+    let mut project = Project::new();
+    project.tempo = 120.0;
+    let id = project.add_midi_track("Native tail");
+    let track = project.track_mut(id).unwrap();
+    track.instrument = Instrument::Vst3 {
+        path: instrument,
+        class_id: None,
+    };
+    track.latency_samples = 257;
+    track.clips.push(Clip::midi(
+        "Held until arrangement end",
+        0.0,
+        1.0,
+        vec![Note::new(60, 0.0, 1.0, 100)],
+    ));
+    let directory = tempfile::tempdir()?;
+    let full = directory.path().join("with-tail.wav");
+    let exact = directory.path().join("exact.wav");
+    export_project_wav(&project, &full, 48_000)?;
+    export_project_wav_with_options(
+        &project,
+        &exact,
+        48_000,
+        ExportOptions {
+            include_effect_tails: false,
+            ..Default::default()
+        },
+    )?;
+    let full = AudioData::load_wav(full)?;
+    let exact = AudioData::load_wav(exact)?;
+    assert_eq!(exact.frames(), 24_000);
+    assert_eq!(full.frames(), 24_000 + tail_frames);
+    for output in [&full, &exact] {
+        assert!(output.samples.iter().all(|sample| sample.is_finite()));
+        assert!(output.samples.iter().any(|sample| sample.abs() > 0.001));
+    }
+    assert!(
+        full.samples[48_000..]
+            .iter()
+            .any(|sample| sample.abs() > 0.0001)
+    );
+    Ok(())
+}
+
+#[test]
 #[ignore = "requires installed instrument/effect in DAW_TEST_VST3 and DAW_TEST_VST3_EFFECT"]
 fn isolated_instrument_insert_and_parallel_buses_render_aligned_audio() -> Result<()> {
     let instrument = std::env::var("DAW_TEST_VST3").context("Set DAW_TEST_VST3")?;

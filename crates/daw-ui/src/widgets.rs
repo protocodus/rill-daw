@@ -537,9 +537,10 @@ fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
     // egui adds the frame, a padded native title row, and its separator outside
     // the body. Reserve all of them so content cannot hide the close button or
     // grow beyond the viewport when an asynchronous view adds more rows.
-    let frame = 2.0 * (tokens::POPUP_MARGIN + tokens::WINDOW_BORDER_WIDTH);
-    let title = tokens::CONTROL_HEIGHT + 2.0 * tokens::POPUP_MARGIN + tokens::WINDOW_BORDER_WIDTH;
-    (popup_bounds(ctx).size() - egui::vec2(frame, frame + title)).max(egui::vec2(160.0, 120.0))
+    let margin = tokens::WINDOW_MARGIN.sum();
+    let frame = margin + egui::Vec2::splat(2.0 * tokens::WINDOW_BORDER_WIDTH);
+    let title = tokens::CONTROL_HEIGHT + margin.y + tokens::WINDOW_BORDER_WIDTH;
+    (popup_bounds(ctx).size() - frame - egui::vec2(0.0, title)).max(egui::vec2(160.0, 120.0))
 }
 
 /// On-demand property/utility window with the same surfaces and spacing as the
@@ -549,7 +550,7 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
     egui::Window::new(title)
         .frame(
             panel(ctx)
-                .inner_margin(tokens::POPUP_MARGIN)
+                .inner_margin(tokens::WINDOW_MARGIN)
                 .stroke(ctx.style().visuals.window_stroke)
                 .shadow(ctx.style().visuals.window_shadow),
         )
