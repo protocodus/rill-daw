@@ -12,7 +12,13 @@ if [ "${RILL_PACKAGE_SKIP_BUILD:-0}" != 1 ]; then
 fi
 bundle="$project_dir/dist/Rill.app/Contents"
 mkdir -p "$bundle/MacOS" "$bundle/Resources"
-cp "$rill_bin_dir/rill" "$rill_bin_dir/daw-plugin-host" "$bundle/MacOS/"
+# Replace executables atomically so an already running app retains its inode.
+for executable in rill daw-plugin-host; do
+  staged_executable=$(mktemp "$bundle/MacOS/.$executable.XXXXXX")
+  cp "$rill_bin_dir/$executable" "$staged_executable"
+  chmod 755 "$staged_executable"
+  mv -f "$staged_executable" "$bundle/MacOS/$executable"
+done
 cp LICENSE "$bundle/Resources/LICENSE"
 cat > "$bundle/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

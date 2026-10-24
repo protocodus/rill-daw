@@ -8,6 +8,11 @@ impl Project {
     /// replaced. No media paths point at an asset that has not been written.
     pub fn demo_with_audio(path: impl AsRef<Path>) -> Result<Self> {
         let mut project = Self::demo();
+        // The playable demo is audio only. MIDI examples in `demo()` remain
+        // unassigned until the user chooses an external VST3 instrument.
+        project
+            .tracks
+            .retain(|track| track.kind == TrackKind::Audio);
         let audio = demo_drums(project.tempo);
         let path = path.as_ref();
         if let Some(parent) = path

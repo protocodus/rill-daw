@@ -6,8 +6,8 @@
 
 use anyhow::{Context, Result};
 use daw_core::{
-    AutomationParameter, AutomationPoint, AutomationTarget, Clip, Effect, EffectSlot, Instrument,
-    Interpolation, Note, Project,
+    AudioData, AutomationParameter, AutomationPoint, AutomationTarget, Clip, Effect, EffectSlot,
+    Instrument, Interpolation, Note, Project,
 };
 
 #[test]
@@ -22,18 +22,23 @@ fn isolated_instrument_insert_and_parallel_buses_render_aligned_audio() -> Resul
     let right_bus = project.add_bus("Right compensated send");
     let source_track = project.track_mut(source).unwrap();
     source_track.gain = 0.7;
-    source_track.instrument = Instrument::Vst3 { path: instrument };
+    source_track.instrument = Instrument::Vst3 {
+        path: instrument,
+        class_id: None,
+    };
     source_track.clips.push(Clip::midi(
         "Offset note",
         0.0,
         1.0,
         vec![Note::new(60, 0.25, 0.5, 105)],
     ));
-    source_track.inserts = vec![
-        EffectSlot::new("Input gain", Effect::Gain { gain: 0.8 }),
-        EffectSlot::new("Native effect", Effect::Vst3 { path: effect }),
-        EffectSlot::new("Output gain", Effect::Gain { gain: 0.75 }),
-    ];
+    source_track.inserts = vec![EffectSlot::new(
+        "Native effect",
+        Effect::Vst3 {
+            path: effect,
+            class_id: None,
+        },
+    )];
     let left = project.track_mut(left_bus).unwrap();
     left.pan = -1.0;
     left.latency_samples = 127;
@@ -98,17 +103,38 @@ fn isolated_vst_effect_parameter_automation_changes_rendered_audio() -> Result<(
     let mut project = Project::new();
     project.tempo = 120.0;
     project.loop_enabled = false;
-    let source = project.add_midi_track("Steady tone");
-    let slot = EffectSlot::new("Automated native gain", Effect::Vst3 { path: effect });
+    let fixture = AudioFixture(std::env::temp_dir().join(format!(
+        "rill-native-{}-{}.wav",
+        std::process::id(),
+        daw_core::new_id()
+    )));
+    AudioData {
+        sample_rate: 48_000,
+        channels: 1,
+        samples: (0..72_000)
+            .map(|frame| {
+                (std::f32::consts::TAU * 440.0 * frame as f32 / 48_000.0).sin() * 0.18 * 100.0
+                    / 127.0
+            })
+            .collect(),
+    }
+    .write_wav(&fixture.0)?;
+    let source = project.add_audio_track("Steady audio source");
+    let slot = EffectSlot::new(
+        "Automated native gain",
+        Effect::Vst3 {
+            path: effect,
+            class_id: None,
+        },
+    );
     let slot_id = slot.id;
     let track = project.track_mut(source).unwrap();
-    track.instrument = Instrument::Sine;
     track.gain = 0.25;
-    track.clips.push(Clip::midi(
-        "Held note",
+    track.clips.push(Clip::audio(
+        "Steady tone",
         0.0,
         3.0,
-        vec![Note::new(69, 0.0, 3.0, 100)],
+        fixture.0.to_string_lossy().into_owned(),
     ));
     track.inserts.push(slot);
     let lane = project.add_automation_track_with_value(
@@ -163,6 +189,101 @@ fn isolated_vst_effect_parameter_automation_changes_rendered_audio() -> Result<(
     Ok(())
 }
 
+/// Separate coverage for the instrument parameter path (`effect: None`).
+#[test]
+#[ignore = "requires Surge XT in DAW_TEST_VST3"]
+fn isolated_vst_instrument_automation_changes_audio_without_shifting_midi() -> Result<()> {
+    let instrument = std::env::var("DAW_TEST_VST3").context("Set DAW_TEST_VST3")?;
+    let probe = daw_plugins::VstInstrument::load(std::path::Path::new(&instrument), 48_000.0, 256)
+        .context("Preparing isolated instrument parameter discovery")?;
+    assert!(probe.isolation_pid().is_some());
+    let parameter = probe
+        .parameters()
+        .context("Enumerating native instrument parameters")?
+        .into_iter()
+        .find(|parameter| {
+            parameter.name.eq_ignore_ascii_case("Global Volume") && !parameter.read_only
+        })
+        .context("This native automation test requires a Global Volume parameter (Surge XT)")?;
+    drop(probe);
+    let mut project = Project::new();
+    project.tempo = 120.0;
+    project.loop_enabled = false;
+    let source = project.add_midi_track("Automated native instrument");
+    let track = project.track_mut(source).unwrap();
+    track.instrument = Instrument::Vst3 {
+        path: instrument,
+        class_id: None,
+    };
+    track.gain = 0.7;
+    track.latency_samples = 127;
+    track.clips.push(Clip::midi(
+        "Offset held note",
+        0.0,
+        3.0,
+        vec![Note::new(60, 0.25, 2.75, 105)],
+    ));
+    let lane = project.add_automation_track_with_value(
+        "Native instrument volume",
+        AutomationTarget {
+            track: source,
+            parameter: AutomationParameter::VstParameter {
+                effect: None,
+                id: parameter.id,
+            },
+        },
+        0.2,
+    )?;
+    let automation = project.automation_lane_mut(lane).unwrap();
+    automation.interpolation = Interpolation::Step;
+    automation.points = vec![
+        AutomationPoint::new(0.0, 0.2),
+        AutomationPoint::new(1.0, 0.9),
+        AutomationPoint::new(2.0, 0.2),
+    ];
+    let automated = daw_engine::render(&project, 48_000, 3.0)
+        .context("Rendering isolated native instrument automation")?;
+    assert_eq!(automated.len(), 144_000);
+    assert!(automated.iter().all(|sample| sample.is_finite()));
+    let levels = [
+        window_rms(&automated, 0.25, 0.4),
+        window_rms(&automated, 0.75, 0.9),
+        window_rms(&automated, 1.25, 1.4),
+    ];
+    assert!(
+        levels[0] > 1e-6,
+        "Instrument must sound before the upward step: {levels:?}"
+    );
+    assert!(
+        levels[1] > levels[0] * 4.0,
+        "Instrument volume did not rise: {levels:?}"
+    );
+    assert!(
+        levels[1] > levels[2] * 4.0,
+        "Instrument volume did not fall: {levels:?}"
+    );
+    // MIDI starts at beat .25, frame 6000. A level-relative threshold measures
+    // onset independently of the automated volume and tolerates the synth attack.
+    let threshold = (levels[0] * 0.001) as f32;
+    let onset = automated
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .position(|frame| frame[0].abs() > threshold)
+        .context("Automated instrument produced no audible onset")?;
+    assert!(
+        (6_000..6_200).contains(&onset),
+        "MIDI onset moved away from frame 6000: {onset}"
+    );
+    assert!(
+        automated[..6_000 * 2]
+            .iter()
+            .all(|sample| sample.abs() < threshold)
+    );
+    eprintln!("Isolated Surge instrument automation RMS low/high/low={levels:?}; onset={onset}");
+    Ok(())
+}
+
 fn window_rms(samples: &[f32], start: f64, end: f64) -> f64 {
     let start = (start * 48_000.0) as usize;
     let end = (end * 48_000.0) as usize;
@@ -170,4 +291,11 @@ fn window_rms(samples: &[f32], start: f64, end: f64) -> f64 {
         .map(|frame| f64::from(samples[frame * 2]).powi(2))
         .sum();
     (sum / (end - start) as f64).sqrt()
+}
+
+struct AudioFixture(std::path::PathBuf);
+impl Drop for AudioFixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }

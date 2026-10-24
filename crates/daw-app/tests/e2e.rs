@@ -6,6 +6,59 @@ use serde_json::json;
 use std::path::Path;
 
 #[test]
+#[ignore = "requires a native desktop or xvfb-run with OpenGL"]
+fn native_window_renders_and_exits_after_screenshot() {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let directory = tempfile::tempdir().unwrap();
+    let mut project = Project::new();
+    project.add_midi_track("Unassigned MIDI");
+    let session = directory.path().join("native.daw.json");
+    project.save(&session).unwrap();
+    let binary =
+        std::env::var_os("RILL_E2E_BINARY").unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
+    for view in ["arrangement", "instrument", "mixer", "setup"] {
+        let screenshot = directory.path().join(format!("{view}.png"));
+        let mut child = Command::new(&binary)
+            .arg("--screenshot")
+            .arg(&screenshot)
+            .arg("--project")
+            .arg(&session)
+            .args(["--view", view])
+            .env("RILL_CONFIG_DIR", directory.path().join("config"))
+            .env("RILL_CACHE_DIR", directory.path().join("cache"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("Native {view} window did not close after its screenshot");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert!(status.success(), "Native {view} exited with {status}");
+        let pixels = image::open(screenshot).unwrap().to_rgb8();
+        assert!(pixels.width() >= 800 && pixels.height() >= 600);
+        let mut values = [false; 256];
+        for pixel in pixels.as_raw() {
+            values[*pixel as usize] = true;
+        }
+        assert!(
+            values.iter().filter(|&&present| present).count() > 32,
+            "Native {view} screenshot must contain rendered UI"
+        );
+    }
+}
+
+#[test]
 fn launch_and_quit_without_a_display_or_audio_device() {
     let mut app = Harness::new();
     let state = app.inspect();

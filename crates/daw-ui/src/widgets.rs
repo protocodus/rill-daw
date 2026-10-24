@@ -40,6 +40,21 @@ pub fn menu_button<R>(
     ui.menu_button(label.into(), add_contents)
 }
 
+/// A searchable or editable popover stays open while its internal controls are used.
+/// Call `ui.close()` when an item is accepted.
+pub fn picker_button<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> (Response, Option<InnerResponse<R>>) {
+    egui::containers::menu::MenuButton::from_button(button_widget(label))
+        .config(
+            egui::containers::menu::MenuConfig::new()
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+        )
+        .ui(ui, contents)
+}
+
 /// Application command bar; menus use the same native focus and popup behavior
 /// as contextual menus throughout the app.
 pub fn menu_bar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
@@ -196,6 +211,27 @@ pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Re
     )
 }
 
+/// Editable numeric canvas control that preserves the parent's row geometry.
+/// Drag to adjust, or double-click to type an exact value.
+pub fn number_at(
+    ui: &mut Ui,
+    rect: egui::Rect,
+    id_salt: impl Hash,
+    value: DragValue<'_>,
+) -> Response {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(id_salt)
+            .max_rect(rect)
+            .layout(egui::Layout::centered_and_justified(
+                egui::Direction::LeftToRight,
+            )),
+    );
+    child.spacing_mut().button_padding = egui::vec2(3.0, 0.0);
+    child.spacing_mut().interact_size = egui::Vec2::ZERO;
+    child.add_sized(rect.size(), value)
+}
+
 pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> ComboBox {
     ComboBox::from_id_salt(id_salt)
         .selected_text(selected_text)
@@ -221,6 +257,100 @@ pub fn number<T: egui::emath::Numeric>(value: &mut T) -> DragValue<'_> {
 
 pub fn color_edit(ui: &mut Ui, value: &mut [u8; 3]) -> Response {
     ui.color_edit_button_srgb(value)
+}
+
+/// Search-result row with an optional real preview image. A missing image leaves
+/// the row compact; callers do not need to invent an instrument thumbnail.
+pub fn catalog_item(
+    ui: &mut Ui,
+    selected: bool,
+    title: &str,
+    detail: &str,
+    thumbnail: Option<&egui::TextureHandle>,
+) -> Response {
+    let height = if detail.is_empty() { 38.0 } else { 58.0 };
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::click(),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            selected,
+            title,
+        )
+    });
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(
+        rect,
+        tokens::RADIUS,
+        if selected {
+            theme::ACCENT.gamma_multiply(0.15)
+        } else if response.hovered() {
+            theme::RAISED
+        } else {
+            theme::PANEL
+        },
+    );
+    let mut x = rect.left() + tokens::SPACE_MD;
+    if let Some(texture) = thumbnail {
+        let size = egui::vec2(58.0, height - 8.0);
+        let original = texture.size_vec2();
+        let scale = (size.x / original.x).min(size.y / original.y);
+        let image_rect = egui::Rect::from_center_size(
+            egui::pos2(x + size.x * 0.5, rect.center().y),
+            original * scale,
+        );
+        painter.image(
+            texture.id(),
+            image_rect,
+            egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+        x += size.x + tokens::SPACE_MD;
+    }
+    painter.text(
+        egui::pos2(
+            x,
+            rect.top()
+                + if detail.is_empty() {
+                    height * 0.5
+                } else {
+                    18.0
+                },
+        ),
+        egui::Align2::LEFT_CENTER,
+        title,
+        egui::FontId::proportional(13.0),
+        theme::TEXT,
+    );
+    if !detail.is_empty() {
+        painter.text(
+            egui::pos2(x, rect.top() + 39.0),
+            egui::Align2::LEFT_CENTER,
+            detail,
+            egui::FontId::proportional(10.0),
+            theme::MUTED,
+        );
+    }
+    if response.has_focus() {
+        painter.rect_stroke(
+            rect,
+            tokens::RADIUS,
+            egui::Stroke::new(1.0_f32, theme::ACCENT),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response
+}
+
+pub fn image_preview(ui: &mut Ui, texture: &egui::TextureHandle, max_size: egui::Vec2) -> Response {
+    let original = texture.size_vec2();
+    let scale = (max_size.x / original.x)
+        .min(max_size.y / original.y)
+        .min(1.0);
+    ui.image((texture.id(), original * scale))
 }
 
 pub fn panel() -> Frame {

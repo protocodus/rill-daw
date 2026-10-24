@@ -117,10 +117,12 @@ impl DawApp {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
-                    for track in
-                        self.project.tracks.iter_mut().filter(|t| {
-                            !matches!(t.kind, TrackKind::Folder | TrackKind::Automation)
-                        })
+                    for (channel, track) in self
+                        .project
+                        .tracks
+                        .iter_mut()
+                        .filter(|t| !matches!(t.kind, TrackKind::Folder | TrackKind::Automation))
+                        .enumerate()
                     {
                         daw_ui::card().inner_margin(12).show(ui, |ui| {
                             ui.vertical(|ui| {
@@ -133,7 +135,8 @@ impl DawApp {
                                 );
                                 ui.label(
                                     egui::RichText::new(format!(
-                                        "To {}",
+                                        "Ch {} > {}",
+                                        channel + 1,
                                         track
                                             .output_bus
                                             .and_then(|id| names.get(&id))
@@ -234,89 +237,7 @@ impl DawApp {
     }
 
     pub fn instrument_editor(&mut self, ctx: &egui::Context) {
-        if !self.instrument_open {
-            return;
-        }
-        let Some(track) = self
-            .selected_track
-            .and_then(|id| self.project.track(id))
-            .filter(|track| track.kind == TrackKind::Midi)
-        else {
-            self.instrument_open = false;
-            return;
-        };
-        let id = track.id;
-        let name = track.name.clone();
-        let mut instrument = track.instrument.clone();
-        let mut open = true;
-        daw_ui::popup(format!("Instrument · {name}"))
-            .id(egui::Id::new("instrument_editor"))
-            .open(&mut open)
-            .default_width(420.0)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    for (name, value) in [
-                        ("Sine", Instrument::Sine),
-                        ("Triangle", Instrument::Triangle),
-                        ("Saw", Instrument::Saw),
-                    ] {
-                        daw_ui::selectable_value(ui, &mut instrument, value, name);
-                    }
-                });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    daw_ui::text_field(
-                        ui,
-                        &mut self.plugin_filter,
-                        "Search VST3 instruments",
-                        280.0,
-                    );
-                    if ui
-                        .add_enabled(self.vst_scan.is_none(), daw_ui::button_widget("Scan"))
-                        .clicked()
-                    {
-                        self.scan_plugins();
-                    }
-                    if self.vst_scan.is_some() {
-                        ui.spinner();
-                    }
-                });
-                let filter = self.plugin_filter.to_lowercase();
-                egui::ScrollArea::vertical()
-                    .max_height(360.0)
-                    .show(ui, |ui| {
-                        for path in &self.vst_paths {
-                            let name = path.file_stem().unwrap_or_default().to_string_lossy();
-                            if name.to_lowercase().contains(&filter) {
-                                daw_ui::selectable_value(
-                                    ui,
-                                    &mut instrument,
-                                    Instrument::Vst3 {
-                                        path: path.to_string_lossy().into_owned(),
-                                    },
-                                    name.as_ref(),
-                                )
-                                .on_hover_text(path.display().to_string());
-                            }
-                        }
-                        if self.vst_paths.is_empty() && self.vst_scan.is_none() {
-                            ui.label(egui::RichText::new("No VST3 instruments found").color(MUTED));
-                        }
-                    });
-            });
-        self.instrument_open = open;
-        if self
-            .project
-            .track(id)
-            .is_some_and(|track| track.instrument != instrument)
-        {
-            self.begin_edit();
-            let result = self.project.set_instrument(id, instrument);
-            if result.is_ok() {
-                self.changed();
-            }
-            self.message(result, "Instrument updated");
-        }
+        self.plugin_instrument_editor(ctx);
     }
     fn piano_roll(&mut self, ui: &mut egui::Ui) {
         let mut edit = None;

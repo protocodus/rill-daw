@@ -194,6 +194,44 @@ pub struct AudioEngine {
     worker: Option<JoinHandle<()>>,
     controls: Arc<Controls>,
     sample_rate: u32,
+    parameters: mpsc::SyncSender<ParameterChange>,
+}
+
+#[derive(Clone, Copy)]
+struct ParameterChange {
+    track: u64,
+    parameter: u32,
+    value: f64,
+}
+
+/// A fatal graph error must not be retried on every worker tick. A new transport
+/// generation permits one retry; replacing the graph creates a fresh latch.
+#[derive(Default)]
+struct RenderFailureLatch {
+    failed_generation: Option<u64>,
+}
+
+impl RenderFailureLatch {
+    fn attempt(
+        &mut self,
+        controls: &Controls,
+        generation: u64,
+        operation: impl FnOnce() -> Result<()>,
+    ) -> bool {
+        if self.failed_generation == Some(generation) {
+            return false;
+        }
+        if operation().is_ok() {
+            return true;
+        }
+        self.failed_generation = Some(generation);
+        controls.render_errors.fetch_add(1, Ordering::Relaxed);
+        controls
+            .finished_generation
+            .store(generation, Ordering::Release);
+        controls.playing.store(false, Ordering::Release);
+        false
+    }
 }
 
 impl AudioEngine {
@@ -255,6 +293,7 @@ impl AudioEngine {
         let worker_queue = Arc::clone(&queue);
         let sample_rate = settings.sample_rate;
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        let (parameter_tx, parameter_rx) = mpsc::sync_channel::<ParameterChange>(128);
         let worker = thread::Builder::new()
             .name("daw-render".into())
             .spawn(move || {
@@ -272,16 +311,44 @@ impl AudioEngine {
                 let mut generation = worker_controls.generation.load(Ordering::Acquire);
                 let mut frames = [[0.0; 2]; BLOCK];
                 let mut positions = [0.0; BLOCK];
+                let mut pending_parameters: Vec<ParameterChange> = Vec::with_capacity(128);
+                let mut render_failure = RenderFailureLatch::default();
                 while !worker_controls.shutdown.load(Ordering::Acquire) {
+                    // UI edits never touch the callback. Coalesce rapid drags before
+                    // issuing bounded IPC on the render worker, including while paused.
+                    pending_parameters.clear();
+                    for _ in 0..128 {
+                        let Ok(change) = parameter_rx.try_recv() else {
+                            break;
+                        };
+                        if let Some(previous) = pending_parameters.iter_mut().find(|previous| {
+                            previous.track == change.track && previous.parameter == change.parameter
+                        }) {
+                            *previous = change;
+                        } else {
+                            pending_parameters.push(change);
+                        }
+                    }
+                    for change in &pending_parameters {
+                        if renderer
+                            .set_instrument_parameter(change.track, change.parameter, change.value)
+                            .is_err()
+                        {
+                            worker_controls
+                                .render_errors
+                                .fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
                     let next_generation = worker_controls.generation.load(Ordering::Acquire);
                     if generation != next_generation {
                         generation = next_generation;
                         let beat =
                             f64::from_bits(worker_controls.seek_beat.load(Ordering::Acquire));
-                        if renderer.seek(beat).is_err() {
-                            worker_controls
-                                .render_errors
-                                .fetch_add(1, Ordering::Relaxed);
+                        if !render_failure
+                            .attempt(&worker_controls, generation, || renderer.seek(beat))
+                        {
+                            thread::sleep(Duration::from_micros(250));
+                            continue;
                         }
                         worker_controls
                             .finished_generation
@@ -298,17 +365,10 @@ impl AudioEngine {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
-                    if renderer.render(&mut frames, &mut positions).is_err() {
-                        frames.fill([0.0; 2]);
-                        positions.fill(renderer.position_beats());
-                        worker_controls
-                            .render_errors
-                            .fetch_add(1, Ordering::Relaxed);
-                        // Bound failure handling. Stop rather than repeatedly executing a failed plugin.
-                        worker_controls
-                            .finished_generation
-                            .store(generation, Ordering::Release);
-                        worker_controls.playing.store(false, Ordering::Release);
+                    if !render_failure.attempt(&worker_controls, generation, || {
+                        renderer.render(&mut frames, &mut positions)
+                    }) {
+                        thread::sleep(Duration::from_micros(250));
                         continue;
                     }
                     if renderer.plugin_errors > 0 {
@@ -366,6 +426,7 @@ impl AudioEngine {
             worker: Some(worker),
             controls,
             sample_rate,
+            parameters: parameter_tx,
         };
         if let Err(error) = engine.stream.as_ref().unwrap().play() {
             engine.stop();
@@ -401,6 +462,21 @@ impl AudioEngine {
     }
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
+    }
+    /// Queue a normalized instrument edit for the render worker. This is
+    /// nonblocking and leaves the hardware callback and transport untouched.
+    pub fn set_instrument_parameter(&self, track: u64, parameter: u32, value: f64) -> Result<()> {
+        ensure!(
+            value.is_finite() && (0.0..=1.0).contains(&value),
+            "Parameter value must be normalized to 0..=1"
+        );
+        self.parameters
+            .try_send(ParameterChange {
+                track,
+                parameter,
+                value,
+            })
+            .map_err(|error| anyhow::anyhow!("Instrument parameter queue unavailable: {error}"))
     }
     pub fn snapshot(&self) -> EngineSnapshot {
         EngineSnapshot {
@@ -514,6 +590,49 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fatal_graph_error_is_not_retried_until_an_explicit_transport_reset() {
+        let controls = Controls::new();
+        controls.playing.store(true, Ordering::Release);
+        let mut latch = RenderFailureLatch::default();
+        let mut attempts = 0;
+        // Simulate subsequent worker ticks after a graph worker has disconnected.
+        // The same production gate wraps both render calls and seek prefill.
+        for _ in 0..1000 {
+            assert!(!latch.attempt(&controls, 0, || {
+                attempts += 1;
+                bail!("Persistent graph worker unexpectedly exited")
+            }));
+        }
+        assert_eq!(attempts, 1);
+        assert_eq!(controls.render_errors.load(Ordering::Relaxed), 1);
+        assert_eq!(controls.finished_generation.load(Ordering::Acquire), 0);
+        assert!(!controls.playing.load(Ordering::Acquire));
+
+        // A deliberate seek/new transport generation can retry a transient fault.
+        controls.generation.store(1, Ordering::Release);
+        controls.playing.store(true, Ordering::Release);
+        assert!(latch.attempt(&controls, 1, || {
+            attempts += 1;
+            Ok(())
+        }));
+        assert_eq!(attempts, 2);
+        assert!(controls.playing.load(Ordering::Acquire));
+        assert_eq!(controls.render_errors.load(Ordering::Relaxed), 1);
+
+        // A persistent fault on the next explicit retry is also reported once.
+        for _ in 0..1000 {
+            assert!(!latch.attempt(&controls, 1, || {
+                attempts += 1;
+                bail!("Seek prefill failed")
+            }));
+        }
+        assert_eq!(attempts, 3);
+        assert_eq!(controls.render_errors.load(Ordering::Relaxed), 2);
+        assert_eq!(controls.finished_generation.load(Ordering::Acquire), 1);
+    }
+
     #[test]
     fn queue_wrap_and_generation_flush() {
         let queue = AudioQueue::new(4);

@@ -12,6 +12,9 @@ use vst3_host::{AudioBuffers, AudioBusLayout, BusAudioBuffers, Plugin, Vst3Host}
 /// Run only in the standalone `daw-plugin-host` executable. Claim stdout before loading
 /// any plugin so a plugin's console messages cannot corrupt the response protocol on Unix.
 pub fn run() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--editor") {
+        return crate::editor::helper_main();
+    }
     let mut protocol = ProtocolChannel::claim();
     let input = std::io::stdin();
     let mut worker = Worker::default();

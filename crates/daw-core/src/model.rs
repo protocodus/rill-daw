@@ -14,6 +14,15 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// A generous finite timeline limit keeps beat-to-sample conversion exact and
 /// prevents malformed project files from saturating integer sample positions.
 pub const MAX_BEAT: f64 = 1_000_000.0;
+pub const MAX_INSTRUMENT_STATE_BYTES: usize = 64 * 1024 * 1024;
+
+pub(crate) fn validate_vst_class_id(class_id: Option<&str>) -> Result<()> {
+    ensure!(
+        class_id.is_none_or(|id| id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())),
+        "VST3 processor class ID must contain exactly 32 hexadecimal characters"
+    );
+    Ok(())
+}
 
 /// IDs are unique within a process; loading a project reserves its existing IDs.
 pub fn new_id() -> u64 {
@@ -42,6 +51,12 @@ pub struct Track {
     pub mute: bool,
     pub solo: bool,
     pub instrument: Instrument,
+    /// Opaque VST3 state captured by the isolated native editor.
+    #[serde(default)]
+    pub instrument_state: Vec<u8>,
+    /// Normalized values applied after restoring opaque state.
+    #[serde(default)]
+    pub instrument_parameters: Vec<PluginParameterValue>,
     pub clips: Vec<Clip>,
     /// Additional path latency, added to latency reported by the instrument.
     pub latency_samples: u32,
@@ -91,16 +106,10 @@ impl EffectSlot {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Effect {
-    Gain {
-        gain: f32,
-    },
-    Delay {
-        time_ms: f32,
-        feedback: f32,
-        mix: f32,
-    },
     Vst3 {
         path: String,
+        #[serde(default)]
+        class_id: Option<String>,
     },
 }
 
@@ -111,12 +120,21 @@ pub struct Send {
     pub pre_fader: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Instrument {
-    Sine,
-    Triangle,
-    Saw,
-    Vst3 { path: String },
+    #[default]
+    None,
+    Vst3 {
+        path: String,
+        #[serde(default)]
+        class_id: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PluginParameterValue {
+    pub id: u32,
+    pub value: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -243,7 +261,9 @@ impl Track {
             pan: 0.0,
             mute: false,
             solo: false,
-            instrument: Instrument::Triangle,
+            instrument: Instrument::None,
+            instrument_state: Vec::new(),
+            instrument_parameters: Vec::new(),
             clips: Vec::new(),
             latency_samples: 0,
             inserts: Vec::new(),
@@ -577,8 +597,30 @@ impl Project {
                 track.pan.is_finite() && (-1.0..=1.0).contains(&track.pan),
                 "Invalid track pan"
             );
-            if let Instrument::Vst3 { path } = &track.instrument {
+            if let Instrument::Vst3 { path, class_id } = &track.instrument {
                 ensure!(!path.is_empty(), "Missing VST3 path");
+                validate_vst_class_id(class_id.as_deref())?;
+            }
+            ensure!(
+                track.instrument_state.len() <= MAX_INSTRUMENT_STATE_BYTES,
+                "Instrument state exceeds 64 MiB"
+            );
+            ensure!(
+                (track.instrument_state.is_empty() && track.instrument_parameters.is_empty())
+                    || (track.kind == TrackKind::Midi
+                        && matches!(track.instrument, Instrument::Vst3 { .. })),
+                "Only VST3 MIDI instruments may contain saved state or parameter overrides"
+            );
+            let mut parameter_ids = HashSet::new();
+            for parameter in &track.instrument_parameters {
+                ensure!(
+                    parameter_ids.insert(parameter.id),
+                    "Duplicate instrument parameter ID"
+                );
+                ensure!(
+                    parameter.value.is_finite() && (0.0..=1.0).contains(&parameter.value),
+                    "Instrument parameter must be normalized between 0 and 1"
+                );
             }
             for slot in &track.inserts {
                 check_id(slot.id)?;
@@ -705,14 +747,13 @@ impl Project {
                     max_id = max_id.max(point.id);
                 }
             }
-            if let Instrument::Vst3 { path } = &mut track.instrument {
+            if let Instrument::Vst3 { path, .. } = &mut track.instrument {
                 absolutize(path, &base);
             }
             for slot in &mut track.inserts {
                 max_id = max_id.max(slot.id);
-                if let Effect::Vst3 { path } = &mut slot.effect {
-                    absolutize(path, &base);
-                }
+                let Effect::Vst3 { path, .. } = &mut slot.effect;
+                absolutize(path, &base);
             }
             for clip in &mut track.clips {
                 max_id = max_id.max(clip.id);
@@ -739,7 +780,6 @@ impl Project {
         };
         let mut chords = Track::new("Glass chords", TrackKind::Midi);
         chords.color = [160, 137, 246];
-        chords.instrument = Instrument::Triangle;
         chords.gain = 0.34;
         let mut chord_notes = Vec::new();
         for (bar, pitches) in [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]
@@ -755,7 +795,6 @@ impl Project {
             .push(Clip::midi("Am · F · C · G", 0.0, 16.0, chord_notes));
         let mut bass = Track::new("Sub motion", TrackKind::Midi);
         bass.color = [86, 190, 170];
-        bass.instrument = Instrument::Sine;
         bass.gain = 0.48;
         let mut bass_notes = Vec::new();
         for (bar, pitch) in [33, 29, 24, 31].iter().enumerate() {
@@ -767,7 +806,6 @@ impl Project {
             .push(Clip::midi("Pulse bass", 0.0, 16.0, bass_notes));
         let mut melody = Track::new("Signal lead", TrackKind::Midi);
         melody.color = [234, 176, 100];
-        melody.instrument = Instrument::Triangle;
         melody.gain = 0.24;
         let pitches = [
             69, 72, 76, 72, 69, 67, 64, 67, 69, 72, 79, 76, 74, 71, 67, 64,

@@ -2,13 +2,18 @@ FROM rust:1.92-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
+    libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxkbcommon-x11-0 \
+    libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY scripts/test-e2e.sh ./scripts/test-e2e.sh
+COPY scripts/test-container.sh ./scripts/test-container.sh
 
-# No display server, GPU, audio device, user home, or VST installation is needed.
+# Native smoke tests use Xvfb and software OpenGL; headless tests need no display.
+# No host GPU, audio device, user home, or VST installation is needed.
 RUN cargo test --locked -p daw-app --tests --no-run
-CMD ["bash", "scripts/test-e2e.sh"]
+RUN cargo test --locked -p daw-plugins --lib --no-run
+CMD ["bash", "scripts/test-container.sh"]

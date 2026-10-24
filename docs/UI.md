@@ -24,18 +24,20 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Purpose | API |
 | --- | --- |
 | Standard actions | `button`, `primary_button`, `small_button` |
+| Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
 | Selected navigation/item | `selectable` |
-| Arrangement overlay control | `selectable_at` |
+| Arrangement overlay controls | `selectable_at`, `number_at` |
 | Text input | `text_field` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | Generic `slider`, `number` |
 | Track color | `color_edit` |
 | Interactive parameter curves | `curve_editor`, `CurvePoint`, `CurveView`, `CurveEdit` |
+| Plug-in library entries and previews | `catalog_item`, `image_preview` |
 | Surfaces | `panel`, `card`, `inset` |
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
@@ -60,11 +62,11 @@ fn channel_controls(ui: &mut egui::Ui, enabled: &mut bool, name: &mut String, ga
 Dropdown builders preserve egui's composable API. Give unlabelled dropdowns a stable ID, and use shared choice controls inside them:
 
 ```rust
-fn waveform(ui: &mut egui::Ui, selected: &mut usize) {
-    daw_ui::select("waveform", ["Sine", "Triangle", "Saw"][*selected])
+fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
+    daw_ui::select("interpolation", ["Step", "Linear", "Smooth"][*selected])
         .width(120.0)
         .show_ui(ui, |ui| {
-            for (value, label) in ["Sine", "Triangle", "Saw"].into_iter().enumerate() {
+            for (value, label) in ["Step", "Linear", "Smooth"].into_iter().enumerate() {
                 if daw_ui::selectable_value(ui, selected, value, label).clicked() {
                     ui.close();
                 }
@@ -77,6 +79,12 @@ Use `popup(title).open(&mut open).show(ctx, ...)` for utility windows. The build
 
 `selectable_at(ui, rect, id_salt, selected, label)` is for controls drawn inside an existing arrangement canvas. It supplies a compact native button in the given rectangle without advancing or enlarging the parent's layout. It requires a stable semantic ID such as `(track.id, "mute")` and retains native hover, focus, keyboard, and accessibility behavior. It does not own arrangement geometry.
 
+`number_at(ui, rect, id_salt, number(&mut value))` places a shared `DragValue` inside a canvas rectangle without advancing the parent layout. Configure its range, speed, precision, prefix, and suffix through the `number` builder. Drag to adjust or double-click to type; use a stable ID such as `(track.id, "gain")`, and commit when the returned response reports `changed()`.
+
+Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Expanded rows reuse `selectable_at` for mute/solo and `number_at` for dB volume and −100..100 pan. Compact rows retain channel routing text. Folders and automation lanes have no audio channel number or fader/pan; folder mute/solo acts on descendants.
+
+**Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. Selecting an instrument assigns that existing track and opens its native editor. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
+
 Arrangement and piano-roll canvases reserve pointer drags for editing. Their scroll areas disable background drag scrolling with `ScrollSource { drag: false, ..Default::default() }`, retaining wheel and scrollbar navigation. This prevents a canvas from scrolling a target away while a clip, note, or track header is being pressed.
 
 ## State, focus, and accessibility
@@ -87,7 +95,7 @@ Disable a group with `ui.add_enabled_ui(false, |ui| ...)`, or use `ui.add_enable
 
 Native buttons, checkboxes, radio choices, text fields, dropdowns, and numeric controls retain egui's keyboard behavior. The custom visual switch exposes a labelled checkbox role and selected state through `WidgetInfo`; its whole label/track area accepts clicks, and Space or Enter activates it when focused. It paints a visible focus ring. Supply a descriptive label, including for icon-only controls, through their response's accessibility/widget metadata where the visual label cannot describe the action.
 
-The library's headless interaction tests exercise pointer activation on a switch label, focus and keyboard activation, disabled input, choice change reporting, Unicode text entry, dropdown selection, compact-control layout isolation, and hidden popups. These test behavior without coupling application views to widget internals.
+The library's headless interaction tests exercise pointer activation on a switch label, focus and keyboard activation, disabled input, choice change reporting, Unicode text entry, dropdown selection, compact button/numeric-control layout isolation, and hidden popups. These test behavior without coupling application views to widget internals.
 
 Run the component checks with:
 

@@ -80,6 +80,9 @@ pub struct DawApp {
     pub inspector_open: bool,
     pub setup_open: bool,
     pub instrument_open: bool,
+    pub close_ready: bool,
+    screenshot_requested: bool,
+    pub instrument_ui: crate::plugin_ui::InstrumentUi,
     pub effects_open: bool,
     pub routing_open: bool,
     pub automation_open: bool,
@@ -101,8 +104,13 @@ pub struct DawApp {
     pub waveforms: HashMap<String, AudioData>,
     pub drop_target: Option<(Option<u64>, f64)>,
     pub vst_paths: Vec<PathBuf>,
-    pub vst_scan: Option<std::sync::mpsc::Receiver<anyhow::Result<Vec<PathBuf>>>>,
+    pub vst_catalog: Vec<daw_plugins::catalog::CatalogEntry>,
+    pub vst_scan:
+        Option<std::sync::mpsc::Receiver<anyhow::Result<Vec<daw_plugins::catalog::CatalogEntry>>>>,
     pub plugin_filter: String,
+    pub plugin_search_focus: bool,
+    pub plugin_assign_target: Option<u64>,
+    pub instrument_autolaunch: Option<u64>,
     pub last_editor_clip: Option<u64>,
     pub frame_count: usize,
     pub screenshot: Option<PathBuf>,
@@ -150,6 +158,9 @@ impl DawApp {
             inspector_open: false,
             setup_open: false,
             instrument_open: false,
+            close_ready: false,
+            screenshot_requested: false,
+            instrument_ui: Default::default(),
             effects_open: false,
             routing_open: false,
             automation_open: false,
@@ -171,8 +182,12 @@ impl DawApp {
             waveforms: HashMap::new(),
             drop_target: None,
             vst_paths: Vec::new(),
+            vst_catalog: Vec::new(),
             vst_scan: None,
             plugin_filter: String::new(),
+            plugin_search_focus: false,
+            plugin_assign_target: None,
+            instrument_autolaunch: None,
             last_editor_clip: None,
             frame_count: 0,
             screenshot,
@@ -201,6 +216,8 @@ impl DawApp {
         match kind {
             PopupKind::Library => {
                 self.library_open = true;
+                self.plugin_search_focus = true;
+                self.plugin_assign_target = None;
                 if self.vst_paths.is_empty() && self.vst_scan.is_none() {
                     self.scan_plugins();
                 }
@@ -414,7 +431,7 @@ impl DawApp {
             "Audio imported · Drag clip to move, drag its right edge to trim",
         );
     }
-    fn autosave_recovery(&mut self) {
+    pub(crate) fn autosave_recovery(&mut self) {
         if !self.modified {
             return;
         }
@@ -458,16 +475,20 @@ impl DawApp {
                 .save_file()
         });
         if let Some(path) = path {
-            let result = self.project.save(&path);
-            if result.is_ok() {
-                self.modified = false;
-                self.project_path = Some(path);
-            }
-            self.message(result, "Session saved");
+            self.save_to(path);
         }
     }
-    fn new_session(&mut self) {
+    pub(crate) fn finish_project_save(&mut self, path: PathBuf) {
+        let result = self.project.save(&path);
+        if result.is_ok() {
+            self.modified = false;
+            self.project_path = Some(path);
+        }
+        self.message(result, "Session saved");
+    }
+    pub(crate) fn finish_new_session(&mut self) {
         self.autosave_recovery();
+        self.reset_instrument_ui();
         self.retire_engine();
         self.loading = None;
         self.desired_playing = false;
@@ -504,30 +525,35 @@ impl DawApp {
             .add_filter("Rill session", &["json"])
             .pick_file()
         {
-            match Project::load(&path) {
-                Ok(project) => {
-                    self.autosave_recovery();
-                    self.retire_engine();
-                    self.loading = None;
-                    self.desired_playing = false;
-                    self.history.clear();
-                    self.before_edit = None;
-                    self.project = project;
-                    self.project_path = Some(path);
-                    self.cursor = 0.0;
-                    self.selected_track = self.project.tracks.first().map(|t| t.id);
-                    self.selected_clip = None;
-                    self.selected_notes.clear();
-                    self.cache_audio();
-                    self.revision = self.revision.wrapping_add(1);
-                    self.modified = false;
-                    self.edit_dirty = false;
-                    self.close_popups();
-                    self.status = "Session opened".into();
-                }
-                Err(e) => self.message(Err(e), ""),
-            }
+            self.request_open_project(path, false);
         }
+    }
+    pub(crate) fn finish_open_project(&mut self, project: Project, path: PathBuf, recovery: bool) {
+        self.autosave_recovery();
+        self.reset_instrument_ui();
+        self.retire_engine();
+        self.loading = None;
+        self.desired_playing = false;
+        self.history.clear();
+        self.before_edit = None;
+        self.project = project;
+        self.project_path = if recovery { None } else { Some(path) };
+        self.cursor = 0.0;
+        self.selected_track = self.project.tracks.first().map(|t| t.id);
+        self.selected_clip = None;
+        self.selected_notes.clear();
+        self.cache_audio();
+        self.revision = self.revision.wrapping_add(1);
+        self.modified = recovery;
+        self.edit_dirty = false;
+        self.close_popups();
+        self.status = if recovery {
+            "Recovery session opened"
+        } else {
+            "Session opened"
+        }
+        .into();
+        self.error = false;
     }
     fn export(&mut self) {
         if self.export_job.is_some() {
@@ -543,7 +569,7 @@ impl DawApp {
         }
     }
 
-    pub(crate) fn export_to(&mut self, path: PathBuf) {
+    pub(crate) fn start_export(&mut self, path: PathBuf) {
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
@@ -643,6 +669,18 @@ impl DawApp {
     fn keyboard(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.close_popups();
+        }
+        let curve_focused = self.automation_open
+            && ctx
+                .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
+                .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
+        if curve_focused && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z)) {
+            self.undo_redo(ctx.input(|i| i.modifiers.shift));
+        }
+        if self.library_open
+            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
+        {
+            ctx.data_mut(|data| data.insert_temp(egui::Id::new("instrument_chooser_enter"), true));
         }
         if self.library_open
             || self.setup_open
@@ -814,8 +852,7 @@ impl DawApp {
                         }
                         ui.separator();
                         if daw_ui::button(ui, "Quit").clicked() {
-                            self.autosave_recovery();
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            self.request_quit(ctx);
                             ui.close();
                         }
                     });
@@ -962,12 +999,14 @@ impl DawApp {
     }
 
     fn undo_redo(&mut self, redo: bool) {
+        let editor_state = self.editor_state_signature();
         let changed = if redo {
             self.history.redo(&mut self.project)
         } else {
             self.history.undo(&mut self.project)
         };
         if changed {
+            self.reconcile_editor_history(editor_state);
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
             self.rebuild();
@@ -977,6 +1016,10 @@ impl DawApp {
 
     fn track_menu(&mut self, ui: &mut egui::Ui) {
         daw_ui::menu_button(ui, "Track", |ui| {
+            if daw_ui::button(ui, "Add instrument…").clicked() {
+                self.open_instrument_chooser(false);
+                ui.close();
+            }
             for (name, kind) in [
                 ("Add MIDI track", TrackKind::Midi),
                 ("Add audio track", TrackKind::Audio),
@@ -985,8 +1028,20 @@ impl DawApp {
             ] {
                 if daw_ui::button(ui, name).clicked() {
                     self.begin_edit();
+                    self.selected_clip = None;
                     self.selected_track = Some(match kind {
-                        TrackKind::Midi => self.project.add_midi_track("New instrument"),
+                        TrackKind::Midi => {
+                            let track = self.project.add_midi_track("New instrument");
+                            let clip = Clip::midi(
+                                "New pattern",
+                                self.snapped(self.cursor).max(0.0),
+                                4.0,
+                                Vec::new(),
+                            );
+                            self.selected_clip = Some(clip.id);
+                            self.project.track_mut(track).unwrap().clips.push(clip);
+                            track
+                        }
                         TrackKind::Audio => self.project.add_audio_track("New audio"),
                         TrackKind::Bus => self.project.add_bus("New bus"),
                         TrackKind::Folder => self.project.add_folder("New folder"),
@@ -994,10 +1049,12 @@ impl DawApp {
                             unreachable!("Automation requires a parameter target")
                         }
                     });
-                    self.selected_clip = None;
                     self.selected_notes.clear();
                     self.close_popups();
                     self.changed();
+                    if kind == TrackKind::Midi {
+                        self.open_instrument_chooser(true);
+                    }
                     ui.close();
                 }
             }
@@ -1017,90 +1074,8 @@ impl DawApp {
         });
     }
 
-    fn assign_instrument(&mut self, name: &str, instrument: Instrument) {
-        self.begin_edit();
-        let track = self.selected_track.filter(|id| {
-            self.project
-                .track(*id)
-                .is_some_and(|t| t.kind == TrackKind::Midi)
-        });
-        let track = track.unwrap_or_else(|| {
-            self.selected_clip = None;
-            self.project.add_midi_track(name)
-        });
-        self.selected_track = Some(track);
-        let result = self.project.set_instrument(track, instrument);
-        if let Err(error) = result {
-            self.message(Err(error), "");
-            return;
-        }
-        self.changed();
-        self.library_open = false;
-    }
-
     fn browser(&mut self, ctx: &egui::Context) {
-        if !self.library_open {
-            return;
-        }
-        let mut open = true;
-        daw_ui::popup("Library")
-            .open(&mut open)
-            .default_width(400.0)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    daw_ui::text_field(ui, &mut self.plugin_filter, "Search instruments", 280.0);
-                    if ui
-                        .add_enabled(self.vst_scan.is_none(), daw_ui::button_widget("Scan"))
-                        .clicked()
-                    {
-                        self.scan_plugins();
-                    }
-                    if self.vst_scan.is_some() {
-                        ui.spinner();
-                    }
-                });
-                ui.add_space(8.0);
-                let filter = self.plugin_filter.to_lowercase();
-                label(ui, "BUILT-IN");
-                for (name, instrument) in [
-                    ("Triangle", Instrument::Triangle),
-                    ("Sine", Instrument::Sine),
-                    ("Saw", Instrument::Saw),
-                ] {
-                    if name.to_lowercase().contains(&filter) && daw_ui::button(ui, name).clicked() {
-                        self.assign_instrument(name, instrument);
-                    }
-                }
-                ui.add_space(12.0);
-                label(ui, "VST3");
-                let mut selected = None;
-                egui::ScrollArea::vertical()
-                    .max_height(340.0)
-                    .show(ui, |ui| {
-                        for path in &self.vst_paths {
-                            let name = path.file_stem().unwrap_or_default().to_string_lossy();
-                            if name.to_lowercase().contains(&filter)
-                                && daw_ui::button(ui, name.as_ref())
-                                    .on_hover_text(path.display().to_string())
-                                    .clicked()
-                            {
-                                selected = Some((name.into_owned(), path.clone()));
-                            }
-                        }
-                        if self.vst_paths.is_empty() && self.vst_scan.is_none() {
-                            ui.label(RichText::new("No plug-ins found").color(MUTED));
-                        }
-                    });
-                if let Some((name, path)) = selected {
-                    self.assign_instrument(
-                        &name,
-                        Instrument::Vst3 {
-                            path: path.to_string_lossy().into(),
-                        },
-                    );
-                }
-            });
-        self.library_open &= open;
+        self.plugin_library(ctx);
     }
     pub(crate) fn scan_plugins(&mut self) {
         let mut dirs = daw_plugins::default_locations();
@@ -1108,13 +1083,7 @@ impl DawApp {
         let (tx, rx) = std::sync::mpsc::channel();
         self.vst_scan = Some(rx);
         std::thread::spawn(move || {
-            let result = daw_plugins::discover_in_paths(&dirs).map(|plugins| {
-                let mut paths: Vec<_> = plugins.into_iter().map(|p| p.path).collect();
-                paths.sort();
-                paths.dedup();
-                paths
-            });
-            let _ = tx.send(result);
+            let _ = tx.send(daw_plugins::catalog::PluginCatalog::default().scan(&dirs));
         });
     }
     fn setup(&mut self, ctx: &egui::Context) {
@@ -1159,16 +1128,7 @@ impl DawApp {
                     ui.horizontal(|ui| {
                         if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() { self.setup_draft.scratch_dir = path; }
                         if daw_ui::button(ui, "Recover session").clicked() {
-                            match Project::load(self.setup_draft.scratch_dir.join("recovery.daw.json")) {
-                                Ok(project) => {
-                                    self.begin_edit(); self.retire_engine(); self.loading = None; self.desired_playing = false;
-                                    self.project_path = None; self.project = project; self.selected_track = None;
-                                    self.selected_clip = None; self.selected_notes.clear(); self.view = WorkspaceView::Arrangement; self.cursor = 0.0;
-                                    self.cache_audio(); self.changed(); self.setup_open = false;
-                                    self.message(Ok(()), "Recovery session opened");
-                                }
-                                Err(error) => self.message(Err(error), ""),
-                            }
+                            self.request_open_project(self.setup_draft.scratch_dir.join("recovery.daw.json"), true);
                         }
                     });
                 }
@@ -1185,7 +1145,20 @@ impl DawApp {
                         }
                     });
                     if let Some(index) = remove { self.setup_draft.vst_dirs.remove(index); }
-                    if daw_ui::button(ui, "+ Folder…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                    let path_key = egui::Id::new("plugin_scan_folder_input");
+                    let mut folder = ctx.data_mut(|data| data.get_temp::<String>(path_key)).unwrap_or_default();
+                    ui.horizontal(|ui| {
+                        daw_ui::text_field(ui, &mut folder, "Folder path", 310.0);
+                        if daw_ui::button(ui, "Add folder").clicked() {
+                            let path = PathBuf::from(folder.trim());
+                            if path.is_dir() {
+                                if !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                                folder.clear();
+                            } else { self.message(Err(anyhow::anyhow!("Choose an existing plug-in folder")), ""); }
+                        }
+                        if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                    });
+                    ctx.data_mut(|data| data.insert_temp(path_key, folder));
                 }
             }
             ui.add_space(16.0);
@@ -1209,8 +1182,9 @@ impl DawApp {
 impl DawApp {
     pub fn ui_frame(&mut self, ctx: &egui::Context) {
         self.frame_count += 1;
-        if ctx.input(|i| i.viewport().close_requested()) {
-            self.autosave_recovery();
+        if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.request_quit(ctx);
         }
         if ctx.input(|i| {
             i.pointer.any_pressed()
@@ -1225,6 +1199,7 @@ impl DawApp {
         }
         self.keyboard(ctx);
         self.poll_engine();
+        self.poll_instrument_editor(ctx);
         self.poll_export();
         if let Some(e) = &self.engine {
             self.cursor = e.position_beats();
@@ -1242,19 +1217,30 @@ impl DawApp {
             && let Ok(result) = rx.try_recv()
         {
             match result {
-                Ok(paths) => {
+                Ok(entries) => {
                     if !self.error {
-                        self.status = format!("Found {} VST3 plug-ins", paths.len());
+                        self.status = format!("Found {} VST3 plug-ins", entries.len());
                     }
-                    self.vst_paths = paths;
+                    self.vst_paths = entries
+                        .iter()
+                        .map(|entry| entry.plugin.path.clone())
+                        .collect();
+                    self.vst_paths.sort();
+                    self.vst_paths.dedup();
+                    self.vst_catalog = entries;
                 }
                 Err(e) => self.message(Err(e), ""),
             }
             self.vst_scan = None;
         }
+        self.poll_plugin_previews(ctx);
         self.menus(ctx);
         self.transport(ctx);
-        if self.error || self.loading.is_some() || self.export_job.is_some() {
+        if self.error
+            || self.loading.is_some()
+            || self.export_job.is_some()
+            || self.state_sync_pending()
+        {
             egui::TopBottomPanel::bottom("status")
                 .frame(daw_ui::panel().inner_margin(8))
                 .show(ctx, |ui| {
@@ -1368,7 +1354,8 @@ impl DawApp {
             self.last_recovery = Instant::now();
         }
         if let Some(path) = &self.screenshot {
-            if self.frame_count == 8 {
+            if self.frame_count >= 8 && self.vst_scan.is_none() && !self.screenshot_requested {
+                self.screenshot_requested = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             }
             let screenshot = ctx.input(|i| {
@@ -1392,7 +1379,7 @@ impl DawApp {
                     Ok(()) => println!("Screenshot: {}", path.display()),
                     Err(e) => eprintln!("Screenshot failed: {e}"),
                 };
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                self.request_quit(ctx);
             }
         }
         ctx.request_repaint_after(Duration::from_millis(
@@ -1425,6 +1412,8 @@ fn audio_equivalent(a: &Project, b: &Project) -> bool {
                 && a.mute == b.mute
                 && a.solo == b.solo
                 && a.instrument == b.instrument
+                && a.instrument_state == b.instrument_state
+                && a.instrument_parameters == b.instrument_parameters
                 && a.latency_samples == b.latency_samples
                 && a.automation == b.automation
                 && a.inserts == b.inserts

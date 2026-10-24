@@ -11,10 +11,6 @@ pub enum AutomationParameter {
     TrackGain,
     TrackPan,
     SendGain { bus: u64 },
-    InsertGain { effect: u64 },
-    DelayTime { effect: u64 },
-    DelayFeedback { effect: u64 },
-    DelayMix { effect: u64 },
     VstParameter { effect: Option<u64>, id: u32 },
 }
 
@@ -24,10 +20,6 @@ impl AutomationParameter {
             Self::TrackGain => "Track gain",
             Self::TrackPan => "Track pan",
             Self::SendGain { .. } => "Send gain",
-            Self::InsertGain { .. } => "Insert gain",
-            Self::DelayTime { .. } => "Delay time",
-            Self::DelayFeedback { .. } => "Delay feedback",
-            Self::DelayMix { .. } => "Delay mix",
             Self::VstParameter { .. } => "VST parameter",
         }
     }
@@ -36,10 +28,8 @@ impl AutomationParameter {
         match self {
             Self::TrackGain => 0.0..=1.5,
             Self::TrackPan => -1.0..=1.0,
-            Self::SendGain { .. } | Self::InsertGain { .. } => 0.0..=16.0,
-            Self::DelayTime { .. } => 1.0..=10_000.0,
-            Self::DelayFeedback { .. } => -0.99..=0.99,
-            Self::DelayMix { .. } | Self::VstParameter { .. } => 0.0..=1.0,
+            Self::SendGain { .. } => 0.0..=16.0,
+            Self::VstParameter { .. } => 0.0..=1.0,
         }
     }
 
@@ -96,16 +86,6 @@ impl AutomationTarget {
                     "Automation send destination is not a bus"
                 );
             }
-            AutomationParameter::InsertGain { effect: id } => ensure!(
-                matches!(effect(id)?, Effect::Gain { .. }),
-                "Automation target is not a gain insert"
-            ),
-            AutomationParameter::DelayTime { effect: id }
-            | AutomationParameter::DelayFeedback { effect: id }
-            | AutomationParameter::DelayMix { effect: id } => ensure!(
-                matches!(effect(id)?, Effect::Delay { .. }),
-                "Automation target is not a delay insert"
-            ),
             AutomationParameter::VstParameter {
                 effect: Some(id), ..
             } => ensure!(
@@ -126,14 +106,6 @@ impl AutomationTarget {
     pub fn current_value(self, project: &Project) -> Result<f32> {
         self.validate(project)?;
         let track = project.track(self.track).expect("validated track");
-        let effect = |id| {
-            &track
-                .inserts
-                .iter()
-                .find(|slot| slot.id == id)
-                .expect("validated insert")
-                .effect
-        };
         let value = match self.parameter {
             AutomationParameter::TrackGain => track.gain,
             AutomationParameter::TrackPan => track.pan,
@@ -145,22 +117,6 @@ impl AutomationTarget {
                     .expect("validated send")
                     .gain
             }
-            AutomationParameter::InsertGain { effect: id } => match effect(id) {
-                Effect::Gain { gain } => *gain,
-                _ => unreachable!(),
-            },
-            AutomationParameter::DelayTime { effect: id } => match effect(id) {
-                Effect::Delay { time_ms, .. } => *time_ms,
-                _ => unreachable!(),
-            },
-            AutomationParameter::DelayFeedback { effect: id } => match effect(id) {
-                Effect::Delay { feedback, .. } => *feedback,
-                _ => unreachable!(),
-            },
-            AutomationParameter::DelayMix { effect: id } => match effect(id) {
-                Effect::Delay { mix, .. } => *mix,
-                _ => unreachable!(),
-            },
             AutomationParameter::VstParameter { .. } => {
                 bail!("Provide an explicit initial normalized VST parameter value")
             }
@@ -384,6 +340,8 @@ impl Project {
         );
         if channel.instrument != instrument {
             channel.instrument = instrument;
+            channel.instrument_state.clear();
+            channel.instrument_parameters.clear();
             candidate.tracks.retain(|lane_track| {
                 !lane_track.automation.as_ref().is_some_and(|lane| {
                     lane.target.track == track

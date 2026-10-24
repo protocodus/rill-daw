@@ -4,31 +4,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 impl Effect {
     pub(crate) fn validate(&self) -> Result<()> {
-        match self {
-            Self::Gain { gain } => ensure!(
-                gain.is_finite() && (0.0..=16.0).contains(gain),
-                "Insert gain must be between 0 and 16"
-            ),
-            Self::Delay {
-                time_ms,
-                feedback,
-                mix,
-            } => {
-                ensure!(
-                    time_ms.is_finite() && (1.0..=10_000.0).contains(time_ms),
-                    "Delay time must be between 1 and 10000 ms"
-                );
-                ensure!(
-                    feedback.is_finite() && (-0.99..=0.99).contains(feedback),
-                    "Delay feedback must be between -0.99 and 0.99"
-                );
-                ensure!(
-                    mix.is_finite() && (0.0..=1.0).contains(mix),
-                    "Delay mix must be between 0 and 1"
-                );
-            }
-            Self::Vst3 { path } => ensure!(!path.is_empty(), "Missing VST3 insert path"),
-        }
+        let Self::Vst3 { path, class_id } = self;
+        ensure!(!path.is_empty(), "Missing VST3 insert path");
+        crate::model::validate_vst_class_id(class_id.as_deref())?;
         Ok(())
     }
 }

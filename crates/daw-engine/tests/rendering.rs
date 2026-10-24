@@ -65,13 +65,13 @@ fn midi_track() -> Track {
 }
 
 #[test]
-fn built_in_instrument_is_nonzero_finite_and_ends() {
+fn unassigned_midi_track_is_silent_without_an_integrated_instrument() {
     let mut project = empty_project();
     project.tracks.push(midi_track());
     let audio = render(&project, 8_000, 2.0).unwrap();
     assert_eq!(audio.len(), 16_000);
     assert!(audio.iter().all(|sample| sample.is_finite()));
-    assert!(audio.iter().any(|sample| sample.abs() > 0.01));
+    assert!(audio.iter().all(|sample| *sample == 0.0));
     assert!(audio[10_000..].iter().all(|sample| *sample == 0.0));
 }
 
@@ -97,19 +97,6 @@ fn nle_audio_offset_is_used_and_source_is_not_modified() {
     );
     assert!(audio[16_000..].iter().all(|sample| *sample == 0.0));
     assert_eq!(std::fs::read(&wav.0).unwrap(), before);
-}
-
-#[test]
-fn midi_source_offset_excludes_trimmed_notes() {
-    let mut project = empty_project();
-    let mut track = midi_track();
-    track.clips[0].offset = 1.0;
-    track.clips[0].length = 1.0;
-    let audio = {
-        project.tracks.push(track);
-        render(&project, 8_000, 1.0).unwrap()
-    };
-    assert!(audio.iter().all(|sample| *sample == 0.0));
 }
 
 #[test]
@@ -172,10 +159,11 @@ fn delay_line_has_exact_sample_latency() {
 #[test]
 fn mute_solo_and_pan_are_applied() {
     let mut project = empty_project();
-    let mut audible = midi_track();
+    let wav = TestWav::new(vec![0.25; 4_000], 8_000);
+    let mut audible = audio_track(&wav, 1.0);
     audible.solo = true;
     audible.pan = -1.0;
-    let mut inaudible = midi_track();
+    let mut inaudible = audio_track(&wav, 1.0);
     inaudible.pan = 1.0;
     project.tracks.extend([audible, inaudible]);
     let audio = render(&project, 8_000, 1.0).unwrap();
@@ -199,7 +187,8 @@ fn mute_solo_and_pan_are_applied() {
 #[test]
 fn streaming_wav_export_matches_offline_render() {
     let mut project = empty_project();
-    project.tracks.push(midi_track());
+    let source = TestWav::new(vec![0.25; 4_000], 8_000);
+    project.tracks.push(audio_track(&source, 1.0));
     let wav = TestWav::new(vec![0.0], 8_000);
     export_wav(&project, &wav.0, 8_000, 2.0).unwrap();
     let loaded = AudioData::load_wav(&wav.0).unwrap();
@@ -234,11 +223,10 @@ fn effect(effect: Effect) -> EffectSlot {
 }
 
 #[test]
-fn bus_sums_inputs_and_applies_inserts_before_its_fader() {
+fn bus_sums_inputs_and_applies_its_fader() {
     let wav = TestWav::new(vec![1.0; 4_000], 8_000);
     let mut bus = Track::new("Mix bus", TrackKind::Bus);
     bus.gain = 0.5;
-    bus.inserts.push(effect(Effect::Gain { gain: 2.0 }));
     let mut a = audio_track(&wav, 0.5);
     a.output_bus = Some(bus.id);
     let mut b = audio_track(&wav, 0.25);
@@ -246,17 +234,16 @@ fn bus_sums_inputs_and_applies_inserts_before_its_fader() {
     let mut project = empty_project();
     project.tracks.extend([bus, a, b]);
     let audio = render(&project, 8_000, 1.0).unwrap();
-    assert!(audio.iter().all(|sample| (*sample - 0.75).abs() < 1e-6));
+    assert!(audio.iter().all(|sample| (*sample - 0.375).abs() < 1e-6));
 }
 
 #[test]
-fn sends_use_the_correct_pre_or_post_fader_tap_after_inserts() {
+fn sends_use_the_correct_pre_or_post_fader_tap() {
     let wav = TestWav::new(vec![1.0; 4_000], 8_000);
-    for (pre_fader, expected) in [(false, 0.75), (true, 1.5)] {
+    for (pre_fader, expected) in [(false, 0.375), (true, 0.75)] {
         let mut bus = Track::new("Return", TrackKind::Bus);
         bus.gain = 1.0;
         let mut source = audio_track(&wav, 0.25);
-        source.inserts.push(effect(Effect::Gain { gain: 2.0 }));
         source.sends.push(Send {
             target_bus: bus.id,
             gain: 0.5,
@@ -300,26 +287,6 @@ fn routing_compensates_bus_inputs_and_parallel_master_sends() {
     let audio = render(&project, 8_000, 1.0).unwrap();
     assert!((audio[0] - 0.5).abs() < 1e-6);
     assert!(audio[2..].iter().all(|sample| *sample == 0.0));
-}
-
-#[test]
-fn musical_delay_is_not_removed_by_processing_latency_compensation() {
-    let mut samples = vec![0.0; 4_000];
-    samples[0] = 0.5;
-    let wav = TestWav::new(samples, 8_000);
-    let mut source = audio_track(&wav, 1.0);
-    source.latency_samples = 120;
-    source.inserts.push(effect(Effect::Delay {
-        time_ms: 10.0,
-        feedback: 0.5,
-        mix: 1.0,
-    }));
-    let mut project = empty_project();
-    project.tracks.push(source);
-    let audio = render(&project, 8_000, 1.0).unwrap();
-    assert_eq!(audio[0], 0.0);
-    assert_eq!(audio[160], 0.5);
-    assert_eq!(audio[320], 0.25);
 }
 
 #[test]
@@ -378,7 +345,10 @@ fn solo_bus_includes_upstream_feeds_and_folder_mute_takes_priority() {
 fn bypassed_inserts_leave_audio_unchanged() {
     let wav = TestWav::new(vec![0.25; 4_000], 8_000);
     let mut source = audio_track(&wav, 1.0);
-    let mut slot = effect(Effect::Gain { gain: 0.0 });
+    let mut slot = effect(Effect::Vst3 {
+        path: "missing-effect.vst3".into(),
+        class_id: None,
+    });
     slot.enabled = false;
     source.inserts.push(slot);
     let mut project = empty_project();
@@ -392,39 +362,14 @@ fn bypassed_inserts_leave_audio_unchanged() {
 }
 
 #[test]
-fn full_project_export_preserves_cascaded_effect_tails() {
-    let mut samples = vec![0.0; 4_000];
-    samples[3_999] = 0.5;
-    let source = TestWav::new(samples, 8_000);
-    let output = TestWav::new(vec![0.0], 8_000);
-    let mut track = audio_track(&source, 1.0);
-    let mut bus = Track::new("Echo return", TrackKind::Bus);
-    bus.gain = 1.0;
-    track.output_bus = Some(bus.id);
-    for node in [&mut track, &mut bus] {
-        node.inserts.push(effect(Effect::Delay {
-            time_ms: 150.0,
-            feedback: 0.0,
-            mix: 1.0,
-        }));
-    }
-    let mut project = empty_project();
-    project.tracks.extend([track, bus]);
-    export_project_wav(&project, &output.0, 8_000).unwrap();
-    let result = AudioData::load_wav(&output.0).unwrap();
-    assert_eq!(result.frames(), 6_400);
-    assert_eq!(result.samples[6_399 * 2], 0.5);
-}
-
-#[test]
 fn failed_export_preserves_the_existing_destination() {
-    let source = TestWav::new(vec![0.25; 4_000], 8_000);
+    let source = TestWav::new(vec![1.0; 4_000], 8_000);
     let output = TestWav::new(vec![0.123], 8_000);
     let before = std::fs::read(&output.0).unwrap();
-    let mut track = audio_track(&source, f32::MAX);
-    track.inserts.push(effect(Effect::Gain { gain: 16.0 }));
+    let track = audio_track(&source, f32::MAX);
     let mut project = empty_project();
     project.tracks.push(track);
+    project.tracks.push(audio_track(&source, f32::MAX));
     assert!(export_project_wav(&project, &output.0, 8_000).is_err());
     assert_eq!(std::fs::read(&output.0).unwrap(), before);
 }
@@ -558,14 +503,11 @@ fn muted_empty_and_folder_muted_lanes_restore_manual_values() {
 }
 
 #[test]
-fn automated_inserts_sends_and_bus_faders_follow_compensated_musical_time() {
+fn automated_sends_and_bus_faders_follow_compensated_musical_time() {
     let wav = TestWav::new(vec![0.1; 4_000], 8_000);
     for pre_fader in [false, true] {
         let mut source = audio_track(&wav, 1.0);
         source.latency_samples = 37;
-        let slot = effect(Effect::Gain { gain: 1.0 });
-        let slot_id = slot.id;
-        source.inserts.push(slot);
         let target = source.id;
         let mut bus = Track::new("Automated bus", TrackKind::Bus);
         bus.latency_samples = 53;
@@ -582,12 +524,6 @@ fn automated_inserts_sends_and_bus_faders_follow_compensated_musical_time() {
         project.tracks.extend([bus, source, parallel]);
         for (track, parameter, from, to) in [
             (target, AutomationParameter::TrackGain, 0.0, 1.0),
-            (
-                target,
-                AutomationParameter::InsertGain { effect: slot_id },
-                1.0,
-                2.0,
-            ),
             (
                 target,
                 AutomationParameter::SendGain { bus: bus_id },
@@ -607,9 +543,8 @@ fn automated_inserts_sends_and_bus_faders_follow_compensated_musical_time() {
         let output = render(&project, 8_000, 1.0).unwrap();
         for (index, frame) in output.as_chunks::<2>().0.iter().enumerate() {
             let beat = index as f32 / 4_000.0;
-            let main = 0.1 * (1.0 + beat) * beat;
-            let send =
-                0.1 * (1.0 + beat) * beat * (1.0 - beat * 0.5) * if pre_fader { 1.0 } else { beat };
+            let main = 0.1 * beat;
+            let send = 0.1 * beat * (1.0 - beat * 0.5) * if pre_fader { 1.0 } else { beat };
             let expected = 0.2 + main + send;
             assert!(
                 (frame[0] - expected).abs() < 2e-6,
@@ -618,53 +553,5 @@ fn automated_inserts_sends_and_bus_faders_follow_compensated_musical_time() {
             );
             assert!((frame[1] - expected).abs() < 2e-6);
         }
-    }
-}
-
-#[test]
-fn automated_delay_time_feedback_and_mix_change_the_echoes() {
-    let mut samples = vec![0.0; 4_000];
-    samples[0] = 0.5;
-    samples[1_200] = 0.5;
-    let wav = TestWav::new(samples, 8_000);
-    let mut source = audio_track(&wav, 1.0);
-    let target = source.id;
-    let slot = effect(Effect::Delay {
-        time_ms: 10.0,
-        feedback: 0.5,
-        mix: 1.0,
-    });
-    let effect = slot.id;
-    source.inserts.push(slot);
-    let mut project = empty_project();
-    project.tracks.push(source);
-    for (parameter, from, to) in [
-        (AutomationParameter::DelayTime { effect }, 10.0, 20.0),
-        (AutomationParameter::DelayFeedback { effect }, 0.5, 0.0),
-        (AutomationParameter::DelayMix { effect }, 1.0, 0.5),
-    ] {
-        automate(
-            &mut project,
-            target,
-            parameter,
-            &[(0.0, from), (0.25, to)],
-            Interpolation::Step,
-        );
-    }
-    let output = render(&project, 8_000, 1.0).unwrap();
-    for (frame, expected) in [
-        (0, 0.0),
-        (80, 0.5),
-        (160, 0.25),
-        (1_200, 0.25),
-        (1_280, 0.0),
-        (1_360, 0.25),
-        (1_520, 0.0),
-    ] {
-        assert!(
-            (output[frame * 2] - expected).abs() < 1e-4,
-            "Frame {frame}: {} vs {expected}",
-            output[frame * 2]
-        );
     }
 }

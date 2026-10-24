@@ -1,6 +1,6 @@
 # Distributions and releases
 
-The CI workflow builds native distributions after formatting, all workspace unit/integration/doc tests, application UI tests, all nine subprocess E2E scenarios, and strict Clippy pass. Each archive is then extracted and the subprocess scenarios run again against that extracted executable before upload. No audio device, display server, or installed VST is required for these automated tests. Hardware audio, native file dialogs, and third-party plug-in compatibility need separate testing.
+The CI workflow builds native distributions after formatting, workspace unit/integration/doc tests, application UI tests, subprocess E2E scenarios, and strict Clippy pass. Each archive is then extracted and the subprocess scenarios run again against that extracted executable before upload. The app E2E suite needs no audio device, display server, or installed VST. Separate native capture tests exercise real Win32 pixels and Linux X11 pixels under Xvfb. Hardware audio, native file dialogs, and third-party plug-in compatibility need separate testing.
 
 | Platform | Native CI runner | Archive |
 | --- | --- | --- |
@@ -36,6 +36,8 @@ The scripts build the full locked workspace in release mode. Both executable and
 For Linux, extract the archive and run `./rill`, keeping `daw-plugin-host` beside it. CI uses Ubuntu 22.04, giving the packaged binaries a glibc 2.35 baseline. Desktop use requires a graphical session, an OpenGL-capable driver, and ALSA, udev, xkbcommon, and Wayland client runtime libraries. On Ubuntu 22.04 install `libasound2 libudev1 libxkbcommon0 libwayland-client0 libgl1`; Ubuntu 24.04 names the ALSA package `libasound2t64`. Locally built archives inherit their build machine's runtime baseline.
 
 For Windows, extract the complete archive and launch `rill.exe`, keeping `daw-plugin-host.exe` beside it. Windows 10/11 x64 and an OpenGL-capable driver are required. CI statically links the application's MSVC C runtime; installed plug-ins may have their own runtime requirements. The application is not Authenticode signed. No installer, registry writes, or administrator access are needed to unpack the distribution.
+
+Native VST3 editors on Linux require X11 or XWayland. Thumbnail capture also needs the XRes and Composite extensions on that display.
 
 Verify an archive against its adjacent checksum file:
 

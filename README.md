@@ -13,20 +13,21 @@ cargo build --release --workspace
 ./target/release/rill
 ```
 
-Or run `./scripts/run.sh`. On macOS, `./scripts/package-macos.sh` creates `dist/Rill.app`. Linux needs ALSA development headers, a desktop display, and OpenGL; see the CI workflow for build dependencies. Native macOS operation and Linux arm64 headless tests have been exercised locally. Windows operation and Linux desktop/audio hardware still need verification on those platforms.
+Or run `./scripts/run.sh`. On macOS, `./scripts/package-macos.sh` creates `dist/Rill.app`. Linux needs ALSA development headers, a desktop display, and OpenGL; see the CI workflow for build dependencies. Native macOS operation, Linux arm64 headless tests, and Linux application rendering under Xvfb have been exercised locally. Windows operation and Linux audio hardware still need verification on those platforms.
 
 CI builds downloadable archives for macOS (Apple silicon and Intel), Linux (arm64 and x86-64), and Windows (x86-64), with the plug-in helper, licenses, installation notes, and SHA-256 checksums. Build the same distribution locally with `./scripts/package-release.sh` on macOS/Linux or `./scripts/package-windows.ps1` on Windows. These builds are unsigned; macOS builds are not notarized. See [distribution and release instructions](docs/RELEASING.md) for prerequisites and the test gates before publication.
 
-The initial session contains three MIDI instruments and an original generated drum loop. Use **File → New** to start empty. Press **Space** to play or pause.
+The initial session contains an original generated audio loop. Rill includes no instruments or insert effects; MIDI tracks remain unassigned until you choose a VST3 instrument. Use **File → New** to start empty. Press **Space** to play or pause.
 
 ## Included
 
-- Audio and MIDI tracks; built-in sine, triangle, and PolyBLEP saw instruments.
+- Audio and MIDI tracks; VST3 instruments and effects hosted in isolated processes.
+- Parallel processing of independent instrument/effect chains, with persistent workers, ordered buses, and a serial path for lightweight sessions.
 - Non-destructive clip movement, trimming, splitting, duplication, cross-track movement, and undo/redo.
 - Drag WAV files onto an existing audio track or empty arrangement space to create a track. Dropping on a MIDI/bus/folder track creates a new audio track.
 - Audio waveforms, clip gain, and fade controls.
 - Piano-roll keyboard with selectable root/scale highlighting; select, pencil, duplicate, cut, and glue tools; box/Shift selection, group movement, resizing, and velocity editing.
-- Ordered insert chains with gain, stereo delay, and isolated VST3 effects. Reorder, bypass, or remove slots.
+- Ordered VST3 insert chains. Reorder, bypass, or remove slots.
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
 - Nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
 - One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
@@ -35,14 +36,14 @@ The initial session contains three MIDI instruments and an original generated dr
 
 ## Working with the editors
 
-The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media.
+The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose a VST3 to assign it and open its native editor; closing the chooser leaves the pattern unassigned.
 
 Arrangement is the main canvas. **Window** opens one focused tool at a time:
 
 | View | Use |
 | --- | --- |
 | **Clip Editor** | Edit MIDI notes or inspect the selected audio waveform. |
-| **Instrument** | Choose a built-in waveform or VST3 instrument for the selected MIDI track. |
+| **Instrument** | Choose, edit, and automate a VST3 instrument for the selected MIDI track. |
 | **Effects** | Add, reorder, bypass, and edit the selected channel's inserts. |
 | **Mixer** | Balance channels, with shortcuts to their instruments, effects, and routing. |
 | **Routing** | Choose the output bus and configure pre/post-fader sends. |
@@ -52,6 +53,8 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Setup** | Configure Audio, Storage, and Plug-ins on separate pages. |
 
 Each tool opens as a popup over Arrangement. Close it, press Escape, or choose **Window → Arrangement** to return. Opening another tool replaces the current popup.
+
+Arrangement channel headers match Mixer channel numbers and show the destination, such as `Ch 1 > Master` or `Ch 1 > Drum bus`. Expanded audio, MIDI, and bus rows expose **M**ute, **S**olo, volume in dB, and pan from −100 (left) to 100 (right). Drag the numeric controls or double-click to type; −60 dB silences the channel. Compact rows retain the channel and destination. Folders and automation tracks do not consume audio channel numbers; folder mute/solo controls their descendants.
 
 In Arrangement, double-click an empty MIDI lane to create a four-beat pattern. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its right edge to trim its length. **Properties** displays the clip's start, length, and source offset as read-only values, and lets you adjust audio gain and fades. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path.
 
@@ -74,18 +77,28 @@ The select tool supports dragging a rectangle around notes. Drag note bodies to 
 Select a track and choose **Window → Effects**, or use its Effects button in Mixer. Add and reorder inserts in that popup. To create a shared effect return:
 
 1. Choose **Track → Add bus**, then rename it in **Window → Properties**.
-2. Open **Window → Effects** and add a delay or VST3 effect to that bus; use 100% wet when appropriate.
+2. Open **Window → Effects** and add a VST3 effect to that bus; use 100% wet when appropriate.
 3. Select each source track, open **Window → Routing**, and add a send to the bus.
 
 To group channels for shared processing, choose their output bus in **Window → Routing**. A bus can feed another bus. Folder membership is independent of audio routing: set **Folder** in Properties to organize tracks. Folder mute/solo applies to descendants. Track color is available in Properties; track-header context menus provide collapse/expand.
 
 ## Automation
 
-Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, an insert control, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
+Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
 
 Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. Choose **Step**, **Linear**, or **Smooth** interpolation; Smooth uses a bounded cubic spline without overshoot. The first and last values hold beyond the curve endpoints. Disable or mute a lane to return to the channel's manual value. Curves save with the project and support undo/redo.
 
-For a VST3 parameter, select the instrument or insert, click **Read parameters**, and choose its named parameter. Discovery runs in a separate helper process. Built-in parameters render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
+For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Insert parameters are available through **Read parameters** in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
+
+## VST3 instruments
+
+Open **Window → Setup → Plug-ins**, add folders, apply the settings, and scan. Choose **Track → Add instrument…**, type a name or vendor, then press Enter or double-click a result. Rill creates a MIDI track and four-beat clip, assigns the VST, and opens its native editor. **Track → Add MIDI track** opens the same chooser after creating its empty pattern. Double-click the clip to write notes. To use an existing MIDI track, open **Window → Instrument → Choose instrument**; assigning the plug-in preserves its notes. **Window → Library** also provides browsing and explicit add/assign actions.
+
+The library captures real native editors in isolated helpers and caches their images as thumbnails. Cache entries are invalidated when the plug-in bundle changes. A failed editor or screenshot leaves the instrument listed with a preview error; it does not close Rill. Plug-ins without classification metadata are labelled **Unverified VST3** and checked when loaded.
+
+Instrument edits persist normalized parameter values and opaque plug-in state in the project. Native editors use a separate instance from audio rendering; parameter gestures update the playing instance, while saving or closing the editor applies its full state. Full state changes rebuild playback. The native editor and instrument parameter list provide access to the plug-in's controls; Rill does not supply instruments, effects, or a separate preset browser.
+
+Thumbnails live in `~/Library/Caches/Rill` on macOS, `%LOCALAPPDATA%/Rill/Cache` on Windows, and `$XDG_CACHE_HOME/rill` (default `~/.cache/rill`) on Linux. Set `RILL_CACHE_DIR` to override this location. Native editor capture needs a desktop session; Linux uses X11/XWayland with the XRes and Composite extensions.
 
 ## Setup and recovery
 
@@ -101,7 +114,7 @@ Each VST3 instrument/effect instance runs in a separate `daw-plugin-host` proces
 
 This is crash isolation. Helpers retain the user's filesystem and network permissions; they are not an OS permission sandbox. Plug-in IPC runs on the render worker, away from the lock-free device callback. The helper must be next to `rill`, or specified by `DAW_PLUGIN_HOST`.
 
-VST3 audio, MIDI, latency, transport, and effect inputs work. Native plug-in windows, a preset UI, project-persisted plug-in state, sidechains, and VST2/AU hosting are not included. Instances currently use their default preset. The plug-in crate exposes parameter/state/recovery APIs for further integration.
+VST3 audio, MIDI, latency, transport, effect inputs, native instrument windows, and project-persisted instrument state are supported. Sidechains, a standalone preset browser, and VST2/AU hosting are not included. Insert chains currently expose parameter automation but do not persist opaque effect presets.
 
 ## Rendering and verification
 
@@ -116,8 +129,6 @@ cargo run --release -p daw-engine --example render_bench
 ```
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
-
-Built-in rendering measured **60.9× realtime** for 32 tracks / 128 simultaneous voices on an Apple M1 Max. The measured 16 seconds of 48 kHz audio rendered in 0.263 seconds. This benchmark excludes VST3 IPC and device/UI overhead. A short real 48 kHz / 256-sample device test reported zero underruns; it is not a long-duration stress test.
 
 See [architecture and limitations](docs/ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats, and PDC model. Current media scope is PCM/float WAV and constant-tempo note MIDI; recording, disk streaming, tempo maps, time stretching, and surround are not implemented. Committed audio edits rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph.
 

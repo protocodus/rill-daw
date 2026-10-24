@@ -76,41 +76,9 @@ impl DawApp {
                                     },
                                 );
                             });
-                            match &mut slot.effect {
-                                Effect::Gain { gain } => {
-                                    changed |= ui
-                                        .add(widgets::slider(gain, 0.0..=2.0).text("Gain"))
-                                        .changed();
-                                }
-                                Effect::Delay {
-                                    time_ms,
-                                    feedback,
-                                    mix,
-                                } => {
-                                    ui.horizontal(|ui| {
-                                        changed |= ui
-                                            .add(
-                                                widgets::number(time_ms)
-                                                    .range(1.0..=2000.0)
-                                                    .suffix(" ms"),
-                                            )
-                                            .changed();
-                                        changed |= ui
-                                            .add(
-                                                widgets::slider(feedback, 0.0..=0.95)
-                                                    .text("Feedback"),
-                                            )
-                                            .changed();
-                                    });
-                                    changed |= ui
-                                        .add(widgets::slider(mix, 0.0..=1.0).text("Mix"))
-                                        .changed();
-                                }
-                                Effect::Vst3 { path } => {
-                                    ui.label(RichText::new("VST3").small().color(MUTED))
-                                        .on_hover_text(path.as_str());
-                                }
-                            }
+                            let Effect::Vst3 { path, .. } = &slot.effect;
+                            ui.label(RichText::new("VST3").small().color(MUTED))
+                                .on_hover_text(path);
                         });
                     });
                 }
@@ -125,36 +93,33 @@ impl DawApp {
                     changed = true;
                 }
                 let mut add = None;
-                widgets::menu_button(ui, "+ Insert", |ui| {
-                    if widgets::button(ui, "Gain").clicked() {
-                        add = Some(EffectSlot::new("Gain", Effect::Gain { gain: 1.0 }));
-                        ui.close();
-                    }
-                    if widgets::button(ui, "Stereo delay").clicked() {
-                        add = Some(EffectSlot::new(
-                            "Stereo delay",
-                            Effect::Delay {
-                                time_ms: 250.0,
-                                feedback: 0.35,
-                                mix: 0.25,
-                            },
-                        ));
-                        ui.close();
-                    }
+                widgets::picker_button(ui, "+ Insert", |ui| {
                     if !self.vst_paths.is_empty() {
+                        let key = ui.id().with("effect_search");
+                        let mut filter = ui
+                            .ctx()
+                            .data_mut(|data| data.get_temp::<String>(key))
+                            .unwrap_or_default();
+                        widgets::text_field(ui, &mut filter, "Search effects", 240.0);
+                        ui.ctx()
+                            .data_mut(|data| data.insert_temp(key, filter.clone()));
+                        let filter = filter.to_lowercase();
                         ui.separator();
-                        label(ui, "VST3");
                         egui::ScrollArea::vertical()
                             .max_height(250.0)
                             .show(ui, |ui| {
-                                for path in &self.vst_paths {
-                                    let name =
-                                        path.file_stem().unwrap_or_default().to_string_lossy();
-                                    if widgets::button(ui, name.as_ref()).clicked() {
+                                for entry in self.vst_catalog.iter().filter(|entry| {
+                                    entry.plugin.is_effect() != Some(false)
+                                        && entry.plugin.name.to_lowercase().contains(&filter)
+                                }) {
+                                    let path = &entry.plugin.path;
+                                    let name = &entry.plugin.name;
+                                    if widgets::button(ui, name.as_str()).clicked() {
                                         add = Some(EffectSlot::new(
-                                            name.as_ref(),
+                                            name.as_str(),
                                             Effect::Vst3 {
                                                 path: path.to_string_lossy().to_string(),
+                                                class_id: entry.plugin.class_id.clone(),
                                             },
                                         ));
                                         ui.close();

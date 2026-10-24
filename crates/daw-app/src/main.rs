@@ -3,6 +3,7 @@ mod arrangement;
 mod automation;
 mod automation_editor;
 mod editor;
+mod plugin_ui;
 mod routing;
 mod settings;
 mod theme;
@@ -25,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.daw.json]\nrill --render-demo output.wav\nrill --render session.daw.json output.wav\nrill --screenshot output.png [--view clip|mixer|instrument|effects|routing|automation|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nBuild all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.daw.json]\nrill --render-demo output.wav\nrill --render session.daw.json output.wav\nrill --screenshot output.png [--project session.daw.json] [--view clip|mixer|instrument|effects|routing|automation|library|setup]\nrill --headless (isolated JSON automation; see docs/E2E.md)\n\nBuild all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }
@@ -54,7 +55,14 @@ fn main() -> anyhow::Result<()> {
     } else {
         None
     };
-    let project = if screenshot.is_none() && !args.is_empty() {
+    let screenshot_project = screenshot.as_ref().and_then(|_| {
+        args.iter()
+            .position(|arg| arg == "--project")
+            .and_then(|index| args.get(index + 1))
+    });
+    let project = if let Some(path) = screenshot_project {
+        Project::load(path)?
+    } else if screenshot.is_none() && !args.is_empty() {
         Project::load(&args[0])?
     } else {
         demo()
@@ -92,32 +100,7 @@ fn main() -> anyhow::Result<()> {
                 Some("automation") => app.open_popup(app::PopupKind::Automation),
                 Some("routing") => app.open_popup(app::PopupKind::Routing),
                 Some("instrument") => app.open_popup(app::PopupKind::Instrument),
-                Some("rack" | "effects") => {
-                    let id = app.project.tracks[0].id;
-                    let bus = app.project.add_bus("Space return");
-                    app.project
-                        .track_mut(bus)
-                        .unwrap()
-                        .inserts
-                        .push(daw_core::EffectSlot::new(
-                            "Stereo delay",
-                            daw_core::Effect::Delay {
-                                time_ms: 375.0,
-                                feedback: 0.4,
-                                mix: 1.0,
-                            },
-                        ));
-                    app.project.add_send(id, bus, 0.2, false)?;
-                    app.project
-                        .track_mut(id)
-                        .unwrap()
-                        .inserts
-                        .push(daw_core::EffectSlot::new(
-                            "Trim",
-                            daw_core::Effect::Gain { gain: 0.8 },
-                        ));
-                    app.open_popup(app::PopupKind::Effects);
-                }
+                Some("rack" | "effects") => app.open_popup(app::PopupKind::Effects),
                 _ => {}
             }
             Ok(Box::new(app))

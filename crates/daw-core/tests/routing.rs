@@ -144,10 +144,13 @@ fn routing_and_hierarchy_survive_project_save_load() {
     project.set_output(audio, Some(bus)).unwrap();
     let effect = EffectSlot::new(
         "Echo",
-        Effect::Delay {
-            time_ms: 240.0,
-            feedback: 0.4,
-            mix: 0.3,
+        Effect::Vst3 {
+            class_id: None,
+            path: directory
+                .path()
+                .join("echo.vst3")
+                .to_string_lossy()
+                .into_owned(),
         },
     );
     let effect_id = effect.id;
@@ -209,15 +212,17 @@ fn malformed_signal_graph_and_effect_parameters_are_rejected() {
         .unwrap()
         .inserts
         .push(EffectSlot::new(
-            "Unstable delay",
-            Effect::Delay {
-                time_ms: 100.0,
-                feedback: 1.0,
-                mix: 0.5,
+            "Missing plugin",
+            Effect::Vst3 {
+                class_id: None,
+                path: String::new(),
             },
         ));
     assert!(project.validate().is_err());
-    project.track_mut(bus).unwrap().inserts[0].effect = Effect::Gain { gain: 1.0 };
+    project.track_mut(bus).unwrap().inserts[0].effect = Effect::Vst3 {
+        class_id: None,
+        path: "/fixture.vst3".into(),
+    };
     project.validate().unwrap();
     project.track_mut(bus).unwrap().inserts[0].id = audio;
     assert!(project.validate().is_err());

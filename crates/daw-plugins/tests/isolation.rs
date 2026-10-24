@@ -1,6 +1,32 @@
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 use vst3_host::process_isolation::{HostCommand, HostResponse, PluginHostProcess};
+
+#[test]
+fn native_editor_exits_when_owner_pipe_closes_before_initialization() {
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_daw-plugin-host"))
+        .arg("--editor")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    drop(child.stdin.take());
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("Orphaned editor did not exit after its owner pipe closed");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
 
 #[test]
 fn helper_reports_errors_without_exiting() {

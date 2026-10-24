@@ -5,7 +5,7 @@ use crate::{
 use daw_core::*;
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
-const HEADER: f32 = 176.0;
+const HEADER: f32 = 248.0;
 const ROW: f32 = 84.0;
 
 enum Edit {
@@ -17,6 +17,8 @@ enum Edit {
     New(u64, f64),
     Mute(u64),
     Solo(u64),
+    Gain(u64, f32),
+    Pan(u64, f32),
     Collapse(u64),
     DeleteTrack(u64),
     Transfer(u64, u64, u64),
@@ -62,6 +64,19 @@ impl DawApp {
         let mut new_cursor = None;
         let mut popup = None;
         let mut open_editor = false;
+        let channels: std::collections::HashMap<_, _> = self
+            .project
+            .tracks
+            .iter()
+            .filter(|track| {
+                matches!(
+                    track.kind,
+                    TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+                )
+            })
+            .enumerate()
+            .map(|(index, track)| (track.id, index + 1))
+            .collect();
         egui::ScrollArea::both()
             .id_salt("arrangement_scroll")
             // Pointer drags belong to clips and track headers. Background drag
@@ -156,7 +171,8 @@ impl DawApp {
                         0.0,
                         color(track.color),
                     );
-                    p.text(
+                    let header_painter = ui.painter_at(header.shrink2(Vec2::new(4.0, 0.0)));
+                    header_painter.text(
                         row.min + Vec2::new(14.0 + depth as f32 * 12.0, 16.0),
                         Align2::LEFT_CENTER,
                         format!(
@@ -171,16 +187,20 @@ impl DawApp {
                         FontId::proportional(12.0),
                         TEXT,
                     );
-                    p.text(
+                    let route = if let Some(channel) = channels.get(&track.id) {
+                        let destination = track.output_bus.and_then(|id| self.project.track(id))
+                            .map(|bus| bus.name.as_str()).unwrap_or("Master");
+                        format!("Ch {channel} > {destination}")
+                    } else {
+                        match track.kind {
+                            TrackKind::Folder => "FOLDER".to_owned(),
+                            _ => "AUTOMATION".to_owned(),
+                        }
+                    };
+                    header_painter.text(
                         row.min + Vec2::new(14.0, 36.0),
                         Align2::LEFT_CENTER,
-                        match track.kind {
-                            TrackKind::Audio => "AUDIO",
-                            TrackKind::Midi => "MIDI / INSTRUMENT",
-                            TrackKind::Bus => "BUS / RETURN",
-                            TrackKind::Folder => "FOLDER",
-                            TrackKind::Automation => "AUTOMATION",
-                        },
+                        route,
                         FontId::proportional(9.0),
                         MUTED,
                     );
@@ -201,13 +221,26 @@ impl DawApp {
                                 });
                             }
                         }
-                        p.text(
-                            row.min + Vec2::new(84.0, 62.0),
-                            Align2::LEFT_CENTER,
-                            format!("{:.1} dB", 20.0 * track.gain.max(0.0001).log10()),
-                            FontId::monospace(10.0),
-                            MUTED,
-                        );
+                        if channels.contains_key(&track.id) {
+                            let mut db = 20.0 * track.gain.max(0.001).log10();
+                            if daw_ui::number_at(ui,
+                                Rect::from_min_size(row.min + Vec2::new(78.0, 51.0), Vec2::new(78.0, 21.0)),
+                                (track.id, "gain"),
+                                daw_ui::number(&mut db).range(-60.0..=20.0 * 1.5_f32.log10())
+                                    .speed(0.1).fixed_decimals(1).suffix(" dB"),
+                            ).on_hover_text("Volume · drag or double-click to type · −60 dB silences the channel").changed() {
+                                edits.push(Edit::Gain(track.id, if db <= -60.0 { 0.0 } else { 10.0_f32.powf(db / 20.0) }));
+                            }
+                            let mut pan = track.pan * 100.0;
+                            if daw_ui::number_at(ui,
+                                Rect::from_min_size(row.min + Vec2::new(162.0, 51.0), Vec2::new(78.0, 21.0)),
+                                (track.id, "pan"),
+                                daw_ui::number(&mut pan).range(-100.0..=100.0).speed(1.0)
+                                    .fixed_decimals(0).prefix("Pan "),
+                            ).on_hover_text("Pan · −100 left · 0 center · 100 right").changed() {
+                                edits.push(Edit::Pan(track.id, pan / 100.0));
+                            }
+                        }
                     }
                     for beat in first_beat..last_beat {
                         let x = origin + beat as f32 * self.zoom;
@@ -587,6 +620,18 @@ impl DawApp {
                     }
                     Ok(())
                 }
+                Edit::Gain(id, gain) => {
+                    if let Some(track) = self.project.track_mut(id) {
+                        track.gain = gain;
+                    }
+                    Ok(())
+                }
+                Edit::Pan(id, pan) => {
+                    if let Some(track) = self.project.track_mut(id) {
+                        track.pan = pan;
+                    }
+                    Ok(())
+                }
                 Edit::Collapse(id) => {
                     if let Some(t) = self.project.track_mut(id) {
                         t.collapsed = !t.collapsed;
@@ -594,6 +639,7 @@ impl DawApp {
                     Ok(())
                 }
                 Edit::New(id, start) => {
+                    let new_track = id == 0;
                     let id = if id == 0 {
                         self.project.add_midi_track("New instrument")
                     } else {
@@ -603,6 +649,9 @@ impl DawApp {
                     self.selected_clip = Some(clip.id);
                     self.selected_track = Some(id);
                     self.project.track_mut(id).unwrap().clips.push(clip);
+                    if new_track {
+                        self.open_instrument_chooser(true);
+                    }
                     Ok(())
                 }
             };

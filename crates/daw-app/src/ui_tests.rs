@@ -341,8 +341,8 @@ fn dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_ed
     let before = harness.app.project.clone();
     let output = harness.settle_full();
     let label = text_position(&output, " Drop target", 0.0);
-    // Track labels start 14 points inside a 176-point header.
-    let pos = label + Vec2::new(162.0 + harness.app.zoom * 2.0, 30.0);
+    // Track labels start 14 points inside a 248-point header.
+    let pos = label + Vec2::new(234.0 + harness.app.zoom * 2.0, 30.0);
     harness.drop_wav(pos, &path);
     assert_eq!(harness.app.project.tracks.len(), 2);
     let clips = &harness.app.project.track(target).unwrap().clips;
@@ -581,21 +581,17 @@ fn escape_from_the_clip_editor_clears_note_selection_before_arrangement_edits() 
 }
 
 #[test]
-fn instrument_popup_changes_the_selected_track_and_records_one_undoable_edit() {
+fn unassigned_instrument_popup_opens_library_without_changing_the_session() {
     let mut harness = Harness::new(0.0);
     let before = harness.app.project.clone();
-    // A cached path prevents a filesystem scan; built-in selection never loads it.
     harness.app.vst_paths.push("unused-fixture.vst3".into());
     harness.app.open_popup(PopupKind::Instrument);
     let output = harness.settle_full();
     assert!(has_text(&output, "Instrument · Test instrument"));
-    let saw = text_position(&output, "Saw", 0.0) + Vec2::new(8.0, 6.0);
-    harness.full_click(saw);
-    assert_eq!(
-        harness.app.project.tracks[0].instrument,
-        daw_core::Instrument::Saw
-    );
-    assert!(harness.app.instrument_open);
-    assert!(harness.app.history.undo(&mut harness.app.project));
+    assert!(has_text(&output, "No instrument assigned"));
+    let choose = text_position(&output, "Choose instrument", 0.0) + Vec2::new(8.0, 6.0);
+    harness.full_click(choose);
+    assert!(harness.app.library_open);
+    assert!(!harness.app.instrument_open);
     assert_eq!(harness.app.project, before);
 }

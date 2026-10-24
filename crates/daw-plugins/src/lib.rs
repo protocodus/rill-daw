@@ -18,9 +18,26 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use vst3_host::process_isolation::{HostCommand, HostResponse, PluginHostProcess};
 use vst3_host::{BusAudioBuffers, MidiChannel, MidiEvent, Plugin, TransportPosition, Vst3Host};
 
+pub mod catalog;
+mod editor;
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+mod editor_native;
+#[cfg(target_os = "macos")]
+#[path = "editor_platform_macos.rs"]
+mod editor_platform;
+#[cfg(target_os = "linux")]
+#[path = "editor_platform_linux.rs"]
+mod editor_platform;
+#[cfg(target_os = "windows")]
+#[path = "editor_platform_windows.rs"]
+mod editor_platform;
 pub mod helper;
+pub use catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
+pub use editor::{EditorEvent, EditorSession, capture_editor, capture_editor_info, launch_editor};
 
 /// Leaves headroom in the host's 4,096-event queue for panic note-offs.
 pub const MAX_MIDI_EVENTS_PER_BLOCK: usize = 2_048;
@@ -249,6 +266,7 @@ pub struct VstInstrument {
     output_bus: usize,
     max_block: usize,
     panic_pending: bool,
+    active_notes: [u16; 128],
     latency: u32,
     tail: u32,
     cached_tempo: Option<f64>,
@@ -352,6 +370,7 @@ impl VstInstrument {
             output_bus,
             max_block,
             panic_pending: false,
+            active_notes: [0; 128],
             latency,
             tail,
             cached_tempo: None,
@@ -395,14 +414,17 @@ impl VstInstrument {
         self.latency = self.plugin.latency_samples();
         self.tail = self.plugin.tail_samples();
         self.panic_pending = false;
+        self.active_notes.fill(0);
         self.cached_tempo = None;
         self.cached_playing = None;
         self.next_position = None;
         Ok(())
     }
 
-    /// Release active notes at the start of the next processed block. This is a MIDI panic;
-    /// it does not reload the preset or suppress the instrument's release/reverb tails.
+    /// Release tracked active notes before the next block's note events. Explicit
+    /// note-offs preserve ordering with chased note-ons; controller-based panic can
+    /// arrive through a separate VST parameter stream and silence new notes.
+    /// This does not reload the preset or suppress release/reverb tails.
     pub fn reset(&mut self) -> Result<()> {
         self.panic_pending = true;
         Ok(())
@@ -495,6 +517,7 @@ impl VstInstrument {
         if left.is_empty() {
             return Ok(());
         }
+        let next_active = track_active_notes(&self.active_notes, self.panic_pending, events)?;
         self.buffers.block_size = left.len();
         for bus in self
             .buffers
@@ -519,13 +542,26 @@ impl VstInstrument {
             );
         }
         if self.panic_pending {
-            self.plugin.midi_panic()?;
+            for (pitch, active) in self.active_notes.iter_mut().enumerate() {
+                for _ in 0..*active {
+                    self.plugin.send_midi_event_at(
+                        MidiEvent::NoteOff {
+                            channel: MidiChannel::Ch1,
+                            note: pitch as u8,
+                            velocity: 0,
+                        },
+                        0,
+                    )?;
+                }
+                *active = 0;
+            }
             self.panic_pending = false;
         }
         for event in events {
             self.plugin
                 .send_midi_event_at(event.as_host_event(), event.offset as i32)?;
         }
+        self.active_notes = next_active;
         self.plugin.process_bus_audio(&mut self.buffers)?;
         if self.cached_playing == Some(true)
             && let (Some(position), Some(tempo)) = (&mut self.next_position, self.cached_tempo)
@@ -539,22 +575,67 @@ impl VstInstrument {
         Ok(())
     }
 
-    /// Enumerate controller parameters on the original control thread, with playback stopped.
+    /// Enumerate parameters on a worker/control thread, with playback stopped.
+    /// Large metadata replies get a separate 30-second helper budget; the active
+    /// processing instance retains its 100 ms deadline. Current values are then
+    /// read from that instance, without requiring plug-in state serialization.
     pub fn parameters(&self) -> Result<Vec<ParameterInfo>> {
-        Ok(self
-            .plugin
-            .get_parameters()?
-            .into_iter()
-            .map(|p| ParameterInfo {
-                id: p.id,
-                name: p.name,
-                value: p.value,
-                default: p.default,
-                unit: p.unit,
-                steps: p.step_count,
-                read_only: p.is_read_only,
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut metadata = PluginHostProcess::new(Some(helper_path()?), Duration::from_secs(30))
+            .map_err(anyhow::Error::msg)
+            .context("Starting isolated parameter discovery")?;
+        let loaded = metadata
+            .send_command(HostCommand::LoadPlugin {
+                path: self.info.path.to_string_lossy().into_owned(),
+                sample_rate: self.buffers.sample_rate,
+                block_size: self.max_block as u32,
+                tempo: self.cached_tempo.unwrap_or(120.0),
+                time_sig_numerator: 4,
+                time_sig_denominator: 4,
+                class_id: self.info.class_id.clone(),
             })
-            .collect())
+            .map_err(anyhow::Error::msg)
+            .context("Loading isolated parameter metadata")?;
+        ensure!(
+            matches!(loaded, HostResponse::PluginInfo { .. }),
+            "Metadata load failed: {loaded:?}"
+        );
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        ensure!(
+            !remaining.is_zero(),
+            "Parameter discovery exceeded its 30-second deadline"
+        );
+        metadata.set_timeout(remaining);
+        let response = metadata
+            .send_command(HostCommand::GetAllParameters)
+            .map_err(anyhow::Error::msg)
+            .context("Enumerating isolated parameter metadata")?;
+        let HostResponse::Parameters { params } = response else {
+            anyhow::bail!("Parameter discovery failed: {response:?}");
+        };
+        drop(metadata);
+        params
+            .into_iter()
+            .map(|p| {
+                ensure!(
+                    Instant::now() < deadline,
+                    "Parameter discovery exceeded its 30-second deadline"
+                );
+                let value = self
+                    .plugin
+                    .get_parameter(p.id)
+                    .with_context(|| format!("Reading current value of parameter {}", p.name))?;
+                Ok(ParameterInfo {
+                    id: p.id,
+                    name: p.name,
+                    value,
+                    default: p.default,
+                    unit: p.unit,
+                    steps: p.step_count,
+                    read_only: p.is_read_only,
+                })
+            })
+            .collect()
     }
 
     /// Set a normalized parameter serially between processing blocks on the owning
@@ -705,6 +786,29 @@ fn copy_stereo_input(channels: &mut [Vec<f32>], left: &[f32], right: &[f32]) {
     }
 }
 
+/// Keep panic releases plus a maximum new block below the SDK's 4,096-event queue.
+/// The count tracks overlapping notes at the same pitch, including zero-velocity offs.
+fn track_active_notes(
+    active: &[u16; 128],
+    reset: bool,
+    events: &[MidiMessage],
+) -> Result<[u16; 128]> {
+    let mut next = if reset { [0; 128] } else { *active };
+    for event in events {
+        let count = &mut next[event.pitch as usize];
+        *count = if event.on && event.velocity > 0 {
+            count.saturating_add(1)
+        } else {
+            count.saturating_sub(1)
+        };
+    }
+    ensure!(
+        next.iter().map(|&count| usize::from(count)).sum::<usize>() <= MAX_MIDI_EVENTS_PER_BLOCK,
+        "Instrument exceeds the 2,048 held-note limit"
+    );
+    Ok(next)
+}
+
 fn validate_block(
     events: &[MidiMessage],
     left_len: usize,
@@ -742,6 +846,26 @@ fn validate_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlapping_notes_preserve_release_counts_and_bound_reset_queue() {
+        let on = MidiMessage {
+            offset: 0,
+            pitch: 60,
+            velocity: 100,
+            on: true,
+        };
+        let active = track_active_notes(&[0; 128], false, &[on, on]).unwrap();
+        assert_eq!(active[60], 2);
+        let zero_velocity = MidiMessage { velocity: 0, ..on };
+        let remaining = track_active_notes(&active, false, &[zero_velocity]).unwrap();
+        assert_eq!(remaining[60], 1);
+        assert_eq!(track_active_notes(&active, true, &[on]).unwrap()[60], 1);
+        let mut full = [0; 128];
+        full[60] = MAX_MIDI_EVENTS_PER_BLOCK as u16;
+        assert!(track_active_notes(&full, false, &[on]).is_err());
+        assert_eq!(track_active_notes(&full, true, &[on]).unwrap()[60], 1);
+    }
 
     #[test]
     fn instrument_is_send_without_an_unsafe_wrapper() {

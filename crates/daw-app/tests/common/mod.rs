@@ -20,18 +20,32 @@ pub struct Harness {
 
 impl Harness {
     pub fn new() -> Self {
+        Self::launch(None)
+    }
+
+    pub fn with_vst_path(path: &std::path::Path) -> Self {
+        Self::launch(Some(path))
+    }
+
+    fn launch(vst_path: Option<&std::path::Path>) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
         let binary = std::env::var_os("RILL_E2E_BINARY")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
-        let mut child = Command::new(binary)
+        let mut command = Command::new(binary);
+        command
             .arg("--headless")
             .env("RILL_AUTOMATION_DIR", directory.path())
             .env("RILL_CONFIG_DIR", directory.path().join("config"))
+            .env("RILL_CACHE_DIR", directory.path().join("cache"))
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        if let Some(path) = vst_path {
+            command.env("VST3_PATH", path);
+        }
+        let mut child = command
             .spawn()
             .expect("launch the production Rill executable");
         let input = child.stdin.take().unwrap();
@@ -131,5 +145,51 @@ impl Drop for Harness {
         // Failed assertions must not leave an application process or temp session.
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+/// Metadata-only multi-class bundle. It contains no executable plug-in code.
+pub fn plugin_fixture() -> TempDir {
+    let root = tempfile::tempdir().unwrap();
+    let resources = root.path().join("RillFixture.vst3/Contents/Resources");
+    std::fs::create_dir_all(&resources).unwrap();
+    let classes = [("Rill Fixture A", "Instrument", "11111111111111111111111111111111"),
+                   ("Rill Fixture B", "Instrument", "22222222222222222222222222222222"),
+                   ("Rill Fixture FX", "Fx", "33333333333333333333333333333333")]
+        .into_iter().map(|(name,category,id)| json!({"CID":id,"Category":"Audio Module Class","Name":name,"Sub Categories":[category],"Version":"1.0","SDKVersion":"VST3.7.9","Cardinality":2147483647})).collect::<Vec<_>>();
+    std::fs::write(resources.join("moduleinfo.json"),json!({"Name":"Fixture","Version":"1.0","Factory Info":{"Vendor":"Rill tests"},"Classes":classes}).to_string()).unwrap();
+    root
+}
+
+pub fn fixture_library(app: &mut Harness) {
+    app.click("Window");
+    app.click("Library");
+    let state = app.inspect();
+    if state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s == "Search instruments")
+    {
+        app.click("Search instruments");
+        app.command(json!({"command":"text","text":"Rill Fixture"}));
+    }
+    wait_visible(app, "Rill Fixture A");
+}
+
+pub fn wait_visible(app: &mut Harness, label: &str) {
+    let deadline = Instant::now() + Duration::from_secs(35);
+    loop {
+        let state = app.inspect();
+        if state["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s == label)
+        {
+            return;
+        }
+        assert!(Instant::now() < deadline, "Missing {label}: {state}");
+        std::thread::sleep(Duration::from_millis(20));
     }
 }

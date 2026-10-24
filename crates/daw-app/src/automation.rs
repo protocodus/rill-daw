@@ -33,6 +33,11 @@ enum Command {
         to_x: Option<f32>,
         to_y: Option<f32>,
     },
+    Scroll {
+        x: f32,
+        y: f32,
+        delta: f32,
+    },
     Key {
         key: String,
         #[serde(default)]
@@ -53,6 +58,12 @@ enum Command {
         track: Option<usize>,
         #[serde(default)]
         beat: f64,
+    },
+    Open {
+        path: PathBuf,
+    },
+    Save {
+        path: PathBuf,
     },
     Export {
         path: PathBuf,
@@ -344,6 +355,26 @@ impl Harness {
                 };
                 self.pointer(from, to, drag)?;
             }
+            Command::Scroll { x, y, delta } => {
+                let pos = Pos2::new(x, y);
+                ensure!(
+                    [x, y, delta].iter().all(|value| value.is_finite())
+                        && Rect::from_min_size(Pos2::ZERO, SIZE).contains(pos),
+                    "Scroll coordinates must be finite and within the viewport"
+                );
+                self.frame(RawInput {
+                    events: vec![
+                        Event::PointerMoved(pos),
+                        Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta: Vec2::new(0.0, delta),
+                            modifiers: Default::default(),
+                        },
+                    ],
+                    ..Default::default()
+                });
+                self.settle();
+            }
             Command::Key {
                 key,
                 shift,
@@ -382,6 +413,27 @@ impl Harness {
                 self.settle();
             }
             Command::Drop { paths, track, beat } => self.drop_files(paths, track, beat)?,
+            Command::Open { path } => {
+                self.app.request_open_project(path, false);
+                let deadline = Instant::now() + Duration::from_secs(35);
+                while self.app.state_sync_pending() {
+                    ensure!(Instant::now() < deadline, "Instrument state save timed out");
+                    self.frame(RawInput::default());
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                self.settle();
+                ensure!(!self.app.error, "{}", self.app.status);
+            }
+            Command::Save { path } => {
+                self.app.save_to(path);
+                let deadline = Instant::now() + Duration::from_secs(35);
+                while self.app.state_sync_pending() {
+                    ensure!(Instant::now() < deadline, "Instrument state save timed out");
+                    self.frame(RawInput::default());
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                ensure!(!self.app.error, "{}", self.app.status);
+            }
             Command::Export { path } => {
                 ensure!(
                     self.app.export_job.is_none(),
@@ -397,7 +449,7 @@ impl Harness {
                     "Export timeout must be between 1 and 60000 ms"
                 );
                 let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-                while self.app.export_job.is_some() {
+                while self.app.export_job.is_some() || self.app.state_sync_pending() {
                     ensure!(Instant::now() < deadline, "Export timed out");
                     self.frame(RawInput::default());
                     std::thread::sleep(Duration::from_millis(1));
@@ -429,6 +481,12 @@ impl Harness {
             .events
             .push(egui::ViewportEvent::Close);
         self.frame(input);
+        let deadline = Instant::now() + Duration::from_secs(35);
+        while self.app.state_sync_pending() {
+            ensure!(Instant::now() < deadline, "Instrument close timed out");
+            self.frame(RawInput::default());
+            std::thread::sleep(Duration::from_millis(1));
+        }
         ensure!(!self.app.error, "{}", self.app.status);
         Ok(())
     }
@@ -436,6 +494,12 @@ impl Harness {
     fn state(&self) -> Value {
         json!({
             "project": self.app.project,
+            "native_editor": self.app.instrument_diagnostics(),
+            "plugin_catalog": self.app.vst_catalog.iter().map(|entry| json!({
+                "name": entry.plugin.name, "class_id": entry.plugin.class_id,
+                "thumbnail": entry.thumbnail, "status": format!("{:?}", entry.status),
+            })).collect::<Vec<_>>(),
+            "instrument_parameter_rect": self.ctx.data(|data| data.get_temp::<Rect>(egui::Id::new("instrument_parameter_rect"))).map(|rect| json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})),
             "selected_track": self.app.selected_track,
             "selected_clip": self.app.selected_clip,
             "view": format!("{:?}", self.app.view),
@@ -450,7 +514,7 @@ impl Harness {
             "setup_draft": self.app.setup_draft,
             "status": self.app.status,
             "error": self.app.error,
-            "export_pending": self.app.export_job.is_some(),
+            "export_pending": self.app.export_job.is_some() || self.app.state_sync_pending(),
             "device_open": self.app.engine.is_some(),
             "scratch_dir": self.app.settings.scratch_dir,
             "drop_target": self.app.drop_target,

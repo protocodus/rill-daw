@@ -5,7 +5,7 @@ mod device;
 mod render;
 
 pub use device::{AudioEngine, DeviceInfo, DeviceSettings, EngineSnapshot, list_output_devices};
-pub use render::{CompensationDelay, export_project_wav, export_wav, render};
+pub use render::{CompensationDelay, export_project_wav, export_wav, render, render_with_workers};
 
 #[cfg(test)]
 mod allocation_test_support {

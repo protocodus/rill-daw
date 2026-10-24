@@ -7,15 +7,17 @@ Rill is a native Rust desktop DAW with separate project, rendering, plugin, and 
 | Crate | Responsibility |
 | --- | --- |
 | `daw-core` | Serializable projects, validation, source-preserving editing, undo/redo, WAV and Standard MIDI File I/O, scales, and routing topology. |
-| `daw-engine` | Compile a project into a playback graph; render built-in instruments, clips, insert chains, sends, and buses; compensate path latency; expose device playback and offline export. |
+| `daw-engine` | Compile a project into a playback graph; render audio clips and isolated VST3 instruments/effects, sends, and buses; compensate path latency; expose device playback and offline export. |
 | `daw-plugins` | Discover VST3 metadata without loading native code into the app; host selected instruments and effects in separate `daw-plugin-host` processes. |
 | `daw-ui` | Shared egui component library, accessible controls, surfaces, popup windows, and design tokens; no audio or application dependencies. |
 | `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Automation, Library, Setup, and Properties windows; persistence and transport UI. |
 
 ```mermaid
 flowchart LR
-    UI[Native UI / editable project] -->|validated snapshot| Worker[Render worker]
-    Worker <-->|bounded synchronous IPC| Plugins[VST3 child processes]
+    UI[Native UI / editable project] -->|validated snapshot| Worker[Render coordinator]
+    Worker -->|dependency levels| Pool[Persistent graph workers]
+    Pool <-->|concurrent bounded IPC| Plugins[VST3 child processes]
+    Pool -->|completed node buffers| Worker
     Worker -->|stereo frames and positions| Queue[Preallocated SPSC queue]
     Queue --> Callback[CPAL device callback]
     Callback --> Device[Audio device]
@@ -46,7 +48,7 @@ Validation rejects nonfinite values, invalid note ranges, duplicate object IDs, 
 
 `TrackKind::Automation` owns one `AutomationLane` targeting a stable track ID and parameter (with stable insert or bus IDs where needed). Lanes have ordered beat/value points, unique IDs, normalized values in 0–1, and Step, Linear, or Smooth interpolation. Smooth uses monotone cubic Hermite interpolation (PCHIP), bounded to neighboring values. Endpoint values hold outside the point range; an empty or muted lane leaves the manual parameter unchanged. Duplicate lanes for one parameter are rejected. Automation tracks carry no audio edges, clips, inserts, or sends, and do not extend song duration.
 
-The render graph binds curves during preparation. Gain, pan, send gain, and native insert controls evaluate at sample positions corrected for each processing stage's upstream latency. VST3 parameters update between 256-frame processing blocks on the render worker; they are not sample-accurate. Neither curve evaluation nor plug-in IPC runs in the device callback. Delay rings reserve the supported maximum delay when automation is bound.
+The render graph binds curves during preparation. Channel gain, pan, and send gain evaluate at sample positions corrected for each processing stage's upstream latency. VST3 parameters update between 256-frame processing blocks on the render worker; they are not sample-accurate. Neither curve evaluation nor plug-in IPC runs in the device callback.
 
 Curves persist with the project and use normal snapshot undo. Removing a target channel, insert, or send removes dependent lanes. Replacing a VST instrument clears its old parameter lanes to avoid applying old parameter IDs to another plug-in. The editor uses the shared, model-independent `daw-ui::curve_editor`; asynchronous parameter discovery loads a temporary isolated helper, reads parameter metadata, and closes it.
 
@@ -70,21 +72,27 @@ Folder hierarchy is validated independently from the signal graph. Parent pointe
 
 Deleting a bus restores incoming main outputs to the master and removes sends targeting that bus. Deleting a folder promotes its direct children to its own parent, preserving deeper hierarchy. The complete deletion candidate is validated before it replaces the current project.
 
-Built-in insert types are gain and a stereo delay. Delay feedback is bounded below unity. VST3 inserts use the same isolated hosting boundary as instruments. Disabled insert slots bypass processing. Inserts are ordered, and reordering them changes the signal path.
+Rill has no integrated instruments or insert effects. MIDI tracks start with `Instrument::None` and remain silent until a VST3 instrument is assigned. VST3 inserts use the same isolated hosting boundary as instruments. Disabled insert slots bypass processing. Inserts are ordered, and reordering them changes the signal path.
 
 ## Audio execution and timing
 
-The renderer uses 256-frame processing blocks. WAV files are decoded before processing; a path-keyed shared cache reuses decoded samples for split or duplicated audio clips. MIDI intervals compile into sample-positioned note-on/off events. Seeking chases notes that span the destination and resets built-in oscillator voices and delay buffers.
+The renderer uses 256-frame processing blocks. WAV files are decoded before processing; a path-keyed shared cache reuses decoded samples for split or duplicated audio clips. MIDI intervals compile into sample-positioned note-on/off events. Seeking chases notes that span the destination and resets plug-in processing and compensation buffers.
 
-Built-in instruments are sine, triangle, and a PolyBLEP saw, with bounded voice storage and short attack/release ramps. Audio clips use linear interpolation when their file sample rate differs from the output rate. Mono clips are duplicated to stereo; channels beyond the first two are not spatially mixed. There is no time stretching or pitch-preserving tempo adaptation. Audio source offsets are expressed in beats at the current project tempo.
+Audio clips use linear interpolation when their file sample rate differs from the output rate. Mono clips are duplicated to stereo; channels beyond the first two are not spatially mixed. There is no time stretching or pitch-preserving tempo adaptation. Audio source offsets are expressed in beats at the current project tempo.
 
 Path latency includes declared channel latency and plugin-reported processing latency. For each node, cumulative latency is the longest incoming path plus its instrument, enabled inserts, and declared latency. Incoming edges delay shorter paths to match the bus's longest input; master routes receive the corresponding final alignment. Declared latency is explicitly simulated, and common master latency is primed and discarded so it is removed from transport/export timing. Cumulative processing latency is capped at ten seconds. Latency is captured when the graph is prepared; live plugin latency changes require rebuilding. Musical delay effects are audible delays, not scheduling latency to subtract. Device and queue latency remain audible and are separate from plugin delay compensation.
 
-The render worker owns plugin instances and performs file-independent DSP and plugin IPC. A preallocated single-producer/single-consumer queue transfers stereo frames and their musical positions to the CPAL callback. Its capacity is two requested device buffers, with a minimum of 512 frames. Generation tags discard queued audio after a seek.
+Preparation compiles the routing DAG into dependency levels. A fixed worker pool processes independent nodes concurrently, including VST instruments, ordered insert chains, audio clips, faders, automation, and route delay buffers. Inserts within one chain remain sequential because each consumes its predecessor's output. Buses wait for their upstream nodes. This parallelizes independent plug-in instances; a plug-in's internal DSP threading remains its own responsibility.
+
+Workers receive batches through bounded queues and return ownership of their preallocated track buffers. Threads, batches, and routing buffers are reused across blocks. The coordinator sums completed routes in a stable order, so scheduling completion order does not change the mix. Every in-flight batch is drained before an offline error is returned; live failures silence the affected path. No plugin instance is concurrently accessed by two workers.
+
+Automatic scheduling uses a pool when a level has at least two plug-in-bearing nodes or 32 active nodes, bounded by the available CPU parallelism and graph width. Smaller graphs use a serial path to avoid dispatch overhead. `render_with_workers` provides an explicit worker limit for repeatable tests and benchmarks. A dependency chain cannot be accelerated by adding idle workers.
+
+A preallocated single-producer/single-consumer queue transfers stereo frames and their musical positions from the coordinator to the CPAL callback. Its capacity is two requested device buffers, with a minimum of 512 frames. Generation tags discard queued audio after a seek.
 
 The callback only consumes queued frames, converts to the configured device sample format, and updates atomic meters/counters. It does not acquire mutexes, decode files, call plugins, or allocate memory. Missing frames produce silence and increment the underrun counter. Nonfinite output is silenced and device samples are hard-clamped to `[-1, 1]`; there is no mastering limiter. Preparation and plugin processing are not claimed to be allocation-free.
 
-Looping wraps at the configured beat boundaries. Seek/loop resets clear the engine's delay and oscillator state. Instrument reset sends a MIDI panic; effect reset stops and restarts processing while retaining parameters. Neither guarantees clearing every third-party plugin's internal tails. Loops therefore do not promise seamless state continuity for every plugin. Automatic playback completion sums reported/estimated tails along signal paths, with a 0.2-second minimum and a 30-second global cap; offline export writes the explicit requested duration.
+Looping wraps at the configured beat boundaries. Seek/loop resets clear the engine's compensation buffers. Instrument reset sends a MIDI panic; effect reset stops and restarts processing while retaining parameters. Neither guarantees clearing every third-party plugin's internal tails. Loops therefore do not promise seamless state continuity for every plugin. Automatic playback completion sums reported/estimated tails along signal paths, with a 0.2-second minimum and a 30-second global cap; offline export writes the explicit requested duration.
 
 Offline export uses the same renderer and ignores looping. `export_project_wav` exports the full arrangement including calculated graph tails; `export_wav` exports an explicit duration. Both stream 32-bit floating-point stereo data through a temporary file and atomically replace the destination only after a successful render. Nonfinite rendered samples produce an error and leave an existing destination intact. WAV size limits are checked before export. The convenience in-memory render API has a four-hour duration limit and uses fallible reservation. Floating-point export preserves headroom instead of applying the device clamp.
 
@@ -94,11 +102,17 @@ Each selected VST3 instance runs in its own `daw-plugin-host` child via `vst3-ho
 
 The host exposes sample-offset MIDI note on/off on channel 1 for instruments, stereo audio inputs for effects, transport position/tempo, normalized parameter access, opaque state APIs, and reported latency. It selects the first active audio output bus; mono is duplicated to stereo. Effects feed the first active input bus, downmix to mono when necessary, and leave other inputs—including sidechains—silent.
 
-IPC uses synchronous commands and serialized audio, with allocation and waiting on the render worker. Normal command response timeouts are bounded at 100 ms; upstream load/state operations have longer timeouts. This design contains plugin process crashes but adds overhead and does not establish a maximum-throughput benchmark against an in-process host. A plugin failure silences its path during live playback; offline export reports an error. Recovery APIs restart the child, after which a caller may restore saved state.
+IPC uses synchronous commands and serialized audio, with allocation and waiting on graph workers; independent workers can have plug-in commands in flight simultaneously. Normal command response timeouts are bounded at 100 ms; upstream load/state operations have longer timeouts. This design contains plugin process crashes but adds serialization and process-switching overhead; it is not a shared-memory transport. A plugin failure silences its path during live playback; offline export reports an error. Recovery APIs restart the child, after which a caller may restore saved state.
 
 Child processes run with the user's permissions. Process isolation is crash containment, not an OS security sandbox. Build the complete workspace so `daw-plugin-host` is available beside the application, or set `DAW_PLUGIN_HOST` to its path.
 
-Native plugin editors, MIDI CC/pitch-bend/MPE, sidechain routing, and live latency renegotiation are not implemented. Parameter and opaque-state APIs exist in the plugin layer, but the project/UI does not yet persist plugin presets or expose a full preset editor; newly constructed instances use their default state.
+Native editors run on the main thread of a separate helper with a platform event loop. A bounded command/event protocol carries parameter changes, captured image paths, and saved state. Initialization and stalled editors have a 30-second deadline. Editor crashes and failed screenshots report errors to the app; no third-party native code is loaded into the UI process. The editor instance is separate from the renderer. A bounded control queue applies live parameter changes on the render worker; full saved state rebuilds the playback graph.
+
+Projects persist each instrument's optional VST3 class ID, opaque state (at most 64 MiB), and normalized parameter overrides. Preparation loads state before applying overrides. Replacing an instrument clears its state, overrides, and automation targets. Legacy projects with path-only VST3 references remain readable; removed built-in instrument/effect variants are rejected rather than silently substituted. Effects currently persist their assignment and automation, but not opaque presets.
+
+`PluginCatalog` stores validated PNG captures and metadata under the platform's Rill cache directory (`RILL_CACHE_DIR` overrides it). SHA-256 fingerprints cover the canonical bundle path, selected class, metadata, and bundle file sizes/modification times. Capture writes a temporary image, validates dimensions and pixels, then atomically publishes the image and record. Failed captures are recorded and do not retry on every frame. macOS captures the editor view; Windows captures the helper-owned window; Linux uses XRes ownership and XComposite offscreen pixels. No synthetic image stands in for an unavailable native editor.
+
+MIDI CC/pitch-bend/MPE, sidechain routing, live latency renegotiation, and a standalone preset browser are not implemented.
 
 ## Scope and verification
 
@@ -108,10 +122,28 @@ WAV input supports integer PCM and 32-bit float files. MIDI import handles note 
 
 `cargo test --workspace` covers project/NLE invariants, MIDI timing and roundtrips, routing and folder cycles, persistence compatibility, audio rendering, queue behavior, and callback allocation checks. `cargo clippy --workspace --all-targets -- -D warnings` checks the workspace. Plugin native-code smoke tests are opt-in and require an installed plugin; they exercise real audio, state restoration, child termination, and recovery. These checks establish tested behavior, not complete compatibility with every driver or VST3 implementation.
 
-On 2026-10-24, the release benchmark on an Apple M1 Max rendered 16 seconds of 48 kHz stereo audio from 32 triangle-instrument tracks (128 simultaneous voices) in 0.263 seconds, or 60.9× realtime. This includes renderer preparation and output allocation and excludes VST3 IPC. Reproduce the scenario with:
+The audio-track benchmark measures 32 concurrent tracks, including renderer preparation and output allocation. It excludes third-party VST3 processing. Run it with:
 
 ```sh
 cargo run --release -p daw-engine --example render_bench
+```
+
+`cargo run --release -p daw-engine --example parallel_bench` compares serial, explicit parallel, and automatic scheduling. `RILL_BENCH_VST3` and `RILL_BENCH_VST_EFFECT` select installed plug-ins. Determinism tests compare serial and parallel output with sends, buses, automation, PDC, seeking, and looping; concurrency tests verify overlapping execution and persistent worker reuse. Native opt-in tests exercise multiple real instrument/effect chains and helper termination.
+
+Local release measurements on an Apple M1 Max, using four seconds of stereo audio at 48 kHz with one Surge XT instrument and one CHOWTapeModel insert per track:
+
+| Independent chains | Isolated VST instances | Serial render | Automatic parallel render | Speedup |
+| --- | --- | --- | --- | --- |
+| 4 | 8 | 1.3171 s | 0.7064 s | 1.86× |
+| 8 | 16 | 2.5676 s | 0.6290 s | 4.08× |
+| 16 | 32 | 5.3331 s | 1.4808 s | 3.60× |
+
+These single-run measurements on a 10-core machine exclude initialization, warmup, and output allocation. The test confirms that automatic scheduling actually uses multiple workers and that the rendered output is finite and audible. Results depend on hardware, presets, plug-in threading, and system load; they are not a guarantee for every session. Run the same prepared-graph test with:
+
+```sh
+DAW_TEST_VST3="/path/to/Surge XT.vst3" \
+DAW_TEST_VST3_EFFECT="/path/to/CHOWTapeModel.vst3" \
+cargo test --release -p daw-engine --lib native_prepared_graph_uses_automatic_workers_and_reports_throughput -- --ignored --nocapture
 ```
 
 A separate 250 ms playback smoke check on the available 48 kHz CPAL device reported zero underruns and zero render errors. That short check verifies device integration; it is not a sustained driver stability test or a plugin throughput benchmark.

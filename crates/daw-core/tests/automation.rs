@@ -113,10 +113,6 @@ fn parameter_conversion_covers_full_native_ranges() {
         Parameter::TrackGain,
         Parameter::TrackPan,
         Parameter::SendGain { bus: 1 },
-        Parameter::InsertGain { effect: 1 },
-        Parameter::DelayTime { effect: 1 },
-        Parameter::DelayFeedback { effect: 1 },
-        Parameter::DelayMix { effect: 1 },
         Parameter::VstParameter {
             effect: None,
             id: 42,
@@ -133,7 +129,6 @@ fn parameter_conversion_covers_full_native_ranges() {
         assert_eq!(parameter.denormalize(-1.0), *range.start());
     }
     assert_eq!(Parameter::TrackPan.denormalize(0.5), 0.0);
-    assert_eq!(Parameter::DelayFeedback { effect: 1 }.denormalize(0.5), 0.0);
     assert_eq!(Parameter::SendGain { bus: 1 }.denormalize(1.0), 16.0);
 }
 
@@ -273,7 +268,13 @@ fn lanes_are_control_only_and_do_not_extend_audio_exports() {
         .track_mut(lane)
         .unwrap()
         .inserts
-        .push(EffectSlot::new("Invalid", Effect::Gain { gain: 1.0 }));
+        .push(EffectSlot::new(
+            "Invalid",
+            Effect::Vst3 {
+                class_id: None,
+                path: "/fixture.vst3".into(),
+            },
+        ));
     assert!(project.validate().is_err());
 }
 
@@ -293,27 +294,33 @@ fn deleting_sources_sends_and_inserts_removes_only_dependent_lanes() {
         .unwrap();
     let delay = EffectSlot::new(
         "Echo",
-        Effect::Delay {
-            time_ms: 250.0,
-            feedback: 0.4,
-            mix: 0.25,
+        Effect::Vst3 {
+            class_id: None,
+            path: "/echo.vst3".into(),
         },
     );
     let effect = delay.id;
     project.track_mut(source).unwrap().inserts.push(delay);
     let delay_lane = project
-        .add_automation_track(
+        .add_automation_track_with_value(
             "Wet",
             AutomationTarget {
                 track: source,
-                parameter: Parameter::DelayMix { effect },
+                parameter: Parameter::VstParameter {
+                    effect: Some(effect),
+                    id: 42,
+                },
             },
+            0.25,
         )
         .unwrap();
     assert!(
         AutomationTarget {
             track: source,
-            parameter: Parameter::InsertGain { effect }
+            parameter: Parameter::VstParameter {
+                effect: Some(u64::MAX),
+                id: 42
+            }
         }
         .validate(&project)
         .is_err()
@@ -375,6 +382,7 @@ fn replacing_vst_instrument_discards_old_parameter_ids_and_is_undoable() {
         .set_instrument(
             source,
             Instrument::Vst3 {
+                class_id: None,
                 path: "/plugins/first.vst3".into(),
             },
         )
@@ -399,6 +407,7 @@ fn replacing_vst_instrument_discards_old_parameter_ids_and_is_undoable() {
         .set_instrument(
             source,
             Instrument::Vst3 {
+                class_id: None,
                 path: "/plugins/first.vst3".into(),
             },
         )
@@ -410,6 +419,7 @@ fn replacing_vst_instrument_discards_old_parameter_ids_and_is_undoable() {
         .set_instrument(
             source,
             Instrument::Vst3 {
+                class_id: None,
                 path: "/plugins/second.vst3".into(),
             },
         )

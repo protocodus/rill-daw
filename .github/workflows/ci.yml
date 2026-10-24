@@ -38,7 +38,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Isolate application settings
         shell: bash
-        run: echo "RILL_CONFIG_DIR=$RUNNER_TEMP/rill-ci-config" >> "$GITHUB_ENV"
+        run: |
+          echo "RILL_CONFIG_DIR=$RUNNER_TEMP/rill-ci-config" >> "$GITHUB_ENV"
+          echo "RILL_CACHE_DIR=$RUNNER_TEMP/rill-ci-cache" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -47,17 +49,27 @@ jobs:
           key: ${{ matrix.target }}-${{ runner.os == 'Windows' && 'crt-static' || 'default' }}
       - name: Linux system libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
+            libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxkbcommon-x11-0 \
+            libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Build application and isolated plug-in host
         run: cargo build --locked --workspace
       - name: Core, engine, plug-in, and component tests
         run: cargo test --locked --workspace --exclude daw-app
+      - name: Native X11 editor capture
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test --locked -p daw-plugins --lib captures_real_x11_window_pixels -- --ignored --nocapture
       - name: App state and UI interaction tests
         run: cargo test --locked -p daw-app --bin rill
       - name: Headless end-to-end tests
-        run: cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e -- --nocapture
+        run: cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e --test mixer_e2e -- --nocapture
+      - name: Native application startup, rendering, and shutdown
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s "-screen 0 1600x1200x24" cargo test --locked -p daw-app --test e2e native_window_renders_and_exits_after_screenshot -- --ignored --nocapture
       - name: Strict Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Package macOS and Linux
@@ -71,7 +83,7 @@ jobs:
         shell: bash
         run: |
           test -n "$RILL_E2E_BINARY"
-          cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e -- --nocapture
+          cargo test --locked -p daw-app --test e2e --test features_e2e --test automation_e2e --test mixer_e2e -- --nocapture
       - name: Upload native distribution and checksum
         uses: actions/upload-artifact@v4
         with:
