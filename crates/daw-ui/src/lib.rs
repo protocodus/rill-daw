@@ -6,6 +6,7 @@
 
 pub mod channel_controls;
 pub mod clip;
+pub mod color;
 pub mod crossfade;
 pub mod curve;
 pub mod form;
@@ -26,6 +27,7 @@ pub mod widgets;
 
 pub use channel_controls::*;
 pub use clip::*;
+pub use color::*;
 pub use crossfade::*;
 pub use curve::*;
 pub use form::*;

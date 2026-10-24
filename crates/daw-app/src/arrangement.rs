@@ -22,6 +22,7 @@ enum Edit {
     Solo(u64),
     Gain(u64, f32),
     Pan(u64, f32),
+    Color(u64, [u8; 3]),
     Output(u64, Option<u64>),
     Collapse(u64),
     DeleteTrack(u64),
@@ -125,6 +126,7 @@ impl DawApp {
         let mut popup = None;
         let mut channel_target = None;
         let mut channel_controls = Vec::new();
+        let mut track_colors = Vec::new();
         let mut instrument_target = None;
         let mut open_editor = false;
         let mut clip_diagnostics = Vec::new();
@@ -221,11 +223,17 @@ impl DawApp {
                     );
                     let header = Rect::from_min_size(row.min, Vec2::new(HEADER - 1.0, row_height));
                     p.rect_filled(header, 0.0, if selected { palette(ui.ctx()).raised } else { palette(ui.ctx()).panel });
-                    p.rect_filled(
-                        Rect::from_min_size(row.min, Vec2::new(3.0, row_height)),
-                        0.0,
-                        color(track.color),
-                    );
+                    let mut track_color = track.color;
+                    let color_strip = daw_ui::color_strip_at(ui,
+                        Rect::from_min_size(row.min, Vec2::new(14.0, row_height)),
+                        (track.id, "color"), &format!("Color of {}", track.name), &mut track_color);
+                    if color_strip.response.changed() {
+                        edits.push(Edit::Color(track.id, track_color));
+                    }
+                    let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
+                    track_colors.push(serde_json::json!({"track":track.id,
+                        "rect":rect_json(color_strip.response.rect), "color":track_color,
+                        "picker":color_strip.picker.map(rect_json)}));
                     let header_painter = ui.painter_at(header.shrink2(Vec2::new(4.0, 0.0)));
                     let track_label = format!("{} {}", if track.kind == TrackKind::Folder {
                         if track.collapsed { "▸" } else { "▾" }
@@ -425,7 +433,7 @@ impl DawApp {
                                 curve_rect,
                                 start,
                                 end,
-                                color(track.color),
+                                color(track_color),
                                 |beat| lane.value_at(beat).unwrap_or(0.5),
                             );
                             for point in &lane.points {
@@ -437,7 +445,7 @@ impl DawApp {
                                             curve_rect.bottom() - point.value * curve_rect.height(),
                                         ),
                                         3.0,
-                                        color(track.color),
+                                        color(track_color),
                                     );
                                 }
                             }
@@ -473,7 +481,7 @@ impl DawApp {
                             continue;
                         }
                         let p = p.with_clip_rect(Rect::from_min_max(Pos2::new(grid_left, row.top()), row.max));
-                        let col = color(track.color);
+                        let col = color(track_color);
                         let is_selected = self.selected_clip == Some(clip.id);
                         if track.kind == TrackKind::Audio {
                             p.rect_filled(rect, 4.0, palette(ui.ctx()).bg);
@@ -743,7 +751,7 @@ impl DawApp {
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
                     "start_row": bounds.start_row, "end_row": bounds.end_row},
                 "tool": format!("{:?}", self.tool), "cursor": self.cursor, "clips": clip_diagnostics,
-                "channels": channel_controls,
+                "channels": channel_controls, "track_colors": track_colors,
             }));
         });
         if let Some(beat) = new_cursor {
@@ -835,6 +843,13 @@ impl DawApp {
                 Edit::Pan(id, pan) => {
                     if let Some(track) = self.project.track_mut(id) {
                         track.pan = pan;
+                    }
+                    Ok(())
+                }
+                Edit::Color(id, color) => {
+                    if let Some(track) = self.project.track_mut(id) {
+                        track.color = color;
+                        self.edit_label = Some("Change track color".into());
                     }
                     Ok(())
                 }

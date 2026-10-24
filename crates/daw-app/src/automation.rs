@@ -26,7 +26,10 @@ fn one_key_press() -> usize {
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
-    Inspect,
+    Inspect {
+        #[serde(default)]
+        paint: bool,
+    },
     /// Supply only the next native file picker's result; application menus still
     /// execute the complete document guard and background I/O path.
     FileDialog {
@@ -198,6 +201,8 @@ struct Harness {
     time: f64,
     labels: Vec<(String, Rect)>,
     menu_labels: Vec<(String, Rect)>,
+    inspect_paint: bool,
+    painted_rects: Vec<Value>,
     clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
@@ -251,6 +256,8 @@ impl Harness {
             time: 0.0,
             labels: Vec::new(),
             menu_labels: Vec::new(),
+            inspect_paint: false,
+            painted_rects: Vec::new(),
             clipboard_text: None,
             close_requested: false,
             focused: true,
@@ -316,8 +323,12 @@ impl Harness {
                 .any(|command| matches!(command, egui::ViewportCommand::Close))
         });
         self.labels.clear();
+        self.painted_rects.clear();
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
+            if self.inspect_paint {
+                collect_painted_rects(&clipped.shape, clipped.clip_rect, &mut self.painted_rects);
+            }
         }
     }
 
@@ -515,6 +526,8 @@ impl Harness {
     }
 
     fn execute(&mut self, command: Command) -> Result<bool> {
+        self.inspect_paint = false;
+        self.painted_rects.clear();
         match command {
             Command::FileDialog { kind, path } => {
                 use crate::document_ui::DocumentDialog;
@@ -563,7 +576,10 @@ impl Harness {
                 self.ctx.set_pixels_per_point(pixels_per_point);
                 self.settle();
             }
-            Command::Inspect => self.settle(),
+            Command::Inspect { paint } => {
+                self.inspect_paint = paint;
+                self.settle();
+            }
             Command::Focused { focused } => {
                 self.focused = focused;
                 self.settle();
@@ -848,6 +864,9 @@ impl Harness {
             })
             .into();
         state["exported_file"] = json!(self.app.exported_file);
+        if self.inspect_paint {
+            state["painted_rects"] = json!(self.painted_rects);
+        }
         state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
         state["popup_context"] = self.app.popup_context_diagnostics();
         state["popups"]["export"] = json!(self.app.export_open);
@@ -875,6 +894,25 @@ impl Harness {
             Value::Null
         };
         state
+    }
+}
+
+fn collect_painted_rects(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value>) {
+    match shape {
+        egui::Shape::Rect(shape) if shape.rect.intersects(clip) => {
+            let rect = shape.rect.intersect(clip);
+            output.push(json!({
+                "rect": {"min":[rect.min.x,rect.min.y], "max":[rect.max.x,rect.max.y]},
+                "fill":shape.fill.to_array(), "stroke":shape.stroke.color.to_array(),
+                "stroke_width":shape.stroke.width,
+            }));
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_rects(shape, clip, output);
+            }
+        }
+        _ => {}
     }
 }
 
