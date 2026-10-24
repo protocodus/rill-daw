@@ -687,7 +687,9 @@ fn installed_vst_parameter_discovery_creates_named_lane_with_current_value() {
     menu(&mut app, "Track", "Add automation track…");
     menu(&mut app, "Volume", "VST instrument parameter");
     wait_label(&mut app, &first_name);
-    menu(&mut app, &first_name, &selected.name);
+    app.click("Search parameters");
+    app.command(json!({"command":"text","text":selected.name}));
+    wait_label(&mut app, &selected.name);
     let state = app.click("Add automation track");
     assert_eq!(state["error"], false, "{state}");
     let track = &state["project"]["tracks"][1];

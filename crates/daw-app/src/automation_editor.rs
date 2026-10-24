@@ -1,16 +1,35 @@
 use crate::app::DawApp;
 use daw_core::{
-    AutomationParameter, AutomationTarget, Effect, Instrument, Interpolation, TrackKind,
+    AutomationParameter, AutomationTarget, Effect, Instrument, Interpolation, PluginParameterValue,
+    TrackKind,
 };
 use daw_ui::{CurveEdit, CurvePoint, CurveTimeline, TimelineViewport};
 use eframe::egui;
 use std::{
+    collections::HashSet,
+    hash::{Hash, Hasher},
     path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 type ParameterResult = Arc<Mutex<Option<Result<Vec<daw_plugins::ParameterInfo>, String>>>>;
+
+#[derive(Clone, PartialEq, Eq)]
+struct ParameterSource {
+    track: u64,
+    effect: Option<u64>,
+    path: String,
+    class_id: Option<String>,
+}
+
+struct ParameterContext<'a> {
+    revision: u64,
+    saved_state: &'a [u8],
+    overrides: &'a [PluginParameterValue],
+    automated: &'a HashSet<u32>,
+    last_touched: Option<u32>,
+}
 
 #[derive(Clone)]
 struct EditorState {
@@ -23,8 +42,11 @@ struct EditorState {
     fitted: bool,
     vst_id: u32,
     initial: f32,
-    parameter_path: Option<String>,
-    parameter_class_id: Option<String>,
+    parameter_source: Option<ParameterSource>,
+    parameter_revision: Option<u64>,
+    snapshot_signature: u64,
+    requested_signature: u64,
+    browser: daw_ui::ParameterBrowserState,
     parameters: Vec<daw_plugins::ParameterInfo>,
     loading: Option<ParameterResult>,
     load_error: Option<String>,
@@ -43,8 +65,11 @@ impl Default for EditorState {
             fitted: false,
             vst_id: 0,
             initial: 0.5,
-            parameter_path: None,
-            parameter_class_id: None,
+            parameter_source: None,
+            parameter_revision: None,
+            snapshot_signature: 0,
+            requested_signature: 0,
+            browser: daw_ui::ParameterBrowserState::default(),
             parameters: Vec::new(),
             loading: None,
             load_error: None,
@@ -137,7 +162,7 @@ impl DawApp {
         } else {
             daw_ui::popup("Add automation", ctx)
                 .id(egui::Id::new("automation_create"))
-                .default_width(540.0)
+                .default_width(880.0)
                 .vscroll(false)
         };
         popup.open(&mut open).show(ctx, |ui| {
@@ -151,10 +176,7 @@ impl DawApp {
                     data.remove::<egui::Rect>(egui::Id::new("automation_plot_rect"));
                     data.remove::<egui::Id>(egui::Id::new("automation_curve_focus"));
                 });
-                cancel = daw_ui::scroll_body(ui, "automation_create_body", |ui| {
-                    self.create_automation_lane(ui, &mut state)
-                })
-                .inner;
+                cancel = self.create_automation_lane(ui, &mut state);
             }
         });
         if !open || cancel {
@@ -269,6 +291,7 @@ impl DawApp {
             ui.end_row();
         });
         let (mut parameter, mut label) = choices[state.parameter].clone();
+        let mut browser_activate = false;
         if let AutomationParameter::VstParameter { effect, .. } = parameter {
             let path = effect
                 .and_then(|id| track.inserts.iter().find(|slot| slot.id == id))
@@ -281,7 +304,49 @@ impl DawApp {
                     _ => None,
                 });
             if let Some((path, class_id)) = path {
-                plugin_parameters(ui, state, path, class_id, effect.is_some());
+                let (saved_state, overrides) = if let Some(slot) =
+                    effect.and_then(|id| track.inserts.iter().find(|slot| slot.id == id))
+                {
+                    (slot.state.as_slice(), slot.parameters.as_slice())
+                } else {
+                    (
+                        track.instrument_state.as_slice(),
+                        track.instrument_parameters.as_slice(),
+                    )
+                };
+                let automated = self
+                    .project
+                    .tracks
+                    .iter()
+                    .filter_map(|track| {
+                        let lane = track.automation.as_ref()?;
+                        match lane.target.parameter {
+                            AutomationParameter::VstParameter { effect: owner, id }
+                                if lane.target.track == source && owner == effect =>
+                            {
+                                Some(id)
+                            }
+                            _ => None,
+                        }
+                    })
+                    .collect::<HashSet<_>>();
+                browser_activate = plugin_parameters(
+                    ui,
+                    state,
+                    ParameterSource {
+                        track: source,
+                        effect,
+                        path,
+                        class_id,
+                    },
+                    ParameterContext {
+                        revision: self.revision,
+                        saved_state,
+                        overrides,
+                        automated: &automated,
+                        last_touched: self.last_touched_plugin_parameter(source, effect),
+                    },
+                );
             }
             parameter = AutomationParameter::VstParameter {
                 effect,
@@ -304,7 +369,10 @@ impl DawApp {
         let vst_parameter = matches!(parameter, AutomationParameter::VstParameter { .. });
         let ready = !vst_parameter
             || state.manual_id
-            || (state.loading.is_none() && state.parameters.iter().any(|p| p.id == state.vst_id));
+            || (state.loading.is_none()
+                && state.load_error.is_none()
+                && state.browser.selected == Some(state.vst_id)
+                && state.parameters.iter().any(|p| p.id == state.vst_id));
         let target = AutomationTarget {
             track: source,
             parameter,
@@ -331,7 +399,7 @@ impl DawApp {
             |ui| daw_ui::button(ui, back).clicked(),
         )
         .inner;
-        if activate {
+        if ready && (activate || browser_activate) {
             if let Some(id) = existing {
                 self.selected_track = Some(id);
                 self.selected_clip = None;
@@ -356,14 +424,15 @@ impl DawApp {
                 Err(error) => self.message(Err(error), ""),
             }
         }
-        // Keep space for a bounded probe diagnostic while loading. Otherwise a
-        // centered popup would move its footer under an in-flight pointer click.
-        if vst_parameter {
+        if vst_parameter && state.manual_id {
+            // Diagnostics arrive asynchronously; keep them after the action so
+            // a pending pointer press cannot lose its target when loading ends.
             ui.allocate_ui(
                 egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT),
                 |ui| {
                     if let Some(error) = &state.load_error {
-                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error);
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
+                            .on_hover_text(error);
                     }
                 },
             );
@@ -540,45 +609,74 @@ impl DawApp {
     }
 }
 
+fn parameter_signature(saved_state: &[u8], overrides: &[PluginParameterValue]) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    saved_state.hash(&mut hash);
+    for parameter in overrides {
+        parameter.id.hash(&mut hash);
+        parameter.value.to_bits().hash(&mut hash);
+    }
+    hash.finish()
+}
+
 fn plugin_parameters(
     ui: &mut egui::Ui,
     state: &mut EditorState,
-    path: String,
-    class_id: Option<String>,
-    effect: bool,
-) {
-    if state.parameter_path.as_ref() != Some(&path) || state.parameter_class_id != class_id {
-        state.parameter_path = Some(path.clone());
-        state.parameter_class_id = class_id.clone();
+    source: ParameterSource,
+    context: ParameterContext<'_>,
+) -> bool {
+    let ParameterContext {
+        revision,
+        saved_state,
+        overrides,
+        automated,
+        last_touched,
+    } = context;
+    let changed_source = state.parameter_source.as_ref() != Some(&source);
+    if changed_source {
+        state.parameter_source = Some(source.clone());
+        state.parameter_revision = None;
         state.parameters.clear();
         state.loading = None;
         state.load_error = None;
         state.manual_id = false;
-        start_parameter_read(state, path.clone(), class_id.clone(), effect);
+        state.vst_id = 0;
+        state.initial = 0.5;
+        state.browser = daw_ui::ParameterBrowserState {
+            focus_search: true,
+            ..Default::default()
+        };
+    }
+    // Large opaque states are hashed only after a project edit, never every
+    // paint. Instance identity separates two copies of the same VST class.
+    if state.parameter_revision != Some(revision) {
+        state.parameter_revision = Some(revision);
+        state.snapshot_signature = parameter_signature(saved_state, overrides);
     }
     if let Some(loading) = &state.loading {
         let ready = loading.lock().ok().and_then(|mut result| result.take());
         if let Some(result) = ready {
             state.loading = None;
-            match result {
-                Ok(parameters) => {
-                    state.parameters = parameters.into_iter().filter(|p| !p.read_only).collect();
-                    if !state.manual_id
-                        && let Some(parameter) = state
-                            .parameters
-                            .iter()
-                            .find(|p| p.id == state.vst_id)
-                            .or_else(|| state.parameters.first())
-                    {
-                        state.vst_id = parameter.id;
-                        state.initial = parameter.value as f32;
+            // Values from an older snapshot must not become a new lane's start.
+            if state.requested_signature == state.snapshot_signature {
+                match result {
+                    Ok(parameters) => {
+                        state.parameters =
+                            parameters.into_iter().filter(|p| !p.read_only).collect();
+                        state.browser.selected = None;
+                        state.load_error = None;
                     }
+                    Err(error) => state.load_error = Some(error),
                 }
-                Err(error) => state.load_error = Some(error),
             }
         } else {
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
+    }
+    if changed_source
+        || (state.loading.is_none() && state.requested_signature != state.snapshot_signature)
+    {
+        start_parameter_read(state, source.clone(), saved_state, overrides);
     }
     daw_ui::toolbar(ui, |ui| {
         daw_ui::picker_button(ui, "Manual ID", |ui| {
@@ -594,80 +692,118 @@ fn plugin_parameters(
                 state.loading.is_none(),
                 daw_ui::button_widget(if state.loading.is_some() {
                     "Loading…"
+                } else if state.load_error.is_some() {
+                    "Retry"
                 } else {
                     "Read parameters"
                 }),
             )
             .clicked()
         {
-            start_parameter_read(state, path, class_id.clone(), effect);
+            start_parameter_read(state, source, saved_state, overrides);
         }
     });
-    if !state.manual_id && !state.parameters.is_empty() {
-        let selected = state
-            .parameters
-            .iter()
-            .find(|p| p.id == state.vst_id)
-            .map(|p| p.name.as_str())
-            .unwrap_or("Choose plug-in parameter");
-        let width =
-            (ui.available_width() - daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG)
-                .clamp(160.0, 320.0);
-        daw_ui::form_grid(ui, "plugin_parameter", |ui| {
-            daw_ui::text::label(ui, "Plug-in parameter");
-            daw_ui::select("plugin_parameter_choice", selected)
-                .width(width)
-                .truncate()
-                .show_ui(ui, |ui| {
-                    ui.set_max_width(width);
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                    for parameter in &state.parameters {
-                        if daw_ui::selectable_value(
-                            ui,
-                            &mut state.vst_id,
-                            parameter.id,
-                            &parameter.name,
-                        )
-                        .changed()
-                        {
-                            state.initial = parameter.value as f32;
-                            state.manual_id = false;
-                        }
-                    }
-                });
-            ui.end_row();
-        });
+    if state.manual_id {
+        ui.add(daw_ui::slider(&mut state.initial, 0.0..=1.0).text("Initial value"));
+        return false;
     }
-    ui.add(daw_ui::slider(&mut state.initial, 0.0..=1.0).text("Initial value"));
+    let items = state
+        .parameters
+        .iter()
+        .map(|parameter| daw_ui::ParameterItem {
+            id: parameter.id,
+            name: &parameter.name,
+            unit: &parameter.unit,
+            value: parameter.value,
+            automated: automated.contains(&parameter.id),
+            last_touched: last_touched == Some(parameter.id),
+        })
+        .collect::<Vec<_>>();
+    let footer =
+        daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG + 2.0 * daw_ui::tokens::SPACE_SM;
+    let height = (ui.available_height() - footer).clamp(0.0, 400.0);
+    let mut selected_id = state.vst_id;
+    let previous_selected = state.browser.selected;
+    let mut initial = state.initial;
+    let response = daw_ui::parameter_browser(
+        ui,
+        "automation_plugin_parameters",
+        &mut state.browser,
+        &items,
+        height,
+        |ui, selected| {
+            if state.loading.is_some() {
+                ui.spinner();
+                daw_ui::text::note(ui, "Reading parameters…");
+            } else if let Some(error) = &state.load_error {
+                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 4)
+                    .on_hover_text(error);
+            } else if let Some(parameter) = selected {
+                if previous_selected != Some(parameter.id) {
+                    selected_id = parameter.id;
+                    initial = parameter.value as f32;
+                }
+                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, parameter.name, 2);
+                if !parameter.unit.is_empty() {
+                    daw_ui::text::note(ui, parameter.unit);
+                }
+                if parameter.automated {
+                    daw_ui::text::note(ui, "Automation already exists");
+                } else {
+                    ui.add(daw_ui::slider(&mut initial, 0.0..=1.0).text("Initial value"));
+                }
+            }
+        },
+    );
+    state.vst_id = selected_id;
+    state.initial = initial;
+    response.activated.is_some_and(|id| id == state.vst_id)
+        && state.loading.is_none()
+        && state.load_error.is_none()
 }
 
 fn start_parameter_read(
     state: &mut EditorState,
-    path: String,
-    class_id: Option<String>,
-    effect: bool,
+    source: ParameterSource,
+    saved_state: &[u8],
+    overrides: &[PluginParameterValue],
 ) {
     let result: ParameterResult = Arc::new(Mutex::new(None));
     state.loading = Some(result.clone());
+    state.requested_signature = state.snapshot_signature;
     state.load_error = None;
+    let saved_state = saved_state.to_vec();
+    let overrides = overrides.to_vec();
     std::thread::spawn(move || {
         let result_value = (|| -> anyhow::Result<_> {
-            if effect {
-                daw_plugins::VstEffect::load_class(
-                    &PathBuf::from(path),
-                    class_id.as_deref(),
+            if source.effect.is_some() {
+                let mut plugin = daw_plugins::VstEffect::load_class(
+                    &PathBuf::from(source.path),
+                    source.class_id.as_deref(),
                     48_000.0,
                     256,
-                )?
-                .parameters()
+                )?;
+                if !saved_state.is_empty() {
+                    plugin.load_state(&saved_state)?;
+                }
+                for parameter in overrides {
+                    plugin.set_parameter(parameter.id, parameter.value)?;
+                }
+                plugin.parameters()
             } else {
-                daw_plugins::VstInstrument::load_class(
-                    &PathBuf::from(path),
-                    class_id.as_deref(),
+                let mut plugin = daw_plugins::VstInstrument::load_class(
+                    &PathBuf::from(source.path),
+                    source.class_id.as_deref(),
                     48_000.0,
                     256,
-                )?
-                .parameters()
+                )?;
+                if !saved_state.is_empty() {
+                    plugin.load_state(&saved_state)?;
+                }
+                for parameter in overrides {
+                    plugin.set_parameter(parameter.id, parameter.value)?;
+                }
+                plugin.parameters()
             }
         })()
         .map_err(|error| format!("{error:#}"));
@@ -800,7 +936,15 @@ mod tests {
             track: Some(track),
             source: Some(track),
             parameter: 2,
-            parameter_path: Some("fixture.vst3".into()),
+            parameter_source: Some(ParameterSource {
+                track,
+                effect: None,
+                path: "fixture.vst3".into(),
+                class_id: None,
+            }),
+            parameter_revision: Some(app.revision),
+            snapshot_signature: parameter_signature(&[], &[]),
+            requested_signature: parameter_signature(&[], &[]),
             loading: Some(pending.clone()),
             ..Default::default()
         };
@@ -885,7 +1029,15 @@ mod tests {
                 track: Some(track),
                 source: Some(track),
                 parameter: 2,
-                parameter_path: Some("fixture.vst3".into()),
+                parameter_source: Some(ParameterSource {
+                    track,
+                    effect: None,
+                    path: "fixture.vst3".into(),
+                    class_id: None,
+                }),
+                parameter_revision: Some(app.revision),
+                snapshot_signature: parameter_signature(&[], &[]),
+                requested_signature: parameter_signature(&[], &[]),
                 loading: Some(pending.clone()),
                 manual_id: true,
                 vst_id: 17,
@@ -909,5 +1061,84 @@ mod tests {
             );
             assert!(lane.points.iter().all(|p| p.value == 0.75));
         }
+    }
+
+    #[test]
+    fn parameter_search_never_activates_a_hidden_selection_and_reuses_an_existing_lane() {
+        let ctx = egui::Context::default();
+        let mut project = daw_core::Project::new();
+        let source = project.add_midi_track("Synth");
+        project.track_mut(source).unwrap().instrument = Instrument::Vst3 {
+            path: "fixture.vst3".into(),
+            class_id: None,
+        };
+        let mut app = DawApp::with_context(&ctx, project, None);
+        let parameters = vec![daw_plugins::ParameterInfo {
+            id: 0,
+            name: "Filter Cutoff".into(),
+            value: 0.73,
+            default: 0.5,
+            unit: "Hz".into(),
+            steps: 0,
+            read_only: false,
+        }];
+        let signature = parameter_signature(&[], &[]);
+        let mut state = EditorState {
+            track: Some(source),
+            source: Some(source),
+            parameter: 2,
+            parameter_source: Some(ParameterSource {
+                track: source,
+                effect: None,
+                path: "fixture.vst3".into(),
+                class_id: None,
+            }),
+            parameter_revision: Some(app.revision),
+            snapshot_signature: signature,
+            requested_signature: signature,
+            loading: Some(Arc::new(Mutex::new(Some(Ok(parameters))))),
+            browser: daw_ui::ParameterBrowserState {
+                focus_search: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        for _ in 0..3 {
+            frame(&mut app, &mut state, &ctx, vec![]);
+        }
+        assert_eq!(
+            state.initial, 0.73,
+            "parameter ID zero uses its current value"
+        );
+        let enter = |pressed| {
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]
+        };
+        state.browser.query = "no matching control".into();
+        frame(&mut app, &mut state, &ctx, vec![]);
+        assert_eq!(state.browser.selected, None);
+        for pressed in [true, false] {
+            frame(&mut app, &mut state, &ctx, enter(pressed));
+        }
+        assert_eq!(app.project.tracks.len(), 1);
+        state.browser.query = "cutoff hz".into();
+        frame(&mut app, &mut state, &ctx, vec![]);
+        for pressed in [true, false] {
+            frame(&mut app, &mut state, &ctx, enter(pressed));
+        }
+        assert_eq!(app.project.tracks.len(), 2);
+        let lane = app.project.tracks[1].automation.as_ref().unwrap();
+        assert!(lane.points.iter().all(|point| point.value == 0.73));
+        let id = app.project.tracks[1].id;
+        for pressed in [true, false] {
+            frame(&mut app, &mut state, &ctx, enter(pressed));
+        }
+        assert_eq!(app.project.tracks.len(), 2, "existing automation is reused");
+        assert_eq!(app.selected_track, Some(id));
     }
 }

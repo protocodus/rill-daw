@@ -26,6 +26,7 @@ impl DawApp {
         let track_name = track.name.clone();
         let mut open = true;
         let mut edit_effect = None;
+        let mut automate_effect = None;
         let mut add_effect = false;
         widgets::popup(format!("Effects of {track_name}"), ctx)
             .id(egui::Id::new("effects"))
@@ -86,6 +87,14 @@ impl DawApp {
                                         {
                                             edit_effect = Some(slot.id);
                                         }
+                                        if widgets::small_button(ui, "Automate…")
+                                            .on_hover_text(
+                                                "Search this effect's automation parameters",
+                                            )
+                                            .clicked()
+                                        {
+                                            automate_effect = Some(slot.id);
+                                        }
                                     },
                                     |ui| {
                                         widgets::reorder_handle(ui, (track_id, slot.id));
@@ -140,6 +149,9 @@ impl DawApp {
         }
         if let Some(effect) = edit_effect {
             self.open_effect_editor(track_id, effect);
+        }
+        if let Some(effect) = automate_effect {
+            self.open_effect_automation(track_id, effect);
         }
     }
 

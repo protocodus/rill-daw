@@ -43,6 +43,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Track color | `color_edit`, `color_strip_at` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
+| Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
 | Non-modal operation feedback | `notice`, `NoticeKind` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
 | Plug-in library entries and previews | `catalog_item`, `image_preview` |
@@ -161,7 +162,7 @@ cargo clippy -p daw-ui --all-targets -- -D warnings
 
 `curve_timeline_editor` adds the shared musical ruler and caller-owned `TimelineViewport`. Automation uses the same middle/Alt-drag pan, Ctrl-wheel/Ctrl-right-drag zoom, plus/minus shortcuts, and Fit/F as the other editors. `TimelinePane::horizontal_only` keeps the complete parameter range visible; `keyboard_focus` allows canvas shortcuts without stealing text input. Fit spans every point, with a full bar for a single-point lane. Visible Beat input is one-based. Navigating cannot create, move, or delete points, and New/Open resets the automation viewport and selection.
 
-Automation's **Add parameter** opens a compact chooser. Back, Escape and its close button restore the original curve, selected point and zoom. Choosing a parameter that already has a lane offers **Edit automation** instead of failing on duplicate creation; switching lanes does not add undo history. Creating a new lane consumes the chooser and preserves the outer workspace return path.
+Automation's **Add parameter** opens a chooser with the shared parameter browser for VST instruments and effects. Back, Escape and its close button restore the original curve, selected point and zoom. Choosing a parameter that already has a lane offers **Edit automation** instead of failing on duplicate creation; switching lanes does not add undo history. Creating a new lane consumes the chooser and preserves the outer workspace return path. Parameter metadata reads restore the selected instance's saved state and overrides in its sandbox, so a new lane starts from that instance's value rather than a plugin default. Switching between instances invalidates the selection and metadata.
 
 `crossfade_editor` edits two normalized cubic Bézier control points and displays
 the paired incoming and outgoing gains. Their sum is one. Drag a handle or use
@@ -196,7 +197,9 @@ Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Dr
 
 Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The **Channel** menu also provides **Open channel**, Instrument, Effects, and Routing actions where applicable. Channel, Effects, Instrument, and Routing share navigation links that keep the same channel selected. The links omit the current destination, whose context is already shown in the title; closing a utility returns to its caller. Each channel shows its own post-fader stereo meter beside the fader, and Master shows the stereo output meter. Readings come from the running engine.
 
-Instrument opens a concise device overview with the native **Open editor** action. **Automate…** reveals searchable parameter controls on demand; the last-touched parameter remains a direct automation shortcut when available. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their existing isolated plugin state and undo behavior.
+Instrument opens a concise device overview with the native **Open editor** action. **Automate…** opens a large parameter browser with automatic loading and focused search. Effect rows expose **Automate…** directly, without opening a native editor first. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
+
+`parameter_browser(ui, id, state, items, height, details)` shares the device library's list-and-details layout. Search matches words across names and units, ranks exact/prefix matches first, and handles Unicode. **All**, **Automated**, and **Last touched** narrow the results. Cards show normalized percentages, unit metadata, automation/touch markers, and compact value bars. Up/Down chooses a result; Enter or double-click creates its lane or reopens the existing one. Cmd/Ctrl+F returns focus to search; Clear restores results. An empty result list clears selection, so Enter cannot automate a stale parameter. Browsing does not alter plugin values. The caller supplies detail controls; the list virtualizes large parameter sets and both panes stay bounded and scroll independently.
 
 
 ## Typography and international names

@@ -506,7 +506,20 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     let x = rect["min"][0].as_f64().unwrap() + 75.0;
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
-    common::wait_visible(&mut app, "Automate last touched · Global Volume");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let state = app.inspect();
+        if state["native_editor"]["last_touched"] == state["native_editor"]["selected"]
+            && !state["native_editor"]["last_touched"].is_null()
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "native parameter gesture must arrive"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
     let state = app.inspect();
     let parameter = state["native_editor"]["last_touched"].as_u64().unwrap();
     let value = state["project"]["tracks"][0]["instrument_parameters"]
