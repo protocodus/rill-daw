@@ -15,6 +15,7 @@ mod midi;
 mod midi_edit;
 mod model;
 mod routing;
+mod track_colors;
 
 pub use audio::AudioData;
 pub use audio_edit::*;

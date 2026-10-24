@@ -348,17 +348,11 @@ impl Project {
     }
 
     pub fn add_audio_track(&mut self, name: impl Into<String>) -> u64 {
-        let track = Track::new(name, TrackKind::Audio);
-        let id = track.id;
-        self.tracks.push(track);
-        id
+        self.insert_new_track(Track::new(name, TrackKind::Audio))
     }
 
     pub fn add_midi_track(&mut self, name: impl Into<String>) -> u64 {
-        let track = Track::new(name, TrackKind::Midi);
-        let id = track.id;
-        self.tracks.push(track);
-        id
+        self.insert_new_track(Track::new(name, TrackKind::Midi))
     }
 
     pub fn track(&self, id: u64) -> Option<&Track> {

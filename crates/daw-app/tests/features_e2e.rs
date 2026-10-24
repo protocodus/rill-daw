@@ -52,6 +52,14 @@ fn menu(app: &mut Harness, menu: &str, item: &str) -> Value {
     }
 }
 
+fn show_plugin_parameters(app: &mut Harness) {
+    if !visible(&app.inspect(), "Search parameters") {
+        common::wait_visible(app, "Automate…");
+        app.click("Automate…");
+    }
+    common::wait_visible(app, "Automate parameter");
+}
+
 fn assert_only_popup(state: &Value, popup: &str) {
     for (name, open) in state["popups"].as_object().unwrap() {
         assert_eq!(open, name == popup, "Unexpected popup {name}: {state}");
@@ -455,7 +463,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
 
     assert_eq!(state["popups"]["instrument"], true);
     assert_eq!(state["project"]["tracks"][0]["clips"][0]["length"], 4.0);
-    common::wait_visible(&mut app, "Automate parameter");
+    show_plugin_parameters(&mut app);
     assert_eq!(
         app.inspect()["native_editor"]["open"],
         true,
@@ -482,7 +490,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
         1
     );
     menu(&mut app, "Window", "Instrument");
-    common::wait_visible(&mut app, "Automate parameter");
+    show_plugin_parameters(&mut app);
     let state = app.inspect();
     assert_eq!(state["native_editor"]["open"], true, "{state}");
     assert!(state["native_editor"]["parameter_count"].as_u64().unwrap() > 0);
@@ -498,7 +506,20 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     let x = rect["min"][0].as_f64().unwrap() + 75.0;
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
-    common::wait_visible(&mut app, "Automate last touched · Global Volume");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let state = app.inspect();
+        if state["native_editor"]["last_touched"] == state["native_editor"]["selected"]
+            && !state["native_editor"]["last_touched"].is_null()
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "native parameter gesture must arrive"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
     let state = app.inspect();
     let parameter = state["native_editor"]["last_touched"].as_u64().unwrap();
     let value = state["project"]["tracks"][0]["instrument_parameters"]
@@ -526,7 +547,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     menu(&mut app, "Edit", "Redo");
     app.click("Open editor");
-    common::wait_visible(&mut app, "Automate parameter");
+    show_plugin_parameters(&mut app);
     app.click("Search parameters");
     app.command(json!({"command":"text","text":"Global Vol"}));
     app.click("Global Volume");
@@ -584,7 +605,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     let state = app.key("Enter");
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 3);
     assert_eq!(state["project"]["tracks"][2]["kind"], "Midi");
-    common::wait_visible(&mut app, "Automate parameter");
+    show_plugin_parameters(&mut app);
     menu(&mut app, "Window", "Clip Editor");
     click_front(&mut app, "Pencil");
     let state = app.inspect();
@@ -612,6 +633,21 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
         audio.samples.iter().any(|sample| sample.abs() > 0.001),
         "instrument export must contain rendered notes"
     );
+    // Headless runs never initialize installed devices just to fill previews.
+    // This opt-in native scenario explicitly asks for its selected instrument.
+    menu(&mut app, "Window", "Library");
+    app.click("Instruments");
+    app.click("Search instruments");
+    app.command(json!({"command":"key", "key":"A", "cmd":true}));
+    app.command(json!({"command":"text", "text":name}));
+    common::wait_visible(&mut app, &name);
+    app.click(&name);
+    let details = app.click("More");
+    app.click(if visible(&details, "Refresh preview") {
+        "Refresh preview"
+    } else {
+        "Capture preview"
+    });
     let deadline = Instant::now() + Duration::from_secs(45);
     loop {
         let state = app.inspect();
@@ -657,14 +693,14 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     app.command(json!({"command":"open","path":saved}));
     menu(&mut app, "Window", "Instrument");
     app.click("Open editor");
-    common::wait_visible(&mut app, "Automate parameter");
+    show_plugin_parameters(&mut app);
     // Opening another project also waits for the active native editor to close.
     let state = app.command(json!({"command":"open","path":saved}));
     assert_eq!(state["native_editor"]["open"], false);
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
     menu(&mut app, "Window", "Instrument");
     app.click("Open editor");
-    common::wait_visible(&mut app, "Automate parameter");
+    show_plugin_parameters(&mut app);
     // Quit must close the real native editor and persist its final state before exit.
     let response = app.raw_command(json!({"command":"quit"}));
     assert_eq!(response["ok"], true, "{response}");

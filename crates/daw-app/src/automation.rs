@@ -19,11 +19,17 @@ const SIZE: Vec2 = Vec2::new(1600.0, 1200.0);
 fn default_pixels_per_point() -> f32 {
     1.0
 }
+fn one_key_press() -> usize {
+    1
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
-    Inspect,
+    Inspect {
+        #[serde(default)]
+        paint: bool,
+    },
     /// Supply only the next native file picker's result; application menus still
     /// execute the complete document guard and background I/O path.
     FileDialog {
@@ -90,6 +96,11 @@ enum Command {
         alt: bool,
         #[serde(default)]
         cmd: bool,
+        /// Deliver the chord and its release before the same UI frame.
+        #[serde(default)]
+        release_modifiers: bool,
+        #[serde(default = "one_key_press")]
+        repetitions: usize,
     },
     Text {
         text: String,
@@ -130,6 +141,7 @@ enum Command {
 enum TestDocumentDialog {
     Save,
     Open,
+    Export,
 }
 
 #[derive(Deserialize)]
@@ -188,6 +200,9 @@ struct Harness {
     app: DawApp,
     time: f64,
     labels: Vec<(String, Rect)>,
+    menu_labels: Vec<(String, Rect)>,
+    inspect_paint: bool,
+    painted_rects: Vec<Value>,
     clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
@@ -229,6 +244,7 @@ impl Harness {
         let ctx = egui::Context::default();
         let mut app = DawApp::with_context(&ctx, Project::new(), None);
         app.audio_device_enabled = std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
+        app.automatic_plugin_previews = false;
         app.settings = Settings {
             scratch_dir,
             ..app.settings.clone()
@@ -239,6 +255,9 @@ impl Harness {
             app,
             time: 0.0,
             labels: Vec::new(),
+            menu_labels: Vec::new(),
+            inspect_paint: false,
+            painted_rects: Vec::new(),
             clipboard_text: None,
             close_requested: false,
             focused: true,
@@ -258,7 +277,40 @@ impl Harness {
         // Periodic recovery is wall-clock driven in the native app. Closing still
         // exercises recovery normally, within the isolated automation directory.
         self.app.last_recovery = Instant::now();
-        let output = self.ctx.run(input, |ctx| self.app.ui_frame(ctx));
+        self.menu_labels.clear();
+        let app = &mut self.app;
+        let menu_labels = &mut self.menu_labels;
+        let output = self.ctx.run(input, |ctx| {
+            app.ui_frame(ctx);
+            // A menu can repeat a persistent toolbar destination. Resolve the
+            // default click to the actual foreground menu, without changing
+            // explicit occurrence indexing for repeated channel/library rows.
+            if egui::Popup::is_any_open(ctx) {
+                let layers = ctx.memory(|memory| {
+                    memory
+                        .layer_ids()
+                        .filter(|layer| {
+                            layer.order == egui::Order::Foreground
+                                && memory.areas().is_visible(layer)
+                        })
+                        .collect::<Vec<_>>()
+                });
+                for layer in layers {
+                    let transform = ctx.layer_transform_to_global(layer);
+                    ctx.graphics(|graphics| {
+                        if let Some(list) = graphics.get(layer) {
+                            for original in list.all_entries() {
+                                let mut shape = original.clone();
+                                if let Some(transform) = transform {
+                                    shape.transform(transform);
+                                }
+                                collect_labels(&shape.shape, shape.clip_rect, menu_labels);
+                            }
+                        }
+                    });
+                }
+            }
+        });
         for command in &output.platform_output.commands {
             if let egui::OutputCommand::CopyText(text) = command {
                 self.clipboard_text = Some(text.clone());
@@ -271,8 +323,12 @@ impl Harness {
                 .any(|command| matches!(command, egui::ViewportCommand::Close))
         });
         self.labels.clear();
+        self.painted_rects.clear();
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
+            if self.inspect_paint {
+                collect_painted_rects(&clipped.shape, clipped.clip_rect, &mut self.painted_rects);
+            }
         }
     }
 
@@ -283,6 +339,15 @@ impl Harness {
     }
 
     fn label_rect(&self, label: &str, occurrence: usize) -> Result<Rect> {
+        if occurrence == 0
+            && let Some((_, rect)) = self
+                .menu_labels
+                .iter()
+                .rev()
+                .find(|(text, _)| text.trim() == label)
+        {
+            return Ok(*rect);
+        }
         self.labels
             .iter()
             .filter(|(text, _)| text.trim() == label)
@@ -461,6 +526,8 @@ impl Harness {
     }
 
     fn execute(&mut self, command: Command) -> Result<bool> {
+        self.inspect_paint = false;
+        self.painted_rects.clear();
         match command {
             Command::FileDialog { kind, path } => {
                 use crate::document_ui::DocumentDialog;
@@ -468,6 +535,7 @@ impl Harness {
                     match kind {
                         TestDocumentDialog::Save => DocumentDialog::Save,
                         TestDocumentDialog::Open => DocumentDialog::Open,
+                        TestDocumentDialog::Export => DocumentDialog::Export,
                     },
                     path,
                 ));
@@ -508,7 +576,10 @@ impl Harness {
                 self.ctx.set_pixels_per_point(pixels_per_point);
                 self.settle();
             }
-            Command::Inspect => self.settle(),
+            Command::Inspect { paint } => {
+                self.inspect_paint = paint;
+                self.settle();
+            }
             Command::Focused { focused } => {
                 self.focused = focused;
                 self.settle();
@@ -581,7 +652,13 @@ impl Harness {
                 ctrl,
                 alt,
                 cmd,
+                release_modifiers,
+                repetitions,
             } => {
+                ensure!(
+                    (1..=32).contains(&repetitions),
+                    "Key repetitions must be between 1 and 32"
+                );
                 let key = egui::Key::from_name(&key).context("Unknown keyboard key")?;
                 let modifiers = egui::Modifiers {
                     alt,
@@ -590,18 +667,33 @@ impl Harness {
                     mac_cmd: cmd && cfg!(target_os = "macos"),
                     command: cmd || ctrl,
                 };
-                for pressed in [true, false] {
+                let event = |pressed| Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers,
+                };
+                if release_modifiers || repetitions > 1 {
                     self.frame(RawInput {
-                        modifiers,
-                        events: vec![Event::Key {
-                            key,
-                            physical_key: None,
-                            pressed,
-                            repeat: false,
-                            modifiers,
-                        }],
+                        modifiers: if release_modifiers {
+                            egui::Modifiers::NONE
+                        } else {
+                            modifiers
+                        },
+                        events: (0..repetitions)
+                            .flat_map(|_| [event(true), event(false)])
+                            .collect(),
                         ..Default::default()
                     });
+                } else {
+                    for pressed in [true, false] {
+                        self.frame(RawInput {
+                            modifiers,
+                            events: vec![event(pressed)],
+                            ..Default::default()
+                        });
+                    }
                 }
                 self.settle();
             }
@@ -756,7 +848,29 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["window_rects"] = self
+            .ctx
+            .memory(|memory| {
+                memory
+                    .layer_ids()
+                    .filter(|layer| {
+                        layer.order == egui::Order::Middle && memory.areas().is_visible(layer)
+                    })
+                    .filter_map(|layer| memory.area_rect(layer.id))
+                    .map(|rect| {
+                        json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .into();
         state["exported_file"] = json!(self.app.exported_file);
+        if self.inspect_paint {
+            state["painted_rects"] = json!(self.painted_rects);
+        }
+        state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
+        state["popup_context"] = self.app.popup_context_diagnostics();
+        state["popups"]["export"] = json!(self.app.export_open);
+        state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
         state["clipboard_text"] = json!(self.clipboard_text);
         state["document_guard"] = self.app.document_guard_diagnostics();
         state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());
@@ -780,6 +894,25 @@ impl Harness {
             Value::Null
         };
         state
+    }
+}
+
+fn collect_painted_rects(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value>) {
+    match shape {
+        egui::Shape::Rect(shape) if shape.rect.intersects(clip) => {
+            let rect = shape.rect.intersect(clip);
+            output.push(json!({
+                "rect": {"min":[rect.min.x,rect.min.y], "max":[rect.max.x,rect.max.y]},
+                "fill":shape.fill.to_array(), "stroke":shape.stroke.color.to_array(),
+                "stroke_width":shape.stroke.width,
+            }));
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_rects(shape, clip, output);
+            }
+        }
+        _ => {}
     }
 }
 

@@ -181,7 +181,7 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
                     "Beat 3.00",
                     "4.00 beats",
                     "0.50 beats",
-                    "Gain",
+                    "Clip gain",
                     "-2.5 dB",
                     "Fade in",
                     "Fade out",
@@ -191,21 +191,14 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
             assert!(!visible(&selected, "Compact track"));
             assert!(!visible(&selected, "Path latency"));
             let track = front(&mut app, "Track");
-            accessible(
-                &track,
-                &[
-                    "Color",
-                    "Compact track",
-                    "Folder",
-                    "Gain",
-                    "Pan",
-                    "Mute",
-                    "Solo",
-                    "Path latency",
-                ],
-            );
-            assert!(!visible(&track, "Source offset"));
-            assert!(!visible(&track, "Fade in"));
+            accessible(&track, &["Color", "Compact track", "Folder"]);
+            for channel_control in ["Gain", "Pan", "Mute", "Solo", "Path latency"] {
+                assert!(!visible(&track, channel_control));
+            }
+            let channel = front(&mut app, "Channel");
+            accessible(&channel, &["Gain", "Pan", "Mute", "Solo", "Path latency"]);
+            assert!(!visible(&channel, "Source offset"));
+            assert!(!visible(&channel, "Fade in"));
             accessible(
                 &app.click("Clip"),
                 &["Source offset", "Fade out", "Make independent"],
@@ -235,7 +228,15 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
                             assert!(!visible(&track, unused), "Automation exposes {unused}");
                         }
                     }
-                    _ => accessible(&track, &["Gain", "Pan", "Mute", "Solo", "Path latency"]),
+                    _ => {
+                        for channel_control in ["Gain", "Pan", "Mute", "Solo", "Path latency"] {
+                            assert!(!visible(&track, channel_control));
+                        }
+                        accessible(
+                            &front(&mut app, "Channel"),
+                            &["Gain", "Pan", "Mute", "Solo", "Path latency"],
+                        );
+                    }
                 }
                 assert_eq!(track["project"], original);
             }
@@ -283,7 +284,7 @@ fn clip_gain_and_fades_edit_linked_instances_and_support_undo_then_independence(
     let left = before["clip_name_rect"][0].as_f64().unwrap();
     let right =
         rect(&before, "-2.5 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
-    let y = center(rect(&before, "Gain")).1;
+    let y = center(rect(&before, "Clip gain")).1;
     let changed = app.command(json!({"command":"pointer", "phase":"click",
         "x":left + (right - left) * 0.7, "y":y}));
     let gain = clip(&changed, first)["content"]["Audio"]["gain"]
@@ -357,7 +358,7 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     assert!(visible(&properties, "40.0 dB"));
     assert_eq!(properties["project"], opened["project"]);
     assert_eq!(properties["modified"], false);
-    let track = front(&mut app, "Track");
+    let track = front(&mut app, "Channel");
     assert!(visible(&track, "6.0 dB"));
     assert!(visible(&track, "220000 samples"));
     assert_eq!(track["project"], opened["project"]);
@@ -372,14 +373,12 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     assert_eq!(mixer["modified"], false);
     assert!(mixer["history"]["undo"].as_array().unwrap().is_empty());
     window(&mut app, "Properties");
-    let track = front(&mut app, "Track");
-    let left = rect(&track, "Audio channel")["min"][0].as_f64().unwrap()
-        - f64::from(daw_ui::tokens::BUTTON_PADDING_X);
+    let track = front(&mut app, "Channel");
     let right =
         rect(&track, "6.0 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
     let y = center(rect(&track, "Gain")).1;
     let edited = app.command(json!({"command":"pointer", "phase":"click",
-        "x":left + (right - left) * 0.6, "y":y}));
+        "x":right - 60.0, "y":y}));
     let gain = edited["project"]["tracks"][0]["gain"].as_f64().unwrap();
     assert!(
         gain > 0.0 && gain < 1.5,

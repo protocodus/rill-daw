@@ -8,6 +8,7 @@ use std::path::PathBuf;
 pub(crate) enum DocumentDialog {
     Save,
     Open,
+    Export,
 }
 
 #[derive(Clone, Debug)]
@@ -44,17 +45,22 @@ impl DawApp {
         {
             return self.next_document_dialog.take().and_then(|(_, path)| path);
         }
-        let dialog = rfd::FileDialog::new()
-            .add_filter("Rill project", &["rill"])
-            .add_filter("Legacy Rill session", &["json"]);
+        let dialog = if kind == DocumentDialog::Export {
+            rfd::FileDialog::new().add_filter("Wave audio", &["wav"])
+        } else {
+            rfd::FileDialog::new()
+                .add_filter("Rill project", &["rill"])
+                .add_filter("Legacy Rill session", &["json"])
+        };
         let dialog = if let Some(parent) = self.project_path.as_ref().and_then(|path| path.parent())
         {
             dialog.set_directory(parent)
         } else {
             dialog
         };
-        match kind {
+        daw_ui::with_native_dialog_menu(|| match kind {
             DocumentDialog::Open => dialog.pick_file(),
+            DocumentDialog::Export => dialog.set_file_name("mixdown.wav").save_file(),
             DocumentDialog::Save => {
                 let filename = self
                     .project_path
@@ -64,7 +70,7 @@ impl DawApp {
                     .unwrap_or_else(|| format!("{}.rill", self.project.name));
                 dialog.set_file_name(filename).save_file()
             }
-        }
+        })
     }
 
     pub(crate) fn request_document_transition(&mut self, transition: DocumentTransition) {
@@ -216,7 +222,11 @@ impl DawApp {
         egui::CentralPanel::default()
             .frame(daw_ui::inset(ctx).inner_margin(0).corner_radius(0))
             .show(ctx, |ui| {
-                daw_ui::paint_ambient(ui.painter(), ui.max_rect());
+                if self.last_scene.shape_count() > 0 {
+                    self.last_scene.paint(ui);
+                } else {
+                    daw_ui::paint_ambient(ui.painter(), ui.max_rect());
+                }
             });
         let Some(guard) = self.document_guard.as_ref() else {
             return;

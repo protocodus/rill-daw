@@ -46,17 +46,13 @@ impl Project {
     pub fn add_bus(&mut self, name: impl Into<String>) -> u64 {
         let mut track = Track::new(name, TrackKind::Bus);
         track.gain = 1.0;
-        let id = track.id;
-        self.tracks.push(track);
-        id
+        self.insert_new_track(track)
     }
 
     pub fn add_folder(&mut self, name: impl Into<String>) -> u64 {
         let mut track = Track::new(name, TrackKind::Folder);
         track.gain = 1.0;
-        let id = track.id;
-        self.tracks.push(track);
-        id
+        self.insert_new_track(track)
     }
 
     /// Remove a channel without leaving dangling signal or hierarchy references.

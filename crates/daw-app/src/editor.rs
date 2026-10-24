@@ -25,6 +25,7 @@ impl DawApp {
     pub(crate) fn mixer(&mut self, ui: &mut egui::Ui) {
         let mut changed = false;
         let mut popup = None;
+        let mut channel_target = None;
         let names: std::collections::HashMap<_, _> = self
             .project
             .tracks
@@ -38,10 +39,19 @@ impl DawApp {
             .unwrap_or_default();
         let strip_width = 180.0;
         let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
-        let fader_height = 180.0;
+        // Names, routing, readouts and footer controls keep their natural size.
+        // Give the remaining viewport height to the faders and meters, with a
+        // usable minimum on short windows where the scroll area takes over.
+        let fixed_height = 2.0 * daw_ui::tokens::SPACE_MD
+            + 5.0 * ui.spacing().interact_size.y
+            + ui.text_style_height(&egui::TextStyle::Monospace)
+            + 6.0 * ui.spacing().item_spacing.y;
         egui::ScrollArea::both()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
+            .show_viewport(ui, |ui, viewport| {
+                let strip_height = viewport.height().max(fixed_height + 120.0);
+                let strip_size = Vec2::new(strip_width, strip_height);
+                let fader_height = strip_height - fixed_height;
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     for (channel, track) in self
@@ -65,11 +75,10 @@ impl DawApp {
                         daw_ui::mixer_strip(
                             ui,
                             track.id,
-                            strip_width,
+                            strip_size,
                             Some(color(track.color)),
                             self.selected_track == Some(track.id),
                             |ui| {
-                                ui.set_min_height(420.0);
                                 if ui
                                     .add_sized(
                                         Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
@@ -79,10 +88,10 @@ impl DawApp {
                                         )
                                         .truncate(),
                                     )
-                                    .on_hover_text(&track.name)
+                                    .on_hover_text(format!("Open channel · {}", track.name))
                                     .clicked()
                                 {
-                                    self.selected_track = Some(track.id);
+                                    channel_target = Some(track.id);
                                 }
                                 if ui
                                     .add_sized(
@@ -105,16 +114,30 @@ impl DawApp {
                                         .monospace(),
                                     );
                                     ui.spacing_mut().slider_width = fader_height;
-                                    changed |= ui
-                                        .add_sized(
-                                            Vec2::new(30.0, fader_height),
-                                            daw_ui::slider(&mut track.gain, 0.0..=1.5)
-                                                .clamping(egui::SliderClamping::Edits)
-                                                .vertical()
-                                                .show_value(false),
+                                    ui.horizontal(|ui| {
+                                        ui.add_space((content_width - 52.0) * 0.5);
+                                        changed |= ui
+                                            .add_sized(
+                                                Vec2::new(30.0, fader_height),
+                                                daw_ui::slider(&mut track.gain, 0.0..=1.5)
+                                                    .clamping(egui::SliderClamping::Edits)
+                                                    .vertical()
+                                                    .show_value(false),
+                                            )
+                                            .on_hover_text("Channel volume")
+                                            .changed();
+                                        let peaks = self
+                                            .engine
+                                            .as_ref()
+                                            .map(|engine| engine.channel_peaks(track.id))
+                                            .unwrap_or([0.0; 2]);
+                                        daw_ui::stereo_meter(
+                                            ui,
+                                            peaks,
+                                            Vec2::new(14.0, fader_height),
                                         )
-                                        .on_hover_text("Channel volume")
-                                        .changed();
+                                        .on_hover_text("Channel output level · post-fader");
+                                    });
                                 });
                                 ui.spacing_mut().slider_width = content_width - 38.0;
                                 changed |= ui
@@ -133,6 +156,10 @@ impl DawApp {
                                         daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
                                 });
                                 daw_ui::action_menu(ui, "Channel", |ui| {
+                                    if daw_ui::button(ui, "Open channel").clicked() {
+                                        channel_target = Some(track.id);
+                                        ui.close();
+                                    }
                                     for (label, kind, visible) in [
                                         (
                                             "Instrument",
@@ -152,8 +179,7 @@ impl DawApp {
                             },
                         );
                     }
-                    daw_ui::mixer_strip(ui, "master", strip_width, None, false, |ui| {
-                        ui.set_min_height(420.0);
+                    daw_ui::mixer_strip(ui, "master", strip_size, None, false, |ui| {
                         ui.allocate_ui_with_layout(
                             Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                             egui::Layout::centered_and_justified(egui::Direction::TopDown),
@@ -187,6 +213,9 @@ impl DawApp {
         }
         if let Some(popup) = popup {
             self.open_popup(popup);
+        }
+        if let Some(track) = channel_target {
+            self.open_channel(track);
         }
     }
 

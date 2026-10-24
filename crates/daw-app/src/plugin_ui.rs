@@ -1,7 +1,6 @@
 use crate::{
-    app::{DawApp, PopupKind},
+    app::{ChannelDestination, DawApp, PopupKind},
     project_io::{DocumentRequest, LoadedProject},
-    theme::*,
 };
 use daw_core::{
     AutomationParameter, AutomationTarget, Instrument, PluginParameterValue, TrackKind,
@@ -34,7 +33,7 @@ pub(crate) type EditorStateSignature =
 
 enum PendingAction {
     Save(PathBuf),
-    Export(PathBuf),
+    Export(PathBuf, bool),
     Quit,
     New,
     Recovery,
@@ -89,13 +88,21 @@ pub(crate) struct InstrumentUi {
     opening: Option<mpsc::Receiver<anyhow::Result<EditorSession>>>,
     metadata_job: Option<mpsc::Receiver<anyhow::Result<Vec<ParameterInfo>>>>,
     parameters: Vec<ParameterInfo>,
-    selected: Option<u32>,
+    browser: daw_ui::ParameterBrowserState,
     last_touched: Option<u32>,
-    filter: String,
+    browse_target: Option<EditorTarget>,
+    parameters_open: bool,
     closing: bool,
     last_saved_request: Option<u64>,
     error: Option<String>,
     pending: Option<PendingState>,
+}
+
+#[derive(Default)]
+struct ParameterActions {
+    refresh: bool,
+    update: Option<(u32, f64)>,
+    automate: Option<(u32, f64, String)>,
 }
 
 impl DawApp {
@@ -144,6 +151,17 @@ impl DawApp {
         self.selected_track = Some(track);
         self.effect_editor_target = Some((track, effect));
         self.instrument_autolaunch = Some(track);
+    }
+
+    pub(crate) fn open_effect_automation(&mut self, track: u64, effect: u64) {
+        self.open_popup(PopupKind::Instrument);
+        self.selected_track = Some(track);
+        self.effect_editor_target = Some((track, effect));
+        self.instrument_autolaunch = None;
+        self.instrument_ui.browse_target = Some(EditorTarget {
+            track,
+            effect: Some(effect),
+        });
     }
 
     pub(crate) fn request_settings_apply(&mut self) {
@@ -228,13 +246,15 @@ impl DawApp {
             "opening": self.instrument_ui.opening.is_some(),
             "closing": self.instrument_ui.closing,
             "parameter_count": self.instrument_ui.parameters.len(),
-            "selected": self.instrument_ui.selected,
+            "parameters_open": self.instrument_ui.parameters_open,
+            "selected": self.instrument_ui.browser.selected,
+            "parameter_query": self.instrument_ui.browser.query,
             "last_touched": self.instrument_ui.last_touched,
             "error": self.instrument_ui.error,
             "track": self.instrument_ui.owner.as_ref().map(|(target, _)| target.track),
             "effect": self.instrument_ui.owner.as_ref().and_then(|(target, _)| target.effect),
             "pid": self.instrument_ui.session.as_ref().map(EditorSession::process_id),
-            "selected_value": self.instrument_ui.selected.and_then(|id| self.instrument_ui.parameters.iter().find(|parameter| parameter.id == id)).map(|parameter| parameter.value),
+            "selected_value": self.instrument_ui.browser.selected.and_then(|id| self.instrument_ui.parameters.iter().find(|parameter| parameter.id == id)).map(|parameter| parameter.value),
         })
     }
 
@@ -359,17 +379,22 @@ impl DawApp {
     }
 
     pub(crate) fn export_to(&mut self, path: PathBuf) {
-        if self.defer_document_request(DocumentRequest::Export(path.clone())) {
+        self.export_to_with_tails(path, true);
+    }
+
+    pub(crate) fn export_to_with_tails(&mut self, path: PathBuf, include_effect_tails: bool) {
+        if self.defer_document_request(DocumentRequest::Export(path.clone(), include_effect_tails))
+        {
             return;
         }
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
         }
-        if let Some(PendingAction::Export(path)) =
-            self.defer_for_editor(PendingAction::Export(path))
+        if let Some(PendingAction::Export(path, include_effect_tails)) =
+            self.defer_for_editor(PendingAction::Export(path, include_effect_tails))
         {
-            self.start_export(path);
+            self.start_export(path, include_effect_tails);
         }
     }
 
@@ -393,6 +418,166 @@ impl DawApp {
             self.close_ready = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+    }
+
+    /// Escape leaves the parameter chooser before dismissing its plugin context.
+    pub(crate) fn close_instrument_parameters(&mut self) -> bool {
+        if self.instrument_open && self.instrument_ui.parameters_open {
+            self.instrument_ui.parameters_open = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn last_touched_plugin_parameter(
+        &self,
+        track: u64,
+        effect: Option<u64>,
+    ) -> Option<u32> {
+        let target = EditorTarget { track, effect };
+        self.instrument_ui
+            .owner
+            .as_ref()
+            .filter(|(owner, plugin)| {
+                *owner == target && self.editor_plugin(target).as_ref() == Some(plugin)
+            })
+            .and(self.instrument_ui.last_touched)
+    }
+
+    fn plugin_parameter_browser(
+        &mut self,
+        ui: &mut egui::Ui,
+        target: EditorTarget,
+        device_name: &str,
+    ) -> ParameterActions {
+        let mut actions = ParameterActions::default();
+        let loading =
+            self.instrument_ui.metadata_job.is_some() || self.instrument_ui.opening.is_some();
+        let can_refresh = !loading && self.instrument_ui.session.is_none();
+        daw_ui::action_row(
+            ui,
+            |ui| {
+                daw_ui::action_menu(ui, "More", |ui| {
+                    if ui
+                        .add_enabled(can_refresh, daw_ui::button_widget("Read parameters"))
+                        .clicked()
+                    {
+                        actions.refresh = true;
+                        ui.close();
+                    }
+                });
+                if daw_ui::button(ui, "Back").clicked() {
+                    self.instrument_ui.parameters_open = false;
+                }
+            },
+            |ui| {
+                daw_ui::text::truncated(
+                    ui,
+                    daw_ui::text::TextRole::Subtitle,
+                    format!("Automate {device_name}"),
+                );
+            },
+        );
+        if let Some(error) = &self.instrument_ui.error {
+            daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 2)
+                .on_hover_text(error);
+            if ui
+                .add_enabled(can_refresh, daw_ui::button_widget("Retry"))
+                .clicked()
+            {
+                actions.refresh = true;
+            }
+        } else if loading {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                daw_ui::text::note(ui, "Loading parameters…");
+            });
+        }
+        let automated: std::collections::HashSet<_> = self
+            .project
+            .tracks
+            .iter()
+            .filter_map(|track| track.automation.as_ref())
+            .filter_map(|lane| match lane.target.parameter {
+                AutomationParameter::VstParameter { effect, id }
+                    if lane.target.track == target.track && effect == target.effect =>
+                {
+                    Some(id)
+                }
+                _ => None,
+            })
+            .collect();
+        let editing_enabled = self.parameter_editing_enabled();
+        let items: Vec<_> = self
+            .instrument_ui
+            .parameters
+            .iter()
+            .filter(|p| !p.read_only)
+            .map(|p| daw_ui::ParameterItem {
+                id: p.id,
+                name: p.name.as_str(),
+                unit: p.unit.as_str(),
+                value: p.value,
+                automated: automated.contains(&p.id),
+                last_touched: self.instrument_ui.last_touched == Some(p.id),
+            })
+            .collect();
+        let browser = daw_ui::parameter_browser(
+            ui,
+            "plugin_parameter_browser",
+            &mut self.instrument_ui.browser,
+            &items,
+            ui.available_height().max(0.0),
+            |ui, selected| {
+                let Some(parameter) = selected else {
+                    daw_ui::text::subtitle(ui, "Choose a parameter");
+                    daw_ui::text::note(ui, "Search by name or unit.");
+                    return;
+                };
+                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, parameter.name, 3);
+                if !parameter.unit.is_empty() {
+                    daw_ui::text::note(ui, format!("Unit · {}", parameter.unit));
+                }
+                ui.add_space(daw_ui::tokens::SPACE_MD);
+                if daw_ui::primary_button(
+                    ui,
+                    if parameter.automated {
+                        "Edit automation"
+                    } else {
+                        "Automate parameter"
+                    },
+                )
+                .clicked()
+                {
+                    actions.automate =
+                        Some((parameter.id, parameter.value, parameter.name.to_owned()));
+                }
+                ui.add_space(daw_ui::tokens::SPACE_MD);
+                let mut value = parameter.value;
+                ui.spacing_mut().slider_width = (ui.available_width() - 90.0).max(70.0);
+                let response = ui.add_enabled(
+                    editing_enabled,
+                    daw_ui::slider(&mut value, 0.0..=1.0).text("Value"),
+                );
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(egui::Id::new("instrument_parameter_rect"), response.rect)
+                });
+                if response.changed() {
+                    actions.update = Some((parameter.id, value));
+                }
+                if parameter.last_touched {
+                    daw_ui::text::note(ui, "Last touched");
+                }
+                daw_ui::text::note(ui, "Enter or double-click to automate");
+            },
+        );
+        if let Some(id) = browser.activated
+            && let Some(parameter) = items.iter().find(|p| p.id == id)
+        {
+            actions.automate = Some((id, parameter.value, parameter.name.to_owned()));
+        }
+        actions
     }
 
     pub(crate) fn plugin_instrument_editor(&mut self, ctx: &egui::Context) {
@@ -421,16 +606,14 @@ impl DawApp {
         let track_id = target.track;
         let track = self.project.track(track_id).unwrap();
         let name = track.name.clone();
-        let context_name = target
+        let effect_name = target
             .effect
             .and_then(|effect| track.inserts.iter().find(|slot| slot.id == effect))
-            .map(|slot| format!("{name} · {}", slot.name))
-            .unwrap_or_else(|| name.clone());
-        let title = if target.effect.is_some() {
-            "Effect"
-        } else {
-            "Instrument"
-        };
+            .map(|slot| slot.name.clone());
+        let title = effect_name
+            .as_ref()
+            .map(|effect| format!("{effect} of {name}"))
+            .unwrap_or_else(|| format!("Instrument of {name}"));
         let owner = (target, instrument.clone());
         if self.instrument_ui.owner.as_ref() != Some(&owner) {
             if self.instrument_ui.session.is_some() || self.instrument_ui.opening.is_some() {
@@ -445,6 +628,7 @@ impl DawApp {
             }
             self.instrument_ui = InstrumentUi {
                 owner: Some(owner),
+                browse_target: self.instrument_ui.browse_target.take(),
                 ..Default::default()
             };
         }
@@ -454,141 +638,139 @@ impl DawApp {
         let mut fetch = false;
         let mut update = None;
         let mut automate = None;
-        daw_ui::popup(title, ctx)
-            .id(egui::Id::new("instrument_editor"))
+        if self.instrument_ui.browse_target.take() == Some(target) {
+            self.instrument_ui.parameters_open = true;
+            self.instrument_ui.browser.focus_search = true;
+            fetch = self.instrument_ui.parameters.is_empty()
+                && self.instrument_ui.metadata_job.is_none()
+                && self.instrument_ui.session.is_none()
+                && self.instrument_ui.opening.is_none();
+        }
+        let parameter_page = self.instrument_ui.parameters_open;
+        daw_ui::popup(&title, ctx)
+            .id(egui::Id::new(("instrument_editor", parameter_page)))
             .open(&mut open)
-            .default_width(600.0)
-            // The parameter list owns scrolling. An outer window scroller
-            // would hide actions when asynchronous metadata grows the body.
+            .default_width(if parameter_page { 920.0 } else { 600.0 })
+            .default_height(if parameter_page { 520.0 } else { 0.0 })
             .vscroll(false)
             .show(ctx, |ui| {
-                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &context_name);
+                if self.channel_navigation(
+                    ui,
+                    if target.effect.is_some() {
+                        ChannelDestination::PluginEditor
+                    } else {
+                        ChannelDestination::Instrument
+                    },
+                ) {
+                    return;
+                }
                 match &instrument {
                     Instrument::None => {
-                        ui.label("No instrument assigned");
+                        daw_ui::text::note(ui, "No instrument assigned");
                         choose = daw_ui::primary_button(ui, "Choose instrument").clicked();
                     }
-                    Instrument::Vst3 { path, .. } => {
-                        daw_ui::text::bounded_block(
-                            ui,
-                            daw_ui::text::TextRole::Label,
-                            PathBuf::from(path)
-                                .file_stem()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string(),
-                            2,
-                        );
-                        ui.horizontal_wrapped(|ui| {
-                            launch = ui
-                                .add_enabled(
-                                    self.instrument_ui.session.is_none()
-                                        && self.instrument_ui.opening.is_none(),
-                                    daw_ui::button_widget(
-                                        if self.instrument_ui.opening.is_some() {
-                                            "Opening editor…"
-                                        } else {
-                                            "Open editor"
-                                        },
-                                    ),
-                                )
-                                .clicked();
-                            if target.effect.is_none() {
-                                choose = daw_ui::button(ui, "Change instrument").clicked();
-                            }
-                            if let Some(session) = &self.instrument_ui.session
-                                && daw_ui::button(ui, "Close editor").clicked()
-                            {
-                                let _ = session.close();
-                                self.instrument_ui.closing = true;
-                            }
-                        });
-                        ui.separator();
-                        ui.horizontal_wrapped(|ui| {
-                            let search_width = (ui.available_width() - 190.0).clamp(80.0, 300.0);
-                            daw_ui::text_field(
-                                ui,
-                                &mut self.instrument_ui.filter,
-                                "Search parameters",
-                                search_width,
-                            );
-                            fetch = ui
-                                .add_enabled(
-                                    self.instrument_ui.metadata_job.is_none()
-                                        && self.instrument_ui.session.is_none()
-                                        && self.instrument_ui.opening.is_none(),
-                                    daw_ui::button_widget(
-                                        if self.instrument_ui.metadata_job.is_some() {
-                                            "Loading…"
-                                        } else {
-                                            "Read parameters"
-                                        },
-                                    ),
-                                )
-                                .clicked();
-                        });
-                        if let Some(parameter) = self.instrument_ui.selected.and_then(|id| {
-                            self.instrument_ui.parameters.iter().find(|p| p.id == id)
-                        }) {
-                            let mut value = parameter.value;
-                            let response = ui.add_enabled(
-                                self.parameter_editing_enabled(),
-                                daw_ui::slider(&mut value, 0.0..=1.0).text(&parameter.name),
-                            );
-                            ctx.data_mut(|data| {
-                                data.insert_temp(
-                                    egui::Id::new("instrument_parameter_rect"),
-                                    response.rect,
-                                )
+                    Instrument::Vst3 { path, class_id } => {
+                        let device_name = effect_name
+                            .clone()
+                            .or_else(|| {
+                                self.vst_catalog
+                                    .iter()
+                                    .find(|entry| {
+                                        entry.plugin.path == std::path::Path::new(path)
+                                            && entry.plugin.class_id == *class_id
+                                    })
+                                    .map(|entry| entry.plugin.name.clone())
+                            })
+                            .unwrap_or_else(|| {
+                                PathBuf::from(path)
+                                    .file_stem()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .into_owned()
                             });
-                            if response.changed() {
-                                update = Some((parameter.id, value));
-                            }
-                            if daw_ui::button(ui, "Automate parameter").clicked() {
+                        if !self.instrument_ui.parameters_open {
+                            daw_ui::text::bounded_block(
+                                ui,
+                                daw_ui::text::TextRole::Subtitle,
+                                &device_name,
+                                2,
+                            );
+                            daw_ui::toolbar(ui, |ui| {
+                                launch = ui
+                                    .add_enabled_ui(
+                                        self.instrument_ui.session.is_none()
+                                            && self.instrument_ui.opening.is_none(),
+                                        |ui| {
+                                            daw_ui::primary_button(
+                                                ui,
+                                                if self.instrument_ui.opening.is_some() {
+                                                    "Opening editor…"
+                                                } else {
+                                                    "Open editor"
+                                                },
+                                            )
+                                        },
+                                    )
+                                    .inner
+                                    .clicked();
+                                if let Some(session) = &self.instrument_ui.session
+                                    && daw_ui::button(ui, "Close editor").clicked()
+                                {
+                                    let _ = session.close();
+                                    self.instrument_ui.closing = true;
+                                }
+                                if daw_ui::button(ui, "Automate…").clicked() {
+                                    self.instrument_ui.parameters_open = true;
+                                    self.instrument_ui.browser.focus_search = true;
+                                    fetch = self.instrument_ui.parameters.is_empty()
+                                        && self.instrument_ui.metadata_job.is_none()
+                                        && self.instrument_ui.session.is_none()
+                                        && self.instrument_ui.opening.is_none();
+                                }
+                                if target.effect.is_none() {
+                                    choose = daw_ui::button(ui, "Change instrument").clicked();
+                                }
+                            });
+                        } else {
+                            let actions = self.plugin_parameter_browser(ui, target, &device_name);
+                            fetch |= actions.refresh;
+                            update = actions.update;
+                            automate = actions.automate;
+                        }
+                        if !self.instrument_ui.parameters_open {
+                            if let Some(parameter) =
+                                self.instrument_ui.last_touched.and_then(|id| {
+                                    self.instrument_ui
+                                        .parameters
+                                        .iter()
+                                        .find(|p| p.id == id && !p.read_only)
+                                })
+                                && daw_ui::button(
+                                    ui,
+                                    format!("Automate last touched · {}", parameter.name),
+                                )
+                                .clicked()
+                            {
                                 automate =
                                     Some((parameter.id, parameter.value, parameter.name.clone()));
                             }
+                            if let Some(error) = &self.instrument_ui.error {
+                                daw_ui::text::bounded_block(
+                                    ui,
+                                    daw_ui::text::TextRole::Note,
+                                    error,
+                                    2,
+                                )
+                                .on_hover_text(error);
+                            }
                         }
-                        if let Some(parameter) = self.instrument_ui.last_touched.and_then(|id| {
-                            self.instrument_ui.parameters.iter().find(|p| p.id == id)
-                        }) && daw_ui::button(
-                            ui,
-                            format!("Automate last touched · {}", parameter.name),
-                        )
-                        .clicked()
-                        {
-                            automate =
-                                Some((parameter.id, parameter.value, parameter.name.clone()));
-                        }
-                        if let Some(error) = &self.instrument_ui.error {
-                            ui.colored_label(palette(ui.ctx()).orange, error);
-                        }
-                        // Keep the current value and automation commands visible;
-                        // only the potentially thousands of parameter names scroll.
-                        let filter = self.instrument_ui.filter.to_lowercase();
-                        egui::ScrollArea::vertical()
-                            .id_salt("instrument_parameters")
-                            .min_scrolled_height(daw_ui::tokens::CONTROL_HEIGHT)
-                            .max_height(
-                                ui.available_height()
-                                    .clamp(daw_ui::tokens::CONTROL_HEIGHT, 260.0),
-                            )
-                            .show(ui, |ui| {
-                                for parameter in self.instrument_ui.parameters.iter().filter(|p| {
-                                    !p.read_only && p.name.to_lowercase().contains(&filter)
-                                }) {
-                                    daw_ui::selectable_value(
-                                        ui,
-                                        &mut self.instrument_ui.selected,
-                                        Some(parameter.id),
-                                        &parameter.name,
-                                    );
-                                }
-                            });
                     }
                 }
             });
         self.instrument_open &= open;
+        if !self.instrument_open {
+            return;
+        }
         if self.instrument_autolaunch == Some(track_id)
             && (self.instrument_ui.session.is_some() || self.instrument_ui.opening.is_some())
         {
@@ -674,23 +856,41 @@ impl DawApp {
             }
         }
         if let Some((id, value, label)) = automate {
-            self.begin_edit();
-            match self.project.add_automation_track_with_value(
-                format!("{name} · {label}"),
-                AutomationTarget {
-                    track: track_id,
-                    parameter: AutomationParameter::VstParameter {
-                        effect: target.effect,
-                        id,
-                    },
+            let automation_target = AutomationTarget {
+                track: track_id,
+                parameter: AutomationParameter::VstParameter {
+                    effect: target.effect,
+                    id,
                 },
-                value as f32,
-            ) {
+            };
+            let existing = self.project.tracks.iter().find_map(|track| {
+                track
+                    .automation
+                    .as_ref()
+                    .filter(|lane| lane.target == automation_target)
+                    .map(|_| track.id)
+            });
+            let result = if let Some(id) = existing {
+                Ok(id)
+            } else {
+                self.begin_edit();
+                self.project.add_automation_track_with_value(
+                    effect_name.as_ref().map_or_else(
+                        || format!("{name} · {label}"),
+                        |effect| format!("{name} · {effect} · {label}"),
+                    ),
+                    automation_target,
+                    value as f32,
+                )
+            };
+            match result {
                 Ok(id) => {
                     self.open_popup(PopupKind::Automation);
                     self.selected_track = Some(id);
                     self.selected_clip = None;
-                    self.changed();
+                    if existing.is_none() {
+                        self.changed();
+                    }
                 }
                 Err(error) => self.message(Err(error), ""),
             }
@@ -782,8 +982,13 @@ impl DawApp {
             self.instrument_ui.metadata_job = None;
             match result {
                 Ok(parameters) => {
-                    self.instrument_ui.selected =
-                        parameters.iter().find(|p| !p.read_only).map(|p| p.id);
+                    if !parameters
+                        .iter()
+                        .any(|p| !p.read_only && Some(p.id) == self.instrument_ui.browser.selected)
+                    {
+                        self.instrument_ui.browser.selected =
+                            parameters.iter().find(|p| !p.read_only).map(|p| p.id);
+                    }
                     self.instrument_ui.parameters = parameters;
                 }
                 Err(error) => self.instrument_ui.error = Some(format!("{error:#}")),
@@ -820,9 +1025,9 @@ impl DawApp {
                 EditorEvent::Ready { parameters } => {
                     if !parameters
                         .iter()
-                        .any(|p| Some(p.id) == self.instrument_ui.selected && !p.read_only)
+                        .any(|p| Some(p.id) == self.instrument_ui.browser.selected && !p.read_only)
                     {
-                        self.instrument_ui.selected =
+                        self.instrument_ui.browser.selected =
                             parameters.iter().find(|p| !p.read_only).map(|p| p.id);
                     }
                     self.instrument_ui.parameters = parameters;
@@ -912,7 +1117,9 @@ impl DawApp {
                 } else {
                     match pending.action {
                         PendingAction::Save(path) => self.finish_project_save(path),
-                        PendingAction::Export(path) => self.start_export(path),
+                        PendingAction::Export(path, include_effect_tails) => {
+                            self.start_export(path, include_effect_tails)
+                        }
                         PendingAction::New => self.finish_new_session(),
                         PendingAction::Recovery => self.autosave_recovery(),
                         PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),
@@ -1113,8 +1320,45 @@ mod tests {
                     read_only: false,
                 })
                 .collect();
-            app.instrument_ui.selected = Some(100);
+            app.instrument_ui.browser.selected = Some(100);
             app.instrument_ui.last_touched = Some(101);
+            // Metadata must not turn the compact native-editor overview into a
+            // generic parameter editor. Its chooser is an explicit user action.
+            let mut overview = draw(&mut app, vec![]);
+            for _ in 0..3 {
+                overview = draw(&mut app, vec![]);
+            }
+            assert!(!overview.shapes.iter().any(|shape| matches!(
+                &shape.shape,
+                egui::Shape::Text(text) if text.galley.text() == "Search parameters"
+            )));
+            if !last_touched {
+                let action = overview
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) if text.galley.text() == "Automate…" => {
+                            Some(text.galley.rect.translate(text.pos.to_vec2()).center())
+                        }
+                        _ => None,
+                    })
+                    .expect("overview offers automation on demand");
+                for pressed in [true, false] {
+                    draw(
+                        &mut app,
+                        vec![
+                            egui::Event::PointerMoved(action),
+                            egui::Event::PointerButton {
+                                pos: action,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                    );
+                }
+                assert!(app.instrument_ui.parameters_open);
+            }
             let mut output = draw(&mut app, vec![]);
             for _ in 0..3 {
                 output = draw(&mut app, vec![]);
@@ -1170,6 +1414,49 @@ mod tests {
                     id: if last_touched { 101 } else { 100 }
                 }
             );
+            assert!(app.automation_open);
+            let saved = app.project.clone();
+            let lane = app.selected_track;
+            app.close_popup();
+            assert!(app.instrument_open);
+            let mut output = draw(&mut app, vec![]);
+            for _ in 0..3 {
+                output = draw(&mut app, vec![]);
+            }
+            let existing_action = if last_touched {
+                "Automate last touched · Parameter 101"
+            } else {
+                "Edit automation"
+            };
+            let point = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == existing_action => {
+                        Some(text.galley.rect.translate(text.pos.to_vec2()).center())
+                    }
+                    _ => None,
+                })
+                .expect("existing automation remains reachable");
+            for pressed in [true, false] {
+                draw(
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(point),
+                        egui::Event::PointerButton {
+                            pos: point,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert_eq!(
+                app.project, saved,
+                "Reopening automation must not create a duplicate lane"
+            );
+            assert_eq!(app.selected_track, lane);
             assert!(app.automation_open);
         }
     }
@@ -1347,9 +1634,9 @@ mod tests {
                 }]))
                 .unwrap();
             app.instrument_ui.metadata_job = Some(receiver);
-            app.instrument_ui.selected = Some(91);
+            app.instrument_ui.browser.selected = Some(91);
             app.instrument_ui.last_touched = Some(91);
-            app.instrument_ui.filter = "old document".into();
+            app.instrument_ui.browser.query = "old document".into();
             app.instrument_ui.error = Some("old error".into());
             app.instrument_autolaunch = app.selected_track;
             app.plugin_assign_target = app.selected_track;
@@ -1366,10 +1653,10 @@ mod tests {
             app.poll_instrument_editor(&ctx);
             assert!(app.instrument_ui.owner.is_none());
             assert!(app.instrument_ui.metadata_job.is_none());
-            assert!(app.instrument_ui.selected.is_none());
+            assert!(app.instrument_ui.browser.selected.is_none());
             assert!(app.instrument_ui.parameters.is_empty());
             assert!(app.instrument_ui.last_touched.is_none());
-            assert!(app.instrument_ui.filter.is_empty());
+            assert!(app.instrument_ui.browser.query.is_empty());
             assert!(app.instrument_ui.error.is_none());
             assert!(app.instrument_autolaunch.is_none());
             assert!(app.plugin_assign_target.is_none());

@@ -17,6 +17,23 @@ pub enum WorkspaceView {
     Mixer,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InspectorPage {
+    Clip,
+    Track,
+    Channel,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ChannelDestination {
+    Channel,
+    Instrument,
+    Effects,
+    Routing,
+    Mixer,
+    PluginEditor,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PopupKind {
     Library,
@@ -29,6 +46,7 @@ pub enum PopupKind {
     History,
     Crossfade,
     Join,
+    Export,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -44,6 +62,9 @@ struct NavigationSnapshot {
     selected_notes: HashSet<u64>,
     last_editor_clip: Option<u64>,
     effect_editor_target: Option<(u64, u64)>,
+    inspector_page: InspectorPage,
+    backdrop: daw_ui::ViewBackdrop,
+    backdrop_title: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -73,6 +94,7 @@ pub struct DawApp {
     pub selected_notes: HashSet<u64>,
     pub engine: Option<AudioEngine>,
     pub audio_device_enabled: bool,
+    pub(crate) automatic_plugin_previews: bool,
     pub(crate) audition_request: Option<(u64, u8, u8)>,
     pub loading: Option<std::sync::mpsc::Receiver<(u64, anyhow::Result<AudioEngine>)>>,
     loading_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
@@ -83,6 +105,8 @@ pub struct DawApp {
     pub(crate) next_document_dialog: Option<(crate::document_ui::DocumentDialog, Option<PathBuf>)>,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
     pub(crate) exported_file: Option<PathBuf>,
+    pub(crate) export_open: bool,
+    pub(crate) export_include_effect_tails: bool,
     pub revision: u64,
     pub desired_playing: bool,
     pub cursor: f64,
@@ -92,10 +116,15 @@ pub struct DawApp {
     pub view: WorkspaceView,
     pub library_open: bool,
     pub inspector_open: bool,
+    pub(crate) inspector_page: InspectorPage,
+    pub(crate) inspector_selection: (Option<u64>, Option<u64>),
     pub setup_open: bool,
     pub instrument_open: bool,
     pub effect_editor_target: Option<(u64, u64)>,
     navigation: Vec<NavigationSnapshot>,
+    pub(crate) last_scene: daw_ui::ViewBackdrop,
+    popup_backdrop: daw_ui::ViewBackdrop,
+    backdrop_title: String,
     pub close_ready: bool,
     screenshot_requested: bool,
     reset_views: bool,
@@ -173,6 +202,7 @@ impl DawApp {
             selected_notes: HashSet::new(),
             engine: None,
             audio_device_enabled: true,
+            automatic_plugin_previews: !cfg!(test),
             audition_request: None,
             loading: None,
             loading_cancel: None,
@@ -183,6 +213,8 @@ impl DawApp {
             next_document_dialog: None,
             export_job: None,
             exported_file: None,
+            export_open: false,
+            export_include_effect_tails: true,
             revision: 0,
             desired_playing: false,
             cursor: 0.0,
@@ -192,10 +224,15 @@ impl DawApp {
             view: WorkspaceView::Arrangement,
             library_open: false,
             inspector_open: false,
+            inspector_page: InspectorPage::Clip,
+            inspector_selection: (selected_track, selected_clip),
             setup_open: false,
             instrument_open: false,
             effect_editor_target: None,
             navigation: Vec::new(),
+            last_scene: Default::default(),
+            popup_backdrop: Default::default(),
+            backdrop_title: String::new(),
             close_ready: false,
             screenshot_requested: false,
             reset_views: false,
@@ -257,6 +294,7 @@ impl DawApp {
             (self.history_open, PopupKind::History),
             (self.crossfade_open, PopupKind::Crossfade),
             (self.join_open, PopupKind::Join),
+            (self.export_open, PopupKind::Export),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -277,6 +315,7 @@ impl DawApp {
         self.history_open = false;
         self.crossfade_open = false;
         self.join_open = false;
+        self.export_open = false;
         self.view = WorkspaceView::Arrangement;
     }
 
@@ -287,6 +326,8 @@ impl DawApp {
         self.navigation.clear();
         self.selected_notes.clear();
         self.effect_editor_target = None;
+        self.popup_backdrop = Default::default();
+        self.backdrop_title.clear();
     }
 
     /// Dismiss only the focused utility, restoring its caller when still valid.
@@ -326,6 +367,10 @@ impl DawApp {
             self.selected_clip = clip.map(|clip| clip.id);
             self.last_editor_clip = previous.last_editor_clip;
             self.effect_editor_target = previous.effect_editor_target;
+            self.inspector_page = previous.inspector_page;
+            self.inspector_selection = (self.selected_track, self.selected_clip);
+            self.popup_backdrop = previous.backdrop;
+            self.backdrop_title = previous.backdrop_title;
             match previous.view {
                 FocusedView::Workspace(view) => self.view = view,
                 FocusedView::Popup(kind) => self.show_popup(kind),
@@ -333,6 +378,8 @@ impl DawApp {
             return;
         }
         self.selected_notes.clear();
+        self.popup_backdrop = Default::default();
+        self.backdrop_title.clear();
     }
 
     fn show_popup(&mut self, kind: PopupKind) {
@@ -352,6 +399,7 @@ impl DawApp {
             PopupKind::History => self.history_open = true,
             PopupKind::Crossfade => self.crossfade_open = true,
             PopupKind::Join => self.join_open = true,
+            PopupKind::Export => self.export_open = true,
         }
     }
 
@@ -367,9 +415,152 @@ impl DawApp {
                 selected_notes: self.selected_notes.clone(),
                 last_editor_clip: self.last_editor_clip,
                 effect_editor_target: self.effect_editor_target,
+                inspector_page: self.inspector_page,
+                backdrop: self.popup_backdrop.clone(),
+                backdrop_title: self.backdrop_title.clone(),
             });
         }
+        if current != FocusedView::Popup(kind) {
+            self.popup_backdrop = self.last_scene.clone();
+            self.backdrop_title = self.focused_title();
+        }
         self.replace_popup(kind);
+        if kind == PopupKind::Inspector {
+            self.inspector_page = if self.selected().is_some() {
+                InspectorPage::Clip
+            } else {
+                InspectorPage::Track
+            };
+            self.inspector_selection = (self.selected_track, self.selected_clip);
+        }
+    }
+
+    fn focused_title(&self) -> String {
+        match self.focused_view() {
+            FocusedView::Workspace(WorkspaceView::Arrangement) => "Arrangement".into(),
+            FocusedView::Workspace(WorkspaceView::Mixer) => "Mixer".into(),
+            FocusedView::Workspace(WorkspaceView::Clip) => self
+                .selected()
+                .map(|clip| format!("Clip Editor · {}", clip.name))
+                .unwrap_or_else(|| "Clip Editor".into()),
+            FocusedView::Popup(kind) => {
+                let label = match kind {
+                    PopupKind::Inspector => "Properties",
+                    PopupKind::Instrument => "Instrument",
+                    PopupKind::Effects => "Effects",
+                    PopupKind::Routing => "Routing",
+                    PopupKind::Library => "Device library",
+                    PopupKind::Setup => "Setup",
+                    PopupKind::Automation => "Automation",
+                    PopupKind::History => "History",
+                    PopupKind::Crossfade => "Crossfade",
+                    PopupKind::Join => "Join clips",
+                    PopupKind::Export => "Export WAV",
+                };
+                self.selected_track
+                    .and_then(|id| self.project.track(id))
+                    .map(|track| format!("{label} · {}", track.name))
+                    .unwrap_or_else(|| label.into())
+            }
+        }
+    }
+
+    pub(crate) fn popup_context_diagnostics(&self) -> serde_json::Value {
+        serde_json::json!({
+            "source": self.backdrop_title,
+            "shapes": self.popup_backdrop.shape_count(),
+            "depth": self.navigation.len(),
+            "interactive": false,
+        })
+    }
+
+    pub(crate) fn open_channel(&mut self, track: u64) {
+        if self
+            .project
+            .track(track)
+            .is_none_or(|track| matches!(track.kind, TrackKind::Folder | TrackKind::Automation))
+        {
+            return;
+        }
+        self.open_popup(PopupKind::Inspector);
+        self.selected_track = Some(track);
+        if self.selected().is_none() {
+            self.selected_clip = None;
+        }
+        self.inspector_page = InspectorPage::Channel;
+        self.inspector_selection = (self.selected_track, self.selected_clip);
+    }
+
+    /// Related views retain this channel and restore their caller on Back/Escape.
+    pub(crate) fn channel_navigation(
+        &mut self,
+        ui: &mut egui::Ui,
+        current: ChannelDestination,
+    ) -> bool {
+        use ChannelDestination::*;
+        let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {
+            return false;
+        };
+        let id = track.id;
+        let mut links = vec![daw_ui::ViewLink {
+            value: Channel,
+            label: "Channel",
+            enabled: true,
+        }];
+        if track.kind == TrackKind::Midi {
+            links.push(daw_ui::ViewLink {
+                value: Instrument,
+                label: "Instrument",
+                enabled: true,
+            });
+        }
+        links.extend([
+            daw_ui::ViewLink {
+                value: Effects,
+                label: "Effects",
+                enabled: true,
+            },
+            daw_ui::ViewLink {
+                value: Routing,
+                label: "Routing",
+                enabled: true,
+            },
+            daw_ui::ViewLink {
+                value: Mixer,
+                label: "Mixer",
+                enabled: true,
+            },
+        ]);
+        links.retain(|link| link.value != current);
+        let Some(destination) = daw_ui::view_links(ui, current, &links) else {
+            return false;
+        };
+        if destination == current {
+            return false;
+        }
+        match destination {
+            Channel => self.open_channel(id),
+            Instrument => self.open_popup(PopupKind::Instrument),
+            Effects => self.open_popup(PopupKind::Effects),
+            Routing => self.open_popup(PopupKind::Routing),
+            Mixer => {
+                self.navigation.push(NavigationSnapshot {
+                    view: self.focused_view(),
+                    selected_track: self.selected_track,
+                    selected_clip: self.selected_clip,
+                    selected_notes: self.selected_notes.clone(),
+                    last_editor_clip: self.last_editor_clip,
+                    effect_editor_target: self.effect_editor_target,
+                    inspector_page: self.inspector_page,
+                    backdrop: self.popup_backdrop.clone(),
+                    backdrop_title: self.backdrop_title.clone(),
+                });
+                self.hide_focused_view();
+                self.view = WorkspaceView::Mixer;
+            }
+            PluginEditor => return false,
+        }
+        true
     }
 
     /// Complete a chooser flow without returning to that chooser on dismissal.
@@ -408,7 +599,8 @@ impl DawApp {
             | PopupKind::Effects
             | PopupKind::Routing
             | PopupKind::Automation
-            | PopupKind::History => {}
+            | PopupKind::History
+            | PopupKind::Export => {}
         }
     }
 
@@ -546,6 +738,7 @@ impl DawApp {
                 && !self.inspector_open
                 && !self.automation_open
                 && !self.history_open
+                && !self.export_open
         });
         if note != self.audition_request {
             self.audition_request = note;
@@ -783,10 +976,11 @@ impl DawApp {
         }
     }
     fn import_dialog(&mut self) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Audio / MIDI", &["wav", "mid", "midi"])
-            .pick_file()
-        {
+        if let Some(path) = daw_ui::with_native_dialog_menu(|| {
+            rfd::FileDialog::new()
+                .add_filter("Audio / MIDI", &["wav", "mid", "midi"])
+                .pick_file()
+        }) {
             if path.extension().is_some_and(|e| e == "mid" || e == "midi") {
                 self.begin_edit();
                 let result = self.project.import_midi(&path, self.cursor).map(|_| ());
@@ -966,29 +1160,18 @@ impl DawApp {
         .into();
         self.error = false;
     }
-    fn export(&mut self) {
-        if self.export_job.is_some() {
-            self.status = "A mixdown is already rendering".into();
-            return;
-        }
-        if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("mixdown.wav")
-            .add_filter("Wave audio", &["wav"])
-            .save_file()
-        {
-            self.export_to(path);
-        }
-    }
-
-    pub(crate) fn start_export(&mut self, path: PathBuf) {
+    pub(crate) fn start_export(&mut self, path: PathBuf, include_effect_tails: bool) {
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
         }
         let project = self.project.clone();
         let rate = self.settings.sample_rate;
-        let options = daw_engine::RenderOptions {
-            resample_quality: self.settings.resample_quality,
+        let options = daw_engine::ExportOptions {
+            render: daw_engine::RenderOptions {
+                resample_quality: self.settings.resample_quality,
+            },
+            include_effect_tails,
         };
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
@@ -1195,6 +1378,10 @@ impl DawApp {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
+                if self.instrument_open && self.close_instrument_parameters() {
+                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+                    return;
+                }
                 self.close_popup();
             }
             return;
@@ -1227,13 +1414,36 @@ impl DawApp {
                 && ctx
                     .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
                     .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
-        if (!ctx.wants_keyboard_input() || curve_focused)
-            && ctx.input(|i| {
-                i.modifiers.command && (i.key_pressed(egui::Key::Z) || i.key_pressed(egui::Key::Y))
-            })
-        {
-            self.undo_redo(ctx.input(|i| i.modifiers.shift || i.key_pressed(egui::Key::Y)));
-            return;
+        if !ctx.wants_keyboard_input() || curve_focused {
+            // A chord may be pressed and released between repaints. Match the
+            // modifiers captured by each key event, not the final held state.
+            // Preserve arrival order when several undo/redo keys share a frame.
+            let actions = ctx.input_mut(|input| {
+                let mut actions = Vec::new();
+                input.events.retain(|event| {
+                    if let egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } = event
+                        && modifiers.command
+                        && matches!(key, egui::Key::Z | egui::Key::Y)
+                    {
+                        actions.push(modifiers.shift || *key == egui::Key::Y);
+                        false
+                    } else {
+                        true
+                    }
+                });
+                actions
+            });
+            if !actions.is_empty() {
+                for redo in actions {
+                    self.undo_redo(redo);
+                }
+                return;
+            }
         }
         if self.library_open
             && !egui::Popup::is_any_open(ctx)
@@ -1251,6 +1461,7 @@ impl DawApp {
             || self.history_open
             || self.crossfade_open
             || self.join_open
+            || self.export_open
         {
             return;
         }
@@ -1264,7 +1475,7 @@ impl DawApp {
             self.seek(0.0);
         }
         if self.view == WorkspaceView::Clip
-            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A))
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A))
             && let Some(Clip {
                 content: ClipContent::Midi { notes },
                 ..
@@ -1278,10 +1489,12 @@ impl DawApp {
         {
             self.delete_selection();
         }
-        if !self.midi_editor.quantize_active()
-            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::D))
-        {
-            self.duplicate_selection();
+        if !self.midi_editor.quantize_active() {
+            let presses =
+                ctx.input_mut(|i| i.count_and_consume_key(egui::Modifiers::COMMAND, egui::Key::D));
+            for _ in 0..presses {
+                self.duplicate_selection();
+            }
         }
         for (key, tool) in [
             (egui::Key::Num1, Tool::Select),
@@ -1301,7 +1514,18 @@ impl DawApp {
         egui::TopBottomPanel::top("transport")
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
+                    let active = self.navigation.iter().rev().find_map(|snapshot| match snapshot.view {
+                        FocusedView::Workspace(view) => Some(view),
+                        _ => None,
+                    }).filter(|_| matches!(self.focused_view(), FocusedView::Popup(_))).unwrap_or(self.view);
+                    if let Some(view) = daw_ui::view_links(ui, active, &[
+                        daw_ui::ViewLink { value: WorkspaceView::Arrangement, label: "Arranger", enabled: true },
+                        daw_ui::ViewLink { value: WorkspaceView::Mixer, label: "Mixer", enabled: true },
+                    ]) {
+                        self.open_workspace(view);
+                    }
+                    ui.separator();
                     if daw_ui::button(ui, "Start")
                         .on_hover_text("Return to start · Home")
                         .clicked()
@@ -1451,9 +1675,11 @@ impl DawApp {
                             ui.close();
                         }
                         if daw_ui::button(ui, "Export MIDI…").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .set_file_name("session.mid")
-                                .save_file()
+                            if let Some(path) = daw_ui::with_native_dialog_menu(|| {
+                                rfd::FileDialog::new()
+                                    .set_file_name("session.mid")
+                                    .save_file()
+                            })
                             {
                                 let result = self.project.export_midi(path);
                                 self.message(result, "MIDI exported");
@@ -1860,7 +2086,7 @@ impl DawApp {
                     label(ui, "SCRATCH DIRECTORY");
                     ui.label(self.setup_draft.scratch_dir.display().to_string()).on_hover_text("Recovery snapshots are saved here every 30 seconds while editing.");
                     ui.horizontal(|ui| {
-                        if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() { self.setup_draft.scratch_dir = path; }
+                        if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) { self.setup_draft.scratch_dir = path; }
                         if daw_ui::button(ui, "Recover session").clicked() {
                             self.request_document_transition(crate::document_ui::DocumentTransition::Open { path: self.setup_draft.scratch_dir.join("recovery.daw.json"), recovery: true });
                         }
@@ -1897,7 +2123,7 @@ impl DawApp {
                                     folder.clear();
                                 } else { self.message(Err(anyhow::anyhow!("Choose an existing plug-in folder")), ""); }
                             }
-                            if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = rfd::FileDialog::new().pick_folder() && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
+                            if daw_ui::button(ui, "Browse…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) && !self.setup_draft.vst_dirs.contains(&path) { self.setup_draft.vst_dirs.push(path); }
                         });
                     });
                     ctx.data_mut(|data| data.insert_temp(path_key, folder));
@@ -2021,17 +2247,37 @@ impl DawApp {
             || self.automation_open
             || self.history_open
             || self.crossfade_open
-            || self.join_open;
+            || self.join_open
+            || self.export_open;
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
+        let mut scene_bounds = ctx.content_rect();
         egui::CentralPanel::default()
             .frame(daw_ui::inset(ctx).inner_margin(0).corner_radius(0))
             .show(ctx, |ui| {
-                // Only the active task owns the canvas. Keeping a disabled
-                // arrangement underneath tools adds visual noise and duplicate
-                // controls to accessibility/automation trees.
+                scene_bounds = ui.max_rect();
                 if utility_open {
-                    daw_ui::paint_ambient(ui.painter(), ui.max_rect());
+                    if self.popup_backdrop.shape_count() == 0 {
+                        // Startup previews may open a utility before the first
+                        // workspace frame. Paint its caller once, then retain
+                        // only inert pixels just as for ordinary navigation.
+                        let layer = ui.layer_id();
+                        let start = ctx.graphics(|graphics| {
+                            graphics.get(layer).map_or(0, |list| list.next_idx().0)
+                        });
+                        ui.add_enabled_ui(false, |ui| self.arrangement(ui));
+                        self.popup_backdrop = daw_ui::ViewBackdrop::capture(ctx, scene_bounds);
+                        if self.backdrop_title.is_empty() {
+                            self.backdrop_title = "Arrangement".into();
+                        }
+                        ctx.graphics_mut(|graphics| {
+                            let list = graphics.entry(layer);
+                            for index in start..list.next_idx().0 {
+                                list.reset_shape(egui::layers::ShapeIdx(index));
+                            }
+                        });
+                    }
+                    self.popup_backdrop.paint(ui);
                     self.drop_target = None;
                     return;
                 }
@@ -2081,6 +2327,13 @@ impl DawApp {
         self.history_popup(ctx);
         self.crossfade_popup(ctx);
         self.join_popup(ctx);
+        self.export_popup(ctx);
+        self.last_scene = if utility_open {
+            daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop)
+        } else {
+            daw_ui::ViewBackdrop::capture(ctx, scene_bounds)
+        };
+        daw_ui::paint_popup_backdrop(ctx, utility_open);
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.

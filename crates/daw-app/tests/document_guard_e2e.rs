@@ -250,6 +250,47 @@ fn save_and_open_shortcuts_work_from_properties_without_losing_cancelled_context
 }
 
 #[test]
+fn completed_and_cancelled_pickers_preserve_text_shortcuts_and_unicode_names() {
+    let mut app = Harness::new();
+    add(&mut app);
+    let path = app.directory.path().join("Neon 🎹 Circuit.rill");
+    picker(&mut app, "save", Some(&path));
+    menu(&mut app, "File", "Save as…");
+    done(&mut app);
+    let mut name = "New audio".to_owned();
+
+    for (kind, item, replacement) in [
+        ("open", "Open…", "夜のドラム 🎹"),
+        ("save", "Save as…", "Neon bass 🎸"),
+    ] {
+        let before = app.inspect();
+        picker(&mut app, kind, None);
+        let cancelled = menu(&mut app, "File", item);
+        assert_eq!(cancelled["project"], before["project"]);
+        assert_eq!(cancelled["project_path"], before["project_path"]);
+        assert_eq!(cancelled["file_dialog_pending"], false);
+        let state = menu(&mut app, "Window", "Properties");
+        let count = state["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|label| label.as_str() == Some(&name))
+            .count();
+        assert!(count > 0);
+        app.command(json!({"command":"click", "label":name, "occurrence":count - 1}));
+        app.command(json!({"command":"key", "key":"A", "cmd":true, "release_modifiers":true}));
+        let renamed = app.command(json!({"command":"text", "text":replacement}));
+        assert_eq!(renamed["project"]["tracks"][0]["name"], replacement);
+        app.key("Escape");
+        cmd(&mut app, "S");
+        done(&mut app);
+        assert_eq!(Project::load(&path).unwrap().tracks[0].name, replacement);
+        name = replacement.to_owned();
+    }
+    app.quit();
+}
+
+#[test]
 fn native_close_and_menu_quit_wait_for_a_choice_and_save_before_exit() {
     for save in [false, true] {
         let mut app = Harness::new();

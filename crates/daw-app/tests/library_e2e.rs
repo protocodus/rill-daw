@@ -206,6 +206,57 @@ fn effect_insertion_send_returns_drag_reorder_and_archive_recall_preserve_identi
 }
 
 #[test]
+fn headless_scan_keeps_previews_missing_until_capture_is_explicitly_requested() {
+    use std::time::{Duration, Instant};
+    let fixture = common::plugin_fixture();
+    let mut app = Harness::with_vst_path(fixture.path());
+    common::fixture_library(&mut app);
+    // Metadata scans still include installed plugins, but pumping normal
+    // headless frames must never initialize their native editors in the background.
+    for _ in 0..20 {
+        let state = app.inspect();
+        let entries = state["plugin_catalog"].as_array().unwrap();
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry["name"] == "Rill Fixture A")
+        );
+        assert!(
+            entries.iter().all(|entry| entry["status"] == "Missing"),
+            "headless scan started an unsolicited preview: {entries:?}"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    app.click("More");
+    app.click("Capture preview");
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let state = app.inspect();
+        let entries = state["plugin_catalog"].as_array().unwrap();
+        let selected = entries
+            .iter()
+            .find(|entry| entry["name"] == "Rill Fixture A")
+            .unwrap();
+        if selected["status"].as_str().unwrap().starts_with("Failed") {
+            assert!(selected["thumbnail"].is_null());
+            assert!(
+                entries
+                    .iter()
+                    .filter(|entry| entry["name"] != "Rill Fixture A")
+                    .all(|entry| entry["status"] == "Missing")
+            );
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "explicit metadata-only fixture capture did not attempt and fail: {selected}"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    app.quit();
+}
+
+#[test]
 fn library_reuses_cached_native_preview_records_for_instruments_and_effects() {
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());

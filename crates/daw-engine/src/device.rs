@@ -1,3 +1,4 @@
+use crate::meter::ChannelMeters;
 use crate::render::{BLOCK, Renderer};
 use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -200,6 +201,7 @@ pub struct AudioEngine {
     sample_rate: u32,
     parameters: mpsc::SyncSender<ParameterChange>,
     audition: Arc<Mutex<Option<(u64, u8, u8)>>>,
+    channel_meters: Arc<ChannelMeters>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -361,6 +363,8 @@ impl AudioEngine {
             cpal::SupportedBufferSize::Unknown => cpal::BufferSize::Fixed(settings.buffer_frames),
         };
         let controls = Arc::new(Controls::new());
+        let channel_meters = Arc::new(ChannelMeters::new(project));
+        let worker_meters = Arc::clone(&channel_meters);
         let queue = Arc::new(AudioQueue::new(
             (settings.buffer_frames as usize * 2).max(BLOCK * 2),
         ));
@@ -387,7 +391,8 @@ impl AudioEngine {
                     render_options,
                     &worker_cancel,
                 ) {
-                    Ok(renderer) => {
+                    Ok(mut renderer) => {
+                        renderer.attach_channel_meters(&worker_meters);
                         let _ = ready_tx.send(Ok(()));
                         renderer
                     }
@@ -552,6 +557,7 @@ impl AudioEngine {
             sample_rate,
             parameters: parameter_tx,
             audition,
+            channel_meters,
         };
         if let Err(error) = engine.stream.as_ref().unwrap().play() {
             engine.stop();
@@ -644,6 +650,20 @@ impl AudioEngine {
             peak_right: f32::from_bits(self.controls.peak_right.load(Ordering::Relaxed)),
             underruns: self.controls.underruns.load(Ordering::Relaxed),
             render_errors: self.controls.render_errors.load(Ordering::Relaxed),
+        }
+    }
+    /// Post-insert, post-fader/pan stereo channel peaks (including buses), with
+    /// instant attack and a 24 dB/second release. This nonconsuming atomic read
+    /// never locks, allocates, or touches a plugin. Stopped/missing channels read
+    /// as silence. The render queue can lead the audible output by its bounded
+    /// prebuffer, just as other transport telemetry can.
+    pub fn channel_peaks(&self, track: u64) -> [f32; 2] {
+        if !self.controls.playing.load(Ordering::Relaxed)
+            && !self.controls.auditioning.load(Ordering::Relaxed)
+        {
+            [0.0; 2]
+        } else {
+            self.channel_meters.peaks(track)
         }
     }
     pub fn stop(&mut self) {
@@ -755,6 +775,38 @@ mod tests {
     use anyhow::bail;
 
     #[test]
+    fn channel_peak_reads_are_nonblocking_and_silent_when_transport_is_stopped() {
+        let mut project = Project::new();
+        let channel = project.add_audio_track("Meter");
+        let meters = Arc::new(ChannelMeters::new(&project));
+        meters.channel(channel).unwrap().publish([0.3, 0.7], 0.0);
+        let (parameters, _receiver) = mpsc::sync_channel(1);
+        let engine = AudioEngine {
+            stream: None,
+            worker: None,
+            controls: Arc::new(Controls::new()),
+            sample_rate: 48_000,
+            parameters,
+            audition: Arc::new(Mutex::new(None)),
+            channel_meters: meters,
+        };
+        assert_eq!(engine.channel_peaks(channel), [0.0; 2]);
+        engine.set_playing(true);
+        assert_eq!(
+            crate::allocation_test_support::count_allocations(|| {
+                assert_eq!(engine.channel_peaks(channel), [0.3, 0.7]);
+                assert_eq!(engine.channel_peaks(channel), [0.3, 0.7]);
+                assert_eq!(engine.channel_peaks(u64::MAX), [0.0; 2]);
+            }),
+            0
+        );
+        engine.set_playing(false);
+        assert_eq!(engine.channel_peaks(channel), [0.0; 2]);
+        engine.controls.auditioning.store(true, Ordering::Relaxed);
+        assert_eq!(engine.channel_peaks(channel), [0.3, 0.7]);
+    }
+
+    #[test]
     fn cancelled_or_timed_out_initialization_keeps_ownership_until_worker_cleanup() {
         for timed_out in [false, true] {
             let controls = Arc::new(Controls::new());
@@ -836,6 +888,7 @@ mod tests {
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
+            channel_meters: Arc::new(ChannelMeters::default()),
         };
         engine.set_instrument_parameter(1, 7, 0.1).unwrap();
         engine.set_plugin_parameter(1, Some(10), 7, 0.2).unwrap();

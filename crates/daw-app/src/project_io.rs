@@ -58,7 +58,7 @@ pub(crate) enum DocumentRequest {
     Open(PathBuf, bool),
     New,
     Quit,
-    Export(PathBuf),
+    Export(PathBuf, bool),
     Settings(Settings),
 }
 
@@ -238,7 +238,9 @@ impl DawApp {
                     }
                     DocumentRequest::New => self.new_session(),
                     DocumentRequest::Quit => self.request_quit(ctx),
-                    DocumentRequest::Export(path) => self.export_to(path),
+                    DocumentRequest::Export(path, include_effect_tails) => {
+                        self.export_to_with_tails(path, include_effect_tails)
+                    }
                     DocumentRequest::Settings(settings) => self.apply_settings_snapshot(settings),
                 }
                 self.project_io.dispatching = false;

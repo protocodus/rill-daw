@@ -1,4 +1,7 @@
-use crate::{app::DawApp, theme::*};
+use crate::{
+    app::{ChannelDestination, DawApp},
+    theme::*,
+};
 use daw_core::*;
 use daw_ui as widgets;
 use eframe::egui;
@@ -23,15 +26,18 @@ impl DawApp {
         let track_name = track.name.clone();
         let mut open = true;
         let mut edit_effect = None;
+        let mut automate_effect = None;
         let mut add_effect = false;
-        widgets::popup("Effects", ctx)
+        widgets::popup(format!("Effects of {track_name}"), ctx)
             .id(egui::Id::new("effects"))
             .open(&mut open)
             .default_width(620.0)
             .vscroll(false)
             .show(ctx, |ui| {
+                if self.channel_navigation(ui, ChannelDestination::Effects) {
+                    return;
+                }
                 widgets::scroll_body(ui, "effects_body", |ui| {
-                    widgets::text::truncated(ui, widgets::text::TextRole::Subtitle, &track_name);
                     let mut remove = None;
                     let mut move_up = None;
                     let mut move_down = None;
@@ -80,6 +86,14 @@ impl DawApp {
                                             .clicked()
                                         {
                                             edit_effect = Some(slot.id);
+                                        }
+                                        if widgets::small_button(ui, "Automate…")
+                                            .on_hover_text(
+                                                "Search this effect's automation parameters",
+                                            )
+                                            .clicked()
+                                        {
+                                            automate_effect = Some(slot.id);
                                         }
                                     },
                                     |ui| {
@@ -136,6 +150,9 @@ impl DawApp {
         if let Some(effect) = edit_effect {
             self.open_effect_editor(track_id, effect);
         }
+        if let Some(effect) = automate_effect {
+            self.open_effect_automation(track_id, effect);
+        }
     }
 
     pub fn routing_popup(&mut self, ctx: &egui::Context) {
@@ -164,14 +181,16 @@ impl DawApp {
             .map(|track| (track.id, track.name.clone()))
             .collect();
         let mut open = true;
-        widgets::popup("Routing", ctx)
+        widgets::popup(format!("Routing of {track_name}"), ctx)
             .id(egui::Id::new("routing"))
             .open(&mut open)
             .default_width(620.0)
             .vscroll(false)
             .show(ctx, |ui| {
+                if self.channel_navigation(ui, ChannelDestination::Routing) {
+                    return;
+                }
                 widgets::scroll_body(ui, "routing_body", |ui| {
-                    widgets::text::truncated(ui, widgets::text::TextRole::Subtitle, &track_name);
                     label(ui, "SENDS");
                     let mut remove = None;
                     let mut changed = false;

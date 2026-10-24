@@ -1,3 +1,4 @@
+use crate::meter::{ChannelMeter, ChannelMeters};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
 use daw_core::{
@@ -340,6 +341,7 @@ struct RenderTrack {
     insert_left: Vec<f32>,
     insert_right: Vec<f32>,
     routes: Vec<Route>,
+    meter: Option<Arc<ChannelMeter>>,
     #[cfg(test)]
     observer: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
@@ -351,6 +353,7 @@ struct BlockContext {
     sample_rate: u32,
     tempo: f64,
     timeline: bool,
+    meter_decay: f32,
 }
 
 fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool) -> Result<u64> {
@@ -360,6 +363,9 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
         }
         track.plugin_failed = true;
         track.delay.reset();
+        if let Some(meter) = &track.meter {
+            meter.clear();
+        }
         return Ok(1);
     }
     Ok(0)
@@ -509,6 +515,7 @@ impl RenderTrack {
                 }
             }
         }
+        let mut channel_peaks = [0.0_f32; 2];
         for index in 0..count {
             let delayed = self.delay.process([self.left[index], self.right[index]]);
             self.left[index] = delayed[0];
@@ -525,6 +532,12 @@ impl RenderTrack {
             // fader factors so multiple sends evaluate the lane only once.
             self.insert_left[index] = gain * (1.0 - pan.max(0.0));
             self.insert_right[index] = gain * (1.0 + pan.min(0.0));
+            if self.meter.is_some() {
+                channel_peaks[0] =
+                    channel_peaks[0].max((self.left[index] * self.insert_left[index]).abs());
+                channel_peaks[1] =
+                    channel_peaks[1].max((self.right[index] * self.insert_right[index]).abs());
+            }
         }
         for route in &mut self.routes {
             for index in 0..count {
@@ -549,6 +562,9 @@ impl RenderTrack {
                 ]);
             }
         }
+        if let Some(meter) = &self.meter {
+            meter.publish(channel_peaks, context.meter_decay);
+        }
         Ok(())
     }
 }
@@ -568,6 +584,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    metering: bool,
 }
 
 impl Renderer {
@@ -914,6 +931,7 @@ impl Renderer {
                 insert_left: vec![0.0; BLOCK],
                 insert_right: vec![0.0; BLOCK],
                 routes,
+                meter: None,
                 #[cfg(test)]
                 observer: None,
             });
@@ -1021,10 +1039,19 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            metering: false,
         };
         renderer.seek_sample(0)?;
         check_cancelled()?;
         Ok(renderer)
+    }
+
+    /// Realtime-only telemetry; offline renders do not calculate or publish meters.
+    pub(crate) fn attach_channel_meters(&mut self, meters: &ChannelMeters) {
+        for track in self.tracks.iter_mut().flatten() {
+            track.meter = meters.channel(track.id).cloned();
+        }
+        self.metering = true;
     }
 
     pub(crate) fn set_plugin_parameter(
@@ -1153,6 +1180,13 @@ impl Renderer {
             self.segment(&mut discard[..count])?;
             remaining -= count;
         }
+        // Priming feeds latency compensation, not audible playback. Do not let
+        // discarded audio or a previous seek leave the visible meter ringing.
+        for track in self.tracks.iter().flatten() {
+            if let Some(meter) = &track.meter {
+                meter.clear();
+            }
+        }
         Ok(())
     }
 
@@ -1267,6 +1301,13 @@ impl Renderer {
             sample_rate: self.sample_rate,
             tempo: self.tempo,
             timeline: !self.preview,
+            meter_decay: if self.metering {
+                // Instant attack, 24 dB/second release, independent of block size.
+                (-std::f32::consts::LN_10 * 1.2 * output.len() as f32 / self.sample_rate as f32)
+                    .exp()
+            } else {
+                0.0
+            },
         };
         for track in self.tracks.iter_mut().flatten() {
             track.left[..context.count].fill(0.0);
@@ -1445,15 +1486,51 @@ pub fn export_project_wav(
     export_project_wav_with_options(project, path, sample_rate, RenderOptions::default())
 }
 
-/// Export the arrangement and finite tails with explicit source-conversion quality.
+/// Project mixdown choices, independent of realtime playback preparation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExportOptions {
+    pub render: RenderOptions,
+    /// Include instrument releases and effect tails after the last clip.
+    /// When false, stop at the arrangement end rounded to the nearest sample.
+    pub include_effect_tails: bool,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        Self {
+            render: RenderOptions::default(),
+            include_effect_tails: true,
+        }
+    }
+}
+
+impl From<RenderOptions> for ExportOptions {
+    fn from(render: RenderOptions) -> Self {
+        Self {
+            render,
+            ..Self::default()
+        }
+    }
+}
+
+/// Export the arrangement with explicit conversion quality and optional effect tails.
+/// Passing `RenderOptions` alone preserves the default of including finite tails.
+/// Delay compensation is primed and removed in both modes; looping is ignored.
 pub fn export_project_wav_with_options(
     project: &Project,
     path: impl AsRef<Path>,
     sample_rate: u32,
-    options: RenderOptions,
+    options: impl Into<ExportOptions>,
 ) -> Result<()> {
-    let renderer = Renderer::new_with_options(project, sample_rate, false, options)?;
-    let frames = renderer.end_sample;
+    let options = options.into();
+    let renderer = Renderer::new_with_options(project, sample_rate, false, options.render)?;
+    let frames = if options.include_effect_tails {
+        renderer.end_sample
+    } else {
+        // Use the same beat-to-sample conversion as prepared clip boundaries.
+        let samples_per_beat = sample_rate as f64 * 60.0 / project.tempo;
+        (project.end_beat() * samples_per_beat).round() as u64
+    };
     ensure!(
         frames * 8 < u32::MAX as u64 - 128,
         "Export exceeds the WAV 4 GiB size limit"
@@ -1693,3 +1770,7 @@ mod parallel_tests;
 #[cfg(test)]
 #[path = "audition_tests.rs"]
 mod audition_tests;
+
+#[cfg(test)]
+#[path = "meter_tests.rs"]
+mod meter_tests;
