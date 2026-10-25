@@ -476,6 +476,7 @@ impl DawApp {
             PopupKind::AudioTakes => self.audio_takes_open = true,
             PopupKind::Recording => {
                 self.refresh_input_devices();
+                self.refresh_midi_devices();
                 self.recording_open = true;
             }
             PopupKind::Export => self.export_open = true,
@@ -700,6 +701,7 @@ impl DawApp {
 
     pub(crate) fn refresh_devices(&mut self) {
         self.refresh_input_devices();
+        self.refresh_midi_devices();
         if !self.audio_device_enabled || self.virtual_audio {
             // Offline/headless work uses the portable render rates, independent
             // of whatever audio hardware happens to be attached to this host.
@@ -1625,7 +1627,10 @@ impl DawApp {
         }
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
-        if self.document_guard.is_some() || self.error_details.is_some() {
+        if self.document_guard.is_some()
+            || self.error_details.is_some()
+            || crate::audio_silence::is_open(ctx)
+        {
             return;
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -1735,6 +1740,9 @@ impl DawApp {
         if ctx.wants_keyboard_input() {
             return;
         }
+        if self.audio_edit_shortcuts(ctx) {
+            return;
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
             self.play();
         }
@@ -1784,7 +1792,7 @@ impl DawApp {
         egui::TopBottomPanel::top("transport")
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
-                let show_loop_summary = ui.available_width() >= 1200.0;
+                let show_loop_summary = ui.available_width() >= 1400.0;
                 ui.horizontal_wrapped(|ui| {
                     let active = self.navigation.iter().rev().find_map(|snapshot| match snapshot.view {
                         FocusedView::Workspace(view) => Some(view),
@@ -1806,8 +1814,7 @@ impl DawApp {
                     {
                         self.seek(0.0);
                     }
-                    let playing =
-                        self.playing() || (self.loading.is_some() && self.desired_playing);
+                    let playing = self.recording_busy() || self.playing() || (self.loading.is_some() && self.desired_playing);
                     if daw_ui::primary_button(ui, if playing { "Pause" } else { "Play" })
                         .on_hover_text("Space")
                         .clicked()
@@ -1825,6 +1832,14 @@ impl DawApp {
                         else { self.begin_recording(); }
                     }
                     if self.recording_finalizing() { daw_ui::text::note(ui, "Finishing recording…"); }
+                    if let Some(engine) = &self.engine {
+                        let timing = engine.timing_snapshot();
+                        if timing.counting { daw_ui::text::note(ui, format!("Count-in · {}", timing.remaining_beats.ceil().max(1.0) as u32)); }
+                    }
+                    let mut click = self.project.metronome_enabled;
+                    if daw_ui::toggle(ui, &mut click, "Click").on_hover_text("Metronome · Pre-count and level are in Window → Recording").changed() {
+                        self.begin_edit(); self.project.metronome_enabled = click; self.edit_label = Some("Metronome".into()); self.changed();
+                    }
                     let mut looping = self.project.loop_enabled;
                     let recording_busy = self.recording_busy();
                     if ui.add_enabled_ui(!recording_busy, |ui| daw_ui::toggle(ui, &mut looping, "Loop")).inner
@@ -2014,12 +2029,29 @@ impl DawApp {
                         let has_edit_selection = has_clip && !(self.view == WorkspaceView::Clip
                             && self.selected_notes.is_empty()
                             && matches!(self.selected().map(|clip| &clip.content), Some(ClipContent::Midi { .. })));
+                        if matches!(self.view, WorkspaceView::Clip | WorkspaceView::Arrangement) && self.selected_track.and_then(|id| self.project.track(id)).is_some_and(|track| track.kind == TrackKind::Audio) {
+                            for (label, action) in [
+                                ("Copy", crate::audio_editor::AudioClipboardAction::Copy),
+                                ("Cut selection", crate::audio_editor::AudioClipboardAction::Cut),
+                                ("Paste", crate::audio_editor::AudioClipboardAction::Paste),
+                            ] {
+                                let paste = matches!(action, crate::audio_editor::AudioClipboardAction::Paste);
+                                if !paste && self.view != WorkspaceView::Clip { continue; }
+                                let enabled = if paste { crate::audio_editor::has_audio_clipboard(ui.ctx()) } else { has_clip };
+                                if ui.add_enabled(enabled, daw_ui::button_widget(label)).clicked() {
+                                    self.audio_clipboard_action(ui.ctx(), action);
+                                    ui.close();
+                                }
+                            }
+                        }
                         if ui
                             .add_enabled(has_edit_selection, daw_ui::button_widget("Duplicate"))
                             .on_hover_text("Duplicate the selection as an independent copy · Ctrl/Cmd+D")
                             .clicked()
                         {
-                            self.duplicate_selection();
+                            if !self.audio_clipboard_action(ui.ctx(), crate::audio_editor::AudioClipboardAction::Duplicate) {
+                                self.duplicate_selection();
+                            }
                             ui.close();
                         }
                         if ui.add_enabled(has_clip, daw_ui::button_widget("Ghost copy"))
@@ -2039,7 +2071,9 @@ impl DawApp {
                             .add_enabled(has_edit_selection, daw_ui::button_widget("Delete"))
                             .clicked()
                         {
-                            self.delete_selection();
+                            if !self.audio_clipboard_action(ui.ctx(), crate::audio_editor::AudioClipboardAction::Delete) {
+                                self.delete_selection();
+                            }
                             ui.close();
                         }
                         if ui
@@ -2128,7 +2162,7 @@ impl DawApp {
                             ("Instrument", PopupKind::Instrument, midi),
                             ("Effects", PopupKind::Effects, audio_channel),
                             ("Routing", PopupKind::Routing, audio_channel),
-                            ("Recording", PopupKind::Recording, track.is_some_and(|track| track.kind == TrackKind::Audio)),
+                            ("Recording", PopupKind::Recording, true),
                             (
                                 "Automation",
                                 PopupKind::Automation,
@@ -2362,7 +2396,7 @@ impl DawApp {
             return;
         }
         let mut open = true;
-        daw_ui::popup("Setup", ctx).open(&mut open).default_width(520.0).show(ctx, |ui| {
+        daw_ui::popup("Setup", ctx).open(&mut open).default_width(520.0).default_height(540.0).vscroll(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Audio, "Audio");
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Appearance, "Appearance");
@@ -2371,7 +2405,7 @@ impl DawApp {
             });
             ui.separator();
             ui.add_space(8.0);
-            match self.setup_page {
+            daw_ui::popup_scroll_body(ui, "setup_body", 76.0, |ui| { match self.setup_page {
                 SetupPage::Appearance => {
                     daw_ui::form_grid(ui, "appearance_settings", |ui| {
                         let theme_label = daw_ui::text::label(ui, "Theme");
@@ -2398,6 +2432,13 @@ impl DawApp {
                             for device in &self.input_devices { daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, Some(device.name.clone()), &device.name); }
                         }).response.labelled_by(input_label.id);
                         ctx.data_mut(|data| data.insert_temp(egui::Id::new("input_device_picker_rect"), picker.rect));
+                        ui.end_row();
+                        let midi_label = daw_ui::text::label(ui, "MIDI input");
+                        let midi_name = self.setup_draft.midi_input_device.as_ref().map(|id| self.recording.midi_ports.iter().find(|port| &port.id == id).map(|port| port.name.as_str()).unwrap_or("Unavailable MIDI input")).unwrap_or("No MIDI input");
+                        daw_ui::select("midi_device", midi_name).width(320.0).truncate().show_ui(ui, |ui| {
+                            daw_ui::selectable_value(ui, &mut self.setup_draft.midi_input_device, None, "No MIDI input");
+                            for port in &self.recording.midi_ports { daw_ui::selectable_value(ui, &mut self.setup_draft.midi_input_device, Some(port.id.clone()), &port.name); }
+                        }).response.labelled_by(midi_label.id);
                         ui.end_row();
                         let rates = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).map(|d| d.supported_sample_rates.clone()).unwrap_or_else(|| vec![44_100, 48_000, 88_200, 96_000]);
                         if self.setup_draft.device_name != previous_device && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
@@ -2473,6 +2514,7 @@ impl DawApp {
                     ctx.data_mut(|data| data.insert_temp(path_key, folder));
                 }
             }
+            });
             ui.add_space(16.0);
             ui.separator();
             ui.horizontal(|ui| {
@@ -2500,8 +2542,10 @@ impl DawApp {
                 }
             });
             crate::audio_editor::reset_audio_editor(ctx);
+            crate::spectrogram::reset(ctx);
             crate::automation_editor::reset_automation_editor(ctx);
         }
+        crate::spectrogram::begin_frame(ctx);
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error_details = None;
@@ -2700,6 +2744,7 @@ impl DawApp {
         self.recording_popup(ctx);
         self.export_popup(ctx);
         self.about_popup(ctx);
+        self.audio_silence_dialog(ctx);
         self.last_scene = if utility_open {
             daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop)
         } else {
@@ -2714,7 +2759,7 @@ impl DawApp {
         {
             self.close_popup();
         }
-        let files = if self.error_details.is_none() {
+        let files = if self.error_details.is_none() && !crate::audio_silence::is_open(ctx) {
             ctx.input(|i| i.raw.dropped_files.clone())
         } else {
             Vec::new()
@@ -2744,6 +2789,7 @@ impl DawApp {
             self.last_recovery = Instant::now();
         }
         self.error_details_frame(ctx);
+        crate::spectrogram::end_frame(ctx);
         self.capture_screenshot(ctx);
         ctx.request_repaint_after(Duration::from_millis(
             if self.playing()

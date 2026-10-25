@@ -57,6 +57,7 @@ impl DawApp {
         }
         daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         let mut fit = false;
+        let mut nudge = 0;
         daw_ui::toolbar(ui, |ui| {
             daw_ui::editor_tools_with_labels(ui, &mut self.tool, &supported, |tool| {
                 if tool == daw_ui::EditorTool::Glue {
@@ -65,6 +66,7 @@ impl DawApp {
                     tool.label()
                 }
             });
+            nudge = daw_ui::nudge_menu(ui, self.selected().is_some());
             daw_ui::toolbar_trailing(ui, 200.0, |ui| {
                 fit = daw_ui::timeline_fit_button(ui).clicked();
                 daw_ui::select(
@@ -88,6 +90,9 @@ impl DawApp {
                 });
             });
         });
+        if nudge != 0 {
+            self.nudge_selected_clip(ui.ctx(), nudge);
+        }
         let content_end = self.project.end_beat().max(if self.recording_busy() {
             self.cursor
         } else {
@@ -300,11 +305,11 @@ impl DawApp {
                                 });
                             },
                         ).0.on_hover_text(format!("{route}\nChange output bus"));
-                        if track.kind == TrackKind::Audio {
+                        if matches!(track.kind, TrackKind::Audio | TrackKind::Midi) {
                             let arm_rect = Rect::from_min_size(row.min + Vec2::new(128.0, 24.0), Vec2::new(22.0, 21.0));
                             recording_controls.push(serde_json::json!({"track":track.id,"arm":{"min":[arm_rect.min.x,arm_rect.min.y],"max":[arm_rect.max.x,arm_rect.max.y]}}));
                             if daw_ui::record_arm_at(ui, arm_rect, egui::Id::new((track.id,"record_arm")), self.recording.armed.contains(&track.id), !self.recording_busy()).clicked() { arm_toggles.push(track.id); }
-                            if daw_ui::button_at(ui, Rect::from_min_size(row.min + Vec2::new(154.0,25.0),Vec2::new(86.0,18.0)), (track.id,"recording_input"), egui::RichText::new("Inputs…").size(daw_ui::tokens::FONT_CANVAS)).clicked() { recording_target = Some(track.id); }
+                            if track.kind == TrackKind::Audio && daw_ui::button_at(ui, Rect::from_min_size(row.min + Vec2::new(154.0,25.0),Vec2::new(86.0,18.0)), (track.id,"recording_input"), egui::RichText::new("Inputs…").size(daw_ui::tokens::FONT_CANVAS)).clicked() { recording_target = Some(track.id); }
                         }
                         if midi {
                             let instrument = match &track.instrument {
@@ -317,7 +322,7 @@ impl DawApp {
                                         .unwrap_or_default().to_string_lossy().into_owned()),
                             };
                             if daw_ui::button_at(ui,
-                                Rect::from_min_size(row.min + Vec2::new(128.0, 25.0), Vec2::new(112.0, 18.0)),
+                                Rect::from_min_size(row.min + Vec2::new(154.0, 25.0), Vec2::new(86.0, 18.0)),
                                 (track.id, "instrument"),
                                 egui::RichText::new(&instrument).size(daw_ui::tokens::FONT_CANVAS).color(palette(ui.ctx()).muted),
                             ).on_hover_text(format!("{instrument}\nChoose VST instrument")).clicked() {

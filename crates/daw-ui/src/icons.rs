@@ -16,6 +16,7 @@ pub enum Icon {
     Unlink,
     Glue,
     Stretch,
+    Slip,
     Erase,
     Stack,
     FadeIn,
@@ -28,6 +29,7 @@ pub enum Icon {
     Pause,
     Stop,
     Record,
+    Metronome,
     Loop,
     Undo,
     Redo,
@@ -69,12 +71,13 @@ impl Icon {
         Some(match label {
             "Select" => Self::Select,
             "Pencil" => Self::Pencil,
-            "Cut" | "Split at cursor" | "Split transients" => Self::Cut,
+            "Cut" | "Cut selection" | "Split at cursor" | "Split transients" => Self::Cut,
             "Copy" | "Copy notes" | "Copy path" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
             "Duplicate" | "Duplicate clip" => Self::Duplicate,
             "Ghost copy" => Self::Link,
             "Stretch" => Self::Stretch,
+            "Slip" => Self::Slip,
             "Make independent" => Self::Unlink,
             "Glue" | "Glue selected" | "Legato" | "Join" | "Join clips…" => Self::Glue,
             "Erase" => Self::Erase,
@@ -90,13 +93,19 @@ impl Icon {
             "Stop" => Self::Stop,
             "Record" | "Arm recording" | "Recording" | "Inputs…" => Self::Record,
             "Stop recording" => Self::Stop,
+            "Click" | "Metronome" => Self::Metronome,
             "Loop" | "Range" => Self::Loop,
             "Add notes" => Self::Add,
             "New variation" => Self::Refresh,
             "Crossfade…" => Self::Automation,
             "Undo" => Self::Undo,
             "Redo" => Self::Redo,
-            "Delete" | "Delete point" | "Delete track" | "Remove" => Self::Delete,
+            "Delete"
+            | "Delete selection"
+            | "Ripple delete selection"
+            | "Delete point"
+            | "Delete track"
+            | "Remove" => Self::Delete,
             "Cancel" | "Cancel quantize" | "Close" | "Dismiss" => Self::Close,
             "Apply" | "Apply quantize" | "Assign to selected track" => Self::Check,
             "Setup" | "Properties" | "Manage" => Self::Settings,
@@ -269,6 +278,13 @@ impl Icon {
                 line(&[(4., 9.), (1., 12.), (4., 15.)]);
                 line(&[(20., 9.), (23., 12.), (20., 15.)]);
             }
+            Self::Slip => {
+                line(&[(3., 4.), (3., 20.)]);
+                line(&[(21., 4.), (21., 20.)]);
+                line(&[(6., 12.), (18., 12.)]);
+                line(&[(9., 9.), (6., 12.), (9., 15.)]);
+                line(&[(15., 9.), (18., 12.), (15., 15.)]);
+            }
             Self::Erase => {
                 line(&[
                     (3., 14.),
@@ -331,6 +347,11 @@ impl Icon {
             Self::Stop => box_at(4., 4., 16., 16.),
             Self::Record => {
                 painter.circle_filled(point(12., 12.), size * 0.30, color);
+            }
+            Self::Metronome => {
+                line(&[(8., 3.), (16., 3.), (21., 21.), (3., 21.), (8., 3.)]);
+                line(&[(12., 18.), (18., 6.)]);
+                line(&[(7., 17.), (17., 17.)]);
             }
             Self::Loop | Self::Refresh => {
                 line(&[(4., 9.), (4., 5.), (20., 5.), (20., 11.)]);

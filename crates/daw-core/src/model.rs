@@ -46,6 +46,16 @@ pub struct Project {
     pub loop_enabled: bool,
     pub loop_start: f64,
     pub loop_end: f64,
+    #[serde(default)]
+    pub metronome_enabled: bool,
+    #[serde(default = "default_metronome_gain")]
+    pub metronome_gain: f32,
+    #[serde(default)]
+    pub precount_bars: u8,
+}
+
+fn default_metronome_gain() -> f32 {
+    0.25
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -85,6 +95,8 @@ pub struct Track {
     /// Saved input channel assignment; arming and monitoring are session-local.
     #[serde(default)]
     pub audio_input: Option<crate::AudioInputChannels>,
+    #[serde(default)]
+    pub midi_input: Option<crate::MidiInputChannel>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -364,6 +376,7 @@ impl Track {
             collapsed: false,
             automation: None,
             audio_input: (kind == TrackKind::Audio).then(crate::AudioInputChannels::default),
+            midi_input: (kind == TrackKind::Midi).then_some(crate::MidiInputChannel::All),
         }
     }
 }
@@ -384,6 +397,9 @@ impl Project {
             loop_enabled: false,
             loop_start: 0.0,
             loop_end: 16.0,
+            metronome_enabled: false,
+            metronome_gain: default_metronome_gain(),
+            precount_bars: 0,
         }
     }
 
@@ -765,6 +781,14 @@ impl Project {
                 && self.loop_end > self.loop_start,
             "Invalid loop range"
         );
+        ensure!(
+            self.precount_bars <= 2,
+            "Pre-count must be off, one bar or two bars"
+        );
+        ensure!(
+            self.metronome_gain.is_finite() && (0.0..=1.0).contains(&self.metronome_gain),
+            "Invalid metronome level"
+        );
         self.validate_linked_clips()?;
         self.validate_audio_takes()?;
         let mut ids = HashSet::new();
@@ -787,6 +811,13 @@ impl Project {
                     "Only audio tracks have inputs"
                 );
                 input.validate(u16::MAX)?;
+            }
+            if let Some(input) = track.midi_input {
+                ensure!(
+                    track.kind == TrackKind::Midi,
+                    "Only MIDI tracks have MIDI inputs"
+                );
+                input.validate()?;
             }
             if let Some(lane) = &track.automation {
                 ensure!(

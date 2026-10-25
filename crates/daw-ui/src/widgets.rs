@@ -677,6 +677,23 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .resizable(false)
 }
 
+/// Scroll a popup's content while keeping the actions below it visible. Use
+/// with `.vscroll(false)` and reserve the footer's height, including spacing.
+pub fn popup_scroll_body<R>(
+    ui: &mut Ui,
+    id: impl Hash,
+    footer_height: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    egui::ScrollArea::vertical()
+        .id_salt(id)
+        .max_height((ui.available_height() - footer_height).max(tokens::COMPACT_HEIGHT))
+        .min_scrolled_height(tokens::COMPACT_HEIGHT)
+        .auto_shrink([false, true])
+        .show(ui, contents)
+        .inner
+}
+
 /// A focused canvas tool, opened on demand over the arrangement. Its viewport
 /// bounds leave the transport accessible and keep close controls on screen.
 pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {

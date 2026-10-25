@@ -420,7 +420,7 @@ impl InputShared {
     fn frame_ns(&self) -> u64 {
         1_000_000_000 / u64::from(self.sample_rate.load(Ordering::Relaxed).max(1))
     }
-    fn now_ns(&self) -> u64 {
+    pub(super) fn now_ns(&self) -> u64 {
         CLOCK_ORIGIN_NS.saturating_add(
             self.clock_origin
                 .elapsed()
@@ -536,12 +536,21 @@ impl InputShared {
         self.producer_busy.store(false, Ordering::Release);
     }
     /// Called only by the output consumer, exactly once per hardware frame.
-    pub(super) fn consume(
+    #[cfg(test)]
+    fn consume(&self, position: Option<u64>, sample_rate: u32, playback_ns: u64) -> [f32; 2] {
+        self.consume_gated(position, sample_rate, playback_ns, true)
+    }
+    pub(super) fn consume_gated(
         &self,
         position: Option<u64>,
         sample_rate: u32,
         playback_ns: u64,
+        capture_allowed: bool,
     ) -> [f32; 2] {
+        // Preserve an already-scheduled ADC/DAC tail after the common gate closes.
+        let capture_allowed = capture_allowed
+            || (self.stop.load(Ordering::Acquire)
+                && self.record_anchor_time.load(Ordering::Acquire) > 0);
         self.consumer_busy.store(true, Ordering::SeqCst);
         let epoch = self.epoch.load(Ordering::Acquire);
         let phase = self.phase.load(Ordering::SeqCst);
@@ -553,6 +562,7 @@ impl InputShared {
             return [0.0; 2];
         }
         if phase == ACTIVE
+            && capture_allowed
             && self.record_anchor_time.load(Ordering::Acquire) == 0
             && !self.stop.load(Ordering::Acquire)
             && let Some(position) = position
@@ -563,6 +573,7 @@ impl InputShared {
                 .store(playback_ns, Ordering::Release);
         }
         if phase == ACTIVE
+            && capture_allowed
             && self.record_anchor_time.load(Ordering::Acquire) > 0
             && position.is_none()
             && !self.stop.load(Ordering::Acquire)
@@ -595,6 +606,7 @@ impl InputShared {
             let stop_at = self.stop_at.load(Ordering::Acquire);
             let stopping = self.stop.load(Ordering::Acquire);
             if phase == ACTIVE
+                && capture_allowed
                 && anchor > 0
                 && capture_ns.saturating_add(frame_ns / 2) >= anchor
                 && (!stopping || capture_ns.saturating_add(frame_ns / 2) < stop_at)
@@ -642,7 +654,7 @@ impl InputShared {
             if stopping && capture_end.saturating_add(frame_ns / 2) >= stop_at {
                 self.tail_complete.store(true, Ordering::Release);
             }
-        } else if phase == ACTIVE && !self.stop.load(Ordering::Acquire) {
+        } else if phase == ACTIVE && capture_allowed && !self.stop.load(Ordering::Acquire) {
             self.dropped.fetch_add(1, Ordering::Relaxed);
             self.fail(3);
         }

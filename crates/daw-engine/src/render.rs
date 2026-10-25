@@ -475,11 +475,54 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
     Ok(0)
 }
 
+/// Stable merge of two timestamp-ordered runs without scratch allocation.
+/// Input batches are bounded; the already sorted sequencer run stays untouched
+/// in the common case without live input or when all input offsets are zero.
+fn merge_midi_events(messages: &mut [MidiMessage], middle: usize) {
+    if middle == 0
+        || middle == messages.len()
+        || messages[middle - 1].offset <= messages[middle].offset
+    {
+        return;
+    }
+    if messages.len() == 2 {
+        messages.swap(0, 1);
+        return;
+    }
+    let (left_cut, right_cut) = if middle > messages.len() - middle {
+        let left = middle / 2;
+        let right = middle
+            + messages[middle..].partition_point(|event| event.offset < messages[left].offset);
+        (left, right)
+    } else {
+        let right = middle + (messages.len() - middle) / 2;
+        let left =
+            messages[..middle].partition_point(|event| event.offset <= messages[right].offset);
+        (left, right)
+    };
+    messages[left_cut..right_cut].rotate_left(middle - left_cut);
+    let next_middle = left_cut + right_cut - middle;
+    let (left, right) = messages.split_at_mut(next_middle);
+    merge_midi_events(left, left_cut);
+    merge_midi_events(right, right_cut - next_middle);
+}
+
 impl RenderTrack {
     fn collect_midi(&mut self, context: BlockContext) {
         let start = context.start;
         let end = start + context.count as u64;
         self.midi.clear();
+        // Driver clock resets can make a bounded input batch locally unordered.
+        // Binary insertion retains equal-offset off/on articulation ordering.
+        for index in 1..self.live_midi.len() {
+            let offset = self.live_midi[index].offset;
+            if self.live_midi[index - 1].offset > offset {
+                let before =
+                    self.live_midi[..index].partition_point(|event| event.offset <= offset);
+                self.live_midi[before..=index].rotate_right(1);
+            }
+        }
+        let live_count = self.live_midi.len();
         self.midi.append(&mut self.live_midi);
         if context.timeline {
             for event in self.chase.drain(..) {
@@ -498,6 +541,9 @@ impl RenderTrack {
             record_active_note(&mut self.active_notes, &mut self.active_indices, *event);
             self.event_cursor += 1;
         }
+        // Input events can land between sequencer events within this block.
+        // Stable ordering preserves a retrigger's note-off/note-on edge order.
+        merge_midi_events(&mut self.midi, live_count);
     }
 
     fn process(&mut self, context: BlockContext) -> Result<()> {
@@ -723,6 +769,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    midi_input_notes: Vec<(u64, u8, u8)>,
     metering: bool,
     live_edit_context: Arc<LiveEditContext>,
 }
@@ -1094,6 +1141,7 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            midi_input_notes: Vec::with_capacity(4096),
             metering: false,
             live_edit_context: Arc::new(LiveEditContext::new(
                 project,
@@ -1195,6 +1243,7 @@ impl Renderer {
         self.release_end_sample = 0;
         self.end_sample = self.timeline_end_sample;
         self.audition = None;
+        self.midi_input_notes.clear();
         self.source_sample = sample;
         self.logical_sample = sample;
         for track in self.tracks.iter_mut().flatten() {
@@ -1336,6 +1385,82 @@ impl Renderer {
             });
             self.audition = note;
         }
+        Ok(())
+    }
+
+    /// Normalize the complete held MIDI input chord on the render worker. A
+    /// route or device disappearing releases every voice, and seek/reset clears
+    /// the remembered set so currently held keys are restored on the next block.
+    pub(crate) fn release_midi_input_note(&mut self, id: u64, pitch: u8, offset: u32) {
+        if let Some(index) = self
+            .midi_input_notes
+            .iter()
+            .position(|note| note.0 == id && note.1 == pitch)
+        {
+            self.midi_input_notes.remove(index);
+            if let Some(track) = self
+                .tracks
+                .iter_mut()
+                .flatten()
+                .find(|track| track.id == id)
+            {
+                track.live_midi.push(MidiMessage {
+                    offset,
+                    pitch,
+                    velocity: 0,
+                    on: false,
+                });
+            }
+        }
+    }
+
+    pub(crate) fn set_midi_input_notes(
+        &mut self,
+        notes: &[(u64, u8, u8)],
+        offset: u32,
+    ) -> Result<()> {
+        ensure!(notes.len() <= 4096, "MIDI monitor voice limit exceeded");
+        if self.midi_input_notes == notes {
+            return Ok(());
+        }
+        for &(id, pitch, velocity) in &self.midi_input_notes {
+            if notes.binary_search(&(id, pitch, velocity)).is_err()
+                && let Some(track) = self
+                    .tracks
+                    .iter_mut()
+                    .flatten()
+                    .find(|track| track.id == id)
+            {
+                track.live_midi.push(MidiMessage {
+                    offset,
+                    pitch,
+                    velocity: 0,
+                    on: false,
+                });
+            }
+        }
+        for &(id, pitch, velocity) in notes {
+            if self
+                .midi_input_notes
+                .binary_search(&(id, pitch, velocity))
+                .is_err()
+                && let Some(track) = self
+                    .tracks
+                    .iter_mut()
+                    .flatten()
+                    .find(|track| track.id == id)
+                && matches!(track.processor, Processor::Vst(_))
+            {
+                track.live_midi.push(MidiMessage {
+                    offset,
+                    pitch,
+                    velocity,
+                    on: true,
+                });
+            }
+        }
+        self.midi_input_notes.clear();
+        self.midi_input_notes.extend_from_slice(notes);
         Ok(())
     }
 
@@ -1715,6 +1840,40 @@ fn write_wav_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_midi_merge_preserves_equal_offset_edges_without_allocating() {
+        for left_len in 0..32 {
+            for right_len in 0..32 {
+                let mut messages: Vec<_> = (0..left_len + right_len)
+                    .map(|index| MidiMessage {
+                        offset: ((index * 17 + index / 3) % 11) as u32,
+                        pitch: index as u8,
+                        velocity: 100,
+                        on: index % 2 == 0,
+                    })
+                    .collect();
+                messages[..left_len].sort_by_key(|message| message.offset);
+                messages[left_len..].sort_by_key(|message| message.offset);
+                let mut expected = messages.clone();
+                expected.sort_by_key(|message| message.offset);
+                let allocations = crate::allocation_test_support::count_allocations(|| {
+                    merge_midi_events(&mut messages, left_len)
+                });
+                assert_eq!(allocations, 0);
+                let actual: Vec<_> = messages
+                    .iter()
+                    .map(|event| (event.offset, event.pitch, event.on))
+                    .collect();
+                let expected: Vec<_> = expected
+                    .iter()
+                    .map(|event| (event.offset, event.pitch, event.on))
+                    .collect();
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
     use daw_core::{
         AutomationPoint, AutomationTarget, Clip, Interpolation, Note, Track, TrackKind,
     };

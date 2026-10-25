@@ -455,12 +455,19 @@ impl DawApp {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));
                     let detail = format!("{:.2} beats · {}", clip.length, if in_comp || group.is_none() { "In comp" } else { "Alternative" });
-                    let response = ui.push_id(clip.id, |ui| daw_ui::audio_take_lane(ui, &daw_ui::TakeLane {
+                    let response = ui.push_id(clip.id, |ui| daw_ui::audio_take_lane_with_background(ui, &daw_ui::TakeLane {
                         name: &clip.name, detail: &detail,
                         selected: Some(clip.id) == self.audio_takes_ui.source,
                         color, peaks: self.audio_takes_ui.peaks.get(&clip.id).map(Vec::as_slice).unwrap_or_default(),
                         span: (((clip.start - start) / span) as f32, ((clip.end() - start) / span) as f32),
                         selection: self.audio_takes_ui.range.map(|(a, b)| (((a - start) / span) as f32, ((b - start) / span) as f32)),
+                    }, |painter, plot| {
+                        let rect = egui::Rect::from_min_max(
+                            egui::pos2(plot.left() + ((clip.start - start) / span) as f32 * plot.width(), plot.top()),
+                            egui::pos2(plot.left() + ((clip.end() - start) / span) as f32 * plot.width(), plot.bottom()),
+                        );
+                        let audio = if let ClipContent::Audio { path, .. } = &clip.content { self.waveforms.get(path) } else { None };
+                        crate::spectrogram::paint(painter, rect, clip, self.project.tempo, (clip.start, clip.end()), color, "takes", audio);
                     })).inner;
                     self.audio_takes_ui.rows.push((clip.id, response.rect));
                     if response.clicked() { self.audio_takes_ui.source = Some(clip.id); }

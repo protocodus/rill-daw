@@ -20,6 +20,41 @@ pub fn record_button(ui: &mut Ui, active: bool, enabled: bool) -> Response {
     ui.add_enabled(enabled, button)
 }
 
+/// Shared recording options. Timing choices are distinct from the Click toggle;
+/// changing the click never changes what is recorded or exported.
+pub fn recording_timing_controls(
+    ui: &mut Ui,
+    precount: &mut u8,
+    click: &mut bool,
+    gain: &mut f32,
+    timing_enabled: bool,
+) -> bool {
+    let before = (*precount, *click, *gain);
+    crate::form_grid(ui, "recording_timing", |ui| {
+        let label = text::label(ui, "Pre-count");
+        ui.add_enabled_ui(timing_enabled, |ui| {
+            crate::select("recording_precount", match *precount { 1 => "1 bar", 2 => "2 bars", _ => "No pre-count" })
+                .show_ui(ui, |ui| {
+                    for (value, title) in [(0, "No pre-count"), (1, "1 bar"), (2, "2 bars")] {
+                        crate::selectable_value(ui, precount, value, title);
+                    }
+                }).response.labelled_by(label.id)
+                .on_hover_text("Count in before recording from stopped. Recording during playback starts immediately.");
+        });
+        ui.end_row();
+        text::label(ui, "Metronome");
+        crate::toggle(ui, click, "Click").on_hover_text(
+            "Play a metronome during playback and recording. Pre-count clicks always play.",
+        );
+        ui.end_row();
+        let label = text::label(ui, "Click level");
+        ui.add(crate::slider(gain, 0.0..=1.0).show_value(false))
+            .labelled_by(label.id);
+        ui.end_row();
+    });
+    before != (*precount, *click, *gain)
+}
+
 pub fn record_arm_at(
     ui: &mut Ui,
     rect: Rect,

@@ -106,3 +106,20 @@ an existing destination intact and remove the temporary file.
 Explicit Save and Open run on one background document pipeline. Saving first flushes native plugin state, then writes an immutable project snapshot atomically. Continued edits remain unsaved; completing an older write never marks later names, colors, notes, or plugin edits as saved. New/Open/Save/Quit requests are serialized, and a failed operation cancels queued document replacement/shutdown. Quit waits for pending writes. Existing outgoing JSON recovery remains in place.
 
 Opening extracts the bundle and prepares waveform data on the worker before flushing the outgoing native editor and replacing the document. Duplicate audio paths decode once. Waveform preparation is limited to 256 MiB per source and 512 MiB total; unavailable/invalid/oversized previews leave their clips linked and display a warning. General WAV decoding rejects declarations exceeding 512 MiB of decoded samples before allocating sample buffers. Streaming sources larger than this is not implemented.
+
+## MIDI input and recording timing
+
+Project format 4 additionally stores optional `Track.midi_input`: `"All"`,
+`{"Channel":{"channel":0}}` (zero-based channel 0–15), or `null`. New MIDI
+tracks default to All; older manifests without the field load with no assignment.
+Only MIDI tracks accept this field. The global MIDI device identifier is stored
+in application settings, not in portable projects; arm/monitor choices remain
+session-only.
+
+Project fields `metronome_enabled`, `metronome_gain`, and `precount_bars` default
+to false, 0.25, and 0 when absent. Gain is finite in 0–1; pre-count accepts 0, 1,
+or 2 bars. These additions do not change existing musical data and require no
+format-version bump. MIDI recordings use ordinary independent MIDI clips, with
+sustain represented by note duration and loop passes merged into that clip.
+There is no extra source file for MIDI. Mixed audio/MIDI recording publishes one
+validated project edit and archives its audio sources through the existing path.

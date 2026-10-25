@@ -190,6 +190,9 @@ fn editor_crash_details_identify_effect_channel_path_and_exit_code() {
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+    // A worker can report its failure in the last settled frame. Let egui
+    // expand the native-editor window before clicking the newly added action.
+    common::wait_visible(&mut app, "Details");
     let opened = app.click("Details");
     let report = opened["error_details"].clone();
     assert!(

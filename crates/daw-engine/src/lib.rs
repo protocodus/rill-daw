@@ -13,8 +13,10 @@ pub use quality::{RenderOptions, ResampleQuality};
 
 pub use device::{
     AudioEngine, DeviceInfo, DeviceSettings, EngineSnapshot, InputRoute, InputSettings,
-    RecordingConfig, RecordingResult, RecordingSnapshot, RecordingTake, VirtualIoSettings,
-    list_input_devices, list_output_devices,
+    MidiPortInfo, MidiRecordingResult, MidiRoute, MidiSettings, MidiSnapshot, RecordedMidiTrack,
+    RecordingConfig, RecordingResult, RecordingSnapshot, RecordingTake, RecordingTiming,
+    RecordingTimingSnapshot, VirtualIoSettings, list_input_devices, list_midi_inputs,
+    list_output_devices,
 };
 pub use render::{
     CompensationDelay, ExportOptions, export_project_wav, export_project_wav_with_options,

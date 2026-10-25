@@ -35,6 +35,12 @@ enum Command {
         samples: Vec<f32>,
     },
     InputError,
+    MidiInput {
+        bytes: Vec<u8>,
+        #[serde(default)]
+        offset_frames: u32,
+    },
+    MidiError,
     OutputError,
     FeedInput {
         channels: u16,
@@ -666,6 +672,33 @@ impl Harness {
                     .feed_virtual_input(&samples, channels)?;
                 self.settle();
             }
+            Command::MidiInput {
+                bytes,
+                offset_frames,
+            } => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "MIDI injection requires virtual audio mode"
+                );
+                self.app
+                    .engine
+                    .as_mut()
+                    .context("Audio engine is not ready")?
+                    .inject_virtual_midi(&bytes, offset_frames)?;
+                self.settle();
+            }
+            Command::MidiError => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "MIDI fault injection requires virtual audio mode"
+                );
+                self.app
+                    .engine
+                    .as_mut()
+                    .context("Audio engine is not ready")?
+                    .fail_virtual_midi()?;
+                self.settle();
+            }
             Command::OutputError => {
                 ensure!(
                     self.app.virtual_audio,
@@ -1014,6 +1047,7 @@ impl Harness {
             })).collect::<Vec<_>>(),
         });
         state["revision"] = json!(self.app.revision);
+        state["audio_silence"] = crate::audio_silence::diagnostics(&self.ctx);
         state["popups"]["about"] = json!(self.app.about_open);
         state["audio_transpose_rect"] = json!(
             self.ctx
@@ -1064,6 +1098,7 @@ impl Harness {
         state["popups"]["recording"] = json!(self.app.recording_open);
         state["input_device_name"] = json!(self.app.settings.input_device_name);
         state["audio_takes"] = self.app.audio_takes_diagnostics();
+        state["spectrogram"] = crate::spectrogram::diagnostics(&self.ctx);
         state["popups"]["audio_takes"] = json!(self.app.audio_takes_open);
         state["error_details"] = self.app.error_details_diagnostics();
         state["document_guard"] = self.app.document_guard_diagnostics();

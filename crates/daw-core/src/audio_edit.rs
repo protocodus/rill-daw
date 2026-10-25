@@ -1,6 +1,9 @@
 //! Source-preserving audio regions, envelopes and analysis.
 
-use crate::{AudioData, Clip, ClipContent, MAX_BEAT, Project, TrackKind, new_id};
+use crate::{
+    AudioData, AudioTakeMembership, AudioTakeRole, Clip, ClipContent, MAX_BEAT, Project, TrackKind,
+    new_id,
+};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +45,58 @@ pub struct AudioEnvelope {
 }
 
 impl Clip {
+    /// A source-preserving subregion in arrangement coordinates. The source,
+    /// fades and processing are shared by value; placement and bounds are local.
+    /// Callers decide whether the resulting region keeps ghost/take membership.
+    pub fn audio_region(&self, start: f64, end: f64) -> Result<Self> {
+        ensure!(
+            matches!(self.content, ClipContent::Audio { .. }),
+            "Select an audio clip"
+        );
+        ensure!(
+            start.is_finite()
+                && end.is_finite()
+                && start >= self.start
+                && end <= self.end()
+                && end > start,
+            "Selection must be inside the clip"
+        );
+        let mut region = self.clone();
+        let delta = start - self.start;
+        region.offset += if matches!(self.content, ClipContent::Audio { reverse: true, .. }) {
+            (self.end() - end) * self.source_rate
+        } else {
+            delta * self.source_rate
+        };
+        region.start = start;
+        region.length = end - start;
+        if let ClipContent::Audio {
+            envelope,
+            crossfade,
+            ..
+        } = &mut region.content
+        {
+            let original = envelope.unwrap_or(AudioEnvelope {
+                offset: 0.0,
+                length: self.source_length(),
+            });
+            ensure!(
+                (original.offset + delta * self.source_rate).abs() <= MAX_BEAT,
+                "Selection exceeds the envelope range"
+            );
+            *envelope = Some(AudioEnvelope {
+                offset: original.offset + delta * self.source_rate,
+                ..original
+            });
+            // A transition belongs to the existing left edge, not an arbitrary
+            // new boundary created inside the region.
+            if start != self.start {
+                *crossfade = None;
+            }
+        }
+        Ok(region)
+    }
+
     pub fn audio_envelope_gain(&self, beat: f64) -> f32 {
         let ClipContent::Audio {
             fade_in,
@@ -100,6 +155,153 @@ pub fn audio_sample(data: &AudioData, frame: f64, channel: usize) -> f32 {
     let a = data.samples[index * data.channels + channel];
     let b = data.samples[next * data.channels + channel];
     a + (b - a) * (frame - index as f64) as f32
+}
+
+/// Find a source zero crossing near an arrangement beat (at most 5 ms each
+/// side). A single frame is chosen for every channel. The quietest multichannel
+/// crossing wins, then the nearest; anti-phase stereo cannot cancel to silence.
+/// Pitch processing can change the resulting waveform: this snaps the source.
+pub fn nearest_audio_zero_crossing(
+    clip: &Clip,
+    data: &AudioData,
+    tempo: f64,
+    beat: f64,
+) -> Option<f64> {
+    if !matches!(clip.content, ClipContent::Audio { .. })
+        || data.frames() < 2
+        || data.channels == 0
+        || data.sample_rate == 0
+        || !(crate::MIN_SOURCE_RATE..=crate::MAX_SOURCE_RATE).contains(&clip.source_rate)
+        || !tempo.is_finite()
+        || tempo <= 0.0
+        || !beat.is_finite()
+    {
+        return None;
+    }
+    let fpb = f64::from(data.sample_rate) * 60.0 / tempo;
+    let source = clip.audio_source_frame(beat - clip.start, tempo, data.sample_rate);
+    let radius = (f64::from(data.sample_rate) * 0.005 * clip.source_rate)
+        .ceil()
+        .max(1.0);
+    let lo = (source - radius).ceil().max(1.0) as usize;
+    let hi = (source + radius).floor().max(0.0) as usize;
+    let reverse = matches!(clip.content, ClipContent::Audio { reverse: true, .. });
+    (lo..=hi.min(data.frames() - 1))
+        .filter_map(|frame| {
+            let mut crossing = false;
+            let mut peak = 0.0_f32;
+            for channel in 0..data.channels {
+                let previous = data.samples[(frame - 1) * data.channels + channel];
+                let value = data.samples[frame * data.channels + channel];
+                crossing |= value == 0.0
+                    || (previous != 0.0 && previous.is_sign_negative() != value.is_sign_negative());
+                peak = peak.max(value.abs());
+            }
+            if !crossing {
+                return None;
+            }
+            let local = if reverse {
+                clip.length - (frame as f64 - clip.offset * fpb + 1.0) / fpb / clip.source_rate
+            } else {
+                (frame as f64 - clip.offset * fpb) / fpb / clip.source_rate
+            };
+            let position = clip.start + local;
+            (0.0..=MAX_BEAT).contains(&position).then_some((
+                position,
+                peak,
+                (frame as f64 - source).abs(),
+            ))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.2.total_cmp(&b.2)))
+        .map(|value| value.0)
+}
+
+/// Re-anchor alternate takes to an edited comp occurrence, including movement,
+/// slip, reverse and stretch. Each occurrence gets its own group because its
+/// source-to-timeline mapping may differ from the other comps in the old group.
+fn ripple_take_windows(original: &[Clip], right: &mut Clip) -> Result<Vec<Clip>> {
+    let Some(take) = right.audio_take else {
+        return Ok(Vec::new());
+    };
+    let AudioTakeRole::Comp { source } = take.role else {
+        return Ok(Vec::new());
+    };
+    let reference = original
+        .iter()
+        .find(|clip| clip.id == source)
+        .context("Retained take not found")?;
+    let reference_reverse = matches!(reference.content, ClipContent::Audio { reverse: true, .. });
+    let reverse =
+        reference_reverse != matches!(right.content, ClipContent::Audio { reverse: true, .. });
+    let start = reference.start
+        + if reference_reverse {
+            (reference.source_end() - right.source_end()) / reference.source_rate
+        } else {
+            (right.offset - reference.offset) / reference.source_rate
+        };
+    let end = start + right.source_length() / reference.source_rate;
+    let ratio = reference.source_rate / right.source_rate;
+    let group = new_id();
+    let mut windows = Vec::new();
+    let mut reference_id = None;
+    for candidate in original
+        .iter()
+        .filter(|clip| clip.is_take_source() && clip.take_group() == Some(take.group))
+    {
+        // Keep the current comp's exact material even if it exposes source
+        // handles beyond the original take's trimmed metadata.
+        let mut window = if candidate.id == source {
+            let mut window = right.clone();
+            window.name.clone_from(&candidate.name);
+            window
+        } else {
+            let a = start.max(candidate.start);
+            let b = end.min(candidate.end());
+            if b <= a {
+                continue;
+            }
+            let mut window = candidate.audio_region(a, b)?;
+            let source_rate = window.source_rate / ratio;
+            // An alternate may already use the opposite stretch extreme.
+            // Keep that original retained rather than rejecting an otherwise
+            // valid ripple or creating an unsupported transformed candidate.
+            if !(crate::MIN_SOURCE_RATE..=crate::MAX_SOURCE_RATE).contains(&source_rate) {
+                continue;
+            }
+            window.start = right.start
+                + if reverse {
+                    (end - b) * ratio
+                } else {
+                    (a - start) * ratio
+                };
+            window.length *= ratio;
+            window.source_rate = source_rate;
+            if reverse && let ClipContent::Audio { reverse, .. } = &mut window.content {
+                *reverse = !*reverse;
+            }
+            window
+        };
+        window.id = new_id();
+        window.link_group = None;
+        window.audio_take = Some(AudioTakeMembership {
+            group,
+            role: AudioTakeRole::Source,
+        });
+        if let ClipContent::Audio { crossfade, .. } = &mut window.content {
+            *crossfade = None;
+        }
+        if candidate.id == source {
+            reference_id = Some(window.id);
+        }
+        windows.push(window);
+    }
+    right.audio_take = Some(AudioTakeMembership {
+        group,
+        role: AudioTakeRole::Comp {
+            source: reference_id.context("Retained take not found")?,
+        },
+    });
+    Ok(windows)
 }
 
 /// Normalize the source window's sample peak, before fades, to an absolute dBFS
@@ -270,6 +472,163 @@ pub fn detect_transients(
 }
 
 impl Project {
+    /// Close a time selection on one audio track. All audible regions intersecting
+    /// the selection are cut; subsequent regions move left by its duration.
+    /// Original takes remain retained. Shifted comps receive aligned source
+    /// windows in a new group so switching takes cannot reintroduce old timing.
+    pub fn ripple_delete_audio_range(
+        &mut self,
+        track_id: u64,
+        start: f64,
+        end: f64,
+    ) -> Result<Vec<u64>> {
+        ensure!(
+            start.is_finite() && end.is_finite() && start >= 0.0 && end > start && end <= MAX_BEAT,
+            "Invalid ripple selection"
+        );
+        let track = self.track(track_id).context("Track not found")?;
+        ensure!(
+            track.kind == TrackKind::Audio,
+            "Ripple editing requires an audio track"
+        );
+        let original = track.clips.clone();
+        let duration = end - start;
+        let mut clips = Vec::with_capacity(original.len());
+        let mut source_windows = Vec::new();
+        let mut boundary_pieces = Vec::new();
+        let mut selected = Vec::new();
+        for clip in &original {
+            if clip.is_take_source() || clip.end() <= start {
+                clips.push(clip.clone());
+                continue;
+            }
+            if clip.start < start {
+                let left = clip.audio_region(clip.start, start)?;
+                selected.push(left.id);
+                clips.push(left);
+            }
+            if clip.end() <= end {
+                continue;
+            }
+            let mut right = clip.audio_region(clip.start.max(end), clip.end())?;
+            if clip.start < start {
+                right.id = new_id();
+            }
+            right.start -= duration;
+            if clip.start <= end
+                && let ClipContent::Audio { crossfade, .. } = &mut right.content
+            {
+                *crossfade = None;
+            }
+            source_windows.extend(ripple_take_windows(&original, &mut right)?);
+            selected.push(right.id);
+            if clip.start <= end {
+                boundary_pieces.push((clip.start, right));
+            } else {
+                clips.push(right);
+            }
+        }
+        // At the collapsed boundary several formerly overlapping clips now
+        // start together. Preserve their original latest-start priority; stable
+        // sorting also preserves the existing vector order for equal starts.
+        boundary_pieces.sort_by(|a, b| a.0.total_cmp(&b.0));
+        clips.extend(boundary_pieces.into_iter().map(|(_, clip)| clip));
+        clips.extend(source_windows);
+        self.track_mut(track_id).unwrap().clips = clips;
+        if let Err(error) = self.validate() {
+            self.track_mut(track_id).unwrap().clips = original;
+            return Err(error);
+        }
+        Ok(selected)
+    }
+
+    /// Copy selected time as independent source-preserving audio.
+    pub fn copy_audio_range(&self, track: u64, clip: u64, start: f64, end: f64) -> Result<Clip> {
+        let mut region = self
+            .clip(track, clip)
+            .context("Clip not found")?
+            .audio_region(start, end)?;
+        region.link_group = None;
+        region.audio_take = None;
+        if let ClipContent::Audio { crossfade, .. } = &mut region.content {
+            *crossfade = None;
+        }
+        Ok(region)
+    }
+
+    /// Remove selected time without closing the gap. Retained takes and other
+    /// ghost occurrences remain untouched. Validation commits all pieces at once.
+    pub fn delete_audio_range(
+        &mut self,
+        track_id: u64,
+        clip_id: u64,
+        start: f64,
+        end: f64,
+    ) -> Result<Vec<u64>> {
+        let original = self.clip(track_id, clip_id).context("Clip not found")?;
+        ensure!(
+            !original.is_take_source(),
+            "Choose a take before editing it"
+        );
+        original.audio_region(start, end)?;
+        let mut pieces = Vec::new();
+        if start > original.start {
+            pieces.push(original.audio_region(original.start, start)?);
+        }
+        if end < original.end() {
+            let mut right = original.audio_region(end, original.end())?;
+            if !pieces.is_empty() {
+                right.id = new_id();
+            }
+            pieces.push(right);
+        }
+        let ids = pieces.iter().map(|clip| clip.id).collect();
+        let track = self.track_mut(track_id).context("Track not found")?;
+        let index = track
+            .clips
+            .iter()
+            .position(|clip| clip.id == clip_id)
+            .context("Clip not found")?;
+        let before = track.clips.clone();
+        track.clips.splice(index..=index, pieces);
+        if let Err(error) = self.validate() {
+            self.track_mut(track_id).unwrap().clips = before;
+            return Err(error);
+        }
+        Ok(ids)
+    }
+
+    /// Slip content in timeline beats while keeping its edges and envelopes
+    /// fixed. Positive movement moves the waveform right, including reverse
+    /// clips. Clamp against the actual file bounds; ghosts keep local offsets.
+    pub fn slip_audio_clip(
+        &mut self,
+        track: u64,
+        clip: u64,
+        movement: f64,
+        source_beats: f64,
+    ) -> Result<()> {
+        ensure!(
+            movement.is_finite()
+                && source_beats.is_finite()
+                && (0.0..=MAX_BEAT).contains(&source_beats),
+            "Invalid source bounds"
+        );
+        let clip = self.clip_mut(track, clip).context("Clip not found")?;
+        ensure!(!clip.is_take_source(), "Choose a take before editing it");
+        let ClipContent::Audio { reverse, .. } = clip.content else {
+            anyhow::bail!("Select an audio clip");
+        };
+        ensure!(
+            source_beats + 1e-9 >= clip.source_length(),
+            "Trim the clip to fit its source before slipping"
+        );
+        let direction = if reverse { 1.0 } else { -1.0 };
+        clip.offset = (clip.offset + movement * clip.source_rate * direction)
+            .clamp(0.0, (source_beats - clip.source_length()).max(0.0));
+        Ok(())
+    }
+
     pub fn set_audio_gain(&mut self, track: u64, clip: u64, gain: f32) -> Result<()> {
         ensure!(gain.is_finite() && gain >= 0.0, "Invalid audio gain");
         ensure!(

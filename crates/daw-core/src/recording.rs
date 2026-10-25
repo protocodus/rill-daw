@@ -192,3 +192,53 @@ impl Project {
         })
     }
 }
+
+/// MIDI channel selection. None on Track means no MIDI input; channel numbers
+/// here are zero-based, while the UI displays the conventional 1 through 16.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MidiInputChannel {
+    #[default]
+    All,
+    Channel {
+        channel: u8,
+    },
+}
+impl MidiInputChannel {
+    pub fn validate(self) -> Result<()> {
+        if let Self::Channel { channel } = self {
+            ensure!(channel < 16, "MIDI input channel must be 1 through 16");
+        }
+        Ok(())
+    }
+    pub fn channel(self) -> Option<u8> {
+        match self {
+            Self::All => None,
+            Self::Channel { channel } => Some(channel),
+        }
+    }
+}
+impl Project {
+    /// MIDI recordings add one independent clip, retaining all existing events.
+    /// Unlike exclusive audio clips, overlapping MIDI clips play together.
+    pub fn insert_recorded_midi(&mut self, track: u64, clip: Clip) -> Result<u64> {
+        self.validate()?;
+        ensure!(
+            self.track(track).context("Recording track not found")?.kind == TrackKind::Midi,
+            "Record MIDI onto a MIDI track"
+        );
+        ensure!(
+            matches!(&clip.content, ClipContent::Midi { notes } if !notes.is_empty()),
+            "A MIDI recording must contain notes"
+        );
+        ensure!(
+            clip.link_group.is_none() && clip.audio_take.is_none(),
+            "A MIDI recording must be independent"
+        );
+        let id = clip.id;
+        let mut next = self.clone();
+        next.track_mut(track).unwrap().clips.push(clip);
+        next.validate()?;
+        *self = next;
+        Ok(id)
+    }
+}

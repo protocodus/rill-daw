@@ -118,6 +118,8 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 
 Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. The native close control remains visible. It supplies a common frame, spacing, and initial width, with fixed sizing and no collapse triangle. Callers may override width, `.resizable(true)`, or `.fixed_pos(...)`; the default pivot is the center. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
 
+When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable.
+
 `workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
 
 `toolbar_group_sized(ui, width, contents)` reserves a known width before drawing
@@ -388,3 +390,13 @@ Loop recording keeps the newest complete pass audible while preserving a partial
 last pass in **Takes…**. Overdub recording creates a separate colored track with
 the original bus/folder and volume/pan, leaving inserts/sends unassigned. Both
 paths enter normal clip editing and commit one named history entry.
+
+### MIDI recording and timing controls
+
+The same **Recording · Track name** popup supports MIDI tracks. **MIDI device** selects the input shared by MIDI tracks, with **Refresh MIDI inputs** beside its channel choices. **All channels**, **Channel 1–16**, and **No input** are per-track project edits. MIDI arming defaults to session-only **Auto** monitoring; audio arming retains **Off**. MIDI monitoring uses the assigned plugin and its effects. An unassigned track offers **Choose instrument…** while still allowing note recording. Every recording creates a new clip; loop passes accumulate without replacing existing notes.
+
+Both MIDI and audio track headers reuse `record_arm_at`. Its direct child UI preserves the arranger's parent row geometry. The MIDI instrument selector sits alongside the arm control. **Window → Recording** also opens with no selected track so global timing controls remain available.
+
+`recording_timing_controls` is a shared component composed from the form, choice, toggle and slider components. **Pre-count** is a choice among **No pre-count**, **1 bar** and **2 bars**, disabled during capture. **Click** is a distinct toggle, also available on the transport, with the shared `Metronome` icon. **Click level** remains adjustable during playback. The count shows remaining beats while preserving the intended cursor position. Narrow transport layouts keep loop-range details in the existing Range popup/tooltip.
+
+MIDI audition pauses during pre-count so the prepared timeline can start exactly at the cue; dry audio monitoring remains available. Pre-count starts only from stopped transport; recording over running backing audio starts immediately. Click and level can change without replacing plugin processes. Recorded audio and exported WAVs exclude the click. MIDI/audio publication, error recovery, Save/Open/New/Quit and Undo use the common recording lifecycle.

@@ -15,6 +15,16 @@ pub struct TakeLane<'a> {
 }
 
 pub fn audio_take_lane(ui: &mut Ui, lane: &TakeLane<'_>) -> Response {
+    audio_take_lane_with_background(ui, lane, |_, _| {})
+}
+
+/// Draw an optional source visualization behind the standard take waveform.
+/// The callback receives the full plot; the caller owns source-span mapping.
+pub fn audio_take_lane_with_background(
+    ui: &mut Ui,
+    lane: &TakeLane<'_>,
+    background: impl FnOnce(&egui::Painter, Rect),
+) -> Response {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 86.0), Sense::click());
     response.widget_info(|| {
@@ -90,6 +100,7 @@ pub fn audio_take_lane(ui: &mut Ui, lane: &TakeLane<'_>) -> Response {
             );
         }
         let (a, b) = lane.span;
+        background(&painter, plot);
         for (i, (low, high)) in lane.peaks.iter().enumerate() {
             let fraction = a + (b - a) * (i as f32 + 0.5) / lane.peaks.len().max(1) as f32;
             if !(0.0..=1.0).contains(&fraction) {

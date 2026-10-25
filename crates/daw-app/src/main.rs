@@ -1,6 +1,7 @@
 mod app;
 mod arrangement;
 mod audio_editor;
+mod audio_silence;
 mod audio_takes_ui;
 mod automation;
 mod automation_editor;
@@ -21,6 +22,7 @@ mod project_io;
 mod recording_ui;
 mod routing;
 mod settings;
+mod spectrogram;
 mod theme;
 #[cfg(test)]
 mod ui_tests;
