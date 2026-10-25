@@ -1,4 +1,5 @@
 use crate::{settings::Settings, theme::*};
+use anyhow::Context;
 use daw_core::*;
 use daw_engine::{AudioEngine, DeviceInfo};
 use eframe::egui::{self, RichText};
@@ -158,10 +159,13 @@ pub struct DawApp {
     pub join_open: bool,
     pub(crate) join_ui: crate::join_ui::JoinUi,
     pub last_render_errors: u64,
+    render_diagnostic_engine: Option<u64>,
     live_edit_error: Option<(u64, String)>,
     pub devices: Vec<DeviceInfo>,
     pub status: String,
     pub error: bool,
+    pub(crate) last_error_report: Option<crate::error_ui::ErrorReport>,
+    pub(crate) error_details: Option<crate::error_ui::ErrorDetails>,
     pub project_path: Option<PathBuf>,
     pub modified: bool,
     pub edit_dirty: bool,
@@ -272,10 +276,13 @@ impl DawApp {
             join_open: false,
             join_ui: Default::default(),
             last_render_errors: 0,
+            render_diagnostic_engine: None,
             live_edit_error: None,
             devices: Vec::new(),
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
             error: false,
+            last_error_report: None,
+            error_details: None,
             project_path: None,
             modified: false,
             edit_dirty: false,
@@ -670,10 +677,12 @@ impl DawApp {
             Ok(()) => {
                 self.status = success.into();
                 self.error = false;
+                self.last_error_report = None;
             }
             Err(e) => {
                 self.status = format!("{e:#}");
                 self.error = true;
+                self.remember_error(&e);
             }
         }
     }
@@ -783,6 +792,7 @@ impl DawApp {
                 .track(*track)
                 .is_some_and(|track| matches!(track.instrument, Instrument::Vst3 { .. }))
                 && self.document_guard.is_none()
+                && self.error_details.is_none()
                 && !self.library_open
                 && !self.instrument_open
                 && !self.effects_open
@@ -1311,6 +1321,8 @@ impl DawApp {
         std::thread::spawn(move || {
             let result =
                 daw_engine::export_project_wav_with_options(&project, &path, rate, options)
+                    .with_context(|| format!("Exporting WAV to {}", path.display()))
+                    .context("WAV export failed")
                     .map(|_| path);
             let _ = tx.send(result);
         });
@@ -1352,7 +1364,14 @@ impl DawApp {
             || self.state_sync_pending()
             || self.project_io_pending();
         let (kind, message) = if self.error {
-            (NoticeKind::Error, self.status.clone())
+            (
+                NoticeKind::Error,
+                self.last_error_report
+                    .as_ref()
+                    .filter(|report| report.status == self.status)
+                    .map(|report| report.summary.clone())
+                    .unwrap_or_else(|| self.status.clone()),
+            )
         } else if busy {
             (NoticeKind::Busy, self.status.clone())
         } else if let Some(path) = &self.exported_file {
@@ -1371,6 +1390,9 @@ impl DawApp {
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
                 let response = daw_ui::notice(ui, kind, &message, |ui| {
+                    if kind == NoticeKind::Error && daw_ui::button(ui, "Details").clicked() {
+                        self.show_status_error_details();
+                    }
                     if matches!(kind, NoticeKind::Error | NoticeKind::Success) {
                         dismiss = daw_ui::small_button(ui, "Dismiss").clicked();
                     }
@@ -1528,7 +1550,7 @@ impl DawApp {
         }
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
-        if self.document_guard.is_some() {
+        if self.document_guard.is_some() || self.error_details.is_some() {
             return;
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -2372,9 +2394,11 @@ impl DawApp {
         }
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.error_details = None;
             self.request_document_transition(crate::document_ui::DocumentTransition::Quit);
         }
         if self.document_guard.is_none()
+            && self.error_details.is_none()
             && ctx.input(|i| {
                 i.pointer.any_pressed()
                     || i.events.iter().any(|e| {
@@ -2406,17 +2430,28 @@ impl DawApp {
         self.poll_export();
         self.poll_join(ctx);
         self.update_note_audition(ctx);
+        let mut render_error = None;
         if let Some(e) = &self.engine {
             self.cursor = e.position_beats();
             let s = e.snapshot();
             if s.render_errors > self.last_render_errors {
                 self.last_render_errors = s.render_errors;
-                self.status = format!(
-                    "Plug-in/render error · {} failures · Stop and restart playback to retry",
-                    s.render_errors
-                );
-                self.error = true;
+                // The worker publishes details and the atomic count separately.
+                // A later count observation must not erase its useful diagnostics.
+                if self.render_diagnostic_engine != Some(s.engine_id) || !self.error {
+                    render_error = Some(format!(
+                        "Plug-in/render error · {} failures · Stop and restart playback to retry",
+                        s.render_errors
+                    ));
+                }
             }
+            if let Some(details) = e.take_render_error() {
+                self.render_diagnostic_engine = Some(s.engine_id);
+                render_error = Some(details);
+            }
+        }
+        if let Some(error) = render_error {
+            self.message(Err(anyhow::anyhow!(error)), "");
         }
         if let Some(rx) = &self.vst_scan
             && let Ok(result) = rx.try_recv()
@@ -2440,9 +2475,15 @@ impl DawApp {
         }
         self.poll_plugin_previews(ctx);
         self.poll_document_guard(ctx);
+        if self.error_details.is_some() {
+            self.error_details_frame(ctx);
+            self.capture_screenshot(ctx);
+            return;
+        }
         self.menus(ctx);
         if self.document_guard.is_some() {
             self.document_guard_frame(ctx);
+            self.error_details_frame(ctx);
             self.capture_screenshot(ctx);
             return;
         }
@@ -2557,7 +2598,11 @@ impl DawApp {
         {
             self.close_popup();
         }
-        let files = ctx.input(|i| i.raw.dropped_files.clone());
+        let files = if self.error_details.is_none() {
+            ctx.input(|i| i.raw.dropped_files.clone())
+        } else {
+            Vec::new()
+        };
         for file in files {
             if let Some(path) = file.path {
                 let (track, beat) = if self.view == WorkspaceView::Arrangement {
@@ -2582,6 +2627,7 @@ impl DawApp {
             self.request_recovery_save();
             self.last_recovery = Instant::now();
         }
+        self.error_details_frame(ctx);
         self.capture_screenshot(ctx);
         ctx.request_repaint_after(Duration::from_millis(
             if self.playing()

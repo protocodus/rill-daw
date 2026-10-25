@@ -106,6 +106,34 @@ struct ParameterActions {
 }
 
 impl DawApp {
+    fn plugin_error_details_button(&mut self, ui: &mut egui::Ui, target: EditorTarget, name: &str) {
+        if daw_ui::button(ui, "Details").clicked() {
+            let Some(error) = self.instrument_ui.error.clone() else {
+                return;
+            };
+            let channel = self
+                .project
+                .track(target.track)
+                .map(|track| track.name.as_str())
+                .unwrap_or("Unknown channel");
+            let plugin = match self.editor_plugin(target) {
+                Some(Instrument::Vst3 { path, class_id }) => format!(
+                    "\nPlugin: {path}\nClass ID: {}",
+                    class_id.as_deref().unwrap_or("Default")
+                ),
+                _ => String::new(),
+            };
+            self.show_error_details(
+                format!("Error · {name}"),
+                error.lines().next().unwrap_or(&error).to_owned(),
+                format!(
+                    "{error}\n\nDevice: {name}\nChannel: {channel} (#{}){plugin}",
+                    target.track
+                ),
+            );
+        }
+    }
+
     fn editor_plugin(&self, target: EditorTarget) -> Option<Instrument> {
         let track = self.project.track(target.track)?;
         if let Some(id) = target.effect {
@@ -482,6 +510,7 @@ impl DawApp {
         if let Some(error) = &self.instrument_ui.error {
             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 2)
                 .on_hover_text(error);
+            self.plugin_error_details_button(ui, target, device_name);
             if ui
                 .add_enabled(can_refresh, daw_ui::button_widget("Retry"))
                 .clicked()
@@ -760,6 +789,7 @@ impl DawApp {
                                     2,
                                 )
                                 .on_hover_text(error);
+                                self.plugin_error_details_button(ui, target, &device_name);
                             }
                         }
                     }

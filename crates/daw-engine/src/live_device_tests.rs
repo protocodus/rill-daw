@@ -48,6 +48,28 @@ fn wait_for(mut predicate: impl FnMut() -> bool) {
 }
 
 #[test]
+fn render_worker_exposes_parameter_failure_once_while_healthy_audio_continues() {
+    let (_directory, project, id) = fixture();
+    let mut engine = engine(&project);
+    engine.pump_virtual(1024).unwrap();
+    // Queue a real command to an audio-only channel: the render worker rejects
+    // this without loading native code, stopping the callback or losing its cause.
+    engine.set_instrument_parameter(id, 71, 0.5).unwrap();
+    wait_for(|| engine.snapshot().render_errors == 1);
+    let error = engine
+        .take_render_error()
+        .expect("Detailed render diagnostic");
+    assert!(error.contains("parameter 71"));
+    assert!(error.contains(&format!("channel ID {id}")));
+    assert!(error.contains("Track has no assigned VST instrument"));
+    assert!(engine.take_render_error().is_none());
+    let samples = engine.pump_virtual(2048).unwrap();
+    assert!(samples.iter().all(|frame| (frame[0] - 0.4).abs() < 1e-6));
+    assert!(engine.snapshot().playing);
+    assert_eq!(engine.snapshot().render_errors, 1);
+}
+
+#[test]
 fn virtual_callback_keeps_generation_and_audio_during_coalesced_edits() {
     let (_directory, mut project, id) = fixture();
     let mut engine = engine(&project);

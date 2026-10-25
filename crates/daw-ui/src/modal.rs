@@ -12,6 +12,16 @@ pub fn modal<R>(
     title: &str,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> ModalResponse<R> {
+    modal_with_title_rows(ctx, id, title, None, contents)
+}
+
+pub(crate) fn modal_with_title_rows<R>(
+    ctx: &Context,
+    id: Id,
+    title: &str,
+    title_rows: Option<usize>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> ModalResponse<R> {
     let width = (ctx.content_rect().width() - 4.0 * tokens::POPUP_MARGIN).clamp(180.0, 460.0);
     egui::Modal::new(id)
         .backdrop_color(crate::theme::palette(ctx).popup_scrim)
@@ -23,7 +33,11 @@ pub fn modal<R>(
         )
         .show(ctx, |ui| {
             ui.set_width(width);
-            text::title(ui, title);
+            if let Some(rows) = title_rows {
+                text::bounded_block(ui, text::TextRole::Title, title, rows);
+            } else {
+                text::title(ui, title);
+            }
             ui.add_space(tokens::SPACE_MD);
             contents(ui)
         })

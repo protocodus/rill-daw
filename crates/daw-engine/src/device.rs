@@ -113,6 +113,7 @@ struct Controls {
     peak_right: AtomicU32,
     underruns: AtomicU64,
     render_errors: AtomicU64,
+    render_error: Mutex<Option<String>>,
     finished_generation: AtomicU64,
 }
 impl Controls {
@@ -131,8 +132,31 @@ impl Controls {
             peak_right: AtomicU32::new(0),
             underruns: AtomicU64::new(0),
             render_errors: AtomicU64::new(0),
+            render_error: Mutex::new(None),
             finished_generation: AtomicU64::new(u64::MAX),
         }
+    }
+
+    /// Only the background render worker publishes text. The device callback
+    /// continues using the atomic counter and never formats or locks diagnostics.
+    fn set_render_error(&self, mut error: String) {
+        const MAX_BYTES: usize = 64 * 1024;
+        if error.len() > MAX_BYTES {
+            let mut end = MAX_BYTES;
+            while !error.is_char_boundary(end) {
+                end -= 1;
+            }
+            error.truncate(end);
+            error.push_str("\n[Further diagnostic text omitted]");
+        }
+        *self
+            .render_error
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(error);
+    }
+
+    fn take_render_error(&self) -> Option<String> {
+        self.render_error.try_lock().ok()?.take()
     }
 }
 
@@ -273,10 +297,9 @@ impl RenderFailureLatch {
         if self.failed_generation == Some(generation) {
             return false;
         }
-        if operation().is_ok() {
-            return true;
-        }
+        let Err(error) = operation() else { return true };
         self.failed_generation = Some(generation);
+        controls.set_render_error(format!("Audio rendering stopped\n\n{error:#}"));
         controls.render_errors.fetch_add(1, Ordering::Relaxed);
         controls
             .finished_generation
@@ -474,15 +497,16 @@ impl AudioEngine {
                         if worker_controls.shutdown.load(Ordering::Acquire) {
                             break;
                         }
-                        if renderer
-                            .set_plugin_parameter(
-                                change.track,
-                                change.effect,
-                                change.parameter,
-                                change.value,
-                            )
-                            .is_err()
-                        {
+                        if let Err(error) = renderer.set_plugin_parameter(
+                            change.track,
+                            change.effect,
+                            change.parameter,
+                            change.value,
+                        ) {
+                            worker_controls.set_render_error(format!(
+                                "Plugin parameter update failed\n\nUpdating plugin parameter {} on channel ID {}: {error:#}",
+                                change.parameter, change.track
+                            ));
                             worker_controls
                                 .render_errors
                                 .fetch_add(1, Ordering::Relaxed);
@@ -564,6 +588,9 @@ impl AudioEngine {
                         continue;
                     }
                     if renderer.plugin_errors > 0 {
+                        while let Some(error) = renderer.take_plugin_error() {
+                            worker_controls.set_render_error(error);
+                        }
                         worker_controls
                             .render_errors
                             .fetch_add(renderer.plugin_errors, Ordering::Relaxed);
@@ -658,6 +685,12 @@ impl AudioEngine {
     /// Retrieve asynchronous preparation errors without waiting on playback.
     pub fn take_edit_error(&self) -> Option<String> {
         self.live_updates.as_ref()?.take_error()
+    }
+
+    /// Retrieve the latest detailed render/plugin failure once, without waiting
+    /// for the render worker. At most one bounded message is retained.
+    pub fn take_render_error(&self) -> Option<String> {
+        self.controls.take_render_error()
     }
 
     /// Consume the production output queue without physical audio hardware.
@@ -1118,6 +1151,15 @@ mod tests {
         assert_eq!(controls.render_errors.load(Ordering::Relaxed), 1);
         assert_eq!(controls.finished_generation.load(Ordering::Acquire), 0);
         assert!(!controls.playing.load(Ordering::Acquire));
+        assert!(
+            controls
+                .take_render_error()
+                .unwrap()
+                .contains("Audio rendering stopped\n\nPersistent graph worker unexpectedly exited")
+        );
+        assert!(controls.take_render_error().is_none());
+        assert!(!latch.attempt(&controls, 0, || bail!("must stay latched")));
+        assert!(controls.take_render_error().is_none());
 
         // A deliberate seek/new transport generation can retry a transient fault.
         controls.generation.store(1, Ordering::Release);
@@ -1140,6 +1182,27 @@ mod tests {
         assert_eq!(attempts, 3);
         assert_eq!(controls.render_errors.load(Ordering::Relaxed), 2);
         assert_eq!(controls.finished_generation.load(Ordering::Acquire), 1);
+        assert!(
+            controls
+                .take_render_error()
+                .unwrap()
+                .contains("Seek prefill failed")
+        );
+    }
+
+    #[test]
+    fn render_error_slot_is_bounded_unicode_safe_and_does_not_wait_for_the_worker() {
+        let controls = Controls::new();
+        controls.set_render_error("old failure".into());
+        controls.set_render_error(format!("Plugin 診断 🎹: {}", "é".repeat(40_000)));
+        let guard = controls.render_error.lock().unwrap();
+        assert!(controls.take_render_error().is_none());
+        drop(guard);
+        let error = controls.take_render_error().unwrap();
+        assert!(error.starts_with("Plugin 診断 🎹:"));
+        assert!(error.ends_with("[Further diagnostic text omitted]"));
+        assert!(error.len() <= 64 * 1024 + 40);
+        assert!(controls.take_render_error().is_none());
     }
 
     #[test]

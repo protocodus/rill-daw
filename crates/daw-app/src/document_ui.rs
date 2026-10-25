@@ -276,6 +276,13 @@ impl DawApp {
                 if let Some(error) = &error {
                     ui.add_space(daw_ui::tokens::SPACE_MD);
                     daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Body, error, 4);
+                    if daw_ui::button(ui, "Details").clicked() {
+                        self.show_error_details(
+                            "Project error",
+                            error.lines().next().unwrap_or(error),
+                            error,
+                        );
+                    }
                 }
                 ui.add_space(daw_ui::tokens::SPACE_XL);
                 daw_ui::action_row(

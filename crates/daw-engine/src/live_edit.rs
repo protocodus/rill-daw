@@ -89,6 +89,7 @@ pub(crate) struct LiveEditPreparer {
 
 struct TrackEdit {
     id: u64,
+    name: String,
     gain: f32,
     pan: f32,
     content: CompiledContent,
@@ -290,6 +291,7 @@ impl LiveEditPreparer {
             let midi_capacity = content.events.len() + 2 * *maximum + 4;
             tracks.push(TrackEdit {
                 id,
+                name: track.name.clone(),
                 gain: track.gain,
                 pan: track.pan,
                 content: content.clone(),
@@ -375,6 +377,7 @@ impl Renderer {
         let mut content_changed = false;
         for (next, old) in edit.tracks.iter_mut().zip(&mut self.tracks) {
             let track = old.as_mut().unwrap();
+            std::mem::swap(&mut track.name, &mut next.name);
             track.gain.set_manual(next.gain, self.sample_rate);
             track.pan.set_manual(next.pan, self.sample_rate);
             if Arc::ptr_eq(&next.content.events, &track.events)

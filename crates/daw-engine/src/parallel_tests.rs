@@ -318,6 +318,20 @@ fn live_worker_panic_silences_only_its_path_and_keeps_the_pool_running() {
     assert_eq!(failed, vec![failed_id]);
     assert_eq!(renderer.plugin_errors, 1);
     assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    let diagnostic = renderer
+        .take_plugin_error()
+        .expect("Preserve contained failure");
+    assert!(diagnostic.contains(&project.track(failed_id).unwrap().name));
+    assert!(diagnostic.contains(&format!("ID {failed_id}")));
+    assert!(diagnostic.contains("Graph processor panicked"));
+    assert!(renderer.take_plugin_error().is_none());
+    renderer
+        .render(&mut [[0.0; 2]; 256], &mut [0.0; 256])
+        .unwrap();
+    assert!(
+        renderer.take_plugin_error().is_none(),
+        "Latched failures must not repeat"
+    );
 }
 
 #[test]

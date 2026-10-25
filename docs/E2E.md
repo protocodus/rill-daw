@@ -25,6 +25,18 @@ The headless tests cover application behavior, UI event handling, model changes,
 
 `parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Third-party compatibility and native editor coverage remain in the opt-in installed-plugin tests.
 
+`error_details_e2e` exercises real export failures and isolated editor failures through
+the running app. It checks the complete diagnostic text, clipboard copy, retained
+caller, and safe dismissal. `render_error_e2e` runs a native VST3 whose processing
+exceeds the sandbox deadline alongside healthy audio: the Details view identifies
+the failed channel/plugin and cause, healthy audio continues while the dialog is
+open, and a dismissed failure does not repeat on every block. These tests use no
+desktop or audio hardware. Run them after building the workspace binaries:
+
+```sh
+cargo test --locked -p daw-app --test error_details_e2e --test render_error_e2e
+```
+
 `plugin_loading_e2e` compiles a native VST3 fixture and runs it through the production
 `daw-plugin-host`, with no protocol substitute. The fixture terminates its process
 if the host attempts to create an editor during audio loading or parameter reads.

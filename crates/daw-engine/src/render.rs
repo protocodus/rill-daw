@@ -404,6 +404,8 @@ fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
 
 struct RenderTrack {
     id: u64,
+    name: String,
+    pending_error: Option<String>,
     audio: Arc<Vec<AudioClip>>,
     audio_segments: Arc<Vec<audio_schedule::Segment>>,
     notes: Arc<Vec<ScheduledNote>>,
@@ -455,6 +457,10 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
             return Err(error);
         }
         track.plugin_failed = true;
+        track.pending_error = Some(format!(
+            "Plugin processing failed on \"{}\"\n\nChannel: \"{}\" (ID {})\n{error:#}",
+            track.name, track.name, track.id
+        ));
         track.delay.reset();
         if let Some(meter) = &track.meter {
             meter.clear();
@@ -526,7 +532,13 @@ impl RenderTrack {
                         &mut self.right[..count],
                     )
                 });
-                process?;
+                process.with_context(|| {
+                    format!(
+                        "Processing instrument \"{}\" ({})",
+                        plugin.info().name,
+                        plugin.info().path.display()
+                    )
+                })?;
                 for index in 0..count {
                     self.mix_left[index] += f64::from(self.left[index]);
                     self.mix_right[index] += f64::from(self.right[index]);
@@ -609,7 +621,13 @@ impl RenderTrack {
                             &mut self.insert_right[..count],
                         )
                     });
-                    process?;
+                    process.with_context(|| {
+                        format!(
+                            "Processing effect \"{}\" ({})",
+                            effect.info().name,
+                            effect.info().path.display()
+                        )
+                    })?;
                     std::mem::swap(&mut self.left, &mut self.insert_left);
                     std::mem::swap(&mut self.right, &mut self.insert_right);
                     effect_latency += effect.latency_samples();
@@ -910,6 +928,8 @@ impl Renderer {
             }
             tracks.push(RenderTrack {
                 id: track.id,
+                name: track.name.clone(),
+                pending_error: None,
                 audio: content.audio,
                 audio_segments: content.audio_segments,
                 notes: content.notes,
@@ -1096,10 +1116,20 @@ impl Renderer {
                 .iter_mut()
                 .find(|insert| matches!(insert, Insert::Vst { id, .. } if *id == effect_id))
                 .context("Insert is not active in the render graph")?;
-            effect.set_parameter(parameter_id, value)?;
+            effect.set_parameter(parameter_id, value).with_context(|| {
+                format!(
+                    "Setting parameter {parameter_id} of effect \"{}\" ({}) on channel \"{}\" (ID {})",
+                    effect.info().name, effect.info().path.display(), track.name, track.id
+                )
+            })?;
             parameters
         } else if let Processor::Vst(plugin) = &mut track.processor {
-            plugin.set_parameter(parameter_id, value)?;
+            plugin.set_parameter(parameter_id, value).with_context(|| {
+                format!(
+                    "Setting parameter {parameter_id} of instrument \"{}\" ({}) on channel \"{}\" (ID {})",
+                    plugin.info().name, plugin.info().path.display(), track.name, track.id
+                )
+            })?;
             &mut track.instrument_automation
         } else {
             bail!("Track has no assigned VST instrument")
@@ -1110,6 +1140,15 @@ impl Renderer {
             }
         }
         Ok(())
+    }
+
+    /// Drain one contained plugin failure after the graph workers return their nodes.
+    /// Failed paths are latched, so subsequent blocks do not recreate the diagnostic.
+    pub(crate) fn take_plugin_error(&mut self) -> Option<String> {
+        self.tracks
+            .iter_mut()
+            .flatten()
+            .find_map(|track| track.pending_error.take())
     }
 
     pub(crate) fn finished(&self) -> bool {
@@ -1155,6 +1194,13 @@ impl Renderer {
                                 return Err(error);
                             }
                             track.plugin_failed = true;
+                            track.pending_error = Some(format!(
+                                "Plugin reset failed on \"{}\"\n\nResetting effect \"{}\" ({}) on channel ID {}: {error:#}",
+                                track.name,
+                                effect.info().name,
+                                effect.info().path.display(),
+                                track.id
+                            ));
                             self.plugin_errors += 1;
                         }
                     }
@@ -1174,6 +1220,13 @@ impl Renderer {
                             return Err(error);
                         }
                         track.plugin_failed = true;
+                        track.pending_error = Some(format!(
+                            "Plugin reset failed on \"{}\"\n\nResetting instrument \"{}\" ({}) on channel ID {}: {error:#}",
+                            track.name,
+                            plugin.info().name,
+                            plugin.info().path.display(),
+                            track.id
+                        ));
                         self.plugin_errors += 1;
                     }
                 }

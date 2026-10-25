@@ -67,21 +67,40 @@ impl Default for ViewBackdrop {
 
 impl ViewBackdrop {
     pub fn capture(ctx: &Context, bounds: Rect) -> Self {
-        Self::capture_over(ctx, bounds, None)
+        Self::capture_over(ctx, bounds, None, false)
+    }
+
+    /// Retain the caller of a modal, including foreground menus or an earlier
+    /// modal. Capture before drawing the new dialog. Existing shared scrims are
+    /// omitted so its own backdrop is the only dimming layer on replay.
+    pub fn capture_dialog_context(ctx: &Context, bounds: Rect) -> Self {
+        Self::capture_over(ctx, bounds, None, true)
     }
 
     /// Keep the original vector/text source underneath a new utility, rather
     /// than capturing already tessellated background text into another cache.
     pub fn capture_overlay(ctx: &Context, bounds: Rect, background: &Self) -> Self {
-        Self::capture_over(ctx, bounds, Some(background))
+        Self::capture_over(ctx, bounds, Some(background), false)
     }
 
-    fn capture_over(ctx: &Context, bounds: Rect, background: Option<&Self>) -> Self {
+    fn capture_over(
+        ctx: &Context,
+        bounds: Rect,
+        background: Option<&Self>,
+        include_foreground: bool,
+    ) -> Self {
         let layers = ctx.memory(|memory| memory.layer_ids().collect::<Vec<_>>());
+        let maximum_order = if include_foreground {
+            egui::Order::Foreground
+        } else {
+            egui::Order::Middle
+        };
+        let scrim = crate::theme::palette(ctx).popup_scrim;
+        let content_rect = ctx.content_rect();
         let mut shapes =
             background.map_or_else(Vec::new, |background| background.shapes.as_ref().clone());
         for layer in layers {
-            if layer.order > egui::Order::Middle
+            if layer.order > maximum_order
                 || crate::popup_backdrop::is_popup_backdrop_layer(layer)
                 || (background.is_some() && layer.order == egui::Order::Background)
             {
@@ -94,6 +113,19 @@ impl ViewBackdrop {
                         let mut shape = original.clone();
                         if let Some(transform) = transform {
                             shape.transform(transform);
+                        }
+                        // egui Modal places its full-viewport scrim in the same
+                        // layer as its contents. Keep the parent dialog but do
+                        // not bake that scrim into the next dialog's backdrop.
+                        if include_foreground
+                            && layer.order == egui::Order::Foreground
+                            && matches!(&shape.shape, egui::Shape::Rect(rect)
+                                if rect.rect == content_rect
+                                    && rect.fill == scrim
+                                    && rect.stroke.width == 0.0
+                                    && rect.brush.is_none())
+                        {
+                            continue;
                         }
                         shape.clip_rect = shape.clip_rect.intersect(bounds);
                         if shape.clip_rect.is_positive() {

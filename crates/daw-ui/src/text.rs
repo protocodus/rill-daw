@@ -87,6 +87,16 @@ pub fn block(ui: &mut Ui, role: TextRole, value: impl Into<String>) -> Response 
     ui.add(egui::Label::new(role.rich(ui.ctx(), value)).wrap())
 }
 
+/// Read-only, selectable text for diagnostics and other text the user may copy.
+/// Unlike bounded headings, this preserves every line; callers bound its viewport.
+pub fn selectable_block(ui: &mut Ui, role: TextRole, value: impl Into<String>) -> Response {
+    ui.add(
+        egui::Label::new(role.rich(ui.ctx(), value))
+            .wrap()
+            .selectable(true),
+    )
+}
+
 /// A wrapping context heading with a bounded number of rows. The full source
 /// remains available to native accessibility and the hover tooltip.
 pub fn bounded_block(
