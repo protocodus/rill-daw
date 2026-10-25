@@ -807,7 +807,25 @@ fn live_midi_monitor_plays_filtered_chords_and_sustain_through_the_isolated_inst
     midi(&mut app, 0, [0xb1, 64, 127]);
     midi(&mut app, 0, [0x81, 60, 0]);
     midi(&mut app, 0, [0x81, 64, 0]);
-    settled(&pump(&mut app, 4096), 0.32);
+    let sustained = pump(&mut app, 4096);
+    settled(&sustained, 0.32);
+    assert_eq!(
+        sustained["engine"]["engine_id"],
+        chord["engine"]["engine_id"]
+    );
+    assert_eq!(
+        sustained["engine"]["consumed_frames"].as_u64().unwrap(),
+        chord["engine"]["consumed_frames"].as_u64().unwrap() + 4096,
+        "UI frames releasing piano-roll audition must preserve MIDI monitoring: {}",
+        sustained["engine"]
+    );
+    for (index, frame) in output(&sustained).iter().enumerate() {
+        assert!(
+            frame.iter().all(|sample| (*sample - 0.32).abs() < 1e-5),
+            "Sustain interrupted at frame {index}: {frame:?}; engine={}",
+            sustained["engine"]
+        );
+    }
     midi(&mut app, 0, [0xb1, 64, 0]);
     let released = pump(&mut app, 4096);
     settled(&released, 0.0);

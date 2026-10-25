@@ -873,7 +873,11 @@ impl AudioEngine {
             .audition
             .lock()
             .unwrap_or_else(|error| error.into_inner()) = note;
-        if note.is_none() {
+        // The ready preview queue also carries live MIDI monitoring. Releasing
+        // the piano-roll key must not mute that independent source while the
+        // render worker is waiting for queue space. The worker still owns mode
+        // changes, pre-count suspension, and fatal-render shutdown.
+        if note.is_none() && !self.controls.midi.monitoring_requested() {
             self.controls.auditioning.store(false, Ordering::Release);
         }
         Ok(())
@@ -1292,6 +1296,64 @@ mod tests {
         queue.push([0.25, 0.25], 9.0, 0);
         fill_output(&mut output, 2, &queue, &controls);
         assert_eq!(output, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn releasing_keyboard_audition_keeps_ready_midi_monitor_audio_consuming() {
+        let mut project = Project::new();
+        let track = project.add_midi_track("Live MIDI");
+        let controls = Arc::new(Controls::new());
+        let queue = Arc::new(AudioQueue::new(BLOCK * 2));
+        let (parameters, _receiver) = mpsc::sync_channel(1);
+        // No render worker: deterministically hold it between publishing ready
+        // preview audio and its next iteration, as can happen with a full queue.
+        let mut engine = AudioEngine {
+            midi: MidiController::new(Arc::clone(&controls), true),
+            input: InputController::new(Arc::clone(&controls), 48000, 256, true),
+            live_updates: None,
+            virtual_queue: Some(Arc::clone(&queue)),
+            stream: None,
+            worker: None,
+            controls: Arc::clone(&controls),
+            sample_rate: 48_000,
+            parameters,
+            audition: Arc::new(Mutex::new(None)),
+            channel_meters: Arc::new(ChannelMeters::new(&project)),
+        };
+        let mut settings = MidiSettings {
+            port_id: Some("rill-virtual-midi".into()),
+            routes: vec![MidiRoute {
+                track,
+                channel: Some(1),
+                monitor: true,
+            }],
+        };
+        engine.configure_midi(&project, settings.clone()).unwrap();
+        controls.render_preview.store(true, Ordering::Release);
+        controls.auditioning.store(true, Ordering::Release);
+        controls
+            .position
+            .store(7.0_f64.to_bits(), Ordering::Relaxed);
+        for _ in 0..BLOCK * 2 {
+            queue.push([0.32, 0.32], 9.0, 0);
+        }
+        assert_eq!(engine.pump_virtual(BLOCK).unwrap(), vec![[0.32; 2]; BLOCK]);
+        engine.audition_note(None).unwrap();
+        assert_eq!(engine.pump_virtual(BLOCK).unwrap(), vec![[0.32; 2]; BLOCK]);
+        assert_eq!(engine.snapshot().consumed_frames, (BLOCK * 2) as u64);
+        assert_eq!(engine.snapshot().underruns, 0);
+        assert_eq!(engine.position_beats(), 7.0);
+        assert!(!engine.snapshot().playing);
+
+        // With MIDI monitoring off, the same GUI release must still silence
+        // keyboard audition immediately, without waiting for the worker.
+        settings.routes[0].monitor = false;
+        engine.configure_midi(&project, settings).unwrap();
+        controls.auditioning.store(true, Ordering::Release);
+        queue.push([0.32, 0.32], 9.0, 0);
+        engine.audition_note(None).unwrap();
+        assert_eq!(engine.pump_virtual(1).unwrap(), vec![[0.0; 2]]);
+        assert_eq!(engine.snapshot().consumed_frames, (BLOCK * 2) as u64);
     }
 
     #[test]
