@@ -764,6 +764,7 @@ name = "daw-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cc",
  "cpal",
  "daw-core",
  "daw-plugins",

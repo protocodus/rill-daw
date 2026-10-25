@@ -97,7 +97,7 @@ Supported commands:
 | `open` | `path` | Execute an already-approved open through the document pipeline, preserving the outgoing session in recovery. Use `file_dialog` and File → Open to test the unsaved-change decision. |
 | `file_dialog` | `kind` (`save`, `open`, or `export`), `path` (or `null`) | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. |
 | `close_window` | — | Deliver a native viewport close request and return the resulting guard or exit state. Unsaved work requires an explicit UI choice. |
-| `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an open foreground menu over an identically named toolbar control. |
+| `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an active menu or utility window over an identically named inactive workspace control. |
 | `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
 | `scroll` | `x`, `y`, `delta`; optional `delta_x` and modifiers | Scroll at viewport coordinates; negative delta moves down the content. |
 | `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd`, `release_modifiers`, `repetitions` (1–32) | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. `release_modifiers: true` delivers the complete chord in one frame with no modifiers held at repaint; repeated presses are also delivered in one frame. Defaults preserve separate press/release frames. |
@@ -169,7 +169,7 @@ WAV after portable saving. Loop settings do not truncate offline export.
 cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins_e2e
 ```
 
-The `clones_e2e` suite creates linked MIDI/audio instances through menus, edits
+The `clones_e2e` suite creates MIDI/audio ghost copies through menus, edits
 notes and Unicode names from different members, and checks chain indicators.
 It exercises independent duplication, detaching, original deletion, local
 moving/trimming/splitting, undo/redo, shared gain/fades/reverse/normalization,
@@ -206,7 +206,7 @@ Layout regression coverage also includes eight long Unicode plug-in folders in
 `setup_layout_e2e`, long effect/channel names with reorder and routing actions in
 `channel_layout_e2e` (including twenty-insert growth/removal), and an 80-device catalog in `components_e2e`. Search and
 creation actions remain fixed while scrolling or using arrow-key selection.
-Join checks distinguish linked instances by their visible one-based beat ranges;
+Join checks distinguish ghost instances by their visible one-based beat ranges;
 mixer checks align master/channel controls and verify vertical overflow access.
 These automated UI regressions are separate from an interactive desktop walkthrough.
 
@@ -231,3 +231,11 @@ default release tail. Popup and destination-picker cancellation preserve the
 project and caller. Its opt-in native test uses `RILL_TEST_VST_INSTRUMENT`
 (Surge XT) to verify both choices against an actual isolated plugin tail;
 ordinary container runs require no installed plugins.
+
+`arranger_tools_e2e` exercises the common audio/MIDI toolset through real pointer and keyboard events: selected-result behavior for repeated Duplicate/Cut, Join and Ghost copy, both trim edges, Shift snap bypass, held Shift-duplicate, Stretch/Undo/return-to-origin, and stretch→trim→split composition. It verifies local ghost timing, linked/independent source edits, version-2 portable recall, joined WAV duration/pitch, editor tool reset, and device-free audio continuity while stretching. `live_edit_e2e` additionally stretches MIDI and audio while retaining instrument/effect sandbox identities, sustained MIDI voices and continuous PCM, including while the pointer remains held.
+
+```sh
+cargo test --locked -p daw-app --test arranger_tools_e2e --test live_edit_e2e
+```
+
+The headless driver's default label click prefers an active utility over an identically named inactive workspace control (for example the Join tool behind the Join popup), while explicit occurrence indexing remains available.

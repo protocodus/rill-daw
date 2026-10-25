@@ -6,6 +6,12 @@ use std::{
     sync::{Mutex, Weak},
 };
 
+pub(super) type AudioAssetKey = (PathBuf, u64);
+
+fn asset_key(path: &Path, rate: f64) -> AudioAssetKey {
+    (path.to_path_buf(), rate.to_bits())
+}
+
 #[derive(Clone)]
 pub(super) struct CompiledContent {
     pub audio: Arc<Vec<AudioClip>>,
@@ -56,7 +62,7 @@ pub(crate) struct LiveEditPreparer {
     previous: Arc<Project>,
     content: HashMap<u64, CompiledContent>,
     maximum_notes: HashMap<u64, usize>,
-    assets: HashMap<PathBuf, Weak<AudioData>>,
+    assets: HashMap<AudioAssetKey, Weak<AudioData>>,
 }
 
 struct TrackEdit {
@@ -195,7 +201,7 @@ impl LiveEditPreparer {
         // Weak entries do not keep deleted audio alive. A prepared plan and the
         // renderer own the live sources; stale plans can be retired independently.
         self.assets.retain(|_, asset| asset.strong_count() > 0);
-        let mut cache: HashMap<PathBuf, Arc<AudioData>> = self
+        let mut cache: HashMap<AudioAssetKey, Arc<AudioData>> = self
             .assets
             .iter()
             .filter_map(|(path, asset)| asset.upgrade().map(|asset| (path.clone(), asset)))
@@ -239,9 +245,18 @@ impl LiveEditPreparer {
                 )?
             };
             for audio in content.audio.iter() {
-                cache.insert(audio.source_alias.clone(), Arc::clone(&audio.data));
-                if used_sources.insert(Arc::as_ptr(&audio.data)) {
-                    cache_bytes += audio.data.samples.len() * size_of::<f32>();
+                cache.insert(
+                    asset_key(&audio.source_alias, audio.source_rate),
+                    Arc::clone(&audio.data),
+                );
+                cache.insert(
+                    asset_key(&audio.source_alias, 1.0),
+                    Arc::clone(&audio.original),
+                );
+                for data in [&audio.data, &audio.original] {
+                    if used_sources.insert(Arc::as_ptr(data)) {
+                        cache_bytes += data.samples.len() * size_of::<f32>();
+                    }
                 }
             }
             ensure!(
@@ -293,8 +308,13 @@ impl Renderer {
         let mut maximum_notes = HashMap::new();
         for track in self.tracks.iter().flatten() {
             for audio in track.audio.iter() {
-                assets.insert(audio.source_path.clone(), Arc::downgrade(&audio.data));
-                assets.insert(audio.source_alias.clone(), Arc::downgrade(&audio.data));
+                for path in [&audio.source_path, &audio.source_alias] {
+                    assets.insert(
+                        asset_key(path, audio.source_rate),
+                        Arc::downgrade(&audio.data),
+                    );
+                    assets.insert(asset_key(path, 1.0), Arc::downgrade(&audio.original));
+                }
             }
             maximum_notes.insert(track.id, track.notes.len());
             content.insert(
@@ -453,7 +473,7 @@ pub(super) fn compile_content(
     track: &Track,
     enabled: bool,
     settings: CompileSettings<'_>,
-    audio_cache: &mut HashMap<PathBuf, Arc<AudioData>>,
+    audio_cache: &mut HashMap<AudioAssetKey, Arc<AudioData>>,
     cache_bytes: &mut usize,
 ) -> Result<CompiledContent> {
     let CompileSettings {
@@ -491,8 +511,8 @@ pub(super) fn compile_content(
         match &clip.content {
             ClipContent::Midi { notes: clip_notes } => {
                 for note in clip_notes {
-                    let relative_start = note.start - clip.offset;
-                    let relative_end = relative_start + note.length;
+                    let relative_start = clip.source_to_local(note.start);
+                    let relative_end = relative_start + note.length / clip.source_rate;
                     if relative_end <= 0.0 || relative_start >= clip.length || note.velocity == 0 {
                         continue;
                     }
@@ -518,13 +538,13 @@ pub(super) fn compile_content(
                 ..
             } => {
                 let requested = PathBuf::from(path);
-                let source_path = if audio_cache.contains_key(&requested) {
+                let source_path = if audio_cache.contains_key(&asset_key(&requested, 1.0)) {
                     requested
                 } else {
                     std::fs::canonicalize(path)
                         .with_context(|| format!("Loading audio clip {}", clip.name))?
                 };
-                let data = if let Some(data) = audio_cache.get(&source_path) {
+                let original = if let Some(data) = audio_cache.get(&asset_key(&source_path, 1.0)) {
                     Arc::clone(data)
                 } else {
                     let source = quality::load_source(&source_path)
@@ -543,7 +563,32 @@ pub(super) fn compile_content(
                         *cache_bytes <= quality::MAX_CACHE_BYTES,
                         "Prepared audio exceeds the 1 GiB session cache limit"
                     );
-                    audio_cache.insert(source_path.clone(), Arc::clone(&data));
+                    audio_cache.insert(asset_key(&source_path, 1.0), Arc::clone(&data));
+                    data
+                };
+                let data = if clip.source_rate == 1.0 {
+                    Arc::clone(&original)
+                } else if let Some(data) =
+                    audio_cache.get(&asset_key(&source_path, clip.source_rate))
+                {
+                    Arc::clone(data)
+                } else {
+                    check_cancelled()?;
+                    let prepared_bytes = (original.samples.len() as f64 / clip.source_rate).ceil()
+                        as usize
+                        * size_of::<f32>();
+                    ensure!(
+                        cache_bytes.saturating_add(prepared_bytes) <= quality::MAX_CACHE_BYTES,
+                        "Prepared audio exceeds the 1 GiB session cache limit"
+                    );
+                    let data = Arc::new(crate::stretch::prepare_stretched(
+                        &original,
+                        clip.source_rate,
+                        cancel,
+                    )?);
+                    *cache_bytes += data.samples.len() * size_of::<f32>();
+                    audio_cache
+                        .insert(asset_key(&source_path, clip.source_rate), Arc::clone(&data));
                     data
                 };
                 ensure!(
@@ -553,17 +598,23 @@ pub(super) fn compile_content(
                 audio.push(AudioClip {
                     source_path,
                     source_alias: PathBuf::from(path),
+                    source_rate: clip.source_rate,
+                    original,
                     start: to_sample(clip.start),
-                    source_offset: clip.offset * 60.0 / tempo * data.sample_rate as f64,
+                    source_offset: clip.offset / clip.source_rate * 60.0 / tempo
+                        * data.sample_rate as f64,
                     gain: *gain,
-                    fade_in: fade_in.max(0.0) * samples_per_beat,
-                    fade_out: fade_out.max(0.0) * samples_per_beat,
+                    fade_in: fade_in.max(0.0) * samples_per_beat / clip.source_rate,
+                    fade_out: fade_out.max(0.0) * samples_per_beat / clip.source_rate,
                     fade_in_curve: *fade_in_curve,
                     fade_out_curve: *fade_out_curve,
                     envelope_offset: envelope.map_or(0.0, |envelope| envelope.offset)
-                        * samples_per_beat,
-                    envelope_length: envelope.map_or(clip.length, |envelope| envelope.length)
-                        * samples_per_beat,
+                        * samples_per_beat
+                        / clip.source_rate,
+                    envelope_length: envelope
+                        .map_or(clip.source_length(), |envelope| envelope.length)
+                        * samples_per_beat
+                        / clip.source_rate,
                     source_length: clip.length * 60.0 / tempo * data.sample_rate as f64,
                     reverse: *reverse,
                     data,

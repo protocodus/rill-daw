@@ -15,6 +15,7 @@ pub enum Icon {
     Link,
     Unlink,
     Glue,
+    Stretch,
     Erase,
     Stack,
     FadeIn,
@@ -68,7 +69,8 @@ impl Icon {
             "Copy" | "Copy notes" | "Copy path" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
             "Duplicate" | "Duplicate clip" => Self::Duplicate,
-            "Create linked clone" => Self::Link,
+            "Ghost copy" => Self::Link,
+            "Stretch" => Self::Stretch,
             "Make independent" => Self::Unlink,
             "Glue" | "Glue selected" | "Legato" | "Join" | "Join clips…" => Self::Glue,
             "Erase" => Self::Erase,
@@ -230,6 +232,13 @@ impl Icon {
                 box_at(3., 8., 7., 8.);
                 box_at(14., 8., 7., 8.);
                 line(&[(10., 12.), (14., 12.)]);
+            }
+            Self::Stretch => {
+                box_at(7., 7., 10., 10.);
+                line(&[(1., 12.), (7., 12.)]);
+                line(&[(17., 12.), (23., 12.)]);
+                line(&[(4., 9.), (1., 12.), (4., 15.)]);
+                line(&[(20., 9.), (23., 12.), (20., 15.)]);
             }
             Self::Erase => {
                 line(&[

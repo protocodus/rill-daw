@@ -45,7 +45,7 @@ distribution. A graphical session (X11 or Wayland), OpenGL-capable driver,
 ALSA, udev, X11 input/cursor, xkbcommon, and Wayland client libraries are required
 for desktop use. The X11 libraries are loaded at runtime and may not appear in ldd.
 Ubuntu 22.04 runtime packages:
-  sudo apt install libasound2 libudev1 libxkbcommon0 libxkbcommon-x11-0 \
+  sudo apt install libstdc++6 libasound2 libudev1 libxkbcommon0 libxkbcommon-x11-0 \
     libwayland-client0 libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libgl1 libegl1
 Ubuntu 24.04 uses libasound2t64 in place of libasound2.
 No installation is needed for the --headless test driver or offline rendering

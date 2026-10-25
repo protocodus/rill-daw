@@ -1,4 +1,4 @@
-//! Linked clips through the running app: editing, independence, recall and audio.
+//! Ghost clips through the running app: editing, independence, recall and audio.
 mod common;
 use common::Harness;
 use daw_core::{AudioData, Clip, Note, Project};
@@ -156,7 +156,8 @@ fn midi_linked_clones_share_notes_and_name_but_duplicate_and_unlink_are_independ
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     app.click("Phrase");
-    let first = menu(&mut app, "Edit", "Create linked clone");
+    let first = menu(&mut app, "Edit", "Ghost copy");
+    assert_eq!(first["history"]["undo"][0], "Create ghost copy");
     let first_id = selected(&first);
     assert_eq!(clips(&first).len(), 2);
     assert!(!clip(&first, original_id)["link_group"].is_null());
@@ -171,7 +172,7 @@ fn midi_linked_clones_share_notes_and_name_but_duplicate_and_unlink_are_independ
     );
     assert_eq!(undo(&mut app, true)["project"], first["project"]);
     select(&mut app, first_id);
-    let second_id = selected(&menu(&mut app, "Edit", "Create linked clone"));
+    let second_id = selected(&menu(&mut app, "Edit", "Ghost copy"));
     let copied = menu(&mut app, "Edit", "Duplicate");
     let independent_id = selected(&copied);
     assert_eq!(clips(&copied).len(), 4);
@@ -188,7 +189,13 @@ fn midi_linked_clones_share_notes_and_name_but_duplicate_and_unlink_are_independ
         &[independent_id],
     );
     select(&mut app, first_id);
-    menu(&mut app, "Window", "Clip Editor");
+    let editor = menu(&mut app, "Window", "Clip Editor");
+    assert!(
+        editor["visible_labels"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Ghost"))
+    );
     let before = app.inspect()["project"].clone();
     let edited = draw_note(&mut app, 2.0, 64);
     assert_eq!(notes(&edited, original_id).as_array().unwrap().len(), 2);
@@ -245,7 +252,7 @@ fn linked_clip_move_trim_and_split_are_local_while_note_edits_reach_every_instan
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     app.click("Pattern");
-    let clone_id = selected(&menu(&mut app, "Edit", "Create linked clone"));
+    let clone_id = selected(&menu(&mut app, "Edit", "Ghost copy"));
     let before = select(&mut app, clone_id);
     let from = center(clip_rect(&before, clone_id));
     let scale = before["timeline"]["pixels_per_beat"].as_f64().unwrap();
@@ -336,7 +343,7 @@ fn audio_clones_share_processing_and_render_identically_after_portable_recall() 
     let state = select(&mut app, original_id);
     let (x, y) = center(clip_rect(&state, original_id));
     app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
-    let clone_id = selected(&app.click("Create linked clone"));
+    let clone_id = selected(&app.click("Ghost copy"));
     let copied = menu(&mut app, "Edit", "Duplicate");
     let independent_id = selected(&copied);
     let independent_content = audio(&copied, independent_id).clone();

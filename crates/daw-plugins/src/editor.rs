@@ -444,6 +444,32 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn spawn_fake_helper(
+        request_id: u64,
+        helper: &Path,
+        timeout: Duration,
+    ) -> Result<EditorSession> {
+        // A concurrent Linux fork can briefly inherit the writable descriptor
+        // of a freshly created script. Retry only that exec failure, before a
+        // session exists; protocol timeouts and their assertions stay unchanged.
+        let spawn_deadline = Instant::now() + Duration::from_millis(250);
+        loop {
+            let result =
+                EditorSession::spawn(EditorCommand::SaveState { request_id }, helper, timeout);
+            let text_file_busy = result.as_ref().err().is_some_and(|error| {
+                error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|error| error.raw_os_error() == Some(26))
+            });
+            if cfg!(target_os = "linux") && text_file_busy && Instant::now() < spawn_deadline {
+                std::thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+            return result;
+        }
+    }
+
+    #[cfg(unix)]
     fn wait_for_failure(session: &mut EditorSession) -> String {
         let start = Instant::now();
         loop {
@@ -460,12 +486,7 @@ mod tests {
     fn native_editor_crash_is_contained() {
         let (_directory, helper) =
             fake_helper("printf '%s\\n' '{\"event\":\"ready\",\"parameters\":[]}'\nexec sleep 30");
-        let mut session = EditorSession::spawn(
-            EditorCommand::SaveState { request_id: 1 },
-            &helper,
-            Duration::from_secs(5),
-        )
-        .unwrap();
+        let mut session = spawn_fake_helper(1, &helper, Duration::from_secs(5)).unwrap();
         assert!(matches!(
             session.try_recv(),
             Some(EditorEvent::Ready { .. })
@@ -480,12 +501,7 @@ mod tests {
     fn native_editor_hang_is_terminated_at_deadline() {
         let (_directory, helper) =
             fake_helper("printf '%s\\n' '{\"event\":\"ready\",\"parameters\":[]}'\nexec sleep 30");
-        let mut session = EditorSession::spawn(
-            EditorCommand::SaveState { request_id: 1 },
-            &helper,
-            Duration::from_secs(5),
-        )
-        .unwrap();
+        let mut session = spawn_fake_helper(1, &helper, Duration::from_secs(5)).unwrap();
         session.response_timeout = Duration::from_millis(80);
         assert!(matches!(
             session.try_recv(),
@@ -501,13 +517,9 @@ mod tests {
     fn native_editor_startup_hang_is_bounded() {
         let (_directory, helper) = fake_helper("exec sleep 30");
         let start = Instant::now();
-        let error = EditorSession::spawn(
-            EditorCommand::SaveState { request_id: 1 },
-            &helper,
-            Duration::from_millis(80),
-        )
-        .err()
-        .unwrap();
+        let error = spawn_fake_helper(1, &helper, Duration::from_millis(80))
+            .err()
+            .unwrap();
         assert!(error.to_string().contains("initialization timed out"));
         assert!(start.elapsed() < Duration::from_secs(2));
     }
@@ -534,12 +546,7 @@ while IFS= read -r command; do
 done
 "#,
         );
-        let mut session = EditorSession::spawn(
-            EditorCommand::SaveState { request_id: 0 },
-            &helper,
-            Duration::from_secs(5),
-        )
-        .unwrap();
+        let mut session = spawn_fake_helper(0, &helper, Duration::from_secs(5)).unwrap();
         assert!(matches!(
             session.try_recv(),
             Some(EditorEvent::Ready { .. })
@@ -593,12 +600,7 @@ printf '%s\n' '{"event":"error","message":"state failed"}' '{"event":"closed","r
 exec sleep 30
 "#,
         );
-        let mut session = EditorSession::spawn(
-            EditorCommand::SaveState { request_id: 7 },
-            &helper,
-            Duration::from_secs(5),
-        )
-        .unwrap();
+        let mut session = spawn_fake_helper(7, &helper, Duration::from_secs(5)).unwrap();
         assert!(matches!(
             session.try_recv(),
             Some(EditorEvent::Ready { .. })

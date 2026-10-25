@@ -616,6 +616,48 @@ fn moving_trimming_splitting_duplicating_and_importing_clips_keep_live_dsp() {
 }
 
 #[test]
+fn stretching_midi_and_audio_preserves_running_plugins_sustain_and_output() {
+    let fixture = Fixture::new();
+    let (mut app, synth, audio, _, _) = fixture.app();
+    let state = app.inspect();
+    let mut previous = pump(&mut app, &state, [0.1, 0.1], true);
+    let instances = fixture.logs();
+    let note_ons = fixture.note_events(60, true);
+    fit(&mut app);
+    for (track_id, factor) in [(synth, 0.75), (audio, 2.0)] {
+        let state = app.inspect();
+        let clip = track(&state, track_id)["clips"][0]["id"].as_u64().unwrap();
+        let rect = clip_rect(&state, clip);
+        let width = rect["max"][0].as_f64().unwrap() - rect["min"][0].as_f64().unwrap();
+        let from = (rect["max"][0].as_f64().unwrap() - 2.0, center(&rect).1);
+        let to = (from.0 + width * (factor - 1.0), from.1);
+        app.command(json!({"command":"key", "key":"S"}));
+        pointer(&mut app, "down", from, from);
+        pointer(&mut app, "move", to, to);
+        let state = settled(&mut app);
+        let rate = track(&state, track_id)["clips"][0]["source_rate"]
+            .as_f64()
+            .unwrap();
+        assert!((rate - 1.0 / factor).abs() < 1e-9);
+        previous = pump_frames(&mut app, &previous, [0.1, 0.1], true, 2048);
+        fixture.assert_instances(&instances);
+        assert_eq!(
+            fixture.note_events(60, true),
+            note_ons,
+            "Stretch must retain the held instrument voice"
+        );
+        pointer(&mut app, "up", to, to);
+        settled(&mut app);
+        undo(&mut app, false);
+        let state = settled(&mut app);
+        assert_eq!(track(&state, track_id)["clips"][0]["source_rate"], 1.0);
+        previous = pump_frames(&mut app, &previous, [0.1, 0.1], true, 2048);
+        fixture.assert_instances(&instances);
+    }
+    app.quit();
+}
+
+#[test]
 fn rapid_edits_and_failed_source_preparation_keep_old_audio_then_recover() {
     let fixture = Fixture::new();
     let (mut app, synth, audio, _, _) = fixture.app();

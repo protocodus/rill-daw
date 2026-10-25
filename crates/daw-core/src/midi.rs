@@ -181,12 +181,13 @@ pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
             };
             for note in notes {
                 let start = note.start.max(clip.offset);
-                let end = (note.start + note.length).min(clip.offset + clip.length);
+                let end = (note.start + note.length).min(clip.source_end());
                 if end <= start {
                     continue;
                 }
-                let on_tick = to_tick(clip.start + start - clip.offset, PPQ)?;
-                let off_tick = to_tick(clip.start + end - clip.offset, PPQ)?.max(on_tick + 1);
+                let on_tick = to_tick(clip.start + clip.source_to_local(start), PPQ)?;
+                let off_tick =
+                    to_tick(clip.start + clip.source_to_local(end), PPQ)?.max(on_tick + 1);
                 events.push((on_tick, 1u8, note.pitch, note.velocity));
                 events.push((off_tick, 0u8, note.pitch, 0u8));
             }

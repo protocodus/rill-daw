@@ -23,6 +23,8 @@ cp LICENSE "$bundle/Resources/LICENSE"
 # This bundle can also be distributed independently of the release archive.
 mkdir -p "$bundle/Resources/licenses/rill-fonts"
 cp crates/daw-ui/assets/fonts/*.txt crates/daw-ui/assets/fonts/README.md "$bundle/Resources/licenses/rill-fonts/"
+mkdir -p "$bundle/Resources/licenses/signalsmith-stretch"
+cp crates/daw-engine/vendor/signalsmith/LICENSE-*.txt crates/daw-engine/vendor/signalsmith/README.md "$bundle/Resources/licenses/signalsmith-stretch/"
 cat > "$bundle/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

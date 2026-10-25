@@ -205,6 +205,7 @@ struct Harness {
     time: f64,
     labels: Vec<(String, Rect)>,
     menu_labels: Vec<(String, Rect)>,
+    window_labels: Vec<(String, Rect)>,
     inspect_paint: bool,
     painted_rects: Vec<Value>,
     painted_images: Vec<Value>,
@@ -264,6 +265,7 @@ impl Harness {
             time: 0.0,
             labels: Vec::new(),
             menu_labels: Vec::new(),
+            window_labels: Vec::new(),
             inspect_paint: false,
             painted_rects: Vec::new(),
             painted_images: Vec::new(),
@@ -288,24 +290,31 @@ impl Harness {
         // exercises recovery normally, within the isolated automation directory.
         self.app.last_recovery = Instant::now();
         self.menu_labels.clear();
+        self.window_labels.clear();
         let app = &mut self.app;
         let menu_labels = &mut self.menu_labels;
+        let window_labels = &mut self.window_labels;
         let output = self.ctx.run(input, |ctx| {
             app.ui_frame(ctx);
             // A menu can repeat a persistent toolbar destination. Resolve the
             // default click to the actual foreground menu, without changing
             // explicit occurrence indexing for repeated channel/library rows.
-            if egui::Popup::is_any_open(ctx) {
+            {
                 let layers = ctx.memory(|memory| {
                     memory
                         .layer_ids()
                         .filter(|layer| {
-                            layer.order == egui::Order::Foreground
+                            matches!(layer.order, egui::Order::Foreground | egui::Order::Middle)
                                 && memory.areas().is_visible(layer)
                         })
                         .collect::<Vec<_>>()
                 });
                 for layer in layers {
+                    let labels = if layer.order == egui::Order::Foreground {
+                        &mut *menu_labels
+                    } else {
+                        &mut *window_labels
+                    };
                     let transform = ctx.layer_transform_to_global(layer);
                     ctx.graphics(|graphics| {
                         if let Some(list) = graphics.get(layer) {
@@ -314,7 +323,7 @@ impl Harness {
                                 if let Some(transform) = transform {
                                     shape.transform(transform);
                                 }
-                                collect_labels(&shape.shape, shape.clip_rect, menu_labels);
+                                collect_labels(&shape.shape, shape.clip_rect, labels);
                             }
                         }
                     });
@@ -358,6 +367,18 @@ impl Harness {
                 .rev()
                 .find(|(text, _)| text.trim() == label)
         {
+            return Ok(*rect);
+        }
+        let first = self.labels.iter().find(|(text, _)| text.trim() == label);
+        if occurrence == 0
+            && let Some((_, rect)) = self
+                .window_labels
+                .iter()
+                .find(|(text, _)| text.trim() == label)
+            && !first.is_some_and(|first| self.window_labels.contains(first))
+        {
+            // Prefer the active utility over the retained, disabled workspace.
+            // Repeated labels within that utility keep their original indexing.
             return Ok(*rect);
         }
         self.labels

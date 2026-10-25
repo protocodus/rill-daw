@@ -14,6 +14,13 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// A generous finite timeline limit keeps beat-to-sample conversion exact and
 /// prevents malformed project files from saturating integer sample positions.
 pub const MAX_BEAT: f64 = 1_000_000.0;
+pub const MIN_SOURCE_RATE: f64 = 0.25;
+pub const MAX_SOURCE_RATE: f64 = 4.0;
+
+fn default_source_rate() -> f64 {
+    1.0
+}
+
 pub const MAX_PLUGIN_STATE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_INSTRUMENT_STATE_BYTES: usize = MAX_PLUGIN_STATE_BYTES;
 
@@ -175,6 +182,10 @@ pub struct Clip {
     pub length: f64,
     /// Source beat at the clip's left edge. Trimming never destroys source notes.
     pub offset: f64,
+    /// Source beats consumed per arrangement beat. Local to this occurrence,
+    /// including when its content belongs to a shared ghost group.
+    #[serde(default = "default_source_rate")]
+    pub source_rate: f64,
     pub content: ClipContent,
 }
 
@@ -232,6 +243,7 @@ impl Clip {
             start,
             length,
             offset: 0.0,
+            source_rate: 1.0,
             content: ClipContent::Midi { notes },
         }
     }
@@ -249,6 +261,7 @@ impl Clip {
             start,
             length,
             offset: 0.0,
+            source_rate: 1.0,
             content: ClipContent::Audio {
                 path: path.into(),
                 gain: 1.0,
@@ -265,6 +278,19 @@ impl Clip {
 
     pub fn end(&self) -> f64 {
         self.start + self.length
+    }
+
+    pub fn source_length(&self) -> f64 {
+        self.length * self.source_rate
+    }
+    pub fn source_end(&self) -> f64 {
+        self.offset + self.source_length()
+    }
+    pub fn source_to_local(&self, source_beat: f64) -> f64 {
+        (source_beat - self.offset) / self.source_rate
+    }
+    pub fn local_to_source(&self, local_beat: f64) -> f64 {
+        self.offset + local_beat * self.source_rate
     }
 
     fn refresh_ids(&mut self) {
@@ -285,7 +311,8 @@ impl Clip {
             ..
         } = &mut self.content
         {
-            let length = envelope.map_or(self.length, |envelope| envelope.length);
+            let length =
+                envelope.map_or(self.length * self.source_rate, |envelope| envelope.length);
             *fade_in = fade_in.min(length);
             *fade_out = fade_out.min(length);
         }
@@ -535,7 +562,7 @@ impl Project {
         } = clip.content
         {
             ensure!(
-                (envelope.offset + delta).abs() <= MAX_BEAT,
+                (envelope.offset + delta * clip.source_rate).abs() <= MAX_BEAT,
                 "Split exceeds the envelope range"
             );
         }
@@ -550,15 +577,15 @@ impl Project {
             *crossfade = None;
         }
         if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
-            clip.offset += clip.length - delta;
+            clip.offset += (clip.length - delta) * clip.source_rate;
         } else {
-            right.offset += delta;
+            right.offset += delta * clip.source_rate;
         }
         let envelope = match &mut clip.content {
             ClipContent::Audio { envelope, .. } => {
                 let original = envelope.unwrap_or(AudioEnvelope {
                     offset: 0.0,
-                    length: clip.length,
+                    length: clip.length * clip.source_rate,
                 });
                 *envelope = Some(original);
                 Some(original)
@@ -569,7 +596,7 @@ impl Project {
             (envelope, &mut right.content)
         {
             *envelope = Some(AudioEnvelope {
-                offset: original.offset + delta,
+                offset: original.offset + delta * clip.source_rate,
                 ..original
             });
         }
@@ -583,18 +610,29 @@ impl Project {
     }
 
     pub fn duplicate_clip(&mut self, track_id: u64, clip_id: u64) -> Result<u64> {
+        let start = self
+            .clip(track_id, clip_id)
+            .context("Clip not found")?
+            .end();
+        self.duplicate_clip_at(track_id, clip_id, start)
+    }
+
+    /// Duplicate directly at the requested position. Validate before allocating
+    /// IDs or changing the document, including near the timeline boundary where
+    /// an adjacent temporary copy would be invalid even when this target is valid.
+    pub fn duplicate_clip_at(&mut self, track_id: u64, clip_id: u64, start: f64) -> Result<u64> {
         let track = self.track_mut(track_id).context("Track not found")?;
-        let mut clip = track
+        let source = track
             .clips
             .iter()
             .find(|clip| clip.id == clip_id)
-            .context("Clip not found")?
-            .clone();
-        clip.start = clip.end();
+            .context("Clip not found")?;
         ensure!(
-            valid_range(clip.start, clip.length),
+            valid_range(start, source.length),
             "Duplicate clip exceeds the supported timeline"
         );
+        let mut clip = source.clone();
+        clip.start = start;
         clip.refresh_ids();
         let id = clip.id;
         track.clips.push(clip);
@@ -624,25 +662,25 @@ impl Project {
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
         let delta = new_start - clip.start;
         let new_offset = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
-            clip.offset + clip.length - delta - new_length
+            clip.offset + (clip.length - delta - new_length) * clip.source_rate
         } else {
-            clip.offset + delta
+            clip.offset + delta * clip.source_rate
         };
         ensure!(
-            valid_range(new_offset, new_length),
+            valid_range(new_offset, new_length * clip.source_rate),
             "Trim extends before the source or overflows its range"
         );
         if let ClipContent::Audio { envelope, .. } = &mut clip.content {
             let original = envelope.unwrap_or(AudioEnvelope {
                 offset: 0.0,
-                length: clip.length,
+                length: clip.length * clip.source_rate,
             });
             ensure!(
-                (original.offset + delta).abs() <= MAX_BEAT,
+                (original.offset + delta * clip.source_rate).abs() <= MAX_BEAT,
                 "Trim exceeds the envelope range"
             );
             *envelope = Some(AudioEnvelope {
-                offset: original.offset + delta,
+                offset: original.offset + delta * clip.source_rate,
                 ..original
             });
         }
@@ -650,6 +688,42 @@ impl Project {
         clip.start = new_start;
         clip.length = new_length;
         clip.constrain_fades();
+        Ok(())
+    }
+
+    /// Change timing without changing source data, placement, or ghost membership.
+    pub fn stretch_clip(&mut self, track_id: u64, clip_id: u64, new_length: f64) -> Result<()> {
+        let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
+        ensure!(
+            valid_range(clip.start, new_length),
+            "Invalid stretch bounds"
+        );
+        let rate = clip.source_rate * clip.length / new_length;
+        ensure!(
+            rate.is_finite() && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&rate),
+            "Stretch must stay between 25% and 400% of source speed"
+        );
+        // Division/multiplication can move an extreme source boundary by one
+        // floating-point ULP. Reject before mutation rather than making a
+        // previously valid document impossible to save.
+        ensure!(
+            valid_range(clip.offset, new_length * rate),
+            "Stretch exceeds the supported source range"
+        );
+        if new_length == clip.length {
+            return Ok(());
+        }
+        let source_length = clip.source_length();
+        if let ClipContent::Audio { envelope, .. } = &mut clip.content {
+            // Fades remain anchored to the exact original source interval,
+            // including a full-length fade at a floating-point boundary.
+            envelope.get_or_insert(AudioEnvelope {
+                offset: 0.0,
+                length: source_length,
+            });
+        }
+        clip.length = new_length;
+        clip.source_rate = rate;
         Ok(())
     }
 
@@ -737,8 +811,13 @@ impl Project {
                 }
                 ensure!(valid_range(clip.start, clip.length), "Invalid clip bounds");
                 ensure!(
-                    valid_range(clip.offset, clip.length),
+                    valid_range(clip.offset, clip.source_length()),
                     "Invalid source offset"
+                );
+                ensure!(
+                    clip.source_rate.is_finite()
+                        && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&clip.source_rate),
+                    "Invalid clip source rate"
                 );
                 match &clip.content {
                     ClipContent::Midi { notes } => {
@@ -782,7 +861,7 @@ impl Project {
                         }
                         ensure!(gain.is_finite() && *gain >= 0.0, "Invalid audio gain");
                         let envelope_length =
-                            envelope.map_or(clip.length, |envelope| envelope.length);
+                            envelope.map_or(clip.source_length(), |envelope| envelope.length);
                         ensure!(
                             envelope.is_none_or(|envelope| envelope.offset.is_finite()
                                 && envelope.offset.abs() <= MAX_BEAT
@@ -837,7 +916,7 @@ impl Project {
             serde_json::to_writer_pretty(
                 &mut writer,
                 &ProjectFile {
-                    version: 1,
+                    version: 2,
                     project: self.clone(),
                 },
             )?;
@@ -872,7 +951,7 @@ impl Project {
         let envelope: ProjectFile =
             serde_json::from_reader(BufReader::new(file)).context("Read project JSON")?;
         ensure!(
-            envelope.version == 1,
+            (1..=2).contains(&envelope.version),
             "Unsupported project version {}",
             envelope.version
         );

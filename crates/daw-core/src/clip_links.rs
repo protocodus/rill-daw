@@ -17,7 +17,7 @@ fn shared_source(clip: &Clip) -> (String, ClipContent) {
     {
         *envelope = Some(AudioEnvelope {
             offset: 0.0,
-            length: envelope.map_or(clip.length, |region| region.length),
+            length: envelope.map_or(clip.source_length(), |region| region.length),
         });
         *crossfade = None;
     }
@@ -68,7 +68,7 @@ fn same_content(a: &ClipContent, a_length: f64, b: &ClipContent, b_length: f64) 
 }
 
 fn same_source(a: &Clip, b: &Clip) -> bool {
-    a.name == b.name && same_content(&a.content, a.length, &b.content, b.length)
+    a.name == b.name && same_content(&a.content, a.source_length(), &b.content, b.source_length())
 }
 
 fn explicit_envelope(clip: &Clip) -> bool {
@@ -78,7 +78,7 @@ fn explicit_envelope(clip: &Clip) -> bool {
 fn apply_source(clip: &mut Clip, source: &(String, ClipContent)) {
     if explicit_envelope(clip)
         && clip.name == source.0
-        && same_content(&clip.content, clip.length, &source.1, 0.0)
+        && same_content(&clip.content, clip.source_length(), &source.1, 0.0)
     {
         return;
     }
@@ -114,7 +114,7 @@ impl Project {
         let clip = self.clip(track_id, clip_id).context("Clip not found")?;
         ensure!(
             clip.end() + clip.length <= MAX_BEAT,
-            "Clone exceeds the supported timeline"
+            "Ghost copy exceeds the supported timeline"
         );
         let group = clip.link_group.unwrap_or_else(new_id);
         let source = shared_source(clip);
@@ -174,7 +174,7 @@ impl Project {
                 .filter(|clip| clip.link_group == Some(group))
                 .all(|clip| std::mem::discriminant(&clip.content)
                     == std::mem::discriminant(&source.1)),
-            "Linked clips must have the same source type"
+            "Ghost clips must have the same source type"
         );
         for clip in self.tracks.iter_mut().flat_map(|track| &mut track.clips) {
             if clip.link_group == Some(group) {
@@ -206,10 +206,7 @@ impl Project {
                 .is_some_and(|old| old.link_group == Some(group) && shared_source(old) != source)
             {
                 if let Some(other) = sources.get(&group) {
-                    ensure!(
-                        other == &source,
-                        "Conflicting edits to linked clip instances"
-                    );
+                    ensure!(other == &source, "Conflicting edits to ghost clips");
                 } else {
                     sources.insert(group, source);
                 }
@@ -236,18 +233,15 @@ impl Project {
             let Some(group) = clip.link_group else {
                 continue;
             };
-            ensure!(
-                group > 0 && group < u64::MAX,
-                "Invalid linked clip group ID"
-            );
+            ensure!(group > 0 && group < u64::MAX, "Invalid ghost clip group ID");
             ensure!(
                 explicit_envelope(clip),
-                "Linked audio clips need an explicit source envelope"
+                "Ghost audio clips need an explicit source envelope"
             );
             if let Some(other) = groups.get(&group) {
                 ensure!(
                     same_source(clip, other),
-                    "Linked clips have inconsistent names or source data"
+                    "Ghost clips have inconsistent names or source data"
                 );
             } else {
                 groups.insert(group, clip);

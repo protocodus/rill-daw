@@ -9,7 +9,7 @@ use daw_core::{
 };
 use daw_ui::{TimelineBounds, TimelinePane, TimelineViewport};
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const KEYS: f32 = 60.0;
 const RULER: f32 = daw_ui::tokens::TIMELINE_RULER_HEIGHT;
@@ -45,7 +45,7 @@ struct QuantizePreview {
     selected: HashSet<u64>,
     settings: QuantizeSettings,
     origin: f64,
-    clip_window: (f64, f64, f64),
+    clip_window: (f64, f64, f64, f64),
 }
 
 pub(crate) struct MidiEditorState {
@@ -112,6 +112,37 @@ enum NoteEdit {
     Replace(Vec<Note>, HashSet<u64>, &'static str),
 }
 
+/// Editor gestures and the clipboard use audible beats. Persisted notes keep
+/// source beats so differently stretched ghosts can share the same source.
+fn scale_note_times(notes: &mut [Note], factor: f64) {
+    for note in notes {
+        note.start *= factor;
+        note.length *= factor;
+    }
+}
+
+fn local_note_times(notes: &mut [Note], rate: f64) {
+    for note in notes {
+        note.start /= rate;
+        note.length /= rate;
+    }
+}
+
+impl NoteEdit {
+    fn into_source_time(mut self, rate: f64) -> Self {
+        match &mut self {
+            Self::Add(notes) | Self::Replace(notes, _, _) => scale_note_times(notes, rate),
+            Self::Move(notes, delta, _) | Self::Resize(notes, delta, _) => {
+                scale_note_times(notes, rate);
+                *delta *= rate;
+            }
+            Self::Cut(_, at) => *at *= rate,
+            Self::Delete(_) | Self::Duplicate(_) | Self::Glue(_) | Self::Velocity(_) => {}
+        }
+        self
+    }
+}
+
 impl DawApp {
     /// The application routes this held note through the assigned VST instrument.
     /// It must call this each frame, including when the editor is no longer shown.
@@ -136,15 +167,23 @@ impl DawApp {
         let ClipContent::Midi { notes } = &clip.content else {
             return;
         };
-        let (clip_id, clip_offset, clip_length, clip_start) =
-            (clip.id, clip.offset, clip.length, clip.start);
-        let source_notes = notes.clone();
+        let (clip_id, clip_offset, clip_length, clip_start, source_rate) = (
+            clip.id,
+            clip.offset / clip.source_rate,
+            clip.length,
+            clip.start,
+            clip.source_rate,
+        );
+        // Everything below, including quantize/clipboard/velocity geometry,
+        // uses one common beat scale. Convert only at the model boundary.
+        let mut source_notes = notes.clone();
+        local_note_times(&mut source_notes, source_rate);
         let mut notes = source_notes.clone();
         let mut state = std::mem::take(&mut self.midi_editor);
         if state.clip != Some(clip_id)
             || state.quantize.as_ref().is_some_and(|preview| {
                 preview.source != source_notes
-                    || preview.clip_window != (clip_start, clip_offset, clip_length)
+                    || preview.clip_window != (clip_start, clip_offset, clip_length, source_rate)
             })
         {
             state.quantize = None;
@@ -161,6 +200,9 @@ impl DawApp {
             Tool::MultiDraw,
             Tool::Cursor,
         ];
+        if !supported.contains(&self.tool) {
+            self.tool = Tool::Select;
+        }
         if state.quantize.is_none() {
             daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         }
@@ -177,7 +219,7 @@ impl DawApp {
                                 selected: self.selected_notes.clone(),
                                 settings: state.quantize_settings,
                                 origin: clip_start - clip_offset,
-                                clip_window: (clip_start, clip_offset, clip_length),
+                                clip_window: (clip_start, clip_offset, clip_length, source_rate),
                             });
                             state.gesture = None;
                             ui.close();
@@ -1167,6 +1209,8 @@ impl DawApp {
         let Some(original) = self.project.clip(track, clip).cloned() else {
             return;
         };
+        let minimum_note = MIN_NOTE * original.source_rate;
+        let action = action.into_source_time(original.source_rate);
         let selection = self.selected_notes.clone();
         self.begin_edit();
         let mut edit_label = None;
@@ -1179,7 +1223,22 @@ impl DawApp {
                 | NoteEdit::Replace(..)
         );
         let result = match action {
-            NoteEdit::Replace(edited, selected, label) => {
+            NoteEdit::Replace(mut edited, selected, label) => {
+                // Preserve unselected source values bit-for-bit through the
+                // editor/source conversion, including arbitrary stretch ratios.
+                if original.source_rate != 1.0
+                    && let ClipContent::Midi { notes } = &original.content
+                {
+                    let unchanged: HashMap<_, _> =
+                        notes.iter().map(|note| (note.id, note)).collect();
+                    for note in &mut edited {
+                        if !selected.contains(&note.id)
+                            && let Some(source) = unchanged.get(&note.id)
+                        {
+                            *note = (*source).clone();
+                        }
+                    }
+                }
                 if let Some(notes) = self.project.midi_notes_mut(track, clip) {
                     *notes = edited;
                     self.selected_notes = selected;
@@ -1250,14 +1309,14 @@ impl DawApp {
                         .min(
                             originals
                                 .iter()
-                                .map(|n| n.length - MIN_NOTE)
+                                .map(|n| n.length - minimum_note)
                                 .fold(f64::INFINITY, f64::min),
                         )
                 } else {
                     delta.max(
                         originals
                             .iter()
-                            .map(|n| MIN_NOTE - n.length)
+                            .map(|n| minimum_note - n.length)
                             .fold(f64::NEG_INFINITY, f64::max),
                     )
                 };
@@ -1307,6 +1366,147 @@ fn pitch_class(pitch: u8) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stretched_ghost_edits_use_audible_beats_and_extend_only_that_instance() {
+        let context = egui::Context::default();
+        let mut project = daw_core::Project::new();
+        let track = project.add_midi_track("Pattern");
+        let note = Note::new(60, 1.0, 1.0, 100);
+        let clip = daw_core::Clip::midi("Source", 0.0, 4.0, vec![note.clone()]);
+        let original = clip.id;
+        project.track_mut(track).unwrap().clips.push(clip);
+        let ghost = project.clone_clip(track, original).unwrap();
+        project.clip_mut(track, ghost).unwrap().source_rate = 0.5;
+        project.clip_mut(track, ghost).unwrap().length = 8.0;
+        let before = project.clone();
+        let mut app = DawApp::with_context(&context, project, None);
+        app.selected_track = Some(track);
+        app.selected_clip = Some(ghost);
+        let mut displayed = vec![note];
+        local_note_times(&mut displayed, 0.5);
+        app.apply_note_edit(NoteEdit::Move(displayed, 1.0, 0));
+        app.apply_note_edit(NoteEdit::Add(vec![Note::new(64, 6.5, 2.0, 80)]));
+        assert!(!app.error, "{}", app.status);
+        for id in [original, ghost] {
+            let ClipContent::Midi { notes } = &app.project.clip(track, id).unwrap().content else {
+                panic!("expected MIDI");
+            };
+            assert_eq!(notes[0].start, 1.5);
+            assert_eq!((notes[1].start, notes[1].length), (3.25, 1.0));
+        }
+        assert_eq!(app.project.clip(track, original).unwrap().length, 4.0);
+        assert_eq!(app.project.clip(track, ghost).unwrap().length, 8.5);
+        app.project.validate().unwrap();
+        app.flush_pending_edit();
+        assert_eq!(app.history.undo_labels().count(), 1);
+        app.undo_redo(false);
+        assert_eq!(app.project, before);
+    }
+
+    #[test]
+    fn copying_between_stretch_rates_preserves_audible_note_spacing_and_duration() {
+        let first = Note::new(60, 1.0, 0.5, 100);
+        let second = Note::new(64, 2.0, 1.0, 80);
+        let mut displayed = vec![first.clone(), second.clone()];
+        local_note_times(&mut displayed, 0.5);
+        let clipboard = copy_midi_notes(&displayed, &HashSet::from([first.id, second.id])).unwrap();
+        let (pasted, selected) = paste_midi_notes(&[], &clipboard, 1.0).unwrap();
+        let mut project = daw_core::Project::new();
+        let track = project.add_midi_track("Destination");
+        let mut clip = daw_core::Clip::midi("Faster", 0.0, 8.0, vec![]);
+        clip.source_rate = 2.0;
+        let id = clip.id;
+        project.track_mut(track).unwrap().clips.push(clip);
+        let mut app = DawApp::with_context(&egui::Context::default(), project, None);
+        app.selected_track = Some(track);
+        app.selected_clip = Some(id);
+        app.apply_note_edit(NoteEdit::Replace(pasted, selected, "Paste notes"));
+        let clip = app.selected().unwrap();
+        let ClipContent::Midi { notes } = &clip.content else {
+            panic!("expected MIDI")
+        };
+        assert_eq!(
+            (
+                clip.source_to_local(notes[0].start),
+                notes[0].length / clip.source_rate
+            ),
+            (1.0, 1.0)
+        );
+        assert_eq!(
+            (
+                clip.source_to_local(notes[1].start),
+                notes[1].length / clip.source_rate
+            ),
+            (3.0, 2.0)
+        );
+        assert_ne!(notes[0].id, first.id);
+        assert_ne!(notes[1].id, second.id);
+        app.project.validate().unwrap();
+    }
+
+    #[test]
+    fn quantize_in_a_stretched_trimmed_clip_aligns_to_arrangement_grid() {
+        let mut project = daw_core::Project::new();
+        let track = project.add_midi_track("Quantize");
+        let note = Note::new(60, 1.1, 0.4, 100);
+        let mut clip = daw_core::Clip::midi("Offset", 0.125, 4.0, vec![note.clone()]);
+        clip.offset = 0.5;
+        clip.source_rate = 0.5;
+        let id = clip.id;
+        let mut displayed = vec![note.clone()];
+        local_note_times(&mut displayed, clip.source_rate);
+        let selection = HashSet::from([note.id]);
+        let edited = quantize_notes(
+            &displayed,
+            &selection,
+            clip.start - clip.offset / clip.source_rate,
+            QuantizeSettings::default(),
+        )
+        .unwrap();
+        project.track_mut(track).unwrap().clips.push(clip);
+        let mut app = DawApp::with_context(&egui::Context::default(), project, None);
+        app.selected_track = Some(track);
+        app.selected_clip = Some(id);
+        app.apply_note_edit(NoteEdit::Replace(edited, selection, "Quantize notes"));
+        let clip = app.selected().unwrap();
+        let ClipContent::Midi { notes } = &clip.content else {
+            panic!("expected MIDI")
+        };
+        assert!((clip.start + clip.source_to_local(notes[0].start) - 1.25).abs() < 1e-10);
+        assert!((notes[0].length - 0.4).abs() < 1e-10);
+        app.project.validate().unwrap();
+    }
+
+    #[test]
+    fn transforming_selected_notes_preserves_other_source_notes_exactly() {
+        let mut project = daw_core::Project::new();
+        let track = project.add_midi_track("Exact source");
+        let untouched = Note::new(60, 0.7, 0.3, 100);
+        let chosen = Note::new(64, 1.1, 0.4, 90);
+        let mut clip =
+            daw_core::Clip::midi("Ratio", 0.0, 4.0, vec![untouched.clone(), chosen.clone()]);
+        clip.source_rate = 1.3;
+        let id = clip.id;
+        let mut edited = vec![untouched.clone(), chosen.clone()];
+        local_note_times(&mut edited, clip.source_rate);
+        edited[1].start += 0.25;
+        project.track_mut(track).unwrap().clips.push(clip);
+        let mut app = DawApp::with_context(&egui::Context::default(), project, None);
+        app.selected_track = Some(track);
+        app.selected_clip = Some(id);
+        app.apply_note_edit(NoteEdit::Replace(
+            edited,
+            HashSet::from([chosen.id]),
+            "Nudge notes",
+        ));
+        let ClipContent::Midi { notes } = &app.selected().unwrap().content else {
+            panic!("expected MIDI")
+        };
+        assert_eq!(notes[0], untouched);
+        assert!((notes[1].start - (chosen.start + 0.25 * 1.3)).abs() < 1e-12);
+        app.project.validate().unwrap();
+    }
 
     fn linked_clip_at_limit(remaining: f64) -> (DawApp, u64, Note) {
         let mut project = daw_core::Project::new();

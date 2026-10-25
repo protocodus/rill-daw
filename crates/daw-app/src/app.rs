@@ -80,10 +80,27 @@ pub enum Drag {
     Clip {
         track: u64,
         clip: u64,
-        start: f64,
-        length: f64,
-        resize: bool,
+        handle: u64,
+        original: std::sync::Arc<Clip>,
+        mode: ClipDragMode,
     },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ClipDragMode {
+    Move,
+    TrimStart,
+    TrimEnd,
+    Stretch,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ClipCommand {
+    Split(f64),
+    Duplicate,
+    Ghost,
+    MakeIndependent,
+    Delete,
 }
 
 pub struct DawApp {
@@ -1134,7 +1151,7 @@ impl DawApp {
             let end = notes
                 .iter()
                 .filter(|n| selected.contains(&n.id))
-                .map(|n| n.start + n.length - clip.offset)
+                .map(|n| clip.source_to_local(n.start + n.length))
                 .fold(clip.length, f64::max);
             clip.length = end;
         }
@@ -1171,7 +1188,8 @@ impl DawApp {
                     && start + length > start
             };
             anyhow::ensure!(
-                valid_range(clip.start, clip.length) && valid_range(clip.offset, clip.length),
+                valid_range(clip.start, clip.length)
+                    && valid_range(clip.offset, clip.source_length()),
                 "Note edit exceeds the supported clip range"
             );
             let ClipContent::Midi { notes } = &clip.content else {
@@ -1377,12 +1395,7 @@ impl DawApp {
             }
             self.selected_notes.clear();
         } else if let (Some(t), Some(c)) = (self.selected_track, self.selected_clip) {
-            let result = self.project.delete_clip(t, c).map(|_| ());
-            if result.is_ok() {
-                self.selected_clip = None;
-                self.changed();
-            }
-            self.message(result, "Clip deleted");
+            self.apply_clip_command(t, c, ClipCommand::Delete);
         }
     }
     pub fn duplicate_selection(&mut self) {
@@ -1418,40 +1431,56 @@ impl DawApp {
                 }
             }
         } else if let (Some(t), Some(c)) = (self.selected_track, self.selected_clip) {
-            match self.project.duplicate_clip(t, c) {
-                Ok(id) => {
-                    self.selected_clip = Some(id);
-                    self.changed();
-                }
-                Err(e) => self.message(Err(e), ""),
-            }
+            self.apply_clip_command(t, c, ClipCommand::Duplicate);
         }
     }
     pub(crate) fn create_linked_clone(&mut self) {
         let Some((track, clip)) = self.selected_track.zip(self.selected_clip) else {
             return;
         };
-        self.begin_edit();
-        match self.project.clone_clip(track, clip) {
-            Ok(id) => {
-                self.selected_clip = Some(id);
-                self.selected_notes.clear();
-                self.edit_label = Some("Create linked clone".into());
-                self.changed();
-            }
-            Err(error) => self.message(Err(error), ""),
-        }
+        self.apply_clip_command(track, clip, ClipCommand::Ghost);
     }
 
     pub(crate) fn make_clip_independent(&mut self) {
         let Some((track, clip)) = self.selected_track.zip(self.selected_clip) else {
             return;
         };
+        self.apply_clip_command(track, clip, ClipCommand::MakeIndependent);
+    }
+
+    /// Every clip entry point shares result selection and one history label.
+    pub(crate) fn apply_clip_command(&mut self, track: u64, clip: u64, command: ClipCommand) {
         self.begin_edit();
-        match self.project.make_clip_independent(track, clip) {
-            Ok(()) => {
+        let (label, result) = match command {
+            ClipCommand::Split(beat) => (
+                "Split clip",
+                self.project.split_clip(track, clip, beat).map(Some),
+            ),
+            ClipCommand::Duplicate => (
+                "Duplicate clip",
+                self.project.duplicate_clip(track, clip).map(Some),
+            ),
+            ClipCommand::Ghost => (
+                "Create ghost copy",
+                self.project.clone_clip(track, clip).map(Some),
+            ),
+            ClipCommand::MakeIndependent => (
+                "Make clip independent",
+                self.project
+                    .make_clip_independent(track, clip)
+                    .map(|()| Some(clip)),
+            ),
+            ClipCommand::Delete => (
+                "Delete clip",
+                self.project.delete_clip(track, clip).map(|_| None),
+            ),
+        };
+        match result {
+            Ok(selected) => {
+                self.selected_track = Some(track);
+                self.selected_clip = selected;
                 self.selected_notes.clear();
-                self.edit_label = Some("Make clip independent".into());
+                self.edit_label = Some(label.into());
                 self.changed();
             }
             Err(error) => self.message(Err(error), ""),
@@ -1832,14 +1861,16 @@ impl DawApp {
                             self.duplicate_selection();
                             ui.close();
                         }
-                        if ui.add_enabled(has_clip, daw_ui::button_widget("Create linked clone"))
-                            .on_hover_text("Create another instance of the whole clip. Name, notes, audio edits, fades and clip volume stay linked.")
+                        if ui.add_enabled(has_clip, daw_ui::button_widget("Ghost copy"))
+                            .on_hover_text("Create a ghost copy sharing the name, notes, audio edits, fades and clip gain. Position and trim stay independent.")
                             .clicked() {
                             self.create_linked_clone();
                             ui.close();
                         }
                         if self.selected().is_some_and(|clip| clip.link_group.is_some())
-                            && ui.add_enabled(has_clip, daw_ui::button_widget("Make independent")).clicked() {
+                            && ui.add_enabled(has_clip, daw_ui::button_widget("Make independent"))
+                                .on_hover_text("Disconnect this ghost while keeping its current name and edits")
+                                .clicked() {
                             self.make_clip_independent();
                             ui.close();
                         }
@@ -1857,14 +1888,7 @@ impl DawApp {
                             if let (Some(track), Some(clip)) =
                                 (self.selected_track, self.selected_clip)
                             {
-                                self.begin_edit();
-                                match self.project.split_clip(track, clip, self.cursor) {
-                                    Ok(id) => {
-                                        self.selected_clip = Some(id);
-                                        self.changed();
-                                    }
-                                    Err(error) => self.message(Err(error), ""),
-                                }
+                                self.apply_clip_command(track, clip, ClipCommand::Split(self.cursor));
                             }
                             ui.close();
                         }
@@ -1873,6 +1897,13 @@ impl DawApp {
                             .clicked()
                         {
                             self.open_popup(PopupKind::Join);
+                            ui.close();
+                        }
+                        if ui.add_enabled(has_clip, daw_ui::button_widget("Stretch"))
+                            .on_hover_text("Activate the arranger stretch tool · S")
+                            .clicked() {
+                            self.open_workspace(WorkspaceView::Arrangement);
+                            self.tool = Tool::Stretch;
                             ui.close();
                         }
                         let audio_clip = self
@@ -2399,7 +2430,7 @@ impl DawApp {
                             .selected()
                             .is_some_and(|clip| clip.link_group.is_some())
                     {
-                        daw_ui::clip_label(ui, "Linked", true);
+                        daw_ui::clip_label(ui, "Ghost", true);
                     }
                     if workspace == WorkspaceView::Clip
                         && daw_ui::button(ui, "Properties").clicked()
@@ -2546,6 +2577,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                     a.start == b.start
                         && a.length == b.length
                         && a.offset == b.offset
+                        && a.source_rate == b.source_rate
                         && match (&a.content, &b.content) {
                             (ClipContent::Midi { notes: a }, ClipContent::Midi { notes: b }) => {
                                 a.len() == b.len()

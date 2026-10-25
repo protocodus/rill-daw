@@ -96,12 +96,12 @@ impl Project {
             };
             for note in notes {
                 let left = note.start.max(clip.offset);
-                let right = (note.start + note.length).min(clip.offset + clip.length);
+                let right = (note.start + note.length).min(clip.source_end());
                 if right > left {
                     joined_notes.push(Note::new(
                         note.pitch,
-                        (clip.start + left - clip.offset - start).max(0.0),
-                        right - left,
+                        (clip.start + clip.source_to_local(left) - start).max(0.0),
+                        (right - left) / clip.source_rate,
                         note.velocity,
                     ));
                 }

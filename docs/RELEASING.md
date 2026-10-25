@@ -16,6 +16,8 @@ Each archive contains the application, its adjacent `daw-plugin-host` helper, `L
 
 ## Build locally
 
+Audio stretching compiles the pinned, vendored Signalsmith Stretch/Linear C++14 sources through `cc`. Use Apple Clang on macOS, GCC/Clang with a C++ standard library on Linux (`g++` in the container/CI), or the MSVC C++ build tools on Windows. No libclang, bindgen, downloaded-at-build source, or external stretch runtime is required. Both MIT licenses and source provenance ship in `licenses/signalsmith-stretch/`.
+
 Install Rust 1.92 or newer, Python 3, and the platform's normal Rust native build tools. Linux additionally needs `pkg-config`, `libasound2-dev`, `libudev-dev`, `libxkbcommon-dev`, and `libwayland-dev`. Run from the repository:
 
 ```sh
@@ -33,7 +35,7 @@ The scripts build the full locked workspace in release mode. Both executable and
 
 `scripts/package-macos.sh` writes `dist/Rill.app`; the release ZIP includes that bundle and its surrounding documentation. Move the app to Applications and keep its contents intact. These builds have no Developer ID signature or notarization, so macOS may require first-launch approval in Privacy & Security.
 
-For Linux, extract the archive and run `./rill`, keeping `daw-plugin-host` beside it. CI uses Ubuntu 22.04, giving the packaged binaries a glibc 2.35 baseline. Desktop use requires a graphical session, an OpenGL-capable driver, and ALSA, udev, xkbcommon, and Wayland client runtime libraries. On Ubuntu 22.04 install `libasound2 libudev1 libxkbcommon0 libwayland-client0 libgl1`; Ubuntu 24.04 names the ALSA package `libasound2t64`. Locally built archives inherit their build machine's runtime baseline.
+For Linux, extract the archive and run `./rill`, keeping `daw-plugin-host` beside it. CI uses Ubuntu 22.04, giving the packaged binaries a glibc 2.35 baseline. Desktop use requires a graphical session, an OpenGL-capable driver, the C++ standard library, and ALSA, udev, xkbcommon, and Wayland client runtime libraries. On Ubuntu 22.04 install `libstdc++6 libasound2 libudev1 libxkbcommon0 libwayland-client0 libgl1`; Ubuntu 24.04 names the ALSA package `libasound2t64`. Locally built archives inherit their build machine's runtime baseline.
 
 For Windows, extract the complete archive and launch `rill.exe`, keeping `daw-plugin-host.exe` beside it. Windows 10/11 x64 and an OpenGL-capable driver are required. CI statically links the application's MSVC C runtime; installed plug-ins may have their own runtime requirements. The application is not Authenticode signed. No installer, registry writes, or administrator access are needed to unpack the distribution.
 

@@ -36,6 +36,7 @@ pub(super) struct LiveMailbox {
     retired: Mutex<Option<PreparedLiveEdit>>,
     wake: Condvar,
     shutdown: AtomicBool,
+    preparation_cancel: AtomicBool,
     sequence: AtomicU64,
     pub requested_revision: AtomicU64,
     pub applied_revision: AtomicU64,
@@ -143,6 +144,11 @@ impl LiveUpdates {
             .sequence
             .fetch_add(1, Ordering::AcqRel)
             .wrapping_add(1);
+        // Stop work on an obsolete stretch promptly rather than waiting for a
+        // whole source before preparing the newest held-drag position.
+        self.mailbox
+            .preparation_cancel
+            .store(true, Ordering::Release);
         self.mailbox
             .requested_revision
             .store(revision, Ordering::Release);
@@ -189,6 +195,9 @@ impl LiveUpdates {
 impl Drop for LiveUpdates {
     fn drop(&mut self) {
         self.mailbox.shutdown.store(true, Ordering::Release);
+        self.mailbox
+            .preparation_cancel
+            .store(true, Ordering::Release);
         self.mailbox.wake.notify_one();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
@@ -213,7 +222,13 @@ fn prepare_loop(mut preparer: LiveEditPreparer, shared: Arc<LiveMailbox>) {
                     .unwrap_or_else(|e| e.into_inner())
                     .0;
             }
-            slot.take()
+            let request = slot.take();
+            // Reset under the submit lock: a later request cannot have its
+            // cancellation signal accidentally cleared after it was submitted.
+            if request.is_some() {
+                shared.preparation_cancel.store(false, Ordering::Release);
+            }
+            request
         };
         let Some(request) = request else { continue };
         if shared.shutdown.load(Ordering::Acquire) {
@@ -237,7 +252,7 @@ fn prepare_loop(mut preparer: LiveEditPreparer, shared: Arc<LiveMailbox>) {
                 }
             }
         }
-        let result = preparer.prepare_cancelled(&request.project, &shared.shutdown);
+        let result = preparer.prepare_cancelled(&request.project, &shared.preparation_cancel);
         if shared.shutdown.load(Ordering::Acquire)
             || request.sequence != shared.sequence.load(Ordering::Acquire)
         {

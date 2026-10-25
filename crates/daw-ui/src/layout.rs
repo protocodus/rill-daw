@@ -25,6 +25,24 @@ pub fn toolbar_group<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> Inn
     })
 }
 
+/// Reserve trailing controls before right alignment, wrapping the whole group
+/// when the remaining row cannot fit it. This keeps its hit area off prior tools.
+pub fn toolbar_trailing<R>(
+    ui: &mut Ui,
+    minimum_width: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let width = ui
+        .available_width()
+        .max(minimum_width)
+        .min(ui.max_rect().width());
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::Layout::right_to_left(egui::Align::Center),
+        contents,
+    )
+}
+
 /// Secondary actions appear on demand, using native menu focus and dismissal.
 pub fn action_menu<R>(
     ui: &mut Ui,

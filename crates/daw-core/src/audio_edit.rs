@@ -56,9 +56,9 @@ impl Clip {
         };
         let region = envelope.unwrap_or(AudioEnvelope {
             offset: 0.0,
-            length: self.length,
+            length: self.source_length(),
         });
-        let position = beat + region.offset;
+        let position = beat * self.source_rate + region.offset;
         let attack = if *fade_in > 0.0 {
             fade_in_curve.value(position / fade_in)
         } else {
@@ -77,9 +77,9 @@ impl Clip {
         let reverse = matches!(self.content, ClipContent::Audio { reverse: true, .. });
         self.offset * frames_per_beat
             + if reverse {
-                (self.length - beat) * frames_per_beat - 1.0
+                (self.length - beat) * self.source_rate * frames_per_beat - 1.0
             } else {
-                beat * frames_per_beat
+                beat * self.source_rate * frames_per_beat
             }
     }
 }
@@ -124,9 +124,7 @@ pub fn normalization_gain(
     );
     let frames_per_beat = f64::from(data.sample_rate) * 60.0 / tempo;
     let start = (clip.offset * frames_per_beat).floor().max(0.0) as usize;
-    let end = ((clip.offset + clip.length) * frames_per_beat)
-        .ceil()
-        .max(0.0) as usize;
+    let end = (clip.source_end() * frames_per_beat).ceil().max(0.0) as usize;
     let peak = if start < data.frames() {
         data.samples[start * data.channels..end.min(data.frames()) * data.channels]
             .iter()
@@ -195,8 +193,12 @@ pub fn detect_transients(
         "Invalid transient settings"
     );
     let frames_per_beat = f64::from(data.sample_rate) * 60.0 / tempo;
-    let frames = (clip.length * frames_per_beat).ceil() as usize;
-    let window = (data.sample_rate as usize / 200).max(1);
+    // Inspect every source frame, even for a compressed clip. Sampling at the
+    // output rate would skip narrow source transients when source_rate > 1.
+    let frames = (clip.source_length() * frames_per_beat).ceil() as usize;
+    let window = (f64::from(data.sample_rate) * 0.005 * clip.source_rate)
+        .round()
+        .max(1.0) as usize;
     let count = frames.div_ceil(window);
     ensure!(
         count <= 1_000_000,
@@ -208,7 +210,7 @@ pub fn detect_transients(
         let mut peak = 0.0_f32;
         let length = window.min(frames - block * window);
         for frame in 0..length {
-            let beat = (block * window + frame) as f64 / frames_per_beat;
+            let beat = (block * window + frame) as f64 / frames_per_beat / clip.source_rate;
             let source = clip.audio_source_frame(beat, tempo, data.sample_rate);
             let mut level = 0.0_f32;
             for channel in 0..data.channels {
@@ -241,7 +243,7 @@ pub fn detect_transients(
                     && level > baseline * (1.1 + (1.0 - settings.sensitivity))
             }
         };
-        let beat = (index * window) as f64 / frames_per_beat;
+        let beat = (index * window) as f64 / frames_per_beat / clip.source_rate;
         if attack
             && beat > 1e-9
             && beat < clip.length - 1e-9
@@ -298,10 +300,10 @@ impl Project {
                     envelope: Some(region),
                     ..
                 } => region.length,
-                _ => clip.length,
+                _ => clip.source_length(),
             }
         } else {
-            clip.length
+            clip.source_length()
         };
         ensure!(
             fade_in.is_finite()
@@ -400,7 +402,9 @@ impl Project {
             ensure!(
                 beats
                     .last()
-                    .is_none_or(|beat| (envelope.offset + beat).abs() <= MAX_BEAT),
+                    .is_none_or(
+                        |beat| (envelope.offset + beat * original.source_rate).abs() <= MAX_BEAT
+                    ),
                 "Split exceeds the envelope range"
             );
         }

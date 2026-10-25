@@ -32,6 +32,10 @@ use live_edit::LiveEditContext;
 mod live_edit_tests;
 
 #[cfg(test)]
+#[path = "stretch_render_tests.rs"]
+mod stretch_render_tests;
+
+#[cfg(test)]
 #[path = "effect_state_tests.rs"]
 mod effect_state_tests;
 
@@ -107,6 +111,8 @@ fn record_active_note(
 struct AudioClip {
     source_path: std::path::PathBuf,
     source_alias: std::path::PathBuf,
+    source_rate: f64,
+    original: Arc<AudioData>,
     start: u64,
     source_offset: f64,
     gain: f32,
@@ -769,7 +775,7 @@ impl Renderer {
             .collect();
         let mut tracks = Vec::new();
         let mut end_sample = to_sample(project.end_beat());
-        let mut audio_cache = HashMap::<std::path::PathBuf, Arc<AudioData>>::new();
+        let mut audio_cache = HashMap::<live_edit::AudioAssetKey, Arc<AudioData>>::new();
         let mut cache_bytes = 0usize;
         let mut tail_samples = sample_rate as u64 / 5;
         for id in &order {

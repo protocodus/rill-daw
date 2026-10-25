@@ -60,7 +60,7 @@ pub fn clip_label(ui: &mut Ui, title: &str, linked: bool) -> Response {
             icon_response.union(label)
         })
         .inner;
-    response.on_hover_text(format!("{title}\nLinked clip — edits and name are shared"))
+    response.on_hover_text(format!("{title}\nGhost clip · edits and name are shared"))
 }
 
 /// A clip choice with visible instance metadata, so linked copies with the same
@@ -85,7 +85,7 @@ pub fn clip_choice(
     response.on_hover_text(format!(
         "{title}\n{detail}{}",
         if linked {
-            "\nLinked clip — edits and name are shared"
+            "\nGhost clip · edits and name are shared"
         } else {
             ""
         }

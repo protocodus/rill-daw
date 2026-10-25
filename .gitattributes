@@ -1,0 +1,2 @@
+# Preserve pinned third-party source bytes, including upstream whitespace.
+crates/daw-engine/vendor/signalsmith/** -text whitespace=-blank-at-eol linguist-vendored
