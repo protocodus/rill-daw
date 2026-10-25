@@ -106,13 +106,15 @@ fn main() -> anyhow::Result<()> {
         .cloned();
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
+            .with_app_id(daw_ui::APP_ID)
+            .with_icon(daw_ui::app_icon())
             .with_inner_size([1480.0, 960.0])
             .with_min_inner_size([1100.0, 720.0]),
         vsync: true,
         ..Default::default()
     };
     eframe::run_native(
-        "Rill — Audio Workstation",
+        "RILL — Audio Workstation",
         options,
         Box::new(move |cc| {
             let mut app = app::DawApp::new(cc, project, screenshot);

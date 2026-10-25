@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+python3 scripts/test-desktop-install.py
 cargo test --locked --workspace --exclude daw-app
 cargo test --locked -p vst3-host --lib component_handler_tests
 cargo test --locked -p vst3-host --lib host_notifications_and_restart_requests_round_trip_across_the_wire

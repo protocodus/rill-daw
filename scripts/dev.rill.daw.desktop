@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=RILL
+GenericName=Digital Audio Workstation
+Comment=Compose and arrange music
+Exec=rill %f
+Icon=dev.rill.daw
+Terminal=false
+Categories=AudioVideo;Audio;Midi;Sequencer;
+StartupNotify=true
+StartupWMClass=dev.rill.daw

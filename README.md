@@ -1,4 +1,7 @@
-# Rill
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="crates/daw-ui/assets/brand/rill-logo-dark.svg">
+  <img alt="RILL" src="crates/daw-ui/assets/brand/rill-logo-light.svg" width="320">
+</picture>
 
 A native, modular audio workstation written in Rust. Arrangement editing, MIDI piano roll, isolated VST3 instruments and effects, and a routed mixer in a compact desktop interface.
 

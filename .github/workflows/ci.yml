@@ -56,6 +56,9 @@ jobs:
             libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth
       - name: Formatting
         run: cargo fmt --all -- --check
+      - name: Linux launcher installation tests
+        if: runner.os == 'Linux'
+        run: python3 scripts/test-desktop-install.py
       - name: Build application and isolated plug-in host
         run: cargo build --locked --workspace
       - name: Core, engine, plug-in, and component tests

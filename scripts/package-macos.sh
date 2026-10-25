@@ -20,6 +20,7 @@ for executable in rill daw-plugin-host; do
   mv -f "$staged_executable" "$bundle/MacOS/$executable"
 done
 cp LICENSE "$bundle/Resources/LICENSE"
+cp crates/daw-ui/assets/brand/rill.icns "$bundle/Resources/rill.icns"
 # This bundle can also be distributed independently of the release archive.
 mkdir -p "$bundle/Resources/licenses/rill-fonts"
 cp crates/daw-ui/assets/fonts/*.txt crates/daw-ui/assets/fonts/README.md "$bundle/Resources/licenses/rill-fonts/"
@@ -32,8 +33,9 @@ cat > "$bundle/Info.plist" <<PLIST
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>rill</string>
 <key>CFBundleIdentifier</key><string>dev.rill.daw</string>
-<key>CFBundleName</key><string>Rill</string>
-<key>CFBundleDisplayName</key><string>Rill</string>
+<key>CFBundleName</key><string>RILL</string>
+<key>CFBundleDisplayName</key><string>RILL</string>
+<key>CFBundleIconFile</key><string>rill.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>$rill_numeric_version</string>
 <key>CFBundleShortVersionString</key><string>$rill_numeric_version</string>
@@ -42,5 +44,6 @@ cat > "$bundle/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 plutil -lint "$bundle/Info.plist"
+python3 scripts/verify-branding.py --macos "$project_dir/dist/Rill.app"
 "$bundle/MacOS/rill" --help >/dev/null
 echo "Built $project_dir/dist/Rill.app"

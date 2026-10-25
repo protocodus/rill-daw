@@ -36,6 +36,7 @@ pub enum ChannelDestination {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PopupKind {
+    About,
     Library,
     Setup,
     Inspector,
@@ -104,6 +105,7 @@ pub(crate) enum ClipCommand {
 }
 
 pub struct DawApp {
+    pub(crate) about_open: bool,
     pub project: Project,
     pub history: History,
     pub selected_track: Option<u64>,
@@ -218,6 +220,7 @@ impl DawApp {
             .and_then(|t| t.clips.first())
             .map(|c| c.id);
         let mut app = Self {
+            about_open: false,
             project,
             history: History::new(),
             selected_track,
@@ -312,6 +315,7 @@ impl DawApp {
 
     fn focused_view(&self) -> FocusedView {
         for (open, kind) in [
+            (self.about_open, PopupKind::About),
             (self.library_open, PopupKind::Library),
             (self.setup_open, PopupKind::Setup),
             (self.inspector_open, PopupKind::Inspector),
@@ -332,6 +336,7 @@ impl DawApp {
     }
 
     fn hide_focused_view(&mut self) {
+        self.about_open = false;
         self.join_ui.cancel();
         self.library_open = false;
         self.setup_open = false;
@@ -414,6 +419,7 @@ impl DawApp {
 
     fn show_popup(&mut self, kind: PopupKind) {
         match kind {
+            PopupKind::About => self.about_open = true,
             PopupKind::Library => self.library_open = true,
             PopupKind::Setup => self.setup_open = true,
             PopupKind::Inspector => self.inspector_open = true,
@@ -475,6 +481,7 @@ impl DawApp {
                 .unwrap_or_else(|| "Clip Editor".into()),
             FocusedView::Popup(kind) => {
                 let label = match kind {
+                    PopupKind::About => return "About RILL".into(),
                     PopupKind::Inspector => "Properties",
                     PopupKind::Instrument => "Instrument",
                     PopupKind::Effects => "Effects",
@@ -630,7 +637,8 @@ impl DawApp {
             | PopupKind::Routing
             | PopupKind::Automation
             | PopupKind::History
-            | PopupKind::Export => {}
+            | PopupKind::Export
+            | PopupKind::About => {}
         }
     }
 
@@ -783,6 +791,7 @@ impl DawApp {
                 && !self.automation_open
                 && !self.history_open
                 && !self.export_open
+                && !self.about_open
         });
         if note != self.audition_request {
             self.audition_request = note;
@@ -1618,6 +1627,7 @@ impl DawApp {
             || self.crossfade_open
             || self.join_open
             || self.export_open
+            || self.about_open
         {
             return;
         }
@@ -1807,6 +1817,8 @@ impl DawApp {
             .show(ctx, |ui| {
                 if self.document_guard.is_some() { ui.disable(); }
                 daw_ui::menu_bar(ui, |ui| {
+                    daw_ui::brand_lockup(ui, daw_ui::BrandSize::Compact);
+                    ui.separator();
                     daw_ui::menu_button(ui, "File", |ui| {
                         if daw_ui::button(ui, "New").clicked() {
                             self.request_document_transition(crate::document_ui::DocumentTransition::New);
@@ -2033,6 +2045,12 @@ impl DawApp {
                             ui.close();
                         }
                     });
+                    daw_ui::menu_button(ui, "Help", |ui| {
+                        if daw_ui::button(ui, "About RILL").clicked() {
+                            self.open_popup(PopupKind::About);
+                            ui.close();
+                        }
+                    });
                     ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width().max(0.0), daw_ui::tokens::CONTROL_HEIGHT),
                         egui::Layout::right_to_left(egui::Align::Center),
@@ -2044,6 +2062,28 @@ impl DawApp {
                     );
                 });
             });
+    }
+
+    fn about_popup(&mut self, ctx: &egui::Context) {
+        if !self.about_open {
+            return;
+        }
+        let mut open = true;
+        let mut close = false;
+        daw_ui::popup("About RILL", ctx)
+            .id(egui::Id::new("about_rill"))
+            .default_width(340.0)
+            .vscroll(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero);
+                ui.add_space(daw_ui::tokens::SPACE_MD);
+                daw_ui::text::body(ui, "Audio workstation");
+                daw_ui::text::note(ui, format!("Version {}", env!("CARGO_PKG_VERSION")));
+                ui.add_space(daw_ui::tokens::SPACE_MD);
+                close = daw_ui::button(ui, "Close").clicked();
+            });
+        self.about_open = open && !close;
     }
 
     pub(crate) fn undo_redo(&mut self, redo: bool) {
@@ -2418,7 +2458,8 @@ impl DawApp {
             || self.history_open
             || self.crossfade_open
             || self.join_open
-            || self.export_open;
+            || self.export_open
+            || self.about_open;
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
         let mut scene_bounds = ctx.content_rect();
@@ -2498,6 +2539,7 @@ impl DawApp {
         self.crossfade_popup(ctx);
         self.join_popup(ctx);
         self.export_popup(ctx);
+        self.about_popup(ctx);
         self.last_scene = if utility_open {
             daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop)
         } else {

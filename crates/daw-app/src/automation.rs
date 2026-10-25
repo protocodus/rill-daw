@@ -899,6 +899,7 @@ impl Harness {
             })).collect::<Vec<_>>(),
         });
         state["revision"] = json!(self.app.revision);
+        state["popups"]["about"] = json!(self.app.about_open);
         state["audio_transpose_rect"] = json!(
             self.ctx
                 .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("audio_transpose_rect")))

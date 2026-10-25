@@ -4,6 +4,7 @@
 //! Components return native egui responses/builders so callers
 //! retain keyboard focus, tooltips, disabled state, and layout composition.
 
+pub mod brand;
 pub mod channel_controls;
 pub mod clip;
 pub mod color;
@@ -29,6 +30,7 @@ pub mod tokens;
 pub mod waveform;
 pub mod widgets;
 
+pub use brand::*;
 pub use channel_controls::*;
 pub use clip::*;
 pub use color::*;

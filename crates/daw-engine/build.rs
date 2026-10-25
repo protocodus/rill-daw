@@ -50,6 +50,9 @@ fn main() {
     // PFFFT is C, not C++. Build it independently so the same checked-in
     // sources work with MSVC, Clang and GCC without CMake or downloaded tools.
     cc::Build::new()
+        // MSVC exposes M_PI only when this is set before <math.h>. PFFFT
+        // defines it internally, but FFTPACK is a separate translation unit.
+        .define("_USE_MATH_DEFINES", None)
         .opt_level(2)
         .warnings(false)
         .file("vendor/bungee/pffft/pffft.c")
