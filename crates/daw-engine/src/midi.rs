@@ -961,8 +961,11 @@ impl AudioEngine {
             .store(u64::MAX, Ordering::Release);
         Ok(())
     }
+    /// Close capture at consumed output; monitoring keeps its independent voices.
     pub fn request_stop_midi_recording(&self) {
         self.controls.midi.requested.store(false, Ordering::SeqCst);
+    }
+    pub(super) fn reset_midi_monitoring(&self) {
         self.controls.midi.reset.fetch_add(1, Ordering::AcqRel);
     }
     pub fn take_midi_recording_result(&mut self) -> Option<MidiRecordingResult> {

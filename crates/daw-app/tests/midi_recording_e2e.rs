@@ -1050,6 +1050,93 @@ fn recording_while_playing_skips_precount_and_stopping_capture_keeps_the_instrum
 }
 
 #[test]
+fn stopping_midi_capture_preserves_held_on_monitoring_until_the_key_is_released() {
+    capture_stop_keeps_on_monitoring(false);
+}
+
+#[test]
+fn stopping_audio_only_capture_preserves_held_midi_monitoring_until_the_key_is_released() {
+    capture_stop_keeps_on_monitoring(true);
+}
+
+fn capture_stop_keeps_on_monitoring(audio_only: bool) {
+    let fixture = Fixture::new();
+    let (mut app, track, audio_track) = fixture.app(true, audio_only, false);
+    configure_midi(&mut app, "All channels", "On", !audio_only);
+    if let Some(audio_track) = audio_track {
+        arm_in_header(&mut app, audio_track);
+    }
+    app.click("Play");
+    wait(&mut app, |state| {
+        state["engine"]["playing"] == true && state["playback_loading"] == false
+    });
+    let before = pump(&mut app, 4096);
+    settled(&before, 0.08);
+    start(&mut app, false);
+    midi(&mut app, 0, [0x90, 60, 100]);
+    let captured = if audio_only {
+        app.command(json!({"command":"pump_input", "channels":2, "samples":vec![0.0;8192]}))
+    } else {
+        pump(&mut app, 4096)
+    };
+    settled(&captured, 0.28);
+    let workers = fixture.logs();
+    app.click("Stop recording");
+    let stopped = wait(&mut app, |state| state["recording"]["phase"] == "idle");
+    assert_eq!(stopped["error"], false, "{}", stopped["last_error_report"]);
+    assert_eq!(stopped["engine"]["playing"], true);
+    let continuing = pump(&mut app, 4096);
+    assert_eq!(
+        continuing["engine"]["engine_id"],
+        before["engine"]["engine_id"]
+    );
+    assert_eq!(
+        continuing["engine"]["generation"],
+        before["engine"]["generation"]
+    );
+    assert_eq!(continuing["recording"]["midi"]["held_notes"], 1);
+    for (index, frame) in output(&continuing).iter().enumerate() {
+        assert!(
+            frame.iter().all(|sample| (*sample - 0.28).abs() < 1e-5),
+            "Stopping capture interrupted held monitoring at frame {index}: {frame:?}; engine={}",
+            continuing["engine"]
+        );
+    }
+    let p = project(&stopped);
+    let midi_clips = &p.track(track).unwrap().clips;
+    if let Some(audio_track) = audio_track {
+        assert_eq!(midi_clips.len(), 1);
+        assert_eq!(p.track(audio_track).unwrap().clips.len(), 1);
+    } else {
+        assert_eq!(midi_clips.len(), 2);
+        assert_notes(&midi_clips[1], &[(60, 4096, 4096, 100)]);
+    }
+    fixture.assert_instances(&workers);
+    let held = fixture.logs();
+    assert!(
+        held[0]
+            .1
+            .iter()
+            .all(|event| event["SendMidiAt"]["event"]["NoteOff"]["note"] != 60)
+    );
+    midi(&mut app, 0, [0x80, 60, 0]);
+    settled(&pump(&mut app, 4096), 0.08);
+    let released = fixture.logs();
+    for kind in ["NoteOn", "NoteOff"] {
+        assert_eq!(
+            released[0]
+                .1
+                .iter()
+                .filter(|event| event["SendMidiAt"]["event"][kind]["note"] == 60)
+                .count(),
+            1
+        );
+    }
+    app.click("Stop");
+    app.quit();
+}
+
+#[test]
 fn midi_disconnect_retains_held_notes_releases_the_instrument_and_allows_retry() {
     let fixture = Fixture::new();
     let (mut app, track, _) = fixture.app(false, false, false);

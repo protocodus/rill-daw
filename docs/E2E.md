@@ -382,7 +382,10 @@ their original note timing, including behind a future event; timestamps at or
 after Stop stay outside the take. Loop recording splits held notes at the loop
 boundary and merges every pass into a new MIDI clip while preserving existing
 clips. Sample and plugin-message checks also require held live voices to remain
-audible across multiple wraps without extra note-on/off messages. Undo,
+audible across multiple wraps without extra note-on/off messages. **Stop
+recording** preserves held **Monitor On** voices during both MIDI and audio-only
+capture while backing playback continues; actual key release ends monitoring.
+Transport Stop, seeking and input reset retain their existing voice-reset behavior. Undo,
 portable project recall, input failure/retry, and document/device transitions
 exercise the same capture finalization used by audio recording.
 

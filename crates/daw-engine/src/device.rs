@@ -889,6 +889,7 @@ impl AudioEngine {
                 self.controls.input.request_stop();
             }
             self.request_stop_midi_recording();
+            self.reset_midi_monitoring();
             if self.controls.timing.busy() {
                 self.controls.timing.cancel(&self.controls);
             }
@@ -903,6 +904,7 @@ impl AudioEngine {
     }
     pub fn seek(&self, beat: f64) {
         self.request_stop_midi_recording();
+        self.reset_midi_monitoring();
         if self.controls.timing.busy() {
             self.controls.timing.cancel(&self.controls);
         }
