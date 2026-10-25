@@ -17,6 +17,7 @@ mod midi;
 mod midi_edit;
 mod midi_generate;
 mod model;
+mod recording;
 mod routing;
 mod track_colors;
 
@@ -33,3 +34,4 @@ pub use midi::{MidiImport, export_midi, import_midi};
 pub use midi_edit::*;
 pub use midi_generate::*;
 pub use model::*;
+pub use recording::*;

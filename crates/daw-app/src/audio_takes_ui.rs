@@ -395,7 +395,7 @@ impl DawApp {
             }
         }
         let mut open = true;
-        daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).show(ctx, |ui| {
+        daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if groups.len() > 1 {
                     daw_ui::picker_button(ui, "Take group", |ui| {
@@ -450,7 +450,8 @@ impl DawApp {
             daw_ui::text::note(ui, "Choose a take, then use it for the whole clip or just your time selection.");
             ui.add_space(6.0);
             self.audio_takes_ui.rows.clear();
-            egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(430.0).show(ui, |ui| {
+            let list_height = (ui.available_height() - 230.0).clamp(86.0, 320.0);
+            egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(list_height).show(ui, |ui| {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));
                     let detail = format!("{:.2} beats · {}", clip.length, if in_comp || group.is_none() { "In comp" } else { "Alternative" });

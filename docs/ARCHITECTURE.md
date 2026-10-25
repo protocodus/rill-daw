@@ -1,16 +1,16 @@
 # Rill architecture
 
-Rill is a native Rust desktop DAW with separate project, rendering, plugin, and UI crates. It currently targets editing and playback of WAV audio and MIDI notes. The implementation deliberately keeps mutable editing state and third-party plugin calls outside the hardware callback.
+Rill is a native Rust desktop DAW with separate project, rendering, plugin, and UI crates. It supports audio input recording, WAV audio editing/playback, and MIDI notes. The implementation deliberately keeps mutable editing state and third-party plugin calls outside the hardware callback.
 
 ## Crate boundaries
 
 | Crate | Responsibility |
 | --- | --- |
 | `daw-core` | Serializable projects, validation, source-preserving editing, undo/redo, WAV and Standard MIDI File I/O, scales, and routing topology. |
-| `daw-engine` | Compile a project into a playback graph; render audio clips and isolated VST3 instruments/effects, sends, and buses; compensate path latency; expose device playback and offline export. |
+| `daw-engine` | Compile a project into a playback graph; render audio clips and isolated VST3 instruments/effects, sends, and buses; compensate path latency; expose device playback, input capture, dry monitoring, and offline export. |
 | `daw-plugins` | Discover VST3 metadata without loading native code into the app; host selected instruments and effects in separate `daw-plugin-host` processes. |
 | `daw-ui` | Shared egui component library, accessible controls, surfaces, popup windows, and design tokens; no audio or application dependencies. |
-| `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Automation, Library, Setup, and Properties windows; persistence and transport UI. |
+| `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Recording, Automation, Library, Setup, and Properties windows; persistence and transport UI. |
 
 ```mermaid
 flowchart LR
@@ -21,6 +21,11 @@ flowchart LR
     Worker -->|stereo frames and positions| Queue[Preallocated SPSC queue]
     Queue --> Callback[CPAL device callback]
     Callback --> Device[Audio device]
+    Input[CPAL input callback] -->|raw frames and capture timestamps| InputQueue[Bounded input queue]
+    InputQueue --> Callback
+    Callback -->|aligned raw capture| CaptureQueue[Bounded recording queue]
+    CaptureQueue --> Writer[Background WAV writer]
+    Writer -->|finalized files| UI
     UI -->|musical edits| Prepare[Background edit preparation]
     Prepare -->|compiled latest edit| Worker
     Worker -->|retired clip data| Prepare
@@ -105,11 +110,25 @@ Automatic scheduling uses a pool when a level has at least two plug-in-bearing n
 
 A preallocated single-producer/single-consumer queue transfers stereo frames and their musical positions from the coordinator to the CPAL callback. Its capacity is two requested device buffers, with a minimum of 512 frames. Generation tags discard queued audio after a seek.
 
-The callback only consumes queued frames, converts to the configured device sample format, and updates atomic meters/counters. It does not acquire mutexes, decode files, call plugins, or allocate memory. Missing frames produce silence and increment the underrun counter. Nonfinite output is silenced and device samples are hard-clamped to `[-1, 1]`; there is no mastering limiter. Preparation and plugin processing are not claimed to be allocation-free.
+The output callback consumes queued playback and input frames, adds dry monitoring, forwards aligned raw capture to a bounded recording queue, converts to the configured device sample format, and updates atomic meters/counters. Neither device callback acquires mutexes, decodes files, calls plugins, writes files, or allocates memory. Missing playback frames produce silence and increment the underrun counter; an underrun after recording starts stops capture with recovery details. Nonfinite output is silenced and device samples are hard-clamped to `[-1, 1]`; there is no mastering limiter. Preparation and plugin processing are not claimed to be allocation-free.
 
 Looping wraps at the configured beat boundaries. Seek/loop resets clear the engine's compensation buffers. Instrument reset sends a MIDI panic; effect reset stops and restarts processing while retaining parameters. Neither guarantees clearing every third-party plugin's internal tails. Loops therefore do not promise seamless state continuity for every plugin. Automatic playback completion sums reported/estimated tails along signal paths, with a 0.2-second minimum and a 30-second global cap; offline export writes the explicit requested duration.
 
 Offline export uses the same renderer and ignores looping. `export_project_wav` exports the full arrangement including calculated graph tails; `export_wav` exports an explicit duration. Both stream 32-bit floating-point stereo data through a temporary file and atomically replace the destination only after a successful render. Nonfinite rendered samples produce an error and leave an existing destination intact. WAV size limits are checked before export. The convenience in-memory render API has a four-hour duration limit and uses fallible reservation. Floating-point export preserves headroom instead of applying the device clamp.
+
+## Audio input recording
+
+`AudioInputChannels` selects one zero-based input channel or two distinct channels for stereo. `Track.audio_input` is optional and serialized with a default for older manifests; input device identity belongs to application settings. Arming and Off/Auto/On monitoring live only in `RecordingUi`, reset on New/Open, and never reopen a microphone from a project alone. Native input opening is asynchronous and requires the project sample rate. The macOS bundle supplies `NSMicrophoneUsageDescription`; actual permission presentation is owned by the OS.
+
+The input callback converts samples to finite `f32` and publishes raw frames and capture timestamps into an 8,192-frame atomic queue. A nonblocking producer claim and stream epoch prevent overlapping retired/new callbacks from corrupting it. The output callback is the sole input consumer and recording producer. Dry monitoring follows track/output-bus gain, pan, mute, and solo, with coherent stereo targets and five-millisecond gain ramps. It bypasses all inserts and sends and never enters the recorded source or offline mix.
+
+Capture anchors the musical position to consumed output and the driver's playback/capture timestamps, rather than render-ahead. Timestamp offsets account for queued device latency, with half-sample rounding tolerance at start/stop. Loop boundaries are converted to exact sample positions before the writer splits files. Stopping retains input still in flight until the output stop boundary; a missing tail times out after two seconds and reports recovery. Separate devices use their reported clocks without adaptive drift resampling. Dummy clock tests verify alignment, delayed tails, and loop splits; physical round-trip timing and driver timestamp quality remain unverified.
+
+A 16,384-frame recording queue feeds one disk writer. It writes unique mono/stereo 32-bit float WAV files, retaining at most 64 passes per session and stopping before any take exceeds the 512 MiB playback-source bound. At most 32 routes use the first 32 device channels. Callback overflow, non-finite input, input/output failure, an output underrun, or a write/finalization failure stops capture and preserves finalized audio with an error. Stop/finalization closes and drains the producer before returning a result; input reconfiguration cannot discard an uncollected recording. WAV I/O and bounded waveform decoding remain off the UI and callback threads.
+
+`Project::insert_recorded_audio` stages and validates a complete recording transaction. Non-loop capture becomes an ordinary clip; loop capture creates retained Source takes and an audible Comp, including partial passes. The newest complete pass is selected, otherwise the longest partial (latest on a tie). Repeated sessions form separate groups so existing comps stay intact. Overdub placement creates a separate colored audio track with the original output bus, folder, input, gain, and pan; inserts and sends are not duplicated. Existing clips remain governed by normal overlap priority. The app publishes all armed tracks as one Undo step, and Undo never deletes source WAVs. Save/Open/New/Quit, device changes, and structural rebuilds finalize capture before proceeding. Pause stops playback; stopping only capture lets the existing backing graph continue.
+
+The device-free backend exposes `VirtualIoSettings`, `feed_virtual_input`, `pump_virtual`, and `pump_virtual_input`, plus explicit input/output fault injection. Input delivery and output consumption advance independently; configurable channel count and input/output latency exercise the same callback, queue, writer, take-commit, and export paths. It provides deterministic test evidence without microphone access or claims about physical device performance.
 
 ## VST3 process boundary
 
@@ -133,7 +152,7 @@ MIDI CC/pitch-bend/MPE, sidechain routing, live latency renegotiation, and a sta
 
 ## Scope and verification
 
-This implementation supplies editing/playback, file MIDI import/export, output-device selection, insert/send/bus processing, hierarchy, and float WAV mixdown. It does not yet record audio or live MIDI input, stream media from disk, provide tempo maps, support multichannel surround routing, or host VST2/AU plugins.
+This implementation supplies audio recording and loop takes, editing/playback, file MIDI import/export, input/output-device selection, dry input monitoring, insert/send/bus processing, hierarchy, and float WAV mixdown. It does not yet record live MIDI input, stream playback media from disk, provide tempo maps, support multichannel surround routing, or host VST2/AU plugins.
 
 WAV input supports integer PCM and 32-bit float files. MIDI import handles note events from metrical type-0/type-1 Standard MIDI Files; it rejects SMPTE timing, sequential-pattern files, variable tempos, and changing/non-quarter-note meters. Controllers and MIDI automation are not imported. MIDI export crops notes to each clip's visible source range and emits a constant-tempo file.
 

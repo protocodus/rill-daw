@@ -48,6 +48,7 @@ pub enum PopupKind {
     History,
     Crossfade,
     AudioTakes,
+    Recording,
     Join,
     Export,
 }
@@ -159,6 +160,10 @@ pub struct DawApp {
     pub crossfade_open: bool,
     pub join_open: bool,
     pub(crate) audio_takes_open: bool,
+    pub(crate) recording_open: bool,
+    pub(crate) recording: crate::recording_ui::RecordingUi,
+    pub(crate) input_devices: Vec<DeviceInfo>,
+    pub(crate) virtual_io: daw_engine::VirtualIoSettings,
     pub(crate) audio_takes_ui: crate::audio_takes_ui::AudioTakesUi,
     pub(crate) join_ui: crate::join_ui::JoinUi,
     pub last_render_errors: u64,
@@ -278,6 +283,10 @@ impl DawApp {
             crossfade_open: false,
             join_open: false,
             audio_takes_open: false,
+            recording_open: false,
+            recording: Default::default(),
+            input_devices: Vec::new(),
+            virtual_io: Default::default(),
             audio_takes_ui: Default::default(),
             join_ui: Default::default(),
             last_render_errors: 0,
@@ -339,6 +348,7 @@ impl DawApp {
             (self.crossfade_open, PopupKind::Crossfade),
             (self.join_open, PopupKind::Join),
             (self.audio_takes_open, PopupKind::AudioTakes),
+            (self.recording_open, PopupKind::Recording),
             (self.export_open, PopupKind::Export),
         ] {
             if open {
@@ -366,6 +376,7 @@ impl DawApp {
             self.audio_takes_ui.invalidate_import();
         }
         self.audio_takes_open = false;
+        self.recording_open = false;
         self.export_open = false;
         self.view = WorkspaceView::Arrangement;
     }
@@ -463,6 +474,10 @@ impl DawApp {
             PopupKind::Crossfade => self.crossfade_open = true,
             PopupKind::Join => self.join_open = true,
             PopupKind::AudioTakes => self.audio_takes_open = true,
+            PopupKind::Recording => {
+                self.refresh_input_devices();
+                self.recording_open = true;
+            }
             PopupKind::Export => self.export_open = true,
         }
     }
@@ -521,6 +536,7 @@ impl DawApp {
                     PopupKind::Crossfade => "Crossfade",
                     PopupKind::Join => "Join clips",
                     PopupKind::AudioTakes => "Audio takes",
+                    PopupKind::Recording => "Recording",
                     PopupKind::Export => "Export WAV",
                 };
                 self.selected_track
@@ -663,6 +679,7 @@ impl DawApp {
             PopupKind::Inspector
             | PopupKind::Crossfade
             | PopupKind::AudioTakes
+            | PopupKind::Recording
             | PopupKind::Effects
             | PopupKind::Routing
             | PopupKind::Automation
@@ -681,11 +698,21 @@ impl DawApp {
         self.view = view;
     }
 
-    fn refresh_devices(&mut self) {
+    pub(crate) fn refresh_devices(&mut self) {
+        self.refresh_input_devices();
         if !self.audio_device_enabled || self.virtual_audio {
             // Offline/headless work uses the portable render rates, independent
             // of whatever audio hardware happens to be attached to this host.
-            self.devices.clear();
+            self.devices = if self.virtual_audio {
+                vec![DeviceInfo {
+                    name: "Rill virtual output".into(),
+                    is_default: true,
+                    supported_sample_rates: vec![44100, 48000, 88200, 96000],
+                    channels: 2,
+                }]
+            } else {
+                Vec::new()
+            };
             return;
         }
         match daw_engine::list_output_devices() {
@@ -761,6 +788,10 @@ impl DawApp {
         self.engine.as_ref().is_some_and(|e| e.snapshot().playing)
     }
     pub fn play(&mut self) {
+        if self.recording_busy() {
+            self.finish_recording(crate::recording_ui::AfterRecording::Pause);
+            return;
+        }
         if self.loading.is_some() {
             self.desired_playing = !self.desired_playing;
             return;
@@ -773,7 +804,7 @@ impl DawApp {
         }
     }
 
-    fn prepare_engine(&mut self, playing: bool) {
+    pub(crate) fn prepare_engine(&mut self, playing: bool) {
         self.desired_playing = playing;
         let previous = self.engine.take();
         if let Some(engine) = &previous {
@@ -898,6 +929,7 @@ impl DawApp {
                 }
                 Err(error) => {
                     self.desired_playing = false;
+                    self.recording_engine_failed(&error);
                     if let Some(previous) = self.settings_rollback.take() {
                         self.settings = previous;
                         self.setup_draft = self.settings.clone();
@@ -911,7 +943,11 @@ impl DawApp {
             }
         }
     }
-    fn stop(&mut self) {
+    pub(crate) fn stop(&mut self) {
+        if self.recording_busy() {
+            self.finish_recording(crate::recording_ui::AfterRecording::Stop);
+            return;
+        }
         self.desired_playing = false;
         self.audition_request = None;
         self.retire_engine();
@@ -920,12 +956,20 @@ impl DawApp {
     }
 
     pub fn seek(&mut self, beat: f64) {
+        if self.recording_busy() {
+            return;
+        }
         self.cursor = beat.max(0.0);
         if let Some(e) = &self.engine {
             e.seek(self.cursor);
         }
     }
     pub fn rebuild(&mut self) {
+        if self.recording_busy() {
+            self.recording.rebuild_after = true;
+            self.finish_recording(crate::recording_ui::AfterRecording::Pause);
+            return;
+        }
         let playing = self.playing() || self.desired_playing;
         if let Some(engine) = &self.engine {
             self.cursor = engine.position_beats();
@@ -1170,6 +1214,7 @@ impl DawApp {
         self.settings_rollback = None;
         self.midi_editor = Default::default();
         self.reset_views = true;
+        self.recording = Default::default();
         self.project = Project::new();
         let old_waveforms = std::mem::take(&mut self.waveforms);
         if !old_waveforms.is_empty() {
@@ -1296,6 +1341,7 @@ impl DawApp {
         self.settings_rollback = None;
         self.midi_editor = Default::default();
         self.reset_views = true;
+        self.recording = Default::default();
         self.history.clear();
         self.before_edit = None;
         self.playback_preview_submitted = false;
@@ -1679,6 +1725,7 @@ impl DawApp {
             || self.crossfade_open
             || self.join_open
             || self.audio_takes_open
+            || self.recording_open
             || self.export_open
             || self.about_open
             || self.midi_editor.generate_active()
@@ -1737,6 +1784,7 @@ impl DawApp {
         egui::TopBottomPanel::top("transport")
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
+                let show_loop_summary = ui.available_width() >= 1200.0;
                 ui.horizontal_wrapped(|ui| {
                     let active = self.navigation.iter().rev().find_map(|snapshot| match snapshot.view {
                         FocusedView::Workspace(view) => Some(view),
@@ -1752,7 +1800,7 @@ impl DawApp {
                         daw_ui::text::note(ui, "Refining audio…");
                     }
                     ui.separator();
-                    if daw_ui::button(ui, "Start")
+                    if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Start"))
                         .on_hover_text("Return to start · Home")
                         .clicked()
                     {
@@ -1772,8 +1820,14 @@ impl DawApp {
                     {
                         self.stop();
                     }
+                    if daw_ui::record_button(ui, self.recording_busy(), !self.recording_finalizing()).clicked() {
+                        if self.recording_busy() { self.finish_recording(crate::recording_ui::AfterRecording::Continue); }
+                        else { self.begin_recording(); }
+                    }
+                    if self.recording_finalizing() { daw_ui::text::note(ui, "Finishing recording…"); }
                     let mut looping = self.project.loop_enabled;
-                    if daw_ui::toggle(ui, &mut looping, "Loop")
+                    let recording_busy = self.recording_busy();
+                    if ui.add_enabled_ui(!recording_busy, |ui| daw_ui::toggle(ui, &mut looping, "Loop")).inner
                         .on_hover_text("Repeat the range between Start beat and End beat")
                         .changed()
                     {
@@ -1782,6 +1836,7 @@ impl DawApp {
                         self.changed();
                     }
                     let range = daw_ui::picker_button(ui, "Range", |ui| {
+                        if recording_busy { ui.disable(); }
                         // Display musical beat numbers from one; the project and
                         // renderer retain their existing zero-based timeline.
                         let mut start = self.project.loop_start + 1.0;
@@ -1822,8 +1877,8 @@ impl DawApp {
                             self.changed();
                         }
                     });
-                    range.0.on_hover_text("Set loop start and end beats");
-                    ui.label(
+                    range.0.on_hover_text(format!("Loop beats {:.2}–{:.2} · Set start and end", self.project.loop_start + 1.0, self.project.loop_end + 1.0));
+                    if show_loop_summary { ui.label(
                         RichText::new(format!(
                             "Beats {:.2}–{:.2}",
                             self.project.loop_start + 1.0,
@@ -1832,7 +1887,7 @@ impl DawApp {
                         .monospace()
                         .color(palette(ui.ctx()).muted),
                     )
-                    .on_hover_text("Loop range in beats; the end is exclusive");
+                    .on_hover_text("Loop range in beats; the end is exclusive"); }
                     ui.separator();
                     let bar = (self.cursor / self.project.beats_per_bar as f64).floor() as u64 + 1;
                     let beat = (self.cursor % self.project.beats_per_bar as f64).floor() as u64 + 1;
@@ -1848,8 +1903,8 @@ impl DawApp {
                     ui.separator();
                     let mut tempo = self.project.tempo;
                     if ui
-                        .add(
-                            daw_ui::number(&mut tempo)
+                        .add_enabled(
+                            !recording_busy, daw_ui::number(&mut tempo)
                                 .speed(0.1)
                                 .range(20.0..=400.0)
                                 .suffix(" BPM"),
@@ -1923,7 +1978,7 @@ impl DawApp {
                     daw_ui::menu_button(ui, "Edit", |ui| {
                         if ui
                             .add_enabled(
-                                self.history.can_undo() && !self.state_sync_pending(),
+                                self.history.can_undo() && !self.state_sync_pending() && !self.recording_busy(),
                                 daw_ui::button_widget("Undo"),
                             )
                             .on_hover_text(format!(
@@ -1937,7 +1992,7 @@ impl DawApp {
                         }
                         if ui
                             .add_enabled(
-                                self.history.can_redo() && !self.state_sync_pending(),
+                                self.history.can_redo() && !self.state_sync_pending() && !self.recording_busy(),
                                 daw_ui::button_widget("Redo"),
                             )
                             .on_hover_text(format!(
@@ -2073,6 +2128,7 @@ impl DawApp {
                             ("Instrument", PopupKind::Instrument, midi),
                             ("Effects", PopupKind::Effects, audio_channel),
                             ("Routing", PopupKind::Routing, audio_channel),
+                            ("Recording", PopupKind::Recording, track.is_some_and(|track| track.kind == TrackKind::Audio)),
                             (
                                 "Automation",
                                 PopupKind::Automation,
@@ -2148,6 +2204,9 @@ impl DawApp {
     }
 
     pub(crate) fn undo_redo_steps(&mut self, redo: bool, steps: usize) {
+        if self.recording_busy() {
+            return;
+        }
         self.midi_editor.cancel_generate();
         self.midi_editor.cancel_quantize();
         if self.state_sync_pending() {
@@ -2333,6 +2392,13 @@ impl DawApp {
                             for device in &self.devices { daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, Some(device.name.clone()), &device.name); }
                         }).response.labelled_by(output_label.id).on_hover_text(self.setup_draft.device_name.as_deref().unwrap_or("System default"));
                         ui.end_row();
+                        let input_label = daw_ui::text::label(ui, "Input device");
+                        let picker = daw_ui::select("input_device", self.setup_draft.input_device_name.as_deref().unwrap_or("System default input")).width(320.0).truncate().show_ui(ui, |ui| {
+                            daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, None, "System default input");
+                            for device in &self.input_devices { daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, Some(device.name.clone()), &device.name); }
+                        }).response.labelled_by(input_label.id);
+                        ctx.data_mut(|data| data.insert_temp(egui::Id::new("input_device_picker_rect"), picker.rect));
+                        ui.end_row();
                         let rates = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).map(|d| d.supported_sample_rates.clone()).unwrap_or_else(|| vec![44_100, 48_000, 88_200, 96_000]);
                         if self.setup_draft.device_name != previous_device && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
                             self.setup_draft.sample_rate = if rates.contains(&48_000) { 48_000 } else { rates[0] };
@@ -2470,6 +2536,7 @@ impl DawApp {
         self.poll_engine();
         self.poll_live_edits();
         self.poll_instrument_editor(ctx);
+        self.poll_recording(ctx);
         self.poll_project_io(ctx);
         self.poll_export();
         self.poll_join(ctx);
@@ -2548,6 +2615,7 @@ impl DawApp {
             || self.crossfade_open
             || self.join_open
             || self.audio_takes_open
+            || self.recording_open
             || self.export_open
             || self.about_open;
         let focused_before_draw = self.focused_view();
@@ -2629,6 +2697,7 @@ impl DawApp {
         self.crossfade_popup(ctx);
         self.join_popup(ctx);
         self.audio_takes_popup(ctx);
+        self.recording_popup(ctx);
         self.export_popup(ctx);
         self.about_popup(ctx);
         self.last_scene = if utility_open {

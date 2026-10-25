@@ -345,7 +345,7 @@ struct Route {
     output: Vec<[f32; 2]>,
 }
 
-fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
+pub(crate) fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
     let mut unmuted = HashSet::new();
     let mut selected = HashSet::new();
     let any_solo = project

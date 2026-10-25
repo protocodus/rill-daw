@@ -663,13 +663,13 @@ pub(super) fn compile_content(
                     requested
                 } else {
                     std::fs::canonicalize(path)
-                        .with_context(|| format!("Loading audio clip {}", clip.name))?
+                        .with_context(|| format!("Loading audio clip {} ({path})", clip.name))?
                 };
                 let original = if let Some(data) = audio_cache.get(&original_key(&source_path)) {
                     Arc::clone(data)
                 } else {
                     let source = quality::load_source(&source_path)
-                        .with_context(|| format!("Loading audio clip {}", clip.name))?;
+                        .with_context(|| format!("Loading audio clip {} ({path})", clip.name))?;
                     check_cancelled()?;
                     let data = Arc::new(quality::prepare_audio_cancelled(
                         source,

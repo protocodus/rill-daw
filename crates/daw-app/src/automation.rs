@@ -30,6 +30,21 @@ enum Command {
     PumpAudio {
         frames: usize,
     },
+    PumpInput {
+        channels: u16,
+        samples: Vec<f32>,
+    },
+    InputError,
+    OutputError,
+    FeedInput {
+        channels: u16,
+        samples: Vec<f32>,
+    },
+    DummyAudioDevice {
+        input_channels: Option<u16>,
+        input_latency_frames: Option<u32>,
+        output_latency_frames: Option<u32>,
+    },
     Inspect {
         #[serde(default)]
         paint: bool,
@@ -582,6 +597,99 @@ impl Harness {
                 );
                 self.settle();
             }
+            Command::PumpInput { channels, samples } => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "Virtual input requires virtual audio mode"
+                );
+                ensure!(
+                    samples.len() <= 1_048_576,
+                    "Input injection exceeds bounded request"
+                );
+                self.audio_output = Some(
+                    self.app
+                        .engine
+                        .as_mut()
+                        .context("Audio engine is not ready")?
+                        .pump_virtual_input(&samples, channels)?,
+                );
+                self.settle();
+            }
+            Command::DummyAudioDevice {
+                input_channels,
+                input_latency_frames,
+                output_latency_frames,
+            } => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "Dummy device configuration requires virtual audio mode"
+                );
+                ensure!(
+                    !self.app.recording_busy(),
+                    "Finish recording before changing dummy device parameters"
+                );
+                let mut config = self.app.virtual_io;
+                if let Some(value) = input_channels {
+                    config.input_channels = value;
+                }
+                if let Some(value) = input_latency_frames {
+                    config.input_latency_frames = value;
+                }
+                if let Some(value) = output_latency_frames {
+                    config.output_latency_frames = value;
+                }
+                ensure!(
+                    (1..=32).contains(&config.input_channels),
+                    "Dummy input requires 1..32 channels"
+                );
+                ensure!(
+                    config.input_latency_frames <= self.app.settings.sample_rate
+                        && config.output_latency_frames <= self.app.settings.sample_rate,
+                    "Dummy device latency may not exceed one second"
+                );
+                if let Some(engine) = self.app.engine.as_mut() {
+                    engine.configure_virtual_io(config)?;
+                }
+                self.app.virtual_io = config;
+                self.app.refresh_devices();
+                self.settle();
+            }
+            Command::FeedInput { channels, samples } => {
+                ensure!(
+                    self.app.virtual_audio && samples.len() <= 1_048_576,
+                    "Input injection requires bounded virtual audio mode"
+                );
+                self.app
+                    .engine
+                    .as_mut()
+                    .context("Audio engine is not ready")?
+                    .feed_virtual_input(&samples, channels)?;
+                self.settle();
+            }
+            Command::OutputError => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "Output fault injection requires virtual audio mode"
+                );
+                self.app
+                    .engine
+                    .as_mut()
+                    .context("Audio engine is not ready")?
+                    .fail_virtual_output()?;
+                self.settle();
+            }
+            Command::InputError => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "Input fault injection requires virtual audio mode"
+                );
+                self.app
+                    .engine
+                    .as_mut()
+                    .context("Audio engine is not ready")?
+                    .fail_virtual_input()?;
+                self.settle();
+            }
             Command::FileDialog { kind, path } => {
                 use crate::document_ui::DocumentDialog;
                 self.app.next_document_dialog = Some((
@@ -822,7 +930,8 @@ impl Harness {
             "Project timeout must be between 1 and 120000 ms"
         );
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-        while self.app.state_sync_pending()
+        while self.app.recording_busy()
+            || self.app.state_sync_pending()
             || self.app.project_io_pending()
             || self.app.document_guard_diagnostics()["phase"]
                 .as_str()
@@ -951,6 +1060,9 @@ impl Harness {
         state["popups"]["export"] = json!(self.app.export_open);
         state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
         state["clipboard_text"] = json!(self.clipboard_text);
+        state["recording"] = self.app.recording_diagnostics(&self.ctx);
+        state["popups"]["recording"] = json!(self.app.recording_open);
+        state["input_device_name"] = json!(self.app.settings.input_device_name);
         state["audio_takes"] = self.app.audio_takes_diagnostics();
         state["popups"]["audio_takes"] = json!(self.app.audio_takes_open);
         state["error_details"] = self.app.error_details_diagnostics();

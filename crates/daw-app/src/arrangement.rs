@@ -88,7 +88,12 @@ impl DawApp {
                 });
             });
         });
-        let end = (self.project.end_beat() + 16.0).max(48.0);
+        let content_end = self.project.end_beat().max(if self.recording_busy() {
+            self.cursor
+        } else {
+            0.0
+        });
+        let end = (content_end + 16.0).max(48.0);
         let visible_tracks = crate::routing::visible_tracks(&self.project);
         let row_units: f32 = visible_tracks
             .iter()
@@ -112,7 +117,7 @@ impl DawApp {
             .unwrap_or(0.0);
         let bounds = daw_ui::TimelineBounds {
             start_beat: earliest,
-            end_beat: self.project.end_beat().max(earliest + 0.25),
+            end_beat: content_end.max(earliest + 0.25),
             start_row: 0.0,
             end_row: row_units.max(1.0),
         };
@@ -141,6 +146,9 @@ impl DawApp {
         let mut channel_controls = Vec::new();
         let mut track_colors = Vec::new();
         let mut instrument_target = None;
+        let mut recording_target = None;
+        let mut recording_controls = Vec::new();
+        let mut arm_toggles = Vec::new();
         let mut open_editor = false;
         let mut clip_diagnostics = Vec::new();
         let channels: std::collections::HashMap<_, _> = self
@@ -265,7 +273,7 @@ impl DawApp {
                         daw_ui::picker_at(
                             ui,
                             Rect::from_min_size(row.min + Vec2::new(14.0, 25.0),
-                                Vec2::new(if midi { 110.0 } else { 226.0 }, 18.0)),
+                                Vec2::new(if midi || track.kind == TrackKind::Audio { 110.0 } else { 226.0 }, 18.0)),
                             (track.id, "output"),
                             egui::RichText::new(&route).size(daw_ui::tokens::FONT_CANVAS).color(palette(ui.ctx()).muted),
                             |ui| {
@@ -292,6 +300,12 @@ impl DawApp {
                                 });
                             },
                         ).0.on_hover_text(format!("{route}\nChange output bus"));
+                        if track.kind == TrackKind::Audio {
+                            let arm_rect = Rect::from_min_size(row.min + Vec2::new(128.0, 24.0), Vec2::new(22.0, 21.0));
+                            recording_controls.push(serde_json::json!({"track":track.id,"arm":{"min":[arm_rect.min.x,arm_rect.min.y],"max":[arm_rect.max.x,arm_rect.max.y]}}));
+                            if daw_ui::record_arm_at(ui, arm_rect, egui::Id::new((track.id,"record_arm")), self.recording.armed.contains(&track.id), !self.recording_busy()).clicked() { arm_toggles.push(track.id); }
+                            if daw_ui::button_at(ui, Rect::from_min_size(row.min + Vec2::new(154.0,25.0),Vec2::new(86.0,18.0)), (track.id,"recording_input"), egui::RichText::new("Inputs…").size(daw_ui::tokens::FONT_CANVAS)).clicked() { recording_target = Some(track.id); }
+                        }
                         if midi {
                             let instrument = match &track.instrument {
                                 Instrument::None => "Choose instrument…".to_owned(),
@@ -728,6 +742,10 @@ impl DawApp {
                             }
                         }
                     }
+                    if let Some((start, end)) = self.recording_region(track.id) {
+                        let rect = Rect::from_min_max(Pos2::new((origin + start as f32 * self.zoom).max(grid_left), row.top()+8.0), Pos2::new((origin + end as f32 * self.zoom).min(row.right()), row.bottom()-8.0));
+                        daw_ui::paint_recording_region(&p, rect);
+                    }
                     if let Some(pos) = ui.ctx().input(|i| i.pointer.hover_pos())
                         && row.contains(pos)
                         && pos.x >= grid_left
@@ -797,7 +815,7 @@ impl DawApp {
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
                     "start_row": bounds.start_row, "end_row": bounds.end_row},
                 "tool": format!("{:?}", self.tool), "cursor": self.cursor, "clips": clip_diagnostics,
-                "channels": channel_controls, "track_colors": track_colors,
+                "channels": channel_controls, "track_colors": track_colors, "recording_controls": recording_controls,
             }));
         });
         if let Some(beat) = new_cursor {
@@ -808,6 +826,12 @@ impl DawApp {
         }
         if let Some(track) = channel_target {
             self.open_channel(track);
+        }
+        for track in arm_toggles {
+            self.toggle_record_arm(track);
+        }
+        if let Some(track) = recording_target {
+            self.open_recording(track);
         }
         if let Some(track) = instrument_target {
             self.selected_track = Some(track);

@@ -18,6 +18,7 @@ mod midi_editor;
 mod midi_generate_ui;
 mod plugin_ui;
 mod project_io;
+mod recording_ui;
 mod routing;
 mod settings;
 mod theme;

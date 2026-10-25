@@ -28,6 +28,29 @@ Retained candidates remain in `track.clips` with their original source windows a
 
 Versions 1–3 remain readable. New saves use version 4 so older applications reject unsupported take metadata instead of playing retained candidates as ordinary overlapping clips. These version rules apply to ZIP manifests and legacy JSON alike.
 
+Audio tracks also save an optional `audio_input` channel assignment: for example
+`{"Mono":{"channel":0}}` or `{"Stereo":{"left":0,"right":1}}`. Indices are
+zero-based channels of the input device chosen in application Setup. Stereo
+channels must be distinct. Missing assignments load as `null`; new audio tracks
+default to mono input 1. Channel availability is checked against the actual device
+when its stream opens, so moving a project to a smaller interface does not make
+its existing recorded audio unreadable. Input-device identity remains a local
+application preference. Record arm, monitoring, and an in-progress recording are
+session state and are never restored automatically from a project.
+
+Finalized recordings use ordinary source WAVs. A non-loop recording creates an
+independent clip; loop recording creates a take group, retaining complete and
+partial passes as separate sources. The newest complete pass is initially audible.
+If none completed, the longest partial pass is selected (latest on a tie), so a
+short final pass does not silence the rest of a longer recording. Existing clips
+and edited comps remain intact; a later recording creates a new recoverable group.
+Overdub placement creates a separate, distinctly colored audio channel with the
+same output bus, folder, input assignment, and gain/pan settings. Inserts and sends
+are not duplicated onto the new layer. A recording batch publishes
+atomically; Undo removes its project references without deleting captured files.
+This optional input metadata does not require another format bump: older
+version-4 readers can ignore channel assignments without changing recorded audio.
+
 Audio entries are named `assets/00000000.wav`, `assets/00000001.wav`, and so on.
 Clips reference these relative names in the manifest. Sources are deduplicated by
 canonical source path; two different files with the same basename remain separate.

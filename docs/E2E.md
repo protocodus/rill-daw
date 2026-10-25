@@ -121,6 +121,11 @@ Supported commands:
 | --- | --- | --- |
 | `inspect` | optional `paint` | Advance frames and return the project, selection, popup state, settings, status, visible labels, and pointer/label geometry. With `paint: true`, also return clipped rectangle fills and strokes in `painted_rects` for visual-color assertions. |
 | `pump_audio` | `frames` (1–8192) | Consume audio through the production queue/callback consumer and return stereo `audio_output` samples. Requires the isolated driver's `RILL_E2E_VIRTUAL_AUDIO` mode; `engine` reports playback identity, revisions, position, and counters. |
+| `dummy_audio_device` | optional `input_channels` (1–32), `input_latency_frames`, `output_latency_frames` | Configure the device-free backend before recording. Omitted fields retain their values; defaults are two input channels and zero latency. Each latency is bounded to one second at the current sample rate. Requires `RILL_E2E_VIRTUAL_AUDIO`. |
+| `pump_input` | `channels`, `samples` (interleaved float array) | Deliver input and consume an equal number of output frames in bounded chunks; return stereo `audio_output`. Runs the production capture, monitoring, and disk-writer path. Requires a configured virtual input with matching channel count. |
+| `feed_input` | `channels`, `samples` (interleaved float array) | Deliver only input callbacks, without advancing output. Pair with `pump_audio` to test independent scheduling, queue overflow, and latency. Same virtual input requirements and bounds as `pump_input`. |
+| `input_error` | — | Inject input disconnection into the virtual backend; active recording finalizes available audio and reports the failure. |
+| `output_error` | — | Inject output failure into the virtual backend; active recording finalizes available audio and reports the failure. |
 | `viewport` | `width`, `height`, optional `pixels_per_point` | Resize the headless logical viewport (800–4096 by 600–4096 points) and display density (0.75–3). |
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
@@ -140,7 +145,7 @@ Supported commands:
 
 File → Quit closes the process through the application's normal viewport command after any unsaved-change decision. Native file picker presentation requires a windowing environment; the driver can supply Open/Save/Export picker results, or start a default export with an explicit path. These are automated UI regressions, not a replacement for native mouse-and-keyboard testing. `--headless` is an opt-in test driver, not a network service. Commands can operate on files with the current user's permissions, so feed it trusted input.
 
-Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.channels` reports the actual header slider/meter rectangles and engine peak readings. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
+Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.channels` reports the actual header slider/meter rectangles and engine peak readings. `recording` reports `phase` (`idle`, `starting`, `recording`, `finalizing`), armed tracks, monitor modes, input readiness/channels/peaks, captured frames, completed passes, dropped frames, `dummy_device` configuration, the last published files/clip IDs, and error details. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
 
 With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit` test in `features_e2e` drives the complete production app: direct instrument creation, automatic native editor opening, note editing, last-touched automation, Undo/Redo protection, saved state restoration, cached thumbnails, two independent VST tracks with audible export, New/Open recovery, and shutdown. The regular suite separately covers keyboard and double-click creation using metadata fixtures.
 
@@ -308,3 +313,52 @@ identities and musical continuity. Engine tests distinguish proxy/full cache
 entries, reject cancelled/stale refinements, verify exact duration/pitch and stereo
 relationships, assert allocation-free swaps, and keep offline exports at full
 quality. None of these tests opens a native desktop or physical audio device.
+
+### Audio input recording and dummy devices
+
+Run the focused subprocess suite with:
+
+```sh
+cargo test --locked --release -p daw-app --test recording_e2e
+```
+
+`recording_e2e` uses the real Recording popup, input choices, arm checkbox,
+monitoring modes, transport controls, take editor, settings, and document guards.
+Its input boundary supplies deterministic samples to the production engine's
+callback queues and WAV writer. Tests check exact mono/stereo samples, separate
+armed channel routing, recording beyond an empty arrangement, Undo/Redo, archived
+sources after restart, and session-only arm/monitor reset. They verify that dry
+monitoring follows channel and bus controls while recorded samples remain raw,
+and that Auto changes behavior between stopped, playback, and recording states.
+
+Loop scenarios check complete passes, partial final passes, and the audible
+complete take's full duration. The tonal comp oracle records C3 and D3 passes,
+selects four ranges in the actual Takes popup to form C3/D3/C3/D3, exports WAV,
+and compares samples against an independent expected signal. It checks hard
+boundaries, smooth complementary crossfades, and a custom Bézier spline. Other
+scenarios verify overdub layers preserve old audio and routing, Pause finalizes
+once, New waits before the unsaved decision, and device/sample-rate changes finish
+capture before reinitializing. A test protocol host verifies that stopping only
+recording retains backing instrument/effect processes and transport continuity.
+
+The dummy input/output devices are explicit and independently driven. Configure
+them with `dummy_audio_device`, arm through the UI, and wait for
+`recording.phase == "recording"`. `feed_input` queues interleaved frames without
+advancing playback; `pump_audio` then consumes them. `pump_input` combines both
+for ordinary scenarios. Each injection must contain complete frames, at most
+1,048,576 sample values and at most 480,000 frames. Input queue capacity is 8,192
+frames, so a larger unconsumed `feed_input` intentionally exercises overflow.
+The writer queue is bounded to 16,384 frames; `pump_input` allows it to drain
+between large offline chunks so fast test execution does not manufacture a disk
+overload.
+
+Independent-clock cases select the fourth of four inputs, vary callback delivery
+sizes, and assert that feeding input alone does not record or move output. With
+128 input and 256 output latency frames, tests require a 384-frame delayed tail,
+exact loop splitting, and preserved samples after Stop. Continue delivering that
+tail and pumping output until phase becomes `idle`; inspecting UI frames alone
+does not advance dummy audio clocks. Input overflow and explicit input/output
+failures must report details, retain valid audio, and allow another recording.
+Engine unit tests separately cover partial first passes, rounding at 44.1 kHz,
+callback allocation, queue bounds, and finalization. These checks run in a container and do not verify
+microphone permission prompts, physical round-trip latency, or hardware drivers.

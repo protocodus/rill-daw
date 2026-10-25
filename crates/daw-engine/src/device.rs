@@ -1,7 +1,14 @@
 use crate::meter::ChannelMeters;
 use crate::render::{BLOCK, Renderer};
+#[path = "input.rs"]
+mod input;
 #[path = "live_updates.rs"]
 mod live_updates;
+use input::{InputController, InputShared};
+pub use input::{
+    InputRoute, InputSettings, RecordingConfig, RecordingResult, RecordingSnapshot, RecordingTake,
+    VirtualIoSettings, list_input_devices,
+};
 use live_updates::{LiveMailbox, LiveUpdates};
 #[cfg(test)]
 #[path = "live_device_tests.rs"]
@@ -103,6 +110,8 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
 static NEXT_ENGINE_ID: AtomicU64 = AtomicU64::new(1);
 
 struct Controls {
+    input: Arc<InputShared>,
+    input_sample_rate: AtomicU32,
     engine_id: u64,
     rendered_frames: AtomicU64,
     consumed_frames: AtomicU64,
@@ -122,6 +131,8 @@ struct Controls {
 impl Controls {
     fn new() -> Self {
         Self {
+            input: Arc::new(InputShared::new()),
+            input_sample_rate: AtomicU32::new(48000),
             engine_id: NEXT_ENGINE_ID.fetch_add(1, Ordering::Relaxed),
             rendered_frames: AtomicU64::new(0),
             consumed_frames: AtomicU64::new(0),
@@ -243,6 +254,7 @@ impl AudioQueue {
 }
 
 pub struct AudioEngine {
+    input: InputController,
     live_updates: Option<LiveUpdates>,
     virtual_queue: Option<Arc<AudioQueue>>,
     stream: Option<cpal::Stream>,
@@ -439,11 +451,21 @@ impl AudioEngine {
             Some((device, config, format))
         };
         let controls = Arc::new(Controls::new());
+        controls
+            .input_sample_rate
+            .store(settings.sample_rate, Ordering::Relaxed);
         let channel_meters = Arc::new(ChannelMeters::new(project));
         let worker_meters = Arc::clone(&channel_meters);
         let queue = Arc::new(AudioQueue::new(
             (settings.buffer_frames as usize * 2).max(BLOCK * 2),
         ));
+        let input = InputController::new(
+            Arc::clone(&controls),
+            settings.sample_rate,
+            settings.buffer_frames,
+            virtual_output,
+        );
+        input.sync_mix(project)?;
         let project = project.clone();
         let worker_controls = Arc::clone(&controls);
         let worker_queue = Arc::clone(&queue);
@@ -573,7 +595,7 @@ impl AudioEngine {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
-                    if !preview && renderer.finished() {
+                    if !preview && renderer.finished() && !worker_controls.input.capture_requested() {
                         worker_controls
                             .finished_generation
                             .store(generation, Ordering::Release);
@@ -631,6 +653,7 @@ impl AudioEngine {
             }
         };
         let mut engine = Self {
+            input,
             live_updates: Some(live_updates),
             virtual_queue: virtual_output.then(|| Arc::clone(&queue)),
             stream: None,
@@ -675,6 +698,7 @@ impl AudioEngine {
     /// Prepare a compatible edit while the existing graph keeps rendering.
     /// `false` means a structural change requires normal graph preparation.
     pub fn try_update_project(&self, project: &Project, revision: u64) -> Result<bool> {
+        self.input.sync_mix(project)?;
         ensure!(
             !self.controls.shutdown.load(Ordering::Acquire),
             "Audio engine has stopped"
@@ -716,7 +740,8 @@ impl AudioEngine {
                     "Audio engine has stopped"
                 );
                 let active = self.controls.playing.load(Ordering::Acquire)
-                    || self.controls.auditioning.load(Ordering::Acquire);
+                    || self.controls.auditioning.load(Ordering::Acquire)
+                    || self.controls.input.active();
                 let generation = self.controls.generation.load(Ordering::Acquire);
                 queue.discard_stale(generation);
                 if !active
@@ -757,6 +782,9 @@ impl AudioEngine {
     }
 
     pub fn set_playing(&self, playing: bool) {
+        if !playing && self.controls.input.capture_requested() {
+            self.controls.input.request_stop();
+        }
         if playing
             && self.controls.finished_generation.load(Ordering::Acquire)
                 == self.controls.generation.load(Ordering::Acquire)
@@ -766,6 +794,9 @@ impl AudioEngine {
         self.controls.playing.store(playing, Ordering::Release);
     }
     pub fn seek(&self, beat: f64) {
+        if self.controls.input.capture_requested() {
+            self.controls.input.request_stop();
+        }
         if !beat.is_finite() {
             return;
         }
@@ -860,6 +891,7 @@ impl AudioEngine {
         }
     }
     pub fn stop(&mut self) {
+        self.input.shutdown();
         self.controls.playing.store(false, Ordering::Release);
         self.controls.auditioning.store(false, Ordering::Release);
         self.controls.shutdown.store(true, Ordering::Release);
@@ -889,11 +921,11 @@ where
     let errors = Arc::clone(&controls);
     Ok(device.build_output_stream(
         *config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            fill_output(data, channels, &queue, &controls)
+        move |data: &mut [T], info: &cpal::OutputCallbackInfo| {
+            fill_output_timed(data, channels, &queue, &controls, Some(info))
         },
-        move |_| {
-            errors.render_errors.fetch_add(1, Ordering::Relaxed);
+        move |error| {
+            output_stream_failed(&errors, &error);
         },
         None,
     )?)
@@ -905,6 +937,30 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
     queue: &AudioQueue,
     controls: &Controls,
 ) {
+    fill_output_timed(data, channels, queue, controls, None);
+}
+
+fn output_stream_failed(controls: &Controls, error: &cpal::Error) {
+    if !controls.input.device_failed(6, error, None) {
+        return;
+    }
+    controls.render_errors.fetch_add(1, Ordering::Relaxed);
+    controls.playing.store(false, Ordering::Release);
+}
+
+fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
+    data: &mut [T],
+    channels: usize,
+    queue: &AudioQueue,
+    controls: &Controls,
+    info: Option<&cpal::OutputCallbackInfo>,
+) {
+    let output_time = controls.input.output_time(info);
+    let sample_rate = controls.input_sample_rate.load(Ordering::Relaxed);
+    let capturing = controls.input.active();
+    if capturing {
+        controls.playing.store(true, Ordering::Release);
+    }
     let playing = controls.playing.load(Ordering::Acquire);
     let auditioning = controls.auditioning.load(Ordering::Acquire);
     let generation = controls.generation.load(Ordering::Acquire);
@@ -912,8 +968,9 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
     let mut peak = [0.0_f32; 2];
     let mut underrun = false;
     let mut consumed = 0;
-    for frame in data.chunks_mut(channels) {
+    for (frame_index, frame) in data.chunks_mut(channels).enumerate() {
         let mut stereo = [0.0; 2];
+        let mut capture_position = None;
         if playing || auditioning {
             // At most one queue's worth of stale samples can exist following a seek.
             for _ in 0..=queue.slots.len() {
@@ -923,6 +980,17 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
                         consumed += 1;
                         if playing {
                             controls.position.store(beat.to_bits(), Ordering::Relaxed);
+                            let tempo =
+                                f64::from_bits(controls.input.tempo.load(Ordering::Relaxed));
+                            capture_position = Some(
+                                (beat
+                                    * controls.input_sample_rate.load(Ordering::Relaxed) as f64
+                                    * 60.0
+                                    / tempo)
+                                    .round()
+                                    .max(1.0) as u64
+                                    - 1,
+                            );
                         }
                         break;
                     }
@@ -938,6 +1006,13 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
                 }
             }
         }
+        let monitor = controls.input.consume(
+            capture_position,
+            sample_rate,
+            output_time + (frame_index as u128 * 1_000_000_000 / u128::from(sample_rate)) as u64,
+        );
+        stereo[0] += monitor[0];
+        stereo[1] += monitor[1];
         for channel in 0..2 {
             stereo[channel] = if stereo[channel].is_finite() {
                 stereo[channel].clamp(-1.0, 1.0)
@@ -954,6 +1029,7 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
             }
         }
     }
+    controls.input.advance_output_clock(data.len() / channels);
     controls
         .consumed_frames
         .fetch_add(consumed, Ordering::Relaxed);
@@ -980,12 +1056,14 @@ mod tests {
         let meters = Arc::new(ChannelMeters::new(&project));
         meters.channel(channel).unwrap().publish([0.3, 0.7], 0.0);
         let (parameters, _receiver) = mpsc::sync_channel(1);
+        let controls = Arc::new(Controls::new());
         let engine = AudioEngine {
+            input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,
             virtual_queue: None,
             stream: None,
             worker: None,
-            controls: Arc::new(Controls::new()),
+            controls,
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
@@ -1082,12 +1160,14 @@ mod tests {
     #[test]
     fn live_parameter_queue_keeps_instruments_and_stable_effect_slots_separate() {
         let (parameters, receiver) = mpsc::sync_channel(128);
+        let controls = Arc::new(Controls::new());
         let engine = AudioEngine {
+            input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,
             virtual_queue: None,
             stream: None,
             worker: None,
-            controls: Arc::new(Controls::new()),
+            controls,
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),

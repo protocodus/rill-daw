@@ -82,6 +82,9 @@ pub struct Track {
     pub collapsed: bool,
     #[serde(default)]
     pub automation: Option<AutomationLane>,
+    /// Saved input channel assignment; arming and monitoring are session-local.
+    #[serde(default)]
+    pub audio_input: Option<crate::AudioInputChannels>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -360,6 +363,7 @@ impl Track {
             parent_folder: None,
             collapsed: false,
             automation: None,
+            audio_input: (kind == TrackKind::Audio).then(crate::AudioInputChannels::default),
         }
     }
 }
@@ -777,6 +781,13 @@ impl Project {
         };
         for track in &self.tracks {
             check_id(track.id)?;
+            if let Some(input) = track.audio_input {
+                ensure!(
+                    track.kind == TrackKind::Audio,
+                    "Only audio tracks have inputs"
+                );
+                input.validate(u16::MAX)?;
+            }
             if let Some(lane) = &track.automation {
                 ensure!(
                     track.kind == TrackKind::Automation,

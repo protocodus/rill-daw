@@ -27,6 +27,7 @@ pub enum Icon {
     Play,
     Pause,
     Stop,
+    Record,
     Loop,
     Undo,
     Redo,
@@ -87,6 +88,8 @@ impl Icon {
             "Play" => Self::Play,
             "Pause" => Self::Pause,
             "Stop" => Self::Stop,
+            "Record" | "Arm recording" | "Recording" | "Inputs…" => Self::Record,
+            "Stop recording" => Self::Stop,
             "Loop" | "Range" => Self::Loop,
             "Add notes" => Self::Add,
             "New variation" => Self::Refresh,
@@ -326,6 +329,9 @@ impl Icon {
                 box_at(15., 3., 4., 18.);
             }
             Self::Stop => box_at(4., 4., 16., 16.),
+            Self::Record => {
+                painter.circle_filled(point(12., 12.), size * 0.30, color);
+            }
             Self::Loop | Self::Refresh => {
                 line(&[(4., 9.), (4., 5.), (20., 5.), (20., 11.)]);
                 line(&[(17., 8.), (20., 11.), (23., 8.)]);

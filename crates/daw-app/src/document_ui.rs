@@ -77,6 +77,9 @@ impl DawApp {
         if self.document_guard.is_some() {
             return;
         }
+        if self.recording_busy() {
+            self.finish_recording(crate::recording_ui::AfterRecording::Pause);
+        }
         self.flush_pending_edit();
         self.audition_request = None;
         if let Some(engine) = &self.engine
@@ -101,7 +104,8 @@ impl DawApp {
         };
         match stage {
             Stage::Waiting
-                if !self.project_io_pending()
+                if !self.recording_busy()
+                    && !self.project_io_pending()
                     && !self.state_sync_pending()
                     && self.export_job.is_none()
                     && !self.join_ui.pending() =>

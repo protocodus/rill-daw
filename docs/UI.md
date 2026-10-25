@@ -2,7 +2,7 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as dimmed, inactive context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as dimmed, inactive context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 ## Theme and tokens
 
@@ -31,6 +31,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
 | Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
+| Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
@@ -331,8 +332,8 @@ source handles; Crossfade exposes the editable spline. Every resulting comp piec
 can still be cut, trimmed, moved, stretched, duplicated, or joined.
 
 **Layer as overdub** creates an independent audio track with a distinct color and
-the same output bus/folder. This edits imported audio; input-device recording is
-not implemented. **Track → Audio takes…** recovers alternatives even after every
+the same output bus/folder. Imported alternatives and newly recorded loop passes
+share this take editor. **Track → Audio takes…** recovers alternatives even after every
 comp piece was deleted or joined, and a group picker appears for multiple groups.
 **Takes → Keep comp only** discards the retained project alternatives without
 modifying source files; Undo restores them.
@@ -348,3 +349,42 @@ by the chosen engine. **Refining audio…** appears while full-rate processing
 replaces it in the background. Swaps use a short preallocated correction ramp,
 retain running plug-ins and transport, and coalesce obsolete edits. Export always
 uses the full-rate render, even while a live preview is being refined.
+
+### Audio recording
+
+**Window → Recording** opens **Recording · Track name** above its caller. **Audio
+setup…** connects to input/output-device selection; the focused view contains the
+track's **Input**, **Arm recording**, **Input monitor (dry)**, and **Record into**
+choices. Inputs use one-based names such as **Mono 1** and **Stereo 1–2**, plus
+**No input**. Record placement chooses **New take** or **Overdub layer**. The raw
+input meter appears below these controls; recording and monitoring do not require
+opening the mixer. **Edit recording** and **Takes…** connect directly to editing.
+
+Monitoring defaults to **Off**. **Auto** monitors an armed track while stopped or
+recording, and switches off during ordinary playback; **On** does not require
+arming. Dry monitoring follows channel/output-bus level, pan, mute, and solo,
+bypasses inserts/sends, and does not alter captured audio. The focused popup
+states this distinction. Arming and monitoring are session-only; opening a
+project resets them. Input selection is a normal project edit with Undo/Redo.
+
+Transport and the popup reuse `record_button`: **Record** becomes **Stop
+recording** during capture. Audio track headers reuse `record_arm_at`, which
+exposes an accessible checkbox role, focus/hover feedback, and disabled state.
+`paint_recording_region` paints the active arrangement span without creating an
+editable clip before finalization. `input_meter` shows the peak of the selected
+raw input channels on a −60 to 0 dBFS scale. All recording indicators share
+`recording_color` with light/dark variants; ordinary select/checkbox/form controls
+come from the existing shared library.
+
+Input, arm, monitor, and placement choices are disabled during capture. Tempo,
+loop boundaries, seeking, and Undo/Redo cannot invalidate the active recording.
+**Stop recording** preserves backing playback; Pause and Stop also stop playback.
+**Finishing recording…** covers writer/tail completion, and Record remains
+disabled until publication finishes. Save, New/Open, Quit, and audio-setup changes
+wait for that publication. Errors retain captured files, show recovery details,
+and offer **Retry input** rather than repeatedly reopening a failed device.
+
+Loop recording keeps the newest complete pass audible while preserving a partial
+last pass in **Takes…**. Overdub recording creates a separate colored track with
+the original bus/folder and volume/pan, leaving inserts/sends unassigned. Both
+paths enter normal clip editing and commit one named history entry.
