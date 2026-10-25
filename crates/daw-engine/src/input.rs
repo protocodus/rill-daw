@@ -1993,7 +1993,11 @@ mod tests {
     #[test]
     fn partial_first_loop_pass_is_not_marked_complete_and_capture_retains_seek_offset() {
         let directory = tempfile::tempdir().unwrap();
+        let (release, gate) = mpsc::channel();
+        super::super::RENDER_READY_TEST_GATE.with(|slot| *slot.borrow_mut() = Some(gate));
         let (mut engine, _, track) = fixture(Some((0.0, 1.0)));
+        // Seek after readiness is published but before the worker's first loop.
+        // This must remain pending even if the render thread is descheduled.
         engine.seek(0.5);
         engine
             .start_recording(RecordingConfig {
@@ -2002,6 +2006,7 @@ mod tests {
             })
             .unwrap();
         active(&engine);
+        release.send(()).unwrap();
         engine.pump_virtual_input(&stereo(0.1, 12000), 2).unwrap();
         engine.pump_virtual_input(&stereo(0.2, 24000), 2).unwrap();
         let result = finish(&mut engine);
@@ -2010,6 +2015,8 @@ mod tests {
         assert_eq!(result.takes[0].start_beat, 0.5);
         assert_eq!(result.takes[0].frames, 12000);
         assert!(!result.takes[0].complete);
+        assert_eq!(result.takes[1].start_beat, 0.0);
+        assert_eq!(result.takes[1].frames, 24000);
         assert!(result.takes[1].complete);
     }
 

@@ -37,6 +37,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
+thread_local! {
+    // Per-test-thread scheduling seam: hold the render worker immediately after
+    // readiness is visible, so an initial seek can race the startup handoff.
+    static RENDER_READY_TEST_GATE: std::cell::RefCell<Option<mpsc::Receiver<()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 #[derive(Clone, Debug)]
 pub struct DeviceSettings {
     pub device_name: Option<String>,
@@ -517,10 +525,16 @@ impl AudioEngine {
         let audition = Arc::new(Mutex::new(None));
         let worker_audition = Arc::clone(&audition);
         let worker_cancel = Arc::clone(&cancel);
+        #[cfg(test)]
+        let ready_test_gate = RENDER_READY_TEST_GATE.with(|gate| gate.borrow_mut().take());
         let worker = thread::Builder::new()
             .name("daw-render".into())
             .spawn(move || {
                 // Plugins are created, processed, and destroyed on this owning thread.
+                // Capture the renderer's initial generation before publishing
+                // readiness. An immediate caller seek must remain a pending
+                // generation change, not be mistaken for already-rendered state.
+                let mut generation = worker_controls.generation.load(Ordering::Acquire);
                 let mut renderer = match Renderer::new_with_options_cancelled(
                     &project,
                     sample_rate,
@@ -532,6 +546,10 @@ impl AudioEngine {
                         renderer.attach_channel_meters(&worker_meters);
                         let _ = preparer_tx.send(renderer.live_edit_preparer());
                         let _ = ready_tx.send(Ok(()));
+                        #[cfg(test)]
+                        if let Some(gate) = ready_test_gate {
+                            let _ = gate.recv_timeout(Duration::from_secs(5));
+                        }
                         renderer
                     }
                     Err(error) => {
@@ -539,7 +557,6 @@ impl AudioEngine {
                         return;
                     }
                 };
-                let mut generation = worker_controls.generation.load(Ordering::Acquire);
                 let mut frames = [[0.0; 2]; BLOCK];
                 let mut positions = [0.0; BLOCK];
                 let mut pending_parameters: Vec<ParameterChange> = Vec::with_capacity(128);
