@@ -57,6 +57,7 @@ pub(crate) struct MidiEditorState {
     velocity: u8,
     gesture: Option<Gesture>,
     audition: Option<(u64, u8, u8)>,
+    audition_from_keys: bool,
     last_click: Option<(Option<u64>, Pos2, f64)>,
     last_created: Option<(Vec<u64>, f64)>,
     clipboard: Vec<Note>,
@@ -80,6 +81,7 @@ impl Default for MidiEditorState {
             velocity: 100,
             gesture: None,
             audition: None,
+            audition_from_keys: false,
             last_click: None,
             last_created: None,
             clipboard: Vec::new(),
@@ -115,6 +117,7 @@ impl DawApp {
     /// It must call this each frame, including when the editor is no longer shown.
     pub(crate) fn midi_audition(&self, ctx: &egui::Context) -> Option<(u64, u8, u8)> {
         if self.view != crate::app::WorkspaceView::Clip
+            || self.playing() && !self.midi_editor.audition_from_keys
             || !ctx.input(|input| input.focused && input.pointer.primary_down())
             || !matches!(
                 self.selected().map(|clip| &clip.content),
@@ -794,11 +797,15 @@ impl DawApp {
             };
         }
         state.audition = None;
+        state.audition_from_keys = false;
         if down
             && owns_pointer
             && !navigation.navigating
             && let Some(pos) = pointer
-            && (keys.contains(pos) || plot.contains(pos) && self.tool != Tool::Cursor)
+            // During playback, edits sound through the running timeline. An
+            // extra preview voice would double/retrigger an already held note.
+            && (keys.contains(pos)
+                || !self.playing() && plot.contains(pos) && self.tool != Tool::Cursor)
         {
             let (pitch, velocity) = note_hit
                 .as_ref()
@@ -806,6 +813,7 @@ impl DawApp {
                     (note.pitch, note.velocity)
                 });
             state.audition = self.selected_track.map(|track| (track, pitch, velocity));
+            state.audition_from_keys = keys.contains(pos);
         }
         if !navigation.navigating
             && owns_pointer

@@ -24,6 +24,7 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Audio and MIDI tracks; VST3 instruments and effects hosted in isolated processes.
 - Parallel processing of independent instrument/effect chains, with persistent workers, ordered buses, and a serial path for lightweight sessions.
 - Non-destructive clip movement, trimming, splitting, duplication, cross-track movement, and undo/redo.
+- Live volume, pan, note, and clip edits retain running plugins, sustained notes, effect tails, and transport position; new audio prepares in the background.
 - Drag WAV files onto an existing audio track or empty arrangement space to create a track. Dropping on a MIDI/bus/folder track creates a new audio track.
 - Non-destructive audio gain, normalization, reverse, curve fades, clipboard editing, and transient split preview.
 - Exclusive audio overlaps, optional spline crossfades, and audio/MIDI clip joining.
@@ -156,7 +157,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](docs/ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats, and PDC model. Current media scope is PCM/float WAV and constant-tempo note MIDI; recording, disk streaming, tempo maps, time stretching, and surround are not implemented. Committed audio edits rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph.
+See [architecture and limitations](docs/ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats, and PDC model. Current media scope is PCM/float WAV and constant-tempo note MIDI; recording, disk streaming, tempo maps, time stretching, and surround are not implemented. Volume, pan, note, and clip edits update the existing playback graph; failed audio preparation keeps the last valid audio playing. Structural, plugin-state, and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Implementation references
 

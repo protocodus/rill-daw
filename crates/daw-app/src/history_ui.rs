@@ -5,14 +5,21 @@ use eframe::egui;
 impl DawApp {
     pub(crate) fn flush_pending_edit(&mut self) {
         let before = self.before_edit.take();
+        let preview_submitted = std::mem::take(&mut self.playback_preview_submitted);
+        let preview_matches_current = std::mem::take(&mut self.playback_preview_matches_current);
+        self.playback_preview_dirty = false;
         let label = self.edit_label.take();
         let group = self.edit_group.take();
         if !std::mem::take(&mut self.edit_dirty) {
             return;
         }
-        let audio_changed = before
-            .as_ref()
-            .is_none_or(|before| !crate::app::audio_equivalent(before, &self.project));
+        let audio_changed = if preview_submitted {
+            !preview_matches_current
+        } else {
+            before
+                .as_ref()
+                .is_none_or(|before| !crate::app::audio_equivalent(before, &self.project))
+        };
         if let Some(before) = before
             && before != self.project
         {
@@ -26,7 +33,7 @@ impl DawApp {
         self.modified = !self.history.is_saved();
         if audio_changed {
             self.revision = self.revision.wrapping_add(1);
-            self.rebuild();
+            self.update_playback();
         }
     }
 

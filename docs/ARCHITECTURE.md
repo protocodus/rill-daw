@@ -21,10 +21,19 @@ flowchart LR
     Worker -->|stereo frames and positions| Queue[Preallocated SPSC queue]
     Queue --> Callback[CPAL device callback]
     Callback --> Device[Audio device]
+    UI -->|musical edits| Prepare[Background edit preparation]
+    Prepare -->|compiled latest edit| Worker
+    Worker -->|retired clip data| Prepare
     UI -->|offline snapshot| Export[Offline renderer / WAV writer]
 ```
 
-The UI owns the editable project. Starting playback prepares a separate renderer; committed edits that affect audio rebuild it. Renaming, colors, and collapsed state do not rebuild the graph. This simplifies ownership and prevents the audio callback from traversing concurrently mutated UI data. Rebuilding can interrupt playback and recreate plugin instances; this is not a seamless incremental graph swap.
+The UI owns the editable project. Starting playback prepares a separate renderer. While its plugin and routing topology stays unchanged, volume, pan, note, and clip edits use a persistent background preparation worker. It compiles immutable clip schedules, reuses decoded sources, and prepares any new audio without stopping the existing renderer. Only the newest requested edit can be installed; a failed preparation leaves the previous audio playing and reports the error. Undo and Redo use the same path. Renaming, colors, and collapsed state do not update audio, including when undone.
+
+Compatible edits also preview while a mouse gesture is held; history still commits the entire gesture as one Undo step on release. Returning to the original value restores playback without adding a history entry. During transport playback, piano-roll edits sound through the live timeline rather than adding an extra audition voice. Stopped note editing and the piano keyboard retain held-note audition.
+
+Prepared edits apply between render blocks. Instrument/effect instances, graph workers, delay-compensation buffers, effect tails, transport position, and queued audio remain intact. MIDI reconciliation retains sounding voices that remain active, ends removed notes, and starts newly active notes without a global panic/reset. Manual volume/pan changes ramp over five milliseconds; active automation retains control. Replaced clip data is reclaimed on the preparation worker, and the device callback still performs no allocation, locking, file access, or plugin calls. Edits become audible after preparation and the existing bounded output queue; this does not discard already queued samples.
+
+Adding/removing tracks, changing instruments, opaque plugin state, routing, mute/solo, automation lanes, tempo/loop settings, or audio-device settings still uses controlled full preparation and can interrupt playback. Compatibility includes known native parameter edits already accepted by the live parameter queue, so a subsequent fader or clip edit does not restart that plugin. This is incremental musical editing within an existing graph, not a general seamless structural graph replacement.
 
 Arrangement is the base canvas. The File/Edit/Track/Window menus open one requested tool at a time as a popup; the background arrangement is disabled while a tool is open. Track/clip selection and transport state carry between tools. Note selection is cleared when leaving Clip Editor so subsequent arrangement commands act on clips. Shared controls, window frames, and design tokens come from `daw-ui`; new components are implemented there before application views use them.
 

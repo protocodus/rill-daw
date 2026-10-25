@@ -26,6 +26,10 @@ fn one_key_press() -> usize {
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    /// Consume the real engine queue through its callback with no audio device.
+    PumpAudio {
+        frames: usize,
+    },
     Inspect {
         #[serde(default)]
         paint: bool,
@@ -204,6 +208,7 @@ struct Harness {
     inspect_paint: bool,
     painted_rects: Vec<Value>,
     painted_images: Vec<Value>,
+    audio_output: Option<Vec<[f32; 2]>>,
     clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
@@ -244,7 +249,9 @@ impl Harness {
         std::fs::create_dir_all(&scratch_dir)?;
         let ctx = egui::Context::default();
         let mut app = DawApp::with_context(&ctx, Project::new(), None);
-        app.audio_device_enabled = std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
+        app.virtual_audio = std::env::var_os("RILL_E2E_VIRTUAL_AUDIO").is_some();
+        app.audio_device_enabled =
+            app.virtual_audio || std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
         app.automatic_plugin_previews = false;
         app.settings = Settings {
             scratch_dir,
@@ -260,6 +267,7 @@ impl Harness {
             inspect_paint: false,
             painted_rects: Vec::new(),
             painted_images: Vec::new(),
+            audio_output: None,
             clipboard_text: None,
             close_requested: false,
             focused: true,
@@ -530,10 +538,26 @@ impl Harness {
     }
 
     fn execute(&mut self, command: Command) -> Result<bool> {
+        self.audio_output = None;
         self.inspect_paint = false;
         self.painted_rects.clear();
         self.painted_images.clear();
         match command {
+            Command::PumpAudio { frames } => {
+                ensure!(self.app.virtual_audio, "Virtual audio is not enabled");
+                ensure!(
+                    (1..=8192).contains(&frames),
+                    "Audio pump size must be 1..=8192"
+                );
+                self.audio_output = Some(
+                    self.app
+                        .engine
+                        .as_mut()
+                        .context("Audio engine is not ready")?
+                        .pump_virtual(frames)?,
+                );
+                self.settle();
+            }
             Command::FileDialog { kind, path } => {
                 use crate::document_ui::DocumentDialog;
                 self.app.next_document_dialog = Some((
@@ -853,6 +877,22 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["revision"] = json!(self.app.revision);
+        state["playback_loading"] = json!(self.app.loading.is_some());
+        state["engine"] = self.app.engine.as_ref().map_or(Value::Null, |engine| {
+            let s = engine.snapshot();
+            json!({
+                "engine_id": s.engine_id, "playing": s.playing,
+                "position_beats": s.position_beats,
+                "peak_left": s.peak_left, "peak_right": s.peak_right,
+                "underruns": s.underruns, "render_errors": s.render_errors,
+                "requested_revision": s.requested_revision,
+                "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
+                "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,
+                "generation": s.generation,
+            })
+        });
+        state["audio_output"] = json!(self.audio_output);
         state["window_rects"] = self
             .ctx
             .memory(|memory| {

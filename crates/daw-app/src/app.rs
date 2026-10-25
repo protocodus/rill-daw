@@ -94,6 +94,8 @@ pub struct DawApp {
     pub selected_notes: HashSet<u64>,
     pub engine: Option<AudioEngine>,
     pub audio_device_enabled: bool,
+    /// Enabled only by the isolated headless driver; never selects host hardware.
+    pub(crate) virtual_audio: bool,
     pub(crate) automatic_plugin_previews: bool,
     pub(crate) audition_request: Option<(u64, u8, u8)>,
     pub loading: Option<std::sync::mpsc::Receiver<(u64, anyhow::Result<AudioEngine>)>>,
@@ -137,6 +139,7 @@ pub struct DawApp {
     pub join_open: bool,
     pub(crate) join_ui: crate::join_ui::JoinUi,
     pub last_render_errors: u64,
+    live_edit_error: Option<(u64, String)>,
     pub devices: Vec<DeviceInfo>,
     pub status: String,
     pub error: bool,
@@ -144,6 +147,9 @@ pub struct DawApp {
     pub modified: bool,
     pub edit_dirty: bool,
     pub before_edit: Option<Project>,
+    pub(crate) playback_preview_submitted: bool,
+    pub(crate) playback_preview_matches_current: bool,
+    pub(crate) playback_preview_dirty: bool,
     pub(crate) edit_label: Option<String>,
     pub(crate) edit_group: Option<String>,
     pub zoom: f32,
@@ -202,6 +208,7 @@ impl DawApp {
             selected_notes: HashSet::new(),
             engine: None,
             audio_device_enabled: true,
+            virtual_audio: false,
             automatic_plugin_previews: !cfg!(test),
             audition_request: None,
             loading: None,
@@ -245,6 +252,7 @@ impl DawApp {
             join_open: false,
             join_ui: Default::default(),
             last_render_errors: 0,
+            live_edit_error: None,
             devices: Vec::new(),
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
             error: false,
@@ -252,6 +260,9 @@ impl DawApp {
             modified: false,
             edit_dirty: false,
             before_edit: None,
+            playback_preview_submitted: false,
+            playback_preview_matches_current: false,
+            playback_preview_dirty: false,
             edit_label: None,
             edit_group: None,
             zoom: 48.0,
@@ -613,7 +624,7 @@ impl DawApp {
     }
 
     fn refresh_devices(&mut self) {
-        if !self.audio_device_enabled {
+        if !self.audio_device_enabled || self.virtual_audio {
             // Offline/headless work uses the portable render rates, independent
             // of whatever audio hardware happens to be attached to this host.
             self.devices.clear();
@@ -651,6 +662,12 @@ impl DawApp {
                 self.project = before;
             }
             self.edit_dirty = false;
+            self.playback_preview_dirty = false;
+            self.playback_preview_matches_current = false;
+            if std::mem::take(&mut self.playback_preview_submitted) {
+                self.revision = self.revision.wrapping_add(1);
+                self.update_playback();
+            }
             self.edit_label = None;
             self.edit_group = None;
             self.modified = !self.history.is_saved();
@@ -660,6 +677,8 @@ impl DawApp {
         self.project.prune_automation();
         self.modified = true;
         self.edit_dirty = true;
+        self.playback_preview_dirty = true;
+        self.playback_preview_matches_current = false;
     }
     pub fn selected(&self) -> Option<&Clip> {
         self.project.clip(self.selected_track?, self.selected_clip?)
@@ -707,6 +726,7 @@ impl DawApp {
         self.loading_cancel = Some(std::sync::Arc::clone(&cancel));
         let project = self.project.clone();
         let settings = self.settings.audio();
+        let virtual_audio = self.virtual_audio;
         let revision = self.revision;
         let (tx, rx) = std::sync::mpsc::channel();
         self.loading = Some(rx);
@@ -717,7 +737,11 @@ impl DawApp {
             if cancel.load(std::sync::atomic::Ordering::Acquire) {
                 return;
             }
-            let result = AudioEngine::start_cancellable(&project, settings, cancel);
+            let result = if virtual_audio {
+                AudioEngine::start_virtual_cancellable(&project, settings, cancel)
+            } else {
+                AudioEngine::start_cancellable(&project, settings, cancel)
+            };
             let _ = tx.send((revision, result));
         });
         self.status = "Preparing audio and isolated plug-ins…".into();
@@ -843,6 +867,72 @@ impl DawApp {
         }
         if self.engine.is_some() || self.loading.is_some() {
             self.prepare_engine(playing);
+        }
+    }
+    /// Musical edits use the existing stream and plugin instances when their
+    /// topology is compatible. Device/structural changes retain full preparation.
+    pub(crate) fn update_playback(&mut self) {
+        let update = self
+            .engine
+            .as_ref()
+            .map(|engine| engine.try_update_project(&self.project, self.revision));
+        match update {
+            Some(Ok(true)) => {}
+            // A rejected edit must leave the last valid audio playing. The
+            // project remains editable/savable and a subsequent edit can retry.
+            Some(Err(error)) => self.message(Err(error), ""),
+            Some(Ok(false)) | None => self.rebuild(),
+        }
+    }
+    /// Preview compatible edits each gesture frame, retaining the original
+    /// project for one Undo entry when the pointer is released. Structural
+    /// changes wait for the commit rather than repeatedly rebuilding a graph.
+    pub(crate) fn preview_playback_edit(&mut self) {
+        if !std::mem::take(&mut self.playback_preview_dirty) || !self.edit_dirty {
+            return;
+        }
+        if !self.playback_preview_submitted
+            && self
+                .before_edit
+                .as_ref()
+                .is_some_and(|previous| audio_equivalent(previous, &self.project))
+        {
+            return;
+        }
+        let revision = self.revision.wrapping_add(1);
+        let result = self
+            .engine
+            .as_ref()
+            .map(|engine| engine.try_update_project(&self.project, revision));
+        match result {
+            Some(Ok(true)) => {
+                self.revision = revision;
+                self.playback_preview_submitted = true;
+                self.playback_preview_matches_current = true;
+            }
+            Some(Err(error)) => self.message(Err(error), ""),
+            Some(Ok(false)) => {}
+            // Engine startup may finish while the pointer remains still. Keep
+            // this value pending so it reaches that engine without another move.
+            None => self.playback_preview_dirty = true,
+        }
+    }
+    fn poll_live_edits(&mut self) {
+        let Some(engine) = &self.engine else { return };
+        let snapshot = engine.snapshot();
+        if let Some(error) = engine.take_edit_error() {
+            self.live_edit_error = Some((snapshot.engine_id, error.clone()));
+            self.message(Err(anyhow::anyhow!(error)), "");
+        } else if self.live_edit_error.as_ref().is_some_and(|(engine_id, _)| {
+            *engine_id != snapshot.engine_id
+                || snapshot.applied_revision == snapshot.requested_revision
+        }) {
+            let (_, message) = self.live_edit_error.take().unwrap();
+            // A later successful edit/Undo resolves this failure without
+            // dismissing an unrelated save, export, or device error.
+            if self.error && self.status == message {
+                self.message(Ok(()), "Audio ready");
+            }
         }
     }
     pub(crate) fn finish_settings_apply(&mut self, settings: Settings) {
@@ -1020,6 +1110,9 @@ impl DawApp {
         self.project_path = None;
         self.history.clear();
         self.before_edit = None;
+        self.playback_preview_submitted = false;
+        self.playback_preview_matches_current = false;
+        self.playback_preview_dirty = false;
         self.edit_label = None;
         self.edit_group = None;
         self.modified = false;
@@ -1133,6 +1226,9 @@ impl DawApp {
         self.reset_views = true;
         self.history.clear();
         self.before_edit = None;
+        self.playback_preview_submitted = false;
+        self.playback_preview_matches_current = false;
+        self.playback_preview_dirty = false;
         self.edit_label = None;
         self.edit_group = None;
         self.project = loaded.project;
@@ -1891,6 +1987,7 @@ impl DawApp {
             return;
         }
         self.flush_pending_edit();
+        let playback_before = self.project.clone();
         let editor_state = self.editor_state_signature();
         let selected_start = self
             .selected()
@@ -1949,8 +2046,10 @@ impl DawApp {
                 .unwrap_or_default();
             self.selected_notes.retain(|id| valid_notes.contains(id));
             self.modified = !self.history.is_saved();
-            self.revision = self.revision.wrapping_add(1);
-            self.rebuild();
+            if !audio_equivalent(&playback_before, &self.project) {
+                self.revision = self.revision.wrapping_add(1);
+                self.update_playback();
+            }
             self.cache_audio();
         }
     }
@@ -2188,6 +2287,7 @@ impl DawApp {
         }
         self.keyboard(ctx);
         self.poll_engine();
+        self.poll_live_edits();
         self.poll_instrument_editor(ctx);
         self.poll_project_io(ctx);
         self.poll_export();
@@ -2357,6 +2457,8 @@ impl DawApp {
         if !ctx.input(|i| i.pointer.any_down()) {
             self.flush_pending_edit();
             self.drag = None;
+        } else {
+            self.preview_playback_edit();
         }
         if self.modified
             && self.last_recovery.elapsed() > Duration::from_secs(30)

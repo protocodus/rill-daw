@@ -23,6 +23,14 @@ use worker_pool::WorkerPool;
 #[path = "audio_schedule.rs"]
 mod audio_schedule;
 
+#[path = "live_edit.rs"]
+pub(crate) mod live_edit;
+use live_edit::LiveEditContext;
+
+#[cfg(test)]
+#[path = "live_edit_tests.rs"]
+mod live_edit_tests;
+
 #[cfg(test)]
 #[path = "effect_state_tests.rs"]
 mod effect_state_tests;
@@ -39,6 +47,8 @@ pub(crate) const BLOCK: usize = 256;
 
 #[derive(Clone, Copy)]
 struct ScheduledNote {
+    clip: u64,
+    id: u64,
     start: u64,
     end: u64,
     pitch: u8,
@@ -52,7 +62,51 @@ struct Event {
     on: bool,
 }
 
+impl Event {
+    fn message(self, offset: u32) -> MidiMessage {
+        MidiMessage {
+            offset,
+            pitch: self.note.pitch,
+            velocity: self.note.velocity,
+            on: self.on,
+        }
+    }
+}
+
+type NoteKey = (u64, u64, u8);
+
+impl ScheduledNote {
+    fn key(self) -> NoteKey {
+        (self.clip, self.id, self.pitch)
+    }
+}
+
+fn record_active_note(
+    active: &mut Vec<ScheduledNote>,
+    indices: &mut HashMap<NoteKey, usize>,
+    event: Event,
+) {
+    let key = event.note.key();
+    if event.on {
+        if let Some(&index) = indices.get(&key) {
+            active[index] = event.note;
+        } else {
+            indices.insert(key, active.len());
+            active.push(event.note);
+        }
+    } else if let Some(index) = indices.remove(&key) {
+        active.swap_remove(index);
+        if let Some(moved) = active.get(index) {
+            *indices
+                .get_mut(&moved.key())
+                .expect("active voice has an index") = index;
+        }
+    }
+}
+
 struct AudioClip {
+    source_path: std::path::PathBuf,
+    source_alias: std::path::PathBuf,
     start: u64,
     source_offset: f64,
     gain: f32,
@@ -152,6 +206,8 @@ enum Processor {
 /// Compiled lane ownership keeps graph lookup and allocation out of rendering.
 struct AutomatedValue {
     manual: f32,
+    smooth_value: f32,
+    smooth_remaining: u32,
     lane: Option<AutomationLane>,
 }
 
@@ -179,7 +235,34 @@ impl AutomatedValue {
                 && lane_enabled(project, candidate))
             .then(|| lane.clone())
         });
-        Self { manual, lane }
+        Self {
+            manual,
+            lane,
+            smooth_value: manual,
+            smooth_remaining: 0,
+        }
+    }
+
+    fn set_manual(&mut self, value: f32, sample_rate: u32) {
+        if self.manual != value {
+            self.manual = value;
+            self.smooth_remaining = (sample_rate / 200).max(1);
+        }
+    }
+
+    #[inline]
+    fn next_value(&mut self, beat: f64) -> f32 {
+        if self.smooth_remaining > 0 {
+            self.smooth_value += (self.manual - self.smooth_value) / self.smooth_remaining as f32;
+            self.smooth_remaining -= 1;
+        }
+        self.lane
+            .as_ref()
+            .and_then(|lane| {
+                lane.value_at(beat)
+                    .map(|value| lane.target.parameter.denormalize(value))
+            })
+            .unwrap_or(self.smooth_value)
     }
 
     #[inline]
@@ -314,14 +397,17 @@ fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
 
 struct RenderTrack {
     id: u64,
-    audio: Vec<AudioClip>,
-    audio_segments: Vec<audio_schedule::Segment>,
-    notes: Vec<ScheduledNote>,
-    events: Vec<Event>,
+    audio: Arc<Vec<AudioClip>>,
+    audio_segments: Arc<Vec<audio_schedule::Segment>>,
+    notes: Arc<Vec<ScheduledNote>>,
+    events: Arc<Vec<Event>>,
+    note_order: Arc<Vec<usize>>,
     event_cursor: usize,
     processor: Processor,
     midi: Vec<MidiMessage>,
-    chase: Vec<MidiMessage>,
+    chase: Vec<Event>,
+    active_notes: Vec<ScheduledNote>,
+    active_indices: HashMap<NoteKey, usize>,
     live_midi: Vec<MidiMessage>,
     left: Vec<f32>,
     right: Vec<f32>,
@@ -372,6 +458,30 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
 }
 
 impl RenderTrack {
+    fn collect_midi(&mut self, context: BlockContext) {
+        let start = context.start;
+        let end = start + context.count as u64;
+        self.midi.clear();
+        self.midi.append(&mut self.live_midi);
+        if context.timeline {
+            for event in self.chase.drain(..) {
+                self.midi.push(event.message(0));
+                record_active_note(&mut self.active_notes, &mut self.active_indices, event);
+            }
+        }
+        while context.timeline
+            && let Some(event) = self.events.get(self.event_cursor)
+        {
+            if event.sample >= end {
+                break;
+            }
+            self.midi
+                .push(event.message(event.sample.saturating_sub(start) as u32));
+            record_active_note(&mut self.active_notes, &mut self.active_indices, *event);
+            self.event_cursor += 1;
+        }
+    }
+
     fn process(&mut self, context: BlockContext) -> Result<()> {
         if !self.enabled || self.plugin_failed {
             return Ok(());
@@ -383,28 +493,12 @@ impl RenderTrack {
         let BlockContext { start, count, .. } = context;
         let end = start + count as u64;
         let beats_per_sample = context.tempo / (60.0 * context.sample_rate as f64);
+        if matches!(self.processor, Processor::Vst(_)) {
+            self.collect_midi(context);
+        }
         match &mut self.processor {
             Processor::None => {}
             Processor::Vst(plugin) => {
-                self.midi.clear();
-                self.midi.append(&mut self.live_midi);
-                if context.timeline {
-                    self.midi.append(&mut self.chase);
-                }
-                while context.timeline
-                    && let Some(event) = self.events.get(self.event_cursor)
-                {
-                    if event.sample >= end {
-                        break;
-                    }
-                    self.midi.push(MidiMessage {
-                        offset: event.sample.saturating_sub(start) as u32,
-                        pitch: event.note.pitch,
-                        velocity: event.note.velocity,
-                        on: event.on,
-                    });
-                    self.event_cursor += 1;
-                }
                 let process = apply_plugin_automation(
                     &mut self.instrument_automation,
                     start as f64 * beats_per_sample,
@@ -526,8 +620,8 @@ impl RenderTrack {
                 start as i64
             };
             let beat = position as f64 * beats_per_sample;
-            let gain = self.gain.value(beat);
-            let pan = self.pan.value(beat).clamp(-1.0, 1.0);
+            let gain = self.gain.next_value(beat);
+            let pan = self.pan.next_value(beat).clamp(-1.0, 1.0);
             // Insert scratch buffers are free after the chain. Reuse them for
             // fader factors so multiple sends evaluate the lane only once.
             self.insert_left[index] = gain * (1.0 - pan.max(0.0));
@@ -578,6 +672,8 @@ pub(crate) struct Renderer {
     logical_sample: u64,
     source_sample: u64,
     pub(crate) end_sample: u64,
+    timeline_end_sample: u64,
+    release_end_sample: u64,
     latency: u32,
     loop_range: Option<(u64, u64)>,
     tolerate_plugin_failure: bool,
@@ -585,6 +681,7 @@ pub(crate) struct Renderer {
     preview: bool,
     audition: Option<(u64, u8, u8)>,
     metering: bool,
+    live_edit_context: Arc<LiveEditContext>,
 }
 
 impl Renderer {
@@ -693,119 +790,18 @@ impl Renderer {
                 track.gain.is_finite() && track.pan.is_finite(),
                 "Track gain and pan must be finite"
             );
-            let mut notes = Vec::new();
-            let mut audio = Vec::new();
-            for clip in &track.clips {
-                check_cancelled()?;
-                if !enabled {
-                    continue;
-                }
-                ensure!(
-                    clip.start.is_finite()
-                        && clip.length.is_finite()
-                        && clip.offset.is_finite()
-                        && clip.start >= 0.0
-                        && clip.length > 0.0
-                        && clip.offset >= 0.0,
-                    "Invalid clip timing on {}",
-                    track.name
-                );
-                match &clip.content {
-                    ClipContent::Midi { notes: clip_notes } => {
-                        for note in clip_notes {
-                            let relative_start = note.start - clip.offset;
-                            let relative_end = relative_start + note.length;
-                            if relative_end <= 0.0
-                                || relative_start >= clip.length
-                                || note.velocity == 0
-                            {
-                                continue;
-                            }
-                            notes.push(ScheduledNote {
-                                start: to_sample(clip.start + relative_start.max(0.0)),
-                                end: to_sample(clip.start + relative_end.min(clip.length)),
-                                pitch: note.pitch.min(127),
-                                velocity: note.velocity.min(127),
-                            });
-                        }
-                    }
-                    ClipContent::Audio {
-                        path,
-                        gain,
-                        fade_in,
-                        fade_out,
-                        fade_in_curve,
-                        fade_out_curve,
-                        reverse,
-                        envelope,
-                        ..
-                    } => {
-                        let source_path = std::fs::canonicalize(path)
-                            .with_context(|| format!("Loading audio clip {}", clip.name))?;
-                        let data = if let Some(data) = audio_cache.get(&source_path) {
-                            Arc::clone(data)
-                        } else {
-                            let source = quality::load_source(&source_path)
-                                .with_context(|| format!("Loading audio clip {}", clip.name))?;
-                            check_cancelled()?;
-                            let data = Arc::new(quality::prepare_audio(
-                                source,
-                                sample_rate,
-                                options.resample_quality,
-                            )?);
-                            check_cancelled()?;
-                            cache_bytes = cache_bytes
-                                .checked_add(data.samples.len() * size_of::<f32>())
-                                .context("Audio cache size overflow")?;
-                            ensure!(
-                                cache_bytes <= quality::MAX_CACHE_BYTES,
-                                "Prepared audio exceeds the 1 GiB session cache limit"
-                            );
-                            audio_cache.insert(source_path, Arc::clone(&data));
-                            data
-                        };
-                        ensure!(
-                            data.channels > 0 && data.sample_rate > 0,
-                            "Invalid WAV format"
-                        );
-                        audio.push(AudioClip {
-                            start: to_sample(clip.start),
-                            source_offset: clip.offset * 60.0 / project.tempo
-                                * data.sample_rate as f64,
-                            gain: *gain,
-                            fade_in: fade_in.max(0.0) * samples_per_beat,
-                            fade_out: fade_out.max(0.0) * samples_per_beat,
-                            fade_in_curve: *fade_in_curve,
-                            fade_out_curve: *fade_out_curve,
-                            envelope_offset: envelope.map_or(0.0, |envelope| envelope.offset)
-                                * samples_per_beat,
-                            envelope_length: envelope
-                                .map_or(clip.length, |envelope| envelope.length)
-                                * samples_per_beat,
-                            source_length: clip.length * 60.0 / project.tempo
-                                * data.sample_rate as f64,
-                            reverse: *reverse,
-                            data,
-                        });
-                    }
-                }
-            }
-            let mut events = Vec::with_capacity(notes.len() * 2);
-            for &note in &notes {
-                if note.end > note.start {
-                    events.push(Event {
-                        sample: note.start,
-                        note,
-                        on: true,
-                    });
-                    events.push(Event {
-                        sample: note.end,
-                        note,
-                        on: false,
-                    });
-                }
-            }
-            events.sort_by_key(|event| (event.sample, event.on));
+            let content = live_edit::compile_content(
+                track,
+                enabled,
+                live_edit::CompileSettings {
+                    tempo: project.tempo,
+                    sample_rate,
+                    options,
+                    cancel,
+                },
+                &mut audio_cache,
+                &mut cache_bytes,
+            )?;
             let (processor, plugin_latency) = match &track.instrument {
                 Instrument::Vst3 { path, class_id } if enabled && track.kind == TrackKind::Midi => {
                     check_cancelled()?;
@@ -834,7 +830,8 @@ impl Renderer {
             };
             let control =
                 |parameter, manual| AutomatedValue::new(project, track.id, parameter, manual);
-            let event_capacity = events.len() + notes.len();
+            let event_capacity = content.events.len() + content.notes.len() + 4;
+            let note_capacity = content.notes.len();
             let mut inserts = Vec::new();
             let mut latency = track.latency_samples.saturating_add(plugin_latency);
             for slot in &track.inserts {
@@ -878,6 +875,8 @@ impl Renderer {
                     target: track.output_bus.map(|target| indices[&target]),
                     gain: AutomatedValue {
                         manual: 1.0,
+                        smooth_value: 1.0,
+                        smooth_remaining: 0,
                         lane: None,
                     },
                     pre_fader: false,
@@ -904,15 +903,18 @@ impl Renderer {
             }
             tracks.push(RenderTrack {
                 id: track.id,
-                audio,
-                audio_segments: audio_schedule::compile(&track.clips, samples_per_beat)?,
-                notes,
-                events,
+                audio: content.audio,
+                audio_segments: content.audio_segments,
+                notes: content.notes,
+                events: content.events,
+                note_order: content.note_order,
                 event_cursor: 0,
                 processor,
                 midi: Vec::with_capacity(event_capacity),
                 live_midi: Vec::with_capacity(4),
                 chase: Vec::with_capacity(event_capacity),
+                active_notes: Vec::with_capacity(note_capacity),
+                active_indices: HashMap::with_capacity(note_capacity),
                 left: vec![0.0; BLOCK],
                 right: vec![0.0; BLOCK],
                 mix_left: vec![0.0; BLOCK],
@@ -1033,6 +1035,8 @@ impl Renderer {
             logical_sample: 0,
             source_sample: 0,
             end_sample: end_sample + tail_samples,
+            timeline_end_sample: end_sample + tail_samples,
+            release_end_sample: 0,
             latency,
             loop_range,
             tolerate_plugin_failure: looping,
@@ -1040,6 +1044,12 @@ impl Renderer {
             preview: false,
             audition: None,
             metering: false,
+            live_edit_context: Arc::new(LiveEditContext::new(
+                project,
+                sample_rate,
+                options,
+                tail_samples,
+            )),
         };
         renderer.seek_sample(0)?;
         check_cancelled()?;
@@ -1112,6 +1122,8 @@ impl Renderer {
     }
 
     fn seek_sample(&mut self, sample: u64) -> Result<()> {
+        self.release_end_sample = 0;
+        self.end_sample = self.timeline_end_sample;
         self.audition = None;
         self.source_sample = sample;
         self.logical_sample = sample;
@@ -1144,6 +1156,8 @@ impl Renderer {
             }
             track.event_cursor = track.events.partition_point(|event| event.sample < sample);
             track.chase.clear();
+            track.active_notes.clear();
+            track.active_indices.clear();
             track.live_midi.clear();
             match &mut track.processor {
                 Processor::None => {}
@@ -1158,14 +1172,13 @@ impl Renderer {
                 }
                 Processor::Vst(_) => {}
             }
-            for &note in &track.notes {
+            for &note in track.notes.iter() {
                 if !self.preview && note.start < sample && note.end > sample {
                     match &mut track.processor {
                         Processor::None => {}
-                        Processor::Vst(_) => track.chase.push(MidiMessage {
-                            offset: 0,
-                            pitch: note.pitch,
-                            velocity: note.velocity,
+                        Processor::Vst(_) => track.chase.push(Event {
+                            sample,
+                            note,
                             on: true,
                         }),
                     }

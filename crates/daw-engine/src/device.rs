@@ -1,5 +1,11 @@
 use crate::meter::ChannelMeters;
 use crate::render::{BLOCK, Renderer};
+#[path = "live_updates.rs"]
+mod live_updates;
+use live_updates::{LiveMailbox, LiveUpdates};
+#[cfg(test)]
+#[path = "live_device_tests.rs"]
+mod live_device_tests;
 use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use daw_core::Project;
@@ -47,6 +53,13 @@ pub struct EngineSnapshot {
     pub peak_right: f32,
     pub underruns: u64,
     pub render_errors: u64,
+    pub engine_id: u64,
+    pub generation: u64,
+    pub requested_revision: u64,
+    pub applied_revision: u64,
+    pub edit_errors: u64,
+    pub rendered_frames: u64,
+    pub consumed_frames: u64,
 }
 
 pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
@@ -84,7 +97,12 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
     Ok(output)
 }
 
+static NEXT_ENGINE_ID: AtomicU64 = AtomicU64::new(1);
+
 struct Controls {
+    engine_id: u64,
+    rendered_frames: AtomicU64,
+    consumed_frames: AtomicU64,
     playing: AtomicBool,
     auditioning: AtomicBool,
     shutdown: AtomicBool,
@@ -100,6 +118,9 @@ struct Controls {
 impl Controls {
     fn new() -> Self {
         Self {
+            engine_id: NEXT_ENGINE_ID.fetch_add(1, Ordering::Relaxed),
+            rendered_frames: AtomicU64::new(0),
+            consumed_frames: AtomicU64::new(0),
             playing: AtomicBool::new(false),
             auditioning: AtomicBool::new(false),
             shutdown: AtomicBool::new(false),
@@ -195,6 +216,8 @@ impl AudioQueue {
 }
 
 pub struct AudioEngine {
+    live_updates: Option<LiveUpdates>,
+    virtual_queue: Option<Arc<AudioQueue>>,
     stream: Option<cpal::Stream>,
     worker: Option<JoinHandle<()>>,
     controls: Arc<Controls>,
@@ -311,6 +334,26 @@ impl AudioEngine {
         settings: DeviceSettings,
         cancel: Arc<AtomicBool>,
     ) -> Result<Self> {
+        Self::start_internal(project, settings, cancel, false)
+    }
+
+    /// Device-free deterministic output for headless application verification.
+    /// Uses the production renderer, queue and callback consumer, but never opens
+    /// an output device. Call `pump_virtual` to consume audio explicitly.
+    pub fn start_virtual_cancellable(
+        project: &Project,
+        settings: DeviceSettings,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<Self> {
+        Self::start_internal(project, settings, cancel, true)
+    }
+
+    fn start_internal(
+        project: &Project,
+        settings: DeviceSettings,
+        cancel: Arc<AtomicBool>,
+        virtual_output: bool,
+    ) -> Result<Self> {
         ensure!(
             !cancel.load(Ordering::Acquire),
             "Audio preparation cancelled"
@@ -319,48 +362,55 @@ impl AudioEngine {
             (16..=8192).contains(&settings.buffer_frames),
             "Buffer size must be between 16 and 8192 frames"
         );
-        let host = cpal::default_host();
-        let device = if let Some(name) = &settings.device_name {
-            host.output_devices()?
-                .find(|device| {
-                    device
-                        .description()
-                        .is_ok_and(|description| description.name() == name)
-                })
-                .with_context(|| format!("Output device '{name}' is unavailable"))?
+        let output = if virtual_output {
+            None
         } else {
-            host.default_output_device()
-                .context("No default audio output device is available")?
-        };
-        let mut supported: Vec<_> = device
-            .supported_output_configs()?
-            .filter(|range| {
-                range.channels() > 0
-                    && range.min_sample_rate() <= settings.sample_rate
-                    && range.max_sample_rate() >= settings.sample_rate
-            })
-            .collect();
-        supported.sort_by_key(|range| {
-            (
-                range.channels() != 2,
-                range.sample_format() != cpal::SampleFormat::F32,
-            )
-        });
-        let range = supported
-            .first()
-            .context("Device does not support the requested sample rate")?;
-        let supported_config = range.with_sample_rate(settings.sample_rate);
-        let format = supported_config.sample_format();
-        let mut config = supported_config.config();
-        config.buffer_size = match range.buffer_size() {
-            cpal::SupportedBufferSize::Range { min, max } => {
-                ensure!(
-                    settings.buffer_frames >= *min && settings.buffer_frames <= *max,
-                    "Device buffer size must be between {min} and {max} frames"
-                );
-                cpal::BufferSize::Fixed(settings.buffer_frames)
-            }
-            cpal::SupportedBufferSize::Unknown => cpal::BufferSize::Fixed(settings.buffer_frames),
+            let host = cpal::default_host();
+            let device = if let Some(name) = &settings.device_name {
+                host.output_devices()?
+                    .find(|device| {
+                        device
+                            .description()
+                            .is_ok_and(|description| description.name() == name)
+                    })
+                    .with_context(|| format!("Output device '{name}' is unavailable"))?
+            } else {
+                host.default_output_device()
+                    .context("No default audio output device is available")?
+            };
+            let mut supported: Vec<_> = device
+                .supported_output_configs()?
+                .filter(|range| {
+                    range.channels() > 0
+                        && range.min_sample_rate() <= settings.sample_rate
+                        && range.max_sample_rate() >= settings.sample_rate
+                })
+                .collect();
+            supported.sort_by_key(|range| {
+                (
+                    range.channels() != 2,
+                    range.sample_format() != cpal::SampleFormat::F32,
+                )
+            });
+            let range = supported
+                .first()
+                .context("Device does not support the requested sample rate")?;
+            let supported_config = range.with_sample_rate(settings.sample_rate);
+            let format = supported_config.sample_format();
+            let mut config = supported_config.config();
+            config.buffer_size = match range.buffer_size() {
+                cpal::SupportedBufferSize::Range { min, max } => {
+                    ensure!(
+                        settings.buffer_frames >= *min && settings.buffer_frames <= *max,
+                        "Device buffer size must be between {min} and {max} frames"
+                    );
+                    cpal::BufferSize::Fixed(settings.buffer_frames)
+                }
+                cpal::SupportedBufferSize::Unknown => {
+                    cpal::BufferSize::Fixed(settings.buffer_frames)
+                }
+            };
+            Some((device, config, format))
         };
         let controls = Arc::new(Controls::new());
         let channel_meters = Arc::new(ChannelMeters::new(project));
@@ -376,6 +426,9 @@ impl AudioEngine {
             resample_quality: settings.resample_quality,
         };
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        let (preparer_tx, preparer_rx) = mpsc::sync_channel(1);
+        let live_mailbox = Arc::new(LiveMailbox::default());
+        let worker_edits = Arc::clone(&live_mailbox);
         let (parameter_tx, parameter_rx) = mpsc::sync_channel::<ParameterChange>(128);
         let audition = Arc::new(Mutex::new(None));
         let worker_audition = Arc::clone(&audition);
@@ -393,6 +446,7 @@ impl AudioEngine {
                 ) {
                     Ok(mut renderer) => {
                         renderer.attach_channel_meters(&worker_meters);
+                        let _ = preparer_tx.send(renderer.live_edit_preparer());
                         let _ = ready_tx.send(Ok(()));
                         renderer
                     }
@@ -408,6 +462,11 @@ impl AudioEngine {
                 let mut render_failure = RenderFailureLatch::default();
                 let mut preview = false;
                 while !worker_controls.shutdown.load(Ordering::Acquire) {
+                    if worker_edits.apply_pending(&mut renderer) {
+                        worker_controls
+                            .finished_generation
+                            .store(u64::MAX, Ordering::Release);
+                    }
                     // UI edits never touch the callback. Coalesce rapid drags before
                     // issuing bounded IPC on the render worker, including while paused.
                     collect_parameter_changes(&parameter_rx, &mut pending_parameters);
@@ -513,6 +572,9 @@ impl AudioEngine {
                     for (frame, beat) in frames.iter().zip(positions) {
                         worker_queue.push(*frame, beat, generation);
                     }
+                    worker_controls
+                        .rendered_frames
+                        .fetch_add(BLOCK as u64, Ordering::Relaxed);
                 }
             })?;
         let worker = wait_for_renderer(
@@ -522,28 +584,16 @@ impl AudioEngine {
             &cancel,
             Duration::from_secs(35),
         )?;
-        let stream_result = match format {
-            cpal::SampleFormat::F32 => {
-                build_stream::<f32>(&device, &config, queue, Arc::clone(&controls))
+        let preparer = match preparer_rx.recv() {
+            Ok(preparer) => preparer,
+            Err(error) => {
+                controls.shutdown.store(true, Ordering::Release);
+                let _ = worker.join();
+                return Err(error.into());
             }
-            cpal::SampleFormat::F64 => {
-                build_stream::<f64>(&device, &config, queue, Arc::clone(&controls))
-            }
-            cpal::SampleFormat::I16 => {
-                build_stream::<i16>(&device, &config, queue, Arc::clone(&controls))
-            }
-            cpal::SampleFormat::I32 => {
-                build_stream::<i32>(&device, &config, queue, Arc::clone(&controls))
-            }
-            cpal::SampleFormat::U16 => {
-                build_stream::<u16>(&device, &config, queue, Arc::clone(&controls))
-            }
-            _ => Err(anyhow::anyhow!(
-                "Unsupported output sample format: {format:?}"
-            )),
         };
-        let stream = match stream_result {
-            Ok(stream) => stream,
+        let live_updates = match LiveUpdates::start(preparer, live_mailbox) {
+            Ok(updates) => updates,
             Err(error) => {
                 controls.shutdown.store(true, Ordering::Release);
                 let _ = worker.join();
@@ -551,7 +601,9 @@ impl AudioEngine {
             }
         };
         let mut engine = Self {
-            stream: Some(stream),
+            live_updates: Some(live_updates),
+            virtual_queue: virtual_output.then(|| Arc::clone(&queue)),
+            stream: None,
             worker: Some(worker),
             controls,
             sample_rate,
@@ -559,11 +611,94 @@ impl AudioEngine {
             audition,
             channel_meters,
         };
-        if let Err(error) = engine.stream.as_ref().unwrap().play() {
-            engine.stop();
-            return Err(error.into());
+        if let Some((device, config, format)) = output {
+            let controls = Arc::clone(&engine.controls);
+            let stream_result = match format {
+                cpal::SampleFormat::F32 => {
+                    build_stream::<f32>(&device, &config, Arc::clone(&queue), Arc::clone(&controls))
+                }
+                cpal::SampleFormat::F64 => {
+                    build_stream::<f64>(&device, &config, Arc::clone(&queue), Arc::clone(&controls))
+                }
+                cpal::SampleFormat::I16 => {
+                    build_stream::<i16>(&device, &config, Arc::clone(&queue), Arc::clone(&controls))
+                }
+                cpal::SampleFormat::I32 => {
+                    build_stream::<i32>(&device, &config, Arc::clone(&queue), Arc::clone(&controls))
+                }
+                cpal::SampleFormat::U16 => {
+                    build_stream::<u16>(&device, &config, Arc::clone(&queue), Arc::clone(&controls))
+                }
+                _ => Err(anyhow::anyhow!(
+                    "Unsupported output sample format: {format:?}"
+                )),
+            };
+            engine.stream = Some(stream_result?);
+            if let Err(error) = engine.stream.as_ref().unwrap().play() {
+                engine.stop();
+                return Err(error.into());
+            }
         }
         Ok(engine)
+    }
+
+    /// Prepare a compatible edit while the existing graph keeps rendering.
+    /// `false` means a structural change requires normal graph preparation.
+    pub fn try_update_project(&self, project: &Project, revision: u64) -> Result<bool> {
+        ensure!(
+            !self.controls.shutdown.load(Ordering::Acquire),
+            "Audio engine has stopped"
+        );
+        self.live_updates
+            .as_ref()
+            .context("Live edits are unavailable")?
+            .submit(project, revision)
+    }
+
+    /// Retrieve asynchronous preparation errors without waiting on playback.
+    pub fn take_edit_error(&self) -> Option<String> {
+        self.live_updates.as_ref()?.take_error()
+    }
+
+    /// Consume the production output queue without physical audio hardware.
+    /// Waiting for each bounded chunk makes this a sample-continuity oracle,
+    /// rather than an assertion about hardware scheduling or driver deadlines.
+    pub fn pump_virtual(&mut self, frames: usize) -> Result<Vec<[f32; 2]>> {
+        ensure!(frames <= 480_000, "Virtual output request is too large");
+        let queue = self
+            .virtual_queue
+            .as_ref()
+            .context("Not a virtual audio engine")?;
+        let mut output = Vec::with_capacity(frames);
+        let mut samples = [0.0_f32; BLOCK * 2];
+        while output.len() < frames {
+            let count = (frames - output.len()).min(BLOCK);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                ensure!(
+                    !self.controls.shutdown.load(Ordering::Acquire),
+                    "Audio engine has stopped"
+                );
+                let active = self.controls.playing.load(Ordering::Acquire)
+                    || self.controls.auditioning.load(Ordering::Acquire);
+                let generation = self.controls.generation.load(Ordering::Acquire);
+                queue.discard_stale(generation);
+                if !active
+                    || queue.slots.len() - queue.free() >= count
+                    || self.controls.finished_generation.load(Ordering::Acquire) == generation
+                {
+                    break;
+                }
+                ensure!(
+                    Instant::now() < deadline,
+                    "Virtual output timed out waiting for rendered audio"
+                );
+                thread::sleep(Duration::from_micros(250));
+            }
+            fill_output(&mut samples[..count * 2], 2, queue, &self.controls);
+            output.extend_from_slice(samples[..count * 2].as_chunks::<2>().0);
+        }
+        Ok(output)
     }
 
     /// Replace the held preview note. This bounded shared command is read only by
@@ -640,7 +775,11 @@ impl AudioEngine {
                 parameter,
                 value,
             })
-            .map_err(|error| anyhow::anyhow!("Plug-in parameter queue unavailable: {error}"))
+            .map_err(|error| anyhow::anyhow!("Plug-in parameter queue unavailable: {error}"))?;
+        if let Some(updates) = &self.live_updates {
+            updates.acknowledge_parameter(track, effect, parameter, value);
+        }
+        Ok(())
     }
     pub fn snapshot(&self) -> EngineSnapshot {
         EngineSnapshot {
@@ -650,6 +789,20 @@ impl AudioEngine {
             peak_right: f32::from_bits(self.controls.peak_right.load(Ordering::Relaxed)),
             underruns: self.controls.underruns.load(Ordering::Relaxed),
             render_errors: self.controls.render_errors.load(Ordering::Relaxed),
+            engine_id: self.controls.engine_id,
+            generation: self.controls.generation.load(Ordering::Relaxed),
+            requested_revision: self.live_updates.as_ref().map_or(0, |updates| {
+                updates.mailbox.requested_revision.load(Ordering::Acquire)
+            }),
+            applied_revision: self.live_updates.as_ref().map_or(0, |updates| {
+                updates.mailbox.applied_revision.load(Ordering::Acquire)
+            }),
+            edit_errors: self
+                .live_updates
+                .as_ref()
+                .map_or(0, |updates| updates.mailbox.errors.load(Ordering::Relaxed)),
+            rendered_frames: self.controls.rendered_frames.load(Ordering::Relaxed),
+            consumed_frames: self.controls.consumed_frames.load(Ordering::Relaxed),
         }
     }
     /// Post-insert, post-fader/pan stereo channel peaks (including buses), with
@@ -674,6 +827,7 @@ impl AudioEngine {
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
+        self.live_updates.take();
     }
 }
 impl Drop for AudioEngine {
@@ -717,6 +871,7 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
     queue.discard_stale(generation);
     let mut peak = [0.0_f32; 2];
     let mut underrun = false;
+    let mut consumed = 0;
     for frame in data.chunks_mut(channels) {
         let mut stereo = [0.0; 2];
         if playing || auditioning {
@@ -725,6 +880,7 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
                 match queue.pop() {
                     Some((samples, beat, epoch)) if epoch == generation => {
                         stereo = samples;
+                        consumed += 1;
                         if playing {
                             controls.position.store(beat.to_bits(), Ordering::Relaxed);
                         }
@@ -759,6 +915,9 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
         }
     }
     controls
+        .consumed_frames
+        .fetch_add(consumed, Ordering::Relaxed);
+    controls
         .peak_left
         .store(peak[0].to_bits(), Ordering::Relaxed);
     controls
@@ -782,6 +941,8 @@ mod tests {
         meters.channel(channel).unwrap().publish([0.3, 0.7], 0.0);
         let (parameters, _receiver) = mpsc::sync_channel(1);
         let engine = AudioEngine {
+            live_updates: None,
+            virtual_queue: None,
             stream: None,
             worker: None,
             controls: Arc::new(Controls::new()),
@@ -882,6 +1043,8 @@ mod tests {
     fn live_parameter_queue_keeps_instruments_and_stable_effect_slots_separate() {
         let (parameters, receiver) = mpsc::sync_channel(128);
         let engine = AudioEngine {
+            live_updates: None,
+            virtual_queue: None,
             stream: None,
             worker: None,
             controls: Arc::new(Controls::new()),

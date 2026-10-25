@@ -39,6 +39,12 @@ On Linux, `cargo test --locked -p daw-plugins --test native_context_menu -- --ig
 
 `header_channel_controls_e2e` drags the graphical gain/pan sliders in normal and compact track headers, verifies the same mixer values and undo/redo, preserves clip data, saves/reopens the project, and checks the exported audio level/balance. On Linux, `channel_meter_e2e` runs a real render worker and CPAL stream against an isolated ALSA null PCM. Its child-only `ALSA_CONFIG_PATH` cannot choose host audio hardware. It validates distinct source, silent-channel, and bus levels after gain/pan, then zero readings on pause/stop. This target requires no display or physical sound device; non-Linux builds skip it.
 
+`live_edit_e2e` drives volume/pan, MIDI notes, audio/MIDI clip edits, source imports, and Undo/Redo while the production render worker is active. A device-free sink consumes the same bounded audio queue and callback path through explicit `pump_audio` commands; it never opens physical audio hardware. A temporary Rust instrument/effect worker speaks the real isolation protocol and retains sustained voices plus a 32-frame delay. Tests inspect actual output samples, engine/generation identity, sandbox process identity, lifecycle/MIDI logs, and applied revisions. Audio is also consumed between pointer Down/Move/Up events: fader previews must sound before release, a gesture returning to its starting value must restore audio without an Undo entry, and dragging a sounding MIDI note must not add a duplicate audition voice. Rapid edits must converge on the latest project; failed source preparation must preserve the previous audio; structural changes still use controlled engine replacement. This deterministic suite verifies musical continuity and instance preservation, not real-time hardware deadline performance or native VST compatibility. It runs on every platform and in containers:
+
+```sh
+cargo test --locked -p daw-app --test live_edit_e2e
+```
+
 `track_color_picker_e2e` clicks the arranger's color strip and edits native RGB controls, then checks actual painted track markers, clip strokes, and full colored mixer names with subdued strip tints. It covers audio, MIDI, and bus colors, neutral Master, selected and unselected channels, tint restoration through undo/redo and portable save/reopen, both appearances and densities, and compact/folder tracks without changing selection, cursor, clip contents, or folder expansion. Rectangle paint diagnostics are requested only by `inspect` with `paint: true`.
 
 `mixer_height_e2e` resizes the running mixer between 1100×720, 1440×1100, and 800×600 in light and dark appearances. It checks the actual strip, fader, and stereo-meter paint bounds, full-height expansion, aligned controls, compact-window scrolling, Effects navigation, and a resized fader edit with Undo.
@@ -84,6 +90,7 @@ Supported commands:
 | Command | Arguments | Behavior |
 | --- | --- | --- |
 | `inspect` | optional `paint` | Advance frames and return the project, selection, popup state, settings, status, visible labels, and pointer/label geometry. With `paint: true`, also return clipped rectangle fills and strokes in `painted_rects` for visual-color assertions. |
+| `pump_audio` | `frames` (1–8192) | Consume audio through the production queue/callback consumer and return stereo `audio_output` samples. Requires the isolated driver's `RILL_E2E_VIRTUAL_AUDIO` mode; `engine` reports playback identity, revisions, position, and counters. |
 | `viewport` | `width`, `height`, optional `pixels_per_point` | Resize the headless logical viewport (800–4096 by 600–4096 points) and display density (0.75–3). |
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
