@@ -25,6 +25,25 @@ pub fn toolbar_group<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> Inn
     })
 }
 
+/// Reserve a known-width group before drawing its left-to-right contents. The
+/// wrapping parent can move the complete group to the next row without adding
+/// unused trailing space or changing the behavior of right-aligned controls.
+pub fn toolbar_group_sized<R>(
+    ui: &mut Ui,
+    minimum_width: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let width = minimum_width.max(0.0).min(ui.max_rect().width().max(0.0));
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
+            contents(ui)
+        },
+    )
+}
+
 /// Reserve trailing controls before right alignment, wrapping the whole group
 /// when the remaining row cannot fit it. This keeps its hit area off prior tools.
 pub fn toolbar_trailing<R>(

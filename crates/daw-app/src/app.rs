@@ -336,6 +336,7 @@ impl DawApp {
     }
 
     fn hide_focused_view(&mut self) {
+        self.midi_editor.cancel_generate();
         self.about_open = false;
         self.join_ui.cancel();
         self.library_open = false;
@@ -1534,7 +1535,7 @@ impl DawApp {
             // Native menus and dropdowns process Escape during their own draw.
             // Leave the containing workspace intact until that inner popup closes.
             if !egui::Popup::is_any_open(ctx) {
-                if self.midi_editor.cancel_quantize() {
+                if self.midi_editor.cancel_generate() || self.midi_editor.cancel_quantize() {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
@@ -1628,6 +1629,7 @@ impl DawApp {
             || self.join_open
             || self.export_open
             || self.about_open
+            || self.midi_editor.generate_active()
         {
             return;
         }
@@ -1898,7 +1900,7 @@ impl DawApp {
                             ui.close();
                         }
                         let has_clip =
-                            self.selected().is_some() && !self.midi_editor.quantize_active();
+                            self.selected().is_some() && !self.midi_editor.quantize_active() && !self.midi_editor.generate_active();
                         let has_edit_selection = has_clip && !(self.view == WorkspaceView::Clip
                             && self.selected_notes.is_empty()
                             && matches!(self.selected().map(|clip| &clip.content), Some(ClipContent::Midi { .. })));
@@ -2091,6 +2093,7 @@ impl DawApp {
     }
 
     pub(crate) fn undo_redo_steps(&mut self, redo: bool, steps: usize) {
+        self.midi_editor.cancel_generate();
         self.midi_editor.cancel_quantize();
         if self.state_sync_pending() {
             return;

@@ -29,7 +29,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Toolbar command, choice, and presentation menus | `action_menu`, `choice_menu`, `view_menu` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
-| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
+| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
@@ -106,6 +106,12 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. The native close control remains visible. It supplies a common frame, spacing, and initial width, with fixed sizing and no collapse triangle. Callers may override width, `.resizable(true)`, or `.fixed_pos(...)`; the default pivot is the center. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
 
 `workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
+
+`toolbar_group_sized(ui, width, contents)` reserves a known width before drawing
+related controls from left to right. It stays on the current row when space
+permits and wraps as a complete group otherwise. Use it for fixed-width choice
+groups such as MIDI multi-draw's two selectors; keep `toolbar_trailing` for
+existing right-aligned controls.
 
 Use distinct control roles consistently. Direct actions use filled buttons. `action_menu` keeps that filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
 
@@ -253,3 +259,42 @@ Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, 
 ## Application identity
 
 `brand_lockup(ui, BrandSize::Compact | BrandSize::Hero)` pairs the shared RILL icon with live Inter SemiBold lettering. The wordmark follows the active palette; image textures are retained per context instead of uploaded every frame. `app_icon()` returns cached native RGBA data, and `APP_ID` is shared with Linux desktop metadata. The menu bar uses Compact; Help → About RILL uses Hero inside the standard contextual popup/backdrop/navigation flow. Artwork, outlined light/dark logo exports and generation prompts live in `crates/daw-ui/assets/brand/`.
+
+## Musical generation previews
+
+The piano-roll **Generate…** action opens a movable dialog over the current clip.
+Start bar and Length initially cover only complete visible bars, in clip-local
+time. A view containing no full bar starts with zero length and requires an
+explicit range. The range stays fixed while changing settings or using **Fit
+preview**. Range and confirmation controls remain visible when parameters scroll.
+
+**Chord** sustains the selected chord or scale across the range, with octave and
+voicing-shift controls. **Arpeggio** offers seven orders and an eighth-note-based
+speed multiplier. **Melody** offers random walk, motif variation and Euclidean
+rhythm, with algorithm-specific controls and up to three companion voices.
+Counterpoint favors consonance and contrary motion; it is not a strict species
+solver. Tintinnabuli pairs the melody with nearby tonic-triad tones, following the
+[Arvo Pärt Centre's description](https://www.arvopart.ee/en/arvo-part/article/formal-algorithms-of-tintinnabuli-in-arvo-parts-music/).
+
+**New variation** changes the seed; changing Preview or Fit does not regenerate
+notes. **Add notes** inserts the exact draft alongside existing notes as one Undo
+step, using the existing live playback edit path. Trimmed and stretched ghosts
+retain source-time conversion and shared editing. Cancel, Escape or navigation
+discards the draft and restores the prior viewport and scale-only view. Previews
+temporarily show all pitches so off-scale choices remain visible. Draft generation
+is cached by settings, bounded to 8,192 notes and never allocates project IDs.
+
+`generation_bar_range` edits a one-based **Start bar** and **Length** in whole bars
+using the shared native numeric controls, and displays the inclusive active bar
+range. Zero length represents a view with no complete bars; the caller disables
+confirmation until a valid range is chosen. Returned input responses expose
+change state, focus and precise interaction rectangles.
+
+Generation previews stay in the live piano roll. Draw the ordinary canvas, then
+`paint_generation_backdrop`, `paint_generation_range` and
+`paint_generation_note`, followed by the shared movable utility window. The light
+scrim preserves musical context; the ruler and roll share the active range, and
+violet outlined draft notes differ from existing blue notes in both themes.
+Additional voices use nearby distinct preview shades. These painters do not
+create input targets, note IDs or project edits. The application owns generation,
+validation, cancellation and the single undoable confirmation.

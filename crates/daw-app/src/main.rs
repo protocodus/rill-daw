@@ -13,6 +13,7 @@ mod join_ui;
 mod library;
 mod library_preview;
 mod midi_editor;
+mod midi_generate_ui;
 mod plugin_ui;
 mod project_io;
 mod routing;

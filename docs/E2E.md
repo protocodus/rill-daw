@@ -124,6 +124,17 @@ cargo test --locked -p daw-app --test library_e2e
 
 The editor suites (`audio_editor_e2e`, `midi_editor_e2e`, `timeline_e2e`) exercise shared gestures and Fit, audio edits/transient previews with rendered-sample oracles, MIDI note/chord/velocity editing, and audition release on mouse/focus/view changes. `audio_setup_e2e` switches conversion quality and sample rate through Setup and verifies real exported bandwidth, rate, persistence, and project preservation. `plugin_recall_e2e` covers failed effect-editor launches plus an opt-in CHOW workflow for automatic state, automation, portable save/reopen, audible recall, and helper crash recovery.
 
+`midi_generate_e2e` uses the running piano roll to generate sustained chords,
+arpeggios and seeded melodies. It verifies complete visible-bar defaults in two
+meters and both themes, editable ranges, non-destructive colored previews,
+cancel and keyboard guards, hidden-note selection safety when scale rows are
+folded, toolbar wrapping, empty-range recovery, arpeggio controls, all melody
+algorithms and accompanying voices. Committing a preview is checked against the
+actual generated source notes, including trimmed/stretched ghost instances,
+one-step undo/redo and portable project recall. Run it on its own with
+`cargo test --locked -p daw-app --test midi_generate_e2e`; it needs no display,
+audio device or installed plugin.
+
 Headless runs disable automatic physical-device startup for held-note previews. `RILL_E2E_AUDIO_DEVICE=1` enables it for a deliberate native-device test. The ordinary suite observes audition intent through `audition_request`; a native Surge renderer test verifies actual sound and note release without a hardware device.
 
 Headless automation and app unit tests also disable automatic native plugin preview capture. Scanning remains metadata-only and cached previews still display. **Capture preview** and **Refresh preview** remain explicit actions for opted-in native tests; normal desktop use still captures previews automatically. `library_e2e` verifies that merely scanning and drawing frames leaves previews missing, while an explicitly requested capture of its metadata-only fixture fails safely without executable plugin code.

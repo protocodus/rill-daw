@@ -17,6 +17,19 @@ struct Fixture {
     plugins: tempfile::TempDir,
     host: PathBuf,
 }
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            for (path, commands) in self.logs() {
+                eprintln!(
+                    "Live audio fixture {} (last commands): {:?}",
+                    path.display(),
+                    &commands[commands.len().saturating_sub(12)..]
+                );
+            }
+        }
+    }
+}
 impl Fixture {
     fn new() -> Self {
         let workers = tempfile::tempdir().unwrap();
@@ -29,6 +42,9 @@ impl Fixture {
         });
         let result = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
             .arg("--edition=2024")
+            // Keep the deterministic fixture comfortably inside the unchanged
+            // production IPC deadline, even when debug E2Es run concurrently.
+            .args(["-C", "opt-level=2"])
             .arg(&source)
             .arg("-o")
             .arg(&host)
@@ -285,7 +301,7 @@ fn pump_frames(
     );
     assert_eq!(engine["playing"], true);
     assert_eq!(state["playback_loading"], false);
-    assert_eq!(engine["render_errors"], 0);
+    assert_eq!(engine["render_errors"], 0, "Render failed: {engine}");
     assert_eq!(engine["edit_errors"], before["engine"]["edit_errors"]);
     assert_eq!(engine["underruns"], before["engine"]["underruns"]);
     assert!(
@@ -341,6 +357,128 @@ fn clip_rect(state: &Value, id: u64) -> Value {
         .find(|clip| clip["id"] == id)
         .unwrap()["rect"]
         .clone()
+}
+
+#[test]
+fn generation_preview_commit_and_undo_keep_running_plugins_and_continuous_pcm() {
+    let fixture = Fixture::new();
+    let (mut app, synth, _, held, _) = fixture.app();
+    let initial = app.inspect();
+    let mut previous = pump(&mut app, &initial, [0.1, 0.1], true);
+    let instances = fixture.logs();
+    let held_ons = fixture.note_events(60, true);
+    let held_offs = fixture.note_events(60, false);
+    assert_eq!(
+        instances.len(),
+        2,
+        "Both instrument and effect are isolated"
+    );
+    assert!(held_ons > 0);
+
+    app.click("Window");
+    app.click("Clip Editor");
+    let baseline = app.inspect();
+    let original_notes = track(&baseline, synth)["clips"][0]["content"]["Midi"]["notes"].clone();
+    let original_held = original_notes
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["id"] == held)
+        .unwrap()
+        .clone();
+    let assert_preview_only = |state: &Value| {
+        assert_eq!(state["project"], baseline["project"]);
+        assert_eq!(state["history"], baseline["history"]);
+        assert_eq!(state["revision"], baseline["revision"]);
+        for field in ["requested_revision", "applied_revision"] {
+            assert_eq!(state["engine"][field], baseline["engine"][field]);
+        }
+    };
+    let assert_held = || {
+        fixture.assert_instances(&instances);
+        assert_eq!(fixture.note_events(60, true), held_ons);
+        assert_eq!(fixture.note_events(60, false), held_offs);
+    };
+
+    let opened = app.click("Generate…");
+    assert!(!opened["midi_editor"]["generate"].is_null());
+    assert_preview_only(&opened);
+    previous = pump(&mut app, &previous, [0.1, 0.1], true);
+    assert_held();
+
+    let melody = app.click("Melody");
+    let varied = app.click("New variation");
+    assert_ne!(
+        varied["midi_editor"]["generate"]["seed"],
+        melody["midi_editor"]["generate"]["seed"]
+    );
+    assert_ne!(
+        varied["midi_editor"]["generate"]["notes"],
+        melody["midi_editor"]["generate"]["notes"]
+    );
+    assert_preview_only(&varied);
+    previous = pump(&mut app, &previous, [0.1, 0.1], true);
+    assert_held();
+
+    let cancelled = app.click("Cancel");
+    assert!(cancelled["midi_editor"]["generate"].is_null());
+    assert_preview_only(&cancelled);
+    previous = pump(&mut app, &previous, [0.1, 0.1], true);
+    assert_held();
+
+    app.click("Generate…");
+    app.click("Chord");
+    // Range controls are edited through their actual text fields. Put the draft
+    // well ahead of playback so every sampled frame still belongs to the held
+    // note and persistent effect, making a restart or retrigger observable.
+    for (field, value) in [("start_bar", "3"), ("length_bars", "1")] {
+        let state = app.inspect();
+        let rect = &state["midi_editor"]["generate"]["controls"][field];
+        assert!(!rect.is_null(), "Missing range control {field}");
+        let point = center(rect);
+        pointer(&mut app, "double_click", point, point);
+        app.command(json!({"command":"key", "key":"A", "cmd":true}));
+        app.command(json!({"command":"text", "text":value}));
+        app.key("Enter");
+    }
+    let preview = app.inspect();
+    assert_preview_only(&preview);
+    let draft = preview["midi_editor"]["generate"]["notes"]
+        .as_array()
+        .unwrap();
+    assert_eq!(draft.len(), 3);
+    assert!(
+        draft
+            .iter()
+            .all(|note| note["start"] == 8.0 && note["length"] == 4.0)
+    );
+    app.click("Add notes");
+    let added = settled(&mut app);
+    assert!(added["midi_editor"]["generate"].is_null());
+    let notes = track(&added, synth)["clips"][0]["content"]["Midi"]["notes"]
+        .as_array()
+        .unwrap();
+    assert_eq!(notes.len(), original_notes.as_array().unwrap().len() + 3);
+    assert_eq!(
+        notes.iter().find(|note| note["id"] == held).unwrap(),
+        &original_held
+    );
+    assert_eq!(
+        added["history"]["undo"].as_array().unwrap().len(),
+        baseline["history"]["undo"].as_array().unwrap().len() + 1
+    );
+    assert!(added["revision"].as_u64().unwrap() > baseline["revision"].as_u64().unwrap());
+    previous = pump(&mut app, &previous, [0.1, 0.1], true);
+    assert_held();
+
+    undo(&mut app, false);
+    let restored = settled(&mut app);
+    assert_eq!(restored["project"], baseline["project"]);
+    assert_eq!(restored["history"]["undo"], baseline["history"]["undo"]);
+    let final_audio = pump(&mut app, &previous, [0.1, 0.1], true);
+    assert!(final_audio["engine"]["position_beats"].as_f64().unwrap() < 4.0);
+    assert_held();
+    app.quit();
 }
 
 #[test]

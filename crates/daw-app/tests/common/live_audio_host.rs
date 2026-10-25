@@ -21,7 +21,7 @@ fn encode(samples: &[f32]) -> String {
         .iter()
         .flat_map(|sample| sample.to_le_bytes())
         .collect();
-    let mut out = String::new();
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let n = (u32::from(chunk[0]) << 16)
             | (u32::from(chunk.get(1).copied().unwrap_or(0)) << 8)
@@ -44,12 +44,14 @@ fn encode(samples: &[f32]) -> String {
 fn decode(encoded: &str) -> Vec<f32> {
     let mut bytes = Vec::new();
     for chunk in encoded.as_bytes().chunks_exact(4) {
-        let digit = |v| {
-            if v == b'=' {
-                0
-            } else {
-                ALPHABET.iter().position(|c| *c == v).unwrap() as u32
-            }
+        let digit = |v| match v {
+            b'A'..=b'Z' => u32::from(v - b'A'),
+            b'a'..=b'z' => u32::from(v - b'a' + 26),
+            b'0'..=b'9' => u32::from(v - b'0' + 52),
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => 0,
+            _ => panic!("Invalid fixture audio encoding"),
         };
         let n = (digit(chunk[0]) << 18)
             | (digit(chunk[1]) << 12)
@@ -81,6 +83,7 @@ fn main() {
     let mut output = std::io::stdout().lock();
     let mut effect = false;
     let mut voices: [Vec<u8>; 128] = std::array::from_fn(|_| Vec::new());
+    let mut synth_value = 0.0;
     let mut events: Vec<(usize, u8, u8, bool)> = Vec::new();
     let mut delay = [[0.0_f32; 2]; 32];
     let mut delay_cursor = 0;
@@ -139,6 +142,7 @@ fn main() {
             r#"{"Success":{"message":""}}"#.to_owned()
         } else if line == "\"MidiPanic\"" {
             voices.iter_mut().for_each(Vec::clear);
+            synth_value = 0.0;
             r#"{"Success":{"message":""}}"#.to_owned()
         } else if line.contains("\"ProcessBuses\"") {
             let frames = number(&line, "frames") as usize;
@@ -160,6 +164,7 @@ fn main() {
             let mut left = Vec::with_capacity(frames);
             let mut right = Vec::with_capacity(frames);
             for frame in 0..frames {
+                let mut changed = false;
                 for &(_, pitch, velocity, on) in events.iter().filter(|e| e.0 == frame) {
                     let active = &mut voices[usize::from(pitch)];
                     if on && velocity > 0 {
@@ -167,14 +172,14 @@ fn main() {
                     } else if !active.is_empty() {
                         active.remove(0);
                     }
+                    changed = true;
                 }
-                let stereo = if effect {
-                    let previous = delay[delay_cursor];
-                    delay[delay_cursor] = [inputs[0][frame] * 0.5, inputs[1][frame] * 0.5];
-                    delay_cursor = (delay_cursor + 1) % delay.len();
-                    previous
-                } else {
-                    let value = voices
+                // This fixture produces DC, so the exact sum changes only at
+                // MIDI events. Rescanning 128 voice vectors for every sample
+                // needlessly made debug fixtures contend for the 100 ms IPC
+                // deadline while several live-edit scenarios ran together.
+                if changed && !effect {
+                    synth_value = voices
                         .iter()
                         .enumerate()
                         .flat_map(|(pitch, velocities)| {
@@ -183,7 +188,14 @@ fn main() {
                             })
                         })
                         .sum::<f32>();
-                    [value, value]
+                }
+                let stereo = if effect {
+                    let previous = delay[delay_cursor];
+                    delay[delay_cursor] = [inputs[0][frame] * 0.5, inputs[1][frame] * 0.5];
+                    delay_cursor = (delay_cursor + 1) % delay.len();
+                    previous
+                } else {
+                    [synth_value, synth_value]
                 };
                 left.push(stereo[0]);
                 right.push(stereo[1]);
