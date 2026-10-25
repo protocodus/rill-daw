@@ -20,6 +20,32 @@ struct Fixture {
     host: PathBuf,
 }
 
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if std::thread::panicking()
+            && let Ok(entries) = std::fs::read_dir(self.workers.path())
+        {
+            for path in entries.filter_map(Result::ok).map(|entry| entry.path()) {
+                if path
+                    .extension()
+                    .is_none_or(|extension| extension != "jsonl")
+                {
+                    continue;
+                }
+                let Ok(contents) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                let commands: Vec<_> = contents.lines().collect();
+                eprintln!(
+                    "MIDI fixture {} (last commands): {:?}",
+                    path.display(),
+                    &commands[commands.len().saturating_sub(16)..]
+                );
+            }
+        }
+    }
+}
+
 impl Fixture {
     fn new() -> Self {
         let workers = tempfile::tempdir().unwrap();
@@ -316,12 +342,19 @@ fn output(state: &Value) -> Vec<[f32; 2]> {
 fn near(actual: f32, expected: f32) {
     assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
 }
+#[track_caller]
 fn settled(state: &Value, expected: f32) {
     let frames = output(state);
     assert!(frames.len() >= 256);
-    for frame in &frames[frames.len() - 256..] {
-        near(frame[0], expected);
-        near(frame[1], expected);
+    for (index, frame) in frames.iter().enumerate().skip(frames.len() - 256) {
+        assert!(
+            frame.iter().all(|sample| (*sample - expected).abs() < 1e-5),
+            "Monitored frame {index}: {frame:?}, expected {expected}; engine={}, MIDI={}, status={}, error={}",
+            state["engine"],
+            state["recording"]["midi"],
+            state["status"],
+            state["error"],
+        );
     }
 }
 fn notes(clip: &Clip) -> &[Note] {
