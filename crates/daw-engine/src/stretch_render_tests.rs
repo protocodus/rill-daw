@@ -1,5 +1,5 @@
 use super::*;
-use daw_core::{Clip, FadeCurve, Note};
+use daw_core::{AudioProcessing, AudioProcessingAlgorithm, Clip, FadeCurve, Note};
 
 fn fixture() -> (tempfile::TempDir, Project, u64, u64) {
     let dir = tempfile::tempdir().unwrap();
@@ -108,6 +108,133 @@ fn live_stretch_reuses_original_audio_and_shares_prepared_data_after_split() {
         &renderer.tracks[0].as_ref().unwrap().audio[0].original,
         &original
     ));
+}
+
+#[test]
+fn live_pitch_and_algorithm_edits_key_the_cache_and_restore_the_original() {
+    let (dir, mut project, track, id) = fixture();
+    let mut renderer = Renderer::new(&project, 48000, true).unwrap();
+    let original = Arc::clone(&renderer.tracks[0].as_ref().unwrap().audio[0].data);
+    let mut preparer = renderer.live_edit_preparer();
+    // Processing edits must use the already loaded original, even if its file
+    // is no longer accessible; they never repeatedly process previous results.
+    std::fs::remove_file(dir.path().join("source.wav")).unwrap();
+    let mut prepared = Vec::new();
+    for algorithm in AudioProcessingAlgorithm::ALL {
+        for transpose_semitones in [12.0, -7.25] {
+            project
+                .set_audio_processing(
+                    track,
+                    id,
+                    AudioProcessing {
+                        algorithm,
+                        transpose_semitones,
+                    },
+                )
+                .unwrap();
+            let mut plan = preparer.prepare(&project).unwrap();
+            assert_eq!(
+                crate::allocation_test_support::count_allocations(|| renderer
+                    .apply_live_edit(&mut plan)
+                    .unwrap()),
+                0
+            );
+            let clip = &renderer.tracks[0].as_ref().unwrap().audio[0];
+            assert!(Arc::ptr_eq(&clip.original, &original));
+            assert!(!Arc::ptr_eq(&clip.data, &original));
+            assert!(prepared.iter().all(|old| !Arc::ptr_eq(old, &clip.data)));
+            prepared.push(Arc::clone(&clip.data));
+        }
+    }
+    project
+        .set_audio_processing(
+            track,
+            id,
+            AudioProcessing {
+                algorithm: AudioProcessingAlgorithm::Signalsmith,
+                transpose_semitones: 12.0,
+            },
+        )
+        .unwrap();
+    let mut plan = preparer.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut plan).unwrap();
+    assert!(Arc::ptr_eq(
+        &renderer.tracks[0].as_ref().unwrap().audio[0].data,
+        &prepared[0]
+    ));
+    let ghost = project.clone_clip(track, id).unwrap();
+    let mut plan = preparer.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut plan).unwrap();
+    let clips = &renderer.tracks[0].as_ref().unwrap().audio;
+    assert!(Arc::ptr_eq(&clips[0].data, &clips[1].data));
+    project
+        .set_audio_processing(
+            track,
+            ghost,
+            AudioProcessing {
+                algorithm: AudioProcessingAlgorithm::Bungee,
+                transpose_semitones: -0.0,
+            },
+        )
+        .unwrap();
+    let mut plan = preparer.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut plan).unwrap();
+    for clip in renderer.tracks[0].as_ref().unwrap().audio.iter() {
+        assert!(Arc::ptr_eq(&clip.data, &original));
+    }
+}
+
+#[test]
+fn transposed_stretched_audio_split_and_join_bake_processing_exactly_once() {
+    for algorithm in AudioProcessingAlgorithm::ALL {
+        let (dir, mut project, track, id) = fixture();
+        project
+            .set_audio_processing(
+                track,
+                id,
+                AudioProcessing {
+                    algorithm,
+                    transpose_semitones: 7.25,
+                },
+            )
+            .unwrap();
+        project.stretch_clip(track, id, 4.0).unwrap();
+        project.reverse_audio_clip(track, id).unwrap();
+        project
+            .set_audio_fades(
+                track,
+                id,
+                0.2,
+                0.3,
+                FadeCurve::EqualPower,
+                FadeCurve::SCurve,
+            )
+            .unwrap();
+        let before = render(&project, 48000, 4.0).unwrap();
+        let right = project.split_clip(track, id, 1.125).unwrap();
+        let after = render(&project, 48000, 4.0).unwrap();
+        assert!(before.iter().zip(&after).all(|(a, b)| (a - b).abs() < 1e-5));
+        let output = dir.path().join("pitched-join.wav");
+        crate::export_audio_join(
+            &project,
+            track,
+            &[id, right],
+            &output,
+            48000,
+            RenderOptions::default(),
+        )
+        .unwrap();
+        let joined = project
+            .replace_audio_clips_with_joined(track, &[id, right], output.to_string_lossy())
+            .unwrap();
+        let ClipContent::Audio { processing, .. } = &project.clip(track, joined).unwrap().content
+        else {
+            panic!()
+        };
+        assert_eq!(*processing, AudioProcessing::default());
+        let after = render(&project, 48000, 4.0).unwrap();
+        assert!(before.iter().zip(&after).all(|(a, b)| (a - b).abs() < 1e-5));
+    }
 }
 
 #[test]

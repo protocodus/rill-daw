@@ -22,13 +22,15 @@ struct RillStretch {
 };
 
 extern "C" {
-void *rill_stretch_create(unsigned channels, unsigned sample_rate) noexcept {
-    if (channels < 1 || channels > 2 || sample_rate < 8000 || sample_rate > 384000)
+void *rill_stretch_create(unsigned channels, unsigned sample_rate, double semitones) noexcept {
+    if (channels < 1 || channels > 2 || sample_rate < 8000 || sample_rate > 384000 ||
+        !std::isfinite(semitones) || semitones < -24 || semitones > 24)
         return nullptr;
     try {
         auto handle = std::unique_ptr<RillStretch>(new RillStretch);
         handle->channels = int(channels);
         handle->dsp.presetDefault(int(channels), float(sample_rate));
+        handle->dsp.setTransposeSemitones(float(semitones));
         return handle.release();
     } catch (...) { return nullptr; }
 }

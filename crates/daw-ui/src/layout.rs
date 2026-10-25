@@ -49,7 +49,29 @@ pub fn action_menu<R>(
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
-    crate::menu_button(ui, label, contents)
+    crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::Action, contents)
+}
+
+/// Presentation settings use a quiet outlined eye button. Unlike action menus,
+/// toggling a setting keeps the menu open; Escape or an outside click dismisses it.
+/// View changes remain the caller's responsibility and must not edit project data.
+pub fn view_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::View, contents)
+}
+
+/// A field-like dropdown for related choices, labelled with the current value.
+/// Use `ui.close()` to accept a choice, or leave it open for several settings.
+/// Nested choice menus use native submenus rather than competing popup state.
+pub fn choice_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::Choice, contents)
 }
 
 /// A small section heading and its controls, grouped by spacing rather than a box.

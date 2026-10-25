@@ -169,7 +169,7 @@ fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_p
     menu(&mut app, "Track", "Add MIDI track");
     app.key("Escape");
     menu(&mut app, "Window", "Clip Editor");
-    app.click("Pitch");
+    app.click("C · Natural minor");
     let open = app.click("Natural minor");
     assert!(visible(&open, "Dorian"));
     let closed = app.key("Escape");

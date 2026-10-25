@@ -780,7 +780,7 @@ fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
     harness.full_click(note_position(&output, "C4") + Vec2::new(8.0, 5.0));
     let selected = harness.app.selected_notes.clone();
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "Pitch", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
     harness.full_frame(RawInput {
         events: vec![Event::PointerMoved(

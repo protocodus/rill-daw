@@ -112,6 +112,7 @@ struct AudioClip {
     source_path: std::path::PathBuf,
     source_alias: std::path::PathBuf,
     source_rate: f64,
+    processing: daw_core::AudioProcessing,
     original: Arc<AudioData>,
     start: u64,
     source_offset: f64,

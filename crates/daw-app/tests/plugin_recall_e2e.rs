@@ -30,7 +30,7 @@ fn insert(app: &mut Harness, name: &str) -> Value {
     common::wait_visible(app, "Search effects");
     app.click("Search effects");
     app.command(json!({"command":"text","text":name}));
-    common::wait_visible(app, "Add to effect chain");
+    common::wait_library_device(app, name);
     app.command(json!({"command":"click","label":name,"occurrence":1}));
     let state = app.click("Add to effect chain");
     assert!(

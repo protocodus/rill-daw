@@ -353,6 +353,7 @@ impl DawApp {
         self.hide_focused_view();
         self.navigation.clear();
         self.selected_notes.clear();
+        self.midi_editor.clear_hidden_selection();
         self.effect_editor_target = None;
         self.popup_backdrop = Default::default();
         self.backdrop_title.clear();
@@ -406,6 +407,7 @@ impl DawApp {
             return;
         }
         self.selected_notes.clear();
+        self.midi_editor.clear_hidden_selection();
         self.popup_backdrop = Default::default();
         self.backdrop_title.clear();
     }
@@ -635,6 +637,7 @@ impl DawApp {
     pub fn open_workspace(&mut self, view: WorkspaceView) {
         if self.view != view {
             self.selected_notes.clear();
+            self.midi_editor.clear_hidden_selection();
         }
         self.close_popups();
         self.view = view;
@@ -1035,6 +1038,7 @@ impl DawApp {
             self.selected_track = Some(id);
             self.selected_clip = Some(clip.id);
             self.selected_notes.clear();
+            self.midi_editor.clear_hidden_selection();
             let bytes = source.samples.len() * std::mem::size_of::<f32>();
             let used = self
                 .waveforms
@@ -1139,6 +1143,7 @@ impl DawApp {
         self.selected_track = None;
         self.selected_clip = None;
         self.selected_notes.clear();
+        self.midi_editor.clear_hidden_selection();
         self.close_popups();
         self.status = "New session · Add a track or drop audio into the arrangement".into();
         self.error = false;
@@ -1259,6 +1264,7 @@ impl DawApp {
         self.selected_track = self.project.tracks.first().map(|t| t.id);
         self.selected_clip = None;
         self.selected_notes.clear();
+        self.midi_editor.clear_hidden_selection();
         self.revision = self.revision.wrapping_add(1);
         self.modified = recovery;
         if recovery {
@@ -1382,6 +1388,17 @@ impl DawApp {
         }
     }
     pub fn delete_selection(&mut self) {
+        if self.view == WorkspaceView::Clip
+            && self.selected_notes.is_empty()
+            && matches!(
+                self.selected().map(|clip| &clip.content),
+                Some(ClipContent::Midi { .. })
+            )
+        {
+            // An empty piano selection never means the containing clip,
+            // including when every note is hidden by the scale view.
+            return;
+        }
         self.begin_edit();
         if !self.selected_notes.is_empty() {
             let selected = self.selected_notes.clone();
@@ -1394,11 +1411,24 @@ impl DawApp {
                 self.changed();
             }
             self.selected_notes.clear();
+            self.midi_editor.clear_hidden_selection();
         } else if let (Some(t), Some(c)) = (self.selected_track, self.selected_clip) {
             self.apply_clip_command(t, c, ClipCommand::Delete);
         }
     }
     pub fn duplicate_selection(&mut self) {
+        if self.view == WorkspaceView::Clip
+            && self.selected_notes.is_empty()
+            && matches!(
+                self.selected().map(|clip| &clip.content),
+                Some(ClipContent::Midi { .. })
+            )
+        {
+            // An empty piano selection never means the containing clip,
+            // including when every note is hidden by the scale view.
+            return;
+        }
+        self.midi_editor.clear_hidden_selection();
         self.begin_edit();
         if !self.selected_notes.is_empty() {
             let selected = self.selected_notes.clone();
@@ -1480,6 +1510,7 @@ impl DawApp {
                 self.selected_track = Some(track);
                 self.selected_clip = selected;
                 self.selected_notes.clear();
+                self.midi_editor.clear_hidden_selection();
                 self.edit_label = Some(label.into());
                 self.changed();
             }
@@ -1606,7 +1637,10 @@ impl DawApp {
                 ..
             }) = self.selected()
         {
-            self.selected_notes = notes.iter().map(|n| n.id).collect();
+            self.selected_notes = self
+                .midi_editor
+                .visible_note_ids(notes, self.root, self.scale);
+            self.midi_editor.clear_hidden_selection();
         }
         if !self.midi_editor.quantize_active()
             && ctx
@@ -1853,8 +1887,11 @@ impl DawApp {
                         }
                         let has_clip =
                             self.selected().is_some() && !self.midi_editor.quantize_active();
+                        let has_edit_selection = has_clip && !(self.view == WorkspaceView::Clip
+                            && self.selected_notes.is_empty()
+                            && matches!(self.selected().map(|clip| &clip.content), Some(ClipContent::Midi { .. })));
                         if ui
-                            .add_enabled(has_clip, daw_ui::button_widget("Duplicate"))
+                            .add_enabled(has_edit_selection, daw_ui::button_widget("Duplicate"))
                             .on_hover_text("Duplicate the selection as an independent copy · Ctrl/Cmd+D")
                             .clicked()
                         {
@@ -1875,7 +1912,7 @@ impl DawApp {
                             ui.close();
                         }
                         if ui
-                            .add_enabled(has_clip, daw_ui::button_widget("Delete"))
+                            .add_enabled(has_edit_selection, daw_ui::button_widget("Delete"))
                             .clicked()
                         {
                             self.delete_selection();
@@ -1928,7 +1965,8 @@ impl DawApp {
                                 ..
                             }) = self.selected()
                             {
-                                self.selected_notes = notes.iter().map(|note| note.id).collect();
+                                self.selected_notes = self.midi_editor.visible_note_ids(notes, self.root, self.scale);
+                                self.midi_editor.clear_hidden_selection();
                             }
                             ui.close();
                         }
@@ -2121,6 +2159,7 @@ impl DawApp {
                         }
                     });
                     self.selected_notes.clear();
+                    self.midi_editor.clear_hidden_selection();
                     self.close_popups();
                     self.changed();
                     if kind == TrackKind::Midi {

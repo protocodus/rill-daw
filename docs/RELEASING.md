@@ -16,7 +16,9 @@ Each archive contains the application, its adjacent `daw-plugin-host` helper, `L
 
 ## Build locally
 
-Audio stretching compiles the pinned, vendored Signalsmith Stretch/Linear C++14 sources through `cc`. Use Apple Clang on macOS, GCC/Clang with a C++ standard library on Linux (`g++` in the container/CI), or the MSVC C++ build tools on Windows. No libclang, bindgen, downloaded-at-build source, or external stretch runtime is required. Both MIT licenses and source provenance ship in `licenses/signalsmith-stretch/`.
+Audio stretching and transposition compile pinned, vendored Signalsmith Stretch/Linear (C++14) and Bungee Basic (C++20) sources directly through `cc`. Use a current Apple Clang on macOS, GCC 11 or newer/Clang with a C++20 standard library on Linux (`g++` in the container/CI), or the Visual Studio 2022 MSVC C++ build tools on Windows. Bungee's pinned Eigen headers and PFFFT C sources are included. No CMake, libclang, bindgen, build-time source download, or external stretch runtime is required.
+
+Signalsmith's MIT licenses and source provenance ship in `licenses/signalsmith-stretch/`. Bungee Basic and Eigen retain MPL-2.0, with PFFFT's UCAR/NCAR license and Eigen's accompanying notices. Rill's separate source remains MIT. `scripts/native_dsp_licenses.py` includes exact covered source, notices and pinned revision/checksum records in a reproducible `licenses/bungee-basic/source.zip`, alongside readable notices. Every release archive includes these files; standalone macOS bundles include them under `Contents/Resources/licenses/` as well. Preserve these materials when redistributing binaries. Vendored source has `-text` attributes so Windows checkout does not alter the recorded source bytes.
 
 Install Rust 1.92 or newer, Python 3, and the platform's normal Rust native build tools. Linux additionally needs `pkg-config`, `libasound2-dev`, `libudev-dev`, `libxkbcommon-dev`, and `libwayland-dev`. Run from the repository:
 

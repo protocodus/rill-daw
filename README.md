@@ -85,6 +85,8 @@ In Arrangement, double-click an empty MIDI lane to create a four-beat pattern. S
 | Shift + click | Add/remove a note from selection |
 | Right-click a note | Delete the note |
 
+The piano roll separates note actions from the **View** menu. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. The scale choice shows the current root and scale. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
+
 The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. Double-click empty space to create a note or a note to delete it. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](docs/EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
 
 ## Clips and looping
@@ -92,6 +94,8 @@ The select tool supports dragging a rectangle around notes. Drag note bodies to 
 The arranger uses the same tools for audio and MIDI clips: **Q Select**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **Z Erase**, and **P Cursor**. **W Pencil** creates MIDI clips. Select drags move clips; either edge trims the visible source window. Shift-dragging the body creates one independent copy, while Shift at a trim/stretch edge temporarily bypasses snap. Join opens a focused chooser. Actions select their resulting clip consistently, whether invoked from tools, menus, or the context menu.
 
 Stretch changes duration without replacing the source. Audio keeps its pitch; MIDI note positions and lengths scale in playback and the editor. Stretching one ghost changes only that occurrence's timing. Source-rate factors range from 0.25× to 4×, and each drag remains one Undo step. Preparing stretched audio happens in the background; the current sound continues until its replacement is ready. Extreme stretches can introduce artifacts, especially in transients and complex material.
+
+In the audio Clip Editor or Properties, open **Pitch** to transpose by up to two octaves in either direction, including fine tuning to cents, without changing duration. Choose **Signalsmith** or **Bungee** for both pitch and time processing. Combined edits render once from the original audio, never from an earlier processed result. Reset pitch restores the original pitch while retaining stretch. Ghost copies share pitch and algorithm; independent duplicates can differ. Both algorithms are included; no external processing utility is required.
 
 Choose **Edit → Ghost copy** (or the clip context menu) to place another instance after the selected clip. A ghost is a linked copy: a chain icon marks every member of the group. Notes, audio edits, fades, clip gain, and the name are shared: edit any member to update the group. Position, trimming, stretching, and overlap crossfades remain independent. **Properties** shows the shared name and instance count before track controls.
 

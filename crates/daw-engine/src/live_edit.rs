@@ -1,15 +1,37 @@
 //! Prepare editable timeline data away from rendering; retain the live DSP graph.
 use super::*;
-use daw_core::{PluginParameterValue, Track};
+use daw_core::{AudioProcessing, AudioProcessingAlgorithm, PluginParameterValue, Track};
 use std::{
     path::PathBuf,
     sync::{Mutex, Weak},
 };
 
-pub(super) type AudioAssetKey = (PathBuf, u64);
+pub(super) type AudioAssetKey = (PathBuf, u64, u64, AudioProcessingAlgorithm);
 
-fn asset_key(path: &Path, rate: f64) -> AudioAssetKey {
-    (path.to_path_buf(), rate.to_bits())
+fn original_key(path: &Path) -> AudioAssetKey {
+    (
+        path.to_path_buf(),
+        1.0_f64.to_bits(),
+        0,
+        AudioProcessingAlgorithm::Signalsmith,
+    )
+}
+
+fn asset_key(path: &Path, rate: f64, processing: AudioProcessing) -> AudioAssetKey {
+    if rate == 1.0 && processing.transpose_semitones == 0.0 {
+        return original_key(path);
+    }
+    let pitch = if processing.transpose_semitones == 0.0 {
+        0
+    } else {
+        processing.transpose_semitones.to_bits()
+    };
+    (
+        path.to_path_buf(),
+        rate.to_bits(),
+        pitch,
+        processing.algorithm,
+    )
 }
 
 #[derive(Clone)]
@@ -246,11 +268,11 @@ impl LiveEditPreparer {
             };
             for audio in content.audio.iter() {
                 cache.insert(
-                    asset_key(&audio.source_alias, audio.source_rate),
+                    asset_key(&audio.source_alias, audio.source_rate, audio.processing),
                     Arc::clone(&audio.data),
                 );
                 cache.insert(
-                    asset_key(&audio.source_alias, 1.0),
+                    original_key(&audio.source_alias),
                     Arc::clone(&audio.original),
                 );
                 for data in [&audio.data, &audio.original] {
@@ -310,10 +332,10 @@ impl Renderer {
             for audio in track.audio.iter() {
                 for path in [&audio.source_path, &audio.source_alias] {
                     assets.insert(
-                        asset_key(path, audio.source_rate),
+                        asset_key(path, audio.source_rate, audio.processing),
                         Arc::downgrade(&audio.data),
                     );
-                    assets.insert(asset_key(path, 1.0), Arc::downgrade(&audio.original));
+                    assets.insert(original_key(path), Arc::downgrade(&audio.original));
                 }
             }
             maximum_notes.insert(track.id, track.notes.len());
@@ -528,6 +550,7 @@ pub(super) fn compile_content(
             }
             ClipContent::Audio {
                 path,
+                processing,
                 gain,
                 fade_in,
                 fade_out,
@@ -538,13 +561,13 @@ pub(super) fn compile_content(
                 ..
             } => {
                 let requested = PathBuf::from(path);
-                let source_path = if audio_cache.contains_key(&asset_key(&requested, 1.0)) {
+                let source_path = if audio_cache.contains_key(&original_key(&requested)) {
                     requested
                 } else {
                     std::fs::canonicalize(path)
                         .with_context(|| format!("Loading audio clip {}", clip.name))?
                 };
-                let original = if let Some(data) = audio_cache.get(&asset_key(&source_path, 1.0)) {
+                let original = if let Some(data) = audio_cache.get(&original_key(&source_path)) {
                     Arc::clone(data)
                 } else {
                     let source = quality::load_source(&source_path)
@@ -563,32 +586,37 @@ pub(super) fn compile_content(
                         *cache_bytes <= quality::MAX_CACHE_BYTES,
                         "Prepared audio exceeds the 1 GiB session cache limit"
                     );
-                    audio_cache.insert(asset_key(&source_path, 1.0), Arc::clone(&data));
+                    audio_cache.insert(original_key(&source_path), Arc::clone(&data));
                     data
                 };
-                let data = if clip.source_rate == 1.0 {
+                let data = if clip.source_rate == 1.0 && processing.transpose_semitones == 0.0 {
                     Arc::clone(&original)
                 } else if let Some(data) =
-                    audio_cache.get(&asset_key(&source_path, clip.source_rate))
+                    audio_cache.get(&asset_key(&source_path, clip.source_rate, *processing))
                 {
                     Arc::clone(data)
                 } else {
                     check_cancelled()?;
-                    let prepared_bytes = (original.samples.len() as f64 / clip.source_rate).ceil()
+                    let prepared_bytes = (original.frames() as f64 / clip.source_rate).ceil()
                         as usize
+                        * original.channels
                         * size_of::<f32>();
                     ensure!(
                         cache_bytes.saturating_add(prepared_bytes) <= quality::MAX_CACHE_BYTES,
                         "Prepared audio exceeds the 1 GiB session cache limit"
                     );
-                    let data = Arc::new(crate::stretch::prepare_stretched(
+                    let data = Arc::new(crate::stretch::prepare_processed(
                         &original,
                         clip.source_rate,
+                        processing.transpose_semitones,
+                        processing.algorithm,
                         cancel,
                     )?);
                     *cache_bytes += data.samples.len() * size_of::<f32>();
-                    audio_cache
-                        .insert(asset_key(&source_path, clip.source_rate), Arc::clone(&data));
+                    audio_cache.insert(
+                        asset_key(&source_path, clip.source_rate, *processing),
+                        Arc::clone(&data),
+                    );
                     data
                 };
                 ensure!(
@@ -599,6 +627,7 @@ pub(super) fn compile_content(
                     source_path,
                     source_alias: PathBuf::from(path),
                     source_rate: clip.source_rate,
+                    processing: *processing,
                     original,
                     start: to_sample(clip.start),
                     source_offset: clip.offset / clip.source_rate * 60.0 / tempo

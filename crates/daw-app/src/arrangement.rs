@@ -1106,12 +1106,16 @@ impl DawApp {
                                 ui.end_row();
                                 if let ClipContent::Audio {
                                     gain,
+                                    processing,
                                     fade_in,
                                     fade_out,
                                     envelope,
                                     ..
                                 } = &mut clip.content
                                 {
+                                    daw_ui::text::label(ui, "Pitch & time");
+                                    changed |= crate::audio_editor::audio_processing_menu(ui, processing);
+                                    ui.end_row();
                                     let fade_length = envelope.map_or(clip.length * clip.source_rate, |region| region.length) / clip.source_rate;
                                     let label = daw_ui::text::label(ui, "Clip gain");
                                     ui.horizontal(|ui| {

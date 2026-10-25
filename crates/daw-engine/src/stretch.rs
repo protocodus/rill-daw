@@ -1,9 +1,10 @@
-//! Fixed-rate, pitch-preserving source preparation. No DSP runs on playback.
-//! Signalsmith's documented seek/process/flush latency contract is applied in
-//! bounded chunks so cancellation does not wait for an entire source file.
+//! Independent time/pitch source preparation. No DSP runs on playback.
+//! Each backend processes original source audio in bounded chunks/grains, with
+//! latency compensation and cancellation between calls. There is no cascade of
+//! destructive time and pitch edits, nor a resampling-only substitute.
 use crate::quality::MAX_ASSET_BYTES;
 use anyhow::{Context, Result, ensure};
-use daw_core::{AudioData, MAX_SOURCE_RATE, MIN_SOURCE_RATE};
+use daw_core::{AudioData, AudioProcessingAlgorithm, MAX_SOURCE_RATE, MIN_SOURCE_RATE};
 use std::{
     ffi::c_void,
     ptr::NonNull,
@@ -11,7 +12,7 @@ use std::{
 };
 
 unsafe extern "C" {
-    fn rill_stretch_create(channels: u32, sample_rate: u32) -> *mut c_void;
+    fn rill_stretch_create(channels: u32, sample_rate: u32, semitones: f64) -> *mut c_void;
     fn rill_stretch_destroy(handle: *mut c_void);
     fn rill_stretch_input_latency(handle: *mut c_void) -> u32;
     fn rill_stretch_output_latency(handle: *mut c_void) -> u32;
@@ -24,6 +25,18 @@ unsafe extern "C" {
         output_frames: u32,
     ) -> i32;
     fn rill_stretch_flush(handle: *mut c_void, output: *mut f32, frames: u32) -> i32;
+    fn rill_bungee_process(
+        input: *const f32,
+        input_frames: usize,
+        output: *mut f32,
+        output_frames: usize,
+        channels: u32,
+        sample_rate: u32,
+        rate: f64,
+        semitones: f64,
+        cancel_context: *mut c_void,
+        cancelled: unsafe extern "C" fn(*mut c_void) -> i32,
+    ) -> i32;
 }
 
 struct Stretch(NonNull<c_void>);
@@ -42,9 +55,26 @@ fn check_cancelled(cancel: Option<&AtomicBool>) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_stretched(
     source: &AudioData,
     rate: f64,
+    cancel: Option<&AtomicBool>,
+) -> Result<AudioData> {
+    prepare_processed(
+        source,
+        rate,
+        0.0,
+        AudioProcessingAlgorithm::Signalsmith,
+        cancel,
+    )
+}
+
+pub(crate) fn prepare_processed(
+    source: &AudioData,
+    rate: f64,
+    transpose_semitones: f64,
+    algorithm: AudioProcessingAlgorithm,
     cancel: Option<&AtomicBool>,
 ) -> Result<AudioData> {
     check_cancelled(cancel)?;
@@ -54,10 +84,14 @@ pub(crate) fn prepare_stretched(
         "Invalid stretch rate"
     );
     ensure!(
+        transpose_semitones.is_finite() && (-24.0..=24.0).contains(&transpose_semitones),
+        "Audio transpose must be between -24 and +24 semitones"
+    );
+    ensure!(
         (1..=2).contains(&source.channels) && (8000..=384000).contains(&source.sample_rate),
         "Invalid stretch source format"
     );
-    if rate == 1.0 || source.frames() == 0 {
+    if (rate == 1.0 && transpose_semitones == 0.0) || source.frames() == 0 {
         return Ok(source.clone());
     }
     let frames = (source.frames() as f64 / rate).ceil() as usize;
@@ -74,10 +108,45 @@ pub(crate) fn prepare_stretched(
         .try_reserve_exact(samples)
         .context("Allocate stretched source")?;
     output.resize(samples, 0.0);
+    match algorithm {
+        AudioProcessingAlgorithm::Bungee => {
+            // SAFETY: disjoint slices cover all stated frames. The callback
+            // borrows cancel only during this synchronous call; C++ contains
+            // exceptions and consults the atomic between bounded audio grains.
+            let status = unsafe {
+                rill_bungee_process(
+                    source.samples.as_ptr(),
+                    source.frames(),
+                    output.as_mut_ptr(),
+                    frames,
+                    channels as u32,
+                    source.sample_rate,
+                    rate,
+                    transpose_semitones,
+                    cancel.map_or(std::ptr::null_mut(), |flag| {
+                        std::ptr::from_ref(flag).cast_mut().cast()
+                    }),
+                    native_cancelled,
+                )
+            };
+            check_cancelled(cancel)?;
+            ensure!(status == 1, "Bungee audio preparation failed");
+            let result = AudioData {
+                sample_rate: source.sample_rate,
+                channels,
+                samples: output,
+            };
+            result.validate()?;
+            return Ok(result);
+        }
+        AudioProcessingAlgorithm::Signalsmith => {}
+    }
     // SAFETY: validated mono/stereo and supported sample rate; C++ contains all exceptions.
     let state = Stretch(
-        NonNull::new(unsafe { rill_stretch_create(channels as u32, source.sample_rate) })
-            .context("Initialize audio stretcher")?,
+        NonNull::new(unsafe {
+            rill_stretch_create(channels as u32, source.sample_rate, transpose_semitones)
+        })
+        .context("Initialize audio stretcher")?,
     );
     let handle = state.0.as_ptr();
     // SAFETY: handle is alive and uniquely owned for this entire preparation.
@@ -162,6 +231,15 @@ pub(crate) fn prepare_stretched(
     result.validate()?;
     check_cancelled(cancel)?;
     Ok(result)
+}
+
+unsafe extern "C" fn native_cancelled(context: *mut c_void) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    // SAFETY: prepare_processed passes a live AtomicBool reference and the
+    // native call finishes before that reference can expire.
+    i32::from(unsafe { &*context.cast::<AtomicBool>() }.load(Ordering::Acquire))
 }
 
 fn copy_output(

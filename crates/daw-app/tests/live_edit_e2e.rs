@@ -46,6 +46,9 @@ impl Fixture {
         }
     }
     fn app(&self) -> (Harness, u64, u64, u64, u64) {
+        self.app_with_audio(false)
+    }
+    fn app_with_audio(&self, tonal_audio: bool) -> (Harness, u64, u64, u64, u64) {
         let mut app = Harness::with_virtual_audio(Some(self.plugins.path()), Some(&self.host));
         let mut project = Project::new();
         project.tempo = 120.0;
@@ -88,7 +91,16 @@ impl Fixture {
         AudioData {
             sample_rate: 48_000,
             channels: 1,
-            samples: vec![0.1; 96_000],
+            samples: if tonal_audio {
+                (0..96_000)
+                    .map(|frame| {
+                        (std::f64::consts::TAU * 440.0 * frame as f64 / 48_000.0).sin() as f32
+                            * 0.04
+                    })
+                    .collect()
+            } else {
+                vec![0.1; 96_000]
+            },
         }
         .write_wav(&path)
         .unwrap();
@@ -96,7 +108,7 @@ impl Fixture {
         track.gain = 1.0;
         track.clips.push(Clip::audio(
             "Future audio",
-            4.0,
+            if tonal_audio { 0.0 } else { 4.0 },
             4.0,
             path.to_string_lossy(),
         ));
@@ -652,6 +664,139 @@ fn stretching_midi_and_audio_preserves_running_plugins_sustain_and_output() {
         let state = settled(&mut app);
         assert_eq!(track(&state, track_id)["clips"][0]["source_rate"], 1.0);
         previous = pump_frames(&mut app, &previous, [0.1, 0.1], true, 2048);
+        fixture.assert_instances(&instances);
+    }
+    app.quit();
+}
+
+#[test]
+fn audio_pitch_and_algorithm_edits_keep_running_plugins_queue_and_audible_output() {
+    let fixture = Fixture::new();
+    let (mut app, _, audio_track, _, _) = fixture.app_with_audio(true);
+    let initial = app.inspect();
+    let close_pitch = |app: &mut Harness| {
+        for _ in 0..3 {
+            let state = app.inspect();
+            if !state["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|text| text == "Transpose")
+            {
+                return;
+            }
+            app.key("Escape");
+        }
+        panic!("Pitch popup did not dismiss");
+    };
+    let pump_tone = |app: &mut Harness, previous: &Value, pitch: f64| {
+        let state = app.command(json!({"command":"pump_audio", "frames":8192}));
+        for field in [
+            "engine_id",
+            "generation",
+            "underruns",
+            "render_errors",
+            "edit_errors",
+        ] {
+            assert_eq!(
+                state["engine"][field], previous["engine"][field],
+                "{field} changed during pitch editing"
+            );
+        }
+        assert_eq!(state["engine"]["playing"], true);
+        assert_eq!(state["playback_loading"], false);
+        assert!(
+            state["engine"]["position_beats"].as_f64().unwrap()
+                > previous["engine"]["position_beats"].as_f64().unwrap()
+        );
+        let samples = state["audio_output"].as_array().unwrap();
+        assert_eq!(samples.len(), 8192);
+        for frame in samples {
+            let left = frame[0].as_f64().unwrap();
+            let right = frame[1].as_f64().unwrap();
+            assert!(left.is_finite() && right.is_finite());
+            assert!(
+                left.abs() + right.abs() > 0.01,
+                "a held synth voice must cover the edit continuously"
+            );
+        }
+        // The held fixture instrument contributes exactly 0.1. Removing that
+        // DC level exposes the audio clip's actual sounding pitch after queued
+        // pre-edit blocks and the existing effect delay have played through.
+        let tone: Vec<_> = samples[4096..]
+            .iter()
+            .map(|frame| frame[0].as_f64().unwrap() - 0.1)
+            .collect();
+        let crossings = tone
+            .windows(2)
+            .filter(|pair| pair[0] <= 0.0 && pair[1] > 0.0)
+            .count();
+        let frequency = crossings as f64 * 48_000.0 / tone.len() as f64;
+        let expected = 440.0 * 2.0_f64.powf(pitch / 12.0);
+        assert!(
+            (frequency - expected).abs() < 18.0,
+            "live pitch {frequency} Hz, expected {expected} Hz"
+        );
+        let rms =
+            (tone.iter().map(|sample| sample * sample).sum::<f64>() / tone.len() as f64).sqrt();
+        assert!(
+            (0.01..0.06).contains(&rms),
+            "the edited audio voice must keep sounding: {rms}"
+        );
+        state
+    };
+    let mut previous = pump_tone(&mut app, &initial, 0.0);
+    let instances = fixture.logs();
+    let note_ons = fixture.note_events(60, true);
+    let note_offs = fixture.note_events(60, false);
+    app.click("Future audio");
+    app.click("Window");
+    app.click("Clip Editor");
+    for (pitch, algorithm) in [
+        (12.0, "Signalsmith"),
+        (12.0, "Bungee"),
+        (-12.0, "Bungee"),
+        (-12.0, "Signalsmith"),
+    ] {
+        let state = app.inspect();
+        let processing = &track(&state, audio_track)["clips"][0]["content"]["Audio"]["processing"];
+        let old_pitch = processing["transpose_semitones"].as_f64().unwrap();
+        app.click(&if old_pitch == 0.0 {
+            "Pitch".into()
+        } else {
+            format!("Pitch {old_pitch:+.2} st")
+        });
+        if old_pitch != pitch {
+            let state = app.inspect();
+            let rect = &state["audio_transpose_rect"];
+            let at = (
+                (rect[0].as_f64().unwrap() + rect[2].as_f64().unwrap()) * 0.5,
+                (rect[1].as_f64().unwrap() + rect[3].as_f64().unwrap()) * 0.5,
+            );
+            pointer(&mut app, "double_click", at, at);
+            app.command(json!({"command":"key", "key":"A", "cmd":true}));
+            app.command(json!({"command":"text", "text":pitch.to_string()}));
+            app.key("Enter");
+        }
+        let old_algorithm = processing["algorithm"].as_str().unwrap();
+        if old_algorithm != algorithm {
+            app.click(old_algorithm);
+            app.click(algorithm);
+        }
+        close_pitch(&mut app);
+        let state = settled(&mut app);
+        let processing = &track(&state, audio_track)["clips"][0]["content"]["Audio"]["processing"];
+        assert_eq!(processing["transpose_semitones"], pitch);
+        assert_eq!(processing["algorithm"], algorithm);
+        previous = pump_tone(&mut app, &previous, pitch);
+        fixture.assert_instances(&instances);
+        assert_eq!(fixture.note_events(60, true), note_ons);
+        assert_eq!(fixture.note_events(60, false), note_offs);
+    }
+    for redo in [false, true] {
+        undo(&mut app, redo);
+        settled(&mut app);
+        previous = pump_tone(&mut app, &previous, -12.0);
         fixture.assert_instances(&instances);
     }
     app.quit();

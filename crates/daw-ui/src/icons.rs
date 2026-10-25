@@ -58,6 +58,9 @@ pub enum Icon {
     Back,
     More,
     Grip,
+    View,
+    ChevronDown,
+    ChevronRight,
 }
 
 impl Icon {
@@ -119,6 +122,7 @@ impl Icon {
             "Semitone down" | "Octave down" => Self::Down,
             "Back" => Self::Back,
             "More" => Self::More,
+            "View" => Self::View,
             "Add point" | "Add parameter" | "New" => Self::Add,
             _ => return None,
         })
@@ -147,6 +151,26 @@ impl Icon {
             painter.circle_stroke(point(x, y), r * size / 24.0, stroke);
         };
         match self {
+            Self::View => {
+                line(&[
+                    (2., 12.),
+                    (5., 8.),
+                    (8., 6.),
+                    (12., 5.),
+                    (16., 6.),
+                    (19., 8.),
+                    (22., 12.),
+                    (19., 16.),
+                    (16., 18.),
+                    (12., 19.),
+                    (8., 18.),
+                    (5., 16.),
+                    (2., 12.),
+                ]);
+                circle(12., 12., 3.5);
+            }
+            Self::ChevronDown => line(&[(5., 9.), (12., 16.), (19., 9.)]),
+            Self::ChevronRight => line(&[(9., 5.), (16., 12.), (9., 19.)]),
             Self::Warning => {
                 line(&[(12., 3.), (22., 21.), (2., 21.), (12., 3.)]);
                 line(&[(12., 9.), (12., 14.)]);

@@ -899,6 +899,11 @@ impl Harness {
             })).collect::<Vec<_>>(),
         });
         state["revision"] = json!(self.app.revision);
+        state["audio_transpose_rect"] = json!(
+            self.ctx
+                .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("audio_transpose_rect")))
+                .map(|rect| [rect.left(), rect.top(), rect.right(), rect.bottom()])
+        );
         state["playback_loading"] = json!(self.app.loading.is_some());
         state["engine"] = self.app.engine.as_ref().map_or(Value::Null, |engine| {
             let s = engine.snapshot();

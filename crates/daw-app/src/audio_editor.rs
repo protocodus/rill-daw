@@ -62,6 +62,7 @@ enum Edit {
     Clone,
     Unlink,
     Gain(f32),
+    Processing(AudioProcessing),
     Fades(f64, f64, FadeCurve, FadeCurve),
     Reverse,
     Split(f64),
@@ -95,6 +96,7 @@ impl DawApp {
             fade_out_curve,
             reverse,
             envelope,
+            processing,
             ..
         } = &clip.content
         else {
@@ -308,6 +310,10 @@ impl DawApp {
             gain_rect = response.rect;
             if response.changed() {
                 edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
+            }
+            let mut processing = *processing;
+            if audio_processing_menu(ui, &mut processing) {
+                edit = Some(Edit::Processing(processing));
             }
         });
         if matches!(state.tool, EditorTool::FadeIn | EditorTool::FadeOut) {
@@ -571,6 +577,11 @@ impl DawApp {
                         self.edit_label = Some("Make clip independent".into());
                     }),
                 Edit::Gain(gain) => self.project.set_audio_gain(track, clip.id, gain),
+                Edit::Processing(processing) => {
+                    self.edit_label = Some("Change audio pitch and algorithm".into());
+                    self.project
+                        .set_audio_processing(track, clip.id, processing)
+                }
                 Edit::Fades(fi, fo, fic, foc) => self
                     .project
                     .set_audio_fades(track, clip.id, fi, fo, fic, foc),
@@ -606,6 +617,68 @@ impl DawApp {
             d.insert_temp(id, state);
         });
     }
+}
+
+/// The same source-processing controls are available from the focused audio
+/// editor and clip properties. All widgets come from the component library.
+pub(crate) fn audio_processing_menu(ui: &mut egui::Ui, processing: &mut AudioProcessing) -> bool {
+    let before = *processing;
+    let label = if processing.transpose_semitones == 0.0 {
+        "Pitch".into()
+    } else {
+        format!("Pitch {:+.2} st", processing.transpose_semitones)
+    };
+    daw_ui::choice_menu(ui, label, |ui| {
+        daw_ui::form_grid(ui, "audio_processing", |ui| {
+            let label = daw_ui::text::label(ui, "Transpose");
+            let response = ui
+                .add(
+                    daw_ui::number(&mut processing.transpose_semitones)
+                        .range(-24.0..=24.0)
+                        .speed(0.05)
+                        .max_decimals(2)
+                        .suffix(" st"),
+                )
+                .labelled_by(label.id)
+                .on_hover_text("Semitones · 0.01 st = 1 cent · duration stays unchanged");
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(egui::Id::new("audio_transpose_rect"), response.rect)
+            });
+            ui.end_row();
+            daw_ui::text::label(ui, "Algorithm");
+            daw_ui::choice_menu(ui, processing.algorithm.name(), |ui| {
+                for algorithm in AudioProcessingAlgorithm::ALL {
+                    daw_ui::selectable_value(
+                        ui,
+                        &mut processing.algorithm,
+                        algorithm,
+                        algorithm.name(),
+                    )
+                    .on_hover_text(match algorithm {
+                        AudioProcessingAlgorithm::Signalsmith => {
+                            "Signalsmith Stretch · default polyphonic pitch and time processing"
+                        }
+                        AudioProcessingAlgorithm::Bungee => {
+                            "Bungee Basic · alternative pitch and time processing"
+                        }
+                    });
+                }
+            })
+            .response
+            .on_hover_text("Used for both pitch changes and pitch-preserving stretching");
+            ui.end_row();
+        });
+        if ui
+            .add_enabled(
+                processing.transpose_semitones != 0.0,
+                daw_ui::button_widget("Reset pitch"),
+            )
+            .clicked()
+        {
+            processing.transpose_semitones = 0.0;
+        }
+    });
+    *processing != before
 }
 
 /// Measure only when fitting, using the displayed source window and envelope.

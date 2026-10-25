@@ -1,4 +1,4 @@
-use crate::{AudioCrossfade, AudioEnvelope, AutomationLane, FadeCurve};
+use crate::{AudioCrossfade, AudioEnvelope, AudioProcessing, AutomationLane, FadeCurve};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -196,6 +196,8 @@ pub enum ClipContent {
     },
     Audio {
         path: String,
+        #[serde(default)]
+        processing: AudioProcessing,
         gain: f32,
         fade_in: f64,
         fade_out: f64,
@@ -264,6 +266,7 @@ impl Clip {
             source_rate: 1.0,
             content: ClipContent::Audio {
                 path: path.into(),
+                processing: AudioProcessing::default(),
                 gain: 1.0,
                 fade_in: 0.0,
                 fade_out: 0.0,
@@ -844,6 +847,7 @@ impl Project {
                     }
                     ClipContent::Audio {
                         path,
+                        processing,
                         gain,
                         fade_in,
                         fade_out,
@@ -856,6 +860,7 @@ impl Project {
                             "Audio clip is on a MIDI track"
                         );
                         ensure!(!path.is_empty(), "Missing audio source path");
+                        processing.validate()?;
                         if let Some(crossfade) = crossfade {
                             crossfade.validate()?;
                         }
@@ -916,7 +921,7 @@ impl Project {
             serde_json::to_writer_pretty(
                 &mut writer,
                 &ProjectFile {
-                    version: 2,
+                    version: 3,
                     project: self.clone(),
                 },
             )?;
@@ -951,7 +956,7 @@ impl Project {
         let envelope: ProjectFile =
             serde_json::from_reader(BufReader::new(file)).context("Read project JSON")?;
         ensure!(
-            (1..=2).contains(&envelope.version),
+            (1..=3).contains(&envelope.version),
             "Unsupported project version {}",
             envelope.version
         );

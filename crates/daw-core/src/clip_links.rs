@@ -32,6 +32,7 @@ fn same_content(a: &ClipContent, a_length: f64, b: &ClipContent, b_length: f64) 
         (
             ClipContent::Audio {
                 path: ap,
+                processing: apr,
                 gain: ag,
                 fade_in: ai,
                 fade_out: ao,
@@ -43,6 +44,7 @@ fn same_content(a: &ClipContent, a_length: f64, b: &ClipContent, b_length: f64) 
             },
             ClipContent::Audio {
                 path: bp,
+                processing: bpr,
                 gain: bg,
                 fade_in: bi,
                 fade_out: bo,
@@ -54,6 +56,7 @@ fn same_content(a: &ClipContent, a_length: f64, b: &ClipContent, b_length: f64) 
             },
         ) => {
             ap == bp
+                && apr == bpr
                 && ag == bg
                 && ai == bi
                 && ao == bo
