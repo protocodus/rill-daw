@@ -23,7 +23,25 @@ The headless tests cover application behavior, UI event handling, model changes,
 
 `popup_backdrop_e2e` inspects actual paint order to require one theme-aware dim layer behind the active popup. It covers utilities, nested navigation, menu-bar and context menus, output and color pickers, combo boxes over both workspaces and utilities, and the unsaved-project confirmation. Closing or cancelling restores the caller and removes the dim when no popup remains; both appearances are exercised.
 
-`parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Real VST/editor coverage remains in the opt-in installed-plugin tests.
+`parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Third-party compatibility and native editor coverage remain in the opt-in installed-plugin tests.
+
+`plugin_loading_e2e` compiles a native VST3 fixture and runs it through the production
+`daw-plugin-host`, with no protocol substitute. The fixture terminates its process
+if the host attempts to create an editor during audio loading or parameter reads.
+Its lifecycle calls take 200 ms to guard against applying audio-block deadlines
+to legitimate instrument initialization. Rill permits up to 30 seconds for
+start/stop and configuration while retaining 100 ms limits for audio processing;
+the native plugin tests also verify both timeout classes terminate stalled workers.
+The app scans the bundle, opens an assigned MIDI project, edits its Level parameter
+through the parameter browser, exports finite non-silent audio with the expected
+level change and note-off silence, then saves and restarts to verify identical
+audio from the recalled archive. It needs no installed plugin, desktop, or audio
+hardware. Build the production worker before running this target alone:
+
+```sh
+cargo build --locked --workspace --bins
+cargo test --locked -p daw-app --test plugin_loading_e2e
+```
 
 `native_parameter_automation_e2e` uses an isolated editor-process fixture to send the production native automation IPC event into the running app. It checks exact instrument/effect ownership, parameter ID zero, current-value initialization, reuse, Undo/Redo, save/reopen, and rejected requests during document confirmation. An opaque-preset scenario checks that the snapshot precedes lane creation, so Undo removes only the lane and preserves the current preset. The fixture never opens a native window or audio device. Host COM tests separately invoke the actual VST3 context-menu interfaces, covering both plugin-rendered copied targets and host-rendered popup callbacks, eligibility, stale targets, and thread/lifetime checks. Shared-menu and worker tests cover nested/disabled entries and process cancellation/failure. These automated layers do not claim compatibility with every third-party editor; native editors must expose the VST3 host-menu hook.
 

@@ -104,7 +104,11 @@ pub struct PluginInfo {
     pub has_midi_input: bool,
     /// Whether the plugin produces MIDI output
     pub has_midi_output: bool,
-    /// Whether the plugin has a GUI
+    /// Whether a native editor may be available.
+    ///
+    /// This is a controller-presence hint, not a successful editor-creation probe. Plugins
+    /// without a custom view can still have controllers; [`Plugin::open_editor`] validates
+    /// availability when the editor is requested. Loading never creates a view for this flag.
     pub has_gui: bool,
 }
 
@@ -2172,7 +2176,11 @@ impl Plugin {
         self.audio_callback = Some(Box::new(callback));
     }
 
-    /// Check if the plugin has an editor GUI
+    /// Check whether a native editor may be available, without creating a view.
+    ///
+    /// A controller is an optimistic capability hint: some controllers expose parameters but
+    /// no custom editor. [`Self::open_editor`] reports that case when opening is requested.
+    /// This query never calls `IEditController::createView` or initializes plugin GUI code.
     pub fn has_editor(&self) -> bool {
         self.internal
             .as_ref()

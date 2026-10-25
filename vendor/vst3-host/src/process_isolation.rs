@@ -17,10 +17,12 @@ pub(crate) const DEFAULT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Default deadline for the slow class of commands ([`is_slow_command`]).
 ///
-/// Loading a plugin binary or serializing a large state blob legitimately takes far longer
-/// than a process block, so those commands get their own (longer) deadline: the short
-/// per-block deadline exists to catch a plugin hung inside `process()`, and applying it to a
-/// cold-cache module load would SIGKILL a helper that is merely slow.
+/// Loading a plugin, changing its processing configuration, enumerating all parameters,
+/// and serializing state can legitimately take far longer than a process block. For example,
+/// `setActive(true)` may
+/// allocate voices or load samples after the module itself has loaded successfully. These
+/// lifecycle operations get their own bounded deadline; audio processing keeps its short
+/// per-block deadline so a hung `process()` still cannot stall playback indefinitely.
 pub(crate) const DEFAULT_SLOW_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Maximum bytes accepted for a single line on the protocol stream. Longer lines are
@@ -47,12 +49,23 @@ const MAX_WIRE_BUSES: i32 = 256;
 /// sum of their 4096-entry limits.
 const MAX_WIRE_PARAMETER_CHANGES: usize = 8192;
 
-/// Whether a command belongs to the slow class — module load and state I/O — which gets
-/// [`DEFAULT_SLOW_COMMAND_TIMEOUT`] instead of the per-block response deadline.
+/// Whether a command belongs to the slow class — lifecycle changes, full metadata, and state
+/// I/O — which gets [`DEFAULT_SLOW_COMMAND_TIMEOUT`] instead of the per-block response deadline.
 pub(crate) fn is_slow_command(command: &HostCommand) -> bool {
     matches!(
         command,
         HostCommand::LoadPlugin { .. }
+            | HostCommand::UnloadPlugin
+            | HostCommand::StartProcessing
+            | HostCommand::StopProcessing
+            | HostCommand::Reconfigure { .. }
+            | HostCommand::SetProcessMode { .. }
+            | HostCommand::SetBusActive { .. }
+            | HostCommand::SetBusArrangements { .. }
+            | HostCommand::ServiceHostRequests
+            | HostCommand::CreateGui
+            | HostCommand::CloseGui
+            | HostCommand::GetAllParameters
             | HostCommand::SaveState
             | HostCommand::LoadState { .. }
             | HostCommand::GetProgramData { .. }
@@ -1430,8 +1443,8 @@ impl PluginHostProcess {
         self.timeout = timeout;
     }
 
-    /// Set the deadline used for the slow command class — loading a plugin and saving or
-    /// restoring its state. Never shorter than the per-command timeout.
+    /// Set the deadline used for lifecycle changes, full metadata, and state I/O. Never shorter
+    /// than the per-command timeout; audio processing always retains the per-command timeout.
     pub fn set_slow_command_timeout(&mut self, timeout: Duration) {
         self.slow_timeout = timeout;
     }
@@ -2658,6 +2671,37 @@ mod wire_tests {
 
     #[test]
     fn slow_commands_are_classified_apart_from_the_per_block_ones() {
+        for command in [
+            HostCommand::StartProcessing,
+            HostCommand::StopProcessing,
+            HostCommand::UnloadPlugin,
+            HostCommand::Reconfigure {
+                sample_rate: 48000.0,
+                block_size: 256,
+            },
+            HostCommand::SetProcessMode {
+                mode: crate::plugin::ProcessMode::Offline,
+            },
+            HostCommand::SetBusActive {
+                media_type: crate::audio::MediaType::Audio,
+                direction: crate::audio::BusDirection::Output,
+                bus_index: 0,
+                active: true,
+            },
+            HostCommand::SetBusArrangements {
+                inputs: vec![],
+                outputs: vec![],
+            },
+            HostCommand::ServiceHostRequests,
+            HostCommand::CreateGui,
+            HostCommand::CloseGui,
+            HostCommand::GetAllParameters,
+        ] {
+            assert!(
+                is_slow_command(&command),
+                "Lifecycle deadline missing: {command:?}"
+            );
+        }
         assert!(is_slow_command(&HostCommand::SaveState));
         assert!(is_slow_command(&HostCommand::LoadState {
             data: vec![],
@@ -2676,7 +2720,12 @@ mod wire_tests {
             inputs: vec![],
             frames: 64
         }));
-        assert!(!is_slow_command(&HostCommand::GetAllParameters));
+        assert!(!is_slow_command(&HostCommand::ProcessBuses {
+            inputs: vec![],
+            outputs: vec![],
+            frames: 64,
+        }));
+        assert!(!is_slow_command(&HostCommand::GetParameter { id: 1 }));
     }
 
     /// A helper that never responds (a hung plugin) must not hang the host: `send_command`
