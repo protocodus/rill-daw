@@ -16,10 +16,11 @@ fn lifecycle_delay() {
     std::thread::sleep(std::time::Duration::from_millis(LIFECYCLE_DELAY_MS));
 }
 
-fn text8<const N: usize>(value: &str) -> [i8; N] {
+fn text8<const N: usize>(value: &str) -> [char8; N] {
     let mut result = [0; N];
     for (dest, source) in result.iter_mut().take(N - 1).zip(value.bytes()) {
-        *dest = source as i8;
+        // SDK char8 follows the platform C char signedness (u8 on ARM Linux).
+        *dest = source as char8;
     }
     result
 }

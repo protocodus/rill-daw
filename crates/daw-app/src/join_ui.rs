@@ -86,7 +86,7 @@ impl DawApp {
         if let Some(neighbor) = track
             .clips
             .iter()
-            .filter(|clip| clip.id != current.id)
+            .filter(|clip| clip.id != current.id && !clip.is_take_source())
             .min_by(|a, b| {
                 (a.start - current.start)
                     .abs()
@@ -110,7 +110,7 @@ impl DawApp {
                     .filter(|clip| self.join_ui.selected.contains(&clip.id))
                     .map(Clip::end)
                     .fold(0.0, f64::max);
-                for clip in &track.clips {
+                for clip in track.clips.iter().filter(|clip| !clip.is_take_source()) {
                     if clip.start < end && clip.end() > start {
                         self.join_ui.selected.insert(clip.id);
                     }
@@ -146,7 +146,11 @@ impl DawApp {
                     egui::ScrollArea::vertical()
                         .max_height(300.0)
                         .show(ui, |ui| {
-                            let mut clips: Vec<_> = track.clips.iter().collect();
+                            let mut clips: Vec<_> = track
+                                .clips
+                                .iter()
+                                .filter(|clip| !clip.is_take_source())
+                                .collect();
                             clips.sort_by(|a, b| a.start.total_cmp(&b.start));
                             for clip in clips {
                                 ui.push_id(clip.id, |ui| {

@@ -272,6 +272,13 @@ pub fn detect_transients(
 impl Project {
     pub fn set_audio_gain(&mut self, track: u64, clip: u64, gain: f32) -> Result<()> {
         ensure!(gain.is_finite() && gain >= 0.0, "Invalid audio gain");
+        ensure!(
+            !self
+                .clip(track, clip)
+                .context("Clip not found")?
+                .is_take_source(),
+            "Choose a take before editing it"
+        );
         let ClipContent::Audio { gain: value, .. } = &mut self
             .clip_mut(track, clip)
             .context("Clip not found")?
@@ -293,6 +300,7 @@ impl Project {
         out_curve: FadeCurve,
     ) -> Result<()> {
         let clip = self.clip_mut(track, clip_id).context("Clip not found")?;
+        ensure!(!clip.is_take_source(), "Choose a take before editing it");
         let linked = clip.link_group.is_some();
         let fade_limit = if linked {
             match &clip.content {
@@ -336,6 +344,13 @@ impl Project {
     }
 
     pub fn reverse_audio_clip(&mut self, track: u64, clip: u64) -> Result<()> {
+        ensure!(
+            !self
+                .clip(track, clip)
+                .context("Clip not found")?
+                .is_take_source(),
+            "Choose a take before editing it"
+        );
         let ClipContent::Audio { reverse, .. } = &mut self
             .clip_mut(track, clip)
             .context("Clip not found")?
@@ -364,6 +379,7 @@ impl Project {
         let mut clip = original.clone();
         clip.id = new_id();
         clip.link_group = None;
+        clip.audio_take = None;
         clip.start = start;
         let id = clip.id;
         let track_id = track.id;

@@ -113,6 +113,7 @@ struct AudioClip {
     source_alias: std::path::PathBuf,
     source_rate: f64,
     processing: daw_core::AudioProcessing,
+    is_preview: bool,
     original: Arc<AudioData>,
     start: u64,
     source_offset: f64,
@@ -408,6 +409,10 @@ struct RenderTrack {
     pending_error: Option<String>,
     audio: Arc<Vec<AudioClip>>,
     audio_segments: Arc<Vec<audio_schedule::Segment>>,
+    // A short source-only correction bridges edits/refinement before inserts.
+    // Preallocated at graph construction; no retained asset is dropped by DSP.
+    audio_transition: Vec<[f32; 2]>,
+    audio_transition_cursor: usize,
     notes: Arc<Vec<ScheduledNote>>,
     events: Arc<Vec<Event>>,
     note_order: Arc<Vec<usize>>,
@@ -582,6 +587,19 @@ impl RenderTrack {
                     }
                 }
             }
+            let transition_frames = count.min(
+                self.audio_transition
+                    .len()
+                    .saturating_sub(self.audio_transition_cursor),
+            );
+            for index in 0..transition_frames {
+                let cursor = self.audio_transition_cursor + index;
+                let gain = 1.0
+                    - cursor as f64 / self.audio_transition.len().saturating_sub(1).max(1) as f64;
+                self.mix_left[index] += f64::from(self.audio_transition[cursor][0]) * gain;
+                self.mix_right[index] += f64::from(self.audio_transition[cursor][1]) * gain;
+            }
+            self.audio_transition_cursor += transition_frames;
         }
         // Convert once after every source/bus contribution is accumulated.
         // Plug-in buffers and graph edges retain their f32 representation.
@@ -809,6 +827,9 @@ impl Renderer {
                 "Track processing latency exceeds ten seconds"
             );
             for clip in &track.clips {
+                if clip.is_take_source() {
+                    continue;
+                }
                 end_sample = end_sample.max(to_sample(clip.start + clip.length));
             }
             ensure!(
@@ -823,6 +844,7 @@ impl Renderer {
                     sample_rate,
                     options,
                     cancel,
+                    preview: false,
                 },
                 &mut audio_cache,
                 &mut cache_bytes,
@@ -932,6 +954,8 @@ impl Renderer {
                 pending_error: None,
                 audio: content.audio,
                 audio_segments: content.audio_segments,
+                audio_transition: vec![[0.0; 2]; (sample_rate as usize / 200).max(2)],
+                audio_transition_cursor: (sample_rate as usize / 200).max(2),
                 notes: content.notes,
                 events: content.events,
                 note_order: content.note_order,
@@ -1174,6 +1198,7 @@ impl Renderer {
         self.source_sample = sample;
         self.logical_sample = sample;
         for track in self.tracks.iter_mut().flatten() {
+            track.audio_transition_cursor = track.audio_transition.len();
             for parameter in &mut track.instrument_automation {
                 parameter.previous = None;
             }

@@ -1,6 +1,7 @@
 mod app;
 mod arrangement;
 mod audio_editor;
+mod audio_takes_ui;
 mod automation;
 mod automation_editor;
 mod crossfade_ui;

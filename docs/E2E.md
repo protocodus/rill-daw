@@ -285,3 +285,26 @@ The headless driver's default label click prefers an active utility over an iden
 `audio_pitch_e2e` changes transpose and processing engine through the running audio editor and Properties. It measures exported pitch, exact duration and stereo relationships for both bundled engines, checks Reset, ghost sharing and independent duplicates, Undo/Redo, archive/restart recall, and combined arranger stretching plus transposition. `live_edit_e2e` also changes the pitch and engine of sounding audio while checking continuous output, retained instrument/effect workers, sustained MIDI voices and unchanged transport/queue generation.
 
 The piano-roll suite checks independent scale/chord highlighting and scale-only rows, view changes without source/history edits, folded drawing/dragging/resize/audition/velocity, hidden-note safety for selection and deletion, and Fit/root changes with every note hidden. Short-note body dragging and fast copy/paste are regression cases. Shared component tests cover distinct action/choice/view menu styles in both themes, nested settings, Unicode accessible names, compact wrapping, keyboard dismissal and disabled controls.
+
+### Audio comping and progressive preparation
+
+`audio_gestures_e2e` covers body moves, both trim edges, independent Shift-copy,
+time-range split/trim, pitch-preserving stretch, marker navigation, transient and
+clip-edge magnet snapping with Shift bypass, and presentation-only view options.
+Rendered sample and pitch oracles verify the gestures' musical results.
+
+`audio_takes_e2e` imports alternatives through the actual Takes popup and native
+picker result boundary, selects whole takes and time ranges, checks both smooth
+comp boundaries against exported samples, splits a comp without changing audio,
+undoes and archives retained alternatives, layers independent overdubs, and
+changes takes through a running virtual audio callback. Cancelled/failed imports
+must leave the project and undo history unchanged. The headless
+`audio_take_files` command supplies only the next picker result (`paths`: array or
+null); it performs no edit itself.
+
+`live_edit_e2e` uses long tonal audio to exercise preview/refinement with the chosen
+Signalsmith and Bungee engines while checking retained instrument/effect process
+identities and musical continuity. Engine tests distinguish proxy/full cache
+entries, reject cancelled/stale refinements, verify exact duration/pitch and stereo
+relationships, assert allocation-free swaps, and keep offline exports at full
+quality. None of these tests opens a native desktop or physical audio device.

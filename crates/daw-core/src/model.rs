@@ -178,6 +178,9 @@ pub struct Clip {
     /// Shared source identity. Arrangement bounds remain local to this instance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link_group: Option<u64>,
+    /// Retained take candidates are archived with the project but never played.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_take: Option<crate::AudioTakeMembership>,
     pub start: f64,
     pub length: f64,
     /// Source beat at the clip's left edge. Trimming never destroys source notes.
@@ -242,6 +245,7 @@ impl Clip {
             id: new_id(),
             name: name.into(),
             link_group: None,
+            audio_take: None,
             start,
             length,
             offset: 0.0,
@@ -260,6 +264,7 @@ impl Clip {
             id: new_id(),
             name: name.into(),
             link_group: None,
+            audio_take: None,
             start,
             length,
             offset: 0.0,
@@ -299,6 +304,7 @@ impl Clip {
     fn refresh_ids(&mut self) {
         self.id = new_id();
         self.link_group = None;
+        self.audio_take = None;
         if let ClipContent::Midi { notes } = &mut self.content {
             for note in notes {
                 note.id = new_id();
@@ -527,6 +533,7 @@ impl Project {
         self.tracks
             .iter()
             .flat_map(|t| &t.clips)
+            .filter(|clip| !clip.is_take_source())
             .map(Clip::end)
             .fold(0.0, f64::max)
     }
@@ -537,6 +544,7 @@ impl Project {
             "Clip position must be finite and nonnegative"
         );
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
+        ensure!(!clip.is_take_source(), "Choose a take before moving it");
         ensure!(
             valid_range(new_start, clip.length),
             "Clip exceeds the supported timeline"
@@ -554,6 +562,7 @@ impl Project {
             .position(|clip| clip.id == clip_id)
             .context("Clip not found")?;
         let clip = &mut track.clips[index];
+        ensure!(!clip.is_take_source(), "Choose a take before splitting it");
         ensure!(
             at_beat.is_finite() && at_beat > clip.start && at_beat < clip.end(),
             "Split must be inside the clip"
@@ -575,6 +584,7 @@ impl Project {
         } else {
             right.refresh_ids();
         }
+        right.audio_take = clip.audio_take;
         right.start = at_beat;
         if let ClipContent::Audio { crossfade, .. } = &mut right.content {
             *crossfade = None;
@@ -649,6 +659,10 @@ impl Project {
             .iter()
             .position(|clip| clip.id == clip_id)
             .context("Clip not found")?;
+        ensure!(
+            !track.clips[index].is_take_source(),
+            "Detach the take group before removing a retained take"
+        );
         Ok(track.clips.remove(index))
     }
 
@@ -663,6 +677,7 @@ impl Project {
     ) -> Result<()> {
         ensure!(valid_range(new_start, new_length), "Invalid clip bounds");
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
+        ensure!(!clip.is_take_source(), "Choose a take before trimming it");
         let delta = new_start - clip.start;
         let new_offset = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
             clip.offset + (clip.length - delta - new_length) * clip.source_rate
@@ -697,6 +712,7 @@ impl Project {
     /// Change timing without changing source data, placement, or ghost membership.
     pub fn stretch_clip(&mut self, track_id: u64, clip_id: u64, new_length: f64) -> Result<()> {
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
+        ensure!(!clip.is_take_source(), "Choose a take before stretching it");
         ensure!(
             valid_range(clip.start, new_length),
             "Invalid stretch bounds"
@@ -746,8 +762,10 @@ impl Project {
             "Invalid loop range"
         );
         self.validate_linked_clips()?;
+        self.validate_audio_takes()?;
         let mut ids = HashSet::new();
         let mut link_groups = HashSet::new();
+        let mut take_groups = HashSet::new();
         let mut midi_groups = HashSet::new();
         let mut automation_targets = HashSet::new();
         let mut check_id = |id| -> Result<()> {
@@ -807,6 +825,11 @@ impl Project {
             }
             for clip in &track.clips {
                 check_id(clip.id)?;
+                if let Some(group) = clip.take_group()
+                    && take_groups.insert(group)
+                {
+                    check_id(group)?;
+                }
                 if let Some(group) = clip.link_group
                     && link_groups.insert(group)
                 {
@@ -921,7 +944,7 @@ impl Project {
             serde_json::to_writer_pretty(
                 &mut writer,
                 &ProjectFile {
-                    version: 3,
+                    version: 4,
                     project: self.clone(),
                 },
             )?;
@@ -956,7 +979,7 @@ impl Project {
         let envelope: ProjectFile =
             serde_json::from_reader(BufReader::new(file)).context("Read project JSON")?;
         ensure!(
-            (1..=3).contains(&envelope.version),
+            (1..=4).contains(&envelope.version),
             "Unsupported project version {}",
             envelope.version
         );
@@ -992,7 +1015,10 @@ impl Project {
                 }
             }
             for clip in &mut track.clips {
-                max_id = max_id.max(clip.id).max(clip.link_group.unwrap_or(0));
+                max_id = max_id
+                    .max(clip.id)
+                    .max(clip.link_group.unwrap_or(0))
+                    .max(clip.take_group().unwrap_or(0));
                 match &mut clip.content {
                     ClipContent::Midi { notes } => {
                         for note in notes {

@@ -57,6 +57,9 @@ pub struct EngineSnapshot {
     pub generation: u64,
     pub requested_revision: u64,
     pub applied_revision: u64,
+    /// The current live edit uses a band-limited proxy while the selected
+    /// algorithm prepares the original at full rate. Export never uses proxies.
+    pub refining_audio: bool,
     pub edit_errors: u64,
     pub rendered_frames: u64,
     pub consumed_frames: u64,
@@ -830,6 +833,10 @@ impl AudioEngine {
             applied_revision: self.live_updates.as_ref().map_or(0, |updates| {
                 updates.mailbox.applied_revision.load(Ordering::Acquire)
             }),
+            refining_audio: self
+                .live_updates
+                .as_ref()
+                .is_some_and(|updates| updates.mailbox.refining_audio.load(Ordering::Acquire)),
             edit_errors: self
                 .live_updates
                 .as_ref()

@@ -55,6 +55,42 @@ fn check_cancelled(cancel: Option<&AtomicBool>) -> Result<()> {
     Ok(())
 }
 
+/// Interactive proxy only: reduce spectral bandwidth, never substitute a
+/// rate-changing resampler for the selected time/pitch algorithm. Final render
+/// preparation always processes the original at the project/output rate.
+pub(crate) fn prepare_preview(
+    source: &AudioData,
+    rate: f64,
+    semitones: f64,
+    algorithm: AudioProcessingAlgorithm,
+    cancel: Option<&AtomicBool>,
+) -> Result<AudioData> {
+    check_cancelled(cancel)?;
+    let proxy = crate::quality::prepare_audio_cancelled(
+        source.clone(),
+        24_000,
+        crate::ResampleQuality::High,
+        cancel,
+    )?;
+    let stretched = prepare_processed(&proxy, rate, semitones, algorithm, cancel)?;
+    let mut result = crate::quality::prepare_audio_cancelled(
+        stretched,
+        source.sample_rate,
+        crate::ResampleQuality::High,
+        cancel,
+    )?;
+    // Two integer rate conversions can add a handful of padded tail frames.
+    // Placement, trims and the refinement swap must use the exact same length.
+    let samples = (source.frames() as f64 / rate).ceil() as usize * source.channels;
+    result.samples.resize(samples, 0.0);
+    check_cancelled(cancel)?;
+    Ok(result)
+}
+
+pub(crate) fn preview_worthwhile(source: &AudioData) -> bool {
+    source.sample_rate >= 44_100 && source.frames() >= source.sample_rate as usize * 8
+}
+
 #[cfg(test)]
 pub(crate) fn prepare_stretched(
     source: &AudioData,

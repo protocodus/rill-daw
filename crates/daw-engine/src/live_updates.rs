@@ -24,6 +24,7 @@ struct Ready {
     sequence: u64,
     revision: u64,
     plan: PreparedLiveEdit,
+    refining: bool,
 }
 
 #[derive(Default)]
@@ -33,6 +34,8 @@ pub(super) struct LiveMailbox {
     has_ready: AtomicBool,
     #[cfg(test)]
     prepare_gate: Mutex<Option<PreparationGate>>,
+    #[cfg(test)]
+    refinement_gate: Mutex<Option<PreparationGate>>,
     retired: Mutex<Option<PreparedLiveEdit>>,
     wake: Condvar,
     shutdown: AtomicBool,
@@ -40,6 +43,7 @@ pub(super) struct LiveMailbox {
     sequence: AtomicU64,
     pub requested_revision: AtomicU64,
     pub applied_revision: AtomicU64,
+    pub refining_audio: AtomicBool,
     pub errors: AtomicU64,
     error: Mutex<Option<(u64, String)>>,
 }
@@ -70,6 +74,8 @@ impl LiveMailbox {
                 Ok(()) => {
                     self.applied_revision
                         .store(update.revision, Ordering::Release);
+                    self.refining_audio
+                        .store(update.refining, Ordering::Release);
                     applied = true;
                 }
                 Err(error) => {
@@ -93,6 +99,19 @@ impl LiveMailbox {
     fn fail(&self, sequence: u64, message: String) {
         let mut error = self.error.lock().unwrap_or_else(|error| error.into_inner());
         if sequence == self.sequence.load(Ordering::Acquire) {
+            // A failed final pass can race the render worker consuming its
+            // already-published preview. That preview remains usable, but must
+            // not claim refinement is still running after the failure.
+            if let Some(ready) = self
+                .ready
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_mut()
+                && ready.sequence == sequence
+            {
+                ready.refining = false;
+            }
+            self.refining_audio.store(false, Ordering::Release);
             self.errors.fetch_add(1, Ordering::Relaxed);
             *error = Some((sequence, message));
         }
@@ -186,6 +205,20 @@ impl LiveUpdates {
         (entered, release)
     }
 
+    #[cfg(test)]
+    pub fn gate_next_refinement(
+        &self,
+    ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        let (started, entered) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        *self
+            .mailbox
+            .refinement_gate
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some((started, released));
+        (entered, release)
+    }
+
     pub fn take_error(&self) -> Option<String> {
         let (sequence, message) = self.mailbox.error.try_lock().ok()?.take()?;
         (sequence == self.mailbox.sequence.load(Ordering::Acquire)).then_some(message)
@@ -252,21 +285,75 @@ fn prepare_loop(mut preparer: LiveEditPreparer, shared: Arc<LiveMailbox>) {
                 }
             }
         }
-        let result = preparer.prepare_cancelled(&request.project, &shared.preparation_cancel);
-        if shared.shutdown.load(Ordering::Acquire)
-            || request.sequence != shared.sequence.load(Ordering::Acquire)
-        {
-            continue;
-        }
-        match result {
-            Ok(plan) => {
-                let next = Ready { sequence: request.sequence, revision: request.revision, plan };
-                // Replacing an obsolete ready plan destroys it on this thread.
-                let mut ready = shared.ready.lock().unwrap_or_else(|e| e.into_inner());
-                *ready = Some(next);
-                shared.has_ready.store(true, Ordering::Release);
+        for preview in [true, false] {
+            // Reclaim a superseded plan before spending time on the next pass,
+            // so a stale ready item cannot keep the preview from being applied.
+            drop(
+                shared
+                    .retired
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take(),
+            );
+            #[cfg(test)]
+            if !preview {
+                let gate = shared
+                    .refinement_gate
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take();
+                if let Some((started, released)) = gate {
+                    let _ = started.send(());
+                    while matches!(
+                        released.recv_timeout(Duration::from_millis(5)),
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                    ) && !shared.shutdown.load(Ordering::Acquire)
+                        && !shared.preparation_cancel.load(Ordering::Acquire)
+                    {
+                        thread::yield_now();
+                    }
+                }
             }
-            Err(error) => shared.fail(request.sequence, format!("Live edit preparation failed; playback continues with the previous audio: {error:#}")),
+            let result =
+                preparer.prepare_cancelled(&request.project, &shared.preparation_cancel, preview);
+            if shared.shutdown.load(Ordering::Acquire)
+                || request.sequence != shared.sequence.load(Ordering::Acquire)
+            {
+                break;
+            }
+            match result {
+                Ok(plan) => {
+                    let refining = plan.needs_refinement();
+                    let next = Ready {
+                        sequence: request.sequence,
+                        revision: request.revision,
+                        plan,
+                        refining,
+                    };
+                    // Replacing an obsolete ready plan destroys it on this thread.
+                    let mut ready = shared.ready.lock().unwrap_or_else(|e| e.into_inner());
+                    *ready = Some(next);
+                    shared.has_ready.store(true, Ordering::Release);
+                    // A cache hit or short/neutral source was already prepared at
+                    // final quality. Do not duplicate that work or publish twice.
+                    if !refining {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    let message = if preview {
+                        format!(
+                            "Live edit preparation failed; playback continues with the previous audio: {error:#}"
+                        )
+                    } else {
+                        format!(
+                            "Audio refinement failed; playback continues with the interactive preview: {error:#}"
+                        )
+                    };
+                    shared.fail(request.sequence, message);
+                    break;
+                }
+            }
         }
     }
     shared

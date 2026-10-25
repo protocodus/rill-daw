@@ -47,6 +47,7 @@ pub enum PopupKind {
     Automation,
     History,
     Crossfade,
+    AudioTakes,
     Join,
     Export,
 }
@@ -157,6 +158,8 @@ pub struct DawApp {
     pub history_open: bool,
     pub crossfade_open: bool,
     pub join_open: bool,
+    pub(crate) audio_takes_open: bool,
+    pub(crate) audio_takes_ui: crate::audio_takes_ui::AudioTakesUi,
     pub(crate) join_ui: crate::join_ui::JoinUi,
     pub last_render_errors: u64,
     render_diagnostic_engine: Option<u64>,
@@ -221,7 +224,7 @@ impl DawApp {
         let selected_clip = project
             .tracks
             .first()
-            .and_then(|t| t.clips.first())
+            .and_then(|t| t.clips.iter().find(|clip| !clip.is_take_source()))
             .map(|c| c.id);
         let mut app = Self {
             about_open: false,
@@ -274,6 +277,8 @@ impl DawApp {
             history_open: false,
             crossfade_open: false,
             join_open: false,
+            audio_takes_open: false,
+            audio_takes_ui: Default::default(),
             join_ui: Default::default(),
             last_render_errors: 0,
             render_diagnostic_engine: None,
@@ -333,6 +338,7 @@ impl DawApp {
             (self.history_open, PopupKind::History),
             (self.crossfade_open, PopupKind::Crossfade),
             (self.join_open, PopupKind::Join),
+            (self.audio_takes_open, PopupKind::AudioTakes),
             (self.export_open, PopupKind::Export),
         ] {
             if open {
@@ -356,6 +362,10 @@ impl DawApp {
         self.history_open = false;
         self.crossfade_open = false;
         self.join_open = false;
+        if self.audio_takes_open {
+            self.audio_takes_ui.invalidate_import();
+        }
+        self.audio_takes_open = false;
         self.export_open = false;
         self.view = WorkspaceView::Arrangement;
     }
@@ -406,7 +416,16 @@ impl DawApp {
                 _ => HashSet::new(),
             };
             self.selected_track = previous.selected_track;
-            self.selected_clip = clip.map(|clip| clip.id);
+            self.selected_clip = clip.and_then(|clip| {
+                if clip.is_take_source() {
+                    self.project
+                        .audio_take_regions(previous.selected_track?, clip.take_group()?)
+                        .first()
+                        .map(|region| region.id)
+                } else {
+                    Some(clip.id)
+                }
+            });
             self.last_editor_clip = previous.last_editor_clip;
             self.effect_editor_target = previous.effect_editor_target;
             self.inspector_page = previous.inspector_page;
@@ -443,6 +462,7 @@ impl DawApp {
             PopupKind::History => self.history_open = true,
             PopupKind::Crossfade => self.crossfade_open = true,
             PopupKind::Join => self.join_open = true,
+            PopupKind::AudioTakes => self.audio_takes_open = true,
             PopupKind::Export => self.export_open = true,
         }
     }
@@ -500,6 +520,7 @@ impl DawApp {
                     PopupKind::History => "History",
                     PopupKind::Crossfade => "Crossfade",
                     PopupKind::Join => "Join clips",
+                    PopupKind::AudioTakes => "Audio takes",
                     PopupKind::Export => "Export WAV",
                 };
                 self.selected_track
@@ -641,6 +662,7 @@ impl DawApp {
             PopupKind::Join => self.prepare_join(),
             PopupKind::Inspector
             | PopupKind::Crossfade
+            | PopupKind::AudioTakes
             | PopupKind::Effects
             | PopupKind::Routing
             | PopupKind::Automation
@@ -719,11 +741,14 @@ impl DawApp {
         self.playback_preview_matches_current = false;
     }
     pub fn selected(&self) -> Option<&Clip> {
-        self.project.clip(self.selected_track?, self.selected_clip?)
+        self.project
+            .clip(self.selected_track?, self.selected_clip?)
+            .filter(|clip| !clip.is_take_source())
     }
     pub fn selected_mut(&mut self) -> Option<&mut Clip> {
         self.project
             .clip_mut(self.selected_track?, self.selected_clip?)
+            .filter(|clip| !clip.is_take_source())
     }
     pub fn snapped(&self, beat: f64) -> f64 {
         if self.snap > 0.0 {
@@ -1146,6 +1171,10 @@ impl DawApp {
         self.midi_editor = Default::default();
         self.reset_views = true;
         self.project = Project::new();
+        let old_waveforms = std::mem::take(&mut self.waveforms);
+        if !old_waveforms.is_empty() {
+            std::thread::spawn(move || drop(old_waveforms));
+        }
         self.exported_file = None;
         self.waveform_warning = None;
         self.project_path = None;
@@ -1649,6 +1678,7 @@ impl DawApp {
             || self.history_open
             || self.crossfade_open
             || self.join_open
+            || self.audio_takes_open
             || self.export_open
             || self.about_open
             || self.midi_editor.generate_active()
@@ -1717,6 +1747,9 @@ impl DawApp {
                         daw_ui::ViewLink { value: WorkspaceView::Mixer, label: "Mixer", enabled: true },
                     ]) {
                         self.open_workspace(view);
+                    }
+                    if self.engine.as_ref().is_some_and(|engine| engine.snapshot().refining_audio) {
+                        daw_ui::text::note(ui, "Refining audio…");
                     }
                     ui.separator();
                     if daw_ui::button(ui, "Start")
@@ -2160,6 +2193,7 @@ impl DawApp {
                         track
                             .clips
                             .iter()
+                            .filter(|clip| !clip.is_take_source())
                             .min_by(|a, b| {
                                 (a.start - selected_start)
                                     .abs()
@@ -2234,6 +2268,16 @@ impl DawApp {
                 }
             }
             ui.separator();
+            if let Some(clip) = self
+                .selected_track
+                .and_then(|track| self.project.track(track))
+                .and_then(|track| track.clips.iter().find(|clip| clip.is_take_source()))
+                .cloned()
+                && daw_ui::button(ui, "Audio takes…").clicked()
+            {
+                self.open_audio_takes(&clip, None);
+                ui.close();
+            }
             if daw_ui::button(ui, "Add automation track…").clicked() {
                 self.start_automation_creation(ui.ctx());
                 self.open_popup(PopupKind::Automation);
@@ -2473,6 +2517,7 @@ impl DawApp {
             }
             self.vst_scan = None;
         }
+        self.poll_audio_take_import(ctx);
         self.poll_plugin_previews(ctx);
         self.poll_document_guard(ctx);
         if self.error_details.is_some() {
@@ -2502,6 +2547,7 @@ impl DawApp {
             || self.history_open
             || self.crossfade_open
             || self.join_open
+            || self.audio_takes_open
             || self.export_open
             || self.about_open;
         let focused_before_draw = self.focused_view();
@@ -2582,6 +2628,7 @@ impl DawApp {
         self.history_popup(ctx);
         self.crossfade_popup(ctx);
         self.join_popup(ctx);
+        self.audio_takes_popup(ctx);
         self.export_popup(ctx);
         self.about_popup(ctx);
         self.last_scene = if utility_open {
@@ -2708,6 +2755,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                         && a.length == b.length
                         && a.offset == b.offset
                         && a.source_rate == b.source_rate
+                        && a.audio_take == b.audio_take
                         && match (&a.content, &b.content) {
                             (ClipContent::Midi { notes: a }, ClipContent::Midi { notes: b }) => {
                                 a.len() == b.len()

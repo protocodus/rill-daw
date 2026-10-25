@@ -51,6 +51,13 @@ impl Project {
         processing: AudioProcessing,
     ) -> Result<()> {
         processing.validate()?;
+        ensure!(
+            !self
+                .clip(track, clip)
+                .context("Clip not found")?
+                .is_take_source(),
+            "Choose a take before editing it"
+        );
         let content = &mut self
             .clip_mut(track, clip)
             .context("Clip not found")?

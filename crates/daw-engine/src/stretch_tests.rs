@@ -1,5 +1,80 @@
 use super::*;
 
+#[test]
+#[ignore = "manual performance comparison"]
+fn compare_bandlimited_preview_preparation_cost() {
+    let source = tone(48000 * 10);
+    for algorithm in AudioProcessingAlgorithm::ALL {
+        let start = std::time::Instant::now();
+        let preview = prepare_preview(&source, 0.8, 7.0, algorithm, None).unwrap();
+        let quick = start.elapsed();
+        let start = std::time::Instant::now();
+        let full = prepare_processed(&source, 0.8, 7.0, algorithm, None).unwrap();
+        eprintln!(
+            "{algorithm:?}: preview {quick:?}, final {:?}",
+            start.elapsed()
+        );
+        assert_eq!(preview.frames(), full.frames());
+    }
+}
+
+#[test]
+fn bandlimited_preview_keeps_selected_pitch_duration_and_stereo_without_aliases() {
+    let source = tone(48_013);
+    assert!(!preview_worthwhile(&source));
+    for algorithm in AudioProcessingAlgorithm::ALL {
+        for (rate, semitones) in [(0.5, -7.0), (1.0, 7.0), (2.0, 7.0)] {
+            let preview = prepare_preview(&source, rate, semitones, algorithm, None).unwrap();
+            assert_eq!(
+                preview.frames(),
+                (source.frames() as f64 / rate).ceil() as usize
+            );
+            assert_eq!(preview.sample_rate, source.sample_rate);
+            let frames = preview.samples.as_chunks::<2>().0;
+            let central = &frames[frames.len() / 4..frames.len() * 3 / 4];
+            let crossings = central
+                .windows(2)
+                .filter(|v| v[0][0] <= 0.0 && v[1][0] > 0.0)
+                .count();
+            let hz = crossings as f64 * 48000.0 / central.len() as f64;
+            let expected = 440.0 * 2.0_f64.powf(semitones / 12.0);
+            assert!(
+                (hz - expected).abs() < 12.0,
+                "{algorithm:?}: {hz}, expected {expected}"
+            );
+            assert!(frames.iter().all(|f| (f[0] * 0.5 - f[1]).abs() < 0.001));
+        }
+        let mut ultrasonic = tone(48000);
+        for (i, frame) in ultrasonic
+            .samples
+            .as_chunks_mut::<2>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            let sample = (std::f64::consts::TAU * 16000.0 * i as f64 / 48000.0).sin() as f32 * 0.25;
+            *frame = [sample, sample];
+        }
+        let preview = prepare_preview(&ultrasonic, 0.8, -5.0, algorithm, None).unwrap();
+        let full = prepare_processed(&ultrasonic, 0.8, -5.0, algorithm, None).unwrap();
+        let energy = |audio: &AudioData| {
+            let middle = &audio.samples[audio.samples.len() / 4..audio.samples.len() * 3 / 4];
+            middle.iter().map(|x| f64::from(*x).powi(2)).sum::<f64>() / middle.len() as f64
+        };
+        assert!(
+            energy(&preview) < 1e-8,
+            "preview must filter rather than alias high frequencies"
+        );
+        assert!(
+            energy(&full) > 0.01,
+            "full-rate preparation must preserve original high-frequency content"
+        );
+        assert!(
+            prepare_preview(&source, 0.5, 7.0, algorithm, Some(&AtomicBool::new(true))).is_err()
+        );
+    }
+}
+
 fn tone(frames: usize) -> AudioData {
     AudioData {
         sample_rate: 48000,

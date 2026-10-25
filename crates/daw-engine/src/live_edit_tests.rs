@@ -214,7 +214,9 @@ fn live_audio_edits_use_cached_sources_and_new_assets_without_restarting_the_tim
     renderer.apply_live_edit(&mut add).unwrap();
     assert_eq!(renderer.logical_sample, position);
     let output = render_block(&mut renderer);
-    for frame in output {
+    assert!((output[0][0] - 0.5 * project.track(id).unwrap().gain).abs() < 1e-6);
+    // Source replacement bridges for 5 ms, then reaches the exact new source.
+    for frame in &output[40..] {
         assert!((frame[0] - 0.2 * project.track(id).unwrap().gain).abs() < 1e-6);
     }
 }
@@ -460,4 +462,187 @@ fn dense_pitch_replacement_keeps_note_off_and_note_on_bookkeeping_allocation_fre
     );
     assert_eq!(track.active_notes.len(), 8_192);
     assert_eq!(track.active_indices.len(), 8_192);
+}
+
+#[test]
+fn audio_edit_bridge_is_allocation_free_and_continuous_through_repeated_changes() {
+    let (mut project, _directory, id) = audio_project();
+    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    render_block(&mut renderer);
+    let ClipContent::Audio { gain, .. } = &mut project.track_mut(id).unwrap().clips[0].content
+    else {
+        unreachable!()
+    };
+    *gain = 0.0;
+    let mut edit = prepare.prepare(&project).unwrap();
+    let mut first = [[0.0; 2]; 16];
+    let mut positions = [0.0; 16];
+    assert_eq!(
+        crate::allocation_test_support::count_allocations(|| {
+            renderer.apply_live_edit(&mut edit).unwrap();
+            renderer.render(&mut first, &mut positions).unwrap();
+        }),
+        0
+    );
+    let level = 0.5 * project.track(id).unwrap().gain;
+    assert!((first[0][0] - level).abs() < 1e-6);
+    assert!(first.windows(2).all(|pair| pair[0][0] >= pair[1][0]));
+    let ClipContent::Audio { gain, .. } = &mut project.track_mut(id).unwrap().clips[0].content
+    else {
+        unreachable!()
+    };
+    *gain = 1.0;
+    let mut edit = prepare.prepare(&project).unwrap();
+    let source = renderer.source_sample;
+    let expected = level * (1.0 - 16.0 / 39.0);
+    renderer.apply_live_edit(&mut edit).unwrap();
+    let block = render_block(&mut renderer);
+    assert_eq!(renderer.source_sample, source + BLOCK as u64);
+    assert!((block[0][0] - expected).abs() < 1e-6);
+    assert!(
+        block[40..]
+            .iter()
+            .all(|frame| (frame[0] - level).abs() < 1e-6)
+    );
+}
+
+#[test]
+fn live_preview_refines_from_original_and_export_cannot_reuse_preview_assets() {
+    let (mut project, directory, id) = audio_project();
+    let path = directory.path().join("long-source.wav");
+    AudioData {
+        sample_rate: 48_000,
+        channels: 2,
+        samples: (0..48_000 * 8)
+            .flat_map(|i| {
+                let signal =
+                    (std::f64::consts::TAU * 440.0 * i as f64 / 48_000.0).sin() as f32 * 0.25;
+                [signal, signal * 0.5]
+            })
+            .collect(),
+    }
+    .write_wav(&path)
+    .unwrap();
+    project.track_mut(id).unwrap().clips[0] =
+        Clip::audio("Long", 0.0, 16.0, path.to_string_lossy());
+    let mut renderer = Renderer::new(&project, 48_000, true).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    for algorithm in daw_core::AudioProcessingAlgorithm::ALL {
+        let clip = &mut project.track_mut(id).unwrap().clips[0];
+        clip.source_rate = 0.8;
+        let ClipContent::Audio { processing, .. } = &mut clip.content else {
+            unreachable!()
+        };
+        processing.algorithm = algorithm;
+        processing.transpose_semitones = 7.0;
+        let cancel = AtomicBool::new(false);
+        let mut preview = prepare.prepare_cancelled(&project, &cancel, true).unwrap();
+        assert!(preview.needs_refinement());
+        let position = renderer.source_sample;
+        assert_eq!(
+            crate::allocation_test_support::count_allocations(|| renderer
+                .apply_live_edit(&mut preview)
+                .unwrap()),
+            0
+        );
+        assert_eq!(renderer.source_sample, position);
+        assert!(renderer.tracks[0].as_ref().unwrap().audio[0].is_preview);
+        render_block(&mut renderer);
+        let mut final_edit = prepare.prepare_cancelled(&project, &cancel, false).unwrap();
+        assert!(!final_edit.needs_refinement());
+        assert_eq!(
+            crate::allocation_test_support::count_allocations(|| renderer
+                .apply_live_edit(&mut final_edit)
+                .unwrap()),
+            0
+        );
+        let final_data = Arc::clone(&renderer.tracks[0].as_ref().unwrap().audio[0].data);
+        assert!(!renderer.tracks[0].as_ref().unwrap().audio[0].is_preview);
+        let offline = Renderer::new(&project, 48_000, false).unwrap();
+        let offline_audio = &offline.tracks[0].as_ref().unwrap().audio[0];
+        assert!(!offline_audio.is_preview);
+        assert_eq!(
+            offline_audio.data.samples, final_data.samples,
+            "export and final playback must prepare from original at full rate"
+        );
+        let cached = prepare.prepare_cancelled(&project, &cancel, true).unwrap();
+        assert!(
+            !cached.needs_refinement(),
+            "warm final assets must skip proxy work"
+        );
+    }
+}
+
+#[test]
+fn retained_take_sources_are_silent_and_comp_crossfades_use_compact_source_indices() {
+    let (mut project, directory, id) = audio_project();
+    let first = project.track(id).unwrap().clips[0].id;
+    let path = directory.path().join("alternative.wav");
+    let alternate = Clip::audio("Alternate", 0.0, 4.0, path.to_string_lossy());
+    let second = alternate.id;
+    project.track_mut(id).unwrap().clips.push(alternate);
+    let group = project.group_audio_takes(id, &[first, second]).unwrap();
+    // A missing inactive take cannot prevent the selected comp from playing.
+    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
+    assert_eq!(renderer.tracks[0].as_ref().unwrap().audio.len(), 1);
+    assert!(
+        render_block(&mut renderer)
+            .iter()
+            .all(|frame| frame[0] > 0.0)
+    );
+    AudioData {
+        sample_rate: 8_000,
+        channels: 2,
+        samples: vec![-0.5; 32_000],
+    }
+    .write_wav(&path)
+    .unwrap();
+    project
+        .select_audio_take(id, group, second, Some((1.0, 3.0)), 0.02)
+        .unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    let mut edit = prepare.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut edit).unwrap();
+    renderer.seek(0.0).unwrap();
+    let mut output = vec![[0.0; 2]; 16_000];
+    let mut positions = vec![0.0; 16_000];
+    renderer.render(&mut output, &mut positions).unwrap();
+    assert!(output[1000][0] > 0.0 && output[8000][0] < 0.0 && output[15000][0] > 0.0);
+    for boundary in [4000, 12000] {
+        assert!(
+            output[boundary - 100..boundary + 100]
+                .windows(2)
+                .all(|pair| (pair[1][0] - pair[0][0]).abs() < 0.03),
+            "comp boundary must crossfade smoothly"
+        );
+    }
+}
+
+#[test]
+fn removing_last_audio_clip_finishes_its_bridge_and_seek_clears_stale_correction() {
+    let (mut project, _directory, id) = audio_project();
+    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    render_block(&mut renderer);
+    let clip = project.track_mut(id).unwrap().clips.pop().unwrap();
+    let mut edit = prepare.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut edit).unwrap();
+    assert!(
+        !renderer.finished(),
+        "the final 5 ms bridge must be allowed to drain"
+    );
+    let output = render_block(&mut renderer);
+    assert!(output[0][0] > 0.0);
+    assert!(output[40..].iter().all(|frame| *frame == [0.0; 2]));
+    project.track_mut(id).unwrap().clips.push(clip);
+    let mut edit = prepare.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut edit).unwrap();
+    renderer.seek(0.0).unwrap();
+    let output = render_block(&mut renderer);
+    let level = 0.5 * project.track(id).unwrap().gain;
+    assert!(
+        output.iter().all(|frame| (frame[0] - level).abs() < 1e-6),
+        "seek must not carry correction from a different timeline position"
+    );
 }

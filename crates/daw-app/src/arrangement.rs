@@ -106,6 +106,7 @@ impl DawApp {
             .tracks
             .iter()
             .flat_map(|track| &track.clips)
+            .filter(|clip| !clip.is_take_source())
             .map(|clip| clip.start)
             .reduce(f64::min)
             .unwrap_or(0.0);
@@ -479,7 +480,7 @@ impl DawApp {
                             self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0),
                         ));
                     }
-                    let mut clips: Vec<_> = track.clips.iter().collect();
+                    let mut clips: Vec<_> = track.clips.iter().filter(|clip| !clip.is_take_source()).collect();
                     if track.kind == TrackKind::Audio {
                         // Stable sort preserves storage order for equal-start takes.
                         clips.sort_by(|a, b| a.start.total_cmp(&b.start));
@@ -908,7 +909,8 @@ impl DawApp {
                     }
                 }),
                 Edit::Transfer(source, target, clip) => {
-                    self.project.delete_clip(source, clip).map(|clip| {
+                    self.project.delete_clip(source, clip).map(|mut clip| {
+                        clip.audio_take = None;
                         self.project.track_mut(target).unwrap().clips.push(clip);
                         self.selected_track = Some(target);
                     })

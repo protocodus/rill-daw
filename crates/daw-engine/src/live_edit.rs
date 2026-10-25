@@ -6,7 +6,7 @@ use std::{
     sync::{Mutex, Weak},
 };
 
-pub(super) type AudioAssetKey = (PathBuf, u64, u64, AudioProcessingAlgorithm);
+pub(super) type AudioAssetKey = (PathBuf, u64, u64, AudioProcessingAlgorithm, bool);
 
 fn original_key(path: &Path) -> AudioAssetKey {
     (
@@ -14,10 +14,11 @@ fn original_key(path: &Path) -> AudioAssetKey {
         1.0_f64.to_bits(),
         0,
         AudioProcessingAlgorithm::Signalsmith,
+        false,
     )
 }
 
-fn asset_key(path: &Path, rate: f64, processing: AudioProcessing) -> AudioAssetKey {
+fn asset_key(path: &Path, rate: f64, processing: AudioProcessing, preview: bool) -> AudioAssetKey {
     if rate == 1.0 && processing.transpose_semitones == 0.0 {
         return original_key(path);
     }
@@ -31,6 +32,7 @@ fn asset_key(path: &Path, rate: f64, processing: AudioProcessing) -> AudioAssetK
         rate.to_bits(),
         pitch,
         processing.algorithm,
+        preview,
     )
 }
 
@@ -106,6 +108,14 @@ pub(crate) struct PreparedLiveEdit {
     context: Arc<LiveEditContext>,
     tracks: Vec<TrackEdit>,
     end_sample: u64,
+}
+
+impl PreparedLiveEdit {
+    pub(crate) fn needs_refinement(&self) -> bool {
+        self.tracks
+            .iter()
+            .any(|track| track.content.audio.iter().any(|audio| audio.is_preview))
+    }
 }
 
 /// Cheap UI-side graph compatibility handle; never retains decoded audio.
@@ -201,13 +211,14 @@ impl LiveEditPreparer {
             self.compatible(project),
             "Edit changes the running plugin graph"
         );
-        self.prepare_cancelled(project, &AtomicBool::new(false))
+        self.prepare_cancelled(project, &AtomicBool::new(false), false)
     }
 
     pub(crate) fn prepare_cancelled(
         &mut self,
         project: &Project,
         cancel: &AtomicBool,
+        preview: bool,
     ) -> Result<PreparedLiveEdit> {
         ensure!(
             self.compatibility().check(project, false),
@@ -245,6 +256,11 @@ impl LiveEditPreparer {
                 .previous
                 .track(id)
                 .is_some_and(|old| old.clips == track.clips)
+                && (preview
+                    || !self
+                        .content
+                        .get(&id)
+                        .is_some_and(|content| content.audio.iter().any(|audio| audio.is_preview)))
             {
                 self.content
                     .get(&id)
@@ -262,6 +278,7 @@ impl LiveEditPreparer {
                         sample_rate: self.context.sample_rate,
                         options: self.context.options,
                         cancel: Some(cancel),
+                        preview,
                     },
                     &mut cache,
                     &mut compilation_bytes,
@@ -269,7 +286,12 @@ impl LiveEditPreparer {
             };
             for audio in content.audio.iter() {
                 cache.insert(
-                    asset_key(&audio.source_alias, audio.source_rate, audio.processing),
+                    asset_key(
+                        &audio.source_alias,
+                        audio.source_rate,
+                        audio.processing,
+                        audio.is_preview,
+                    ),
                     Arc::clone(&audio.data),
                 );
                 cache.insert(
@@ -334,7 +356,7 @@ impl Renderer {
             for audio in track.audio.iter() {
                 for path in [&audio.source_path, &audio.source_alias] {
                     assets.insert(
-                        asset_key(path, audio.source_rate, audio.processing),
+                        asset_key(path, audio.source_rate, audio.processing, audio.is_preview),
                         Arc::downgrade(&audio.data),
                     );
                     assets.insert(original_key(path), Arc::downgrade(&audio.original));
@@ -457,6 +479,37 @@ impl Renderer {
                 next.active_indices.insert(note.key(), index);
             }
             std::mem::swap(&mut track.active_indices, &mut next.active_indices);
+            if !self.preview
+                && !Arc::ptr_eq(&track.audio, &next.content.audio)
+                && (!track.audio.is_empty() || !next.content.audio.is_empty())
+            {
+                let old_cursor = track.audio_transition_cursor;
+                let length = track.audio_transition.len();
+                for index in 0..length {
+                    let position = self.source_sample + index as u64;
+                    let old = timeline_sample(
+                        &track.audio,
+                        &track.audio_segments,
+                        position,
+                        self.sample_rate,
+                    );
+                    let new = timeline_sample(
+                        &next.content.audio,
+                        &next.content.audio_segments,
+                        position,
+                        self.sample_rate,
+                    );
+                    let retiring = if old_cursor + index < length {
+                        let gain = 1.0 - (old_cursor + index) as f32 / (length - 1).max(1) as f32;
+                        track.audio_transition[old_cursor + index].map(|sample| sample * gain)
+                    } else {
+                        [0.0; 2]
+                    };
+                    track.audio_transition[index] =
+                        [old[0] + retiring[0] - new[0], old[1] + retiring[1] - new[1]];
+                }
+                track.audio_transition_cursor = 0;
+            }
             std::mem::swap(&mut track.audio, &mut next.content.audio);
             std::mem::swap(&mut track.audio_segments, &mut next.content.audio_segments);
             std::mem::swap(&mut track.notes, &mut next.content.notes);
@@ -477,13 +530,53 @@ impl Renderer {
             // Removing the final clip behind the playhead must still deliver
             // pending note-offs and drain existing plugin/PDC tails. This window
             // is bounded by the graph's known tail and resets on an explicit seek.
+            let bridge = self
+                .tracks
+                .iter()
+                .flatten()
+                .map(|track| {
+                    track
+                        .audio_transition
+                        .len()
+                        .saturating_sub(track.audio_transition_cursor) as u64
+                })
+                .max()
+                .unwrap_or(0);
             self.release_end_sample = self.release_end_sample.max(
                 self.source_sample
-                    .saturating_add(self.live_edit_context.tail_samples),
+                    .saturating_add(self.live_edit_context.tail_samples.max(bridge)),
             );
         }
         self.end_sample = self.timeline_end_sample.max(self.release_end_sample);
         Ok(())
+    }
+}
+
+/// Bounded lookup used only for the 5 ms edit bridge, never a whole asset render.
+fn timeline_sample(
+    audio: &[AudioClip],
+    segments: &[audio_schedule::Segment],
+    position: u64,
+    sample_rate: u32,
+) -> [f32; 2] {
+    let index = segments.partition_point(|segment| segment.end <= position);
+    let Some(segment) = segments
+        .get(index)
+        .filter(|segment| segment.start <= position)
+    else {
+        return [0.0; 2];
+    };
+    let b = audio[segment.incoming].sample(position, sample_rate);
+    if let (Some(outgoing), Some(curve)) = (segment.outgoing, &segment.fade) {
+        let progress = (position - segment.start) as f64 / (segment.end - segment.start) as f64;
+        let gain = curve.value(progress, &mut curve.cursor(progress));
+        let a = audio[outgoing].sample(position, sample_rate);
+        [
+            a[0] * (1.0 - gain) + b[0] * gain,
+            a[1] * (1.0 - gain) + b[1] * gain,
+        ]
+    } else {
+        b
     }
 }
 
@@ -492,6 +585,7 @@ pub(super) struct CompileSettings<'a> {
     pub sample_rate: u32,
     pub options: RenderOptions,
     pub cancel: Option<&'a AtomicBool>,
+    pub preview: bool,
 }
 
 pub(super) fn compile_content(
@@ -506,6 +600,7 @@ pub(super) fn compile_content(
         sample_rate,
         options,
         cancel,
+        preview,
     } = settings;
     let check_cancelled = || {
         ensure!(
@@ -520,7 +615,7 @@ pub(super) fn compile_content(
     let mut audio = Vec::new();
     for clip in &track.clips {
         check_cancelled()?;
-        if !enabled {
+        if !enabled || clip.is_take_source() {
             continue;
         }
         ensure!(
@@ -576,10 +671,11 @@ pub(super) fn compile_content(
                     let source = quality::load_source(&source_path)
                         .with_context(|| format!("Loading audio clip {}", clip.name))?;
                     check_cancelled()?;
-                    let data = Arc::new(quality::prepare_audio(
+                    let data = Arc::new(quality::prepare_audio_cancelled(
                         source,
                         sample_rate,
                         options.resample_quality,
+                        cancel,
                     )?);
                     check_cancelled()?;
                     *cache_bytes = cache_bytes
@@ -592,11 +688,19 @@ pub(super) fn compile_content(
                     audio_cache.insert(original_key(&source_path), Arc::clone(&data));
                     data
                 };
+                let full_key = asset_key(&source_path, clip.source_rate, *processing, false);
+                let is_preview = preview
+                    && crate::stretch::preview_worthwhile(&original)
+                    && !(clip.source_rate == 1.0 && processing.transpose_semitones == 0.0)
+                    && !audio_cache.contains_key(&full_key);
+                let key = if is_preview {
+                    asset_key(&source_path, clip.source_rate, *processing, true)
+                } else {
+                    full_key
+                };
                 let data = if clip.source_rate == 1.0 && processing.transpose_semitones == 0.0 {
                     Arc::clone(&original)
-                } else if let Some(data) =
-                    audio_cache.get(&asset_key(&source_path, clip.source_rate, *processing))
-                {
+                } else if let Some(data) = audio_cache.get(&key) {
                     Arc::clone(data)
                 } else {
                     check_cancelled()?;
@@ -608,7 +712,12 @@ pub(super) fn compile_content(
                         cache_bytes.saturating_add(prepared_bytes) <= quality::MAX_CACHE_BYTES,
                         "Prepared audio exceeds the 1 GiB session cache limit"
                     );
-                    let data = Arc::new(crate::stretch::prepare_processed(
+                    let prepare = if is_preview {
+                        crate::stretch::prepare_preview
+                    } else {
+                        crate::stretch::prepare_processed
+                    };
+                    let data = Arc::new(prepare(
                         &original,
                         clip.source_rate,
                         processing.transpose_semitones,
@@ -616,10 +725,7 @@ pub(super) fn compile_content(
                         cancel,
                     )?);
                     *cache_bytes += data.samples.len() * size_of::<f32>();
-                    audio_cache.insert(
-                        asset_key(&source_path, clip.source_rate, *processing),
-                        Arc::clone(&data),
-                    );
+                    audio_cache.insert(key, Arc::clone(&data));
                     data
                 };
                 ensure!(
@@ -631,6 +737,7 @@ pub(super) fn compile_content(
                     source_alias: PathBuf::from(path),
                     source_rate: clip.source_rate,
                     processing: *processing,
+                    is_preview,
                     original,
                     start: to_sample(clip.start),
                     source_offset: clip.offset / clip.source_rate * 60.0 / tempo

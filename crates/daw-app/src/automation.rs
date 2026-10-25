@@ -40,6 +40,9 @@ enum Command {
         kind: TestDocumentDialog,
         path: Option<PathBuf>,
     },
+    AudioTakeFiles {
+        paths: Option<Vec<PathBuf>>,
+    },
     CloseWindow,
     Focused {
         focused: bool,
@@ -590,6 +593,9 @@ impl Harness {
                     path,
                 ));
             }
+            Command::AudioTakeFiles { paths } => {
+                self.app.audio_takes_ui.next_files = Some(paths);
+            }
             Command::CloseWindow => {
                 let mut input = RawInput::default();
                 input
@@ -916,7 +922,7 @@ impl Harness {
                 "requested_revision": s.requested_revision,
                 "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
                 "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,
-                "generation": s.generation,
+                "generation": s.generation, "refining_audio": s.refining_audio,
             })
         });
         state["audio_output"] = json!(self.audio_output);
@@ -945,6 +951,8 @@ impl Harness {
         state["popups"]["export"] = json!(self.app.export_open);
         state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
         state["clipboard_text"] = json!(self.clipboard_text);
+        state["audio_takes"] = self.app.audio_takes_diagnostics();
+        state["popups"]["audio_takes"] = json!(self.app.audio_takes_open);
         state["error_details"] = self.app.error_details_diagnostics();
         state["document_guard"] = self.app.document_guard_diagnostics();
         state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());

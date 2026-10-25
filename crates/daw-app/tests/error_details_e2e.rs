@@ -211,14 +211,23 @@ fn editor_crash_details_identify_effect_channel_path_and_exit_code() {
         assert!(details.contains(expected), "Missing {expected}: {details}");
     }
     assert!(details.contains(before["tracks"][0]["name"].as_str().unwrap()));
+    let plugin_path = before["tracks"][0]["inserts"][0]["effect"]["Vst3"]["path"]
+        .as_str()
+        .unwrap();
+    // The scanner stores a canonical path. On Windows that can expand an 8.3
+    // temporary-directory alias and add a verbatim prefix. Check identity first,
+    // then require that exact project path in the human-readable report.
+    assert_eq!(
+        std::fs::canonicalize(plugin_path).unwrap(),
+        plugins
+            .path()
+            .join("RillFixture.vst3")
+            .canonicalize()
+            .unwrap()
+    );
     assert!(
-        details.contains(
-            plugins
-                .path()
-                .join("RillFixture.vst3")
-                .to_string_lossy()
-                .as_ref()
-        )
+        details.contains(plugin_path),
+        "Missing plugin path {plugin_path}: {details}"
     );
     assert_eq!(
         app.click("Copy details")["clipboard_text"],

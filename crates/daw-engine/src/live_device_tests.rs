@@ -261,3 +261,64 @@ fn stopping_cancels_a_pending_preparation_without_waiting_for_its_gate() {
     shutdown.join().unwrap();
     result.expect("Shutdown must cancel preparation before joining its worker");
 }
+
+#[test]
+fn progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_edit() {
+    let (_directory, mut project, id) = fixture();
+    let daw_core::ClipContent::Audio { path, .. } = &project.track(id).unwrap().clips[0].content
+    else {
+        unreachable!()
+    };
+    AudioData {
+        sample_rate: 48_000,
+        channels: 2,
+        samples: (0..48_000 * 8)
+            .flat_map(|i| {
+                let sample =
+                    (std::f64::consts::TAU * 440.0 * i as f64 / 48_000.0).sin() as f32 * 0.25;
+                [sample, sample * 0.5]
+            })
+            .collect(),
+    }
+    .write_wav(path)
+    .unwrap();
+    let mut engine = engine(&project);
+    engine.pump_virtual(1024).unwrap();
+    let initial = engine.snapshot();
+    let (started, release) = engine.live_updates.as_ref().unwrap().gate_next_refinement();
+    project.track_mut(id).unwrap().clips[0].source_rate = 0.8;
+    assert!(engine.try_update_project(&project, 1).unwrap());
+    started.recv_timeout(Duration::from_secs(5)).unwrap();
+    wait_for(|| engine.snapshot().applied_revision == 1);
+    assert!(
+        engine.snapshot().refining_audio,
+        "preview must be visible while final preparation is pending"
+    );
+    let output = engine.pump_virtual(8192).unwrap();
+    assert!(
+        output
+            .chunks(256)
+            .all(|block| block.iter().any(|frame| frame[0].abs() > 0.01))
+    );
+    assert_eq!(engine.snapshot().engine_id, initial.engine_id);
+    assert_eq!(engine.snapshot().generation, initial.generation);
+    project.track_mut(id).unwrap().clips[0].source_rate = 0.5;
+    assert!(engine.try_update_project(&project, 2).unwrap());
+    drop(release);
+    wait_for(|| engine.snapshot().applied_revision == 2 && !engine.snapshot().refining_audio);
+    let output = engine.pump_virtual(8192).unwrap();
+    assert!(
+        output
+            .chunks(256)
+            .all(|block| block.iter().any(|frame| frame[0].abs() > 0.01))
+    );
+    let final_state = engine.snapshot();
+    assert_eq!(final_state.applied_revision, 2);
+    assert_eq!(final_state.edit_errors, 0);
+    assert_eq!(final_state.generation, initial.generation);
+    assert_eq!(final_state.engine_id, initial.engine_id);
+    assert_eq!(
+        final_state.consumed_frames,
+        initial.consumed_frames + 16_384
+    );
+}

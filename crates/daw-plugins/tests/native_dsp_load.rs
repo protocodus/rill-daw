@@ -40,7 +40,9 @@ fn load_fixture(fixture: &EditorProbeFixture, timeout: Duration) -> PluginHostPr
         timeout,
     )
     .unwrap();
-    worker.set_slow_command_timeout(Duration::from_secs(3));
+    // Cold loading several freshly compiled native bundles can contend on OS
+    // verification in parallel CI. Bootstrap is outside the deadline assertions.
+    worker.set_slow_command_timeout(Duration::from_secs(15));
     let response = worker
         .send_command(HostCommand::LoadPlugin {
             path: fixture.path.to_string_lossy().into_owned(),
@@ -56,6 +58,7 @@ fn load_fixture(fixture: &EditorProbeFixture, timeout: Duration) -> PluginHostPr
         matches!(response, HostResponse::PluginInfo { .. }),
         "{response:?}"
     );
+    worker.set_slow_command_timeout(Duration::from_secs(3));
     worker
 }
 

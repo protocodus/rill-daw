@@ -38,6 +38,8 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
 - Nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
 - System-following light/dark themes, bundled Inter typography with Unicode fallbacks, shared text components, and vector toolbar icons.
+- Audio take selection and non-destructive range comping, smooth boundary crossfades, imported overdub layers, and retained alternatives in portable projects.
+- Responsive audio move/trim/stretch gestures, time selections, transient/edge snapping, and quick live previews that refine in the background; exports retain full quality.
 - Named undo/redo history with grouped gestures, saved checkpoints, and bounded memory.
 - One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
 - Output-device, sample-rate, and buffer-size setup; writable scratch directory and custom VST3 scan directories.

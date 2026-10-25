@@ -310,3 +310,41 @@ violet outlined draft notes differ from existing blue notes in both themes.
 Additional voices use nearby distinct preview shades. These painters do not
 create input targets, note IDs or project edits. The application owns generation,
 validation, cancellation and the single undoable confirmation.
+
+### Audio selection, takes, and comping
+
+The audio editor shares Q Select, E Cut, R Duplicate, G Ghost, S Stretch,
+I/O fades, P Cursor, middle/Alt panning, modifier zoom, and Fit with the other
+musical canvases. Select drags the body to move and either edge to trim;
+Shift-body drag makes an independent copy. Cursor drag selects a time range.
+Snap separates grid, clip boundaries, and detected transients; Shift bypasses
+snapping. View options control neighbouring waveforms and transient markers
+without changing audio. Transient analysis remains asynchronous and is restricted
+to the selected range when splitting. Markers survive closing the analysis panel.
+
+**Clip → Takes…** opens retained alternatives over the editor's dimmed context.
+**Add takes…** imports WAVs aligned to the group's original start, as one Undo
+step. **Group overlapping clips** keeps the selected clip as the initial comp.
+Choose a waveform row and use its whole take or the selected time range. Boundary
+crossfades default to 10 ms with a smooth complementary curve, limited to actual
+source handles; Crossfade exposes the editable spline. Every resulting comp piece
+can still be cut, trimmed, moved, stretched, duplicated, or joined.
+
+**Layer as overdub** creates an independent audio track with a distinct color and
+the same output bus/folder. This edits imported audio; input-device recording is
+not implemented. **Track → Audio takes…** recovers alternatives even after every
+comp piece was deleted or joined, and a group picker appears for multiple groups.
+**Takes → Keep comp only** discards the retained project alternatives without
+modifying source files; Undo restores them.
+
+`paint_timeline_selection` and `paint_audio_clip_edges` provide shared selection
+painting and visible edge targets. Offscreen boundaries never become phantom
+trim handles. `audio_take_lane` is a reusable, keyboard-focusable waveform choice
+with a name, short detail, selection tint, and a common normalized time range.
+Thumbnails use bounded sampling; full audio is prepared away from the UI thread.
+
+Long uncached stretch/transpose edits can first use a band-limited proxy rendered
+by the chosen engine. **Refining audio…** appears while full-rate processing
+replaces it in the background. Swaps use a short preallocated correction ramp,
+retain running plug-ins and transport, and coalesce obsolete edits. Export always
+uses the full-rate render, even while a live preview is being refined.

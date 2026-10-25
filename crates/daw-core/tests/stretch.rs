@@ -239,7 +239,7 @@ fn versioned_projects_round_trip_rates_and_version_one_defaults_to_unstretched()
         if extension == "json" {
             let value: serde_json::Value =
                 serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-            assert_eq!(value["version"], 3);
+            assert_eq!(value["version"], 4);
         }
     }
     let mut legacy = serde_json::json!({"version":1,"project":project});
@@ -257,7 +257,7 @@ fn versioned_projects_round_trip_rates_and_version_one_defaults_to_unstretched()
             .source_rate,
         1.0
     );
-    legacy["version"] = 4.into();
+    legacy["version"] = 5.into();
     std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
     assert!(Project::load(&path).is_err());
 }

@@ -1,12 +1,15 @@
 //! Source-rate conversion is prepared once per source, before playback starts.
-//! High uses Rubato's synchronous FFT low-pass resampler; `process_all` trims
-//! its startup delay and flushes the tail. No conversion runs in the device callback.
+//! High uses Rubato's synchronous FFT low-pass resampler in cancellable chunks,
+//! trimming startup delay and flushing the tail. No conversion runs in the device callback.
 //! Reference: https://github.com/HEnquist/rubato (v5.0.1, Resampler::process_all).
 use anyhow::{Context, Result, ensure};
 use daw_core::AudioData;
-use rubato::{Fft, FixedSync, Resampler, audioadapter_buffers::direct::InterleavedSlice};
+use rubato::{Fft, FixedSync, Indexing, Resampler, audioadapter_buffers::direct::InterleavedSlice};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 pub(crate) const MAX_ASSET_BYTES: usize = 512 * 1024 * 1024;
 pub(crate) const MAX_CACHE_BYTES: usize = 1024 * 1024 * 1024;
@@ -48,11 +51,29 @@ pub(crate) fn load_source(path: &Path) -> Result<AudioData> {
     AudioData::load_wav(path)
 }
 
-pub(crate) fn prepare_audio(
-    mut source: AudioData,
+#[cfg(test)]
+fn prepare_audio(
+    source: AudioData,
     target_rate: u32,
     quality: ResampleQuality,
 ) -> Result<AudioData> {
+    prepare_audio_cancelled(source, target_rate, quality, None)
+}
+
+pub(crate) fn prepare_audio_cancelled(
+    mut source: AudioData,
+    target_rate: u32,
+    quality: ResampleQuality,
+    cancel: Option<&AtomicBool>,
+) -> Result<AudioData> {
+    let check_cancelled = || {
+        ensure!(
+            !cancel.is_some_and(|flag| flag.load(Ordering::Acquire)),
+            "Audio conversion cancelled"
+        );
+        Ok::<(), anyhow::Error>(())
+    };
+    check_cancelled()?;
     source.validate()?;
     ensure!(
         (8_000..=384_000).contains(&target_rate),
@@ -99,7 +120,7 @@ pub(crate) fn prepare_audio(
                 source.channels,
                 FixedSync::Both,
             )?;
-            let needed = resampler.process_all_needed_output_len(source.frames());
+            let needed = resampler.output_frames_max();
             ensure!(
                 needed
                     .checked_mul(source.channels)
@@ -108,9 +129,39 @@ pub(crate) fn prepare_audio(
                 "Resampler workspace exceeds the asset limit"
             );
             let input = InterleavedSlice::new(&source.samples, source.channels, source.frames())?;
-            resampler
-                .process_all(&input, source.frames(), None)?
-                .take_data()
+            let mut block = vec![0.0; needed * source.channels];
+            let mut output = Vec::new();
+            output
+                .try_reserve_exact(samples)
+                .context("Allocate resampled audio")?;
+            let mut offset = 0;
+            let mut trim = resampler.output_delay();
+            while output.len() < samples {
+                check_cancelled()?;
+                let available = source
+                    .frames()
+                    .saturating_sub(offset)
+                    .min(resampler.input_frames_next());
+                let indexing = Indexing {
+                    input_offset: offset,
+                    partial_len: Some(available),
+                    ..Indexing::default()
+                };
+                let (_, produced) = resampler.process_into_buffer(
+                    &input,
+                    &mut InterleavedSlice::new_mut(&mut block, source.channels, needed)?,
+                    Some(&indexing),
+                )?;
+                ensure!(produced > 0, "Audio converter made no progress");
+                offset += available;
+                let skip = trim.min(produced);
+                trim -= skip;
+                let count = ((samples - output.len()) / source.channels).min(produced - skip);
+                output.extend_from_slice(
+                    &block[skip * source.channels..(skip + count) * source.channels],
+                );
+            }
+            output
         }
         ResampleQuality::Fast => {
             let mut output = Vec::new();
@@ -119,6 +170,9 @@ pub(crate) fn prepare_audio(
                 .context("Allocate resampled audio")?;
             let ratio = f64::from(source.sample_rate) / f64::from(target_rate);
             for frame in 0..frames {
+                if frame % 4096 == 0 {
+                    check_cancelled()?;
+                }
                 let position = frame as f64 * ratio;
                 let index = (position.floor() as usize).min(source.frames() - 1);
                 let next = (index + 1).min(source.frames() - 1);
@@ -143,6 +197,7 @@ pub(crate) fn prepare_audio(
         samples: output,
     };
     audio.validate()?;
+    check_cancelled()?;
     Ok(audio)
 }
 
@@ -173,6 +228,45 @@ mod tests {
         assert!(rms(&fast) > 0.2, "linear comparison must expose aliasing");
         let pass = prepare_audio(tone(96_000, 1_000.0), 44_100, ResampleQuality::High).unwrap();
         assert!((rms(&pass) - std::f64::consts::FRAC_1_SQRT_2).abs() < 0.002);
+    }
+
+    #[test]
+    fn cancellable_chunks_match_whole_source_reference_including_short_tails() {
+        for (from, to) in [
+            (96_000, 44_100),
+            (48_000, 24_000),
+            (24_000, 48_000),
+            (44_100, 48_000),
+        ] {
+            for frames in [1, 17, 1023, 5001] {
+                let mut source = tone(from, 440.0);
+                source.samples.truncate(frames);
+                let mut reference =
+                    Fft::<f32>::new(from as usize, to as usize, 1024, 1, FixedSync::Both).unwrap();
+                let input = InterleavedSlice::new(&source.samples, 1, frames).unwrap();
+                let reference = reference
+                    .process_all(&input, frames, None)
+                    .unwrap()
+                    .take_data();
+                let output = prepare_audio_cancelled(
+                    source.clone(),
+                    to,
+                    ResampleQuality::High,
+                    Some(&AtomicBool::new(false)),
+                )
+                .unwrap();
+                assert_eq!(output.samples, reference, "{frames} frames {from} -> {to}");
+                assert!(
+                    prepare_audio_cancelled(
+                        source,
+                        to,
+                        ResampleQuality::High,
+                        Some(&AtomicBool::new(true))
+                    )
+                    .is_err()
+                );
+            }
+        }
     }
     #[test]
     fn latency_is_trimmed_and_short_stereo_tails_are_not_lost() {
