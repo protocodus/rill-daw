@@ -53,7 +53,9 @@ fn export_error_details_preserve_causes_copy_and_block_background_edits() {
             .path()
             .join("Exports 音楽 🎹/This is a directory.wav");
         std::fs::create_dir_all(&destination).unwrap();
-        app.command(json!({"command":"export", "path":destination}));
+        // A fast failing worker can finish before the start command returns.
+        // Assert the terminal failure below, independent of that scheduling.
+        app.raw_command(json!({"command":"export", "path":destination}));
         let export = app.raw_command(json!({"command":"wait_export"}));
         assert_eq!(export["ok"], false);
         let failed = app.inspect();
