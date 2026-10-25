@@ -2,7 +2,7 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as dimmed, inactive context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as dimmed, inactive context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 ## Theme and tokens
 
@@ -31,6 +31,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
 | Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
+| Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
@@ -47,6 +48,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
 | Non-modal operation feedback | `notice`, `NoticeKind` |
+| On-demand error diagnostics | `error_details`, `ErrorDetailsResponse`, `text::selectable_block` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
 | Plug-in library cards and previews | `device_card`, `device_grid`, `device_grid_layout`, `image_preview` |
 | Bounded context titles | `text::bounded_block` |
@@ -62,11 +64,22 @@ Standard controls use comfortable horizontal/vertical padding; canvas-owned cont
 
 `view_links` presents a wrapping row of related destinations with the active one marked. The caller supplies destinations and handles the returned selection. `ViewBackdrop` retains the caller's paint for a utility background without creating widgets, hit targets, or keyboard focus; cached context cannot edit the project or duplicate active accessibility controls. Nested utilities keep their parent context and restore the prior selection and inspector page when dismissed.
 
+For a modal opened above a menu or another modal, `ViewBackdrop::capture_dialog_context` also retains foreground content. Call it before drawing the new dialog. It omits existing shared popup and modal scrims so the new modal dims the complete retained caller once; replay still creates no controls or accessibility targets.
+
 Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one theme-aware dim layer below the active window or native menu/picker, including submenus. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the same palette color through its native input-blocking backdrop. Confirmation dialogs retain the previous view. Dimming adds one solid rectangle, no blur passes, animation, hit targets, or additional repaint requests.
 
 `scroll_body` inside a window with `.vscroll(false)` lets short utility content fit naturally while long chains remain bounded and scrollable. Use a stable height for tabbed forms and reserve footer space before sizing inner lists.
 
 `notice` keeps readable feedback and trailing actions within one bounded row. It supports progress, success, warning, and error states; long text truncates with a full-message tooltip. Export completion stays visible until dismissed, shows the resulting filename, and offers **Copy path**. Errors retain priority over completion, and a new export clears the previous result. Notifications never add project history or block editing.
+
+Errors offer **Details** from the notification, plugin view, or unsaved-project dialog.
+The diagnostic view shows the full available cause chain and contextual plugin,
+channel, application, and audio configuration data. **Copy details** copies the
+report exactly; **Close** or Escape returns to the unchanged caller. The report is
+a snapshot, so background completion cannot replace it while it is being read.
+Underlying editor shortcuts and file drops are blocked; playback continues.
+
+`error_details(ctx, title, summary, details)` shows a diagnostic snapshot in the shared modal above the current workspace. Contextual titles stay within one row with their full text on hover; put operation, device/path and cause information in `details`. The summary is bounded, while the complete selectable diagnostic text wraps inside a scrollable inset. **Copy details** copies every supplied line, including offscreen content; **Close**, Escape or the backdrop dismisses. The footer stays outside the scrolling area. The application owns opening, snapshot lifetime and raw keyboard/drop gating, as for other modals.
 
 Long names and paths must stay within their window. `action_row` reserves trailing controls before flexible content; `path_row` adds path truncation and a full-path tooltip. `form_grid` aligns label/control columns; associate a separate label with its control using `.labelled_by(label_response.id)`. `bounded_columns` gives each library pane a fixed viewport so catalog and preview scrolling leave search and primary actions visible. `text::bounded_block` wraps within a row limit and exposes the full source on hover. Task names belong in native window titles; long track and device names belong in bounded content headings. `clip_choice` includes visible instance metadata to distinguish ghost copies with shared names.
 
@@ -104,6 +117,8 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 ```
 
 Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. The native close control remains visible. It supplies a common frame, spacing, and initial width, with fixed sizing and no collapse triangle. Callers may override width, `.resizable(true)`, or `.fixed_pos(...)`; the default pivot is the center. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
+
+When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable.
 
 `workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
 
@@ -298,3 +313,90 @@ violet outlined draft notes differ from existing blue notes in both themes.
 Additional voices use nearby distinct preview shades. These painters do not
 create input targets, note IDs or project edits. The application owns generation,
 validation, cancellation and the single undoable confirmation.
+
+### Audio selection, takes, and comping
+
+The audio editor shares Q Select, E Cut, R Duplicate, G Ghost, S Stretch,
+I/O fades, P Cursor, middle/Alt panning, modifier zoom, and Fit with the other
+musical canvases. Select drags the body to move and either edge to trim;
+Shift-body drag makes an independent copy. Cursor drag selects a time range.
+Snap separates grid, clip boundaries, and detected transients; Shift bypasses
+snapping. View options control neighbouring waveforms and transient markers
+without changing audio. Transient analysis remains asynchronous and is restricted
+to the selected range when splitting. Markers survive closing the analysis panel.
+
+**Clip → Takes…** opens retained alternatives over the editor's dimmed context.
+**Add takes…** imports WAVs aligned to the group's original start, as one Undo
+step. **Group overlapping clips** keeps the selected clip as the initial comp.
+Choose a waveform row and use its whole take or the selected time range. Boundary
+crossfades default to 10 ms with a smooth complementary curve, limited to actual
+source handles; Crossfade exposes the editable spline. Every resulting comp piece
+can still be cut, trimmed, moved, stretched, duplicated, or joined.
+
+**Layer as overdub** creates an independent audio track with a distinct color and
+the same output bus/folder. Imported alternatives and newly recorded loop passes
+share this take editor. **Track → Audio takes…** recovers alternatives even after every
+comp piece was deleted or joined, and a group picker appears for multiple groups.
+**Takes → Keep comp only** discards the retained project alternatives without
+modifying source files; Undo restores them.
+
+`paint_timeline_selection` and `paint_audio_clip_edges` provide shared selection
+painting and visible edge targets. Offscreen boundaries never become phantom
+trim handles. `audio_take_lane` is a reusable, keyboard-focusable waveform choice
+with a name, short detail, selection tint, and a common normalized time range.
+Thumbnails use bounded sampling; full audio is prepared away from the UI thread.
+
+Long uncached stretch/transpose edits can first use a band-limited proxy rendered
+by the chosen engine. **Refining audio…** appears while full-rate processing
+replaces it in the background. Swaps use a short preallocated correction ramp,
+retain running plug-ins and transport, and coalesce obsolete edits. Export always
+uses the full-rate render, even while a live preview is being refined.
+
+### Audio recording
+
+**Window → Recording** opens **Recording · Track name** above its caller. **Audio
+setup…** connects to input/output-device selection; the focused view contains the
+track's **Input**, **Arm recording**, **Input monitor (dry)**, and **Record into**
+choices. Inputs use one-based names such as **Mono 1** and **Stereo 1–2**, plus
+**No input**. Record placement chooses **New take** or **Overdub layer**. The raw
+input meter appears below these controls; recording and monitoring do not require
+opening the mixer. **Edit recording** and **Takes…** connect directly to editing.
+
+Monitoring defaults to **Off**. **Auto** monitors an armed track while stopped or
+recording, and switches off during ordinary playback; **On** does not require
+arming. Dry monitoring follows channel/output-bus level, pan, mute, and solo,
+bypasses inserts/sends, and does not alter captured audio. The focused popup
+states this distinction. Arming and monitoring are session-only; opening a
+project resets them. Input selection is a normal project edit with Undo/Redo.
+
+Transport and the popup reuse `record_button`: **Record** becomes **Stop
+recording** during capture. Audio track headers reuse `record_arm_at`, which
+exposes an accessible checkbox role, focus/hover feedback, and disabled state.
+`paint_recording_region` paints the active arrangement span without creating an
+editable clip before finalization. `input_meter` shows the peak of the selected
+raw input channels on a −60 to 0 dBFS scale. All recording indicators share
+`recording_color` with light/dark variants; ordinary select/checkbox/form controls
+come from the existing shared library.
+
+Input, arm, monitor, and placement choices are disabled during capture. Tempo,
+loop boundaries, seeking, and Undo/Redo cannot invalidate the active recording.
+**Stop recording** preserves backing playback; Pause and Stop also stop playback.
+**Finishing recording…** covers writer/tail completion, and Record remains
+disabled until publication finishes. Save, New/Open, Quit, and audio-setup changes
+wait for that publication. Errors retain captured files, show recovery details,
+and offer **Retry input** rather than repeatedly reopening a failed device.
+
+Loop recording keeps the newest complete pass audible while preserving a partial
+last pass in **Takes…**. Overdub recording creates a separate colored track with
+the original bus/folder and volume/pan, leaving inserts/sends unassigned. Both
+paths enter normal clip editing and commit one named history entry.
+
+### MIDI recording and timing controls
+
+The same **Recording · Track name** popup supports MIDI tracks. **MIDI device** selects the input shared by MIDI tracks, with **Refresh MIDI inputs** beside its channel choices. **All channels**, **Channel 1–16**, and **No input** are per-track project edits. MIDI arming defaults to session-only **Auto** monitoring; audio arming retains **Off**. MIDI monitoring uses the assigned plugin and its effects. An unassigned track offers **Choose instrument…** while still allowing note recording. Every recording creates a new clip; loop passes accumulate without replacing existing notes.
+
+Both MIDI and audio track headers reuse `record_arm_at`. Its direct child UI preserves the arranger's parent row geometry. The MIDI instrument selector sits alongside the arm control. **Window → Recording** also opens with no selected track so global timing controls remain available.
+
+`recording_timing_controls` is a shared component composed from the form, choice, toggle and slider components. **Pre-count** is a choice among **No pre-count**, **1 bar** and **2 bars**, disabled during capture. **Click** is a distinct toggle, also available on the transport, with the shared `Metronome` icon. **Click level** remains adjustable during playback. The count shows remaining beats while preserving the intended cursor position. Narrow transport layouts keep loop-range details in the existing Range popup/tooltip.
+
+MIDI audition pauses during pre-count so the prepared timeline can start exactly at the cue; dry audio monitoring remains available. Pre-count starts only from stopped transport; recording over running backing audio starts immediately. Click and level can change without replacing plugin processes. Recorded audio and exported WAVs exclude the click. MIDI/audio publication, error recovery, Save/Open/New/Quit and Undo use the common recording lifecycle.

@@ -36,6 +36,7 @@ impl Project {
             .collect();
         ensure!(clips.len() == ids.len(), "Selected clip no longer exists");
         for clip in &clips {
+            ensure!(!clip.is_take_source(), "Choose a take before joining it");
             ensure!(
                 matches!(
                     (&clip.content, kind),
@@ -64,7 +65,8 @@ impl Project {
             // One ordinary joined region cannot preserve separate priority
             // against a third, unselected region inside its new span (even gaps).
             ensure!(
-                !track.clips.iter().any(|clip| !selected.contains(&clip.id)
+                !track.clips.iter().any(|clip| !clip.is_take_source()
+                    && !selected.contains(&clip.id)
                     && clip.start < end
                     && clip.end() > start),
                 "Include overlapping clips before joining"

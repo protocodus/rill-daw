@@ -81,7 +81,10 @@ fn a_hung_worker_is_killed_at_the_response_deadline() {
     };
     let start = Instant::now();
     let error = child
-        .send_command(HostCommand::StartProcessing)
+        .send_command(HostCommand::Process {
+            inputs: vec![],
+            frames: 64,
+        })
         .unwrap_err();
     assert!(error.to_lowercase().contains("timed out"), "{error}");
     assert!(start.elapsed() < Duration::from_secs(2));

@@ -1,4 +1,4 @@
-# vst3-host 0.10.0: native parameter automation menus
+# vst3-host 0.10.0: native automation menus and stable plugin loading
 
 Source: the published `vst3-host` 0.10.0 crate from crates.io, licensed under MIT
 (see LICENSE). Upstream repository: https://github.com/HelgeSverre/rust-vst3-host/.
@@ -23,13 +23,46 @@ thread. Changes to the configured actions and component-handler destruction inva
 targets. Weak references prevent pending-menu ownership cycles. The isolated host
 command protocol forwards the same configuration and notification.
 
+Plugin loading and `Plugin::has_editor` never call `IEditController::createView`.
+Controller presence supplies an optimistic editor capability hint, as it already
+does during discovery; requesting the editor validates whether a view is available.
+This avoids initializing GUI frameworks inside an audio-only worker. An eager
+load-time editor probe caused the reported Hammond B-3X crash; native editors still
+open explicitly in Rill's separate editor helper.
+
+Plugin activation, deactivation, reconfiguration, complete parameter enumeration,
+and other lifecycle operations use the existing bounded 30-second control deadline.
+AAS Player can take longer than the 100-millisecond audio deadline to activate, and
+enumerating its thousands of parameters can approach that bound. These control
+operations must not be mistaken for a hung audio callback. `Process` and
+`ProcessBuses` retain their short deadline, and exceeding either deadline still
+terminates the worker. Native fixtures exercise delayed lifecycle callbacks and
+metadata enumeration, along with both lifecycle and audio timeout enforcement.
+
+Isolated lifecycle and configuration commands use the configured bounded slow
+operation deadline (30 seconds in Rill), including start/stop, sample rate, block
+size, and bus reconfiguration. Native instruments can legitimately spend longer
+than one audio-block deadline in these calls; AAS initialization took about 200 ms.
+Audio `Process` and `ProcessBuses` retain Rill's 100 ms deadline, so a stalled
+processor still terminates promptly. The native fixture delays lifecycle callbacks
+by 200 ms and checks both successful initialization and enforced timeout bounds.
+
 Regression coverage lives with the upstream COM implementation unit tests and
-process-isolation serialization tests. Run from the repository root:
+process-isolation serialization tests. A native test plugin terminates its worker
+if `createView` is reached: `native_dsp_load` checks DSP/state and capability queries,
+while the app test checks parameter editing, audible export, and archive recall.
+Run from the repository root:
 
 ```sh
 cargo test --locked -p vst3-host --lib component_handler_tests
 cargo test --locked -p vst3-host --lib host_notifications_and_restart_requests_round_trip_across_the_wire
+cargo test --locked -p vst3-host --lib slow_commands_are_classified_apart_from_the_per_block_ones
+cargo build --locked --workspace --bins
+cargo test --locked -p daw-plugins --test native_dsp_load
+cargo test --locked -p daw-app --test plugin_loading_e2e
 ```
 
 Remove the local patch once an upstream release provides equivalent host-prefilled
-actions and retained-target validation, after verifying both native-menu paths.
+actions, retained-target validation, side-effect-free editor capability queries,
+and separate bounded lifecycle/audio deadlines,
+after verifying both native-menu paths and headless plugin loading.

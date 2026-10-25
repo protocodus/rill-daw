@@ -1,12 +1,15 @@
 mod app;
 mod arrangement;
 mod audio_editor;
+mod audio_silence;
+mod audio_takes_ui;
 mod automation;
 mod automation_editor;
 mod crossfade_ui;
 mod document_ui;
 mod editor;
 mod engine_lifecycle;
+mod error_ui;
 mod export_ui;
 mod history_ui;
 mod join_ui;
@@ -16,8 +19,10 @@ mod midi_editor;
 mod midi_generate_ui;
 mod plugin_ui;
 mod project_io;
+mod recording_ui;
 mod routing;
 mod settings;
+mod spectrogram;
 mod theme;
 #[cfg(test)]
 mod ui_tests;

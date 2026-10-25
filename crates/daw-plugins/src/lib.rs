@@ -357,7 +357,9 @@ impl VstInstrument {
             category: raw.category.clone(),
             class_id: Some(raw.uid.clone()),
         };
-        plugin.start_processing()?;
+        plugin
+            .start_processing()
+            .with_context(|| format!("Starting VST3 processor {}", path.display()))?;
         let latency = plugin.latency_samples();
         let tail = plugin.tail_samples();
         ensure!(

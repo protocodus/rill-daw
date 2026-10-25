@@ -47,6 +47,10 @@ mod quality_tests;
 #[path = "audio_overlap_tests.rs"]
 mod audio_overlap_tests;
 
+#[cfg(test)]
+#[path = "midi_loop_tests.rs"]
+mod midi_loop_tests;
+
 pub(crate) const BLOCK: usize = 256;
 
 #[derive(Clone, Copy)]
@@ -113,6 +117,7 @@ struct AudioClip {
     source_alias: std::path::PathBuf,
     source_rate: f64,
     processing: daw_core::AudioProcessing,
+    is_preview: bool,
     original: Arc<AudioData>,
     start: u64,
     source_offset: f64,
@@ -344,7 +349,7 @@ struct Route {
     output: Vec<[f32; 2]>,
 }
 
-fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
+pub(crate) fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
     let mut unmuted = HashSet::new();
     let mut selected = HashSet::new();
     let any_solo = project
@@ -404,8 +409,14 @@ fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
 
 struct RenderTrack {
     id: u64,
+    name: String,
+    pending_error: Option<String>,
     audio: Arc<Vec<AudioClip>>,
     audio_segments: Arc<Vec<audio_schedule::Segment>>,
+    // A short source-only correction bridges edits/refinement before inserts.
+    // Preallocated at graph construction; no retained asset is dropped by DSP.
+    audio_transition: Vec<[f32; 2]>,
+    audio_transition_cursor: usize,
     notes: Arc<Vec<ScheduledNote>>,
     events: Arc<Vec<Event>>,
     note_order: Arc<Vec<usize>>,
@@ -446,6 +457,7 @@ struct BlockContext {
     sample_rate: u32,
     tempo: f64,
     timeline: bool,
+    live_input: bool,
     meter_decay: f32,
 }
 
@@ -455,6 +467,10 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
             return Err(error);
         }
         track.plugin_failed = true;
+        track.pending_error = Some(format!(
+            "Plugin processing failed on \"{}\"\n\nChannel: \"{}\" (ID {})\n{error:#}",
+            track.name, track.name, track.id
+        ));
         track.delay.reset();
         if let Some(meter) = &track.meter {
             meter.clear();
@@ -464,12 +480,68 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
     Ok(0)
 }
 
+/// Stable merge of two timestamp-ordered runs without scratch allocation.
+/// Input batches are bounded; the already sorted sequencer run stays untouched
+/// in the common case without live input or when all input offsets are zero.
+fn merge_midi_events(messages: &mut [MidiMessage], middle: usize) {
+    if middle == 0
+        || middle == messages.len()
+        || messages[middle - 1].offset <= messages[middle].offset
+    {
+        return;
+    }
+    if messages.len() == 2 {
+        messages.swap(0, 1);
+        return;
+    }
+    let (left_cut, right_cut) = if middle > messages.len() - middle {
+        let left = middle / 2;
+        let right = middle
+            + messages[middle..].partition_point(|event| event.offset < messages[left].offset);
+        (left, right)
+    } else {
+        let right = middle + (messages.len() - middle) / 2;
+        let left =
+            messages[..middle].partition_point(|event| event.offset <= messages[right].offset);
+        (left, right)
+    };
+    messages[left_cut..right_cut].rotate_left(middle - left_cut);
+    let next_middle = left_cut + right_cut - middle;
+    let (left, right) = messages.split_at_mut(next_middle);
+    merge_midi_events(left, left_cut);
+    merge_midi_events(right, right_cut - next_middle);
+}
+
 impl RenderTrack {
     fn collect_midi(&mut self, context: BlockContext) {
         let start = context.start;
         let end = start + context.count as u64;
         self.midi.clear();
-        self.midi.append(&mut self.live_midi);
+        // Driver clock resets can make a bounded input batch locally unordered.
+        // Binary insertion retains equal-offset off/on articulation ordering.
+        for index in 1..self.live_midi.len() {
+            let offset = self.live_midi[index].offset;
+            if self.live_midi[index - 1].offset > offset {
+                let before =
+                    self.live_midi[..index].partition_point(|event| event.offset <= offset);
+                self.live_midi[before..=index].rotate_right(1);
+            }
+        }
+        // A loop can split one worker block into shorter processing segments.
+        // Keep later input edges for the next segment, in audible sample time.
+        // Latency priming discards output, so it must not consume these edges.
+        let live_count = if context.live_input {
+            self.live_midi
+                .partition_point(|event| event.offset < context.count as u32)
+        } else {
+            0
+        };
+        self.midi.extend(self.live_midi.drain(..live_count));
+        if context.live_input {
+            for event in &mut self.live_midi {
+                event.offset -= context.count as u32;
+            }
+        }
         if context.timeline {
             for event in self.chase.drain(..) {
                 self.midi.push(event.message(0));
@@ -487,6 +559,9 @@ impl RenderTrack {
             record_active_note(&mut self.active_notes, &mut self.active_indices, *event);
             self.event_cursor += 1;
         }
+        // Input events can land between sequencer events within this block.
+        // Stable ordering preserves a retrigger's note-off/note-on edge order.
+        merge_midi_events(&mut self.midi, live_count);
     }
 
     fn process(&mut self, context: BlockContext) -> Result<()> {
@@ -526,7 +601,13 @@ impl RenderTrack {
                         &mut self.right[..count],
                     )
                 });
-                process?;
+                process.with_context(|| {
+                    format!(
+                        "Processing instrument \"{}\" ({})",
+                        plugin.info().name,
+                        plugin.info().path.display()
+                    )
+                })?;
                 for index in 0..count {
                     self.mix_left[index] += f64::from(self.left[index]);
                     self.mix_right[index] += f64::from(self.right[index]);
@@ -570,6 +651,19 @@ impl RenderTrack {
                     }
                 }
             }
+            let transition_frames = count.min(
+                self.audio_transition
+                    .len()
+                    .saturating_sub(self.audio_transition_cursor),
+            );
+            for index in 0..transition_frames {
+                let cursor = self.audio_transition_cursor + index;
+                let gain = 1.0
+                    - cursor as f64 / self.audio_transition.len().saturating_sub(1).max(1) as f64;
+                self.mix_left[index] += f64::from(self.audio_transition[cursor][0]) * gain;
+                self.mix_right[index] += f64::from(self.audio_transition[cursor][1]) * gain;
+            }
+            self.audio_transition_cursor += transition_frames;
         }
         // Convert once after every source/bus contribution is accumulated.
         // Plug-in buffers and graph edges retain their f32 representation.
@@ -609,7 +703,13 @@ impl RenderTrack {
                             &mut self.insert_right[..count],
                         )
                     });
-                    process?;
+                    process.with_context(|| {
+                        format!(
+                            "Processing effect \"{}\" ({})",
+                            effect.info().name,
+                            effect.info().path.display()
+                        )
+                    })?;
                     std::mem::swap(&mut self.left, &mut self.insert_left);
                     std::mem::swap(&mut self.right, &mut self.insert_right);
                     effect_latency += effect.latency_samples();
@@ -687,6 +787,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    midi_input_notes: Vec<(u64, u8, u8)>,
     metering: bool,
     live_edit_context: Arc<LiveEditContext>,
 }
@@ -791,6 +892,9 @@ impl Renderer {
                 "Track processing latency exceeds ten seconds"
             );
             for clip in &track.clips {
+                if clip.is_take_source() {
+                    continue;
+                }
                 end_sample = end_sample.max(to_sample(clip.start + clip.length));
             }
             ensure!(
@@ -805,6 +909,7 @@ impl Renderer {
                     sample_rate,
                     options,
                     cancel,
+                    preview: false,
                 },
                 &mut audio_cache,
                 &mut cache_bytes,
@@ -910,8 +1015,12 @@ impl Renderer {
             }
             tracks.push(RenderTrack {
                 id: track.id,
+                name: track.name.clone(),
+                pending_error: None,
                 audio: content.audio,
                 audio_segments: content.audio_segments,
+                audio_transition: vec![[0.0; 2]; (sample_rate as usize / 200).max(2)],
+                audio_transition_cursor: (sample_rate as usize / 200).max(2),
                 notes: content.notes,
                 events: content.events,
                 note_order: content.note_order,
@@ -1050,6 +1159,7 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            midi_input_notes: Vec::with_capacity(4096),
             metering: false,
             live_edit_context: Arc::new(LiveEditContext::new(
                 project,
@@ -1058,7 +1168,7 @@ impl Renderer {
                 tail_samples,
             )),
         };
-        renderer.seek_sample(0)?;
+        renderer.seek_sample(0, false)?;
         check_cancelled()?;
         Ok(renderer)
     }
@@ -1096,10 +1206,20 @@ impl Renderer {
                 .iter_mut()
                 .find(|insert| matches!(insert, Insert::Vst { id, .. } if *id == effect_id))
                 .context("Insert is not active in the render graph")?;
-            effect.set_parameter(parameter_id, value)?;
+            effect.set_parameter(parameter_id, value).with_context(|| {
+                format!(
+                    "Setting parameter {parameter_id} of effect \"{}\" ({}) on channel \"{}\" (ID {})",
+                    effect.info().name, effect.info().path.display(), track.name, track.id
+                )
+            })?;
             parameters
         } else if let Processor::Vst(plugin) = &mut track.processor {
-            plugin.set_parameter(parameter_id, value)?;
+            plugin.set_parameter(parameter_id, value).with_context(|| {
+                format!(
+                    "Setting parameter {parameter_id} of instrument \"{}\" ({}) on channel \"{}\" (ID {})",
+                    plugin.info().name, plugin.info().path.display(), track.name, track.id
+                )
+            })?;
             &mut track.instrument_automation
         } else {
             bail!("Track has no assigned VST instrument")
@@ -1110,6 +1230,15 @@ impl Renderer {
             }
         }
         Ok(())
+    }
+
+    /// Drain one contained plugin failure after the graph workers return their nodes.
+    /// Failed paths are latched, so subsequent blocks do not recreate the diagnostic.
+    pub(crate) fn take_plugin_error(&mut self) -> Option<String> {
+        self.tracks
+            .iter_mut()
+            .flatten()
+            .find_map(|track| track.pending_error.take())
     }
 
     pub(crate) fn finished(&self) -> bool {
@@ -1125,16 +1254,20 @@ impl Renderer {
         // boundaries. Reordering these operations can move a seek one sample.
         let samples_per_beat = self.sample_rate as f64 * 60.0 / self.tempo;
         let sample = (beat * samples_per_beat).round() as u64;
-        self.seek_sample(sample)
+        self.seek_sample(sample, false)
     }
 
-    fn seek_sample(&mut self, sample: u64) -> Result<()> {
+    fn seek_sample(&mut self, sample: u64, loop_wrap: bool) -> Result<()> {
         self.release_end_sample = 0;
         self.end_sample = self.timeline_end_sample;
-        self.audition = None;
+        if !loop_wrap {
+            self.audition = None;
+            self.midi_input_notes.clear();
+        }
         self.source_sample = sample;
         self.logical_sample = sample;
         for track in self.tracks.iter_mut().flatten() {
+            track.audio_transition_cursor = track.audio_transition.len();
             for parameter in &mut track.instrument_automation {
                 parameter.previous = None;
             }
@@ -1155,6 +1288,13 @@ impl Renderer {
                                 return Err(error);
                             }
                             track.plugin_failed = true;
+                            track.pending_error = Some(format!(
+                                "Plugin reset failed on \"{}\"\n\nResetting effect \"{}\" ({}) on channel ID {}: {error:#}",
+                                track.name,
+                                effect.info().name,
+                                effect.info().path.display(),
+                                track.id
+                            ));
                             self.plugin_errors += 1;
                         }
                     }
@@ -1163,17 +1303,38 @@ impl Renderer {
             }
             track.event_cursor = track.events.partition_point(|event| event.sample < sample);
             track.chase.clear();
+            if loop_wrap {
+                // Looping restarts sequencer notes, not the independent live
+                // input/audition voices already sounding in this instrument.
+                // A whole-instrument reset would kill and retrigger those keys.
+                track
+                    .chase
+                    .extend(track.active_notes.iter().map(|&note| Event {
+                        sample,
+                        note,
+                        on: false,
+                    }));
+            }
             track.active_notes.clear();
             track.active_indices.clear();
-            track.live_midi.clear();
+            if !loop_wrap {
+                track.live_midi.clear();
+            }
             match &mut track.processor {
                 Processor::None => {}
-                Processor::Vst(plugin) if !track.plugin_failed => {
+                Processor::Vst(plugin) if !track.plugin_failed && !loop_wrap => {
                     if let Err(error) = plugin.reset() {
                         if !self.tolerate_plugin_failure {
                             return Err(error);
                         }
                         track.plugin_failed = true;
+                        track.pending_error = Some(format!(
+                            "Plugin reset failed on \"{}\"\n\nResetting instrument \"{}\" ({}) on channel ID {}: {error:#}",
+                            track.name,
+                            plugin.info().name,
+                            plugin.info().path.display(),
+                            track.id
+                        ));
                         self.plugin_errors += 1;
                     }
                 }
@@ -1197,7 +1358,7 @@ impl Renderer {
         let mut remaining = self.latency as usize;
         while remaining > 0 {
             let count = remaining.min(BLOCK);
-            self.segment(&mut discard[..count])?;
+            self.segment(&mut discard[..count], false)?;
             remaining -= count;
         }
         // Priming feeds latency compensation, not audible playback. Do not let
@@ -1261,6 +1422,82 @@ impl Renderer {
         Ok(())
     }
 
+    /// Normalize the complete held MIDI input chord on the render worker. A
+    /// route or device disappearing releases every voice, and seek/reset clears
+    /// the remembered set so currently held keys are restored on the next block.
+    pub(crate) fn release_midi_input_note(&mut self, id: u64, pitch: u8, offset: u32) {
+        if let Some(index) = self
+            .midi_input_notes
+            .iter()
+            .position(|note| note.0 == id && note.1 == pitch)
+        {
+            self.midi_input_notes.remove(index);
+            if let Some(track) = self
+                .tracks
+                .iter_mut()
+                .flatten()
+                .find(|track| track.id == id)
+            {
+                track.live_midi.push(MidiMessage {
+                    offset,
+                    pitch,
+                    velocity: 0,
+                    on: false,
+                });
+            }
+        }
+    }
+
+    pub(crate) fn set_midi_input_notes(
+        &mut self,
+        notes: &[(u64, u8, u8)],
+        offset: u32,
+    ) -> Result<()> {
+        ensure!(notes.len() <= 4096, "MIDI monitor voice limit exceeded");
+        if self.midi_input_notes == notes {
+            return Ok(());
+        }
+        for &(id, pitch, velocity) in &self.midi_input_notes {
+            if notes.binary_search(&(id, pitch, velocity)).is_err()
+                && let Some(track) = self
+                    .tracks
+                    .iter_mut()
+                    .flatten()
+                    .find(|track| track.id == id)
+            {
+                track.live_midi.push(MidiMessage {
+                    offset,
+                    pitch,
+                    velocity: 0,
+                    on: false,
+                });
+            }
+        }
+        for &(id, pitch, velocity) in notes {
+            if self
+                .midi_input_notes
+                .binary_search(&(id, pitch, velocity))
+                .is_err()
+                && let Some(track) = self
+                    .tracks
+                    .iter_mut()
+                    .flatten()
+                    .find(|track| track.id == id)
+                && matches!(track.processor, Processor::Vst(_))
+            {
+                track.live_midi.push(MidiMessage {
+                    offset,
+                    pitch,
+                    velocity,
+                    on: true,
+                });
+            }
+        }
+        self.midi_input_notes.clear();
+        self.midi_input_notes.extend_from_slice(notes);
+        Ok(())
+    }
+
     pub(crate) fn render_preview(
         &mut self,
         output: &mut [[f32; 2]],
@@ -1270,7 +1507,7 @@ impl Renderer {
             self.preview && output.len() == positions.len(),
             "Invalid audition render"
         );
-        self.segment(output)?;
+        self.segment(output, true)?;
         positions.fill(self.logical_sample as f64 / self.sample_rate as f64 * self.tempo / 60.0);
         Ok(())
     }
@@ -1285,7 +1522,7 @@ impl Renderer {
             if let Some((start, end)) = self.loop_range
                 && self.logical_sample >= end
             {
-                self.seek_sample(start)?;
+                self.seek_sample(start, true)?;
             }
             let remaining = self
                 .loop_range
@@ -1293,7 +1530,7 @@ impl Renderer {
                 .unwrap_or(usize::MAX);
             let count = BLOCK.min(output.len() - offset).min(remaining);
             let first_sample = self.logical_sample;
-            self.segment(&mut output[offset..offset + count])?;
+            self.segment(&mut output[offset..offset + count], true)?;
             for (index, position) in positions[offset..offset + count].iter_mut().enumerate() {
                 *position = (first_sample + index as u64 + 1) as f64 / self.sample_rate as f64
                     * self.tempo
@@ -1312,7 +1549,7 @@ impl Renderer {
         }
     }
 
-    fn segment(&mut self, output: &mut [[f32; 2]]) -> Result<()> {
+    fn segment(&mut self, output: &mut [[f32; 2]], live_input: bool) -> Result<()> {
         output.fill([0.0; 2]);
         let mut master = [[0.0_f64; 2]; BLOCK];
         let context = BlockContext {
@@ -1321,6 +1558,7 @@ impl Renderer {
             sample_rate: self.sample_rate,
             tempo: self.tempo,
             timeline: !self.preview,
+            live_input,
             meter_decay: if self.metering {
                 // Instant attack, 24 dB/second release, independent of block size.
                 (-std::f32::consts::LN_10 * 1.2 * output.len() as f32 / self.sample_rate as f32)
@@ -1637,6 +1875,40 @@ fn write_wav_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_midi_merge_preserves_equal_offset_edges_without_allocating() {
+        for left_len in 0..32 {
+            for right_len in 0..32 {
+                let mut messages: Vec<_> = (0..left_len + right_len)
+                    .map(|index| MidiMessage {
+                        offset: ((index * 17 + index / 3) % 11) as u32,
+                        pitch: index as u8,
+                        velocity: 100,
+                        on: index % 2 == 0,
+                    })
+                    .collect();
+                messages[..left_len].sort_by_key(|message| message.offset);
+                messages[left_len..].sort_by_key(|message| message.offset);
+                let mut expected = messages.clone();
+                expected.sort_by_key(|message| message.offset);
+                let allocations = crate::allocation_test_support::count_allocations(|| {
+                    merge_midi_events(&mut messages, left_len)
+                });
+                assert_eq!(allocations, 0);
+                let actual: Vec<_> = messages
+                    .iter()
+                    .map(|event| (event.offset, event.pitch, event.on))
+                    .collect();
+                let expected: Vec<_> = expected
+                    .iter()
+                    .map(|event| (event.offset, event.pitch, event.on))
+                    .collect();
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
     use daw_core::{
         AutomationPoint, AutomationTarget, Clip, Interpolation, Note, Track, TrackKind,
     };

@@ -36,6 +36,9 @@ fn request_id() -> Result<u64> {
 }
 
 const DEADLINE: Duration = Duration::from_secs(30);
+// EOF can reach the reader thread just before the OS publishes the child exit status.
+// Poll briefly for it; never block the UI waiting for a helper that closed stdout early.
+const EXIT_STATUS_GRACE: Duration = Duration::from_millis(100);
 const MAX_WIRE_BYTES: u64 = 256 * 1024 * 1024 + 4096;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -114,6 +117,22 @@ pub(crate) enum EditorCommand {
     },
 }
 
+impl EditorCommand {
+    fn operation(&self) -> &'static str {
+        match self {
+            Self::Open { .. } => "Open native editor",
+            Self::SetParameter { .. } => "Set plugin parameter",
+            Self::SaveState { .. } => "Save plugin state",
+            Self::Capture { .. } => "Capture plugin preview",
+            Self::Close { .. } => "Close native editor",
+            #[cfg(debug_assertions)]
+            Self::RestoreStateWithoutNotifications { .. } => "Restore plugin state",
+            #[cfg(all(debug_assertions, target_os = "macos"))]
+            Self::MouseDrag { .. } => "Edit native plugin control",
+        }
+    }
+}
+
 /// A Send handle. Open it on a worker; polling and control writes are nonblocking.
 /// Keep it alive until `Closed` after requesting close so the final state is retained.
 pub struct EditorSession {
@@ -123,6 +142,9 @@ pub struct EditorSession {
     pending: Option<EditorEvent>,
     last_response: Instant,
     response_timeout: Duration,
+    plugin_path: Option<PathBuf>,
+    last_operation: Cell<&'static str>,
+    disconnected_at: Option<Instant>,
     close_request: Cell<Option<u64>>,
     closed: bool,
 }
@@ -188,12 +210,27 @@ impl EditorSession {
     }
 
     fn spawn(command: EditorCommand, helper: &Path, timeout: Duration) -> Result<Self> {
+        let plugin_path = match &command {
+            EditorCommand::Open { path, .. } => Some(path.clone()),
+            _ => None,
+        };
+        let operation = command.operation();
         let mut child = Command::new(helper)
             .arg("--editor")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .spawn()?;
+            .spawn()
+            .with_context(|| {
+                format!(
+                    "Starting native editor helper {}{}",
+                    helper.display(),
+                    plugin_path
+                        .as_ref()
+                        .map(|path| format!(" for {}", path.display()))
+                        .unwrap_or_default()
+                )
+            })?;
         let mut input = child.stdin.take().context("Missing editor command pipe")?;
         let output = child
             .stdout
@@ -243,16 +280,34 @@ impl EditorSession {
             pending: None,
             last_response: Instant::now(),
             response_timeout: timeout,
+            plugin_path,
+            last_operation: Cell::new(operation),
+            disconnected_at: None,
             close_request: Cell::new(None),
             closed: false,
         };
         session.send(command)?;
         let deadline = Instant::now() + timeout;
         loop {
-            let event = session
+            let event = match session
                 .events
                 .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .context("Native editor initialization timed out or exited")?;
+            {
+                Ok(event) => event,
+                Err(mpsc::RecvTimeoutError::Timeout) => bail!(session.diagnostic(format!(
+                    "Native editor initialization timed out after {} ms; helper terminated",
+                    timeout.as_millis()
+                ))),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    if let Some(message) = session.disconnected_error() {
+                        bail!(message);
+                    }
+                    // Initialization already runs on a worker. Runtime polling below does
+                    // not sleep; its caller retries on a later frame.
+                    std::thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+            };
             match event {
                 EditorEvent::Ready { .. } => {
                     session.last_response = Instant::now();
@@ -260,17 +315,55 @@ impl EditorSession {
                     return Ok(session);
                 }
                 EditorEvent::Heartbeat => {}
-                EditorEvent::Error { message } => bail!(message),
-                _ => bail!("Native editor exited before initialization completed"),
+                EditorEvent::Error { message } => bail!(session.diagnostic(message)),
+                _ => bail!(
+                    session.diagnostic("Native editor exited before initialization completed")
+                ),
             }
         }
     }
 
+    fn diagnostic(&self, message: impl std::fmt::Display) -> String {
+        let mut details = format!("{message}\nLast request: {}", self.last_operation.get());
+        if let Some(path) = &self.plugin_path {
+            details.push_str(&format!("\nPlugin: {}", path.display()));
+        }
+        details.push_str(&format!("\nEditor helper PID: {}", self.child.id()));
+        details
+    }
+
+    fn disconnected_error(&mut self) -> Option<String> {
+        let cause = match self.child.try_wait() {
+            Ok(Some(status)) => format!("Native editor process exited unexpectedly ({status})"),
+            Ok(None) => {
+                let disconnected = self.disconnected_at.get_or_insert_with(Instant::now);
+                if disconnected.elapsed() < EXIT_STATUS_GRACE {
+                    return None;
+                }
+                let _ = self.child.kill();
+                "Native editor response pipe closed while its helper was still running; helper terminated".to_owned()
+            }
+            Err(error) => {
+                let _ = self.child.kill();
+                format!(
+                    "Could not read native editor helper exit status: {error}; helper terminated"
+                )
+            }
+        };
+        self.closed = true;
+        Some(self.diagnostic(cause))
+    }
+
     fn send(&self, command: EditorCommand) -> Result<()> {
         ensure!(!self.closed, "Native editor is closed");
-        self.commands
-            .try_send(command)
-            .map_err(|error| anyhow::anyhow!("Native editor command queue unavailable: {error}"))
+        let operation = command.operation();
+        self.commands.try_send(command).map_err(|error| {
+            anyhow::anyhow!(self.diagnostic(format!(
+                "Could not request {operation}: native editor command queue unavailable: {error}"
+            )))
+        })?;
+        self.last_operation.set(operation);
+        Ok(())
     }
 
     pub fn set_parameter(&self, id: u32, value: f64) -> Result<()> {
@@ -329,19 +422,21 @@ impl EditorSession {
                     if matches!(event, EditorEvent::Closed { .. }) {
                         self.closed = true;
                     }
-                    if matches!(event, EditorEvent::Error { .. }) {
+                    if let EditorEvent::Error { message } = event {
                         // A failure is terminal: queued or malformed Closed events
                         // can never turn a failed state operation into success.
                         self.closed = true;
                         let _ = self.child.kill();
+                        return Some(EditorEvent::Error {
+                            message: self.diagnostic(message),
+                        });
                     }
                     return Some(event);
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    self.closed = true;
-                    return Some(EditorEvent::Error {
-                        message: "Native editor process exited unexpectedly".into(),
-                    });
+                    return self
+                        .disconnected_error()
+                        .map(|message| EditorEvent::Error { message });
                 }
                 Err(mpsc::TryRecvError::Empty)
                     if self.last_response.elapsed() > self.response_timeout =>
@@ -349,7 +444,10 @@ impl EditorSession {
                     self.closed = true;
                     let _ = self.child.kill();
                     return Some(EditorEvent::Error {
-                        message: "Native editor stopped responding and was terminated".into(),
+                        message: self.diagnostic(format!(
+                            "Native editor stopped responding for {} ms and was terminated",
+                            self.response_timeout.as_millis()
+                        )),
                     });
                 }
                 Err(mpsc::TryRecvError::Empty) => return None,
@@ -391,7 +489,10 @@ fn capture_session(mut session: EditorSession, output_png: &Path) -> Result<()> 
     let deadline = Instant::now() + DEADLINE;
     let mut captured = false;
     loop {
-        ensure!(Instant::now() < deadline, "Native editor capture timed out");
+        ensure!(
+            Instant::now() < deadline,
+            session.diagnostic("Native editor capture timed out after 30000 ms")
+        );
         if let Some(event) = session.try_recv() {
             match event {
                 EditorEvent::Captured { .. } => {
@@ -403,7 +504,9 @@ fn capture_session(mut session: EditorSession, output_png: &Path) -> Result<()> 
                 }
                 EditorEvent::Error { message } => bail!(message),
                 EditorEvent::Closed { .. } if captured => return Ok(()),
-                EditorEvent::Closed { .. } => bail!("Native editor closed before capture"),
+                EditorEvent::Closed { .. } => {
+                    bail!(session.diagnostic("Native editor closed before capture"))
+                }
                 _ => {}
             }
         }
@@ -449,13 +552,21 @@ mod tests {
         helper: &Path,
         timeout: Duration,
     ) -> Result<EditorSession> {
+        spawn_fake_command(|| EditorCommand::SaveState { request_id }, helper, timeout)
+    }
+
+    #[cfg(unix)]
+    fn spawn_fake_command(
+        command: impl Fn() -> EditorCommand,
+        helper: &Path,
+        timeout: Duration,
+    ) -> Result<EditorSession> {
         // A concurrent Linux fork can briefly inherit the writable descriptor
         // of a freshly created script. Retry only that exec failure, before a
         // session exists; protocol timeouts and their assertions stay unchanged.
         let spawn_deadline = Instant::now() + Duration::from_millis(250);
         loop {
-            let result =
-                EditorSession::spawn(EditorCommand::SaveState { request_id }, helper, timeout);
+            let result = EditorSession::spawn(command(), helper, timeout);
             let text_file_busy = result.as_ref().err().is_some_and(|error| {
                 error
                     .downcast_ref::<std::io::Error>()
@@ -492,7 +603,10 @@ mod tests {
             Some(EditorEvent::Ready { .. })
         ));
         session.child.kill().unwrap();
-        assert!(wait_for_failure(&mut session).contains("exited unexpectedly"));
+        let message = wait_for_failure(&mut session);
+        assert!(message.contains("exited unexpectedly"), "{message}");
+        assert!(message.contains("signal: 9"), "{message}");
+        assert!(message.contains("Editor helper PID:"), "{message}");
         assert!(session.try_recv().is_none());
     }
 
@@ -520,8 +634,109 @@ mod tests {
         let error = spawn_fake_helper(1, &helper, Duration::from_millis(80))
             .err()
             .unwrap();
-        assert!(error.to_string().contains("initialization timed out"));
+        let message = error.to_string();
+        assert!(
+            message.contains("initialization timed out after 80 ms"),
+            "{message}"
+        );
+        assert!(!message.contains("exited unexpectedly"), "{message}");
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[cfg(unix)]
+    fn fake_open(helper: &Path) -> Result<EditorSession> {
+        spawn_fake_command(
+            || EditorCommand::Open {
+                path: PathBuf::from("/plugins/Missing resources 🎹.vst3"),
+                class_id: None,
+                state: vec![],
+                parameters: vec![],
+                visible: false,
+            },
+            helper,
+            Duration::from_secs(5),
+        )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_editor_startup_exit_reports_status_and_plugin_identity() {
+        let (_directory, helper) = fake_helper("IFS= read -r request\nexit 17");
+        let message = fake_open(&helper).err().unwrap().to_string();
+        assert!(message.contains("exit status: 17"), "{message}");
+        assert!(
+            message.contains("Last request: Open native editor"),
+            "{message}"
+        );
+        assert!(
+            message.contains("/plugins/Missing resources 🎹.vst3"),
+            "{message}"
+        );
+        assert!(message.contains("Editor helper PID:"), "{message}");
+        assert!(!message.contains("timed out"), "{message}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_editor_runtime_exit_reports_last_request_and_exit_code() {
+        let (_directory, helper) = fake_helper(
+            "IFS= read -r initial\nprintf '%s\\n' '{\"event\":\"ready\",\"parameters\":[]}'\nIFS= read -r request\nexit 19",
+        );
+        let mut session = fake_open(&helper).unwrap();
+        assert!(matches!(
+            session.try_recv(),
+            Some(EditorEvent::Ready { .. })
+        ));
+        session.save_state().unwrap();
+        let message = wait_for_failure(&mut session);
+        assert!(message.contains("exit status: 19"), "{message}");
+        assert!(
+            message.contains("Last request: Save plugin state"),
+            "{message}"
+        );
+        assert!(
+            message.contains("/plugins/Missing resources 🎹.vst3"),
+            "{message}"
+        );
+        assert!(session.try_recv().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_editor_reported_error_retains_its_cause_and_plugin_identity() {
+        let (_directory, helper) = fake_helper(
+            "IFS= read -r request\nprintf '%s\\n' '{\"event\":\"error\",\"message\":\"Load failed: resource.pak: No such file or directory\"}'\nexec sleep 30",
+        );
+        let message = fake_open(&helper).err().unwrap().to_string();
+        assert!(
+            message.contains("Load failed: resource.pak: No such file or directory"),
+            "{message}"
+        );
+        assert!(
+            message.contains("/plugins/Missing resources 🎹.vst3"),
+            "{message}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_editor_closed_pipe_does_not_block_waiting_for_a_live_helper() {
+        let (_directory, helper) = fake_helper(
+            "IFS= read -r initial\nprintf '%s\\n' '{\"event\":\"ready\",\"parameters\":[]}'\nexec 1>&-\nexec sleep 30",
+        );
+        let mut session = fake_open(&helper).unwrap();
+        assert!(matches!(
+            session.try_recv(),
+            Some(EditorEvent::Ready { .. })
+        ));
+        let message = wait_for_failure(&mut session);
+        assert!(
+            message.contains("response pipe closed while its helper was still running"),
+            "{message}"
+        );
+        assert!(!message.contains("exit status:"), "{message}");
+        assert!(!session.child.wait().unwrap().success());
+        assert!(session.try_recv().is_none());
     }
 
     #[cfg(unix)]
@@ -605,7 +820,8 @@ exec sleep 30
             session.try_recv(),
             Some(EditorEvent::Ready { .. })
         ));
-        assert_eq!(wait_for_failure(&mut session), "state failed");
+        let message = wait_for_failure(&mut session);
+        assert!(message.starts_with("state failed\n"), "{message}");
         assert!(session.try_recv().is_none());
         assert!(session.close().is_err());
     }

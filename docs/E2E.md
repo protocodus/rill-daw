@@ -11,6 +11,8 @@ The suite runs on macOS and in a Linux arm64 container with Rust 1.92. The headl
 
 The integration tests launch the production `rill --headless` executable as a separate process. It runs the real application and egui frame processing without opening a native window or audio device. Pointer clicks use visible labels, and WAV imports use normal hover and file-drop events. Mixdown uses the same asynchronous export worker as File → Export WAV. Each test supplies a separate temporary configuration, cache, and scratch directory; closing exercises the application's session recovery path there.
 
+The runner executes scenarios one at a time, including in CI and containers. Each app still runs its concurrent audio and isolated plugin workers with the production response deadlines. Serial scenario scheduling avoids turning functional tests into a test of several complete DAWs competing for limited runner CPUs; sample, continuity, crash-isolation and deadline assertions remain unchanged.
+
 By default the tests launch Cargo's application binary. Set `RILL_E2E_BINARY` to an absolute executable path to test a packaged build instead. CI runs all subprocess scenarios again against the executable extracted from each native distribution before uploading the archive.
 
 The audio scenario creates five tracks through the Track menu, drops generated WAV files with different lengths and sample rates onto their rows, exports the complete arrangement, and checks duration including the release tail, finite samples, nonzero stereo content, a distinct audible frequency from each of the five sources, 48 kHz / 32-bit floating-point format, recovered session contents, and successful process exit. Another scenario drops multiple files into empty arrangement space and checks that new tracks appear. Launch-and-quit and File → Quit scenarios verify display-free startup and shutdown. Further scenarios cover track creation and Undo/Redo, instrument/library selection, effect insertion/bypass/reordering and bus routing, mixer mute/solo, folder membership/collapse, and Setup Apply/Cancel persistence. The Add MIDI track scenario verifies automatic assignment-chooser opening and its four-beat pattern; choosing an instrument preserves that pattern. The `mixer_e2e` target drags arranger volume/pan controls, checks channel/destination labels against Mixer, verifies that folders do not consume channel numbers, exercises mute/solo and Undo/Redo, saves/reopens the session, and verifies that the exported stereo balance and level reflect those edits. All subprocess scenarios share `crates/daw-app/tests/common/mod.rs`.
@@ -23,7 +25,37 @@ The headless tests cover application behavior, UI event handling, model changes,
 
 `popup_backdrop_e2e` inspects actual paint order to require one theme-aware dim layer behind the active popup. It covers utilities, nested navigation, menu-bar and context menus, output and color pickers, combo boxes over both workspaces and utilities, and the unsaved-project confirmation. Closing or cancelling restores the caller and removes the dim when no popup remains; both appearances are exercised.
 
-`parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Real VST/editor coverage remains in the opt-in installed-plugin tests.
+`parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Third-party compatibility and native editor coverage remain in the opt-in installed-plugin tests.
+
+`error_details_e2e` exercises real export failures and isolated editor failures through
+the running app. It checks the complete diagnostic text, clipboard copy, retained
+caller, and safe dismissal. `render_error_e2e` runs a native VST3 whose processing
+exceeds the sandbox deadline alongside healthy audio: the Details view identifies
+the failed channel/plugin and cause, healthy audio continues while the dialog is
+open, and a dismissed failure does not repeat on every block. These tests use no
+desktop or audio hardware. Run them after building the workspace binaries:
+
+```sh
+cargo test --locked -p daw-app --test error_details_e2e --test render_error_e2e
+```
+
+`plugin_loading_e2e` compiles a native VST3 fixture and runs it through the production
+`daw-plugin-host`, with no protocol substitute. The fixture terminates its process
+if the host attempts to create an editor during audio loading or parameter reads.
+Its lifecycle calls take 200 ms to guard against applying audio-block deadlines
+to legitimate instrument initialization. Rill permits up to 30 seconds for
+start/stop and configuration while retaining 100 ms limits for audio processing;
+the native plugin tests also verify both timeout classes terminate stalled workers.
+The app scans the bundle, opens an assigned MIDI project, edits its Level parameter
+through the parameter browser, exports finite non-silent audio with the expected
+level change and note-off silence, then saves and restarts to verify identical
+audio from the recalled archive. It needs no installed plugin, desktop, or audio
+hardware. Build the production worker before running this target alone:
+
+```sh
+cargo build --locked --workspace --bins
+cargo test --locked -p daw-app --test plugin_loading_e2e
+```
 
 `native_parameter_automation_e2e` uses an isolated editor-process fixture to send the production native automation IPC event into the running app. It checks exact instrument/effect ownership, parameter ID zero, current-value initialization, reuse, Undo/Redo, save/reopen, and rejected requests during document confirmation. An opaque-preset scenario checks that the snapshot precedes lane creation, so Undo removes only the lane and preserves the current preset. The fixture never opens a native window or audio device. Host COM tests separately invoke the actual VST3 context-menu interfaces, covering both plugin-rendered copied targets and host-rendered popup callbacks, eligibility, stale targets, and thread/lifetime checks. Shared-menu and worker tests cover nested/disabled entries and process cancellation/failure. These automated layers do not claim compatibility with every third-party editor; native editors must expose the VST3 host-menu hook.
 
@@ -91,6 +123,13 @@ Supported commands:
 | --- | --- | --- |
 | `inspect` | optional `paint` | Advance frames and return the project, selection, popup state, settings, status, visible labels, and pointer/label geometry. With `paint: true`, also return clipped rectangle fills and strokes in `painted_rects` for visual-color assertions. |
 | `pump_audio` | `frames` (1–8192) | Consume audio through the production queue/callback consumer and return stereo `audio_output` samples. Requires the isolated driver's `RILL_E2E_VIRTUAL_AUDIO` mode; `engine` reports playback identity, revisions, position, and counters. |
+| `dummy_audio_device` | optional `input_channels` (1–32), `input_latency_frames`, `output_latency_frames` | Configure the device-free backend before recording. Omitted fields retain their values; defaults are two input channels and zero latency. Each latency is bounded to one second at the current sample rate. Requires `RILL_E2E_VIRTUAL_AUDIO`. |
+| `pump_input` | `channels`, `samples` (interleaved float array) | Deliver input and consume an equal number of output frames in bounded chunks; return stereo `audio_output`. Runs the production capture, monitoring, and disk-writer path. Requires a configured virtual input with matching channel count. |
+| `feed_input` | `channels`, `samples` (interleaved float array) | Deliver only input callbacks, without advancing output. Pair with `pump_audio` to test independent scheduling, queue overflow, and latency. Same virtual input requirements and bounds as `pump_input`. |
+| `input_error` | — | Inject input disconnection into the virtual backend; active recording finalizes available audio and reports the failure. |
+| `output_error` | — | Inject output failure into the virtual backend; active recording finalizes available audio and reports the failure. |
+| `midi_input` | `bytes` (MIDI byte array), optional `offset_frames` (default `0`) | Queue a MIDI message through the dummy input callback, relative to the next output frame. Requires a selected and ready virtual MIDI port. Feed scheduled messages in timestamp order, then advance the device with `pump_audio` or `pump_input`; inspecting UI frames does not advance MIDI time. |
+| `midi_error` | — | Disconnect the selected virtual MIDI input. Active capture retains completed notes and closes held notes; monitoring releases held instrument voices. |
 | `viewport` | `width`, `height`, optional `pixels_per_point` | Resize the headless logical viewport (800–4096 by 600–4096 points) and display density (0.75–3). |
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
@@ -110,7 +149,7 @@ Supported commands:
 
 File → Quit closes the process through the application's normal viewport command after any unsaved-change decision. Native file picker presentation requires a windowing environment; the driver can supply Open/Save/Export picker results, or start a default export with an explicit path. These are automated UI regressions, not a replacement for native mouse-and-keyboard testing. `--headless` is an opt-in test driver, not a network service. Commands can operate on files with the current user's permissions, so feed it trusted input.
 
-Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.channels` reports the actual header slider/meter rectangles and engine peak readings. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
+Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, and `instrument_parameter_rect`. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.channels` reports the actual header slider/meter rectangles and engine peak readings. `recording` reports `phase` (`idle`, `starting`, `counting_in`, `recording`, `finalizing`), armed tracks, monitor modes, input readiness/channels/peaks, captured frames, completed passes, dropped frames, `dummy_device` configuration, the last published files/clip IDs, and error details. Its `midi` snapshot reports port readiness, capture activity, event and held-note counts; `timing` reports remaining count-in beats/frames and capture gates. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
 
 With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit` test in `features_e2e` drives the complete production app: direct instrument creation, automatic native editor opening, note editing, last-touched automation, Undo/Redo protection, saved state restoration, cached thumbnails, two independent VST tracks with audible export, New/Open recovery, and shutdown. The regular suite separately covers keyboard and double-click creation using metadata fixtures.
 
@@ -255,3 +294,170 @@ The headless driver's default label click prefers an active utility over an iden
 `audio_pitch_e2e` changes transpose and processing engine through the running audio editor and Properties. It measures exported pitch, exact duration and stereo relationships for both bundled engines, checks Reset, ghost sharing and independent duplicates, Undo/Redo, archive/restart recall, and combined arranger stretching plus transposition. `live_edit_e2e` also changes the pitch and engine of sounding audio while checking continuous output, retained instrument/effect workers, sustained MIDI voices and unchanged transport/queue generation.
 
 The piano-roll suite checks independent scale/chord highlighting and scale-only rows, view changes without source/history edits, folded drawing/dragging/resize/audition/velocity, hidden-note safety for selection and deletion, and Fit/root changes with every note hidden. Short-note body dragging and fast copy/paste are regression cases. Shared component tests cover distinct action/choice/view menu styles in both themes, nested settings, Unicode accessible names, compact wrapping, keyboard dismissal and disabled controls.
+
+### Audio comping and progressive preparation
+
+`audio_gestures_e2e` covers body moves, both trim edges, independent Shift-copy,
+time-range split/trim, pitch-preserving stretch, marker navigation, transient and
+clip-edge magnet snapping with Shift bypass, and presentation-only view options.
+Rendered sample and pitch oracles verify the gestures' musical results.
+
+`audio_takes_e2e` imports alternatives through the actual Takes popup and native
+picker result boundary, selects whole takes and time ranges, checks both smooth
+comp boundaries against exported samples, splits a comp without changing audio,
+undoes and archives retained alternatives, layers independent overdubs, and
+changes takes through a running virtual audio callback. Cancelled/failed imports
+must leave the project and undo history unchanged. The headless
+`audio_take_files` command supplies only the next picker result (`paths`: array or
+null); it performs no edit itself.
+
+`live_edit_e2e` uses long tonal audio to exercise preview/refinement with the chosen
+Signalsmith and Bungee engines while checking retained instrument/effect process
+identities and musical continuity. Engine tests distinguish proxy/full cache
+entries, reject cancelled/stale refinements, verify exact duration/pitch and stereo
+relationships, assert allocation-free swaps, and keep offline exports at full
+quality. None of these tests opens a native desktop or physical audio device.
+
+### Audio input recording and dummy devices
+
+Run the focused subprocess suite with:
+
+```sh
+cargo test --locked --release -p daw-app --test recording_e2e
+```
+
+`recording_e2e` uses the real Recording popup, input choices, arm checkbox,
+monitoring modes, transport controls, take editor, settings, and document guards.
+Its input boundary supplies deterministic samples to the production engine's
+callback queues and WAV writer. Tests check exact mono/stereo samples, separate
+armed channel routing, recording beyond an empty arrangement, Undo/Redo, archived
+sources after restart, and session-only arm/monitor reset. They verify that dry
+monitoring follows channel and bus controls while recorded samples remain raw,
+and that Auto changes behavior between stopped, playback, and recording states.
+
+Loop scenarios check complete passes, partial final passes, and the audible
+complete take's full duration. The tonal comp oracle records C3 and D3 passes,
+selects four ranges in the actual Takes popup to form C3/D3/C3/D3, exports WAV,
+and compares samples against an independent expected signal. It checks hard
+boundaries, smooth complementary crossfades, and a custom Bézier spline. Other
+scenarios verify overdub layers preserve old audio and routing, Pause finalizes
+once, New waits before the unsaved decision, and device/sample-rate changes finish
+capture before reinitializing. A test protocol host verifies that stopping only
+recording retains backing instrument/effect processes and transport continuity.
+
+The dummy input/output devices are explicit and independently driven. Configure
+them with `dummy_audio_device`, arm through the UI, and wait for
+`recording.phase == "recording"`. `feed_input` queues interleaved frames without
+advancing playback; `pump_audio` then consumes them. `pump_input` combines both
+for ordinary scenarios. Each injection must contain complete frames, at most
+1,048,576 sample values and at most 480,000 frames. Input queue capacity is 8,192
+frames, so a larger unconsumed `feed_input` intentionally exercises overflow.
+The writer queue is bounded to 16,384 frames; `pump_input` allows it to drain
+between large offline chunks so fast test execution does not manufacture a disk
+overload.
+
+Independent-clock cases select the fourth of four inputs, vary callback delivery
+sizes, and assert that feeding input alone does not record or move output. With
+128 input and 256 output latency frames, tests require a 384-frame delayed tail,
+exact loop splitting, and preserved samples after Stop. Continue delivering that
+tail and pumping output until phase becomes `idle`; inspecting UI frames alone
+does not advance dummy audio clocks. Input overflow and explicit input/output
+failures must report details, retain valid audio, and allow another recording.
+Engine unit tests separately cover partial first passes, rounding at 44.1 kHz,
+callback allocation, queue bounds, and finalization. These checks run in a container and do not verify
+microphone permission prompts, physical round-trip latency, or hardware drivers.
+
+### MIDI input, pre-count and metronome
+
+```sh
+cargo test --locked --release -p daw-app --test midi_recording_e2e
+```
+
+`midi_recording_e2e` selects **Rill virtual MIDI input** in the real Recording
+popup and sends timestamped MIDI bytes through the production input path. It
+checks channel filtering, exact note starts/durations/velocities, chords,
+same-pitch retriggers, velocity-zero note-offs, sustain release, and notes held
+when recording stops. Delayed callbacks queued after the last output pump keep
+their original note timing, including behind a future event; timestamps at or
+after Stop stay outside the take. Loop recording splits held notes at the loop
+boundary and merges every pass into a new MIDI clip while preserving existing
+clips. Sample and plugin-message checks also require held live voices to remain
+audible across multiple wraps without extra note-on/off messages. **Stop
+recording** preserves held **Monitor On** voices during both MIDI and audio-only
+capture while backing playback continues; actual key release ends monitoring.
+Transport Stop, seeking and input reset retain their existing voice-reset behavior. Undo,
+portable project recall, input failure/retry, and document/device transitions
+exercise the same capture finalization used by audio recording.
+
+The temporary protocol instrument produces a known level for each pitch and
+velocity. Tests check real monitored/output samples and sandbox MIDI messages,
+plus exact exported chord/overdub audio. This verifies live input reaches the
+isolated instrument; it does not claim native VST or physical MIDI-driver
+compatibility. No controller, audio hardware, desktop, or installed plugin is
+required.
+
+Combined audio/MIDI scenarios test no pre-count, one bar, and two bars. During
+pre-count the cursor stays still and neither audio nor MIDI enters the take.
+Notes first pressed during pre-count remain excluded even if released later;
+events on the first capture frame are included. Count-in clicks are audible
+even when the ordinary playback Click toggle is off. MIDI audition is suspended
+during pre-count while the timeline is prepared; monitoring resumes when capture
+starts. Audio dry monitoring remains available. Sample oracles check beat
+boundaries, stronger downbeats, clean audio at the capture boundary, and absence
+of clicks in exported WAV files. Recording into already-running playback skips
+pre-count, and changing Click while playing preserves plugin instances.
+
+The virtual port ID is `rill-virtual-midi`. Select/arm it through the UI and wait
+for `recording.midi.input_ready` before sending `midi_input`. Offsets are in
+output frames, not UI frames or wall-clock milliseconds; queue messages in time
+order during ordinary playback. To simulate delayed native delivery, send
+`{"command":"midi_input","bytes":[128,60,0],"delay_frames":2400}` after pumping
+the output: its timestamp is 2,400 output frames before the current dummy clock.
+`delay_frames` and `offset_frames` are mutually exclusive, default to zero, and
+are limited to one minute. Stop tests deliberately combine a future event with
+delayed events to check finalization independently of queue timestamp order.
+For pre-count, wait for `recording.phase == "counting_in"` and continue
+pumping the dummy output until capture begins. `pump_audio` accepts up to 8,192
+frames per command, so longer musical spans use multiple calls. These fixtures
+exercise deterministic musical timing and recovery, not hardware latency.
+
+### Common audio editing
+
+```sh
+cargo test --locked --release -p daw-app --test audio_common_e2e --test audio_silence_e2e --test audio_playback_edit_e2e
+```
+
+These running-app suites exercise range Cut/Copy/Paste/Duplicate/Delete,
+track-local ripple deletion, source slip, zero-crossing snap with Shift bypass,
+and shared Grid/1 ms/1 sample nudging. Rendered WAV oracles verify surviving
+samples and silent gaps, including reversed stereo sources. Core regressions
+also check moved/stretched take alignment and overlap priority after ripple edits.
+
+Strip silence tests preview controls and retained spans, modal cancellation and
+background input blocking, full silent-clip removal, Undo/Redo, and portable
+project recall. The live-edit test selects, copies and cuts a future range while
+the dummy device plays: transport and engine generation must stay unchanged,
+with every output sample matching the edited song. Native egui clipboard-event
+coverage complements the keyboard-driven E2Es. See
+[audio editor coverage](AUDIO_EDITOR.md) for controls and remaining advanced tools.
+
+### Spectral waveform previews
+
+```sh
+cargo test --locked --release -p daw-app --test spectrum_e2e
+```
+
+The fixtures contain alternating low and high tones, including opposing stereo
+channels. Tests wait for background results and check time/frequency summaries,
+then match spectral texture IDs to actual egui paint commands in the arranger,
+focused audio editor, neighbouring clips and take thumbnails. Both themes keep
+the spectral layer faint. Reverse, trim and stretch tests check the source-frame
+mapping, and ghosts and repeated views must reuse one source analysis.
+
+The dummy device verifies that analysis and view changes leave transport,
+engine generation and output samples intact. The project, undo history and WAV
+export also remain unchanged. Reload checks require a new cache generation and
+only the replacement document's sources. Worker counters verify background work
+was submitted without requiring an artificial minimum pending duration on fast
+machines. These tests use generated WAV files and need no desktop, audio device,
+installed plug-in or network connection.

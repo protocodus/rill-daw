@@ -193,6 +193,23 @@ fn failed_save_keeps_the_document_and_can_be_cancelled_or_retried() {
     assert_eq!(failed["modified"], true);
     assert!(invalid.is_dir());
     assert!(has(&failed, "Cancel"));
+    let details = app.click("Details");
+    assert_eq!(details["error_details"]["title"], "Project error");
+    assert!(
+        details["error_details"]["background_shapes"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    let copied = app.click("Copy details");
+    assert_eq!(
+        copied["clipboard_text"],
+        details["error_details"]["details"]
+    );
+    let returned = app.key("Escape");
+    assert!(returned["error_details"].is_null());
+    assert_eq!(returned["document_guard"], failed["document_guard"]);
+    assert_eq!(returned["project"], before["project"]);
     let cancelled = app.click("Cancel");
     assert!(cancelled["document_guard"].is_null());
     assert_eq!(cancelled["project"], before["project"]);

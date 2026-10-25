@@ -135,7 +135,7 @@ fn portable_project_keeps_original_audio_and_recalls_processing_and_local_stretc
     project.save(&json).unwrap();
     assert_eq!(Project::load(&json).unwrap(), project);
     let json: serde_json::Value = serde_json::from_slice(&std::fs::read(json).unwrap()).unwrap();
-    assert_eq!(json["version"], 3);
+    assert_eq!(json["version"], 4);
     let archive = temp.path().join("processing.rill");
     project.save(&archive).unwrap();
     assert_eq!(std::fs::read(&source).unwrap(), original_bytes);

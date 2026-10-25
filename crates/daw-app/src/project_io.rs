@@ -94,8 +94,12 @@ impl DawApp {
     /// Serialize public document requests, including requests made while an editor
     /// snapshot is outstanding. Internal completions bypass this queue exactly once.
     pub(crate) fn defer_document_request(&mut self, request: DocumentRequest) -> bool {
+        if self.recording_busy() {
+            self.finish_recording(crate::recording_ui::AfterRecording::Pause);
+        }
         if self.project_io.dispatching
-            || (!self.project_io_pending()
+            || (!self.recording_busy()
+                && !self.project_io_pending()
                 && !self.state_sync_pending()
                 && self.export_job.is_none())
         {
@@ -223,7 +227,10 @@ impl DawApp {
             }
             _ => {}
         }
-        if self.project_io.job.is_none() && !self.state_sync_pending() && self.export_job.is_none()
+        if !self.recording_busy()
+            && self.project_io.job.is_none()
+            && !self.state_sync_pending()
+            && self.export_job.is_none()
         {
             if self.error {
                 // A failed snapshot/save must never be followed by a queued New,

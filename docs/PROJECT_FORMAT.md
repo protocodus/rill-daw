@@ -1,6 +1,6 @@
 # Rill project files
 
-`.rill` is a portable ZIP archive. Version 3 contains `manifest.json` and the WAV
+`.rill` is a portable ZIP archive. Version 4 contains `manifest.json` and the WAV
 files referenced by audio clips. MIDI notes, edits, routing, automation, and opaque
 instrument/effect state live in the manifest. Legacy JSON projects remain readable
 and writable when their filename has another extension, such as `.daw.json`.
@@ -8,7 +8,7 @@ and writable when their filename has another extension, such as `.daw.json`.
 The manifest is UTF-8 JSON with this envelope:
 
 ```json
-{"version":3,"project":{"name":"Song","tracks":[]}}
+{"version":4,"project":{"name":"Song","tracks":[]}}
 ```
 
 The example omits the remaining required project fields. The `project` schema is
@@ -20,7 +20,36 @@ identify the same instance.
 
 Version 2 adds the per-instance `source_rate` field (source beats per arrangement beat, default `1.0`, range `0.25`–`4.0`). The source window is `[offset, offset + length * source_rate)`. Stretch changes the visible duration and rate while preserving that window; source notes/audio and ghost membership stay unchanged. Version-1 files load with unity rate.
 
-Version 3 adds audio `processing`: `algorithm` (`Signalsmith` or `Bungee`) and `transpose_semitones` (−24 to +24, fractional values supported). Missing processing defaults to Signalsmith and zero transposition. Pitch and algorithm are shared source edits for ghosts; stretch rate remains local. Versions 1 and 2 remain readable. New saves use version 3 so older applications reject unsupported processing instead of silently playing a project incorrectly. The same version rules apply to ZIP manifests and legacy JSON.
+Version 3 adds audio `processing`: `algorithm` (`Signalsmith` or `Bungee`) and `transpose_semitones` (−24 to +24, fractional values supported). Missing processing defaults to Signalsmith and zero transposition. Pitch and algorithm are shared source edits for ghosts; stretch rate remains local.
+
+Version 4 adds optional audio clip `audio_take` membership. A retained candidate uses `{"group":42,"role":"Source"}`; an audible comp region uses `{"group":42,"role":{"Comp":{"source":17}}}`, where `17` is the retained source clip's ID. Clips without this field are ordinary independent or ghost clips. Group IDs share the document's object-ID namespace, are reserved when loading, and cannot span tracks. Each comp source reference must identify a retained candidate in the same group and audio track. A group supports up to 64 candidates.
+
+Retained candidates remain in `track.clips` with their original source windows and edits. They are silent: playback, overlap scheduling, and export duration exclude them. Their media remains bundled even when no comp region currently uses it. Comp regions are ordinary editable audio clips with local bounds, source offsets, rates, fades, and optional crossfades. Selecting a passage preserves other regions and adds smooth complementary crossfades limited to available source handles; choosing a whole take replaces the group's audible comp. Independent copies and overdubs clear take membership, while splits preserve it. Detaching a group removes retained candidates from the document and leaves the current comp as ordinary clips without deleting any source files.
+
+Versions 1–3 remain readable. New saves use version 4 so older applications reject unsupported take metadata instead of playing retained candidates as ordinary overlapping clips. These version rules apply to ZIP manifests and legacy JSON alike.
+
+Audio tracks also save an optional `audio_input` channel assignment: for example
+`{"Mono":{"channel":0}}` or `{"Stereo":{"left":0,"right":1}}`. Indices are
+zero-based channels of the input device chosen in application Setup. Stereo
+channels must be distinct. Missing assignments load as `null`; new audio tracks
+default to mono input 1. Channel availability is checked against the actual device
+when its stream opens, so moving a project to a smaller interface does not make
+its existing recorded audio unreadable. Input-device identity remains a local
+application preference. Record arm, monitoring, and an in-progress recording are
+session state and are never restored automatically from a project.
+
+Finalized recordings use ordinary source WAVs. A non-loop recording creates an
+independent clip; loop recording creates a take group, retaining complete and
+partial passes as separate sources. The newest complete pass is initially audible.
+If none completed, the longest partial pass is selected (latest on a tie), so a
+short final pass does not silence the rest of a longer recording. Existing clips
+and edited comps remain intact; a later recording creates a new recoverable group.
+Overdub placement creates a separate, distinctly colored audio channel with the
+same output bus, folder, input assignment, and gain/pan settings. Inserts and sends
+are not duplicated onto the new layer. A recording batch publishes
+atomically; Undo removes its project references without deleting captured files.
+This optional input metadata does not require another format bump: older
+version-4 readers can ignore channel assignments without changing recorded audio.
 
 Audio entries are named `assets/00000000.wav`, `assets/00000001.wav`, and so on.
 Clips reference these relative names in the manifest. Sources are deduplicated by
@@ -77,3 +106,20 @@ an existing destination intact and remove the temporary file.
 Explicit Save and Open run on one background document pipeline. Saving first flushes native plugin state, then writes an immutable project snapshot atomically. Continued edits remain unsaved; completing an older write never marks later names, colors, notes, or plugin edits as saved. New/Open/Save/Quit requests are serialized, and a failed operation cancels queued document replacement/shutdown. Quit waits for pending writes. Existing outgoing JSON recovery remains in place.
 
 Opening extracts the bundle and prepares waveform data on the worker before flushing the outgoing native editor and replacing the document. Duplicate audio paths decode once. Waveform preparation is limited to 256 MiB per source and 512 MiB total; unavailable/invalid/oversized previews leave their clips linked and display a warning. General WAV decoding rejects declarations exceeding 512 MiB of decoded samples before allocating sample buffers. Streaming sources larger than this is not implemented.
+
+## MIDI input and recording timing
+
+Project format 4 additionally stores optional `Track.midi_input`: `"All"`,
+`{"Channel":{"channel":0}}` (zero-based channel 0–15), or `null`. New MIDI
+tracks default to All; older manifests without the field load with no assignment.
+Only MIDI tracks accept this field. The global MIDI device identifier is stored
+in application settings, not in portable projects; arm/monitor choices remain
+session-only.
+
+Project fields `metronome_enabled`, `metronome_gain`, and `precount_bars` default
+to false, 0.25, and 0 when absent. Gain is finite in 0–1; pre-count accepts 0, 1,
+or 2 bars. These additions do not change existing musical data and require no
+format-version bump. MIDI recordings use ordinary independent MIDI clips, with
+sustain represented by note duration and loop passes merged into that clip.
+There is no extra source file for MIDI. Mixed audio/MIDI recording publishes one
+validated project edit and archives its audio sources through the existing path.

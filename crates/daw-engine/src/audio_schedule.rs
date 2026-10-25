@@ -1,7 +1,7 @@
 //! Preparation-only overlap compilation. Rendering traverses disjoint segments,
 //! reads at most two sources, and linearly interpolates a bounded-error curve.
 use anyhow::Result;
-use daw_core::{AudioSchedule, Clip, CrossfadeCurve};
+use daw_core::{AudioSchedule, Clip, ClipContent, CrossfadeCurve};
 use std::{collections::HashMap, sync::Arc};
 
 pub(super) struct Segment {
@@ -14,6 +14,16 @@ pub(super) struct Segment {
 
 pub(super) fn compile(clips: &[Clip], samples_per_beat: f64) -> Result<Vec<Segment>> {
     let source = AudioSchedule::new(clips)?;
+    // Core schedule indices refer to the project vector, which also retains
+    // inactive take sources. The render source vector contains audible audio only.
+    let mut indices = vec![usize::MAX; clips.len()];
+    let mut next = 0;
+    for (index, clip) in clips.iter().enumerate() {
+        if !clip.is_take_source() && matches!(clip.content, ClipContent::Audio { .. }) {
+            indices[index] = next;
+            next += 1;
+        }
+    }
     let mut curves = HashMap::new();
     let to_sample = |beat: f64| (beat * samples_per_beat).round() as u64;
     Ok(source
@@ -42,8 +52,8 @@ pub(super) fn compile(clips: &[Clip], samples_per_beat: f64) -> Result<Vec<Segme
             Some(Segment {
                 start,
                 end,
-                incoming: segment.incoming,
-                outgoing: segment.outgoing,
+                incoming: indices[segment.incoming],
+                outgoing: segment.outgoing.map(|index| indices[index]),
                 fade,
             })
         })

@@ -17,6 +17,7 @@ pub enum EditorTool {
     Cursor,
     Ghost,
     Stretch,
+    Slip,
 }
 
 impl EditorTool {
@@ -25,7 +26,7 @@ impl EditorTool {
     #[allow(non_upper_case_globals)]
     pub const Split: Self = Self::Cut;
 
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Select,
         Self::Pencil,
         Self::Cut,
@@ -38,6 +39,7 @@ impl EditorTool {
         Self::Cursor,
         Self::Ghost,
         Self::Stretch,
+        Self::Slip,
     ];
 
     pub fn label(self) -> &'static str {
@@ -54,6 +56,7 @@ impl EditorTool {
             Self::Cursor => "Cursor",
             Self::Ghost => "Ghost copy",
             Self::Stretch => "Stretch",
+            Self::Slip => "Slip",
         }
     }
 
@@ -71,6 +74,7 @@ impl EditorTool {
             Self::Cursor => Key::P,
             Self::Ghost => Key::G,
             Self::Stretch => Key::S,
+            Self::Slip => Key::L,
         }
     }
 
@@ -93,6 +97,9 @@ impl EditorTool {
             }
             Self::Stretch => {
                 "Drag to change duration. Audio keeps its pitch; MIDI note timing scales. Hold Shift to bypass snap."
+            }
+            Self::Slip => {
+                "Drag the audio inside fixed clip edges. Source bounds are preserved; Shift bypasses grid snap."
             }
         }
     }
@@ -138,6 +145,71 @@ pub fn editor_tools_with_labels(
 
 pub fn timeline_fit_button(ui: &mut Ui) -> egui::Response {
     crate::button(ui, "Fit").on_hover_text("Fit all content on both axes · F")
+}
+
+/// Shared by the arranger and focused audio editor. This is an edit increment,
+/// not a viewport option. One sample always means the active output sample rate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NudgeUnit {
+    #[default]
+    Grid,
+    Millisecond,
+    Sample,
+}
+
+impl NudgeUnit {
+    pub fn beats(self, grid: f64, tempo: f64, sample_rate: u32) -> f64 {
+        match self {
+            Self::Grid => {
+                if grid > 0.0 {
+                    grid
+                } else {
+                    0.25
+                }
+            }
+            Self::Millisecond => tempo / 60_000.0,
+            Self::Sample => tempo / 60.0 / f64::from(sample_rate.max(1)),
+        }
+    }
+
+    pub fn load(ctx: &egui::Context) -> Self {
+        ctx.data(|data| data.get_temp(egui::Id::new("timeline_nudge_unit")))
+            .unwrap_or_default()
+    }
+}
+
+/// On-demand edit menu shared across timelines. Choices and actions have the
+/// same semantics and appearance in both workspaces.
+pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
+    let mut unit = NudgeUnit::load(ui.ctx());
+    let mut direction = 0;
+    crate::action_menu(ui, "Nudge", |ui| {
+        crate::text::label(ui, "Increment");
+        for (value, label) in [
+            (NudgeUnit::Grid, "Grid"),
+            (NudgeUnit::Millisecond, "1 ms"),
+            (NudgeUnit::Sample, "1 sample"),
+        ] {
+            crate::selectable_value(ui, &mut unit, value, label);
+        }
+        ui.separator();
+        for (value, label, hint) in [
+            (-1, "Nudge left", "Move selected clip left · Left arrow"),
+            (1, "Nudge right", "Move selected clip right · Right arrow"),
+        ] {
+            if ui
+                .add_enabled(enabled, crate::button_widget(label))
+                .on_hover_text(hint)
+                .clicked()
+            {
+                direction = value;
+                ui.close();
+            }
+        }
+    });
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(egui::Id::new("timeline_nudge_unit"), unit));
+    direction
 }
 
 /// Musical bars and elapsed clock time share the exact same horizontal mapping.

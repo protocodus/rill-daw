@@ -57,6 +57,66 @@ fn retained_view_paints_without_recreating_text_controls_or_handling_clicks() {
 }
 
 #[test]
+fn dialog_context_keeps_parent_modal_without_live_controls_or_a_second_scrim() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let scrim = daw_ui::theme::palette(&ctx).popup_scrim;
+    let mut backdrop = ViewBackdrop::default();
+    let mut parent_button = Rect::NOTHING;
+    for _ in 0..3 {
+        let _ = ctx.run(input(vec![]), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                daw_ui::text::title(ui, "Arrangement");
+            });
+            daw_ui::modal(ctx, egui::Id::new("parent"), "Save changes?", |ui| {
+                daw_ui::text::body(ui, "This is the previous foreground dialog");
+                parent_button = daw_ui::button(ui, "Save project").rect;
+            });
+            let ordinary = ViewBackdrop::capture(ctx, ctx.content_rect());
+            backdrop = ViewBackdrop::capture_dialog_context(ctx, ctx.content_rect());
+            assert!(backdrop.shape_count() > ordinary.shape_count());
+        });
+    }
+    for pressed in [true, false] {
+        let output = ctx.run(
+            input(vec![
+                Event::PointerMoved(parent_button.center()),
+                Event::PointerButton {
+                    pos: parent_button.center(),
+                    button: PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                },
+            ]),
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| backdrop.paint(ui));
+            },
+        );
+        assert!(output.platform_output.events.is_empty());
+        assert!(
+            !output
+                .shapes
+                .iter()
+                .any(|shape| { matches!(shape.shape, egui::Shape::Text(_)) })
+        );
+        let meshes = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Mesh(mesh) => Some(mesh),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(!meshes.is_empty());
+        assert!(
+            meshes
+                .iter()
+                .all(|mesh| mesh.vertices.iter().all(|v| v.color != scrim))
+        );
+    }
+}
+
+#[test]
 fn retained_view_keeps_preview_texture_alive_until_last_snapshot_is_dropped() {
     let ctx = Context::default();
     let image = ctx.load_texture(

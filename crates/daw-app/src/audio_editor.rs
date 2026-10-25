@@ -3,14 +3,23 @@ use crate::{app::DawApp, theme::*};
 use daw_core::*;
 use daw_ui::{EditorTool, TimelineBounds, TimelinePane, TimelineViewport, WaveformColumn};
 use eframe::egui::{self, Pos2, Rect, Sense, Stroke, Vec2};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 const TOOLS: &[EditorTool] = &[
+    EditorTool::Select,
     EditorTool::Cursor,
     EditorTool::Cut,
+    EditorTool::Stretch,
+    EditorTool::Slip,
     EditorTool::FadeIn,
     EditorTool::FadeOut,
 ];
+// A new project or editor may discard its result, but it must not multiply
+// whole-file analysis workers while a previous file is still being decoded.
+static ANALYSIS_RUNNING: AtomicBool = AtomicBool::new(false);
 type AnalysisResult = Arc<Mutex<Option<Result<Analysis, String>>>>;
 #[derive(Clone)]
 enum Analysis {
@@ -23,6 +32,22 @@ struct Pending {
     tempo: f64,
     settings: TransientSettings,
     result: AnalysisResult,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AudioDragMode {
+    Move,
+    TrimStart,
+    TrimEnd,
+    Stretch,
+    Range,
+    Slip,
+}
+#[derive(Clone)]
+struct AudioDrag {
+    original: Clip,
+    mode: AudioDragMode,
+    origin: f64,
+    markers: Vec<f64>,
 }
 #[derive(Clone)]
 struct AudioView {
@@ -38,6 +63,13 @@ struct AudioView {
     pending: Option<Pending>,
     error: String,
     amplitude_reference: f32,
+    drag: Option<AudioDrag>,
+    range: Option<(f64, f64)>,
+    snap_edges: bool,
+    snap_transients: bool,
+    snap_zero_crossings: bool,
+    show_markers: bool,
+    show_neighbours: bool,
 }
 impl Default for AudioView {
     fn default() -> Self {
@@ -54,6 +86,13 @@ impl Default for AudioView {
             pending: None,
             error: String::new(),
             amplitude_reference: 1.0,
+            drag: None,
+            range: None,
+            snap_edges: true,
+            snap_transients: true,
+            snap_zero_crossings: false,
+            show_markers: true,
+            show_neighbours: true,
         }
     }
 }
@@ -67,19 +106,333 @@ enum Edit {
     Reverse,
     Split(f64),
     Trim(f64, f64),
-    Paste(Clip, f64),
-    Duplicate,
+    Slip(Clip, f64, f64),
     Transients(Vec<f64>),
+    Bounds(Clip, f64, f64, bool),
+    Move(f64, bool),
+    SplitRange(f64, f64),
+    RippleRange(f64, f64),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AudioClipboardAction {
+    Copy,
+    Cut,
+    Paste,
+    Duplicate,
+    Delete,
+}
+
+pub(crate) fn has_audio_clipboard(ctx: &egui::Context) -> bool {
+    ctx.data(|data| data.get_temp::<AudioView>(egui::Id::new("audio_editor_state")))
+        .is_some_and(|state| state.clipboard.is_some())
 }
 
 pub(crate) fn reset_audio_editor(ctx: &egui::Context) {
+    crate::audio_silence::reset(ctx);
     ctx.data_mut(|data| {
         data.remove::<AudioView>(egui::Id::new("audio_editor_state"));
         data.remove::<serde_json::Value>(egui::Id::new("audio_editor_diagnostics"));
     });
 }
 
+fn selected_transients<'a>(state: &'a AudioView, clip: &Clip) -> impl Iterator<Item = f64> + 'a {
+    let clip_start = clip.start;
+    let range = state.range;
+    state.preview.iter().copied().filter(move |offset| {
+        range.is_none_or(|(start, end)| {
+            let beat = clip_start + offset;
+            beat >= start && beat <= end
+        })
+    })
+}
+
+fn adjacent_transient(points: &[f64], start: f64, cursor: f64, next: bool) -> Option<f64> {
+    let beats = points.iter().map(|point| start + point);
+    if next {
+        beats
+            .filter(|beat| *beat > cursor + 1e-7)
+            .min_by(f64::total_cmp)
+    } else {
+        beats
+            .filter(|beat| *beat < cursor - 1e-7)
+            .max_by(f64::total_cmp)
+    }
+}
+
+fn reveal_beat(view: &mut TimelineViewport, beat: f64, width: f32) {
+    let visible = width.max(100.0) as f64 / view.pixels_per_beat as f64;
+    if beat < view.start_beat || beat > view.start_beat + visible {
+        view.start_beat = (beat - visible * 0.25).max(0.0);
+    }
+}
+
+/// A magnetic target is measured in screen pixels, so zooming in never traps
+/// an edit in an unexpectedly wide region. Shift is shared with the arranger.
+fn snap_audio_beat(
+    raw: f64,
+    grid: f64,
+    pixels_per_beat: f32,
+    targets: &[f64],
+    bypass: bool,
+) -> (f64, Option<f64>) {
+    if bypass {
+        return (raw, None);
+    }
+    let nearest = targets
+        .iter()
+        .copied()
+        .filter(|target| ((target - raw).abs() * pixels_per_beat as f64) <= 8.0)
+        .min_by(|a, b| (a - raw).abs().total_cmp(&(b - raw).abs()));
+    if let Some(target) = nearest {
+        (target, Some(target))
+    } else if grid > 0.0 {
+        ((raw / grid).round() * grid, None)
+    } else {
+        (raw, None)
+    }
+}
+
+fn snap_audio_move(
+    raw: f64,
+    length: f64,
+    grid: f64,
+    pixels_per_beat: f32,
+    targets: &[f64],
+    bypass: bool,
+) -> (f64, Option<f64>) {
+    let (start, start_target) = snap_audio_beat(raw, grid, pixels_per_beat, targets, bypass);
+    let (end, end_target) = snap_audio_beat(raw + length, 0.0, pixels_per_beat, targets, bypass);
+    if end_target.is_some()
+        && (start_target.is_none() || (end - length - raw).abs() < (start - raw).abs())
+    {
+        (end - length, end_target)
+    } else {
+        (start, start_target)
+    }
+}
+
 impl DawApp {
+    fn audio_clipboard_edit(
+        &mut self,
+        ctx: &egui::Context,
+        state: &mut AudioView,
+        action: AudioClipboardAction,
+    ) -> anyhow::Result<()> {
+        let track = self
+            .selected_track
+            .ok_or_else(|| anyhow::anyhow!("Select an audio track"))?;
+        if matches!(action, AudioClipboardAction::Paste) {
+            let source = state
+                .clipboard
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Copy an audio selection first"))?;
+            self.begin_edit();
+            let id = self.project.paste_audio_clip(track, source, self.cursor)?;
+            self.selected_clip = Some(id);
+            self.edit_label = Some("Paste audio selection".into());
+            state.range = None;
+            self.changed();
+            return Ok(());
+        }
+        let clip = self
+            .selected()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Select an audio clip"))?;
+        let (start, end) = state
+            .range
+            .filter(|_| state.owner == clip.id)
+            .unwrap_or((clip.start, clip.end()));
+        let region = self.project.copy_audio_range(track, clip.id, start, end)?;
+        if matches!(action, AudioClipboardAction::Copy) {
+            // egui-winit only emits native Paste when the system clipboard is
+            // nonempty. Publish a human-readable marker; audio stays internal.
+            ctx.copy_text(format!("RILL audio selection · {}", region.name));
+            state.clipboard = Some(region);
+            return Ok(());
+        }
+        self.begin_edit();
+        if matches!(action, AudioClipboardAction::Duplicate) {
+            let id = self.project.paste_audio_clip(track, &region, end)?;
+            self.selected_clip = Some(id);
+            self.edit_label = Some("Duplicate audio selection".into());
+        } else {
+            let remaining = self
+                .project
+                .delete_audio_range(track, clip.id, start, end)?;
+            if matches!(action, AudioClipboardAction::Cut) {
+                ctx.copy_text(format!("RILL audio selection · {}", region.name));
+                state.clipboard = Some(region);
+            }
+            self.selected_clip = remaining.first().copied();
+            self.edit_label = Some(
+                if matches!(action, AudioClipboardAction::Cut) {
+                    "Cut audio selection"
+                } else {
+                    "Delete audio selection"
+                }
+                .into(),
+            );
+        }
+        state.range = None;
+        self.changed();
+        Ok(())
+    }
+
+    /// Route menus and keys through the same selection-aware transaction.
+    pub(crate) fn audio_clipboard_action(
+        &mut self,
+        ctx: &egui::Context,
+        action: AudioClipboardAction,
+    ) -> bool {
+        let paste_in_arranger = self.view == crate::app::WorkspaceView::Arrangement
+            && matches!(action, AudioClipboardAction::Paste);
+        if (self.view != crate::app::WorkspaceView::Clip && !paste_in_arranger)
+            || !self
+                .selected_track
+                .and_then(|id| self.project.track(id))
+                .is_some_and(|track| track.kind == TrackKind::Audio)
+        {
+            return false;
+        }
+        let id = egui::Id::new("audio_editor_state");
+        let mut state = ctx.data_mut(|data| data.get_temp::<AudioView>(id).unwrap_or_default());
+        match self.audio_clipboard_edit(ctx, &mut state, action) {
+            Ok(()) => state.error.clear(),
+            Err(error) => state.error = error.to_string(),
+        }
+        ctx.data_mut(|data| data.insert_temp(id, state));
+        true
+    }
+
+    pub(crate) fn nudge_selected_clip(&mut self, ctx: &egui::Context, direction: i32) {
+        let Some((track, clip)) = self.selected_track.zip(self.selected().cloned()) else {
+            return;
+        };
+        let step = daw_ui::NudgeUnit::load(ctx).beats(
+            self.snap,
+            self.project.tempo,
+            self.settings.sample_rate,
+        );
+        let start = (clip.start + step * f64::from(direction)).clamp(0.0, MAX_BEAT - clip.length);
+        if start == clip.start {
+            return;
+        }
+        self.begin_edit();
+        match self.project.move_clip(track, clip.id, start) {
+            Ok(()) => {
+                self.edit_label = Some("Nudge clip".into());
+                self.changed();
+                ctx.data_mut(|data| {
+                    let id = egui::Id::new("audio_editor_state");
+                    if let Some(mut state) = data.get_temp::<AudioView>(id) {
+                        state.range = None;
+                        data.insert_temp(id, state);
+                    }
+                });
+            }
+            Err(error) => self.message(Err(error), ""),
+        }
+    }
+
+    /// Called after modal and text-input guards, before global clip shortcuts.
+    pub(crate) fn audio_edit_shortcuts(&mut self, ctx: &egui::Context) -> bool {
+        use crate::app::WorkspaceView;
+        if egui::Popup::is_any_open(ctx) {
+            return false;
+        }
+        let audio = self.view == WorkspaceView::Clip
+            && self
+                .selected_track
+                .and_then(|id| self.project.track(id))
+                .is_some_and(|track| track.kind == TrackKind::Audio);
+        let nudge = audio || self.view == WorkspaceView::Arrangement;
+        let paste = audio
+            || (self.view == WorkspaceView::Arrangement
+                && self
+                    .selected_track
+                    .and_then(|id| self.project.track(id))
+                    .is_some_and(|track| track.kind == TrackKind::Audio));
+        let commands = ctx.input_mut(|input| {
+            let mut commands = Vec::new();
+            let native_copy = input
+                .events
+                .iter()
+                .any(|event| matches!(event, egui::Event::Copy));
+            let native_cut = input
+                .events
+                .iter()
+                .any(|event| matches!(event, egui::Event::Cut));
+            let native_paste = input
+                .events
+                .iter()
+                .any(|event| matches!(event, egui::Event::Paste(_)));
+            input.events.retain(|event| {
+                let command = match event {
+                    egui::Event::Copy if audio => Some((Some(AudioClipboardAction::Copy), 0)),
+                    egui::Event::Cut if audio => Some((Some(AudioClipboardAction::Cut), 0)),
+                    egui::Event::Paste(_) if paste => Some((Some(AudioClipboardAction::Paste), 0)),
+                    egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } if (audio || paste)
+                        && modifiers.command
+                        && !modifiers.shift
+                        && !modifiers.alt =>
+                    {
+                        match key {
+                            egui::Key::C if audio && !native_copy => {
+                                Some((Some(AudioClipboardAction::Copy), 0))
+                            }
+                            egui::Key::X if audio && !native_cut => {
+                                Some((Some(AudioClipboardAction::Cut), 0))
+                            }
+                            egui::Key::V if paste && !native_paste => {
+                                Some((Some(AudioClipboardAction::Paste), 0))
+                            }
+                            egui::Key::D if audio => {
+                                Some((Some(AudioClipboardAction::Duplicate), 0))
+                            }
+                            _ => None,
+                        }
+                    }
+                    egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } if !modifiers.any() => match key {
+                        egui::Key::Delete | egui::Key::Backspace if audio => {
+                            Some((Some(AudioClipboardAction::Delete), 0))
+                        }
+                        egui::Key::ArrowLeft if nudge => Some((None, -1)),
+                        egui::Key::ArrowRight if nudge => Some((None, 1)),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(command) = command {
+                    commands.push(command);
+                    false
+                } else {
+                    true
+                }
+            });
+            commands
+        });
+        let handled = !commands.is_empty();
+        for (action, direction) in commands {
+            if let Some(action) = action {
+                self.audio_clipboard_action(ctx, action);
+            } else {
+                self.nudge_selected_clip(ctx, direction);
+            }
+        }
+        handled
+    }
+
     pub(crate) fn audio_editor(&mut self, ui: &mut egui::Ui) {
         let Some(clip) = self.selected().cloned() else {
             return;
@@ -111,7 +464,10 @@ impl DawApp {
             state.fitted = false;
             state.preview.clear();
             state.preview_source = None;
-            state.pending = None;
+            // Keep the sole in-flight worker until completion, even when its
+            // result belongs to another clip. The identity check below drops it.
+            state.drag = None;
+            state.range = None;
             state.error.clear();
         }
         if state
@@ -123,6 +479,8 @@ impl DawApp {
             state.preview_source = None;
         }
         let mut edit = None;
+        let mut clipboard_action = None;
+        let mut nudge = 0;
         if let Some(pending) = state.pending.clone() {
             let finished = pending
                 .result
@@ -137,11 +495,10 @@ impl DawApp {
                 {
                     match result {
                         Ok(Analysis::Gain(gain)) => edit = Some(Edit::Gain(gain)),
-                        Ok(Analysis::Transients(points)) if state.transients_open => {
+                        Ok(Analysis::Transients(points)) => {
                             state.preview = points;
                             state.preview_source = Some((clip.clone(), self.project.tempo));
                         }
-                        Ok(Analysis::Transients(_)) => {}
                         Err(error) => state.error = error,
                     }
                 }
@@ -151,6 +508,13 @@ impl DawApp {
             }
         }
         daw_ui::editor_tool_shortcuts(ui, &mut state.tool, TOOLS);
+        if !ui.input(|input| input.pointer.primary_down()) {
+            state.drag = None;
+        }
+        if let Some((start, end)) = state.range {
+            state.range = (end.min(clip.end()) > start.max(clip.start))
+                .then_some((start.max(clip.start), end.min(clip.end())));
+        }
         let mut fit = false;
         let mut analyze = None;
         let mut gain_rect = Rect::NOTHING;
@@ -182,7 +546,9 @@ impl DawApp {
                 },
             )
             .width(90.0)
+            .height(380.0)
             .show_ui(ui, |ui| {
+                daw_ui::text::label(ui, "Grid");
                 for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
                     daw_ui::selectable_value(
                         ui,
@@ -195,6 +561,17 @@ impl DawApp {
                         },
                     );
                 }
+                ui.separator();
+                daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
+                daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
+                daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
+                    .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
+                daw_ui::text::note(ui, "Hold Shift to bypass snapping");
+            });
+            nudge = daw_ui::nudge_menu(ui, true);
+            daw_ui::view_menu(ui, "View", |ui| {
+                daw_ui::checkbox(ui, &mut state.show_markers, "Show transient markers");
+                daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips");
             });
             daw_ui::action_menu(ui, "Clip", |ui| {
                 if daw_ui::button(ui, "Clip start").clicked() {
@@ -242,23 +619,80 @@ impl DawApp {
                     edit = Some(Edit::Split(self.cursor));
                     ui.close();
                 }
+                if ui
+                    .add_enabled(
+                        state.range.is_some(),
+                        daw_ui::button_widget("Split selection"),
+                    )
+                    .clicked()
+                {
+                    let (start, end) = state.range.unwrap();
+                    edit = Some(Edit::SplitRange(start, end));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        state.range.is_some(),
+                        daw_ui::button_widget("Trim to selection"),
+                    )
+                    .clicked()
+                {
+                    let (start, end) = state.range.unwrap();
+                    edit = Some(Edit::Trim(start, end - start));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        state.range.is_some(),
+                        daw_ui::button_widget("Clear selection"),
+                    )
+                    .clicked()
+                {
+                    state.range = None;
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Takes…").clicked() {
+                    self.open_audio_takes(&clip, state.range);
+                    ui.close();
+                }
                 ui.separator();
                 if daw_ui::button(ui, "Copy").clicked() {
-                    state.clipboard = Some(clip.clone());
+                    clipboard_action = Some(AudioClipboardAction::Copy);
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Cut selection")
+                    .on_hover_text("Cut selected time, leaving a gap · Ctrl/Cmd+X")
+                    .clicked()
+                {
+                    clipboard_action = Some(AudioClipboardAction::Cut);
                     ui.close();
                 }
                 if ui
                     .add_enabled(state.clipboard.is_some(), daw_ui::button_widget("Paste"))
                     .clicked()
                 {
-                    edit = Some(Edit::Paste(state.clipboard.clone().unwrap(), self.cursor));
+                    clipboard_action = Some(AudioClipboardAction::Paste);
                     ui.close();
                 }
                 if daw_ui::button(ui, "Duplicate clip")
                     .on_hover_text("Create an independent copy of this clip")
                     .clicked()
                 {
-                    edit = Some(Edit::Duplicate);
+                    clipboard_action = Some(AudioClipboardAction::Duplicate);
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Delete selection")
+                    .on_hover_text("Remove selected time, leaving a gap · Delete")
+                    .clicked()
+                {
+                    clipboard_action = Some(AudioClipboardAction::Delete);
+                    ui.close();
+                }
+                if ui.add_enabled(state.range.is_some(), daw_ui::button_widget("Ripple delete selection"))
+                    .on_hover_text("Remove this time from the selected audio track and close the gap. Other tracks stay in place.")
+                    .clicked() {
+                    let (start, end) = state.range.unwrap();
+                    edit = Some(Edit::RippleRange(start, end));
                     ui.close();
                 }
                 if daw_ui::button(ui, "Ghost copy")
@@ -295,6 +729,16 @@ impl DawApp {
                 }
                 if daw_ui::button(ui, "Transients").clicked() {
                     state.transients_open = true;
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        state.pending.is_none(),
+                        daw_ui::button_widget("Strip silence…"),
+                    )
+                    .clicked()
+                {
+                    self.open_audio_silence(ui.ctx(), track, clip.id, state.range);
                     ui.close();
                 }
             });
@@ -392,61 +836,125 @@ impl DawApp {
                 }
                 if ui
                     .add_enabled(
-                        !state.preview.is_empty(),
+                        selected_transients(&state, &clip).next().is_some(),
                         daw_ui::button_widget("Split transients"),
                     )
+                    .on_hover_text(if state.range.is_some() {
+                        "Split only the markers inside the selected time range"
+                    } else {
+                        "Split at every detected marker"
+                    })
                     .clicked()
                 {
-                    edit = Some(Edit::Transients(state.preview.clone()));
+                    edit = Some(Edit::Transients(
+                        selected_transients(&state, &clip).collect(),
+                    ));
                 }
-                ui.label(format!("{} markers", state.preview.len()));
+                if ui
+                    .add_enabled(
+                        !state.preview.is_empty(),
+                        daw_ui::button_widget("Previous transient"),
+                    )
+                    .clicked()
+                    && let Some(beat) =
+                        adjacent_transient(&state.preview, clip.start, self.cursor, false)
+                {
+                    self.seek(beat);
+                    reveal_beat(&mut state.view, beat, ui.max_rect().width());
+                }
+                if ui
+                    .add_enabled(
+                        !state.preview.is_empty(),
+                        daw_ui::button_widget("Next transient"),
+                    )
+                    .clicked()
+                    && let Some(beat) =
+                        adjacent_transient(&state.preview, clip.start, self.cursor, true)
+                {
+                    self.seek(beat);
+                    reveal_beat(&mut state.view, beat, ui.max_rect().width());
+                }
+                ui.label(if state.range.is_some() {
+                    format!(
+                        "{} of {} markers",
+                        selected_transients(&state, &clip).count(),
+                        state.preview.len()
+                    )
+                } else {
+                    format!("{} markers", state.preview.len())
+                });
                 if daw_ui::button(ui, "Close transients").clicked() {
                     state.transients_open = false;
-                    state.preview.clear();
-                    state.preview_source = None;
                 }
             });
         }
         // Async feedback occupies a stable row below all actions, so completion
         // can never move a pressed button before the pointer is released.
+        let feedback = if state.pending.is_some() {
+            "Analyzing…".into()
+        } else if !state.error.is_empty() {
+            state.error.clone()
+        } else if let Some((start, end)) = state.range {
+            format!("{start:.2}–{end:.2} beats selected")
+        } else {
+            String::new()
+        };
         ui.label(
-            egui::RichText::new(if state.pending.is_some() {
-                "Analyzing…"
-            } else {
-                &state.error
-            })
-            .small()
-            .color(palette(ui.ctx()).muted),
+            egui::RichText::new(feedback)
+                .small()
+                .color(palette(ui.ctx()).muted),
         );
-        if let Some(transients) = analyze {
-            state.error.clear();
-            let result = Arc::new(Mutex::new(None));
-            let destination = result.clone();
-            let source = clip.clone();
-            let tempo = self.project.tempo;
-            let settings = state.settings;
-            let path = path.clone();
-            std::thread::spawn(move || {
-                let value = AudioData::load_wav(path)
-                    .and_then(|data| {
-                        if transients {
-                            detect_transients(&source, &data, tempo, settings)
-                                .map(Analysis::Transients)
-                        } else {
-                            normalization_gain(&source, &data, tempo, -1.0).map(Analysis::Gain)
+        if let Some(transients) = analyze.filter(|_| state.pending.is_none()) {
+            if ANALYSIS_RUNNING
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+            {
+                state.error = "Previous analysis is finishing. Try again shortly.".into();
+            } else {
+                state.error.clear();
+                let result = Arc::new(Mutex::new(None));
+                let destination = result.clone();
+                let source = clip.clone();
+                let tempo = self.project.tempo;
+                let settings = state.settings;
+                let path = path.clone();
+                let spawned = std::thread::Builder::new()
+                    .name("audio-analysis".into())
+                    .spawn(move || {
+                        struct ReleaseWorker;
+                        impl Drop for ReleaseWorker {
+                            fn drop(&mut self) {
+                                ANALYSIS_RUNNING.store(false, Ordering::Release);
+                            }
                         }
-                    })
-                    .map_err(|e| e.to_string());
-                if let Ok(mut slot) = destination.lock() {
-                    *slot = Some(value);
+                        let _release = ReleaseWorker;
+                        let value = AudioData::load_wav(path)
+                            .and_then(|data| {
+                                if transients {
+                                    detect_transients(&source, &data, tempo, settings)
+                                        .map(Analysis::Transients)
+                                } else {
+                                    normalization_gain(&source, &data, tempo, -1.0)
+                                        .map(Analysis::Gain)
+                                }
+                            })
+                            .map_err(|e| e.to_string());
+                        if let Ok(mut slot) = destination.lock() {
+                            *slot = Some(value);
+                        }
+                    });
+                if let Err(error) = spawned {
+                    ANALYSIS_RUNNING.store(false, Ordering::Release);
+                    state.error = error.to_string();
+                } else {
+                    state.pending = Some(Pending {
+                        clip: clip.clone(),
+                        tempo,
+                        settings,
+                        result,
+                    });
                 }
-            });
-            state.pending = Some(Pending {
-                clip: clip.clone(),
-                tempo,
-                settings,
-                result,
-            });
+            }
         }
         let width = ui.available_width().max(100.0);
         let (whole, _) = ui.allocate_exact_size(
@@ -462,6 +970,7 @@ impl DawApp {
         );
         let canvas = Rect::from_min_max(Pos2::new(whole.left(), ruler.bottom()), whole.max);
         let data = self.waveforms.get(path);
+        crate::spectrogram::prioritize(ui.ctx(), path, data);
         let channels = data.map_or(1, |audio| audio.channels.min(2));
         let bounds = TimelineBounds {
             start_beat: clip.start,
@@ -491,6 +1000,40 @@ impl DawApp {
             self.project.tempo,
             self.project.beats_per_bar,
         );
+        let neighbours: Vec<_> = self
+            .project
+            .track(track)
+            .into_iter()
+            .flat_map(|track| &track.clips)
+            .filter(|other| {
+                other.id != clip.id
+                    && !other.is_take_source()
+                    && matches!(other.content, ClipContent::Audio { .. })
+            })
+            .collect();
+        if state.show_neighbours {
+            let visible_end = state.view.beat_at(canvas, canvas.right());
+            for other in neighbours
+                .iter()
+                .filter(|other| other.end() > state.view.start_beat && other.start < visible_end)
+            {
+                if let ClipContent::Audio { path, .. } = &other.content
+                    && let Some(data) = self.waveforms.get(path)
+                {
+                    draw_waveform(
+                        &painter,
+                        canvas,
+                        state.view,
+                        data,
+                        other,
+                        self.project.tempo,
+                        headroom,
+                        palette(ui.ctx()).muted.gamma_multiply(0.45),
+                        "audio_neighbour",
+                    );
+                }
+            }
+        }
         if let Some(data) = data {
             draw_waveform(
                 &painter,
@@ -501,45 +1044,196 @@ impl DawApp {
                 self.project.tempo,
                 headroom,
                 palette(ui.ctx()).accent,
+                "audio_editor",
             );
         }
-        for beat in state.preview.iter().map(|beat| clip.start + beat) {
+        crate::audio_silence::paint_preview(&painter, canvas, state.view, &clip);
+        let strip_open = crate::audio_silence::is_open(ui.ctx());
+        for beat in state
+            .preview
+            .iter()
+            .filter(|_| state.show_markers)
+            .map(|beat| clip.start + beat)
+        {
             let x = state.view.x_at(canvas, beat);
             painter.with_clip_rect(canvas).line_segment(
                 [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
                 Stroke::new(1.0_f32, palette(ui.ctx()).orange),
             );
         }
-        for (beat, color) in [
-            (clip.start, palette(ui.ctx()).muted),
-            (clip.end(), palette(ui.ctx()).muted),
-            (self.cursor, palette(ui.ctx()).text),
-        ] {
-            let x = state.view.x_at(canvas, beat);
-            painter.with_clip_rect(canvas).line_segment(
-                [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
-                Stroke::new(1.0_f32, color),
-            );
+        if let Some((start, end)) = state.range {
+            daw_ui::paint_timeline_selection(&painter, canvas, state.view, start, end);
         }
-        let response = ui.interact(
+        let edges = daw_ui::paint_audio_clip_edges(
+            &painter,
             canvas,
-            ui.id().with("audio_edit_canvas"),
-            if navigation.navigating {
-                Sense::hover()
-            } else {
-                Sense::click_and_drag()
-            },
+            state.view,
+            clip.start,
+            clip.end(),
+            palette(ui.ctx()).accent,
         );
+        let cursor_x = state.view.x_at(canvas, self.cursor);
+        painter.with_clip_rect(canvas).line_segment(
+            [
+                Pos2::new(cursor_x, canvas.top()),
+                Pos2::new(cursor_x, canvas.bottom()),
+            ],
+            Stroke::new(1.0_f32, palette(ui.ctx()).text),
+        );
+        let response = ui
+            .interact(
+                canvas,
+                ui.id().with("audio_edit_canvas"),
+                if navigation.navigating || strip_open {
+                    Sense::hover()
+                } else {
+                    Sense::click_and_drag()
+                },
+            )
+            .on_hover_text(if state.tool == EditorTool::Cursor {
+                "Click to place the cursor · Drag to select time · Shift bypasses snap"
+            } else {
+                state.tool.hint()
+            });
+        let shift = ui.input(|input| input.modifiers.shift);
+        let mut snap_target = None;
+        let marker_source = state
+            .drag
+            .as_ref()
+            .map_or(&state.preview, |drag| &drag.markers);
+        let marker_start = state
+            .drag
+            .as_ref()
+            .map_or(clip.start, |drag| drag.original.start);
+        let edge_targets: Vec<_> = neighbours
+            .iter()
+            .filter(|_| state.snap_edges)
+            .flat_map(|other| [other.start, other.end()])
+            .collect();
+        let mut targets = edge_targets.clone();
+        let moving = state
+            .drag
+            .as_ref()
+            .is_some_and(|drag| drag.mode == AudioDragMode::Move);
+        if !moving {
+            if state.snap_edges {
+                targets.extend([clip.start, clip.end()]);
+            }
+            if state.snap_transients {
+                targets.extend(marker_source.iter().map(|beat| marker_start + beat));
+            }
+        }
+        let grid = self.snap;
+        let pixels_per_beat = state.view.pixels_per_beat;
+        let tempo = self.project.tempo;
+        let source_beats =
+            data.map(|data| data.frames() as f64 / f64::from(data.sample_rate) * tempo / 60.0);
+        let snap = |raw| {
+            let (beat, target) = snap_audio_beat(raw, grid, pixels_per_beat, &targets, shift);
+            if state.snap_zero_crossings
+                && !shift
+                && let Some(crossing) =
+                    data.and_then(|data| nearest_audio_zero_crossing(&clip, data, tempo, beat))
+            {
+                (crossing, Some(crossing))
+            } else {
+                (beat, target)
+            }
+        };
+        let mut new_cursor = None;
         if !navigation.navigating
+            && !strip_open
+            && response.hovered()
+            && let Some(pointer) = response.hover_pos()
+        {
+            ui.ctx().set_cursor_icon(match state.tool {
+                EditorTool::Select
+                    if edges.start.is_some_and(|rect| rect.contains(pointer))
+                        || edges.end.is_some_and(|rect| rect.contains(pointer)) =>
+                {
+                    egui::CursorIcon::ResizeHorizontal
+                }
+                EditorTool::Select | EditorTool::Slip => egui::CursorIcon::Grab,
+                EditorTool::Stretch => egui::CursorIcon::ResizeHorizontal,
+                _ => egui::CursorIcon::Crosshair,
+            });
+        }
+        if !navigation.navigating
+            && !strip_open
+            && response.drag_started()
+            && matches!(
+                state.tool,
+                EditorTool::Select | EditorTool::Stretch | EditorTool::Cursor | EditorTool::Slip
+            )
+            && ui
+                .input(|input| input.pointer.press_origin())
+                .is_some_and(|pressed| {
+                    state.tool == EditorTool::Cursor
+                        || (pressed.x >= state.view.x_at(canvas, clip.start) - 4.0
+                            && pressed.x <= state.view.x_at(canvas, clip.end()) + 4.0)
+                })
+        {
+            let pressed = ui
+                .input(|input| input.pointer.press_origin())
+                .unwrap_or(canvas.center());
+            let mode = if state.tool == EditorTool::Cursor {
+                AudioDragMode::Range
+            } else if state.tool == EditorTool::Slip {
+                AudioDragMode::Slip
+            } else if state.tool == EditorTool::Stretch {
+                AudioDragMode::Stretch
+            } else if edges.start.is_some_and(|rect| rect.contains(pressed)) {
+                AudioDragMode::TrimStart
+            } else if edges.end.is_some_and(|rect| rect.contains(pressed)) {
+                AudioDragMode::TrimEnd
+            } else {
+                AudioDragMode::Move
+            };
+            state.drag = Some(AudioDrag {
+                original: clip.clone(),
+                mode,
+                origin: state.view.beat_at(canvas, pressed.x),
+                markers: state.preview.clone(),
+            });
+            if mode != AudioDragMode::Range {
+                state.range = None;
+            }
+        }
+        if !navigation.navigating
+            && !strip_open
             && (response.clicked() || response.dragged())
             && let Some(pointer) = response.interact_pointer_pos()
         {
-            let beat = self
-                .snapped(state.view.beat_at(canvas, pointer.x))
-                .clamp(clip.start, clip.end());
+            let raw = state.view.beat_at(canvas, pointer.x);
+            let (snapped, target) = snap(raw);
+            let beat = snapped.clamp(clip.start, clip.end());
+            snap_target = target;
             match state.tool {
-                EditorTool::Cursor => self.seek(beat),
-                EditorTool::Cut if response.clicked() => edit = Some(Edit::Split(beat)),
+                EditorTool::Select
+                    if response.clicked()
+                        && state.show_neighbours
+                        && (raw < clip.start || raw >= clip.end()) =>
+                {
+                    if let Some(other) = neighbours
+                        .iter()
+                        .filter(|other| raw >= other.start && raw < other.end())
+                        .max_by(|a, b| a.start.total_cmp(&b.start))
+                    {
+                        self.selected_clip = Some(other.id);
+                        state.owner = other.id;
+                        state.preview.clear();
+                        state.preview_source = None;
+                        state.range = None;
+                        state.error.clear();
+                    }
+                }
+                EditorTool::Cursor if response.clicked() => {
+                    state.range = None;
+                    new_cursor = Some(beat);
+                }
+                EditorTool::Cut if response.clicked() && beat > clip.start && beat < clip.end() => {
+                    edit = Some(Edit::Split(beat))
+                }
                 EditorTool::FadeIn => {
                     edit = Some(Edit::Fades(
                         (fade_region.offset + (beat - clip.start) * clip.source_rate)
@@ -562,7 +1256,123 @@ impl DawApp {
                 }
                 _ => {}
             }
+            if response.dragged()
+                && let Some(drag) = &state.drag
+            {
+                let delta = raw - drag.origin;
+                let original = &drag.original;
+                let minimum = original.length.min(0.0625);
+                match drag.mode {
+                    AudioDragMode::Range => {
+                        let origin = snap(drag.origin).0.clamp(clip.start, clip.end());
+                        let (start, end) = (origin.min(beat), origin.max(beat));
+                        state.range = (end > start).then_some((start, end));
+                        if response.drag_started() && !self.playing() {
+                            new_cursor = Some(origin);
+                        }
+                    }
+                    AudioDragMode::Move => {
+                        // Shift copies on the first frame; subsequent frames
+                        // move the independent copy using the original anchor.
+                        let (start, target) = snap_audio_move(
+                            original.start + delta,
+                            original.length,
+                            grid,
+                            pixels_per_beat,
+                            &edge_targets,
+                            shift,
+                        );
+                        snap_target = target;
+                        edit = Some(Edit::Move(start.max(0.0), response.drag_started() && shift));
+                    }
+                    AudioDragMode::Slip => {
+                        if let Some(source_beats) = source_beats {
+                            let movement = if grid > 0.0 && !shift {
+                                (delta / grid).round() * grid
+                            } else {
+                                delta
+                            };
+                            edit = Some(Edit::Slip(original.clone(), movement, source_beats));
+                        }
+                    }
+                    AudioDragMode::TrimStart => {
+                        let earliest =
+                            if matches!(original.content, ClipContent::Audio { reverse: true, .. })
+                            {
+                                0.0
+                            } else {
+                                (original.start - original.offset / original.source_rate).max(0.0)
+                            };
+                        let (start, target) = snap(original.start + delta);
+                        snap_target = target;
+                        let start = start.clamp(earliest, (original.end() - minimum).max(earliest));
+                        edit = Some(Edit::Bounds(
+                            original.clone(),
+                            start,
+                            original.end() - start,
+                            false,
+                        ));
+                    }
+                    AudioDragMode::TrimEnd | AudioDragMode::Stretch => {
+                        let (end, target) = snap(original.end() + delta);
+                        snap_target = target;
+                        let stretch = drag.mode == AudioDragMode::Stretch;
+                        let mut length = (end - original.start).max(minimum);
+                        if stretch {
+                            length = length.clamp(
+                                original.source_length() / MAX_SOURCE_RATE,
+                                original.source_length() / MIN_SOURCE_RATE,
+                            );
+                        } else if matches!(
+                            original.content,
+                            ClipContent::Audio { reverse: true, .. }
+                        ) {
+                            length = length
+                                .min(original.length + original.offset / original.source_rate);
+                        }
+                        edit = Some(Edit::Bounds(
+                            original.clone(),
+                            original.start,
+                            length,
+                            stretch,
+                        ));
+                    }
+                }
+            }
         }
+        if let Some(beat) = new_cursor {
+            self.seek(beat);
+        }
+        if let Some(beat) = snap_target {
+            let x = state.view.x_at(canvas, beat);
+            painter.with_clip_rect(canvas).line_segment(
+                [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
+                Stroke::new(2.0_f32, palette(ui.ctx()).orange),
+            );
+        }
+        let edit = edit.filter(|edit| match edit {
+            Edit::Bounds(original, start, length, stretch) => {
+                clip.start != *start
+                    || clip.length != *length
+                    || (*stretch
+                        && clip.source_rate != original.source_rate * original.length / length)
+            }
+            Edit::Move(start, copy) => *copy || clip.start != *start,
+            Edit::Slip(original, movement, source_beats)
+                if *source_beats >= original.source_length() =>
+            {
+                let direction =
+                    if matches!(original.content, ClipContent::Audio { reverse: true, .. }) {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                let offset = (original.offset + movement * original.source_rate * direction)
+                    .clamp(0.0, source_beats - original.source_length());
+                clip.offset != offset
+            }
+            _ => true,
+        });
         if let Some(edit) = edit {
             self.begin_edit();
             let result = match edit {
@@ -588,19 +1398,90 @@ impl DawApp {
                 Edit::Reverse => self.project.reverse_audio_clip(track, clip.id),
                 Edit::Trim(start, length) => self.project.trim_clip(track, clip.id, start, length),
                 Edit::Split(beat) => self.project.split_clip(track, clip.id, beat).map(|_| ()),
-                Edit::Paste(source, start) => self
-                    .project
-                    .paste_audio_clip(track, &source, start)
-                    .map(|id| {
-                        self.selected_clip = Some(id);
-                    }),
-                Edit::Duplicate => self.project.duplicate_clip(track, clip.id).map(|id| {
-                    self.selected_clip = Some(id);
-                }),
+                Edit::Slip(original, movement, source_beats) => {
+                    self.edit_label = Some("Slip audio contents".into());
+                    if let Some(current) = self.project.clip_mut(track, clip.id) {
+                        current.clone_from(&original);
+                    }
+                    let result =
+                        self.project
+                            .slip_audio_clip(track, clip.id, movement, source_beats);
+                    if result.is_err()
+                        && let Some(current) = self.project.clip_mut(track, clip.id)
+                    {
+                        current.clone_from(&clip);
+                    }
+                    result
+                }
                 Edit::Transients(points) => self
                     .project
                     .split_audio_transients(track, clip.id, &points)
                     .map(|_| ()),
+                Edit::Move(start, copy) => {
+                    self.edit_label =
+                        Some(if copy { "Duplicate clip" } else { "Move clip" }.into());
+                    if copy {
+                        let result =
+                            self.project
+                                .duplicate_clip_at(track, clip.id, start)
+                                .map(|id| {
+                                    self.selected_clip = Some(id);
+                                    state.owner = id;
+                                });
+                        if result.is_err() {
+                            state.drag = None;
+                        }
+                        result
+                    } else {
+                        self.project.move_clip(track, clip.id, start)
+                    }
+                }
+                Edit::Bounds(original, start, length, stretch) => {
+                    self.edit_label =
+                        Some(if stretch { "Stretch clip" } else { "Trim clip" }.into());
+                    if let Some(current) = self.project.clip_mut(track, clip.id) {
+                        current.clone_from(&original);
+                    }
+                    let result = if stretch {
+                        self.project.stretch_clip(track, clip.id, length)
+                    } else {
+                        self.project.trim_clip(track, clip.id, start, length)
+                    };
+                    if result.is_err()
+                        && let Some(current) = self.project.clip_mut(track, clip.id)
+                    {
+                        current.clone_from(&clip);
+                    }
+                    result
+                }
+                Edit::SplitRange(start, end) => {
+                    self.edit_label = Some("Split audio selection".into());
+                    // Split from the right, retaining the original ID until
+                    // the left boundary is cut, then select the isolated piece.
+                    let result = if end < clip.end() {
+                        self.project.split_clip(track, clip.id, end).map(|_| ())
+                    } else {
+                        Ok(())
+                    };
+                    result.and_then(|()| {
+                        if start > clip.start {
+                            self.project
+                                .split_clip(track, clip.id, start)
+                                .map(|id| self.selected_clip = Some(id))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                }
+                Edit::RippleRange(start, end) => {
+                    self.edit_label = Some("Ripple delete audio selection".into());
+                    self.project
+                        .ripple_delete_audio_range(track, start, end)
+                        .map(|ids| {
+                            self.selected_clip = ids.first().copied();
+                            state.range = None;
+                        })
+                }
             };
             match result {
                 Ok(()) => {
@@ -612,8 +1493,21 @@ impl DawApp {
                 Err(error) => state.error = error.to_string(),
             }
         }
+        if nudge != 0 {
+            self.nudge_selected_clip(ui.ctx(), nudge);
+            state.range = None;
+        }
+        if let Some(action) = clipboard_action {
+            match self.audio_clipboard_edit(ui.ctx(), &mut state, action) {
+                Ok(()) => state.error.clear(),
+                Err(error) => state.error = error.to_string(),
+            }
+        }
+        let nudge_unit = format!("{:?}", daw_ui::NudgeUnit::load(ui.ctx()));
         ui.ctx().data_mut(|d| {
-            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference}));
+            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
+                "range":state.range,"snap_target":snap_target,"snap_edges":state.snap_edges,"snap_transients":state.snap_transients,"snap_zero_crossings":state.snap_zero_crossings,"nudge_unit":nudge_unit,"show_markers":state.show_markers,"show_neighbours":state.show_neighbours,
+                "start_handle":edges.start.map(|r| [r.left(),r.top(),r.right(),r.bottom()]),"end_handle":edges.end.map(|r| [r.left(),r.top(),r.right(),r.bottom()])}));
             d.insert_temp(id, state);
         });
     }
@@ -716,11 +1610,31 @@ fn draw_waveform(
     tempo: f64,
     headroom: f32,
     color: egui::Color32,
+    spectrum_view: &'static str,
 ) {
     let ClipContent::Audio { gain, .. } = clip.content else {
         return;
     };
     let channels = data.channels.min(2);
+    let spectrum_rect = Rect::from_min_max(
+        Pos2::new(view.x_at(rect, clip.start).max(rect.left()), rect.top()),
+        Pos2::new(view.x_at(rect, clip.end()).min(rect.right()), rect.bottom()),
+    );
+    if spectrum_rect.is_positive() {
+        crate::spectrogram::paint(
+            painter,
+            spectrum_rect,
+            clip,
+            tempo,
+            (
+                view.beat_at(rect, spectrum_rect.left()),
+                view.beat_at(rect, spectrum_rect.right()),
+            ),
+            color,
+            spectrum_view,
+            Some(data),
+        );
+    }
     let width = rect.width().ceil().max(0.0) as usize;
     let mut columns = Vec::with_capacity(width * channels);
     for x in 0..width {
@@ -776,12 +1690,33 @@ pub(crate) fn paint_audio_clip(
         row_offset: 0.0,
         row_height: rect.height() / (data.channels.min(2) * 2) as f32,
     };
-    draw_waveform(painter, rect, view, data, clip, tempo, 1.0, color);
+    draw_waveform(
+        painter, rect, view, data, clip, tempo, 1.0, color, "arranger",
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn magnetic_snap_is_measured_in_pixels_and_aligns_either_move_edge() {
+        assert_eq!(
+            snap_audio_beat(1.38, 0.25, 100.0, &[1.37], false),
+            (1.37, Some(1.37))
+        );
+        assert_eq!(
+            snap_audio_beat(1.38, 0.25, 1000.0, &[1.37], false),
+            (1.5, None)
+        );
+        assert_eq!(
+            snap_audio_beat(1.38, 0.25, 100.0, &[1.37], true),
+            (1.38, None)
+        );
+        let (start, target) = snap_audio_move(2.38, 4.0, 0.25, 100.0, &[6.37], false);
+        assert!((start - 2.37).abs() < 1e-10);
+        assert_eq!(target, Some(6.37));
+    }
 
     #[test]
     fn fit_reference_uses_visible_window_envelope_channels_and_silence() {
@@ -892,6 +1827,76 @@ mod tests {
         let _ = ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| app.audio_editor(ui));
         });
+    }
+
+    #[test]
+    fn native_clipboard_events_publish_paste_marker_and_cut_only_once() {
+        let (ctx, mut app, track, _) = linked_audio_editor(EditorTool::Cursor);
+        app.view = crate::app::WorkspaceView::Clip;
+        ctx.data_mut(|data| {
+            let id = egui::Id::new("audio_editor_state");
+            let mut state = data.get_temp::<AudioView>(id).unwrap();
+            state.range = Some((5.25, 5.75));
+            data.insert_temp(id, state);
+        });
+        let before = app.project.clone();
+        let copied = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Copy],
+                ..Default::default()
+            },
+            |ctx| {
+                assert!(app.audio_edit_shortcuts(ctx));
+            },
+        );
+        assert_eq!(app.project, before);
+        let marker = copied
+            .platform_output
+            .commands
+            .iter()
+            .find_map(|command| match command {
+                egui::OutputCommand::CopyText(text) => Some(text.clone()),
+                _ => None,
+            })
+            .expect("Native Paste requires a nonempty system clipboard");
+        assert!(!marker.is_empty());
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![
+                    egui::Event::Cut,
+                    egui::Event::Key {
+                        key: egui::Key::X,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::COMMAND,
+                    },
+                ],
+                ..Default::default()
+            },
+            |ctx| {
+                assert!(app.audio_edit_shortcuts(ctx));
+            },
+        );
+        assert_eq!(
+            app.project.track(track).unwrap().clips.len(),
+            3,
+            "Native Cut and its key event must perform one deletion"
+        );
+        app.cursor = 8.0;
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Paste(marker)],
+                ..Default::default()
+            },
+            |ctx| {
+                assert!(app.audio_edit_shortcuts(ctx));
+            },
+        );
+        let pasted = app.selected().unwrap();
+        assert_eq!((pasted.start, pasted.length), (8.0, 0.5));
+        assert!(pasted.link_group.is_none());
+        assert_eq!(app.project.track(track).unwrap().clips.len(), 4);
     }
 
     #[test]

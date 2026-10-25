@@ -108,7 +108,8 @@ impl Fixture {
             sample_rate: 48_000,
             channels: 1,
             samples: if tonal_audio {
-                (0..96_000)
+                // Long enough to exercise the live proxy -> full-rate path.
+                (0..48_000 * 8)
                     .map(|frame| {
                         (std::f64::consts::TAU * 440.0 * frame as f64 / 48_000.0).sin() as f32
                             * 0.04
@@ -125,7 +126,7 @@ impl Fixture {
         track.clips.push(Clip::audio(
             "Future audio",
             if tonal_audio { 0.0 } else { 4.0 },
-            4.0,
+            if tonal_audio { 16.0 } else { 4.0 },
             path.to_string_lossy(),
         ));
         let import_target = project.add_audio_track("Import target");
@@ -301,7 +302,11 @@ fn pump_frames(
     );
     assert_eq!(engine["playing"], true);
     assert_eq!(state["playback_loading"], false);
-    assert_eq!(engine["render_errors"], 0, "Render failed: {engine}");
+    assert_eq!(
+        engine["render_errors"], 0,
+        "Render failed: {engine}; status={}, error={}, details={}",
+        state["status"], state["error"], state["error_details"]
+    );
     assert_eq!(engine["edit_errors"], before["engine"]["edit_errors"]);
     assert_eq!(engine["underruns"], before["engine"]["underruns"]);
     assert!(
@@ -838,7 +843,8 @@ fn audio_pitch_and_algorithm_edits_keep_running_plugins_queue_and_audible_output
         ] {
             assert_eq!(
                 state["engine"][field], previous["engine"][field],
-                "{field} changed during pitch editing"
+                "{field} changed during pitch editing: engine={}, status={}, error={}, details={}",
+                state["engine"], state["status"], state["error"], state["error_details"]
             );
         }
         assert_eq!(state["engine"]["playing"], true);
@@ -926,6 +932,13 @@ fn audio_pitch_and_algorithm_edits_keep_running_plugins_queue_and_audible_output
         let processing = &track(&state, audio_track)["clips"][0]["content"]["Audio"]["processing"];
         assert_eq!(processing["transpose_semitones"], pitch);
         assert_eq!(processing["algorithm"], algorithm);
+        previous = pump_tone(&mut app, &previous, pitch);
+        wait(&mut app, |state| {
+            state["engine"]["applied_revision"] == state["revision"]
+                && state["engine"]["refining_audio"] == false
+        });
+        // The final pass must keep the same pitch, transport and sandbox DSP
+        // state when its full-bandwidth asset replaces the interactive proxy.
         previous = pump_tone(&mut app, &previous, pitch);
         fixture.assert_instances(&instances);
         assert_eq!(fixture.note_events(60, true), note_ons);

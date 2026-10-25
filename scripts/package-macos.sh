@@ -41,6 +41,7 @@ cat > "$bundle/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>$rill_numeric_version</string>
 <key>LSMinimumSystemVersion</key><string>11.0</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSMicrophoneUsageDescription</key><string>RILL records and monitors audio from the input device you select.</string>
 </dict></plist>
 PLIST
 plutil -lint "$bundle/Info.plist"

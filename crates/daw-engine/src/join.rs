@@ -45,6 +45,12 @@ fn prepare(
     let mut source = Track::new("Join sources", TrackKind::Audio);
     source.gain = 1.0;
     source.clips = selection.clips;
+    // Comp membership refers to retained takes in the original document. The
+    // isolated render needs only the audible regions and their source windows;
+    // detach these copies without changing the document or its alternatives.
+    for clip in &mut source.clips {
+        clip.audio_take = None;
+    }
     isolated.tracks.push(source);
     let mut renderer = match cancel {
         Some(cancel) => {
@@ -272,6 +278,94 @@ mod tests {
         std::fs::remove_file(&output).unwrap();
         let reopened = Project::load(&archive).unwrap();
         assert_eq!(crate::render(&reopened, 8000, 5.0).unwrap(), expected);
+    }
+
+    #[test]
+    fn joining_split_comp_regions_preserves_source_windows_and_retained_takes() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut project = Project::new();
+        project.tempo = 120.0;
+        let track = project.add_audio_track("Loop takes");
+        project.track_mut(track).unwrap().gain = 1.0;
+        for take in 0..2 {
+            let path = directory.path().join(format!("take-{take}.wav"));
+            AudioData {
+                sample_rate: 8000,
+                channels: 2,
+                samples: (0..24000)
+                    .flat_map(|frame| {
+                        let value = 0.1 + take as f32 * 0.2 + frame as f32 / 100000.0;
+                        [value, -value * 0.5]
+                    })
+                    .collect(),
+            }
+            .write_wav(&path)
+            .unwrap();
+            let mut clip = Clip::audio(format!("Take {take}"), 1.0, 4.0, path.to_string_lossy());
+            clip.offset = 0.5;
+            if let ClipContent::Audio {
+                gain,
+                reverse,
+                fade_in,
+                fade_out,
+                ..
+            } = &mut clip.content
+            {
+                *gain = 0.75;
+                *reverse = true;
+                *fade_in = 0.25;
+                *fade_out = 0.5;
+            }
+            project.track_mut(track).unwrap().clips.push(clip);
+        }
+        let sources: Vec<_> = project
+            .track(track)
+            .unwrap()
+            .clips
+            .iter()
+            .map(|clip| clip.id)
+            .collect();
+        let group = project.group_audio_takes(track, &sources).unwrap();
+        let left = project.audio_take_regions(track, group)[0].id;
+        let right = project.split_clip(track, left, 3.0).unwrap();
+        project.validate().unwrap();
+        let before = project.clone();
+        let retained: Vec<_> = project
+            .audio_take_sources(track, group)
+            .into_iter()
+            .cloned()
+            .collect();
+        let expected = crate::render(&project, 8000, 6.0).unwrap();
+        let joined = render_audio_join(&project, track, &[left, right], 8000).unwrap();
+        assert_eq!(joined.frames(), 16000);
+        assert_eq!(joined.samples, expected[4000 * 2..20000 * 2]);
+        assert_eq!(project, before);
+        let path = directory.path().join("joined.wav");
+        export_audio_join(
+            &project,
+            track,
+            &[left, right],
+            &path,
+            8000,
+            RenderOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(AudioData::load_wav(&path).unwrap().samples, joined.samples);
+        assert_eq!(project, before);
+        let id = project
+            .replace_audio_clips_with_joined(track, &[left, right], path.to_string_lossy())
+            .unwrap();
+        assert!(project.clip(track, id).unwrap().audio_take.is_none());
+        assert_eq!(
+            project
+                .audio_take_sources(track, group)
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            retained
+        );
+        project.validate().unwrap();
+        assert_eq!(crate::render(&project, 8000, 6.0).unwrap(), expected);
     }
 
     #[test]

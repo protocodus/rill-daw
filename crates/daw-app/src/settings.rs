@@ -13,6 +13,8 @@ use std::{
 pub struct Settings {
     pub appearance: daw_ui::theme::Appearance,
     pub device_name: Option<String>,
+    pub input_device_name: Option<String>,
+    pub midi_input_device: Option<String>,
     pub sample_rate: u32,
     pub buffer_frames: u32,
     pub resample_quality: daw_engine::ResampleQuality,
@@ -49,6 +51,8 @@ impl Default for Settings {
         Self {
             appearance: daw_ui::theme::Appearance::System,
             device_name: None,
+            input_device_name: None,
+            midi_input_device: None,
             sample_rate: 48_000,
             buffer_frames: 256,
             resample_quality: daw_engine::ResampleQuality::High,
@@ -89,6 +93,18 @@ impl Settings {
                 .as_ref()
                 .is_none_or(|name| !name.trim().is_empty()),
             "Invalid output device name"
+        );
+        anyhow::ensure!(
+            self.input_device_name
+                .as_ref()
+                .is_none_or(|name| !name.trim().is_empty()),
+            "Invalid input device name"
+        );
+        anyhow::ensure!(
+            self.midi_input_device
+                .as_ref()
+                .is_none_or(|id| !id.trim().is_empty()),
+            "Invalid MIDI input device"
         );
         Ok(())
     }

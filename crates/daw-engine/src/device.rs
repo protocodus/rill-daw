@@ -1,8 +1,26 @@
 use crate::meter::ChannelMeters;
 use crate::render::{BLOCK, Renderer};
+#[path = "input.rs"]
+mod input;
 #[path = "live_updates.rs"]
 mod live_updates;
+#[path = "midi.rs"]
+mod midi;
+#[path = "timing.rs"]
+mod timing;
+use input::{InputController, InputShared};
+pub use input::{
+    InputRoute, InputSettings, RecordingConfig, RecordingResult, RecordingSnapshot, RecordingTake,
+    VirtualIoSettings, list_input_devices,
+};
 use live_updates::{LiveMailbox, LiveUpdates};
+use midi::{MidiController, MidiMonitor, MidiShared};
+pub use midi::{
+    MidiPortInfo, MidiRecordingResult, MidiRoute, MidiSettings, MidiSnapshot, RecordedMidiTrack,
+    list_midi_inputs,
+};
+use timing::TimingShared;
+pub use timing::{RecordingTiming, RecordingTimingSnapshot};
 #[cfg(test)]
 #[path = "live_device_tests.rs"]
 mod live_device_tests;
@@ -18,6 +36,14 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
+
+#[cfg(test)]
+thread_local! {
+    // Per-test-thread scheduling seam: hold the render worker immediately after
+    // readiness is visible, so an initial seek can race the startup handoff.
+    static RENDER_READY_TEST_GATE: std::cell::RefCell<Option<mpsc::Receiver<()>>> =
+        const { std::cell::RefCell::new(None) };
+}
 
 #[derive(Clone, Debug)]
 pub struct DeviceSettings {
@@ -57,6 +83,9 @@ pub struct EngineSnapshot {
     pub generation: u64,
     pub requested_revision: u64,
     pub applied_revision: u64,
+    /// The current live edit uses a band-limited proxy while the selected
+    /// algorithm prepares the original at full rate. Export never uses proxies.
+    pub refining_audio: bool,
     pub edit_errors: u64,
     pub rendered_frames: u64,
     pub consumed_frames: u64,
@@ -100,6 +129,11 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
 static NEXT_ENGINE_ID: AtomicU64 = AtomicU64::new(1);
 
 struct Controls {
+    timing: TimingShared,
+    midi: Arc<MidiShared>,
+    render_preview: AtomicBool,
+    input: Arc<InputShared>,
+    input_sample_rate: AtomicU32,
     engine_id: u64,
     rendered_frames: AtomicU64,
     consumed_frames: AtomicU64,
@@ -113,11 +147,17 @@ struct Controls {
     peak_right: AtomicU32,
     underruns: AtomicU64,
     render_errors: AtomicU64,
+    render_error: Mutex<Option<String>>,
     finished_generation: AtomicU64,
 }
 impl Controls {
     fn new() -> Self {
         Self {
+            timing: TimingShared::new(),
+            midi: Arc::new(MidiShared::new()),
+            render_preview: AtomicBool::new(false),
+            input: Arc::new(InputShared::new()),
+            input_sample_rate: AtomicU32::new(48000),
             engine_id: NEXT_ENGINE_ID.fetch_add(1, Ordering::Relaxed),
             rendered_frames: AtomicU64::new(0),
             consumed_frames: AtomicU64::new(0),
@@ -131,8 +171,31 @@ impl Controls {
             peak_right: AtomicU32::new(0),
             underruns: AtomicU64::new(0),
             render_errors: AtomicU64::new(0),
+            render_error: Mutex::new(None),
             finished_generation: AtomicU64::new(u64::MAX),
         }
+    }
+
+    /// Only the background render worker publishes text. The device callback
+    /// continues using the atomic counter and never formats or locks diagnostics.
+    fn set_render_error(&self, mut error: String) {
+        const MAX_BYTES: usize = 64 * 1024;
+        if error.len() > MAX_BYTES {
+            let mut end = MAX_BYTES;
+            while !error.is_char_boundary(end) {
+                end -= 1;
+            }
+            error.truncate(end);
+            error.push_str("\n[Further diagnostic text omitted]");
+        }
+        *self
+            .render_error
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(error);
+    }
+
+    fn take_render_error(&self) -> Option<String> {
+        self.render_error.try_lock().ok()?.take()
     }
 }
 
@@ -159,6 +222,14 @@ impl AudioQueue {
             read: AtomicUsize::new(0),
             write: AtomicUsize::new(0),
         }
+    }
+    fn ready(&self, generation: u64) -> bool {
+        let read = self.read.load(Ordering::Relaxed);
+        read != self.write.load(Ordering::Acquire)
+            && self.slots[read % self.slots.len()]
+                .generation
+                .load(Ordering::Relaxed)
+                == generation
     }
     fn free(&self) -> usize {
         self.slots.len()
@@ -216,6 +287,8 @@ impl AudioQueue {
 }
 
 pub struct AudioEngine {
+    midi: MidiController,
+    input: InputController,
     live_updates: Option<LiveUpdates>,
     virtual_queue: Option<Arc<AudioQueue>>,
     stream: Option<cpal::Stream>,
@@ -273,10 +346,9 @@ impl RenderFailureLatch {
         if self.failed_generation == Some(generation) {
             return false;
         }
-        if operation().is_ok() {
-            return true;
-        }
+        let Err(error) = operation() else { return true };
         self.failed_generation = Some(generation);
+        controls.set_render_error(format!("Audio rendering stopped\n\n{error:#}"));
         controls.render_errors.fetch_add(1, Ordering::Relaxed);
         controls
             .finished_generation
@@ -413,11 +485,31 @@ impl AudioEngine {
             Some((device, config, format))
         };
         let controls = Arc::new(Controls::new());
+        controls
+            .input_sample_rate
+            .store(settings.sample_rate, Ordering::Relaxed);
         let channel_meters = Arc::new(ChannelMeters::new(project));
         let worker_meters = Arc::clone(&channel_meters);
         let queue = Arc::new(AudioQueue::new(
             (settings.buffer_frames as usize * 2).max(BLOCK * 2),
         ));
+        let input = InputController::new(
+            Arc::clone(&controls),
+            settings.sample_rate,
+            settings.buffer_frames,
+            virtual_output,
+        );
+        input.sync_mix(project)?;
+        controls.timing.configure(
+            project,
+            RecordingTiming {
+                precount_bars: project.precount_bars,
+                click_enabled: project.metronome_enabled,
+                click_gain: project.metronome_gain,
+            },
+            settings.sample_rate,
+        )?;
+        let midi = MidiController::new(Arc::clone(&controls), virtual_output);
         let project = project.clone();
         let worker_controls = Arc::clone(&controls);
         let worker_queue = Arc::clone(&queue);
@@ -433,10 +525,16 @@ impl AudioEngine {
         let audition = Arc::new(Mutex::new(None));
         let worker_audition = Arc::clone(&audition);
         let worker_cancel = Arc::clone(&cancel);
+        #[cfg(test)]
+        let ready_test_gate = RENDER_READY_TEST_GATE.with(|gate| gate.borrow_mut().take());
         let worker = thread::Builder::new()
             .name("daw-render".into())
             .spawn(move || {
                 // Plugins are created, processed, and destroyed on this owning thread.
+                // Capture the renderer's initial generation before publishing
+                // readiness. An immediate caller seek must remain a pending
+                // generation change, not be mistaken for already-rendered state.
+                let mut generation = worker_controls.generation.load(Ordering::Acquire);
                 let mut renderer = match Renderer::new_with_options_cancelled(
                     &project,
                     sample_rate,
@@ -448,6 +546,10 @@ impl AudioEngine {
                         renderer.attach_channel_meters(&worker_meters);
                         let _ = preparer_tx.send(renderer.live_edit_preparer());
                         let _ = ready_tx.send(Ok(()));
+                        #[cfg(test)]
+                        if let Some(gate) = ready_test_gate {
+                            let _ = gate.recv_timeout(Duration::from_secs(5));
+                        }
                         renderer
                     }
                     Err(error) => {
@@ -455,12 +557,12 @@ impl AudioEngine {
                         return;
                     }
                 };
-                let mut generation = worker_controls.generation.load(Ordering::Acquire);
                 let mut frames = [[0.0; 2]; BLOCK];
                 let mut positions = [0.0; BLOCK];
                 let mut pending_parameters: Vec<ParameterChange> = Vec::with_capacity(128);
                 let mut render_failure = RenderFailureLatch::default();
                 let mut preview = false;
+                let mut midi_monitor = MidiMonitor::new();
                 while !worker_controls.shutdown.load(Ordering::Acquire) {
                     if worker_edits.apply_pending(&mut renderer) {
                         worker_controls
@@ -474,15 +576,16 @@ impl AudioEngine {
                         if worker_controls.shutdown.load(Ordering::Acquire) {
                             break;
                         }
-                        if renderer
-                            .set_plugin_parameter(
-                                change.track,
-                                change.effect,
-                                change.parameter,
-                                change.value,
-                            )
-                            .is_err()
-                        {
+                        if let Err(error) = renderer.set_plugin_parameter(
+                            change.track,
+                            change.effect,
+                            change.parameter,
+                            change.value,
+                        ) {
+                            worker_controls.set_render_error(format!(
+                                "Plugin parameter update failed\n\nUpdating plugin parameter {} on channel ID {}: {error:#}",
+                                change.parameter, change.track
+                            ));
                             worker_controls
                                 .render_errors
                                 .fetch_add(1, Ordering::Relaxed);
@@ -494,8 +597,9 @@ impl AudioEngine {
                     let held = *worker_audition
                         .lock()
                         .unwrap_or_else(|error| error.into_inner());
-                    let next_preview =
-                        !worker_controls.playing.load(Ordering::Acquire) && held.is_some();
+                    let next_preview = !worker_controls.playing.load(Ordering::Acquire)
+                        && !worker_controls.timing.suspends_midi_monitor()
+                        && (held.is_some() || worker_controls.midi.monitoring_requested());
                     if preview != next_preview {
                         worker_controls.auditioning.store(false, Ordering::Release);
                         preview = next_preview;
@@ -510,6 +614,9 @@ impl AudioEngine {
                             thread::sleep(Duration::from_micros(250));
                             continue;
                         }
+                        // Publish only after the new queue generation and seek:
+                        // the callback must never capture paused preview audio.
+                        worker_controls.render_preview.store(preview, Ordering::Release);
                     }
                     let next_generation = worker_controls.generation.load(Ordering::Acquire);
                     if generation != next_generation {
@@ -538,15 +645,22 @@ impl AudioEngine {
                             .lock()
                             .unwrap_or_else(|error| error.into_inner());
                         worker_controls.auditioning.store(
-                            preview && current.is_some() && *current == held,
+                            preview && ((current.is_some() && *current == held) || worker_controls.midi.monitoring_requested()),
                             Ordering::Release,
                         );
+                    }
+                    if worker_controls.timing.suspends_midi_monitor() {
+                        midi_monitor.update_suspended(&worker_controls.midi);
                     }
                     if worker_queue.free() < BLOCK {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
-                    if !preview && renderer.finished() {
+                    if !worker_controls.timing.suspends_midi_monitor() && !render_failure.attempt(&worker_controls, generation, || midi_monitor.update(&worker_controls.midi, &mut renderer)) {
+                        thread::sleep(Duration::from_micros(250));
+                        continue;
+                    }
+                    if !preview && renderer.finished() && !worker_controls.input.capture_requested() && !worker_controls.midi.capture_requested() && !worker_controls.timing.keeps_clock_running() {
                         worker_controls
                             .finished_generation
                             .store(generation, Ordering::Release);
@@ -564,6 +678,9 @@ impl AudioEngine {
                         continue;
                     }
                     if renderer.plugin_errors > 0 {
+                        while let Some(error) = renderer.take_plugin_error() {
+                            worker_controls.set_render_error(error);
+                        }
                         worker_controls
                             .render_errors
                             .fetch_add(renderer.plugin_errors, Ordering::Relaxed);
@@ -601,6 +718,8 @@ impl AudioEngine {
             }
         };
         let mut engine = Self {
+            midi,
+            input,
             live_updates: Some(live_updates),
             virtual_queue: virtual_output.then(|| Arc::clone(&queue)),
             stream: None,
@@ -645,6 +764,8 @@ impl AudioEngine {
     /// Prepare a compatible edit while the existing graph keeps rendering.
     /// `false` means a structural change requires normal graph preparation.
     pub fn try_update_project(&self, project: &Project, revision: u64) -> Result<bool> {
+        self.controls.timing.sync_project(project)?;
+        self.input.sync_mix(project)?;
         ensure!(
             !self.controls.shutdown.load(Ordering::Acquire),
             "Audio engine has stopped"
@@ -660,6 +781,12 @@ impl AudioEngine {
         self.live_updates.as_ref()?.take_error()
     }
 
+    /// Retrieve the latest detailed render/plugin failure once, without waiting
+    /// for the render worker. At most one bounded message is retained.
+    pub fn take_render_error(&self) -> Option<String> {
+        self.controls.take_render_error()
+    }
+
     /// Consume the production output queue without physical audio hardware.
     /// Waiting for each bounded chunk makes this a sample-continuity oracle,
     /// rather than an assertion about hardware scheduling or driver deadlines.
@@ -672,20 +799,52 @@ impl AudioEngine {
         let mut output = Vec::with_capacity(frames);
         let mut samples = [0.0_f32; BLOCK * 2];
         while output.len() < frames {
-            let count = (frames - output.len()).min(BLOCK);
+            let count = (frames - output.len()).min(BLOCK).min(
+                self.controls
+                    .timing
+                    .count_frames()
+                    .unwrap_or(u64::MAX)
+                    .max(1)
+                    .min(usize::MAX as u64) as usize,
+            );
             let deadline = Instant::now() + Duration::from_secs(5);
             loop {
                 ensure!(
                     !self.controls.shutdown.load(Ordering::Acquire),
                     "Audio engine has stopped"
                 );
-                let active = self.controls.playing.load(Ordering::Acquire)
-                    || self.controls.auditioning.load(Ordering::Acquire);
+                let holding = self.controls.timing.holds_transport();
+                let preview = self.controls.render_preview.load(Ordering::Acquire);
+                let monitoring = self.controls.midi.monitoring_requested()
+                    && !self.controls.timing.suspends_midi_monitor();
+                let active = if holding {
+                    monitoring || self.controls.auditioning.load(Ordering::Acquire)
+                } else {
+                    self.controls.playing.load(Ordering::Acquire)
+                        || self.controls.auditioning.load(Ordering::Acquire)
+                        || self.controls.input.active()
+                        || self.controls.midi.active()
+                        || monitoring
+                };
+                let switching_to_timeline = (self.controls.timing.can_start()
+                    || self.controls.timing.suspends_midi_monitor())
+                    && preview;
+                let switching_to_preview =
+                    !self.controls.playing.load(Ordering::Acquire) && monitoring && !preview;
                 let generation = self.controls.generation.load(Ordering::Acquire);
                 queue.discard_stale(generation);
-                if !active
-                    || queue.slots.len() - queue.free() >= count
-                    || self.controls.finished_generation.load(Ordering::Acquire) == generation
+                let waiting_for_timeline =
+                    self.controls.timing.waiting_for_timeline() && !queue.ready(generation);
+                if !switching_to_timeline
+                    && !waiting_for_timeline
+                    && !switching_to_preview
+                    && (!active
+                        || queue.slots.len() - queue.free() >= count
+                        || (self.controls.finished_generation.load(Ordering::Acquire)
+                            == generation
+                            && !self.controls.timing.keeps_clock_running()
+                            && !self.controls.input.capture_requested()
+                            && !self.controls.midi.capture_requested()))
                 {
                     break;
                 }
@@ -714,13 +873,27 @@ impl AudioEngine {
             .audition
             .lock()
             .unwrap_or_else(|error| error.into_inner()) = note;
-        if note.is_none() {
+        // The ready preview queue also carries live MIDI monitoring. Releasing
+        // the piano-roll key must not mute that independent source while the
+        // render worker is waiting for queue space. The worker still owns mode
+        // changes, pre-count suspension, and fatal-render shutdown.
+        if note.is_none() && !self.controls.midi.monitoring_requested() {
             self.controls.auditioning.store(false, Ordering::Release);
         }
         Ok(())
     }
 
     pub fn set_playing(&self, playing: bool) {
+        if !playing {
+            if self.controls.input.capture_requested() {
+                self.controls.input.request_stop();
+            }
+            self.request_stop_midi_recording();
+            self.reset_midi_monitoring();
+            if self.controls.timing.busy() {
+                self.controls.timing.cancel(&self.controls);
+            }
+        }
         if playing
             && self.controls.finished_generation.load(Ordering::Acquire)
                 == self.controls.generation.load(Ordering::Acquire)
@@ -730,6 +903,14 @@ impl AudioEngine {
         self.controls.playing.store(playing, Ordering::Release);
     }
     pub fn seek(&self, beat: f64) {
+        self.request_stop_midi_recording();
+        self.reset_midi_monitoring();
+        if self.controls.timing.busy() {
+            self.controls.timing.cancel(&self.controls);
+        }
+        if self.controls.input.capture_requested() {
+            self.controls.input.request_stop();
+        }
         if !beat.is_finite() {
             return;
         }
@@ -797,6 +978,10 @@ impl AudioEngine {
             applied_revision: self.live_updates.as_ref().map_or(0, |updates| {
                 updates.mailbox.applied_revision.load(Ordering::Acquire)
             }),
+            refining_audio: self
+                .live_updates
+                .as_ref()
+                .is_some_and(|updates| updates.mailbox.refining_audio.load(Ordering::Acquire)),
             edit_errors: self
                 .live_updates
                 .as_ref()
@@ -820,6 +1005,9 @@ impl AudioEngine {
         }
     }
     pub fn stop(&mut self) {
+        self.controls.timing.cancel(&self.controls);
+        self.midi.shutdown();
+        self.input.shutdown();
         self.controls.playing.store(false, Ordering::Release);
         self.controls.auditioning.store(false, Ordering::Release);
         self.controls.shutdown.store(true, Ordering::Release);
@@ -849,11 +1037,11 @@ where
     let errors = Arc::clone(&controls);
     Ok(device.build_output_stream(
         *config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            fill_output(data, channels, &queue, &controls)
+        move |data: &mut [T], info: &cpal::OutputCallbackInfo| {
+            fill_output_timed(data, channels, &queue, &controls, Some(info))
         },
-        move |_| {
-            errors.render_errors.fetch_add(1, Ordering::Relaxed);
+        move |error| {
+            output_stream_failed(&errors, &error);
         },
         None,
     )?)
@@ -865,15 +1053,49 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
     queue: &AudioQueue,
     controls: &Controls,
 ) {
-    let playing = controls.playing.load(Ordering::Acquire);
-    let auditioning = controls.auditioning.load(Ordering::Acquire);
+    fill_output_timed(data, channels, queue, controls, None);
+}
+
+fn output_stream_failed(controls: &Controls, error: &cpal::Error) {
+    if !controls.input.device_failed(6, error, None) {
+        return;
+    }
+    controls.midi.output_failed();
+    controls.render_errors.fetch_add(1, Ordering::Relaxed);
+    controls.playing.store(false, Ordering::Release);
+}
+
+fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
+    data: &mut [T],
+    channels: usize,
+    queue: &AudioQueue,
+    controls: &Controls,
+    info: Option<&cpal::OutputCallbackInfo>,
+) {
+    let output_time = controls.input.output_time(info);
+    let sample_rate = controls.input_sample_rate.load(Ordering::Relaxed);
+    let capturing = controls.input.active();
+    if (capturing || controls.midi.active()) && controls.timing.legacy_capture_allowed() {
+        controls.playing.store(true, Ordering::Release);
+    }
     let generation = controls.generation.load(Ordering::Acquire);
     queue.discard_stale(generation);
     let mut peak = [0.0_f32; 2];
     let mut underrun = false;
     let mut consumed = 0;
-    for frame in data.chunks_mut(channels) {
+    for (frame_index, frame) in data.chunks_mut(channels).enumerate() {
+        let gate = controls.timing.frame_before(
+            controls,
+            !controls.render_preview.load(Ordering::Acquire)
+                && queue.ready(controls.generation.load(Ordering::Acquire)),
+        );
+        let preview = controls.render_preview.load(Ordering::Acquire);
+        let playing = controls.playing.load(Ordering::Acquire) && !gate.hold_transport && !preview;
+        let auditioning = controls.auditioning.load(Ordering::Acquire)
+            && (preview || !controls.playing.load(Ordering::Acquire));
+        let generation = controls.generation.load(Ordering::Acquire);
         let mut stereo = [0.0; 2];
+        let mut capture_position = None;
         if playing || auditioning {
             // At most one queue's worth of stale samples can exist following a seek.
             for _ in 0..=queue.slots.len() {
@@ -883,12 +1105,27 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
                         consumed += 1;
                         if playing {
                             controls.position.store(beat.to_bits(), Ordering::Relaxed);
+                            let tempo =
+                                f64::from_bits(controls.input.tempo.load(Ordering::Relaxed));
+                            capture_position = Some(
+                                (beat
+                                    * controls.input_sample_rate.load(Ordering::Relaxed) as f64
+                                    * 60.0
+                                    / tempo)
+                                    .round()
+                                    .max(1.0) as u64
+                                    - 1,
+                            );
                         }
                         break;
                     }
                     Some(_) => continue,
                     None => {
-                        if controls.finished_generation.load(Ordering::Acquire) == generation {
+                        if controls.finished_generation.load(Ordering::Acquire) == generation
+                            && !controls.timing.keeps_clock_running()
+                            && !controls.input.capture_requested()
+                            && !controls.midi.capture_requested()
+                        {
                             controls.playing.store(false, Ordering::Release);
                         } else {
                             underrun = true;
@@ -898,6 +1135,26 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
                 }
             }
         }
+        let playback_ns =
+            output_time + (frame_index as u128 * 1_000_000_000 / u128::from(sample_rate)) as u64;
+        controls
+            .timing
+            .observe_frame(capture_position, gate.capture_allowed);
+        controls.midi.observe_frame(
+            capture_position,
+            sample_rate,
+            playback_ns,
+            gate.capture_allowed,
+        );
+        let monitor = controls.input.consume_gated(
+            capture_position,
+            sample_rate,
+            playback_ns,
+            gate.capture_allowed,
+        );
+        let click = controls.timing.click(gate, capture_position);
+        stereo[0] += monitor[0] + click;
+        stereo[1] += monitor[1] + click;
         for channel in 0..2 {
             stereo[channel] = if stereo[channel].is_finite() {
                 stereo[channel].clamp(-1.0, 1.0)
@@ -914,6 +1171,7 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
             }
         }
     }
+    controls.input.advance_output_clock(data.len() / channels);
     controls
         .consumed_frames
         .fetch_add(consumed, Ordering::Relaxed);
@@ -940,12 +1198,15 @@ mod tests {
         let meters = Arc::new(ChannelMeters::new(&project));
         meters.channel(channel).unwrap().publish([0.3, 0.7], 0.0);
         let (parameters, _receiver) = mpsc::sync_channel(1);
+        let controls = Arc::new(Controls::new());
         let engine = AudioEngine {
+            midi: MidiController::new(Arc::clone(&controls), true),
+            input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,
             virtual_queue: None,
             stream: None,
             worker: None,
-            controls: Arc::new(Controls::new()),
+            controls,
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
@@ -1040,14 +1301,75 @@ mod tests {
     }
 
     #[test]
+    fn releasing_keyboard_audition_keeps_ready_midi_monitor_audio_consuming() {
+        let mut project = Project::new();
+        let track = project.add_midi_track("Live MIDI");
+        let controls = Arc::new(Controls::new());
+        let queue = Arc::new(AudioQueue::new(BLOCK * 2));
+        let (parameters, _receiver) = mpsc::sync_channel(1);
+        // No render worker: deterministically hold it between publishing ready
+        // preview audio and its next iteration, as can happen with a full queue.
+        let mut engine = AudioEngine {
+            midi: MidiController::new(Arc::clone(&controls), true),
+            input: InputController::new(Arc::clone(&controls), 48000, 256, true),
+            live_updates: None,
+            virtual_queue: Some(Arc::clone(&queue)),
+            stream: None,
+            worker: None,
+            controls: Arc::clone(&controls),
+            sample_rate: 48_000,
+            parameters,
+            audition: Arc::new(Mutex::new(None)),
+            channel_meters: Arc::new(ChannelMeters::new(&project)),
+        };
+        let mut settings = MidiSettings {
+            port_id: Some("rill-virtual-midi".into()),
+            routes: vec![MidiRoute {
+                track,
+                channel: Some(1),
+                monitor: true,
+            }],
+        };
+        engine.configure_midi(&project, settings.clone()).unwrap();
+        controls.render_preview.store(true, Ordering::Release);
+        controls.auditioning.store(true, Ordering::Release);
+        controls
+            .position
+            .store(7.0_f64.to_bits(), Ordering::Relaxed);
+        for _ in 0..BLOCK * 2 {
+            queue.push([0.32, 0.32], 9.0, 0);
+        }
+        assert_eq!(engine.pump_virtual(BLOCK).unwrap(), vec![[0.32; 2]; BLOCK]);
+        engine.audition_note(None).unwrap();
+        assert_eq!(engine.pump_virtual(BLOCK).unwrap(), vec![[0.32; 2]; BLOCK]);
+        assert_eq!(engine.snapshot().consumed_frames, (BLOCK * 2) as u64);
+        assert_eq!(engine.snapshot().underruns, 0);
+        assert_eq!(engine.position_beats(), 7.0);
+        assert!(!engine.snapshot().playing);
+
+        // With MIDI monitoring off, the same GUI release must still silence
+        // keyboard audition immediately, without waiting for the worker.
+        settings.routes[0].monitor = false;
+        engine.configure_midi(&project, settings).unwrap();
+        controls.auditioning.store(true, Ordering::Release);
+        queue.push([0.32, 0.32], 9.0, 0);
+        engine.audition_note(None).unwrap();
+        assert_eq!(engine.pump_virtual(1).unwrap(), vec![[0.0; 2]]);
+        assert_eq!(engine.snapshot().consumed_frames, (BLOCK * 2) as u64);
+    }
+
+    #[test]
     fn live_parameter_queue_keeps_instruments_and_stable_effect_slots_separate() {
         let (parameters, receiver) = mpsc::sync_channel(128);
+        let controls = Arc::new(Controls::new());
         let engine = AudioEngine {
+            midi: MidiController::new(Arc::clone(&controls), true),
+            input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,
             virtual_queue: None,
             stream: None,
             worker: None,
-            controls: Arc::new(Controls::new()),
+            controls,
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
@@ -1118,6 +1440,15 @@ mod tests {
         assert_eq!(controls.render_errors.load(Ordering::Relaxed), 1);
         assert_eq!(controls.finished_generation.load(Ordering::Acquire), 0);
         assert!(!controls.playing.load(Ordering::Acquire));
+        assert!(
+            controls
+                .take_render_error()
+                .unwrap()
+                .contains("Audio rendering stopped\n\nPersistent graph worker unexpectedly exited")
+        );
+        assert!(controls.take_render_error().is_none());
+        assert!(!latch.attempt(&controls, 0, || bail!("must stay latched")));
+        assert!(controls.take_render_error().is_none());
 
         // A deliberate seek/new transport generation can retry a transient fault.
         controls.generation.store(1, Ordering::Release);
@@ -1140,6 +1471,27 @@ mod tests {
         assert_eq!(attempts, 3);
         assert_eq!(controls.render_errors.load(Ordering::Relaxed), 2);
         assert_eq!(controls.finished_generation.load(Ordering::Acquire), 1);
+        assert!(
+            controls
+                .take_render_error()
+                .unwrap()
+                .contains("Seek prefill failed")
+        );
+    }
+
+    #[test]
+    fn render_error_slot_is_bounded_unicode_safe_and_does_not_wait_for_the_worker() {
+        let controls = Controls::new();
+        controls.set_render_error("old failure".into());
+        controls.set_render_error(format!("Plugin 診断 🎹: {}", "é".repeat(40_000)));
+        let guard = controls.render_error.lock().unwrap();
+        assert!(controls.take_render_error().is_none());
+        drop(guard);
+        let error = controls.take_render_error().unwrap();
+        assert!(error.starts_with("Plugin 診断 🎹:"));
+        assert!(error.ends_with("[Further diagnostic text omitted]"));
+        assert!(error.len() <= 64 * 1024 + 40);
+        assert!(controls.take_render_error().is_none());
     }
 
     #[test]

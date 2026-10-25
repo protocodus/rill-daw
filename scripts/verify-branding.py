@@ -107,6 +107,7 @@ def verify_macos(bundle):
         info = plistlib.load(source)
     assert info["CFBundleIconFile"] == "rill.icns", "Bundle does not select the RILL icon"
     assert info["CFBundleIdentifier"] == "dev.rill.daw", "Incorrect application identity"
+    assert info.get("NSMicrophoneUsageDescription", "").strip(), "Missing microphone permission explanation"
     icon = (content / "Resources/rill.icns").read_bytes()
     icns_images(icon)
     assert icon == (BRAND / "rill.icns").read_bytes(), "Packaged ICNS differs from the canonical artwork"

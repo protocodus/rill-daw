@@ -116,6 +116,10 @@ impl Project {
         self.validate()?;
         let clip = self.clip(track_id, clip_id).context("Clip not found")?;
         ensure!(
+            !clip.is_take_source(),
+            "Choose a take before creating a ghost"
+        );
+        ensure!(
             clip.end() + clip.length <= MAX_BEAT,
             "Ghost copy exceeds the supported timeline"
         );
@@ -123,6 +127,7 @@ impl Project {
         let source = shared_source(clip);
         let mut clone = clip.clone();
         clone.id = new_id();
+        clone.audio_take = None;
         clone.link_group = Some(group);
         clone.start = clip.end();
         apply_source(&mut clone, &source);

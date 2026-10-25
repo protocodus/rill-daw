@@ -139,6 +139,9 @@ impl AudioSchedule {
     pub fn new(clips: &[Clip]) -> Result<Self> {
         let mut events = Vec::with_capacity(clips.len() * 2);
         for (index, clip) in clips.iter().enumerate() {
+            if clip.is_take_source() {
+                continue;
+            }
             if let ClipContent::Audio { crossfade, .. } = clip.content {
                 ensure!(
                     clip.start.is_finite()
@@ -268,6 +271,13 @@ impl Project {
         if let Some(value) = crossfade {
             value.validate()?;
         }
+        ensure!(
+            !self
+                .clip(track, clip)
+                .context("Clip not found")?
+                .is_take_source(),
+            "Choose a take before editing it"
+        );
         let ClipContent::Audio {
             crossfade: destination,
             ..

@@ -1483,26 +1483,12 @@ impl PluginImpl {
             // reload (or respawn under isolation) to get this same component back.
             let info = Self::extract_plugin_info(path, &factory, &component, class_index)?;
 
-            let has_gui = controller.is_some() && {
-                if let Some(ref ctrl) = controller {
-                    let view_type = c"editor".as_ptr();
-                    let view_ptr = ctrl.createView(view_type);
-                    if !view_ptr.is_null() {
-                        // Release the probe view; never call `removed()` on it — that pairs with
-                        // `attached()`, and an unmatched `removed()` crashes some plugins that
-                        // initialize their close state only on attach.
-                        let _ = ComPtr::<IPlugView>::from_raw(view_ptr);
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            };
-
             let mut updated_info = info;
-            updated_info.has_gui = has_gui;
+            // A controller is an editor capability hint, not proof of a native view. Never
+            // instantiate a throwaway editor during audio loading: createView can initialize
+            // GUI frameworks that need a window host and an event loop, neither of which is
+            // available in an audio-only worker. Explicit editor opening validates createView.
+            updated_info.has_gui = controller.is_some();
 
             host_app.configure_data_exchange(
                 processor.as_ptr(),
@@ -3126,36 +3112,10 @@ impl PluginInternal for PluginImpl {
     }
 
     fn has_editor(&self) -> bool {
-        // First check our cached value
-        if self.info.has_gui {
-            return true;
-        }
-
-        // An open editor is proof enough, and probing for a second view while one is attached
-        // upsets plugins that assume a single live view.
-        if self.plugin_view.is_some() {
-            return true;
-        }
-
-        // Otherwise do a runtime check
-        if let Some(ref controller) = self.controller {
-            unsafe {
-                // Check if controller can create an editor view
-                let view_type = c"editor".as_ptr();
-                let view_ptr = controller.createView(view_type);
-                if !view_ptr.is_null() {
-                    // Release the probe view; never call `removed()` on it — that pairs with
-                    // `attached()`, and an unmatched `removed()` crashes some plugins that
-                    // initialize their close state only on attach.
-                    let _ = ComPtr::<IPlugView>::from_raw(view_ptr);
-                    true
-                } else {
-                    false
-                }
-            }
-        } else {
-            false
-        }
+        // Capability queries must remain side-effect-free, including before setup/activation
+        // and in workers with no GUI runtime. A controller may still decline createView when
+        // the user actually opens the editor; open_editor reports that failure normally.
+        self.controller.is_some() || self.plugin_view.is_some()
     }
 
     fn open_editor(&mut self, parent: *mut std::ffi::c_void) -> Result<()> {
