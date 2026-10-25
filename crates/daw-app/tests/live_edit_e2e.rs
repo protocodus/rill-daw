@@ -302,7 +302,11 @@ fn pump_frames(
     );
     assert_eq!(engine["playing"], true);
     assert_eq!(state["playback_loading"], false);
-    assert_eq!(engine["render_errors"], 0, "Render failed: {engine}");
+    assert_eq!(
+        engine["render_errors"], 0,
+        "Render failed: {engine}; status={}, error={}, details={}",
+        state["status"], state["error"], state["error_details"]
+    );
     assert_eq!(engine["edit_errors"], before["engine"]["edit_errors"]);
     assert_eq!(engine["underruns"], before["engine"]["underruns"]);
     assert!(
@@ -839,7 +843,8 @@ fn audio_pitch_and_algorithm_edits_keep_running_plugins_queue_and_audible_output
         ] {
             assert_eq!(
                 state["engine"][field], previous["engine"][field],
-                "{field} changed during pitch editing"
+                "{field} changed during pitch editing: engine={}, status={}, error={}, details={}",
+                state["engine"], state["status"], state["error"], state["error_details"]
             );
         }
         assert_eq!(state["engine"]["playing"], true);
