@@ -469,6 +469,32 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     app.command(json!({"command":"viewport","width":1100.0,"height":760.0}));
     app.key("Q");
     let before = app.inspect();
+    let labels = before["label_rects"].as_array().unwrap();
+    let transport_y = labels.iter().find(|label| label["text"] == "Play").unwrap()["min"][1]
+        .as_f64()
+        .unwrap();
+    for text in [
+        "Arranger",
+        "Mixer",
+        "Start",
+        "Play",
+        "Stop",
+        "Record",
+        "Click",
+        "Loop",
+        "Range",
+        "120.0 BPM",
+    ] {
+        let label = labels.iter().find(|label| label["text"] == text).unwrap();
+        assert!(
+            (label["min"][1].as_f64().unwrap() - transport_y).abs() < 2.0,
+            "The full labeled transport must fit one row at 1100 points: {label}"
+        );
+        assert!(
+            label["max"][1].as_f64().unwrap() - label["min"][1].as_f64().unwrap() >= 18.0,
+            "Compact transport must retain readable text: {label}"
+        );
+    }
     let visible = |state: &Value, label: &str| {
         state["visible_labels"]
             .as_array()

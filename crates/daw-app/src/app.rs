@@ -1793,6 +1793,13 @@ impl DawApp {
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
                 let show_loop_summary = ui.available_width() >= 1400.0;
+                // Keep the labeled transport, including Click and tempo, on
+                // one row at ordinary laptop widths. Preserve type and target
+                // height; only horizontal padding and gaps become compact.
+                if ui.available_width() < 1200.0 {
+                    ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
+                    ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_XS;
+                }
                 ui.horizontal_wrapped(|ui| {
                     let active = self.navigation.iter().rev().find_map(|snapshot| match snapshot.view {
                         FocusedView::Workspace(view) => Some(view),

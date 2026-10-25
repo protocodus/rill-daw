@@ -549,9 +549,16 @@ pub(crate) fn paint(
         min_frequency: ready.summary.min_frequency,
         max_frequency: ready.summary.max_frequency,
     };
+    // Horizontal cropping changes the source endpoints above. Keep the full
+    // frequency axis vertically, so a partially visible row clips its bands
+    // instead of squeezing the entire spectrum into the visible row fragment.
+    let mapping_rect = egui::Rect::from_min_max(
+        egui::pos2(visible.left(), rect.top()),
+        egui::pos2(visible.right(), rect.bottom()),
+    );
     if let Some(painted) = daw_ui::paint_audio_spectrogram(
         painter,
-        visible,
+        mapping_rect,
         source,
         (source_left, source_right),
         processing.transpose_semitones as f32,
@@ -712,6 +719,64 @@ mod tests {
         assert_eq!(cache.entries.len(), MAX_ENTRIES);
         assert!(cache.entries.contains_key("source-0"));
         assert!(cache.entries.contains_key("new-source"));
+    }
+
+    #[test]
+    fn vertically_clipped_waveforms_preserve_their_original_frequency_axis() {
+        let ctx = egui::Context::default();
+        let shared = shared(&ctx);
+        let (sender, receiver) = mpsc::sync_channel(1);
+        {
+            let mut cache = shared.lock().unwrap();
+            cache.request("clipped.wav", None, 1);
+            cache.receiver = receiver;
+            sender
+                .send(Completion {
+                    serial: 1,
+                    generation: cache.generation,
+                    revision: cache.entries["clipped.wav"].revision,
+                    path: "clipped.wav".into(),
+                    outcome: prepared(),
+                })
+                .unwrap();
+            cache.poll(&ctx);
+        }
+        let clip = Clip::audio("Clipped", 0.0, 1000.0 / 24000.0, "clipped.wav");
+        let plot = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(200.0, 120.0));
+        let _ = ctx.run(Default::default(), |ctx| {
+            for (top, bottom) in [(60.0, 120.0), (0.0, 60.0)] {
+                let painter = ctx
+                    .layer_painter(egui::LayerId::background())
+                    .with_clip_rect(egui::Rect::from_min_max(
+                        egui::pos2(0.0, top),
+                        egui::pos2(200.0, bottom),
+                    ));
+                paint(
+                    &painter,
+                    plot,
+                    &clip,
+                    120.0,
+                    (clip.start, clip.end()),
+                    egui::Color32::WHITE,
+                    "takes",
+                    None,
+                );
+            }
+        });
+        let cache = shared.lock().unwrap();
+        assert_eq!(cache.painted.len(), 2);
+        assert_eq!(
+            (cache.painted[0].rect.top(), cache.painted[0].rect.bottom()),
+            (60.0, 120.0)
+        );
+        assert_eq!(
+            (cache.painted[0].uv.top(), cache.painted[0].uv.bottom()),
+            (0.5, 1.0)
+        );
+        assert_eq!(
+            (cache.painted[1].uv.top(), cache.painted[1].uv.bottom()),
+            (0.0, 0.5)
+        );
     }
 
     #[test]
