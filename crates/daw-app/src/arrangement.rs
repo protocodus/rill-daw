@@ -1,5 +1,8 @@
 use crate::{
-    app::{ChannelDestination, DawApp, Drag, InspectorPage, PopupKind, WorkspaceView},
+    app::{
+        ChannelDestination, ClipCommand, ClipDragMode, DawApp, Drag, InspectorPage, PopupKind,
+        WorkspaceView,
+    },
     theme::*,
 };
 use daw_core::*;
@@ -11,12 +14,9 @@ const COMPACT_ROW: f32 = 72.0;
 
 enum Edit {
     Move(u64, u64, f64),
-    Trim(u64, u64, f64, f64),
-    Split(u64, u64, f64),
-    Duplicate(u64, u64),
-    Clone(u64, u64),
-    Unlink(u64, u64),
-    Delete(u64, u64),
+    Bounds(u64, u64, std::sync::Arc<Clip>, f64, f64, bool),
+    Command(u64, u64, ClipCommand),
+    StartDuplicate(u64, u64, f64),
     New(u64, f64),
     Mute(u64),
     Solo(u64),
@@ -46,14 +46,26 @@ impl DawApp {
             daw_ui::EditorTool::Pencil,
             daw_ui::EditorTool::Cut,
             daw_ui::EditorTool::Duplicate,
+            daw_ui::EditorTool::Glue,
+            daw_ui::EditorTool::Ghost,
+            daw_ui::EditorTool::Stretch,
             daw_ui::EditorTool::Erase,
             daw_ui::EditorTool::Cursor,
         ];
+        if !supported.contains(&self.tool) {
+            self.tool = daw_ui::EditorTool::Select;
+        }
         daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         let mut fit = false;
         daw_ui::toolbar(ui, |ui| {
-            daw_ui::editor_tools(ui, &mut self.tool, &supported);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            daw_ui::editor_tools_with_labels(ui, &mut self.tool, &supported, |tool| {
+                if tool == daw_ui::EditorTool::Glue {
+                    "Join"
+                } else {
+                    tool.label()
+                }
+            });
+            daw_ui::toolbar_trailing(ui, 200.0, |ui| {
                 fit = daw_ui::timeline_fit_button(ui).clicked();
                 daw_ui::select(
                     "snap",
@@ -520,9 +532,9 @@ impl DawApp {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
                                     for n in notes {
-                                        let start = (n.start - clip.offset).max(0.0);
+                                        let start = clip.source_to_local(n.start).max(0.0);
                                         let stop =
-                                            (n.start + n.length - clip.offset).min(clip.length);
+                                            clip.source_to_local(n.start + n.length).min(clip.length);
                                         if stop <= start {
                                             continue;
                                         }
@@ -565,7 +577,7 @@ impl DawApp {
                         let response =
                             ui.interact(rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), row.max)),
                                 ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() })
-                                .on_hover_text(if clip.link_group.is_some() { format!("{} · Linked clip\nEdits and name are shared. Position and trim are independent.", clip.name) } else { clip.name.clone() });
+                                .on_hover_text(if clip.link_group.is_some() { format!("{} · Ghost clip\nEdits and name are shared. Position and trim are independent.", clip.name) } else { clip.name.clone() });
                         if response.clicked() || response.drag_started() {
                             self.selected_track = Some(track.id);
                             self.selected_clip = Some(clip.id);
@@ -574,9 +586,11 @@ impl DawApp {
                         if response.clicked() && !navigation.navigating {
                             let beat = response.interact_pointer_pos().map(|pos| self.snapped(((pos.x - origin) / self.zoom) as f64));
                             match self.tool {
-                                daw_ui::EditorTool::Cut => { if let Some(beat) = beat { edits.push(Edit::Split(track.id, clip.id, beat)); } }
-                                daw_ui::EditorTool::Duplicate => edits.push(Edit::Duplicate(track.id, clip.id)),
-                                daw_ui::EditorTool::Erase => edits.push(Edit::Delete(track.id, clip.id)),
+                                daw_ui::EditorTool::Cut => { if let Some(beat) = beat { edits.push(Edit::Command(track.id, clip.id, ClipCommand::Split(beat))); } }
+                                daw_ui::EditorTool::Duplicate => edits.push(Edit::Command(track.id, clip.id, ClipCommand::Duplicate)),
+                                daw_ui::EditorTool::Ghost => edits.push(Edit::Command(track.id, clip.id, ClipCommand::Ghost)),
+                                daw_ui::EditorTool::Glue => popup = Some(PopupKind::Join),
+                                daw_ui::EditorTool::Erase => edits.push(Edit::Command(track.id, clip.id, ClipCommand::Delete)),
                                 daw_ui::EditorTool::Cursor => new_cursor = beat,
                                 _ => {}
                             }
@@ -589,57 +603,88 @@ impl DawApp {
                         if response.hovered()
                             && let Some(pos) = response.hover_pos()
                         {
-                            if pos.x > rect.right() - 8.0 {
+                            if self.tool == daw_ui::EditorTool::Stretch || pos.x > rect.right() - 8.0 || pos.x < rect.left() + 8.0 {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
                             } else {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                             }
                         }
-                        if response.drag_started() && self.tool == daw_ui::EditorTool::Select {
-                            let resize = ui.input(|input| input.pointer.press_origin())
-                                .is_some_and(|pos| pos.x > rect.right() - 10.0);
+                        if response.drag_started() && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch) {
+                            let pressed = ui.input(|input| input.pointer.press_origin()).unwrap_or(rect.center());
+                            let edge = 10.0_f32.min(rect.width() / 3.0);
+                            let mode = if self.tool == daw_ui::EditorTool::Stretch {
+                                ClipDragMode::Stretch
+                            } else if pressed.x > rect.right() - edge {
+                                ClipDragMode::TrimEnd
+                            } else if pressed.x < rect.left() + edge {
+                                ClipDragMode::TrimStart
+                            } else { ClipDragMode::Move };
                             self.drag = Some(Drag::Clip {
                                 track: track.id,
                                 clip: clip.id,
-                                start: clip.start,
-                                length: clip.length,
-                                resize,
+                                handle: clip.id,
+                                original: std::sync::Arc::new(clip.clone()),
+                                mode,
                             });
+                            if mode == ClipDragMode::Move && ui.input(|i| i.modifiers.shift) {
+                                let delta = response.total_drag_delta().unwrap_or_default().x as f64 / self.zoom as f64;
+                                edits.push(Edit::StartDuplicate(track.id, clip.id, self.snapped(clip.start + delta).max(0.0)));
+                            }
                         }
-                        if response.dragged() && self.tool == daw_ui::EditorTool::Select
+                        if response.dragged() && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch)
                             && let Some(Drag::Clip {
                                 track: t,
                                 clip: c,
-                                start,
-                                length,
-                                resize,
+                                handle,
+                                original,
+                                mode,
                             }) = &self.drag
-                            && *c == clip.id
+                            && *handle == clip.id
+                            && !(response.drag_started() && *mode == ClipDragMode::Move && ui.input(|i| i.modifiers.shift))
                         {
                             let delta = response.total_drag_delta().unwrap_or_default().x as f64
                                 / self.zoom as f64;
-                            if *resize {
-                                edits.push(Edit::Trim(
-                                    *t,
-                                    *c,
-                                    *start,
-                                    self.snapped(*length + delta).max(self.snap.max(0.0625)),
-                                ));
-                            } else {
-                                edits.push(Edit::Move(
-                                    *t,
-                                    *c,
-                                    self.snapped(*start + delta).max(0.0),
-                                ));
+                            let snap = |beat| if ui.input(|i| i.modifiers.shift) { beat } else { self.snapped(beat) };
+                            let minimum = original.length.min(0.0625);
+                            match mode {
+                                ClipDragMode::Move => edits.push(Edit::Move(*t, *c, self.snapped(original.start + delta).max(0.0))),
+                                ClipDragMode::TrimStart => {
+                                    let earliest = if matches!(original.content, ClipContent::Audio { reverse: true, .. }) {
+                                        0.0
+                                    } else { (original.start - original.offset / original.source_rate).max(0.0) };
+                                    let start = snap(original.start + delta).clamp(earliest, (original.end() - minimum).max(earliest));
+                                    let length = if start == original.start { original.length } else { original.end() - start };
+                                    edits.push(Edit::Bounds(*t, *c, std::sync::Arc::clone(original), start, length, false));
+                                }
+                                ClipDragMode::TrimEnd | ClipDragMode::Stretch => {
+                                    let mut length = (snap(original.end() + delta) - original.start).max(minimum);
+                                    if *mode == ClipDragMode::Stretch {
+                                        length = length.clamp(original.source_length() / 4.0, original.source_length() / 0.25);
+                                    } else if matches!(original.content, ClipContent::Audio { reverse: true, .. }) {
+                                        length = length.min(original.length + original.offset / original.source_rate);
+                                    }
+                                    edits.push(Edit::Bounds(*t, *c, std::sync::Arc::clone(original), original.start, length, *mode == ClipDragMode::Stretch));
+                                }
                             }
                         }
                         response.context_menu(|ui| {
-                            if daw_ui::button(ui, "Create linked clone").clicked() {
-                                edits.push(Edit::Clone(track.id, clip.id));
+                            if daw_ui::button(ui, "Stretch").clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                self.selected_notes.clear();
+                                self.tool = daw_ui::EditorTool::Stretch;
                                 ui.close();
                             }
-                            if clip.link_group.is_some() && daw_ui::button(ui, "Make independent").clicked() {
-                                edits.push(Edit::Unlink(track.id, clip.id));
+                            if daw_ui::button(ui, "Ghost copy")
+                                .on_hover_text("Create another clip sharing its name and edits")
+                                .clicked() {
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Ghost));
+                                ui.close();
+                            }
+                            if clip.link_group.is_some() && daw_ui::button(ui, "Make independent")
+                                .on_hover_text("Disconnect this ghost while keeping its current name and edits")
+                                .clicked() {
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::MakeIndependent));
                                 ui.close();
                             }
                             if daw_ui::button(ui, "Join clips…").clicked() {
@@ -655,15 +700,15 @@ impl DawApp {
                                 ui.close();
                             }
                             if daw_ui::button(ui, "Duplicate").clicked() {
-                                edits.push(Edit::Duplicate(track.id, clip.id));
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Duplicate));
                                 ui.close();
                             }
                             if daw_ui::button(ui, "Split at cursor").clicked() {
-                                edits.push(Edit::Split(track.id, clip.id, self.cursor));
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Split(self.cursor)));
                                 ui.close();
                             }
                             if daw_ui::button(ui, "Delete").clicked() {
-                                edits.push(Edit::Delete(track.id, clip.id));
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Delete));
                                 ui.close();
                             }
                         });
@@ -776,7 +821,7 @@ impl DawApp {
             && let Some(Drag::Clip {
                 track,
                 clip,
-                resize: false,
+                mode: ClipDragMode::Move,
                 ..
             }) = self.drag
             && let Some((Some(target), _)) = self.drop_target
@@ -792,23 +837,69 @@ impl DawApp {
         for edit in edits {
             self.begin_edit();
             let result = match edit {
-                Edit::Move(t, c, b) => self.project.move_clip(t, c, b),
-                Edit::Trim(t, c, s, l) => self.project.trim_clip(t, c, s, l),
-                Edit::Split(t, c, b) => self.project.split_clip(t, c, b).map(|_| ()),
-                Edit::Duplicate(t, c) => self.project.duplicate_clip(t, c).map(|_| ()),
-                Edit::Clone(t, c) => self.project.clone_clip(t, c).map(|id| {
-                    self.selected_track = Some(t);
-                    self.selected_clip = Some(id);
-                    self.selected_notes.clear();
-                    self.edit_label = Some("Create linked clone".into());
-                }),
-                Edit::Unlink(t, c) => self.project.make_clip_independent(t, c).map(|()| {
-                    self.selected_track = Some(t);
-                    self.selected_clip = Some(c);
-                    self.selected_notes.clear();
-                    self.edit_label = Some("Make clip independent".into());
-                }),
-                Edit::Delete(t, c) => self.project.delete_clip(t, c).map(|_| ()),
+                Edit::Move(t, c, b) => {
+                    if self.project.clip(t, c).is_some_and(|clip| clip.start == b) {
+                        continue;
+                    }
+                    self.project.move_clip(t, c, b)
+                }
+                Edit::Command(t, c, command) => {
+                    self.apply_clip_command(t, c, command);
+                    continue;
+                }
+                Edit::StartDuplicate(t, c, start) => {
+                    let result = self.project.duplicate_clip_at(t, c, start).map(|id| {
+                        self.selected_track = Some(t);
+                        self.selected_clip = Some(id);
+                        self.selected_notes.clear();
+                        self.edit_label = Some("Duplicate clip".into());
+                        if let Some(Drag::Clip { clip, .. }) = &mut self.drag {
+                            *clip = id;
+                        }
+                    });
+                    if result.is_err() {
+                        // A failed copy must not turn the remaining gesture
+                        // into a move of its original clip.
+                        self.drag = None;
+                    }
+                    result
+                }
+                Edit::Bounds(t, c, original, start, length, stretch) => {
+                    if self.project.clip(t, c).is_some_and(|clip| {
+                        clip.start == start
+                            && clip.length == length
+                            && (!stretch
+                                || clip.source_rate
+                                    == original.source_rate * original.length / length)
+                    }) {
+                        // Egui keeps a drag active while the pointer is still.
+                        // Re-enqueuing the same edit would repeatedly cancel
+                        // background stretching before it can finish.
+                        continue;
+                    }
+                    let previous = self.project.clip(t, c).cloned();
+                    if let Some(clip) = self.project.clip_mut(t, c) {
+                        clip.clone_from(&original);
+                    }
+                    let result = if start == original.start && length == original.length {
+                        Ok(())
+                    } else if stretch {
+                        self.project.stretch_clip(t, c, length)
+                    } else {
+                        self.project.trim_clip(t, c, start, length)
+                    };
+                    if result.is_err() {
+                        if let (Some(clip), Some(previous)) =
+                            (self.project.clip_mut(t, c), previous)
+                        {
+                            *clip = previous;
+                        }
+                    } else {
+                        self.edit_label =
+                            Some(if stretch { "Stretch clip" } else { "Trim clip" }.into());
+                    }
+                    result
+                }
                 Edit::DeleteTrack(id) => self.project.delete_track(id).map(|_| {
                     if self.selected_track == Some(id) {
                         self.selected_track = None;
@@ -975,8 +1066,11 @@ impl DawApp {
                         if let Some(clip) = self.selected_mut() {
                             if let Some(count) = count {
                                 ui.horizontal_wrapped(|ui| {
-                                    daw_ui::clip_label(ui, &format!("{count} linked instances"), true);
-                                    make_independent = daw_ui::button(ui, "Make independent").clicked();
+                                    let label = if count == 1 { "1 ghost".into() } else { format!("{count} ghosts") };
+                                    daw_ui::clip_label(ui, &label, true);
+                                    make_independent = daw_ui::button(ui, "Make independent")
+                                        .on_hover_text("Disconnect this ghost while keeping its current name and edits")
+                                        .clicked();
                                 });
                                 ui.add_space(daw_ui::tokens::SPACE_SM);
                             }
@@ -985,7 +1079,7 @@ impl DawApp {
                                 let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 260.0)
                                     .labelled_by(label.id)
                                     .on_hover_text(if linked.is_some() {
-                                        "Shared name · renaming any instance renames every linked clip"
+                                        "Shared name · renaming any ghost renames the whole group"
                                     } else {
                                         "Name of this independent clip"
                                     });
@@ -1000,19 +1094,29 @@ impl DawApp {
                                 daw_ui::text::label(ui, "Duration");
                                 daw_ui::text::body(ui, format!("{:.2} beats", clip.length));
                                 ui.end_row();
+                                if clip.source_rate != 1.0 {
+                                    daw_ui::text::label(ui, "Stretch");
+                                    daw_ui::text::body(ui, format!("{:.1}%", 100.0 / clip.source_rate))
+                                        .on_hover_text("Duration relative to the source; local to this occurrence");
+                                    ui.end_row();
+                                }
                                 daw_ui::text::label(ui, "Source offset");
                                 daw_ui::text::body(ui, format!("{:.2} beats", clip.offset))
                                     .on_hover_text("Distance from the beginning of the source to this clip's first beat");
                                 ui.end_row();
                                 if let ClipContent::Audio {
                                     gain,
+                                    processing,
                                     fade_in,
                                     fade_out,
                                     envelope,
                                     ..
                                 } = &mut clip.content
                                 {
-                                    let fade_length = envelope.map_or(clip.length, |region| region.length);
+                                    daw_ui::text::label(ui, "Pitch & time");
+                                    changed |= crate::audio_editor::audio_processing_menu(ui, processing);
+                                    ui.end_row();
+                                    let fade_length = envelope.map_or(clip.length * clip.source_rate, |region| region.length) / clip.source_rate;
                                     let label = daw_ui::text::label(ui, "Clip gain");
                                     ui.horizontal(|ui| {
                                         changed |= ui
@@ -1029,14 +1133,18 @@ impl DawApp {
                                     ui.end_row();
                                     for (name, value) in [("Fade in", fade_in), ("Fade out", fade_out)] {
                                         let label = daw_ui::text::label(ui, name);
-                                        changed |= ui
-                                            .add(daw_ui::number(value)
+                                        let mut audible = *value / clip.source_rate;
+                                        if ui
+                                            .add(daw_ui::number(&mut audible)
                                                 .range(0.0..=fade_length)
                                                 .clamp_existing_to_range(false)
                                                 .speed(0.05)
                                                 .suffix(" beats"))
                                             .labelled_by(label.id)
-                                            .changed();
+                                            .changed() {
+                                                *value = audible * clip.source_rate;
+                                                changed = true;
+                                            }
                                         ui.end_row();
                                     }
                                 }

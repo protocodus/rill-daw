@@ -36,6 +36,12 @@ TEXT
   Linux)
     cp "$rill_bin_dir/rill" "$rill_bin_dir/daw-plugin-host" "$package_dir/"
     chmod 755 "$package_dir/rill" "$package_dir/daw-plugin-host"
+    mkdir -p "$package_dir/share/applications" "$package_dir/share/icons/hicolor/256x256/apps"
+    cp crates/daw-ui/assets/brand/rill-icon-256.png "$package_dir/share/icons/hicolor/256x256/apps/dev.rill.daw.png"
+    cp scripts/dev.rill.daw.desktop "$package_dir/share/applications/"
+    cp scripts/install-desktop.py "$package_dir/"
+    python3 scripts/test-desktop-install.py
+    python3 scripts/verify-branding.py --linux "$package_dir"
     cat > "$package_dir/INSTALL.txt" <<'TEXT'
 Rill for Linux
 
@@ -45,7 +51,7 @@ distribution. A graphical session (X11 or Wayland), OpenGL-capable driver,
 ALSA, udev, X11 input/cursor, xkbcommon, and Wayland client libraries are required
 for desktop use. The X11 libraries are loaded at runtime and may not appear in ldd.
 Ubuntu 22.04 runtime packages:
-  sudo apt install libasound2 libudev1 libxkbcommon0 libxkbcommon-x11-0 \
+  sudo apt install libstdc++6 libasound2 libudev1 libxkbcommon0 libxkbcommon-x11-0 \
     libwayland-client0 libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libgl1 libegl1
 Ubuntu 24.04 uses libasound2t64 in place of libasound2.
 No installation is needed for the --headless test driver or offline rendering
@@ -53,6 +59,14 @@ beyond shared-library dependencies. Use the archive matching your CPU.
 Separately installed VST3 plug-ins must match the host architecture.
 Native plug-in editors need X11 or XWayland. Editor thumbnail capture requires
 the XRes and Composite extensions on that display.
+
+Optional application-menu launcher (Python 3, current user only):
+  python3 ./install-desktop.py
+Keep this extracted directory in its final location before installing the launcher.
+Run the command again after moving it. Remove the launcher with:
+  python3 ./install-desktop.py --remove
+The bundled share/ directory also provides a standard desktop entry and icon
+for system package maintainers; its rill executable must be on PATH.
 TEXT
     executable="$package_dir/rill"
     archive="$project_dir/dist/$package_name.tar.gz"

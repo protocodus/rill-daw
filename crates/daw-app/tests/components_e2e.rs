@@ -239,7 +239,7 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             );
             app.click("Search effects");
             app.command(json!({"command":"text","text":"Rill Fixture FX"}));
-            common::wait_visible(&mut app, "Add to effect chain");
+            common::wait_library_device(&mut app, "Rill Fixture FX");
             app.click("All developers");
             let filtered = front(&mut app, "000 Rill component tests");
             accessible(
@@ -330,7 +330,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             assert_eq!(
                 label_count(&before, &name(0)),
                 2,
-                "First device is shown in catalog and details"
+                "First device is shown on its card and in the selection footer"
             );
 
             let catalog = &before["library"]["catalog"];
@@ -343,11 +343,11 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             assert_eq!(
                 label_count(&scrolled, &name(0)),
                 1,
-                "Selected detail stays while its catalog row scrolls away"
+                "Selected device context stays while its card scrolls away"
             );
             assert!(
                 visible(&scrolled, &name(79)),
-                "Last catalog row must be reachable"
+                "Last card row must be reachable"
             );
             for label in [
                 "Instruments",
@@ -372,19 +372,21 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             );
             accessible(&selected, &["Add instrument track", "More"]);
 
-            // Keyboard browsing must reveal a device beyond the visible rows.
+            // Up moves one full card row and reveals the selected device.
+            let columns = selected["library"]["columns"].as_u64().unwrap() as usize;
+            let keyboard_name = name(79usize.saturating_sub(12 * columns));
             for _ in 0..12 {
                 app.key("ArrowUp");
             }
             let mut keyboard = app.inspect();
             for _ in 0..20 {
-                if label_count(&keyboard, &name(67)) == 2 {
+                if label_count(&keyboard, &keyboard_name) == 2 {
                     break;
                 }
                 keyboard = app.inspect();
             }
             assert_eq!(
-                label_count(&keyboard, &name(67)),
+                label_count(&keyboard, &keyboard_name),
                 2,
                 "Arrow selection must scroll into view"
             );

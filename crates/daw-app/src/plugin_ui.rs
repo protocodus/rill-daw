@@ -102,7 +102,7 @@ pub(crate) struct InstrumentUi {
 struct ParameterActions {
     refresh: bool,
     update: Option<(u32, f64)>,
-    automate: Option<(u32, f64, String)>,
+    automate: Option<(u32, f64)>,
 }
 
 impl DawApp {
@@ -550,8 +550,7 @@ impl DawApp {
                 )
                 .clicked()
                 {
-                    actions.automate =
-                        Some((parameter.id, parameter.value, parameter.name.to_owned()));
+                    actions.automate = Some((parameter.id, parameter.value));
                 }
                 ui.add_space(daw_ui::tokens::SPACE_MD);
                 let mut value = parameter.value;
@@ -575,7 +574,7 @@ impl DawApp {
         if let Some(id) = browser.activated
             && let Some(parameter) = items.iter().find(|p| p.id == id)
         {
-            actions.automate = Some((id, parameter.value, parameter.name.to_owned()));
+            actions.automate = Some((id, parameter.value));
         }
         actions
     }
@@ -751,8 +750,7 @@ impl DawApp {
                                 )
                                 .clicked()
                             {
-                                automate =
-                                    Some((parameter.id, parameter.value, parameter.name.clone()));
+                                automate = Some((parameter.id, parameter.value));
                             }
                             if let Some(error) = &self.instrument_ui.error {
                                 daw_ui::text::bounded_block(
@@ -855,48 +853,83 @@ impl DawApp {
                 self.apply_instrument_parameters(&[(id, value)]);
             }
         }
-        if let Some((id, value, label)) = automate {
-            let automation_target = AutomationTarget {
-                track: track_id,
-                parameter: AutomationParameter::VstParameter {
-                    effect: target.effect,
-                    id,
-                },
-            };
-            let existing = self.project.tracks.iter().find_map(|track| {
-                track
-                    .automation
-                    .as_ref()
-                    .filter(|lane| lane.target == automation_target)
-                    .map(|_| track.id)
-            });
-            let result = if let Some(id) = existing {
-                Ok(id)
-            } else {
-                self.begin_edit();
-                self.project.add_automation_track_with_value(
-                    effect_name.as_ref().map_or_else(
-                        || format!("{name} · {label}"),
-                        |effect| format!("{name} · {effect} · {label}"),
-                    ),
-                    automation_target,
-                    value as f32,
-                )
-            };
-            match result {
-                Ok(id) => {
-                    self.open_popup(PopupKind::Automation);
-                    self.selected_track = Some(id);
-                    self.selected_clip = None;
-                    if existing.is_none() {
-                        self.changed();
-                    }
-                }
-                Err(error) => self.message(Err(error), ""),
-            }
+        if let Some((id, value)) = automate {
+            self.automate_plugin_parameter(target, id, value);
         }
         if choose {
             self.open_instrument_chooser(true);
+        }
+    }
+
+    /// Both the parameter browser and native context menu resolve against the
+    /// editor owner. Changing the arranger selection cannot redirect a request.
+    fn automate_plugin_parameter(
+        &mut self,
+        target: EditorTarget,
+        id: u32,
+        value: f64,
+    ) -> Option<u64> {
+        if !self.parameter_editing_enabled() || !value.is_finite() || !(0.0..=1.0).contains(&value)
+        {
+            return None;
+        }
+        let (owner, plugin) = self.instrument_ui.owner.as_ref()?;
+        if *owner != target
+            || !matches!(plugin, Instrument::Vst3 { .. })
+            || self.editor_plugin(target).as_ref() != Some(plugin)
+        {
+            return None;
+        }
+        let parameter = self
+            .instrument_ui
+            .parameters
+            .iter()
+            .find(|parameter| parameter.id == id && !parameter.read_only)?;
+        let source = self.project.track(target.track)?;
+        let name = if let Some(effect) = target.effect {
+            let effect = source.inserts.iter().find(|slot| slot.id == effect)?;
+            format!("{} · {} · {}", source.name, effect.name, parameter.name)
+        } else {
+            format!("{} · {}", source.name, parameter.name)
+        };
+        let automation_target = AutomationTarget {
+            track: target.track,
+            parameter: AutomationParameter::VstParameter {
+                effect: target.effect,
+                id,
+            },
+        };
+        let existing = self.project.tracks.iter().find_map(|track| {
+            track
+                .automation
+                .as_ref()
+                .filter(|lane| lane.target == automation_target)
+                .map(|_| track.id)
+        });
+        let result = if let Some(id) = existing {
+            Ok(id)
+        } else {
+            // Native parameter gestures and a new lane are separate Undo steps.
+            self.flush_pending_edit();
+            self.begin_edit();
+            self.project
+                .add_automation_track_with_value(name, automation_target, value as f32)
+        };
+        match result {
+            Ok(lane) => {
+                self.instrument_ui.browser.selected = Some(id);
+                self.open_popup(PopupKind::Automation);
+                self.selected_track = Some(lane);
+                self.selected_clip = None;
+                if existing.is_none() {
+                    self.changed();
+                }
+                Some(lane)
+            }
+            Err(error) => {
+                self.message(Err(error), "");
+                None
+            }
         }
     }
 
@@ -1048,6 +1081,19 @@ impl DawApp {
                         updates.push((id, value));
                     }
                 }
+                EditorEvent::AutomateParameter { id, value } => {
+                    if valid {
+                        // Preserve wire order: the gesture before this action
+                        // belongs to its own history entry and current state.
+                        self.apply_instrument_parameters(&updates);
+                        updates.clear();
+                        if let Some((target, _)) = self.instrument_ui.owner.as_ref()
+                            && self.automate_plugin_parameter(*target, id, value).is_some()
+                        {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        }
+                    }
+                }
                 EditorEvent::StateSaved { request_id, state } => {
                     if state.len() > daw_core::MAX_PLUGIN_STATE_BYTES {
                         self.instrument_ui.error =
@@ -1153,6 +1199,8 @@ impl DawApp {
         self.instrument_ui.opening.is_none()
             && !self.instrument_ui.closing
             && !self.state_sync_pending()
+            && !self.project_io_pending()
+            && self.document_guard.is_none()
     }
 
     fn apply_editor_snapshot(&mut self, state: Vec<u8>) {
@@ -1264,6 +1312,171 @@ mod tests {
         app.modified = true;
         app.instrument_ui.owner = Some((id.into(), instrument));
         app
+    }
+
+    fn automation_parameter(id: u32, read_only: bool) -> ParameterInfo {
+        ParameterInfo {
+            id,
+            name: "Cutoff Ω".into(),
+            value: 0.4,
+            default: 0.5,
+            unit: "Hz".into(),
+            steps: 0,
+            read_only,
+        }
+    }
+
+    #[test]
+    fn native_automation_uses_owner_zero_id_and_reuses_without_history_or_value_changes() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        let target = app.instrument_ui.owner.as_ref().unwrap().0;
+        app.instrument_ui.parameters = vec![automation_parameter(0, false)];
+        app.selected_track = Some(app.project.add_midi_track("Other selection"));
+        app.apply_instrument_parameters(&[(0, 0.73)]);
+        let lane = app.automate_plugin_parameter(target, 0, 0.73).unwrap();
+        app.flush_pending_edit();
+        let automation = app
+            .project
+            .track(lane)
+            .unwrap()
+            .automation
+            .as_ref()
+            .unwrap();
+        assert_eq!(automation.target.track, target.track);
+        assert_eq!(
+            automation.target.parameter,
+            AutomationParameter::VstParameter {
+                effect: None,
+                id: 0
+            }
+        );
+        assert!((automation.points[0].value - 0.73).abs() < 1e-6);
+        assert_eq!(
+            app.project.track(lane).unwrap().name,
+            "Instrument · Cutoff Ω"
+        );
+        let original = app.project.clone();
+        assert_eq!(app.automate_plugin_parameter(target, 0, 0.2), Some(lane));
+        assert_eq!(
+            app.project, original,
+            "opening a lane must preserve its curve"
+        );
+        app.flush_pending_edit();
+        app.undo_redo(false);
+        assert!(
+            app.project.track(lane).is_none(),
+            "reopening adds no Undo step"
+        );
+        assert_eq!(app.editor_state(target).unwrap().1[0].value, 0.73);
+        app.undo_redo(true);
+        assert_eq!(app.project, original);
+    }
+
+    #[test]
+    fn native_effect_automation_uses_slot_identity_and_channel_context() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        let track = app.project.tracks[0].id;
+        let mut slots = vec![];
+        for name in ["Echo A", "Echo B"] {
+            let slot = daw_core::EffectSlot::new(
+                name,
+                daw_core::Effect::Vst3 {
+                    path: "effect.vst3".into(),
+                    class_id: None,
+                },
+            );
+            slots.push(slot.id);
+            app.project.track_mut(track).unwrap().inserts.push(slot);
+        }
+        app.instrument_ui.parameters = vec![automation_parameter(0, false)];
+        for (index, effect) in slots.into_iter().enumerate() {
+            let target = EditorTarget {
+                track,
+                effect: Some(effect),
+            };
+            app.instrument_ui.owner = Some((target, app.editor_plugin(target).unwrap()));
+            let lane = app.automate_plugin_parameter(target, 0, 0.3).unwrap();
+            assert_eq!(
+                app.project.track(lane).unwrap().name,
+                format!(
+                    "Instrument · Echo {} · Cutoff Ω",
+                    if index == 0 { "A" } else { "B" }
+                )
+            );
+            assert_eq!(
+                app.project
+                    .track(lane)
+                    .unwrap()
+                    .automation
+                    .as_ref()
+                    .unwrap()
+                    .target
+                    .parameter,
+                AutomationParameter::VstParameter {
+                    effect: Some(effect),
+                    id: 0
+                }
+            );
+        }
+        assert_eq!(
+            app.project
+                .tracks
+                .iter()
+                .filter(|track| track.automation.is_some())
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn native_automation_rejects_invalid_metadata_stale_owners_and_document_transitions() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut app = pending_app(&ctx, directory.path());
+        let target = app.instrument_ui.owner.as_ref().unwrap().0;
+        app.instrument_ui.parameters = vec![
+            automation_parameter(0, false),
+            automation_parameter(43, true),
+        ];
+        let original = app.project.clone();
+        for (id, value) in [
+            (43, 0.4),
+            (999, 0.4),
+            (0, -0.1),
+            (0, 1.1),
+            (0, f64::NAN),
+            (0, f64::INFINITY),
+        ] {
+            assert_eq!(app.automate_plugin_parameter(target, id, value), None);
+        }
+        app.instrument_ui.closing = true;
+        assert_eq!(app.automate_plugin_parameter(target, 0, 0.4), None);
+        app.instrument_ui.closing = false;
+        app.instrument_ui.pending = Some(PendingState {
+            action: PendingAction::Save(directory.path().join("waiting.rill")),
+            deadline: Instant::now() + Duration::from_secs(30),
+            request_id: Some(1),
+            saved: false,
+        });
+        assert_eq!(app.automate_plugin_parameter(target, 0, 0.4), None);
+        app.instrument_ui.pending = None;
+        app.request_document_transition(crate::document_ui::DocumentTransition::New);
+        assert_eq!(app.automate_plugin_parameter(target, 0, 0.4), None);
+        app.document_guard = None;
+        assert_eq!(app.project, original);
+        let Instrument::Vst3 { class_id, .. } =
+            &mut app.project.track_mut(target.track).unwrap().instrument
+        else {
+            unreachable!()
+        };
+        *class_id = Some("replacement".into());
+        assert_eq!(app.automate_plugin_parameter(target, 0, 0.4), None);
+        app.project.tracks.clear();
+        assert_eq!(app.automate_plugin_parameter(target, 0, 0.4), None);
     }
 
     #[test]

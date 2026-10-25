@@ -15,6 +15,8 @@ pub enum EditorTool {
     FadeIn,
     FadeOut,
     Cursor,
+    Ghost,
+    Stretch,
 }
 
 impl EditorTool {
@@ -23,7 +25,7 @@ impl EditorTool {
     #[allow(non_upper_case_globals)]
     pub const Split: Self = Self::Cut;
 
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 12] = [
         Self::Select,
         Self::Pencil,
         Self::Cut,
@@ -34,6 +36,8 @@ impl EditorTool {
         Self::FadeIn,
         Self::FadeOut,
         Self::Cursor,
+        Self::Ghost,
+        Self::Stretch,
     ];
 
     pub fn label(self) -> &'static str {
@@ -48,6 +52,8 @@ impl EditorTool {
             Self::FadeIn => "Fade in",
             Self::FadeOut => "Fade out",
             Self::Cursor => "Cursor",
+            Self::Ghost => "Ghost copy",
+            Self::Stretch => "Stretch",
         }
     }
 
@@ -63,6 +69,31 @@ impl EditorTool {
             Self::FadeIn => Key::I,
             Self::FadeOut => Key::O,
             Self::Cursor => Key::P,
+            Self::Ghost => Key::G,
+            Self::Stretch => Key::S,
+        }
+    }
+
+    pub fn hint(self) -> &'static str {
+        match self {
+            Self::Select => {
+                "Drag to move; drag an edge to trim. Shift-drag copies; Shift at an edge bypasses snap."
+            }
+            Self::Pencil => "Draw a note or MIDI clip.",
+            Self::Cut => "Split at the pointer.",
+            Self::Duplicate => "Create an independent copy.",
+            Self::Glue => "Join clips or selected notes.",
+            Self::Erase => "Delete at the pointer.",
+            Self::MultiDraw => "Draw the selected chord or scale.",
+            Self::FadeIn => "Drag to shape the audio fade-in.",
+            Self::FadeOut => "Drag to shape the audio fade-out.",
+            Self::Cursor => "Place the playback cursor.",
+            Self::Ghost => {
+                "Create a linked copy. Source edits and the name remain shared; placement, trim and stretch stay independent."
+            }
+            Self::Stretch => {
+                "Drag to change duration. Audio keeps its pitch; MIDI note timing scales. Hold Shift to bypass snap."
+            }
         }
     }
 }
@@ -85,11 +116,22 @@ pub fn editor_tool_shortcuts(ui: &mut Ui, tool: &mut EditorTool, supported: &[Ed
 }
 
 pub fn editor_tools(ui: &mut Ui, tool: &mut EditorTool, supported: &[EditorTool]) {
+    editor_tools_with_labels(ui, tool, supported, EditorTool::label);
+}
+
+/// Contextual wording keeps the same tool identity and shortcut in each editor.
+pub fn editor_tools_with_labels(
+    ui: &mut Ui,
+    tool: &mut EditorTool,
+    supported: &[EditorTool],
+    label: impl Fn(EditorTool) -> &'static str,
+) {
     for candidate in supported {
-        crate::selectable_value(ui, tool, *candidate, candidate.label()).on_hover_text(format!(
-            "{} · {}",
-            candidate.label(),
-            candidate.key().name()
+        crate::selectable_value(ui, tool, *candidate, label(*candidate)).on_hover_text(format!(
+            "{} · {}\n{}",
+            label(*candidate),
+            candidate.key().name(),
+            candidate.hint(),
         ));
     }
 }

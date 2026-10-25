@@ -55,7 +55,14 @@ fn point(state: &Value, beat: f64, pitch: u8) -> (f64, f64) {
         plot["min"][0].as_f64().unwrap()
             + (beat - m["start_beat"].as_f64().unwrap()) * m["pixels_per_beat"].as_f64().unwrap(),
         plot["min"][1].as_f64().unwrap()
-            + (127.5 - f64::from(pitch) - m["row_offset"].as_f64().unwrap())
+            + (m["visible_pitches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .position(|value| value.as_u64() == Some(u64::from(pitch)))
+                .expect("pitch is visible") as f64
+                + 0.5
+                - m["row_offset"].as_f64().unwrap())
                 * m["row_height"].as_f64().unwrap(),
     )
 }
@@ -477,7 +484,7 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     ] {
         assert!(!visible(&before, label), "{label} should be contextual");
     }
-    let pitch = app.click("Pitch");
+    let pitch = app.click("C · Natural minor");
     assert!(visible(&pitch, "Natural minor"));
     assert!(visible(&pitch, "Major triad"));
     assert_eq!(app.key("Escape")["view"], "Clip");
@@ -615,4 +622,318 @@ fn shift_drag_duplicates_once_and_shift_edge_resize_temporarily_bypasses_snap() 
     assert_eq!(notes(&undo(&mut app, false)).len(), 4);
     assert_eq!(notes(&undo(&mut app, false)).len(), 2);
     app.quit();
+}
+
+#[test]
+fn scale_view_highlights_fold_and_hidden_selection_never_change_source_notes() {
+    let mut app = open(vec![
+        Note::new(60, 1.0, 1.0, 90),
+        Note::new(61, 2.0, 1.0, 75),
+        Note::new(63, 3.0, 1.0, 100),
+    ]);
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    let original = app.inspect();
+    app.click("View");
+    let no_chord = app.click("Highlight chord");
+    assert_eq!(no_chord["midi_editor"]["highlight_chord"], false);
+    let no_highlights = app.click("Highlight scale");
+    assert_eq!(no_highlights["midi_editor"]["highlight_scale"], false);
+    let folded = app.click("Only scale keys");
+    assert_eq!(folded["midi_editor"]["only_scale_keys"], true);
+    assert_eq!(folded["midi_editor"]["hidden_notes"], 1);
+    assert!(
+        folded["midi_editor"]["visible_pitches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|pitch| daw_core::Scale::Minor.contains(0, pitch.as_u64().unwrap() as u8))
+    );
+    assert_eq!(folded["project"], original["project"]);
+    assert_eq!(folded["history"], original["history"]);
+    assert_eq!(folded["midi_editor"]["notes"].as_array().unwrap().len(), 2);
+    let lit = app.click("Highlight scale");
+    assert_eq!(lit["midi_editor"]["only_scale_keys"], true);
+    assert_eq!(lit["midi_editor"]["highlight_scale"], true);
+    let key_color = |state: &Value| {
+        state["midi_editor"]["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|key| key["pitch"] == 60)
+            .unwrap()["row_color"]
+            .clone()
+    };
+    assert_ne!(key_color(&lit), key_color(&folded));
+    app.key("Escape");
+    let restored = app.click("1 note hidden · Show all");
+    assert_eq!(restored["midi_editor"]["only_scale_keys"], false);
+    assert!(
+        restored["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|note| note["selected"] == true),
+        "Unfold restores the hidden selection"
+    );
+    assert_eq!(restored["project"], original["project"]);
+    assert_eq!(restored["history"], original["history"]);
+    app.quit();
+}
+
+#[test]
+fn folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes() {
+    let hidden = Note::new(61, 1.0, 1.0, 77);
+    let hidden_id = hidden.id;
+    let mut app = open(vec![
+        Note::new(60, 1.0, 1.0, 90),
+        hidden,
+        Note::new(72, 10.0, 1.0, 100),
+    ]);
+    app.click("View");
+    app.click("Only scale keys");
+    app.key("Escape");
+    app.key("Q");
+    let state = app.inspect();
+    let state = pointer(
+        &mut app,
+        "drag",
+        point(&state, 1.5, 60),
+        Some(point(&state, 2.5, 62)),
+    );
+    assert!(
+        notes(&state)
+            .iter()
+            .any(|note| note["pitch"] == 62 && note["start"] == 2.0)
+    );
+    let state = app.key("ArrowUp");
+    assert!(
+        notes(&state)
+            .iter()
+            .any(|note| note["pitch"] == 63 && note["start"] == 2.0)
+    );
+    app.key("W");
+    let state = app.inspect();
+    let state = pointer(
+        &mut app,
+        "drag",
+        point(&state, 5.0, 65),
+        Some(point(&state, 6.0, 65)),
+    );
+    let drawn = notes(&state)
+        .into_iter()
+        .find(|note| note["pitch"] == 65)
+        .unwrap();
+    close_enough(drawn["length"].as_f64().unwrap(), 1.0);
+    let id = drawn["id"].as_u64().unwrap();
+    let rect = note_rect(&state, id);
+    let x = rect["min"][0].as_f64().unwrap() + 2.0;
+    let y = center(&rect).1;
+    let state = pointer(
+        &mut app,
+        "drag",
+        (x, y),
+        Some((
+            x + state["midi_editor"]["pixels_per_beat"].as_f64().unwrap() * 0.25,
+            y,
+        )),
+    );
+    close_enough(
+        notes(&state).iter().find(|note| note["id"] == id).unwrap()["start"]
+            .as_f64()
+            .unwrap(),
+        5.25,
+    );
+    let key = state["midi_editor"]["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|key| key["pitch"] == 65)
+        .unwrap();
+    let key_pos = center(&key["rect"]);
+    assert_eq!(
+        pointer(&mut app, "down", key_pos, None)["midi_editor"]["audition"][1],
+        65
+    );
+    assert!(pointer(&mut app, "up", key_pos, None)["midi_editor"]["audition"].is_null());
+    let state = app.inspect();
+    let lane = &state["midi_editor"]["velocity"];
+    let y = lane["min"][1].as_f64().unwrap() + 10.0;
+    let state = pointer(
+        &mut app,
+        "drag",
+        (point(&state, 0.9, 60).0, y),
+        Some((point(&state, 10.1, 60).0, y)),
+    );
+    assert_eq!(
+        notes(&state)
+            .iter()
+            .find(|note| note["id"] == hidden_id)
+            .unwrap()["velocity"],
+        77
+    );
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    let deleted = app.key("Delete");
+    assert_eq!(notes(&deleted).len(), 1);
+    assert_eq!(notes(&deleted)[0]["id"], hidden_id);
+    assert_eq!(deleted["midi_editor"]["hidden_notes"], 1);
+    app.click("1 note hidden · Show all");
+    assert_eq!(
+        app.inspect()["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    app.quit();
+}
+
+#[test]
+fn short_notes_move_from_center_and_fast_copy_paste_keeps_audible_lengths() {
+    let note = Note::new(60, 1.0, 0.125, 90);
+    let id = note.id;
+    let mut app = open(vec![note]);
+    app.key("Q");
+    let state = app.inspect();
+    let rect = note_rect(&state, id);
+    assert!(rect["max"][0].as_f64().unwrap() - rect["min"][0].as_f64().unwrap() < 14.0);
+    let from = center(&rect);
+    let moved = pointer(
+        &mut app,
+        "drag",
+        from,
+        Some((
+            from.0 + state["midi_editor"]["pixels_per_beat"].as_f64().unwrap(),
+            from.1,
+        )),
+    );
+    close_enough(notes(&moved)[0]["start"].as_f64().unwrap(), 2.0);
+    close_enough(notes(&moved)[0]["length"].as_f64().unwrap(), 0.125);
+    let copied =
+        app.command(json!({"command":"key","key":"C","cmd":true,"release_modifiers":true}));
+    assert_eq!(copied["midi_editor"]["clipboard_count"], 1);
+    let pasted =
+        app.command(json!({"command":"key","key":"V","cmd":true,"release_modifiers":true}));
+    assert_eq!(notes(&pasted).len(), 2);
+    assert!(notes(&pasted).iter().all(|note| note["length"] == 0.125));
+    app.quit();
+}
+
+#[test]
+fn folded_fit_and_root_changes_handle_hidden_only_clips_without_edits() {
+    let mut app = open(vec![Note::new(61, 9.0, 1.0, 90)]);
+    let original = app.inspect();
+    app.click("View");
+    app.click("Only scale keys");
+    app.key("Escape");
+    let state = app.inspect();
+    let plot = &state["midi_editor"]["plot"];
+    pointer(&mut app, "move", center(plot), None);
+    let fitted = app.key("F");
+    assert!(
+        fitted["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        fitted["midi_editor"]["row_height"]
+            .as_f64()
+            .unwrap()
+            .is_finite()
+    );
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    assert_eq!(app.key("Delete")["project"], original["project"]);
+    assert_eq!(
+        app.command(json!({"command":"key","key":"D","cmd":true}))["project"],
+        original["project"]
+    );
+    for label in ["Duplicate", "Delete"] {
+        app.click("Edit");
+        let disabled = app.click(label);
+        assert_eq!(disabled["project"], original["project"]);
+        assert_eq!(disabled["history"], original["history"]);
+        app.click("Fit");
+    }
+    app.click("C · Natural minor");
+    app.click("C");
+    let revealed = app.click("C♯");
+    assert_eq!(revealed["midi_editor"]["hidden_notes"], 0);
+    assert_eq!(revealed["project"], original["project"]);
+    app.key("Escape");
+    let state = app.inspect();
+    pointer(
+        &mut app,
+        "move",
+        center(&state["midi_editor"]["plot"]),
+        None,
+    );
+    let fitted = app.key("F");
+    let plot = &fitted["midi_editor"]["plot"];
+    let rect = &fitted["midi_editor"]["notes"][0]["rect"];
+    for axis in 0..2 {
+        assert!(rect["min"][axis].as_f64().unwrap() >= plot["min"][axis].as_f64().unwrap() - 0.1);
+        assert!(rect["max"][axis].as_f64().unwrap() <= plot["max"][axis].as_f64().unwrap() + 0.1);
+    }
+    assert_eq!(fitted["history"], original["history"]);
+    app.quit();
+}
+
+#[test]
+fn unfolding_never_restores_selection_after_deselect_replace_select_all_or_navigation() {
+    for action in ["blank", "replace", "all", "navigation"] {
+        let mut app = open(vec![
+            Note::new(60, 1.0, 1.0, 90),
+            Note::new(61, 3.0, 1.0, 75),
+            Note::new(67, 5.0, 1.0, 100),
+        ]);
+        app.key("Q");
+        let original = app.inspect();
+        pointer(&mut app, "click", point(&original, 1.5, 60), None);
+        let sharp = point(&original, 3.5, 61);
+        app.command(
+            json!({"command":"pointer","phase":"click","x":sharp.0,"y":sharp.1,"shift":true}),
+        );
+        app.click("View");
+        app.click("Only scale keys");
+        app.key("Escape");
+        let folded = app.inspect();
+        match action {
+            "blank" => {
+                pointer(&mut app, "click", point(&folded, 8.5, 65), None);
+            }
+            "replace" => {
+                pointer(&mut app, "click", point(&folded, 5.5, 67), None);
+            }
+            "all" => {
+                app.command(json!({"command":"key","key":"A","cmd":true}));
+            }
+            "navigation" => {
+                app.key("Escape");
+                app.click("Window");
+                app.click("Clip Editor");
+            }
+            _ => unreachable!(),
+        }
+        let unfolded = app.click("1 note hidden · Show all");
+        assert_eq!(unfolded["project"], original["project"], "{action}");
+        let displayed = unfolded["midi_editor"]["notes"].as_array().unwrap();
+        assert_eq!(
+            displayed.iter().find(|note| note["pitch"] == 61).unwrap()["selected"],
+            false,
+            "{action} must forget the previous hidden selection"
+        );
+        if matches!(action, "blank" | "navigation") {
+            assert!(
+                displayed.iter().all(|note| note["selected"] == false),
+                "{action}"
+            );
+        } else {
+            assert_eq!(
+                displayed.iter().find(|note| note["pitch"] == 67).unwrap()["selected"],
+                true,
+                "{action}"
+            );
+        }
+        app.quit();
+    }
 }

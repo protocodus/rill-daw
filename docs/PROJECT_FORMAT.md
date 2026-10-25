@@ -1,6 +1,6 @@
 # Rill project files
 
-`.rill` is a portable ZIP archive. Version 1 contains `manifest.json` and the WAV
+`.rill` is a portable ZIP archive. Version 3 contains `manifest.json` and the WAV
 files referenced by audio clips. MIDI notes, edits, routing, automation, and opaque
 instrument/effect state live in the manifest. Legacy JSON projects remain readable
 and writable when their filename has another extension, such as `.daw.json`.
@@ -8,7 +8,7 @@ and writable when their filename has another extension, such as `.daw.json`.
 The manifest is UTF-8 JSON with this envelope:
 
 ```json
-{"version":1,"project":{"name":"Song","tracks":[]}}
+{"version":3,"project":{"name":"Song","tracks":[]}}
 ```
 
 The example omits the remaining required project fields. The `project` schema is
@@ -17,6 +17,10 @@ is encoded as JSON byte arrays in `instrument_state` or an effect slot's `state`
 Normalized parameter overrides are restored after opaque state. Effect slot IDs
 remain stable across saves, allowing routing/editor and automation references to
 identify the same instance.
+
+Version 2 adds the per-instance `source_rate` field (source beats per arrangement beat, default `1.0`, range `0.25`–`4.0`). The source window is `[offset, offset + length * source_rate)`. Stretch changes the visible duration and rate while preserving that window; source notes/audio and ghost membership stay unchanged. Version-1 files load with unity rate.
+
+Version 3 adds audio `processing`: `algorithm` (`Signalsmith` or `Bungee`) and `transpose_semitones` (−24 to +24, fractional values supported). Missing processing defaults to Signalsmith and zero transposition. Pitch and algorithm are shared source edits for ghosts; stretch rate remains local. Versions 1 and 2 remain readable. New saves use version 3 so older applications reject unsupported processing instead of silently playing a project incorrectly. The same version rules apply to ZIP manifests and legacy JSON.
 
 Audio entries are named `assets/00000000.wav`, `assets/00000001.wav`, and so on.
 Clips reference these relative names in the manifest. Sources are deduplicated by
@@ -42,7 +46,7 @@ grows; old extraction directories can be removed after all projects using them a
 closed. Failed loads remove their incomplete directory and leave unrelated scratch
 files alone.
 
-Version 1 enforces these limits:
+The format enforces these limits:
 
 | Item | Limit |
 | --- | --- |

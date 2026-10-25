@@ -79,17 +79,14 @@ impl DawApp {
                             Some(color(track.color)),
                             self.selected_track == Some(track.id),
                             |ui| {
-                                if ui
-                                    .add_sized(
-                                        Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
-                                        daw_ui::button_widget(
-                                            daw_ui::text::TextRole::Label
-                                                .rich(ui.ctx(), &track.name),
-                                        )
-                                        .truncate(),
-                                    )
-                                    .on_hover_text(format!("Open channel · {}", track.name))
-                                    .clicked()
+                                if daw_ui::mixer_channel_button(
+                                    ui,
+                                    &track.name,
+                                    content_width,
+                                    color(track.color),
+                                )
+                                .on_hover_text(format!("Open channel · {}", track.name))
+                                .clicked()
                                 {
                                     channel_target = Some(track.id);
                                 }

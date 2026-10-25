@@ -226,7 +226,7 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
         json!({"command":"pointer", "phase":"click", "button":"secondary",
         "x":(left+right)*0.5, "y":(top+bottom)*0.5}),
     );
-    assert_backdrop(&painted(&mut app), "Create linked clone");
+    assert_backdrop(&painted(&mut app), "Ghost copy");
     app.key("Escape");
     assert_clear(&mut app);
 

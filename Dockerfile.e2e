@@ -1,7 +1,7 @@
 FROM rust:1.92-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
+    g++ python3 pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
     libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxkbcommon-x11-0 \
     libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
@@ -9,8 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY vendor ./vendor
 COPY scripts/test-e2e.sh ./scripts/test-e2e.sh
 COPY scripts/test-container.sh ./scripts/test-container.sh
+COPY scripts/dev.rill.daw.desktop scripts/install-desktop.py scripts/test-desktop-install.py ./scripts/
 
 # Native smoke tests use Xvfb and software OpenGL; headless tests need no display.
 # No host GPU, audio device, user home, or VST installation is needed.

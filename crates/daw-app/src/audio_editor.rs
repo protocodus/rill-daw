@@ -62,6 +62,7 @@ enum Edit {
     Clone,
     Unlink,
     Gain(f32),
+    Processing(AudioProcessing),
     Fades(f64, f64, FadeCurve, FadeCurve),
     Reverse,
     Split(f64),
@@ -95,6 +96,7 @@ impl DawApp {
             fade_out_curve,
             reverse,
             envelope,
+            processing,
             ..
         } = &clip.content
         else {
@@ -153,15 +155,15 @@ impl DawApp {
         let mut analyze = None;
         let mut gain_rect = Rect::NOTHING;
         let mut sensitivity_rect = Rect::NOTHING;
-        let mut fi = *fade_in;
-        let mut fo = *fade_out;
+        let mut fi = *fade_in / clip.source_rate;
+        let mut fo = *fade_out / clip.source_rate;
         let mut fic = *fade_in_curve;
         let mut foc = *fade_out_curve;
         // Linked fades retain source coordinates when this instance is trimmed.
         // Independent fade edits keep their established local reanchor behavior.
         let local_region = AudioEnvelope {
             offset: 0.0,
-            length: clip.length,
+            length: clip.source_length(),
         };
         let fade_region = if clip.link_group.is_some() {
             envelope.unwrap_or(local_region)
@@ -252,15 +254,27 @@ impl DawApp {
                     edit = Some(Edit::Paste(state.clipboard.clone().unwrap(), self.cursor));
                     ui.close();
                 }
-                if daw_ui::button(ui, "Duplicate clip").clicked() {
+                if daw_ui::button(ui, "Duplicate clip")
+                    .on_hover_text("Create an independent copy of this clip")
+                    .clicked()
+                {
                     edit = Some(Edit::Duplicate);
                     ui.close();
                 }
-                if daw_ui::button(ui, "Create linked clone").clicked() {
+                if daw_ui::button(ui, "Ghost copy")
+                    .on_hover_text("Create another clip sharing its name and edits")
+                    .clicked()
+                {
                     edit = Some(Edit::Clone);
                     ui.close();
                 }
-                if clip.link_group.is_some() && daw_ui::button(ui, "Make independent").clicked() {
+                if clip.link_group.is_some()
+                    && daw_ui::button(ui, "Make independent")
+                        .on_hover_text(
+                            "Disconnect this ghost while keeping its current name and edits",
+                        )
+                        .clicked()
+                {
                     edit = Some(Edit::Unlink);
                     ui.close();
                 }
@@ -297,6 +311,10 @@ impl DawApp {
             if response.changed() {
                 edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
             }
+            let mut processing = *processing;
+            if audio_processing_menu(ui, &mut processing) {
+                edit = Some(Edit::Processing(processing));
+            }
         });
         if matches!(state.tool, EditorTool::FadeIn | EditorTool::FadeOut) {
             daw_ui::toolbar(ui, |ui| {
@@ -309,7 +327,7 @@ impl DawApp {
                 let mut changed = ui
                     .add(
                         daw_ui::number(duration)
-                            .range(0.0..=fade_region.length)
+                            .range(0.0..=fade_region.length / clip.source_rate)
                             .clamp_existing_to_range(false)
                             .speed(0.05)
                             .suffix(" beats"),
@@ -327,8 +345,8 @@ impl DawApp {
                     // Only an intentional independent edit reanchors both
                     // fades to this visible window; merely viewing never does.
                     edit = Some(Edit::Fades(
-                        fi.min(fade_region.length),
-                        fo.min(fade_region.length),
+                        (fi * clip.source_rate).min(fade_region.length),
+                        (fo * clip.source_rate).min(fade_region.length),
                         fic,
                         foc,
                     ));
@@ -524,16 +542,19 @@ impl DawApp {
                 EditorTool::Cut if response.clicked() => edit = Some(Edit::Split(beat)),
                 EditorTool::FadeIn => {
                     edit = Some(Edit::Fades(
-                        (fade_region.offset + beat - clip.start).clamp(0.0, fade_region.length),
-                        fo.min(fade_region.length),
+                        (fade_region.offset + (beat - clip.start) * clip.source_rate)
+                            .clamp(0.0, fade_region.length),
+                        (fo * clip.source_rate).min(fade_region.length),
                         fic,
                         foc,
                     ))
                 }
                 EditorTool::FadeOut => {
                     edit = Some(Edit::Fades(
-                        fi.min(fade_region.length),
-                        (fade_region.length - fade_region.offset - (beat - clip.start))
+                        (fi * clip.source_rate).min(fade_region.length),
+                        (fade_region.length
+                            - fade_region.offset
+                            - (beat - clip.start) * clip.source_rate)
                             .clamp(0.0, fade_region.length),
                         fic,
                         foc,
@@ -547,7 +568,7 @@ impl DawApp {
             let result = match edit {
                 Edit::Clone => self.project.clone_clip(track, clip.id).map(|id| {
                     self.selected_clip = Some(id);
-                    self.edit_label = Some("Create linked clone".into());
+                    self.edit_label = Some("Create ghost copy".into());
                 }),
                 Edit::Unlink => self
                     .project
@@ -556,6 +577,11 @@ impl DawApp {
                         self.edit_label = Some("Make clip independent".into());
                     }),
                 Edit::Gain(gain) => self.project.set_audio_gain(track, clip.id, gain),
+                Edit::Processing(processing) => {
+                    self.edit_label = Some("Change audio pitch and algorithm".into());
+                    self.project
+                        .set_audio_processing(track, clip.id, processing)
+                }
                 Edit::Fades(fi, fo, fic, foc) => self
                     .project
                     .set_audio_fades(track, clip.id, fi, fo, fic, foc),
@@ -593,6 +619,68 @@ impl DawApp {
     }
 }
 
+/// The same source-processing controls are available from the focused audio
+/// editor and clip properties. All widgets come from the component library.
+pub(crate) fn audio_processing_menu(ui: &mut egui::Ui, processing: &mut AudioProcessing) -> bool {
+    let before = *processing;
+    let label = if processing.transpose_semitones == 0.0 {
+        "Pitch".into()
+    } else {
+        format!("Pitch {:+.2} st", processing.transpose_semitones)
+    };
+    daw_ui::choice_menu(ui, label, |ui| {
+        daw_ui::form_grid(ui, "audio_processing", |ui| {
+            let label = daw_ui::text::label(ui, "Transpose");
+            let response = ui
+                .add(
+                    daw_ui::number(&mut processing.transpose_semitones)
+                        .range(-24.0..=24.0)
+                        .speed(0.05)
+                        .max_decimals(2)
+                        .suffix(" st"),
+                )
+                .labelled_by(label.id)
+                .on_hover_text("Semitones · 0.01 st = 1 cent · duration stays unchanged");
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(egui::Id::new("audio_transpose_rect"), response.rect)
+            });
+            ui.end_row();
+            daw_ui::text::label(ui, "Algorithm");
+            daw_ui::choice_menu(ui, processing.algorithm.name(), |ui| {
+                for algorithm in AudioProcessingAlgorithm::ALL {
+                    daw_ui::selectable_value(
+                        ui,
+                        &mut processing.algorithm,
+                        algorithm,
+                        algorithm.name(),
+                    )
+                    .on_hover_text(match algorithm {
+                        AudioProcessingAlgorithm::Signalsmith => {
+                            "Signalsmith Stretch · default polyphonic pitch and time processing"
+                        }
+                        AudioProcessingAlgorithm::Bungee => {
+                            "Bungee Basic · alternative pitch and time processing"
+                        }
+                    });
+                }
+            })
+            .response
+            .on_hover_text("Used for both pitch changes and pitch-preserving stretching");
+            ui.end_row();
+        });
+        if ui
+            .add_enabled(
+                processing.transpose_semitones != 0.0,
+                daw_ui::button_widget("Reset pitch"),
+            )
+            .clicked()
+        {
+            processing.transpose_semitones = 0.0;
+        }
+    });
+    *processing != before
+}
+
 /// Measure only when fitting, using the displayed source window and envelope.
 /// Gain/fade edits retain this reference until the next explicit Fit.
 fn visible_peak(data: &AudioData, clip: &Clip, tempo: f64) -> f32 {
@@ -602,15 +690,13 @@ fn visible_peak(data: &AudioData, clip: &Clip, tempo: f64) -> f32 {
     let frames_per_beat = data.sample_rate as f64 * 60.0 / tempo;
     let source_start = clip.offset * frames_per_beat;
     let start = source_start.ceil().max(0.0) as usize;
-    let end = ((clip.offset + clip.length) * frames_per_beat)
-        .ceil()
-        .max(0.0) as usize;
+    let end = (clip.source_end() * frames_per_beat).ceil().max(0.0) as usize;
     let mut peak = 0.0_f32;
     for frame in start..end.min(data.frames()) {
         let beat = if reverse {
-            clip.length - (frame as f64 - source_start + 1.0) / frames_per_beat
+            clip.length - (frame as f64 - source_start + 1.0) / frames_per_beat / clip.source_rate
         } else {
-            (frame as f64 - source_start) / frames_per_beat
+            (frame as f64 - source_start) / frames_per_beat / clip.source_rate
         };
         let envelope = gain * clip.audio_envelope_gain(beat);
         for channel in 0..data.channels.min(2) {
@@ -645,7 +731,7 @@ fn draw_waveform(
         }
         let start = beat.max(clip.start);
         let end = next.min(clip.end());
-        let frames = ((end - start) * 60.0 / tempo * data.sample_rate as f64)
+        let frames = ((end - start) * clip.source_rate * 60.0 / tempo * data.sample_rate as f64)
             .ceil()
             .clamp(1.0, 32.0) as usize;
         for channel in 0..channels {
@@ -732,6 +818,35 @@ mod tests {
         assert_eq!(visible_peak(&silence, &clip, 120.0), 1.0);
     }
 
+    #[test]
+    fn stretched_fit_measures_the_same_source_window_and_fade_envelope() {
+        let data = AudioData {
+            sample_rate: 8000,
+            channels: 1,
+            samples: (0..12000)
+                .map(|frame| if frame < 8000 { 0.25 } else { 1.0 })
+                .collect(),
+        };
+        for rate in [0.5, 1.0, 2.0] {
+            let mut clip = Clip::audio("Stretched window", 2.0, 1.0 / rate, "source.wav");
+            clip.offset = 1.0;
+            clip.source_rate = rate;
+            assert!((visible_peak(&data, &clip, 120.0) - 0.25).abs() < 1e-6);
+            if let ClipContent::Audio {
+                fade_in,
+                fade_out,
+                reverse,
+                ..
+            } = &mut clip.content
+            {
+                *fade_in = 1.0;
+                *fade_out = 1.0;
+                *reverse = true;
+            }
+            assert!((visible_peak(&data, &clip, 120.0) - 0.0625).abs() < 1e-6);
+        }
+    }
+
     fn linked_audio_editor(tool: EditorTool) -> (egui::Context, DawApp, u64, u64) {
         let ctx = egui::Context::default();
         let mut project = Project::new();
@@ -816,11 +931,17 @@ mod tests {
 
     #[test]
     fn linked_fade_pointer_edits_use_source_coordinates_and_preserve_opposite_fade() {
-        for (tool, local_beat, expected) in [
+        for ((tool, source_beat, expected), rate) in [
             (EditorTool::FadeIn, 0.5, (1.5, 3.0)),
             (EditorTool::FadeOut, 1.5, (3.0, 1.5)),
-        ] {
+        ]
+        .into_iter()
+        .flat_map(|case| [0.5, 1.0, 2.0].map(|rate| (case, rate)))
+        {
             let (ctx, mut app, track, original) = linked_audio_editor(tool);
+            let clip = app.selected_mut().unwrap();
+            clip.source_rate = rate;
+            clip.length /= rate;
             for _ in 0..3 {
                 audio_frame(&ctx, &mut app, vec![]);
             }
@@ -843,7 +964,10 @@ mod tests {
                     values[3].as_f64().unwrap() as f32,
                 ),
             );
-            let position = Pos2::new(state.view.x_at(canvas, 5.0 + local_beat), canvas.center().y);
+            let position = Pos2::new(
+                state.view.x_at(canvas, 5.0 + source_beat / rate),
+                canvas.center().y,
+            );
             for pressed in [true, false] {
                 audio_frame(
                     &ctx,

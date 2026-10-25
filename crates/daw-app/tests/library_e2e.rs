@@ -30,7 +30,7 @@ fn effect(app: &mut Harness, action: &str) -> Value {
     app.click("+ Insert");
     app.click("Search effects");
     app.command(json!({"command":"text","text":"Rill Fixture FX"}));
-    common::wait_visible(app, "Add to effect chain");
+    common::wait_library_device(app, "Rill Fixture FX");
     front(app, "Rill Fixture FX");
     if action != "Add to effect chain" {
         app.click("More");
@@ -309,7 +309,7 @@ fn send_browser_has_one_contextual_action_and_library_management_is_on_demand() 
     app.click("Create send track");
     app.click("Search effects");
     app.command(json!({"command":"text","text":"Rill Fixture FX"}));
-    common::wait_visible(&mut app, "Create send track");
+    common::wait_library_device(&mut app, "Rill Fixture FX");
     let state = app.inspect();
     assert!(visible(&state, "Scan"));
     assert!(!visible(&state, "Add to effect chain"));

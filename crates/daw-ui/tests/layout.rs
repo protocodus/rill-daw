@@ -94,6 +94,75 @@ fn toolbar_wraps_complete_native_controls_without_eating_the_canvas() {
 }
 
 #[test]
+fn sized_toolbar_choices_use_remaining_row_space_and_wrap_as_one_group() {
+    for (width, should_wrap) in [(800.0, false), (560.0, true)] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        for _ in 0..2 {
+            let _ = ctx.run(input(vec![], egui::vec2(width, 760.0)), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let available = ui.max_rect();
+                    let row = controls::toolbar(ui, |ui| {
+                        let leading = ui.add_sized(
+                            egui::vec2(240.0, controls::tokens::CONTROL_HEIGHT),
+                            controls::button_widget("Select · Pencil · Generate"),
+                        );
+                        let group = controls::toolbar_group_sized(
+                            ui,
+                            2.0 * controls::tokens::SELECT_WIDTH + controls::tokens::SPACE_SM,
+                            |ui| {
+                                [
+                                    controls::select("stack", "Chord stack")
+                                        .show_ui(ui, |_| {})
+                                        .response,
+                                    controls::select("chord", "Major triad")
+                                        .show_ui(ui, |_| {})
+                                        .response,
+                                ]
+                            },
+                        );
+                        (leading, group.inner)
+                    });
+                    let (leading, choices) = row.inner;
+                    assert!(
+                        (choices[0].rect.top() - choices[1].rect.top()).abs() < 0.5,
+                        "related choices must stay together: {choices:?}"
+                    );
+                    if should_wrap {
+                        assert!(
+                            choices[0].rect.top() > leading.rect.bottom(),
+                            "insufficient remaining width must wrap the whole group"
+                        );
+                    } else {
+                        assert!(
+                            (choices[0].rect.center().y - leading.rect.center().y).abs() < 0.5,
+                            "a fitting group must not consume an unnecessary canvas row"
+                        );
+                    }
+                    let targets = [leading.rect, choices[0].rect, choices[1].rect];
+                    for (index, rect) in targets.iter().enumerate() {
+                        assert!(
+                            available.contains_rect(*rect),
+                            "control exceeds canvas: {rect:?}"
+                        );
+                        assert!(
+                            targets[..index]
+                                .iter()
+                                .all(|other| !other.intersects(*rect)),
+                            "toolbar hit targets overlap: {targets:?}"
+                        );
+                    }
+                    assert!(
+                        ui.available_height() > 600.0,
+                        "toolbar must preserve editing space"
+                    );
+                });
+            });
+        }
+    }
+}
+
+#[test]
 fn utility_popup_is_centered_bounded_and_scrolls_long_content() {
     let ctx = Context::default();
     theme::apply(&ctx);

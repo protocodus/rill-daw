@@ -26,6 +26,8 @@ try {
     New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
     Copy-Item (Join-Path $binDir 'rill.exe'), (Join-Path $binDir 'daw-plugin-host.exe'), 'README.md', 'LICENSE' -Destination $packageDir
     Copy-Item 'docs' -Destination $packageDir -Recurse
+    & python scripts/verify-branding.py --windows (Join-Path $packageDir 'rill.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Embedded Windows icon verification failed' }
     & python scripts/collect-licenses.py $packageDir
     if ($LASTEXITCODE -ne 0) { throw 'License inventory failed' }
     @'

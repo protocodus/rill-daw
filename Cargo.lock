@@ -743,6 +743,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "winresource",
 ]
 
 [[package]]
@@ -764,6 +765,7 @@ name = "daw-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cc",
  "cpal",
  "daw-core",
  "daw-plugins",
@@ -778,6 +780,8 @@ name = "daw-plugins"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "daw-ui",
+ "eframe",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -796,10 +800,12 @@ name = "daw-ui"
 version = "0.1.0"
 dependencies = [
  "egui",
+ "image",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "serde",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3317,8 +3323,6 @@ dependencies = [
 [[package]]
 name = "vst3-host"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a1b316200861ab8b9f634c587e882b796cb2fa8005d9f6c6d21df42386e896"
 dependencies = [
  "core-foundation 0.10.1",
  "crossbeam-queue",
@@ -3984,6 +3988,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winresource"
+version = "0.1.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2bc6d36480b829272a5bdabf08e6dca8004761c1da7e35efef800540c66221b"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]

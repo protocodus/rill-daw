@@ -97,7 +97,7 @@ pub(crate) fn save(project: &Project, path: &Path) -> Result<()> {
         serde_json::to_writer(
             &mut writer,
             &ProjectFile {
-                version: 1,
+                version: 3,
                 project: portable,
             },
         )?;
@@ -220,7 +220,7 @@ pub(crate) fn load(path: &Path, scratch: &Path) -> Result<Project> {
     );
     let envelope: ProjectFile = serde_json::from_slice(&bytes).context("Read project manifest")?;
     ensure!(
-        envelope.version == 1,
+        (1..=3).contains(&envelope.version),
         "Unsupported project bundle version {}",
         envelope.version
     );

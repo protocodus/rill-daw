@@ -25,11 +25,27 @@ The headless tests cover application behavior, UI event handling, model changes,
 
 `parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Real VST/editor coverage remains in the opt-in installed-plugin tests.
 
+`native_parameter_automation_e2e` uses an isolated editor-process fixture to send the production native automation IPC event into the running app. It checks exact instrument/effect ownership, parameter ID zero, current-value initialization, reuse, Undo/Redo, save/reopen, and rejected requests during document confirmation. An opaque-preset scenario checks that the snapshot precedes lane creation, so Undo removes only the lane and preserves the current preset. The fixture never opens a native window or audio device. Host COM tests separately invoke the actual VST3 context-menu interfaces, covering both plugin-rendered copied targets and host-rendered popup callbacks, eligibility, stale targets, and thread/lifetime checks. Shared-menu and worker tests cover nested/disabled entries and process cancellation/failure. These automated layers do not claim compatibility with every third-party editor; native editors must expose the VST3 host-menu hook.
+
+```sh
+cargo test --locked -p daw-app --test native_parameter_automation_e2e
+cargo test --locked -p vst3-host --lib component_handler_tests
+cargo test --locked -p daw-plugins --lib editor_context_menu
+```
+
+On Linux, `cargo test --locked -p daw-plugins --test native_context_menu -- --ignored` creates its own private Xvfb display and drives the real menu worker with X11 pointer/keyboard events. It checks selection of action zero, disabled items, Escape cancellation, and physical positioning at 1× and 2× scale. It requires Xvfb and Mesa, connects only to its private display, and is included in container tests and Linux CI.
+
 `workspace_switch_e2e` exercises the persistent Arranger/Mixer switch from both workspaces, Clip Editor, and contextual utilities, including selecting the already active caller to dismiss a popup. It checks bounds at 800×600 and 1100×720, both appearances and densities, and preserves project/history/selection. `channel_properties_e2e` verifies separate Clip/Track/Channel scopes, audio-only clip gain, channel gain/pan, and navigation among Mixer, Channel, Effects, Instrument, and Routing. `instrument_context_e2e` checks concise native-editor overviews, the on-demand **Automate…** parameter page, contextual titles, effect-editor-to-instrument navigation, and clean failure of metadata-only plugin fixtures.
 
 `header_channel_controls_e2e` drags the graphical gain/pan sliders in normal and compact track headers, verifies the same mixer values and undo/redo, preserves clip data, saves/reopens the project, and checks the exported audio level/balance. On Linux, `channel_meter_e2e` runs a real render worker and CPAL stream against an isolated ALSA null PCM. Its child-only `ALSA_CONFIG_PATH` cannot choose host audio hardware. It validates distinct source, silent-channel, and bus levels after gain/pan, then zero readings on pause/stop. This target requires no display or physical sound device; non-Linux builds skip it.
 
-`track_color_picker_e2e` clicks the arranger's color strip and edits native RGB controls, then checks actual painted track markers, clip strokes, and mixer markers. It covers undo/redo, portable save/reopen, both appearances and densities, and compact/folder tracks without changing selection, cursor, clip contents, or folder expansion. Rectangle paint diagnostics are requested only by `inspect` with `paint: true`.
+`live_edit_e2e` drives volume/pan, MIDI notes, audio/MIDI clip edits, source imports, and Undo/Redo while the production render worker is active. A device-free sink consumes the same bounded audio queue and callback path through explicit `pump_audio` commands; it never opens physical audio hardware. A temporary Rust instrument/effect worker speaks the real isolation protocol and retains sustained voices plus a 32-frame delay. Tests inspect actual output samples, engine/generation identity, sandbox process identity, lifecycle/MIDI logs, and applied revisions. Audio is also consumed between pointer Down/Move/Up events: fader previews must sound before release, a gesture returning to its starting value must restore audio without an Undo entry, and dragging a sounding MIDI note must not add a duplicate audition voice. Rapid edits must converge on the latest project; failed source preparation must preserve the previous audio; structural changes still use controlled engine replacement. This deterministic suite verifies musical continuity and instance preservation, not real-time hardware deadline performance or native VST compatibility. It runs on every platform and in containers:
+
+```sh
+cargo test --locked -p daw-app --test live_edit_e2e
+```
+
+`track_color_picker_e2e` clicks the arranger's color strip and edits native RGB controls, then checks actual painted track markers, clip strokes, and full colored mixer names with subdued strip tints. It covers audio, MIDI, and bus colors, neutral Master, selected and unselected channels, tint restoration through undo/redo and portable save/reopen, both appearances and densities, and compact/folder tracks without changing selection, cursor, clip contents, or folder expansion. Rectangle paint diagnostics are requested only by `inspect` with `paint: true`.
 
 `mixer_height_e2e` resizes the running mixer between 1100×720, 1440×1100, and 800×600 in light and dark appearances. It checks the actual strip, fader, and stereo-meter paint bounds, full-height expansion, aligned controls, compact-window scrolling, Effects navigation, and a resized fader edit with Undo.
 
@@ -74,13 +90,14 @@ Supported commands:
 | Command | Arguments | Behavior |
 | --- | --- | --- |
 | `inspect` | optional `paint` | Advance frames and return the project, selection, popup state, settings, status, visible labels, and pointer/label geometry. With `paint: true`, also return clipped rectangle fills and strokes in `painted_rects` for visual-color assertions. |
+| `pump_audio` | `frames` (1–8192) | Consume audio through the production queue/callback consumer and return stereo `audio_output` samples. Requires the isolated driver's `RILL_E2E_VIRTUAL_AUDIO` mode; `engine` reports playback identity, revisions, position, and counters. |
 | `viewport` | `width`, `height`, optional `pixels_per_point` | Resize the headless logical viewport (800–4096 by 600–4096 points) and display density (0.75–3). |
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
 | `open` | `path` | Execute an already-approved open through the document pipeline, preserving the outgoing session in recovery. Use `file_dialog` and File → Open to test the unsaved-change decision. |
 | `file_dialog` | `kind` (`save`, `open`, or `export`), `path` (or `null`) | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. |
 | `close_window` | — | Deliver a native viewport close request and return the resulting guard or exit state. Unsaved work requires an explicit UI choice. |
-| `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an open foreground menu over an identically named toolbar control. |
+| `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an active menu or utility window over an identically named inactive workspace control. |
 | `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
 | `scroll` | `x`, `y`, `delta`; optional `delta_x` and modifiers | Scroll at viewport coordinates; negative delta moves down the content. |
 | `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd`, `release_modifiers`, `repetitions` (1–32) | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. `release_modifiers: true` delivers the complete chord in one frame with no modifiers held at repaint; repeated presses are also delivered in one frame. Defaults preserve separate press/release frames. |
@@ -99,11 +116,24 @@ With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrume
 
 The `library_e2e` target drives the large device browser through actual UI controls: name/category search, developer filtering, MIDI instrument creation and assignment, cached instrument/effect previews, insertion into the active chain, creation of routed send returns, and returning from the routing browser with Escape. Its drag test loads stateful effect slots, reorders them by pointer gesture, checks stable IDs/state/parameter overrides/automation, exercises Undo/Redo, and saves/reopens a `.rill` bundle. These metadata fixtures need neither installed plugins nor an audio device and run in containers. Real native preview capture remains covered by the opt-in installed-plugin tests.
 
+`device_cards_e2e` checks the responsive card grid using cached PNG fixtures, including actual painted image meshes, device/developer text, placeholders, both themes and display densities, compact-window bounds, virtualized scrolling, two-dimensional keyboard navigation, filtering, and safe click/double-click creation and assignment. `inspect` with `paint: true` includes `painted_images` alongside painted rectangles; normal frames do not collect these diagnostics. Shared component tests cover large catalogs, long Unicode names, focus, and stable geometry as previews arrive. Preview-cache tests cover bounded background decoding, refresh invalidation, failure memoization, and eviction.
+
 ```sh
 cargo test --locked -p daw-app --test library_e2e
 ```
 
 The editor suites (`audio_editor_e2e`, `midi_editor_e2e`, `timeline_e2e`) exercise shared gestures and Fit, audio edits/transient previews with rendered-sample oracles, MIDI note/chord/velocity editing, and audition release on mouse/focus/view changes. `audio_setup_e2e` switches conversion quality and sample rate through Setup and verifies real exported bandwidth, rate, persistence, and project preservation. `plugin_recall_e2e` covers failed effect-editor launches plus an opt-in CHOW workflow for automatic state, automation, portable save/reopen, audible recall, and helper crash recovery.
+
+`midi_generate_e2e` uses the running piano roll to generate sustained chords,
+arpeggios and seeded melodies. It verifies complete visible-bar defaults in two
+meters and both themes, editable ranges, non-destructive colored previews,
+cancel and keyboard guards, hidden-note selection safety when scale rows are
+folded, toolbar wrapping, empty-range recovery, arpeggio controls, all melody
+algorithms and accompanying voices. Committing a preview is checked against the
+actual generated source notes, including trimmed/stretched ghost instances,
+one-step undo/redo and portable project recall. Run it on its own with
+`cargo test --locked -p daw-app --test midi_generate_e2e`; it needs no display,
+audio device or installed plugin.
 
 Headless runs disable automatic physical-device startup for held-note previews. `RILL_E2E_AUDIO_DEVICE=1` enables it for a deliberate native-device test. The ordinary suite observes audition intent through `audition_request`; a native Surge renderer test verifies actual sound and note release without a hardware device.
 
@@ -150,7 +180,7 @@ WAV after portable saving. Loop settings do not truncate offline export.
 cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins_e2e
 ```
 
-The `clones_e2e` suite creates linked MIDI/audio instances through menus, edits
+The `clones_e2e` suite creates MIDI/audio ghost copies through menus, edits
 notes and Unicode names from different members, and checks chain indicators.
 It exercises independent duplication, detaching, original deletion, local
 moving/trimming/splitting, undo/redo, shared gain/fades/reverse/normalization,
@@ -187,7 +217,7 @@ Layout regression coverage also includes eight long Unicode plug-in folders in
 `setup_layout_e2e`, long effect/channel names with reorder and routing actions in
 `channel_layout_e2e` (including twenty-insert growth/removal), and an 80-device catalog in `components_e2e`. Search and
 creation actions remain fixed while scrolling or using arrow-key selection.
-Join checks distinguish linked instances by their visible one-based beat ranges;
+Join checks distinguish ghost instances by their visible one-based beat ranges;
 mixer checks align master/channel controls and verify vertical overflow access.
 These automated UI regressions are separate from an interactive desktop walkthrough.
 
@@ -212,3 +242,16 @@ default release tail. Popup and destination-picker cancellation preserve the
 project and caller. Its opt-in native test uses `RILL_TEST_VST_INSTRUMENT`
 (Surge XT) to verify both choices against an actual isolated plugin tail;
 ordinary container runs require no installed plugins.
+
+`arranger_tools_e2e` exercises the common audio/MIDI toolset through real pointer and keyboard events: selected-result behavior for repeated Duplicate/Cut, Join and Ghost copy, both trim edges, Shift snap bypass, held Shift-duplicate, Stretch/Undo/return-to-origin, and stretch→trim→split composition. It verifies local ghost timing, linked/independent source edits, versioned portable recall, joined WAV duration/pitch, editor tool reset, and device-free audio continuity while stretching. `live_edit_e2e` additionally stretches MIDI and audio while retaining instrument/effect sandbox identities, sustained MIDI voices and continuous PCM, including while the pointer remains held.
+
+```sh
+cargo test --locked -p daw-app --test arranger_tools_e2e --test live_edit_e2e
+```
+
+The headless driver's default label click prefers an active utility over an identically named inactive workspace control (for example the Join tool behind the Join popup), while explicit occurrence indexing remains available.
+
+
+`audio_pitch_e2e` changes transpose and processing engine through the running audio editor and Properties. It measures exported pitch, exact duration and stereo relationships for both bundled engines, checks Reset, ghost sharing and independent duplicates, Undo/Redo, archive/restart recall, and combined arranger stretching plus transposition. `live_edit_e2e` also changes the pitch and engine of sounding audio while checking continuous output, retained instrument/effect workers, sustained MIDI voices and unchanged transport/queue generation.
+
+The piano-roll suite checks independent scale/chord highlighting and scale-only rows, view changes without source/history edits, folded drawing/dragging/resize/audition/velocity, hidden-note safety for selection and deletion, and Fit/root changes with every note hidden. Short-note body dragging and fast copy/paste are regression cases. Shared component tests cover distinct action/choice/view menu styles in both themes, nested settings, Unicode accessible names, compact wrapping, keyboard dismissal and disabled controls.

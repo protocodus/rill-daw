@@ -80,6 +80,18 @@ impl Platform {
         !window.is_null() && unsafe { IsWindow(window) } == 0
     }
 
+    pub fn context_menu_position(&self, title: &str, x: i32, y: i32) -> Result<[f64; 2]> {
+        use windows_sys::Win32::{Foundation::POINT, Graphics::Gdi::ClientToScreen};
+        let window = find_window(title)?;
+        let mut point = POINT { x, y };
+        // SAFETY: this helper owns the HWND and point is writable storage.
+        ensure!(
+            unsafe { ClientToScreen(window, &mut point) } != 0,
+            "Locating context menu failed"
+        );
+        Ok([f64::from(point.x), f64::from(point.y)])
+    }
+
     pub fn capture(&self, title: &str, path: &Path) -> Result<(u32, u32)> {
         let window = find_window(title)?;
         let mut rect = RECT::default();

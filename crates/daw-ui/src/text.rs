@@ -133,6 +133,30 @@ pub fn paint_row(painter: &egui::Painter, rect: egui::Rect, role: TextRole, valu
     );
 }
 
+/// Bounded multiline canvas text using the shared font roles. The underlying
+/// text shape retains its full Unicode source for diagnostics/accessibility.
+pub fn paint_bounded_block(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    role: TextRole,
+    value: &str,
+    max_rows: usize,
+) {
+    if !rect.is_positive() {
+        return;
+    }
+    let color = if role == TextRole::Note {
+        theme::palette(painter.ctx()).muted
+    } else {
+        theme::palette(painter.ctx()).text
+    };
+    let mut job = egui::text::LayoutJob::simple(value.to_owned(), role.font(), color, rect.width());
+    job.wrap.max_rows = max_rows.max(1);
+    job.wrap.break_anywhere = true;
+    let galley = painter.layout_job(job);
+    painter.with_clip_rect(rect).galley(rect.min, galley, color);
+}
+
 pub fn paint_single_line(
     painter: &egui::Painter,
     rect: egui::Rect,

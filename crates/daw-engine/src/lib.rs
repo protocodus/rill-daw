@@ -6,6 +6,7 @@ mod join;
 mod meter;
 mod quality;
 mod render;
+mod stretch;
 
 pub use join::{export_audio_join, export_audio_join_cancelled, render_audio_join};
 pub use quality::{RenderOptions, ResampleQuality};

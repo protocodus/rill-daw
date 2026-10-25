@@ -131,9 +131,9 @@ fn audio_drops_and_instrument_creation_advance_colors_but_existing_tracks_keep_t
     menu(&mut app, "Track", "Add instrument…");
     app.click("Search instruments");
     app.command(json!({"command":"text", "text":"Rill Fixture A"}));
-    // The query field itself already displays the plugin name while scanning;
-    // wait for the actual creation action, not a matching text-field label.
-    common::wait_visible(&mut app, "Add instrument track");
+    // Both the query text and disabled creation action appear before scanning
+    // finishes. Wait for the matching card to be rendered and selected.
+    common::wait_library_device(&mut app, "Rill Fixture A");
     let instrument = app.click("Add instrument track");
     assert_new_color(&assigned, &instrument);
     let created = instrument["project"]["tracks"]

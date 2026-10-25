@@ -1,11 +1,11 @@
 //! Device discovery, cached previews and focused insertion workflows.
 use crate::app::{DawApp, PopupKind, SetupPage};
+use crate::library_preview::PreviewCache;
 use daw_core::{Clip, Effect, EffectSlot, Instrument, TrackKind};
 use daw_plugins::catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
 use eframe::egui;
 use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
+    collections::HashSet,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -35,11 +35,12 @@ struct LibraryUi {
     target: LibraryTarget,
     developer: String,
     selected: Option<String>,
-    preview: Option<(PathBuf, egui::TextureHandle)>,
     capture: Option<CaptureJob>,
     queued_capture: Option<daw_plugins::PluginInfo>,
     attempted: HashSet<String>,
-    thumbnails: HashMap<String, egui::TextureHandle>,
+    previews: PreviewCache,
+    grid_filter: Option<(DeviceKind, String, String)>,
+    grid_columns: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -90,6 +91,7 @@ impl DawApp {
                 state.capture = None;
                 match result {
                     Ok(entry) => {
+                        state.previews.invalidate(&entry.fingerprint);
                         if let Some(current) = self
                             .vst_catalog
                             .iter_mut()
@@ -97,7 +99,6 @@ impl DawApp {
                         {
                             *current = entry;
                         }
-                        state.preview = None;
                     }
                     Err(error) => self.message(Err(anyhow::anyhow!(error)), ""),
                 }
@@ -176,6 +177,7 @@ impl DawApp {
             };
             state.selected = None;
             state.developer.clear();
+            state.grid_filter = None;
         }
         let assign = self.plugin_assign_target.is_some();
         let source = match self.library_target {
@@ -190,14 +192,6 @@ impl DawApp {
                 )
             })
         });
-        let default_action = match state.kind {
-            DeviceKind::Instrument if assign => DeviceAction::Assign,
-            DeviceKind::Instrument => DeviceAction::Instrument,
-            DeviceKind::Effect if matches!(self.library_target, LibraryTarget::Send(_)) => {
-                DeviceAction::Send
-            }
-            DeviceKind::Effect => DeviceAction::Insert,
-        };
         let mut action = None;
         let mut folders = false;
         let mut retry = None;
@@ -216,7 +210,7 @@ impl DawApp {
             .id(egui::Id::new("library"))
             .open(&mut open)
             .default_width(940.0)
-            .default_height(550.0)
+            .default_height(650.0)
             .vscroll(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -251,7 +245,7 @@ impl DawApp {
                         }
                     });
                 });
-                ui.horizontal_wrapped(|ui| {
+                let search = ui.horizontal_wrapped(|ui| {
                     let search_width = (ui.available_width()
                         - daw_ui::tokens::SELECT_WIDTH
                         - daw_ui::tokens::SPACE_SM
@@ -310,7 +304,8 @@ impl DawApp {
                             );
                         }
                     });
-                });
+                    search
+                }).inner;
                 ui.add_space(8.0);
                 let filter = self.plugin_filter.to_lowercase();
                 let matches: Vec<_> = self
@@ -328,293 +323,167 @@ impl DawApp {
                             .contains(&filter)
                     })
                     .collect();
-                if !matches
-                    .iter()
-                    .any(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
-                {
+                let signature = (state.kind, self.plugin_filter.clone(), state.developer.clone());
+                let filter_changed = state.grid_filter.as_ref() != Some(&signature);
+                state.grid_filter = Some(signature);
+                if !matches.iter().any(|entry| state.selected.as_ref() == Some(&entry.fingerprint)) {
                     state.selected = matches.first().map(|entry| entry.fingerprint.clone());
-                    state.preview = None;
                 }
+                let primary = match state.kind {
+                    DeviceKind::Instrument if assign => DeviceAction::Assign,
+                    DeviceKind::Instrument => DeviceAction::Instrument,
+                    DeviceKind::Effect if matches!(self.library_target, LibraryTarget::Send(_)) => DeviceAction::Send,
+                    DeviceKind::Effect => DeviceAction::Insert,
+                };
+                let enabled = state.kind == DeviceKind::Instrument || source.is_some();
+                let layout = daw_ui::device_grid_layout(ui.available_width());
+                let reflowed = state.grid_columns != layout.columns;
+                state.grid_columns = layout.columns;
                 let popup_open = egui::Popup::is_any_open(ctx);
-                let step = ctx.input(|input| {
-                    if popup_open {
-                        0
-                    } else if input.key_pressed(egui::Key::ArrowDown) {
+                let search_focused = ui.memory(|memory| memory.has_focus(search.id));
+                let step = ctx.input_mut(|input| {
+                    if popup_open { return 0; }
+                    if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
+                        layout.columns as isize
+                    } else if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
+                        -(layout.columns as isize)
+                    } else if !search_focused && input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight) {
                         1
-                    } else if input.key_pressed(egui::Key::ArrowUp) {
+                    } else if !search_focused && input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft) {
                         -1
-                    } else {
-                        0
-                    }
+                    } else { 0 }
                 });
+                let mut scroll_to = if filter_changed || reflowed {
+                    matches.iter().position(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
+                } else {
+                    None
+                };
                 if step != 0 && !matches.is_empty() {
-                    let index = matches
-                        .iter()
-                        .position(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
-                        .unwrap_or(0);
-                    state.selected = Some(
-                        matches
-                            [(index as isize + step).clamp(0, matches.len() as isize - 1) as usize]
-                            .fingerprint
-                            .clone(),
-                    );
+                    let index = matches.iter().position(|entry| state.selected.as_ref() == Some(&entry.fingerprint)).unwrap_or(0);
+                    let next = if (step == -(layout.columns as isize) && index < layout.columns)
+                        || (step == layout.columns as isize && index / layout.columns == (matches.len() - 1) / layout.columns)
+                    {
+                        index
+                    } else {
+                        (index as isize + step).clamp(0, matches.len() as isize - 1) as usize
+                    };
+                    state.selected = Some(matches[next].fingerprint.clone());
+                    scroll_to = Some(next);
                 }
-                if activate
-                    && let Some(entry) = matches
-                        .iter()
-                        .find(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
+                if activate && enabled
+                    && let Some(entry) = matches.iter().find(|entry| state.selected.as_ref() == Some(&entry.fingerprint))
                 {
-                    action = Some((entry.plugin.clone(), default_action));
+                    action = Some((entry.plugin.clone(), primary));
                 }
-                daw_ui::bounded_columns(ui, "library_panes", ui.available_height(), |pane, ui| {
-                    if pane == 0 {
-                    let catalog = egui::ScrollArea::vertical()
-                        .id_salt("device_catalog")
-                        .min_scrolled_height(0.0)
-                        .max_height(ui.available_height().max(0.0))
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            for entry in &matches {
-                                let plugin = &entry.plugin;
-                                let detail = if !plugin.vendor.is_empty() {
-                                    plugin.vendor.clone()
-                                } else if plugin.is_instrument().is_some() {
-                                    plugin.category.replace('|', " · ")
-                                } else {
-                                    String::new()
-                                };
-                                let visible = ui.clip_rect().intersects(egui::Rect::from_min_size(
-                                    ui.cursor().min,
-                                    egui::vec2(ui.available_width(), 58.0),
-                                ));
-                                if visible
-                                    && !state.thumbnails.contains_key(&entry.fingerprint)
-                                    && let Some(path) = &entry.thumbnail
-                                    && let Ok(image) = image::open(path)
-                                {
-                                    let image = image.thumbnail(144, 96).to_rgba8();
-                                    let pixels = egui::ColorImage::from_rgba_unmultiplied(
-                                        [image.width() as usize, image.height() as usize],
-                                        image.as_raw(),
-                                    );
-                                    // Bound GPU memory even when scrolling a very large library.
-                                    if state.thumbnails.len() >= 128 {
-                                        state.thumbnails.clear();
-                                    }
-                                    state.thumbnails.insert(
-                                        entry.fingerprint.clone(),
-                                        ctx.load_texture(
-                                            format!("thumb-{}", entry.fingerprint),
-                                            pixels,
-                                            egui::TextureOptions::LINEAR,
-                                        ),
-                                    );
-                                }
-                                let response = daw_ui::catalog_item(
-                                    ui,
-                                    state.selected.as_ref() == Some(&entry.fingerprint),
-                                    &plugin.name,
-                                    &detail,
-                                    state.thumbnails.get(&entry.fingerprint),
-                                );
-                                if step != 0
-                                    && state.selected.as_ref() == Some(&entry.fingerprint)
-                                {
-                                    response.scroll_to_me(Some(egui::Align::Center));
-                                }
-                                if response.clicked() {
-                                    state.selected = Some(entry.fingerprint.clone());
-                                }
-                                if response.double_clicked() {
-                                    action = Some((plugin.clone(), default_action));
-                                }
-                            }
-                            if matches.is_empty() && self.vst_scan.is_none() {
-                                ui.label("No matching devices");
-                            }
-                        });
-                    ctx.data_mut(|data| data.insert_temp(egui::Id::new("library_diagnostics"), serde_json::json!({
-                        "catalog": {"min": [catalog.inner_rect.min.x, catalog.inner_rect.min.y], "max": [catalog.inner_rect.max.x, catalog.inner_rect.max.y]},
-                        "scroll_offset": catalog.state.offset.y,
-                        "selected": state.selected,
-                    })));
-                    return;
+                // A fixed footer keeps the insertion target stable as previews
+                // arrive, filters change, and long device names wrap on cards.
+                // Includes separator spacing, the selected name and action row.
+                // A reserve smaller than their total feeds window growth back
+                // into this available-height calculation on every frame.
+                let grid_height = (ui.available_height() - 84.0).max(0.0);
+                let grid = daw_ui::device_grid(ui, "device_catalog", matches.len(), grid_height, scroll_to, |ui, index, width| {
+                    let entry = matches[index];
+                    let texture = entry.thumbnail.as_ref().and_then(|path| state.previews.request(ctx, &entry.fingerprint, path));
+                    let producer = if entry.plugin.vendor.is_empty() { "Unknown developer" } else { &entry.plugin.vendor };
+                    let card = daw_ui::device_card(ui, &daw_ui::DeviceCard {
+                        id: egui::Id::new(("library_device", &entry.fingerprint)),
+                        name: &entry.plugin.name,
+                        producer,
+                        preview: texture.as_ref(),
+                        selected: state.selected.as_ref() == Some(&entry.fingerprint),
+                        icon: if state.kind == DeviceKind::Instrument { daw_ui::Icon::Instrument } else { daw_ui::Icon::Effect },
+                    }, width);
+                    if step != 0 && state.selected.as_ref() == Some(&entry.fingerprint) {
+                        card.request_focus();
                     }
-                    ctx.data_mut(|data| {
-                        if let Some(value) = data.get_temp_mut_or_default::<serde_json::Value>(egui::Id::new("library_diagnostics")).as_object_mut() {
-                            let rect = ui.max_rect();
-                            value.insert("details".into(), serde_json::json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]}));
-                        }
+                    if card.response.clicked() {
+                        state.selected = Some(entry.fingerprint.clone());
+                    }
+                    if card.activated && enabled {
+                        action = Some((entry.plugin.clone(), primary));
+                    }
+                    let rect = card.response.rect;
+                    let preview = card.preview_rect;
+                    serde_json::json!({
+                        "fingerprint": entry.fingerprint, "name": entry.plugin.name, "producer": producer,
+                        "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
+                        "preview_rect": {"min": [preview.min.x, preview.min.y], "max": [preview.max.x, preview.max.y]},
+                        "preview": texture.is_some(), "texture_id": texture.as_ref().map(|texture| format!("{:?}", texture.id())),
+                    })
+                });
+                if matches.is_empty() && self.vst_scan.is_none() {
+                    let mut empty = ui.new_child(egui::UiBuilder::new().max_rect(grid.rect));
+                    empty.centered_and_justified(|ui| { daw_ui::text::note(ui, "No matching devices"); });
+                }
+                let mut cards: Vec<_> = grid.cards.into_iter().map(|(_, card)| card).collect();
+                for card in &mut cards {
+                    card["selected"] = serde_json::json!(card["fingerprint"].as_str() == state.selected.as_deref());
+                }
+                ui.separator();
+                let footer_start = ui.cursor().min;
+                let selected = state.selected.as_ref().and_then(|selected| matches.iter().find(|entry| &entry.fingerprint == selected)).copied();
+                if let Some(entry) = selected {
+                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, &entry.plugin.name);
+                } else {
+                    ui.add_space(daw_ui::tokens::FONT_BODY + daw_ui::tokens::SPACE_SM);
+                }
+                let primary_label = match primary {
+                    DeviceAction::Instrument => "Add instrument track",
+                    DeviceAction::Assign => "Assign instrument",
+                    DeviceAction::Insert => "Add to effect chain",
+                    DeviceAction::Send => "Create send track",
+                };
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(enabled && selected.is_some(), |ui| {
+                        if daw_ui::primary_button(ui, primary_label).clicked()
+                            && let Some(entry) = selected
+                        { action = Some((entry.plugin.clone(), primary)); }
                     });
-                    if let Some(entry) = state.selected.as_ref().and_then(|selected| {
-                        matches.iter().find(|entry| &entry.fingerprint == selected)
-                    }) {
-                        let reserved_controls = 2.0 * daw_ui::tokens::CONTROL_HEIGHT
-                            + 4.0 * daw_ui::tokens::SPACE_SM
-                            + 2.0 * daw_ui::tokens::FONT_SMALL
-                            + 2.0 * daw_ui::tokens::SPACE_MD;
-                        let title_rows = ((ui.available_height() - reserved_controls)
-                            / (daw_ui::tokens::FONT_HEADING * 1.2))
-                            .clamp(1.0, 4.0) as usize;
-                        daw_ui::text::bounded_block(
-                            ui,
-                            daw_ui::text::TextRole::Title,
-                            &entry.plugin.name,
-                            title_rows,
-                        );
-                        if !entry.plugin.vendor.is_empty() {
-                            daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, &entry.plugin.vendor);
-                        }
-                        if entry.plugin.is_instrument().is_none() {
-                            daw_ui::text::note(ui, "Unverified VST3");
-                        }
-                        ui.add_space(10.0);
-                        // Keep the main action before asynchronous preview content.
-                        // Context determines the primary action; alternatives stay on demand.
-                        let primary = match state.kind {
-                            DeviceKind::Instrument if assign => DeviceAction::Assign,
-                            DeviceKind::Instrument => DeviceAction::Instrument,
-                            DeviceKind::Effect
-                                if matches!(self.library_target, LibraryTarget::Send(_)) =>
-                            {
-                                DeviceAction::Send
-                            }
-                            DeviceKind::Effect => DeviceAction::Insert,
-                        };
-                        let primary_label = match primary {
-                            DeviceAction::Instrument => "Add instrument track",
-                            DeviceAction::Assign => "Assign instrument",
-                            DeviceAction::Insert => "Add to effect chain",
-                            DeviceAction::Send => "Create send track",
-                        };
-                        let enabled = state.kind == DeviceKind::Instrument || source.is_some();
-                        ui.horizontal_wrapped(|ui| {
-                            ui.add_enabled_ui(enabled, |ui| {
-                                if daw_ui::primary_button(ui, primary_label).clicked() {
-                                    action = Some((entry.plugin.clone(), primary));
-                                }
-                            });
-                            daw_ui::action_menu(ui, "More", |ui| {
-                                ui.set_max_width(360.0);
-                                if state.kind == DeviceKind::Instrument {
-                                    let can_assign = self
-                                        .selected_track
-                                        .and_then(|id| self.project.track(id))
-                                        .is_some_and(|track| track.kind == TrackKind::Midi);
-                                    if !assign
-                                        && can_assign
-                                        && daw_ui::button(ui, "Assign to selected track").clicked()
-                                    {
-                                        action = Some((entry.plugin.clone(), DeviceAction::Assign));
-                                        ui.close();
-                                    }
-                                } else if source.is_some() {
-                                    let (label, alternate) = if primary == DeviceAction::Send {
-                                        ("Add to effect chain", DeviceAction::Insert)
-                                    } else {
-                                        ("Create send track", DeviceAction::Send)
-                                    };
-                                    if daw_ui::button(ui, label).clicked() {
-                                        action = Some((entry.plugin.clone(), alternate));
-                                        ui.close();
-                                    }
-                                }
-                                if daw_ui::button(
-                                    ui,
-                                    if entry.thumbnail.is_some() {
-                                        "Refresh preview"
-                                    } else {
-                                        "Capture preview"
-                                    },
-                                )
-                                .clicked()
-                                {
-                                    retry = Some(entry.plugin.clone());
+                    ui.add_enabled_ui(selected.is_some(), |ui| {
+                        daw_ui::action_menu(ui, "More", |ui| {
+                            let Some(entry) = selected else { return; };
+                            ui.set_max_width(360.0);
+                            if state.kind == DeviceKind::Instrument {
+                                let can_assign = self.selected_track.and_then(|id| self.project.track(id)).is_some_and(|track| track.kind == TrackKind::Midi);
+                                if !assign && can_assign && daw_ui::button(ui, "Assign to selected track").clicked() {
+                                    action = Some((entry.plugin.clone(), DeviceAction::Assign));
                                     ui.close();
                                 }
-                                ui.separator();
-                                daw_ui::text::note(
-                                    ui,
-                                    if entry.plugin.category.is_empty() {
-                                        "VST3".to_owned()
-                                    } else {
-                                        format!(
-                                            "VST3 · {}",
-                                            entry.plugin.category.replace('|', " · ")
-                                        )
-                                    },
-                                );
-                                daw_ui::text::note(ui, entry.plugin.path.display().to_string())
-                                    .on_hover_text(
-                                        entry
-                                            .plugin
-                                            .class_id
-                                            .as_deref()
-                                            .unwrap_or("Unverified class"),
-                                    );
-                            });
+                            } else if source.is_some() {
+                                let (label, alternate) = if primary == DeviceAction::Send { ("Add to effect chain", DeviceAction::Insert) } else { ("Create send track", DeviceAction::Send) };
+                                if daw_ui::button(ui, label).clicked() {
+                                    action = Some((entry.plugin.clone(), alternate));
+                                    ui.close();
+                                }
+                            }
+                            if daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" }).clicked() {
+                                retry = Some(entry.plugin.clone());
+                                ui.close();
+                            }
+                            ui.separator();
+                            daw_ui::text::note(ui, if entry.plugin.category.is_empty() { "Unverified VST3".to_owned() } else { format!("VST3 · {}", entry.plugin.category.replace('|', " · ")) });
+                            if let ThumbnailStatus::Failed { message } = &entry.status {
+                                daw_ui::text::note(ui, "Preview unavailable").on_hover_text(message);
+                            }
+                            daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
                         });
-                        if state.kind == DeviceKind::Effect {
-                            if let Some(track) = source.and_then(|id| self.project.track(id)) {
-                                daw_ui::text::truncated(
-                                    ui,
-                                    daw_ui::text::TextRole::Note,
-                                    if primary == DeviceAction::Send {
-                                        format!("Send from {}", track.name)
-                                    } else {
-                                        track.name.clone()
-                                    },
-                                );
-                            } else {
-                                daw_ui::text::note(ui, "Select a channel to add effects");
-                            }
-                        }
-                        ui.add_space(10.0);
-                        egui::ScrollArea::vertical()
-                            .id_salt(("device_preview", &entry.fingerprint))
-                            .min_scrolled_height(0.0)
-                            .max_height(ui.available_height().max(0.0))
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                        if let Some(path) = &entry.thumbnail {
-                            if state
-                                .preview
-                                .as_ref()
-                                .is_some_and(|(loaded, _)| loaded != path)
-                            {
-                                state.preview = None;
-                            }
-                            if state.preview.is_none()
-                                && let Ok(image) = image::open(path)
-                            {
-                                let image = image.thumbnail(1000, 600).to_rgba8();
-                                let pixels = egui::ColorImage::from_rgba_unmultiplied(
-                                    [image.width() as usize, image.height() as usize],
-                                    image.as_raw(),
-                                );
-                                state.preview = Some((
-                                    path.clone(),
-                                    ctx.load_texture(
-                                        entry.fingerprint.clone(),
-                                        pixels,
-                                        egui::TextureOptions::LINEAR,
-                                    ),
-                                ));
-                            }
-                            if let Some((_, texture)) = &state.preview {
-                                daw_ui::image_preview(
-                                    ui,
-                                    texture,
-                                    egui::vec2(ui.available_width(), 250.0),
-                                );
-                            }
-                        }
-                        if let ThumbnailStatus::Failed { message } = &entry.status {
-                            daw_ui::text::note(ui, "Preview unavailable").on_hover_text(message);
-                        }
-                            });
+                    });
+                    if state.kind == DeviceKind::Effect {
+                        let context = source.and_then(|id| self.project.track(id)).map(|track| {
+                            if primary == DeviceAction::Send { format!("Send from {}", track.name) } else { track.name.clone() }
+                        }).unwrap_or_else(|| "Select a channel to add effects".to_owned());
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, context);
                     }
                 });
+                let footer = egui::Rect::from_min_max(footer_start, ui.min_rect().max);
+                ctx.data_mut(|data| data.insert_temp(egui::Id::new("library_diagnostics"), serde_json::json!({
+                    "catalog": {"min": [grid.rect.min.x, grid.rect.min.y], "max": [grid.rect.max.x, grid.rect.max.y]},
+                    "footer": {"min": [footer.min.x, footer.min.y], "max": [footer.max.x, footer.max.y]},
+                    "scroll_offset": grid.scroll_offset,
+                    "selected": state.selected, "columns": grid.layout.columns,
+                    "card_size": [grid.layout.card_width, daw_ui::DEVICE_CARD_HEIGHT],
+                    "total": matches.len(), "cards": cards,
+                })));
             });
         self.library_open &= open;
         if folders {

@@ -33,6 +33,19 @@ pub(super) struct WorkerPool {
 
 impl WorkerPool {
     #[cfg(test)]
+    pub fn prime_completion_wait_for_test(&self) {
+        // std's bounded channels allocate their waiter list on the first
+        // blocking receive, not necessarily the first receive. A warm-up render
+        // may find every result ready and skip that path entirely. Exercise the
+        // actual empty completion queue before measuring steady-state dispatch.
+        assert!(matches!(
+            self.completed
+                .recv_timeout(std::time::Duration::from_millis(25)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+    }
+
+    #[cfg(test)]
     pub fn disconnect_for_test(&mut self, worker: usize) {
         let (sender, receiver) = mpsc::sync_channel(1);
         drop(receiver);

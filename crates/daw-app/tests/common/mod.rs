@@ -14,6 +14,7 @@ use tempfile::TempDir;
 pub struct Harness {
     pub directory: TempDir,
     plugin_host: Option<std::path::PathBuf>,
+    virtual_audio: bool,
     child: Child,
     input: ChildStdin,
     output: Receiver<String>,
@@ -32,7 +33,18 @@ impl Harness {
     /// process-global environment or the production helper executable.
     pub fn with_plugin_host(path: &std::path::Path, host: &std::path::Path) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
-        Self::launch_configured(Some(path), directory, None, Some(host))
+        Self::launch_configured(Some(path), directory, None, Some(host), false)
+    }
+
+    /// A deterministic device-free sink sharing the production render worker,
+    /// bounded audio queue and callback consumer. Only explicit pump commands
+    /// consume audio; no host device or desktop is touched.
+    pub fn with_virtual_audio(
+        vst_path: Option<&std::path::Path>,
+        host: Option<&std::path::Path>,
+    ) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated virtual-audio directory");
+        Self::launch_configured(vst_path, directory, None, host, true)
     }
 
     /// A real CPAL/ALSA stream that discards all samples. The child sees only
@@ -46,7 +58,7 @@ impl Harness {
             "pcm.!default { type null hint { show on description \"Rill null output\" } }\n",
         )
         .expect("write isolated ALSA configuration");
-        Self::launch_configured(None, directory, Some(&config), None)
+        Self::launch_configured(None, directory, Some(&config), None, false)
     }
 
     fn launch(vst_path: Option<&std::path::Path>) -> Self {
@@ -55,7 +67,7 @@ impl Harness {
     }
 
     fn launch_in(vst_path: Option<&std::path::Path>, directory: TempDir) -> Self {
-        Self::launch_configured(vst_path, directory, None, None)
+        Self::launch_configured(vst_path, directory, None, None, false)
     }
 
     fn launch_configured(
@@ -63,6 +75,7 @@ impl Harness {
         directory: TempDir,
         null_audio: Option<&std::path::Path>,
         plugin_host: Option<&std::path::Path>,
+        virtual_audio: bool,
     ) -> Self {
         let binary = std::env::var_os("RILL_E2E_BINARY")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
@@ -72,11 +85,16 @@ impl Harness {
             .env("RILL_AUTOMATION_DIR", directory.path())
             .env("RILL_CONFIG_DIR", directory.path().join("config"))
             .env("RILL_CACHE_DIR", directory.path().join("cache"))
+            .env_remove("RILL_E2E_VIRTUAL_AUDIO")
+            .env_remove("RILL_E2E_AUDIO_DEVICE")
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
+        if virtual_audio {
+            command.env("RILL_E2E_VIRTUAL_AUDIO", "1");
+        }
         if let Some(path) = vst_path {
             command.env("VST3_PATH", path);
         }
@@ -109,6 +127,7 @@ impl Harness {
         let harness = Self {
             directory,
             plugin_host: plugin_host.map(std::path::Path::to_owned),
+            virtual_audio,
             child,
             input,
             output: rx,
@@ -133,8 +152,9 @@ impl Harness {
         assert_eq!(result["event"], "exiting");
         let directory = std::mem::replace(&mut self.directory, tempfile::tempdir().unwrap());
         let plugin_host = self.plugin_host.clone();
+        let virtual_audio = self.virtual_audio;
         self.wait_exit();
-        Self::launch_configured(None, directory, None, plugin_host.as_deref())
+        Self::launch_configured(None, directory, None, plugin_host.as_deref(), virtual_audio)
     }
 
     fn response(&self) -> Value {
@@ -246,6 +266,27 @@ pub fn wait_visible(app: &mut Harness, label: &str) {
             return;
         }
         assert!(Instant::now() < deadline, "Missing {label}: {state}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Wait for a rendered device card rather than its always-present disabled action.
+/// A search field may have exactly the same visible text as the requested device.
+pub fn wait_library_device(app: &mut Harness, name: &str) {
+    let deadline = Instant::now() + Duration::from_secs(35);
+    loop {
+        let state = app.inspect();
+        if state["library"]["cards"]
+            .as_array()
+            .is_some_and(|cards| cards.iter().any(|card| card["name"] == name))
+        {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Missing device card {name}: {}",
+            state["library"]
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
 }

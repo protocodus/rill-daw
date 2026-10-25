@@ -81,6 +81,127 @@ pub fn menu_button<R>(
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MenuRole {
+    Action,
+    Choice,
+    View,
+}
+
+/// The three toolbar roles share native layout, focus, and popup handling.
+/// Only their affordance changes: filled commands, inset choices, outlined views.
+pub(crate) fn semantic_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    role: MenuRole,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    if egui::containers::menu::is_in_menu(ui) && role == MenuRole::Action {
+        return menu_button(ui, label, contents);
+    }
+    let (response, inner) = semantic_picker(ui, label, role, contents);
+    InnerResponse::new(inner.map(|inner| inner.inner), response)
+}
+
+fn semantic_picker<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    role: MenuRole,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> (Response, Option<InnerResponse<R>>) {
+    use egui::containers::menu::{MenuConfig, MenuState, SubMenu};
+
+    let nested = egui::containers::menu::is_in_menu(ui);
+    let label = label.into();
+    let icon = match role {
+        MenuRole::View => Some(crate::Icon::View),
+        MenuRole::Action => crate::Icon::for_label(label.text()),
+        MenuRole::Choice => None,
+    };
+    let icon_id = egui::Id::new("rill-menu-role-icon");
+    let disclosure_id = egui::Id::new("rill-menu-disclosure");
+    let mut atoms = egui::Atoms::new(label);
+    if icon.is_some() {
+        atoms.push_left(egui::Atom::custom(icon_id, egui::Vec2::splat(18.0)));
+    }
+    atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(12.0)));
+
+    // Style only the opener, never its popup contents or following controls.
+    // Avoid a nested Ui scope so horizontal_wrapped can wrap each whole control.
+    let previous_style = ui.style().clone();
+    let colors = theme::palette(ui.ctx());
+    ui.spacing_mut().button_padding =
+        egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+    let visuals = &mut ui.visuals_mut().widgets;
+    match role {
+        MenuRole::Action => {
+            visuals.inactive.bg_stroke = egui::Stroke::NONE;
+            visuals.hovered.bg_stroke = egui::Stroke::NONE;
+        }
+        MenuRole::Choice => {
+            visuals.inactive.weak_bg_fill = colors.bg;
+            visuals.inactive.bg_stroke = egui::Stroke::new(1.0_f32, colors.line);
+        }
+        MenuRole::View => {
+            visuals.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+            visuals.inactive.bg_stroke = egui::Stroke::new(1.0_f32, colors.line);
+        }
+    }
+    if nested {
+        let next_id = ui.next_auto_id();
+        let open = MenuState::from_ui(ui, |state, _| {
+            state.open_item == Some(SubMenu::id_from_widget_id(next_id))
+        });
+        if open {
+            ui.visuals_mut().widgets.inactive = ui.visuals().widgets.open;
+        }
+    }
+    let button = Button::new(atoms)
+        .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
+        .corner_radius(tokens::RADIUS)
+        .wrap_mode(egui::TextWrapMode::Truncate)
+        .atom_ui(ui);
+    let color = ui.style().interact(&button.response).text_color();
+    if let (Some(icon), Some(rect)) = (icon, button.rect(icon_id)) {
+        icon.paint(ui.painter(), rect, color);
+    }
+    if let Some(rect) = button.rect(disclosure_id) {
+        if nested {
+            crate::Icon::ChevronRight
+        } else {
+            crate::Icon::ChevronDown
+        }
+        .paint(ui.painter(), rect, color);
+    }
+    ui.set_style(previous_style);
+
+    let response = button.response;
+    let mut config = MenuConfig::new();
+    if role != MenuRole::Action {
+        config.close_behavior = egui::PopupCloseBehavior::CloseOnClickOutside;
+    }
+    let inner = if nested {
+        // A submenu's provisional first-frame area can cover its opener. Retain
+        // the opening click while egui settles that area's final position.
+        if response.clicked() {
+            config.close_behavior = egui::PopupCloseBehavior::IgnoreClicks;
+        }
+        SubMenu::default()
+            .config(config)
+            .show(ui, &response, contents)
+    } else {
+        egui::Popup::menu(&response)
+            .close_behavior(config.close_behavior)
+            .style(config.style.clone())
+            .info(
+                egui::UiStackInfo::new(egui::UiKind::Menu)
+                    .with_tag_value(MenuConfig::MENU_CONFIG_TAG, config),
+            )
+            .show(contents)
+    };
+    (response, inner)
+}
+
 fn native_menu_button<'a, R>(
     ui: &mut Ui,
     atoms: impl egui::IntoAtoms<'a>,
@@ -115,23 +236,14 @@ fn native_menu_button<'a, R>(
     InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
-/// A searchable or editable popover stays open while its internal controls are used.
-/// Call `ui.close()` when an item is accepted.
+/// A searchable or editable choice field with a disclosure chevron. Its popover
+/// stays open while internal controls are used. Call `ui.close()` to accept.
 pub fn picker_button<R>(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
-    egui::containers::menu::MenuButton::from_button(
-        Button::new(label.into())
-            .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
-            .corner_radius(tokens::RADIUS),
-    )
-    .config(
-        egui::containers::menu::MenuConfig::new()
-            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
-    )
-    .ui(ui, contents)
+    semantic_picker(ui, label, MenuRole::Choice, contents)
 }
 
 /// Application command bar; menus use the same native focus and popup behavior

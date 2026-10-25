@@ -15,6 +15,7 @@ pub enum Icon {
     Link,
     Unlink,
     Glue,
+    Stretch,
     Erase,
     Stack,
     FadeIn,
@@ -57,6 +58,9 @@ pub enum Icon {
     Back,
     More,
     Grip,
+    View,
+    ChevronDown,
+    ChevronRight,
 }
 
 impl Icon {
@@ -68,21 +72,24 @@ impl Icon {
             "Copy" | "Copy notes" | "Copy path" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
             "Duplicate" | "Duplicate clip" => Self::Duplicate,
-            "Create linked clone" => Self::Link,
+            "Ghost copy" => Self::Link,
+            "Stretch" => Self::Stretch,
             "Make independent" => Self::Unlink,
             "Glue" | "Glue selected" | "Legato" | "Join" | "Join clips…" => Self::Glue,
             "Erase" => Self::Erase,
-            "Multi-draw" => Self::Stack,
+            "Multi-draw" | "Generate…" => Self::Stack,
             "Fade in" => Self::FadeIn,
             "Fade out" => Self::FadeOut,
             "Cursor" => Self::Cursor,
-            "Fit" => Self::Fit,
+            "Fit" | "Fit preview" => Self::Fit,
             "Start" | "Clip start" | "Set start" => Self::Start,
             "Clip end" | "Set end" | "Snap end" => Self::End,
             "Play" => Self::Play,
             "Pause" => Self::Pause,
             "Stop" => Self::Stop,
             "Loop" | "Range" => Self::Loop,
+            "Add notes" => Self::Add,
+            "New variation" => Self::Refresh,
             "Crossfade…" => Self::Automation,
             "Undo" => Self::Undo,
             "Redo" => Self::Redo,
@@ -117,6 +124,7 @@ impl Icon {
             "Semitone down" | "Octave down" => Self::Down,
             "Back" => Self::Back,
             "More" => Self::More,
+            "View" => Self::View,
             "Add point" | "Add parameter" | "New" => Self::Add,
             _ => return None,
         })
@@ -145,6 +153,26 @@ impl Icon {
             painter.circle_stroke(point(x, y), r * size / 24.0, stroke);
         };
         match self {
+            Self::View => {
+                line(&[
+                    (2., 12.),
+                    (5., 8.),
+                    (8., 6.),
+                    (12., 5.),
+                    (16., 6.),
+                    (19., 8.),
+                    (22., 12.),
+                    (19., 16.),
+                    (16., 18.),
+                    (12., 19.),
+                    (8., 18.),
+                    (5., 16.),
+                    (2., 12.),
+                ]);
+                circle(12., 12., 3.5);
+            }
+            Self::ChevronDown => line(&[(5., 9.), (12., 16.), (19., 9.)]),
+            Self::ChevronRight => line(&[(9., 5.), (16., 12.), (9., 19.)]),
             Self::Warning => {
                 line(&[(12., 3.), (22., 21.), (2., 21.), (12., 3.)]);
                 line(&[(12., 9.), (12., 14.)]);
@@ -230,6 +258,13 @@ impl Icon {
                 box_at(3., 8., 7., 8.);
                 box_at(14., 8., 7., 8.);
                 line(&[(10., 12.), (14., 12.)]);
+            }
+            Self::Stretch => {
+                box_at(7., 7., 10., 10.);
+                line(&[(1., 12.), (7., 12.)]);
+                line(&[(17., 12.), (23., 12.)]);
+                line(&[(4., 9.), (1., 12.), (4., 15.)]);
+                line(&[(20., 9.), (23., 12.), (20., 15.)]);
             }
             Self::Erase => {
                 line(&[

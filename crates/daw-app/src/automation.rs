@@ -26,6 +26,10 @@ fn one_key_press() -> usize {
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    /// Consume the real engine queue through its callback with no audio device.
+    PumpAudio {
+        frames: usize,
+    },
     Inspect {
         #[serde(default)]
         paint: bool,
@@ -201,8 +205,11 @@ struct Harness {
     time: f64,
     labels: Vec<(String, Rect)>,
     menu_labels: Vec<(String, Rect)>,
+    window_labels: Vec<(String, Rect)>,
     inspect_paint: bool,
     painted_rects: Vec<Value>,
+    painted_images: Vec<Value>,
+    audio_output: Option<Vec<[f32; 2]>>,
     clipboard_text: Option<String>,
     close_requested: bool,
     focused: bool,
@@ -243,7 +250,9 @@ impl Harness {
         std::fs::create_dir_all(&scratch_dir)?;
         let ctx = egui::Context::default();
         let mut app = DawApp::with_context(&ctx, Project::new(), None);
-        app.audio_device_enabled = std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
+        app.virtual_audio = std::env::var_os("RILL_E2E_VIRTUAL_AUDIO").is_some();
+        app.audio_device_enabled =
+            app.virtual_audio || std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
         app.automatic_plugin_previews = false;
         app.settings = Settings {
             scratch_dir,
@@ -256,8 +265,11 @@ impl Harness {
             time: 0.0,
             labels: Vec::new(),
             menu_labels: Vec::new(),
+            window_labels: Vec::new(),
             inspect_paint: false,
             painted_rects: Vec::new(),
+            painted_images: Vec::new(),
+            audio_output: None,
             clipboard_text: None,
             close_requested: false,
             focused: true,
@@ -278,24 +290,31 @@ impl Harness {
         // exercises recovery normally, within the isolated automation directory.
         self.app.last_recovery = Instant::now();
         self.menu_labels.clear();
+        self.window_labels.clear();
         let app = &mut self.app;
         let menu_labels = &mut self.menu_labels;
+        let window_labels = &mut self.window_labels;
         let output = self.ctx.run(input, |ctx| {
             app.ui_frame(ctx);
             // A menu can repeat a persistent toolbar destination. Resolve the
             // default click to the actual foreground menu, without changing
             // explicit occurrence indexing for repeated channel/library rows.
-            if egui::Popup::is_any_open(ctx) {
+            {
                 let layers = ctx.memory(|memory| {
                     memory
                         .layer_ids()
                         .filter(|layer| {
-                            layer.order == egui::Order::Foreground
+                            matches!(layer.order, egui::Order::Foreground | egui::Order::Middle)
                                 && memory.areas().is_visible(layer)
                         })
                         .collect::<Vec<_>>()
                 });
                 for layer in layers {
+                    let labels = if layer.order == egui::Order::Foreground {
+                        &mut *menu_labels
+                    } else {
+                        &mut *window_labels
+                    };
                     let transform = ctx.layer_transform_to_global(layer);
                     ctx.graphics(|graphics| {
                         if let Some(list) = graphics.get(layer) {
@@ -304,7 +323,7 @@ impl Harness {
                                 if let Some(transform) = transform {
                                     shape.transform(transform);
                                 }
-                                collect_labels(&shape.shape, shape.clip_rect, menu_labels);
+                                collect_labels(&shape.shape, shape.clip_rect, labels);
                             }
                         }
                     });
@@ -324,10 +343,12 @@ impl Harness {
         });
         self.labels.clear();
         self.painted_rects.clear();
+        self.painted_images.clear();
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
             if self.inspect_paint {
                 collect_painted_rects(&clipped.shape, clipped.clip_rect, &mut self.painted_rects);
+                collect_painted_images(&clipped.shape, clipped.clip_rect, &mut self.painted_images);
             }
         }
     }
@@ -346,6 +367,18 @@ impl Harness {
                 .rev()
                 .find(|(text, _)| text.trim() == label)
         {
+            return Ok(*rect);
+        }
+        let first = self.labels.iter().find(|(text, _)| text.trim() == label);
+        if occurrence == 0
+            && let Some((_, rect)) = self
+                .window_labels
+                .iter()
+                .find(|(text, _)| text.trim() == label)
+            && !first.is_some_and(|first| self.window_labels.contains(first))
+        {
+            // Prefer the active utility over the retained, disabled workspace.
+            // Repeated labels within that utility keep their original indexing.
             return Ok(*rect);
         }
         self.labels
@@ -526,9 +559,26 @@ impl Harness {
     }
 
     fn execute(&mut self, command: Command) -> Result<bool> {
+        self.audio_output = None;
         self.inspect_paint = false;
         self.painted_rects.clear();
+        self.painted_images.clear();
         match command {
+            Command::PumpAudio { frames } => {
+                ensure!(self.app.virtual_audio, "Virtual audio is not enabled");
+                ensure!(
+                    (1..=8192).contains(&frames),
+                    "Audio pump size must be 1..=8192"
+                );
+                self.audio_output = Some(
+                    self.app
+                        .engine
+                        .as_mut()
+                        .context("Audio engine is not ready")?
+                        .pump_virtual(frames)?,
+                );
+                self.settle();
+            }
             Command::FileDialog { kind, path } => {
                 use crate::document_ui::DocumentDialog;
                 self.app.next_document_dialog = Some((
@@ -848,6 +898,28 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["revision"] = json!(self.app.revision);
+        state["popups"]["about"] = json!(self.app.about_open);
+        state["audio_transpose_rect"] = json!(
+            self.ctx
+                .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("audio_transpose_rect")))
+                .map(|rect| [rect.left(), rect.top(), rect.right(), rect.bottom()])
+        );
+        state["playback_loading"] = json!(self.app.loading.is_some());
+        state["engine"] = self.app.engine.as_ref().map_or(Value::Null, |engine| {
+            let s = engine.snapshot();
+            json!({
+                "engine_id": s.engine_id, "playing": s.playing,
+                "position_beats": s.position_beats,
+                "peak_left": s.peak_left, "peak_right": s.peak_right,
+                "underruns": s.underruns, "render_errors": s.render_errors,
+                "requested_revision": s.requested_revision,
+                "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
+                "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,
+                "generation": s.generation,
+            })
+        });
+        state["audio_output"] = json!(self.audio_output);
         state["window_rects"] = self
             .ctx
             .memory(|memory| {
@@ -866,6 +938,7 @@ impl Harness {
         state["exported_file"] = json!(self.app.exported_file);
         if self.inspect_paint {
             state["painted_rects"] = json!(self.painted_rects);
+            state["painted_images"] = json!(self.painted_images);
         }
         state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
         state["popup_context"] = self.app.popup_context_diagnostics();
@@ -910,6 +983,26 @@ fn collect_painted_rects(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value
         egui::Shape::Vec(shapes) => {
             for shape in shapes {
                 collect_painted_rects(shape, clip, output);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_painted_images(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value>) {
+    match shape {
+        egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => {
+            let rect = mesh.calc_bounds().intersect(clip);
+            if rect.is_positive() {
+                output.push(json!({
+                    "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
+                    "texture_id": format!("{:?}", mesh.texture_id),
+                }));
+            }
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_images(shape, clip, output);
             }
         }
         _ => {}

@@ -11,7 +11,9 @@ mod export_ui;
 mod history_ui;
 mod join_ui;
 mod library;
+mod library_preview;
 mod midi_editor;
+mod midi_generate_ui;
 mod plugin_ui;
 mod project_io;
 mod routing;
@@ -105,13 +107,15 @@ fn main() -> anyhow::Result<()> {
         .cloned();
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
+            .with_app_id(daw_ui::APP_ID)
+            .with_icon(daw_ui::app_icon())
             .with_inner_size([1480.0, 960.0])
             .with_min_inner_size([1100.0, 720.0]),
         vsync: true,
         ..Default::default()
     };
     eframe::run_native(
-        "Rill — Audio Workstation",
+        "RILL — Audio Workstation",
         options,
         Box::new(move |cc| {
             let mut app = app::DawApp::new(cc, project, screenshot);

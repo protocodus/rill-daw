@@ -25,13 +25,72 @@ pub fn toolbar_group<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> Inn
     })
 }
 
+/// Reserve a known-width group before drawing its left-to-right contents. The
+/// wrapping parent can move the complete group to the next row without adding
+/// unused trailing space or changing the behavior of right-aligned controls.
+pub fn toolbar_group_sized<R>(
+    ui: &mut Ui,
+    minimum_width: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let width = minimum_width.max(0.0).min(ui.max_rect().width().max(0.0));
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
+            contents(ui)
+        },
+    )
+}
+
+/// Reserve trailing controls before right alignment, wrapping the whole group
+/// when the remaining row cannot fit it. This keeps its hit area off prior tools.
+pub fn toolbar_trailing<R>(
+    ui: &mut Ui,
+    minimum_width: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let width = ui
+        .available_width()
+        .max(minimum_width)
+        .min(ui.max_rect().width());
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::Layout::right_to_left(egui::Align::Center),
+        contents,
+    )
+}
+
 /// Secondary actions appear on demand, using native menu focus and dismissal.
 pub fn action_menu<R>(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
-    crate::menu_button(ui, label, contents)
+    crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::Action, contents)
+}
+
+/// Presentation settings use a quiet outlined eye button. Unlike action menus,
+/// toggling a setting keeps the menu open; Escape or an outside click dismisses it.
+/// View changes remain the caller's responsibility and must not edit project data.
+pub fn view_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::View, contents)
+}
+
+/// A field-like dropdown for related choices, labelled with the current value.
+/// Use `ui.close()` to accept a choice, or leave it open for several settings.
+/// Nested choice menus use native submenus rather than competing popup state.
+pub fn choice_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::Choice, contents)
 }
 
 /// A small section heading and its controls, grouped by spacing rather than a box.
@@ -149,9 +208,43 @@ pub fn workspace_header<R>(
     }
 }
 
-/// A uniform mixer channel. Color identifies the track without enclosing each
-/// strip in another outlined card. Size includes the internal margins; all
-/// channels can share the viewport height while their controls remain stacked.
+/// A channel name action that keeps the arranger's exact track color. Text
+/// contrast follows the user-chosen color rather than the application theme.
+pub fn mixer_channel_button(ui: &mut Ui, name: &str, width: f32, color: egui::Color32) -> Response {
+    let foreground = theme::contrast_text(color);
+    let response = ui.add_sized(
+        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::Button::new(
+            crate::text::TextRole::Label
+                .rich(ui.ctx(), name)
+                .color(foreground),
+        )
+        .fill(color)
+        .corner_radius(tokens::RADIUS)
+        .truncate(),
+    );
+    // A fixed identity fill needs its own hover/focus cue without changing hue.
+    if response.hovered() || response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect,
+            tokens::RADIUS,
+            egui::Stroke::new(
+                if response.has_focus() {
+                    2.0_f32
+                } else {
+                    1.0_f32
+                },
+                foreground.gamma_multiply(0.65),
+            ),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response
+}
+
+/// A uniform mixer channel with a quiet wash of its arranger track color.
+/// Size includes the internal margins; all channels can share the viewport
+/// height while their controls remain stacked. Uncolored channels stay neutral.
 pub fn mixer_strip<R>(
     ui: &mut Ui,
     id: impl Hash,
@@ -162,13 +255,21 @@ pub fn mixer_strip<R>(
 ) -> InnerResponse<R> {
     ui.push_id(id, |ui| {
         let colors = theme::palette(ui.ctx());
-        let frame = egui::Frame::new()
-            .fill(if selected {
-                colors.track_selected
-            } else {
-                colors.panel
-            })
-            .inner_margin(tokens::SPACE_MD);
+        let base = if selected {
+            colors.track_selected
+        } else {
+            colors.panel
+        };
+        let fill = color.map_or(base, |color| {
+            let amount = match (ui.ctx().theme(), selected) {
+                (egui::Theme::Dark, false) => 0.14,
+                (egui::Theme::Dark, true) => 0.22,
+                (egui::Theme::Light, false) => 0.10,
+                (egui::Theme::Light, true) => 0.18,
+            };
+            base.lerp_to_gamma(color, amount)
+        });
+        let frame = egui::Frame::new().fill(fill).inner_margin(tokens::SPACE_MD);
         let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_width((size.x - 2.0 * tokens::SPACE_MD).max(0.0));

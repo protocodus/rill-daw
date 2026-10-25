@@ -67,7 +67,7 @@ fn unicode_emoji_names_edit_display_and_recall_at_both_densities_and_appearances
 }
 
 #[test]
-fn long_device_name_wraps_in_details_and_actions_stay_accessible_in_small_window() {
+fn long_device_name_wraps_on_card_and_actions_stay_accessible_in_small_window() {
     let fixture = common::plugin_fixture();
     let path = fixture
         .path()
@@ -81,7 +81,7 @@ fn long_device_name_wraps_in_details_and_actions_stay_accessible_in_small_window
     menu(&mut app, "Window", "Library");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":"Žluťoučký"}));
-    common::wait_visible(&mut app, "Add instrument track");
+    common::wait_library_device(&mut app, name);
     let state = app.inspect();
     let name_rows: Vec<_> = state["label_rects"]
         .as_array()
@@ -92,13 +92,13 @@ fn long_device_name_wraps_in_details_and_actions_stay_accessible_in_small_window
     assert_eq!(
         name_rows.len(),
         2,
-        "catalog and detail title must retain full source name"
+        "card and selection footer must retain full source name"
     );
     assert!(
         name_rows
             .iter()
             .any(|row| row["max"][1].as_f64().unwrap() - row["min"][1].as_f64().unwrap() > 30.0),
-        "detail title should wrap"
+        "card name should wrap"
     );
     let action = state["label_rects"]
         .as_array()

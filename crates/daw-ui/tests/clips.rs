@@ -3,7 +3,7 @@ use egui::{Context, RawInput, Rect, Shape};
 
 #[test]
 fn linked_clone_and_independent_copy_actions_have_distinct_vector_icons() {
-    assert_eq!(Icon::for_label("Create linked clone"), Some(Icon::Link));
+    assert_eq!(Icon::for_label("Ghost copy"), Some(Icon::Link));
     assert_eq!(Icon::for_label("Make independent"), Some(Icon::Unlink));
     assert_eq!(Icon::for_label("Duplicate"), Some(Icon::Duplicate));
 }

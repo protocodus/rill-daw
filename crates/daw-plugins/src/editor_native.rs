@@ -1,10 +1,10 @@
 //! Native editor lifetime and IPC. This module runs only in the isolated helper.
 
-use crate::editor_platform::Platform;
 use crate::{
     ParameterInfo,
     editor::{EditorCommand, EditorEvent},
 };
+use crate::{editor_context_menu::ContextMenuProcess, editor_platform::Platform};
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
 use std::{
@@ -62,9 +62,18 @@ impl SnapshotSchedule {
     }
 }
 
-fn current_parameters(plugin: &Plugin) -> Result<Vec<ParameterInfo>> {
-    Ok(plugin
-        .get_parameters()?
+fn current_parameters(plugin: &mut Plugin) -> Result<Vec<ParameterInfo>> {
+    let parameters = plugin.get_parameters()?;
+    // Configure before the editor opens: some plug-ins copy the host's entries
+    // into their own menu instead of asking us to display a popup. Eligibility is
+    // checked again by the host and when the selected action reaches this helper.
+    let actions = parameters
+        .iter()
+        .filter(|parameter| parameter.can_automate && !parameter.is_read_only)
+        .map(|parameter| (parameter.id, "Automate in Rill".to_owned()))
+        .collect::<Vec<_>>();
+    plugin.set_parameter_context_menu_actions(&actions)?;
+    Ok(parameters
         .into_iter()
         .map(|p| ParameterInfo {
             id: p.id,
@@ -143,7 +152,7 @@ fn save_state(
             emit(
                 output,
                 &EditorEvent::Ready {
-                    parameters: current_parameters(&plugin)?,
+                    parameters: current_parameters(&mut plugin)?,
                 },
             )?;
         }
@@ -204,7 +213,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         );
         plugin.set_parameter(id, value)?;
     }
-    let parameters = current_parameters(&plugin)?;
+    let parameters = current_parameters(&mut plugin)?;
     let mut buffers = plugin.create_bus_audio_buffers(256)?;
     plugin.start_processing()?;
     let title = format!("{} - VST3", plugin.info().name);
@@ -217,6 +226,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
     let mut heartbeat = Instant::now();
     let mut next_process = Instant::now();
     let mut capture: Option<(PathBuf, Instant)> = None;
+    let mut context_menu: Option<ContextMenuProcess> = None;
     let mut closing = None;
     while closing.is_none() {
         for _ in 0..32 {
@@ -281,8 +291,34 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         if closing.is_none() && visible && (window.closed_by_user() || platform.closed_by_user()) {
             closing = Some((true, None));
         }
+        // The native menu has its own process because OS popup calls can run a
+        // nested, blocking event loop. Polling keeps editor IPC and processing
+        // alive for as long as the user leaves a menu open.
+        let menu_result = context_menu.as_mut().and_then(|menu| match menu.poll() {
+            Ok(Some(selection)) => Some((menu.menu_id(), selection)),
+            Ok(None) => None,
+            Err(error) => {
+                eprintln!("Native context menu closed: {error:#}");
+                Some((menu.menu_id(), None))
+            }
+        });
+        let mut menu_requests = Vec::new();
+        let mut automation_requests = Vec::new();
         {
             let mut plugin = plugin.lock().unwrap();
+            if let Some((menu_id, selection)) = menu_result {
+                context_menu = None;
+                let result = match selection.filter(|_| closing.is_none()) {
+                    Some(item_id) => plugin.execute_context_menu_item(menu_id, item_id),
+                    None => plugin.dismiss_context_menu(menu_id),
+                };
+                if let Err(error) = result {
+                    // A preset/reload can invalidate a menu while it is open.
+                    // Cancelling an obsolete menu must not close the editor.
+                    let _ = plugin.dismiss_context_menu(menu_id);
+                    eprintln!("Native context menu action ignored: {error}");
+                }
+            }
             plugin.service_run_loop();
             if Instant::now() >= next_process {
                 plugin.process_bus_audio(&mut buffers)?;
@@ -310,13 +346,29 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                 }
             }
             for notification in plugin.take_host_notifications() {
-                if matches!(
-                    notification,
+                match notification {
                     HostNotification::DirtyChanged(true)
-                        | HostNotification::ProgramListChanged { .. }
-                        | HostNotification::GroupEditFinished
-                ) {
-                    snapshots.edited(Instant::now());
+                    | HostNotification::ProgramListChanged { .. }
+                    | HostNotification::GroupEditFinished => snapshots.edited(Instant::now()),
+                    HostNotification::ContextMenuRequested {
+                        menu_id,
+                        x,
+                        y,
+                        items,
+                        ..
+                    } => {
+                        if visible && closing.is_none() {
+                            menu_requests.push((menu_id, x, y, items));
+                        } else {
+                            let _ = plugin.dismiss_context_menu(menu_id);
+                        }
+                    }
+                    HostNotification::ParameterAutomationRequested { id }
+                        if visible && closing.is_none() =>
+                    {
+                        automation_requests.push(id);
+                    }
+                    _ => {}
                 }
             }
             let flags = plugin.service_host_requests()?;
@@ -325,9 +377,57 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                 || flags.reload_component()
             {
                 snapshots.edited(Instant::now());
+                emit(
+                    output,
+                    &EditorEvent::Ready {
+                        parameters: current_parameters(&mut plugin)?,
+                    },
+                )?;
             }
             if flags.io_changed() {
                 buffers = plugin.create_bus_audio_buffers(256)?;
+            }
+        }
+        for id in automation_requests {
+            // Commit opaque preset changes and queued controller edits before
+            // creating a lane. Otherwise its playback rebuild and Undo entry
+            // could precede an earlier preset change's periodic snapshot.
+            save_state(&plugin, &mut buffers, output, &mut snapshots, None, true)?;
+            let mut plugin = plugin.lock().unwrap();
+            // Never infer a parameter from focus or "last touched". Revalidate
+            // the exact callback ID after the snapshot, then sample its value.
+            if plugin
+                .get_parameters()?
+                .iter()
+                .any(|p| p.id == id && p.can_automate && !p.is_read_only)
+                && let Ok(value) = plugin.get_parameter(id)
+                && value.is_finite()
+                && (0.0..=1.0).contains(&value)
+            {
+                emit(
+                    output,
+                    &EditorEvent::Ready {
+                        parameters: current_parameters(&mut plugin)?,
+                    },
+                )?;
+                emit(output, &EditorEvent::AutomateParameter { id, value })?;
+            }
+        }
+        for (menu_id, x, y, items) in menu_requests {
+            if let Some(previous) = context_menu.take() {
+                let previous_id = previous.menu_id();
+                drop(previous);
+                let _ = plugin.lock().unwrap().dismiss_context_menu(previous_id);
+            }
+            let menu = platform
+                .context_menu_position(&title, x, y)
+                .and_then(|position| ContextMenuProcess::spawn(menu_id, items, position));
+            match menu {
+                Ok(menu) => context_menu = Some(menu),
+                Err(error) => {
+                    let _ = plugin.lock().unwrap().dismiss_context_menu(menu_id);
+                    eprintln!("Unable to display native context menu: {error:#}");
+                }
             }
         }
         if visible && closing.is_none() && snapshots.due(Instant::now()) {
@@ -353,6 +453,11 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
             heartbeat = Instant::now();
         }
         std::thread::sleep(Duration::from_millis(2));
+    }
+    if let Some(menu) = context_menu.take() {
+        let menu_id = menu.menu_id();
+        drop(menu);
+        let _ = plugin.lock().unwrap().dismiss_context_menu(menu_id);
     }
     let (save_requested, request_id) = closing.expect("editor close was requested");
     if save_requested {
