@@ -133,6 +133,29 @@ impl Queue {
         self.read.fetch_add(1, Ordering::Release);
         Some(value)
     }
+    // Caller must own the consumer gate so no inspected slot can be recycled.
+    // The producer may keep publishing into slots beyond this bounded snapshot.
+    fn pending(&self) -> impl Iterator<Item = Event> + '_ {
+        let read = self.read.load(Ordering::Relaxed);
+        let count = self.write.load(Ordering::Acquire).wrapping_sub(read);
+        (0..count).map(move |offset| {
+            let slot = &self.slots[read.wrapping_add(offset) % self.slots.len()];
+            Event {
+                time: slot.time.load(Ordering::Relaxed),
+                data: slot.data.load(Ordering::Relaxed),
+                epoch: slot.epoch.load(Ordering::Relaxed),
+            }
+        })
+    }
+}
+
+/// The callback normally owns the input consumer. After Stop, finalization may
+/// borrow it without waiting; a concurrent callback simply leaves MIDI queued.
+struct ObserverGuard<'a>(&'a AtomicBool);
+impl Drop for ObserverGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 pub(super) struct MidiShared {
@@ -203,6 +226,58 @@ impl MidiShared {
             && self.monitor_requested.load(Ordering::Acquire)
             && self.fault.load(Ordering::Acquire) == 0
     }
+    fn claim_observer(&self) -> Option<ObserverGuard<'_>> {
+        self.observer
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .ok()
+            .map(|_| ObserverGuard(&self.observer))
+    }
+    fn captured_event(&self, event: Event, frames: u64) -> Option<Event> {
+        let sample_rate = u64::from(self.sample_rate.load(Ordering::Relaxed));
+        let anchor = self.anchor_ns.load(Ordering::Relaxed);
+        if !self.started.load(Ordering::Acquire)
+            || event.epoch != self.epoch.load(Ordering::Acquire)
+            || event.time.saturating_add(500_000_000 / sample_rate) < anchor
+        {
+            return None;
+        }
+        let nanos = event.time.saturating_sub(anchor);
+        let frame =
+            ((u128::from(nanos) * u128::from(sample_rate) + 500_000_000) / 1_000_000_000) as u64;
+        (frame < frames).then_some(Event {
+            time: frame,
+            ..event
+        })
+    }
+    fn finish_capture(&self, events: &mut Vec<Event>) -> Option<(u64, u64)> {
+        if self.requested.load(Ordering::SeqCst) {
+            return None;
+        }
+        let _observer = self.claim_observer()?;
+        let frames = self.frames.load(Ordering::Acquire);
+        let start = self.start_sample.load(Ordering::Acquire);
+        let retain = |event, events: &mut Vec<Event>| {
+            if events.len() < MAX_EVENTS {
+                events.push(event);
+            } else {
+                self.fail(3);
+            }
+        };
+        while let Some(event) = self.recorded.pop() {
+            retain(event, events);
+        }
+        // No output callback is required after Stop. Inspect the bounded queue
+        // under its consumer gate, including late input behind future events.
+        // Leave it intact for monitoring; clearing started prevents recapture.
+        for event in self.incoming.pending() {
+            if let Some(event) = self.captured_event(event, frames) {
+                retain(event, events);
+                self.events.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        self.started.store(false, Ordering::Release);
+        Some((frames, start))
+    }
     fn fail(&self, code: usize) {
         let _ = self
             .fault
@@ -263,7 +338,9 @@ impl MidiShared {
         if !self.ready.load(Ordering::Acquire) && !self.requested.load(Ordering::Acquire) {
             return;
         }
-        self.observer.store(true, Ordering::SeqCst);
+        let Some(_observer) = self.claim_observer() else {
+            return;
+        };
         self.sample_rate.store(sample_rate, Ordering::Relaxed);
         self.next_output_ns.store(
             playback_ns + (1_000_000_000 / u64::from(sample_rate)),
@@ -285,6 +362,9 @@ impl MidiShared {
             self.frames.store(0, Ordering::Relaxed);
             self.started.store(true, Ordering::Release);
         }
+        // Stop freezes the range, but callbacks can still deliver timestamps
+        // inside it before finalization. Keep those events without extending it.
+        let capture_frames = self.frames.load(Ordering::Relaxed) + u64::from(capture);
         let epoch = self.epoch.load(Ordering::Acquire);
         while let Some(event) = self.incoming.peek() {
             if event.epoch == epoch && event.time > playback_ns {
@@ -298,21 +378,8 @@ impl MidiShared {
                 self.fail(1);
                 break;
             }
-            let anchor = self.anchor_ns.load(Ordering::Relaxed);
-            if capture
-                && event
-                    .time
-                    .saturating_add(500_000_000 / u64::from(sample_rate))
-                    >= anchor
-            {
-                let nanos = event.time.saturating_sub(anchor);
-                let frame = ((u128::from(nanos) * u128::from(sample_rate) + 500_000_000)
-                    / 1_000_000_000) as u64;
-                if !self.recorded.push(Event {
-                    time: frame,
-                    data: event.data,
-                    epoch,
-                }) {
+            if let Some(event) = self.captured_event(event, capture_frames) {
+                if !self.recorded.push(event) {
                     self.fail(1);
                     break;
                 }
@@ -322,7 +389,6 @@ impl MidiShared {
         if capture {
             self.frames.fetch_add(1, Ordering::Release);
         }
-        self.observer.store(false, Ordering::SeqCst);
     }
 }
 
@@ -902,27 +968,22 @@ impl AudioEngine {
     pub fn take_midi_recording_result(&mut self) -> Option<MidiRecordingResult> {
         self.midi.poll();
         let shared = &self.controls.midi;
-        if shared.requested.load(Ordering::SeqCst) || shared.observer.load(Ordering::SeqCst) {
-            return None;
-        }
-        let mut recording = self.midi.recording.take()?;
-        while let Some(event) = shared.recorded.pop() {
-            if recording.events.len() < MAX_EVENTS {
-                recording.events.push(event);
-            } else {
-                shared.fail(3);
-            }
-        }
-        let frames = shared.frames.load(Ordering::Acquire);
-        let start = shared.start_sample.load(Ordering::Acquire);
+        let (frames, start) = shared.finish_capture(&mut self.midi.recording.as_mut()?.events)?;
+        let recording = self.midi.recording.take().unwrap();
         let mut result = assemble(recording, frames, start, self.sample_rate);
         if let Some(error) = shared.fault_text() {
             result.error = Some(error);
         }
-        shared.started.store(false, Ordering::Release);
         Some(result)
     }
     pub fn inject_virtual_midi(&mut self, bytes: &[u8], offset_frames: u32) -> Result<()> {
+        self.inject_virtual_midi_offset(bytes, i64::from(offset_frames))
+    }
+    /// Simulate a driver callback arriving after its timestamped performance.
+    pub fn inject_virtual_midi_delayed(&mut self, bytes: &[u8], delay_frames: u32) -> Result<()> {
+        self.inject_virtual_midi_offset(bytes, -i64::from(delay_frames))
+    }
+    fn inject_virtual_midi_offset(&mut self, bytes: &[u8], offset_frames: i64) -> Result<()> {
         ensure!(
             self.midi.virtual_input,
             "MIDI injection requires virtual audio mode"
@@ -935,11 +996,18 @@ impl AudioEngine {
             "Virtual MIDI input is not ready"
         );
         ensure!(
-            offset_frames <= self.sample_rate * 60,
+            offset_frames.unsigned_abs() <= u64::from(self.sample_rate) * 60,
             "MIDI offset exceeds one minute"
         );
-        let time = self.controls.input.output_time(None)
-            + (u128::from(offset_frames) * 1_000_000_000 / u128::from(self.sample_rate)) as u64;
+        let delta = (u128::from(offset_frames.unsigned_abs()) * 1_000_000_000
+            / u128::from(self.sample_rate)) as u64;
+        let now = self.controls.input.output_time(None);
+        let time = if offset_frames < 0 {
+            now.checked_sub(delta)
+                .context("MIDI delay precedes the virtual device clock")?
+        } else {
+            now.saturating_add(delta)
+        };
         shared.enqueue(data, time, shared.epoch.load(Ordering::Acquire));
         Ok(())
     }
@@ -1085,9 +1153,8 @@ mod tests {
         loop_range: Option<(u64, u64)>,
     ) -> MidiRecordingResult {
         let mut events = Vec::new();
-        while let Some(event) = shared.recorded.pop() {
-            events.push(event);
-        }
+        shared.requested.store(false, Ordering::SeqCst);
+        let (frames, start) = shared.finish_capture(&mut events).unwrap();
         assemble(
             Recording {
                 routes,
@@ -1095,8 +1162,8 @@ mod tests {
                 tempo: 120.0,
                 loop_range,
             },
-            shared.frames.load(Ordering::Acquire),
-            shared.start_sample.load(Ordering::Acquire),
+            frames,
+            start,
             RATE,
         )
     }
@@ -1171,6 +1238,86 @@ mod tests {
         near(notes[0].start, 100.0 / 24000.0);
         near(notes[0].length, 200.0 / 24000.0);
         near(notes[1].length, 150.0 / 24000.0);
+    }
+    #[test]
+    fn stop_drains_late_input_without_another_output_callback_and_excludes_the_boundary() {
+        let shared = shared();
+        pump(&shared, 100, 600, true);
+        // Delivered after the last output callback, with their original clock.
+        send(&shared, 50, [0x90, 48, 100]); // before capture
+        send(&shared, 200, [0x90, 60, 100]);
+        send(&shared, 300, [0x80, 60, 0]);
+        send(&shared, 450, [0x90, 67, 80]); // held at Stop
+        send(&shared, 600, [0x90, 72, 90]); // exactly at the excluded end
+        let result = result(&shared, vec![route(1, None)], None);
+        let track = &result.tracks[0];
+        assert_eq!(track.notes.len(), 2);
+        near(track.start_beat, 100.0 / 24000.0);
+        near(track.length_beats, 500.0 / 24000.0);
+        assert_eq!(track.notes[0].pitch, 60);
+        near(track.notes[0].start, 100.0 / 24000.0);
+        near(track.notes[0].length, 100.0 / 24000.0);
+        assert_eq!(track.notes[1].pitch, 67);
+        near(track.notes[1].start, 350.0 / 24000.0);
+        near(track.notes[1].length, 150.0 / 24000.0);
+        assert_eq!(shared.incoming.pending().count(), 5);
+        assert_eq!(shared.events.load(Ordering::Relaxed), 3);
+    }
+    #[test]
+    fn stop_retains_delayed_events_behind_a_future_event_without_reordering_monitor_input() {
+        let shared = shared();
+        pump(&shared, 0, 500, true);
+        send(&shared, 700, [0x90, 72, 100]);
+        send(&shared, 200, [0x90, 60, 90]);
+        send(&shared, 300, [0x80, 60, 0]);
+        let result = result(&shared, vec![route(1, None)], None);
+        assert_eq!(result.tracks[0].notes.len(), 1);
+        near(result.tracks[0].notes[0].start, 200.0 / 24000.0);
+        near(result.tracks[0].notes[0].length, 100.0 / 24000.0);
+        assert_eq!(shared.incoming.peek().unwrap().time, at(700));
+        shared.observe_frame(None, RATE, at(700), true);
+        assert!(shared.recorded.pop().is_none());
+        assert_eq!(shared.monitoring.pending().count(), 3);
+    }
+    #[test]
+    fn callback_after_stop_retains_a_delayed_note_off_without_extending_capture() {
+        let shared = shared();
+        send(&shared, 10, [0x90, 60, 100]);
+        pump(&shared, 0, 500, true);
+        shared.requested.store(false, Ordering::SeqCst);
+        send(&shared, 200, [0x80, 60, 0]);
+        send(&shared, 600, [0x90, 72, 100]);
+        shared.observe_frame(None, RATE, at(700), true);
+        let result = result(&shared, vec![route(1, None)], None);
+        let track = &result.tracks[0];
+        assert_eq!(track.notes.len(), 1);
+        near(track.length_beats, 500.0 / 24000.0);
+        near(track.notes[0].start, 10.0 / 24000.0);
+        near(track.notes[0].length, 190.0 / 24000.0);
+        assert_eq!(shared.frames.load(Ordering::Acquire), 500);
+    }
+    #[test]
+    fn stop_consumer_handoff_never_waits_or_pops_concurrently_with_a_callback() {
+        let shared = shared();
+        pump(&shared, 0, 500, true);
+        send(&shared, 100, [0x90, 60, 100]);
+        shared.requested.store(false, Ordering::SeqCst);
+        let callback = shared.claim_observer().unwrap();
+        let mut events = Vec::new();
+        assert!(shared.finish_capture(&mut events).is_none());
+        assert_eq!(shared.incoming.read.load(Ordering::Acquire), 0);
+        drop(callback);
+        // The converse: an output callback never blocks on UI finalization.
+        let finalizer = shared.claim_observer().unwrap();
+        let allocations = crate::allocation_test_support::count_allocations(|| {
+            shared.observe_frame(None, RATE, at(600), true);
+        });
+        assert_eq!(allocations, 0);
+        assert_eq!(shared.incoming.read.load(Ordering::Acquire), 0);
+        drop(finalizer);
+        let result = result(&shared, vec![route(1, None)], None);
+        assert_eq!(result.tracks[0].notes.len(), 1);
+        near(result.tracks[0].notes[0].length, 400.0 / 24000.0);
     }
     #[test]
     fn held_notes_split_at_loop_boundaries_and_every_pass_is_retained() {

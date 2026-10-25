@@ -138,6 +138,7 @@ fn paused_audition_holds_gain_pan_and_send_automation_at_the_cursor() {
                 sample_rate: 8000,
                 tempo: 120.0,
                 timeline: false,
+                live_input: true,
                 meter_decay: 0.0,
             })
             .unwrap();
@@ -162,6 +163,7 @@ fn paused_audition_holds_gain_pan_and_send_automation_at_the_cursor() {
             sample_rate: 8000,
             tempo: 120.0,
             timeline: true,
+            live_input: true,
             meter_decay: 0.0,
         })
         .unwrap();

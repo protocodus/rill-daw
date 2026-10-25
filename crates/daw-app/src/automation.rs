@@ -39,6 +39,8 @@ enum Command {
         bytes: Vec<u8>,
         #[serde(default)]
         offset_frames: u32,
+        #[serde(default)]
+        delay_frames: u32,
     },
     MidiError,
     OutputError,
@@ -675,16 +677,26 @@ impl Harness {
             Command::MidiInput {
                 bytes,
                 offset_frames,
+                delay_frames,
             } => {
                 ensure!(
                     self.app.virtual_audio,
                     "MIDI injection requires virtual audio mode"
                 );
-                self.app
+                ensure!(
+                    offset_frames == 0 || delay_frames == 0,
+                    "Choose either a MIDI offset or a callback delivery delay"
+                );
+                let engine = self
+                    .app
                     .engine
                     .as_mut()
-                    .context("Audio engine is not ready")?
-                    .inject_virtual_midi(&bytes, offset_frames)?;
+                    .context("Audio engine is not ready")?;
+                if delay_frames == 0 {
+                    engine.inject_virtual_midi(&bytes, offset_frames)?;
+                } else {
+                    engine.inject_virtual_midi_delayed(&bytes, delay_frames)?;
+                }
                 self.settle();
             }
             Command::MidiError => {
@@ -1046,6 +1058,14 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["last_error_report"] = self.app.last_error_report.as_ref().map_or(
+            Value::Null,
+            |report| {
+                json!({
+                    "summary": report.summary, "details": report.details, "status": report.status,
+                })
+            },
+        );
         state["revision"] = json!(self.app.revision);
         state["audio_silence"] = crate::audio_silence::diagnostics(&self.ctx);
         state["popups"]["about"] = json!(self.app.about_open);

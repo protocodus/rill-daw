@@ -304,10 +304,31 @@ fn start(app: &mut Harness, counting: bool) -> Value {
     assert_eq!(state["error"], false, "{}", state["status"]);
     state
 }
+#[track_caller]
 fn stop(app: &mut Harness) -> Value {
     app.click("Stop");
     let state = wait(app, |state| state["recording"]["phase"] == "idle");
-    assert_eq!(state["error"], false, "{}", state["status"]);
+    let details = if state["error"] == true
+        && state["visible_labels"]
+            .as_array()
+            .is_some_and(|labels| labels.iter().any(|label| label == "Details"))
+    {
+        // Best-effort UI diagnostics must not replace the original failure.
+        app.raw_command(json!({"command":"click", "label":"Details"}))
+    } else {
+        Value::Null
+    };
+    assert_eq!(
+        state["error"],
+        false,
+        "Recording stop failed: status={}, engine={}, recording={}, retained_error={}, error_details={}, details_response={}",
+        state["status"],
+        state["engine"],
+        state["recording"],
+        state["last_error_report"],
+        state["error_details"],
+        json!({"ok":details["ok"],"error":details["error"],"error_details":details["state"]["error_details"]}),
+    );
     state
 }
 fn midi(app: &mut Harness, frame: usize, bytes: [u8; 3]) -> Value {
@@ -452,6 +473,119 @@ fn selected_midi_channel_records_exact_chords_and_velocities_and_exports_the_ins
             .flat_map(|(_, events)| events)
             .any(|event| event["SendMidiAt"]["event"]["NoteOn"]["note"] == 72)
     );
+    app.quit();
+}
+
+#[test]
+fn stop_retains_callbacks_delivered_after_the_last_audio_pump_at_their_original_timestamps() {
+    let fixture = Fixture::new();
+    let (mut app, track, _) = fixture.app(false, false, false);
+    configure_midi(&mut app, "All channels", "Off", true);
+    start(&mut app, false);
+    midi(&mut app, 100, [0x90, 60, 100]);
+    pump(&mut app, 4000);
+    // A future queue head must not hide subsequently delivered older events.
+    midi(&mut app, 1000, [0x90, 76, 100]);
+    for (delay, bytes) in [
+        (1900, [0x80, 60, 0]),
+        (1000, [0x90, 64, 80]),
+        (500, [0x80, 64, 0]),
+        (250, [0x90, 67, 60]),
+    ] {
+        app.command(json!({"command":"midi_input", "bytes":bytes, "delay_frames":delay}));
+    }
+    // Exact Stop boundary is outside the take. No further output callback runs.
+    midi(&mut app, 0, [0x90, 72, 100]);
+    let state = stop(&mut app);
+    let p = project(&state);
+    let clips = &p.track(track).unwrap().clips;
+    assert_eq!(clips.len(), 1);
+    assert_notes(
+        &clips[0],
+        &[
+            (60, 100, 2000, 100),
+            (64, 3000, 500, 80),
+            (67, 3750, 250, 60),
+        ],
+    );
+    assert!((clips[0].length * BEAT as f64 - 4000.0).abs() < 1e-6);
+    let rendered = export(&mut app, "late-callbacks.wav");
+    for (frame, stereo) in rendered.samples[..8000]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+    {
+        let expected = if (100..2100).contains(&frame) {
+            0.2
+        } else if (3000..3500).contains(&frame) {
+            0.24 * 0.8
+        } else if (3750..4000).contains(&frame) {
+            0.27 * 0.6
+        } else {
+            0.0
+        };
+        near(stereo[0], expected);
+        near(stereo[1], expected);
+    }
+    app.quit();
+}
+
+#[test]
+fn live_midi_chord_keeps_its_voices_and_audio_through_recording_loop_wraps() {
+    let fixture = Fixture::new();
+    let (mut app, track, _) = fixture.app(false, false, true);
+    configure_midi(&mut app, "All channels", "On", true);
+    start(&mut app, false);
+    midi(&mut app, 0, [0x90, 60, 100]);
+    midi(&mut app, 0, [0x90, 64, 50]);
+    let before = pump(&mut app, 4096);
+    settled(&before, 0.32);
+    let workers = fixture.logs();
+    let looping = pump(&mut app, BEAT * 3);
+    assert_eq!(
+        looping["engine"]["engine_id"],
+        before["engine"]["engine_id"]
+    );
+    assert_eq!(
+        looping["engine"]["generation"],
+        before["engine"]["generation"]
+    );
+    for (index, frame) in output(&looping).iter().enumerate() {
+        assert!(
+            frame.iter().all(|sample| (*sample - 0.32).abs() < 1e-5),
+            "Live chord changed at loop frame {index}: {frame:?}; engine={}",
+            looping["engine"]
+        );
+    }
+    let held = fixture.logs();
+    assert_eq!(held.len(), 1);
+    assert_eq!(held[0].0, workers[0].0);
+    for pitch in [60, 64] {
+        assert_eq!(
+            held[0]
+                .1
+                .iter()
+                .filter(|event| event["SendMidiAt"]["event"]["NoteOn"]["note"] == pitch)
+                .count(),
+            1,
+            "Loop wrap restarted live pitch {pitch}"
+        );
+        assert!(
+            held[0]
+                .1
+                .iter()
+                .all(|event| event["SendMidiAt"]["event"]["NoteOff"]["note"] != pitch)
+        );
+    }
+    midi(&mut app, 0, [0x80, 60, 0]);
+    midi(&mut app, 0, [0x80, 64, 0]);
+    settled(&pump(&mut app, 4096), 0.0);
+    let state = stop(&mut app);
+    let p = project(&state);
+    let clips = &p.track(track).unwrap().clips;
+    assert_eq!(clips.len(), 1);
+    assert_eq!(notes(&clips[0]).len(), 8);
     app.quit();
 }
 

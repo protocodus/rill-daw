@@ -252,6 +252,158 @@ fn audio_join_bakes_edits_and_crossfade_once_and_reopens_without_scratch_source(
 }
 
 #[test]
+fn joining_split_loop_recordings_keeps_alternate_takes_undo_and_portable_audio() {
+    let mut app = Harness::with_virtual_audio(None, None);
+    let mut project = Project::new();
+    project.tempo = 120.0;
+    project.loop_enabled = true;
+    project.loop_end = 1.0;
+    let track = project.add_audio_track("Loop capture");
+    project.track_mut(track).unwrap().gain = 1.0;
+    project.track_mut(track).unwrap().audio_input = None;
+    open(&mut app, &project, "Loop capture");
+    app.click("Window");
+    app.click("Recording");
+    app.click("No input");
+    app.click("Mono 1");
+    app.click("Arm recording");
+    app.key("Escape");
+    let wait_recording = |app: &mut Harness, phase: &str| {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let state = app.inspect();
+            assert_eq!(state["error"], false, "{state}");
+            if state["recording"]["phase"] == phase {
+                break state;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Recording did not settle: {state}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    app.click("Record");
+    wait_recording(&mut app, "recording");
+    // Two actual callback/writer passes, with distinguishable ramp samples.
+    let input: Vec<f32> = (0..48000)
+        .flat_map(|frame| {
+            let sample = 0.1 + (frame / 24000) as f32 * 0.2 + (frame % 24000) as f32 / 240000.0;
+            [sample, -sample]
+        })
+        .collect();
+    app.command(json!({"command":"pump_input","channels":2,"samples":input}));
+    app.click("Stop");
+    let recorded = document(&wait_recording(&mut app, "idle"));
+    let retained: Vec<_> = recorded
+        .track(track)
+        .unwrap()
+        .clips
+        .iter()
+        .filter(|clip| clip.is_take_source())
+        .cloned()
+        .collect();
+    assert_eq!(retained.len(), 2);
+    assert_eq!(recorded.track(track).unwrap().clips.len(), 3);
+    let take_samples: Vec<_> = retained
+        .iter()
+        .map(|clip| {
+            let ClipContent::Audio { path, .. } = &clip.content else {
+                unreachable!()
+            };
+            AudioData::load_wav(path).unwrap().samples
+        })
+        .collect();
+    assert_eq!(
+        take_samples[0],
+        input[..24000 * 2]
+            .iter()
+            .step_by(2)
+            .copied()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        take_samples[1],
+        input[24000 * 2..]
+            .iter()
+            .step_by(2)
+            .copied()
+            .collect::<Vec<_>>()
+    );
+    app.click("Window");
+    app.click("Clip Editor");
+    app.key("P");
+    let state = app.inspect();
+    let view = &state["audio_editor"];
+    let x = view["rect"][0].as_f64().unwrap()
+        + (0.5 - view["start_beat"].as_f64().unwrap()) * view["pixels_per_beat"].as_f64().unwrap();
+    let y = (view["rect"][1].as_f64().unwrap() + view["rect"][3].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    app.click("Clip");
+    let split = document(&app.click("Split at cursor"));
+    let group = retained[0].take_group().unwrap();
+    assert_eq!(split.audio_take_regions(track, group).len(), 2);
+    let before = export(&mut app, "split-takes.wav");
+    for (frame, sample) in take_samples[1].iter().take(24000).enumerate() {
+        near(before.samples[frame * 2], f64::from(*sample));
+    }
+    join_dialog(&mut app);
+    app.click("Join");
+    let joined = document(&wait_join(&mut app));
+    joined.validate().unwrap();
+    assert_eq!(
+        joined
+            .audio_take_sources(track, group)
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+        retained
+    );
+    let clips = &joined.track(track).unwrap().clips;
+    let baked = clips.iter().find(|clip| !clip.is_take_source()).unwrap();
+    assert_eq!(clips.len(), 3);
+    assert_eq!((baked.start, baked.length), (0.0, 1.0));
+    assert!(baked.audio_take.is_none());
+    assert_eq!(export(&mut app, "joined-takes.wav").samples, before.samples);
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(document(&undone), split);
+    app.click("Window");
+    app.click("Clip Editor");
+    app.click("Clip");
+    let chooser = app.click("Takes…");
+    assert_eq!(chooser["audio_takes"]["rows"].as_array().unwrap().len(), 2);
+    app.key("Escape");
+    let redone = app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+    assert_eq!(document(&redone), joined);
+    let archive = app.directory.path().join("joined-loop-takes.rill");
+    app.command(json!({"command":"save","path":archive}));
+    for clip in clips {
+        let ClipContent::Audio { path, .. } = &clip.content else {
+            unreachable!()
+        };
+        std::fs::remove_file(path).unwrap();
+    }
+    app = app.restart();
+    let reopened = document(&app.command(json!({"command":"open","path":archive})));
+    reopened.validate().unwrap();
+    for (index, source) in reopened.audio_take_sources(track, group).iter().enumerate() {
+        let ClipContent::Audio { path, .. } = &source.content else {
+            unreachable!()
+        };
+        assert_eq!(
+            AudioData::load_wav(path).unwrap().samples,
+            take_samples[index]
+        );
+    }
+    assert_eq!(reopened.audio_take_sources(track, group).len(), 2);
+    assert_eq!(
+        export(&mut app, "reopened-takes.wav").samples,
+        before.samples
+    );
+    app.quit();
+}
+
+#[test]
 fn audio_join_requires_overlapping_regions_and_cancel_leaves_document_untouched() {
     let mut app = Harness::new();
     let source = app.directory.path().join("constant.wav");

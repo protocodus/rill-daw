@@ -377,8 +377,12 @@ cargo test --locked --release -p daw-app --test midi_recording_e2e
 popup and sends timestamped MIDI bytes through the production input path. It
 checks channel filtering, exact note starts/durations/velocities, chords,
 same-pitch retriggers, velocity-zero note-offs, sustain release, and notes held
-when recording stops. Loop recording splits held notes at the loop boundary and
-merges every pass into a new MIDI clip while preserving existing clips. Undo,
+when recording stops. Delayed callbacks queued after the last output pump keep
+their original note timing, including behind a future event; timestamps at or
+after Stop stay outside the take. Loop recording splits held notes at the loop
+boundary and merges every pass into a new MIDI clip while preserving existing
+clips. Sample and plugin-message checks also require held live voices to remain
+audible across multiple wraps without extra note-on/off messages. Undo,
 portable project recall, input failure/retry, and document/device transitions
 exercise the same capture finalization used by audio recording.
 
@@ -403,7 +407,13 @@ pre-count, and changing Click while playing preserves plugin instances.
 The virtual port ID is `rill-virtual-midi`. Select/arm it through the UI and wait
 for `recording.midi.input_ready` before sending `midi_input`. Offsets are in
 output frames, not UI frames or wall-clock milliseconds; queue messages in time
-order. For pre-count, wait for `recording.phase == "counting_in"` and continue
+order during ordinary playback. To simulate delayed native delivery, send
+`{"command":"midi_input","bytes":[128,60,0],"delay_frames":2400}` after pumping
+the output: its timestamp is 2,400 output frames before the current dummy clock.
+`delay_frames` and `offset_frames` are mutually exclusive, default to zero, and
+are limited to one minute. Stop tests deliberately combine a future event with
+delayed events to check finalization independently of queue timestamp order.
+For pre-count, wait for `recording.phase == "counting_in"` and continue
 pumping the dummy output until capture begins. `pump_audio` accepts up to 8,192
 frames per command, so longer musical spans use multiple calls. These fixtures
 exercise deterministic musical timing and recovery, not hardware latency.

@@ -374,7 +374,9 @@ impl DawApp {
                 self.desired_playing = false;
             }
         }
-        self.status = "Finishing recording…".into();
+        if !self.error {
+            self.status = "Finishing recording…".into();
+        }
     }
 
     fn desired_input(&self) -> InputSettings {
@@ -834,7 +836,7 @@ impl DawApp {
                         )
                     };
                     self.message(Err(anyhow::anyhow!("{error}\n\n{recovery}")), "");
-                } else if !self.recording.failed_input {
+                } else if !self.recording.failed_input && !self.error {
                     self.status = if commits.is_empty() {
                         "Recording cancelled · No input captured".into()
                     } else {
@@ -1152,6 +1154,42 @@ mod tests {
         assert!(!app.recording_busy());
         assert!(app.playing());
         assert!(app.desired_playing);
+    }
+
+    #[test]
+    fn successful_recording_commit_preserves_an_unrelated_active_error_and_its_details() {
+        let (context, mut app, _directory) = midi_app(0);
+        app.begin_recording();
+        app.poll_recording(&context);
+        let engine = app.engine.as_mut().unwrap();
+        engine.inject_virtual_midi(&[0x90, 60, 100], 0).unwrap();
+        engine.pump_virtual(512).unwrap();
+        app.message(
+            Err(anyhow::anyhow!("Isolated worker did not respond")
+                .context("Instrument processing failed")),
+            "",
+        );
+        let status = app.status.clone();
+        app.finish_recording(AfterRecording::Stop);
+        assert_eq!(
+            app.status, status,
+            "Finishing must preserve the actual error"
+        );
+        app.poll_recording(&context);
+        assert!(!app.recording_busy());
+        assert_eq!(app.recording.last_commit["midi_clips"], 1);
+        assert_eq!(app.project.tracks[0].clips.len(), 1);
+        assert!(app.error);
+        assert_eq!(app.status, status);
+        app.show_status_error_details();
+        let details = app.error_details_diagnostics();
+        assert_eq!(details["summary"], "Instrument processing failed");
+        assert!(
+            details["details"]
+                .as_str()
+                .unwrap()
+                .contains("Isolated worker did not respond")
+        );
     }
 
     #[test]

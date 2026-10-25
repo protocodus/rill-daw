@@ -39,6 +39,7 @@ fn midi_tick(renderer: &mut Renderer) -> Vec<(u8, bool, u32)> {
         sample_rate: renderer.sample_rate,
         tempo: renderer.tempo,
         timeline: true,
+        live_input: true,
         meter_decay: 1.0,
     };
     let track = renderer.tracks[0].as_mut().unwrap();
@@ -393,6 +394,7 @@ fn dense_live_note_edits_preserve_pitch_counts_and_apply_without_allocating() {
         sample_rate: 8_000,
         tempo: 120.0,
         timeline: true,
+        live_input: true,
         meter_decay: 1.0,
     };
     let track = renderer.tracks[0].as_mut().unwrap();
@@ -442,6 +444,7 @@ fn dense_pitch_replacement_keeps_note_off_and_note_on_bookkeeping_allocation_fre
         sample_rate: 8_000,
         tempo: project.tempo,
         timeline: true,
+        live_input: true,
         meter_decay: 1.0,
     };
     let track = renderer.tracks[0].as_mut().unwrap();

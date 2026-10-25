@@ -47,6 +47,10 @@ mod quality_tests;
 #[path = "audio_overlap_tests.rs"]
 mod audio_overlap_tests;
 
+#[cfg(test)]
+#[path = "midi_loop_tests.rs"]
+mod midi_loop_tests;
+
 pub(crate) const BLOCK: usize = 256;
 
 #[derive(Clone, Copy)]
@@ -453,6 +457,7 @@ struct BlockContext {
     sample_rate: u32,
     tempo: f64,
     timeline: bool,
+    live_input: bool,
     meter_decay: f32,
 }
 
@@ -522,8 +527,21 @@ impl RenderTrack {
                 self.live_midi[before..=index].rotate_right(1);
             }
         }
-        let live_count = self.live_midi.len();
-        self.midi.append(&mut self.live_midi);
+        // A loop can split one worker block into shorter processing segments.
+        // Keep later input edges for the next segment, in audible sample time.
+        // Latency priming discards output, so it must not consume these edges.
+        let live_count = if context.live_input {
+            self.live_midi
+                .partition_point(|event| event.offset < context.count as u32)
+        } else {
+            0
+        };
+        self.midi.extend(self.live_midi.drain(..live_count));
+        if context.live_input {
+            for event in &mut self.live_midi {
+                event.offset -= context.count as u32;
+            }
+        }
         if context.timeline {
             for event in self.chase.drain(..) {
                 self.midi.push(event.message(0));
@@ -1150,7 +1168,7 @@ impl Renderer {
                 tail_samples,
             )),
         };
-        renderer.seek_sample(0)?;
+        renderer.seek_sample(0, false)?;
         check_cancelled()?;
         Ok(renderer)
     }
@@ -1236,14 +1254,16 @@ impl Renderer {
         // boundaries. Reordering these operations can move a seek one sample.
         let samples_per_beat = self.sample_rate as f64 * 60.0 / self.tempo;
         let sample = (beat * samples_per_beat).round() as u64;
-        self.seek_sample(sample)
+        self.seek_sample(sample, false)
     }
 
-    fn seek_sample(&mut self, sample: u64) -> Result<()> {
+    fn seek_sample(&mut self, sample: u64, loop_wrap: bool) -> Result<()> {
         self.release_end_sample = 0;
         self.end_sample = self.timeline_end_sample;
-        self.audition = None;
-        self.midi_input_notes.clear();
+        if !loop_wrap {
+            self.audition = None;
+            self.midi_input_notes.clear();
+        }
         self.source_sample = sample;
         self.logical_sample = sample;
         for track in self.tracks.iter_mut().flatten() {
@@ -1283,12 +1303,26 @@ impl Renderer {
             }
             track.event_cursor = track.events.partition_point(|event| event.sample < sample);
             track.chase.clear();
+            if loop_wrap {
+                // Looping restarts sequencer notes, not the independent live
+                // input/audition voices already sounding in this instrument.
+                // A whole-instrument reset would kill and retrigger those keys.
+                track
+                    .chase
+                    .extend(track.active_notes.iter().map(|&note| Event {
+                        sample,
+                        note,
+                        on: false,
+                    }));
+            }
             track.active_notes.clear();
             track.active_indices.clear();
-            track.live_midi.clear();
+            if !loop_wrap {
+                track.live_midi.clear();
+            }
             match &mut track.processor {
                 Processor::None => {}
-                Processor::Vst(plugin) if !track.plugin_failed => {
+                Processor::Vst(plugin) if !track.plugin_failed && !loop_wrap => {
                     if let Err(error) = plugin.reset() {
                         if !self.tolerate_plugin_failure {
                             return Err(error);
@@ -1324,7 +1358,7 @@ impl Renderer {
         let mut remaining = self.latency as usize;
         while remaining > 0 {
             let count = remaining.min(BLOCK);
-            self.segment(&mut discard[..count])?;
+            self.segment(&mut discard[..count], false)?;
             remaining -= count;
         }
         // Priming feeds latency compensation, not audible playback. Do not let
@@ -1473,7 +1507,7 @@ impl Renderer {
             self.preview && output.len() == positions.len(),
             "Invalid audition render"
         );
-        self.segment(output)?;
+        self.segment(output, true)?;
         positions.fill(self.logical_sample as f64 / self.sample_rate as f64 * self.tempo / 60.0);
         Ok(())
     }
@@ -1488,7 +1522,7 @@ impl Renderer {
             if let Some((start, end)) = self.loop_range
                 && self.logical_sample >= end
             {
-                self.seek_sample(start)?;
+                self.seek_sample(start, true)?;
             }
             let remaining = self
                 .loop_range
@@ -1496,7 +1530,7 @@ impl Renderer {
                 .unwrap_or(usize::MAX);
             let count = BLOCK.min(output.len() - offset).min(remaining);
             let first_sample = self.logical_sample;
-            self.segment(&mut output[offset..offset + count])?;
+            self.segment(&mut output[offset..offset + count], true)?;
             for (index, position) in positions[offset..offset + count].iter_mut().enumerate() {
                 *position = (first_sample + index as u64 + 1) as f64 / self.sample_rate as f64
                     * self.tempo
@@ -1515,7 +1549,7 @@ impl Renderer {
         }
     }
 
-    fn segment(&mut self, output: &mut [[f32; 2]]) -> Result<()> {
+    fn segment(&mut self, output: &mut [[f32; 2]], live_input: bool) -> Result<()> {
         output.fill([0.0; 2]);
         let mut master = [[0.0_f64; 2]; BLOCK];
         let context = BlockContext {
@@ -1524,6 +1558,7 @@ impl Renderer {
             sample_rate: self.sample_rate,
             tempo: self.tempo,
             timeline: !self.preview,
+            live_input,
             meter_decay: if self.metering {
                 // Instant attack, 24 dB/second release, independent of block size.
                 (-std::f32::consts::LN_10 * 1.2 * output.len() as f32 / self.sample_rate as f32)
