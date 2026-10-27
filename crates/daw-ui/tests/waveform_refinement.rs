@@ -63,7 +63,7 @@ fn envelope_is_one_bounded_stereo_mesh_with_physical_pixel_edge_coverage() {
                 .count(),
             preview.stats.fringe_vertices
         );
-        for strip in mesh.vertices.chunks_exact(4) {
+        for strip in mesh.vertices.as_chunks::<4>().0 {
             assert!(strip.iter().all(|vertex| vertex.pos.is_finite()));
             assert!((strip[0].pos.distance(strip[1].pos) - density.recip()).abs() < 0.0001);
             assert!((strip[3].pos.distance(strip[2].pos) - density.recip()).abs() < 0.0001);
@@ -75,7 +75,7 @@ fn envelope_is_one_bounded_stereo_mesh_with_physical_pixel_edge_coverage() {
                 .iter()
                 .any(|vertex| vertex.color.a() > 0 && (vertex.pos.y - 30.0).abs() < 0.001)
         );
-        for triangle in mesh.indices.chunks_exact(3) {
+        for triangle in mesh.indices.as_chunks::<3>().0 {
             let belongs_to_first = |index: u32| (index as usize) < mesh.vertices.len() / 2;
             assert!(
                 triangle

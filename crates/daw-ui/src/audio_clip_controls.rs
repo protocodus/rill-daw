@@ -26,7 +26,7 @@ pub fn audio_fade_handle(
     let direction = if incoming { -1.0 } else { 1.0 };
     painter.line_segment(
         [center, center + Vec2::new(direction * 6.0, 6.0)],
-        Stroke::new(1.0, foreground),
+        Stroke::new(1.0_f32, foreground),
     );
     response
         .on_hover_cursor(egui::CursorIcon::ResizeHorizontal)

@@ -644,8 +644,8 @@ impl Widget for IconButton {
         if self.role == ButtonRole::View {
             let colors = crate::theme::palette(ui.ctx());
             ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-            ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0, colors.line);
-            ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0, colors.accent);
+            ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
+            ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.accent);
         }
         let native_event_index = self
             .accessible_label

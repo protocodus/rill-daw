@@ -324,7 +324,7 @@ pub fn paint_timeline_ruler(
                     egui::pos2(x, rect.bottom() - length),
                     egui::pos2(x, rect.bottom()),
                 ],
-                egui::Stroke::new(1.0, palette.line),
+                egui::Stroke::new(1.0_f32, palette.line),
             );
         }
     };

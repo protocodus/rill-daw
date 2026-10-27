@@ -206,8 +206,10 @@ pub fn resize_value_at(
             Pos2::new(rect.right(), center.y),
         ),
     };
-    ui.painter()
-        .line_segment([a, b], Stroke::new(if active { 2.0 } else { 1.0 }, color));
+    ui.painter().line_segment(
+        [a, b],
+        Stroke::new(if active { 2.0_f32 } else { 1.0_f32 }, color),
+    );
     response
 }
 
@@ -260,7 +262,7 @@ pub fn paint_bus_badge(painter: &egui::Painter, rect: Rect, tint: egui::Color32)
     painter.rect_stroke(
         rect,
         3.0,
-        Stroke::new(1.0, tint.gamma_multiply(0.6)),
+        Stroke::new(1.0_f32, tint.gamma_multiply(0.6)),
         egui::StrokeKind::Inside,
     );
     crate::text::paint_single_line(
@@ -296,7 +298,7 @@ pub fn track_hierarchy(
         if x < rect.right() {
             painter.line_segment(
                 [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-                Stroke::new(1.0, colors.line),
+                Stroke::new(1.0_f32, colors.line),
             );
         }
     }

@@ -163,7 +163,7 @@ pub fn paint_piano_key_selection(painter: &Painter, rect: Rect) {
     painter.rect_stroke(
         rect.shrink(1.5),
         2.0,
-        Stroke::new(2.0, theme::palette(painter.ctx()).accent),
+        Stroke::new(2.0_f32, theme::palette(painter.ctx()).accent),
         StrokeKind::Inside,
     );
 }

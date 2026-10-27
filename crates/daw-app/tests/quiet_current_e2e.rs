@@ -285,7 +285,7 @@ fn waltz_range_variation_and_fades_survive_portable_recall_and_exact_export() {
             .iter()
             .all(|sample| sample.is_finite() && sample.abs() < 1.0)
     );
-    for bar in preview.samples.chunks_exact(RATE as usize * 4) {
+    for bar in preview.samples.as_chunks::<{ RATE as usize * 4 }>().0 {
         assert!(
             bar.iter()
                 .map(|sample| f64::from(*sample).powi(2))
@@ -296,7 +296,9 @@ fn waltz_range_variation_and_fades_survive_portable_recall_and_exact_export() {
     assert!(
         preview
             .samples
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .any(|frame| (frame[0] - frame[1]).abs() > 0.001)
     );
 

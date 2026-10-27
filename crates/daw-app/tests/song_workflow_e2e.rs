@@ -245,7 +245,11 @@ fn eight_bar_song_can_be_arranged_varied_balanced_and_recalled_without_source_fi
             .all(|sample| sample.is_finite() && sample.abs() < 1.0)
     );
     // Every bar contains real musical output, including the last repeated bar.
-    for bar in preview.samples.chunks_exact(SAMPLE_RATE as usize * 4) {
+    for bar in preview
+        .samples
+        .as_chunks::<{ SAMPLE_RATE as usize * 4 }>()
+        .0
+    {
         let energy: f64 = bar.iter().map(|sample| f64::from(*sample).powi(2)).sum();
         assert!(energy > 1.0, "An arranged bar was silent: {energy}");
     }

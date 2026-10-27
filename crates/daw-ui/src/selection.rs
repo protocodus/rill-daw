@@ -34,7 +34,7 @@ pub fn paint_selection_region(painter: &Painter, region: Rect) {
     painter.rect_stroke(
         region,
         0.0,
-        Stroke::new(1.0, colors.accent),
+        Stroke::new(1.0_f32, colors.accent),
         StrokeKind::Inside,
     );
 }
