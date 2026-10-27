@@ -892,6 +892,7 @@ name = "daw-composer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "daw-core",
  "serde",
  "serde_json",
 ]

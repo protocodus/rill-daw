@@ -67,6 +67,14 @@ Validation rejects nonfinite values, invalid note ranges, duplicate object IDs, 
 
 ## AI and current-song tools
 
+`daw-core::music_theory` is the piano roll's single source for chord and scale
+definitions, spelling, and aliases. The editor's `Chord`/`Scale` choices,
+highlighting, multi-draw, and generator use that catalogue. Full compound
+intervals and cached pitch-class projections serve voicing and one-octave
+drawing respectively. `daw-composer` depends on this core vocabulary for its
+progression and accompaniment calculations; it has no separate catalogue.
+The `generate_part` tool schema is derived from the same editor choices.
+
 `daw-core::commands` provides 65 typed edit variants and atomic `EditBatch`
 application. Batch-local keys let a single operation create a track, populate
 clips, and set musical properties without rediscovering IDs between calls.

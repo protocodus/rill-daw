@@ -8,9 +8,15 @@ ranges, read-only theory queries, instrument/routing preservation, and atomic
 rejection of stale or invalid composition calls. They require no model API key,
 audio device, display, or installed plug-in code.
 
+`shared_theory_e2e` selects expanded chord/scale choices through the piano roll,
+including a deep scrolling menu. It compares editor highlighting, octave
+stacks, Generate previews/commits, and AI tool generation against the shared
+catalogue, while preserving legacy Add9 and scale choices.
+
 ```sh
 cargo test --locked -p daw-composer -p daw-tools
 cargo test --locked -p daw-app --test composer_e2e
+cargo test --locked -p daw-app --test shared_theory_e2e
 ```
 
 Run `bash scripts/test-e2e.sh` locally, or run the same suite in a Linux container:

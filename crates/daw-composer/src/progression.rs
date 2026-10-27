@@ -1,8 +1,8 @@
 //! Diatonic stacked-thirds progressions and upstream's greedy close voicings.
-use crate::catalog::{catalog, find_scale};
-use crate::notes::{LETTER_PCS, Note, degree_steps, parse_note, transpose};
 use crate::{ChordDefinition, MAX_CHORDS, Progression, ProgressionChord};
 use anyhow::{Result, anyhow, ensure};
+use daw_core::music_theory::notes::{LETTER_PCS, Note, degree_steps, parse_note, transpose};
+use daw_core::music_theory::{catalog, find_scale};
 
 /// Resolve integer degree positions in a heptatonic scale, not literal Roman
 /// numerals or modal interchange. The root must carry an octave (C4 = MIDI 60).

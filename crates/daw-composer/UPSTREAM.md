@@ -16,6 +16,13 @@ Rust adaptation. It is not presented as a verbatim upstream license file.
 
 ## Adapted material
 
+The shared catalogue and spelling implementation live in Rill's
+`daw-core/src/music_theory/`. The piano roll owns the canonical `Chord` and
+`Scale` choices over this data; `daw-composer` re-exports and consumes those
+definitions. UI membership is a cached pitch-class projection of the same
+compound intervals used for theoretical voicings. There is no independent
+composition-module catalogue.
+
 The scale and chord vocabulary, interval/degree data, aliases, and descriptions
 come from upstream
 [scales.py](https://github.com/voho/midi-composer-mcp/blob/72a25722f12fed96e8e19c637f0b15260fcb51a7/src/midi_composer_mcp/scales.py)

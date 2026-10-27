@@ -685,24 +685,28 @@ impl DawApp {
                     .response
                     .on_hover_text("Scale and chord root");
                     daw_ui::choice_menu(ui, self.scale.name(), |ui| {
-                        for scale in Scale::ALL {
-                            if daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name())
-                                .changed()
-                            {
-                                ui.close();
+                        daw_ui::command_menu_contents(ui, |ui| {
+                            for scale in Scale::ALL {
+                                if daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name())
+                                    .changed()
+                                {
+                                    ui.close();
+                                }
                             }
-                        }
+                        });
                     })
                     .response
                     .on_hover_text("Blue scale highlights");
                     daw_ui::choice_menu(ui, state.chord.name(), |ui| {
-                        for chord in Chord::ALL {
-                            if daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name())
-                                .changed()
-                            {
-                                ui.close();
+                        daw_ui::command_menu_contents(ui, |ui| {
+                            for chord in Chord::ALL {
+                                if daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name())
+                                    .changed()
+                                {
+                                    ui.close();
+                                }
                             }
-                        }
+                        });
                     })
                     .response
                     .on_hover_text("Bright blue chord highlights");

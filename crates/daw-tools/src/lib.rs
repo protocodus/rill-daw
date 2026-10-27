@@ -614,10 +614,14 @@ fn generator_settings(q: &GenerateArgs) -> Result<GenerateSettings, ToolError> {
         ));
     }
     if let Some(v) = &q.chord {
-        s.harmony = GenerateHarmony::Chord(enum_value(&Chord::ALL, v)?);
+        s.harmony = GenerateHarmony::Chord(
+            Chord::from_name(v).map_err(|e| ToolError::new("invalid_arguments", e.to_string()))?,
+        );
     }
     if let Some(v) = &q.scale {
-        s.harmony = GenerateHarmony::Scale(enum_value(&Scale::ALL, v)?);
+        s.harmony = GenerateHarmony::Scale(
+            Scale::from_name(v).map_err(|e| ToolError::new("invalid_arguments", e.to_string()))?,
+        );
     }
     if let Some(v) = q.start_octave {
         s.start_octave = v;

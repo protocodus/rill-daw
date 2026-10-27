@@ -1,4 +1,5 @@
 use crate::{ToolProfile, ToolSpec};
+use daw_core::{Chord, Scale};
 use serde_json::{Value, json};
 
 fn object(properties: Value, required: &[&str]) -> Value {
@@ -386,26 +387,11 @@ pub fn song_tool_specs() -> Vec<ToolSpec> {
         ("kind", choices(&["chord", "arpeggio", "melody"])),
         (
             "chord",
-            choices(&[
-                "Major",
-                "Minor",
-                "Diminished",
-                "Augmented",
-                "SuspendedSecond",
-                "SuspendedFourth",
-                "DominantSeventh",
-                "MajorSeventh",
-                "MinorSeventh",
-                "HalfDiminished",
-                "DiminishedSeventh",
-                "MajorSixth",
-                "MinorSixth",
-                "AddNine",
-            ]),
+            json!({"type":"string","enum":Chord::ALL.iter().map(|value|format!("{value:?}")).collect::<Vec<_>>()}),
         ),
         (
             "scale",
-            choices(&["Chromatic", "Major", "Minor", "Dorian", "Pentatonic"]),
+            json!({"type":"string","enum":Scale::ALL.iter().map(|value|format!("{value:?}")).collect::<Vec<_>>()}),
         ),
         ("root", integer()),
         ("start_octave", json!({"type":"integer"})),

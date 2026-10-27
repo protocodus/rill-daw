@@ -101,10 +101,12 @@ finishes; poll `document_status` for completion and errors.
 ## Native composition module
 
 The assistant and MCP share six native composition tools from the separate
-`daw-composer` module. The module adapts the scale/chord vocabulary and selected
-deterministic techniques from [midi-composer-mcp](https://github.com/voho/midi-composer-mcp).
-It needs no Python installation or external MCP server. Its 50 scales and 37
-chord types include octave-aware spelling; diatonic progressions support smooth
+`daw-composer` module. It reuses the piano roll's canonical catalogue in
+`daw-core::music_theory`, including its names, aliases, and octave-aware spelling.
+All 50 scales and 37 chords are available to the piano roll, Generate dialog,
+`generate_part`, and composition queries. Selected deterministic techniques
+adapted from [midi-composer-mcp](https://github.com/voho/midi-composer-mcp)
+need no Python installation or external MCP server. Diatonic progressions support smooth
 close voicings, with chord, arpeggio, and bass accompaniment committed together.
 Read [composition tools and examples](COMPOSER.md) for schemas, limits, and the
 exact ported subset.
