@@ -50,7 +50,7 @@ execution must derive from the canonical registry rather than separate lists.
 | `daw-ai` | Background `AgentRun`, provider adapters, bounded tool loop, encrypted credential envelope; sends `ToolCall` events to the app rather than owning a project |
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
 
-The current registry contains **30 tools**, of which **26 are current-song
+The current registry contains **36 tools**, of which **32 are current-song
 tools**, with **65 typed `SongEdit` variants**
 available through `apply_edits`. Its high-level operations avoid one call per
 note, control, or input assignment. This is substantial current-song coverage,
@@ -61,6 +61,8 @@ discovery remains authoritative as the catalog expands.
 | --- | --- |
 | Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`: session/revision, paginated structural data, note data, and nondestructive clip settings |
 | Scope and history | `get_selection`, `set_selection`, `history`: choose objects by stable IDs without changing view; read/undo/redo normal song history |
+| Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
+| Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
 | Musical edits | `apply_edits`, `create_midi_part`, `generate_part`, `transform_phrase`, `set_mix`, `join_clips`: atomic typed batches, complete patterns, seeded generation, phrase transforms, multi-channel settings, and MIDI/audio consolidation |
 | Instruments | `list_plugins`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs, assign instruments/inserts, create notes plus instrument in one commit, and inspect actual parameter metadata |
 | Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, or strip silence with one checked background operation |
@@ -95,6 +97,17 @@ Replacing unsaved work requires `discard_unsaved:true`; native-editor snapshots
 are still acknowledged, and newly revealed changes cause rejection rather than
 a confirmation dialog. Operations may report acceptance before background work
 finishes; poll `document_status` for completion and errors.
+
+## Native composition module
+
+The assistant and MCP share six native composition tools from the separate
+`daw-composer` module. The module adapts the scale/chord vocabulary and selected
+deterministic techniques from [midi-composer-mcp](https://github.com/voho/midi-composer-mcp).
+It needs no Python installation or external MCP server. Its 50 scales and 37
+chord types include octave-aware spelling; diatonic progressions support smooth
+close voicings, with chord, arpeggio, and bass accompaniment committed together.
+Read [composition tools and examples](COMPOSER.md) for schemas, limits, and the
+exact ported subset.
 
 ## Sessions, commands, and execution
 

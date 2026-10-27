@@ -888,6 +888,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "daw-composer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "daw-core"
 version = "0.1.0"
 dependencies = [
@@ -952,6 +961,7 @@ dependencies = [
 name = "daw-tools"
 version = "0.1.0"
 dependencies = [
+ "daw-composer",
  "daw-core",
  "serde",
  "serde_json",

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{error::Error, fmt};
 
+mod composer;
+
 pub const MAX_ARGUMENT_BYTES: usize = 1024 * 1024;
 pub const MAX_QUERY_ITEMS: usize = 256;
 
@@ -35,6 +37,9 @@ impl ToolSpec {
 }
 /// Conservative effect classification for scheduling and revision fencing.
 pub fn tool_effect(name: &str) -> ToolEffect {
+    if composer::is_read(name) {
+        return ToolEffect::Read;
+    }
     match name {
         "get_song_context"
         | "list_tracks"
@@ -310,6 +315,9 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
     name: &str,
     arguments: Value,
 ) -> Result<Value, ToolError> {
+    if composer::handles(name) {
+        return composer::dispatch(host, name, arguments);
+    }
     match name {
         "get_song_context" => {
             #[derive(Deserialize)]

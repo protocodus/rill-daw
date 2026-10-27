@@ -74,7 +74,7 @@ The app's `session_service` validates and commits candidates, records normal
 undo history, reconciles selection/native editors, increments song revision,
 and enters the established engine update path.
 
-`daw-tools` defines one catalog of 30 tool schemas, including 26 current-song
+`daw-tools` defines one catalog of 36 tool schemas, including 32 current-song
 tools and four application tools. Its high-level operations
 include generated phrases, notes-plus-instrument creation, bulk channel edits,
 selection, source-backed audio processing, MIDI/audio joining, and five recording tools. Pure song

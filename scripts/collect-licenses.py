@@ -20,6 +20,19 @@ def main():
     notices.mkdir(parents=True, exist_ok=True)
     rows = []
     inventory = []
+    # The native composer is a workspace crate, so Cargo's dependency scan
+    # below skips it. Retain its adapted upstream attribution in distributions.
+    composer_source = Path(__file__).resolve().parents[1] / "crates/daw-composer"
+    composer_notices = notices / "midi-composer-mcp"
+    composer_notices.mkdir(parents=True, exist_ok=True)
+    copied_composer = []
+    for name in ("UPSTREAM.md", "LICENSE-MIT.txt"):
+        target = composer_notices / name
+        shutil.copyfile(composer_source / name, target)
+        copied_composer.append({"file": str(target.relative_to(destination)), "sha256": hashlib.sha256(target.read_bytes()).hexdigest()})
+    composer_repository = "https://github.com/voho/midi-composer-mcp/tree/72a25722f12fed96e8e19c637f0b15260fcb51a7"
+    rows.append(f'| midi-composer-mcp 0.2.0 (native adaptation) | MIT | {composer_repository} |')
+    inventory.append({"name": "midi-composer-mcp", "version": "0.2.0-native-adaptation", "license": "MIT", "repository": composer_repository, "notices": copied_composer})
     # Fonts embedded by the workspace are not Cargo dependencies. Include their
     # source/attribution and OFL notices in every platform's release archive.
     font_source = Path(__file__).resolve().parents[1] / "crates/daw-ui/assets/fonts"
@@ -83,6 +96,7 @@ def main():
         "# Third-party dependencies\n\n"
         "This inventory records the locked Cargo dependency graph, including platform and development dependencies that may not be linked into this archive. "
         "Available license and notice files from downloaded package sources are included under `licenses/`. "
+        "Native composition tools adapt midi-composer-mcp under MIT; attribution and scope are in `licenses/midi-composer-mcp/`. "
         "Embedded Inter and Noto Sans CJK fonts use SIL OFL 1.1; their licenses and source attribution are in `licenses/rill-fonts/`. "
         "Vendored Signalsmith Stretch and Linear use MIT; both licenses and source provenance are in `licenses/signalsmith-stretch/`. "
         "Bungee Basic and Eigen retain MPL-2.0, PFFFT retains its UCAR/NCAR license, and their exact source and notices are bundled in `licenses/bungee-basic/source.zip`. "
