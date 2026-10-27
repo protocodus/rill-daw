@@ -1,0 +1,13 @@
+{
+  "source_commit": "72a25722f12fed96e8e19c637f0b15260fcb51a7",
+  "progressions": [
+    {"root": "C4","scale_type": "major","degrees": [1,5,6,4],"sevenths": false,"octave": 4,"smooth": false,"symbols": ["C","G","Am","F"],"notes": [["C4","E4","G4"],["G4","B4","D5"],["A4","C5","E5"],["F4","A4","C5"]],"midi": [[60,64,67],[67,71,74],[69,72,76],[65,69,72]]},
+    {"root": "C4","scale_type": "major","degrees": [1,5,6,4],"sevenths": false,"octave": 4,"smooth": true,"symbols": ["C","G","Am","F"],"notes": [["C4","E4","G4"],["B3","D4","G4"],["C4","E4","A4"],["C4","F4","A4"]],"midi": [[60,64,67],[59,62,67],[60,64,69],[60,65,69]]},
+    {"root": "F4","scale_type": "major","degrees": [2,5,1],"sevenths": true,"octave": 4,"smooth": true,"symbols": ["Gm7","C7","Fmaj7"],"notes": [["G4","Bb4","D5","F5"],["G4","Bb4","C5","E5"],["F4","A4","C5","E5"]],"midi": [[67,70,74,77],[67,70,72,76],[65,69,72,76]]},
+    {"root": "D4","scale_type": "natural minor","degrees": [1,6,3,7],"sevenths": false,"octave": 4,"smooth": true,"symbols": ["Dm","Bb","F","C"],"notes": [["D4","F4","A4"],["D4","F4","Bb4"],["C4","F4","A4"],["C4","E4","G4"]],"midi": [[62,65,69],[62,65,70],[60,65,69],[60,64,67]]},
+    {"root": "A4","scale_type": "harmonic minor","degrees": [1,4,5,1],"sevenths": false,"octave": 4,"smooth": true,"symbols": ["Am","Dm","E","Am"],"notes": [["A4","C5","E5"],["A4","D5","F5"],["G#4","B4","E5"],["A4","C5","E5"]],"midi": [[69,72,76],[69,74,77],[68,71,76],[69,72,76]]},
+    {"root": "Eb4","scale_type": "major","degrees": [1,4,2,5,1],"sevenths": true,"octave": 4,"smooth": true,"symbols": ["Ebmaj7","Abmaj7","Fm7","Bb7","Ebmaj7"],"notes": [["Eb4","G4","Bb4","D5"],["Eb4","G4","Ab4","C5"],["Eb4","F4","Ab4","C5"],["D4","F4","Ab4","Bb4"],["D4","Eb4","G4","Bb4"]],"midi": [[63,67,70,74],[63,67,68,72],[63,65,68,72],[62,65,68,70],[62,63,67,70]]},
+    {"root": "D4","scale_type": "dorian","degrees": [1,4,7,1],"sevenths": false,"octave": 4,"smooth": true,"symbols": ["Dm","G","C","Dm"],"notes": [["D4","F4","A4"],["D4","G4","B4"],["E4","G4","C5"],["F4","A4","D5"]],"midi": [[62,65,69],[62,67,71],[64,67,72],[65,69,74]]},
+    {"root": "Gb4","scale_type": "major","degrees": [1,6,2,5],"sevenths": true,"octave": 4,"smooth": false,"symbols": ["Gbmaj7","Ebm7","Abm7","Db7"],"notes": [["Gb4","Bb4","Db5","F5"],["Eb5","Gb5","Bb5","Db6"],["Ab4","Cb5","Eb5","Gb5"],["Db5","F5","Ab5","Cb6"]],"midi": [[66,70,73,77],[75,78,82,85],[68,71,75,78],[73,77,80,83]]}
+  ]
+}

@@ -1,5 +1,18 @@
 # Application E2E tests
 
+`composer_e2e` exercises the native composition module through the running
+assistant and MCP boundary. A deterministic provider fixture creates chord,
+arpeggio, and bass clips in one history entry; pointer-driven Undo/Redo checks
+the same song state. The scenarios verify exact pitches/timing, full clip
+ranges, read-only theory queries, instrument/routing preservation, and atomic
+rejection of stale or invalid composition calls. They require no model API key,
+audio device, display, or installed plug-in code.
+
+```sh
+cargo test --locked -p daw-composer -p daw-tools
+cargo test --locked -p daw-app --test composer_e2e
+```
+
 Run `bash scripts/test-e2e.sh` locally, or run the same suite in a Linux container:
 
 ```sh

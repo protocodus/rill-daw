@@ -1,0 +1,13 @@
+{
+  "source_commit": "72a25722f12fed96e8e19c637f0b15260fcb51a7",
+  "rhythms": [
+    {"pattern": "O..o..o.","pulses": 3,"steps": 8,"rotation": 0,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [0,3,6]},
+    {"pattern": "O.oo.oo.","pulses": 5,"steps": 8,"rotation": 0,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [0,2,3,5,6]},
+    {"pattern": "..O..o..o..o...o","pulses": 5,"steps": 16,"rotation": 1,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [2,5,8,11,15]},
+    {"pattern": "O.o.oo.o.oo.","pulses": 7,"steps": 12,"rotation": -2,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [0,2,4,5,7,9,10]},
+    {"pattern": "........","pulses": 0,"steps": 8,"rotation": 0,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": []},
+    {"pattern": "Oooooooo","pulses": 8,"steps": 8,"rotation": 0,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [0,1,2,3,4,5,6,7]},
+    {"pattern": "O","pulses": 1,"steps": 1,"rotation": 0,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [0]},
+    {"pattern": "O..o.o..","pulses": 3,"steps": 8,"rotation": 11,"legend": {"O": "strong beat","o": "weak beat",".": "pause"},"onset_positions": [0,3,5]}
+  ]
+}

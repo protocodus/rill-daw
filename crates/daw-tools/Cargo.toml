@@ -7,5 +7,6 @@ rust-version.workspace = true
 
 [dependencies]
 daw-core.workspace = true
+daw-composer.workspace = true
 serde.workspace = true
 serde_json.workspace = true

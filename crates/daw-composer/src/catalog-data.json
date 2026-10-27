@@ -1,0 +1,2007 @@
+{
+  "scales": [
+    {
+      "name": "major",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        7,
+        9,
+        11
+      ],
+      "aliases": [
+        "ionian",
+        "maj"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "description": "The standard major scale (do-re-mi); bright, stable, and the bedrock of Western tonal music."
+    },
+    {
+      "name": "dorian",
+      "intervals": [
+        0,
+        2,
+        3,
+        5,
+        7,
+        9,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "4",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "A minor mode with a bright raised 6th; the hopeful, jazzy minor of folk and modal jazz."
+    },
+    {
+      "name": "phrygian",
+      "intervals": [
+        0,
+        1,
+        3,
+        5,
+        7,
+        8,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "4",
+        "5",
+        "b6",
+        "b7"
+      ],
+      "description": "A minor mode with a flat 2nd; dark and tense, with a Spanish/flamenco undercurrent."
+    },
+    {
+      "name": "lydian",
+      "intervals": [
+        0,
+        2,
+        4,
+        6,
+        7,
+        9,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "#4",
+        "5",
+        "6",
+        "7"
+      ],
+      "description": "A major mode with a raised 4th; dreamy, floating and luminous, a film-score favorite."
+    },
+    {
+      "name": "mixolydian",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        7,
+        9,
+        10
+      ],
+      "aliases": [
+        "dominant scale"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "A major mode with a flat 7th; the dominant-7th sound of blues, rock, funk and Celtic music."
+    },
+    {
+      "name": "natural minor",
+      "intervals": [
+        0,
+        2,
+        3,
+        5,
+        7,
+        8,
+        10
+      ],
+      "aliases": [
+        "minor",
+        "min",
+        "aeolian"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "4",
+        "5",
+        "b6",
+        "b7"
+      ],
+      "description": "The standard minor scale and relative minor of the major scale; wistful and melancholic."
+    },
+    {
+      "name": "locrian",
+      "intervals": [
+        0,
+        1,
+        3,
+        5,
+        6,
+        8,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "4",
+        "b5",
+        "b6",
+        "b7"
+      ],
+      "description": "A diminished mode with flat 2nd and flat 5th; unstable and rarely a tonic, home of the m7b5 chord."
+    },
+    {
+      "name": "harmonic minor",
+      "intervals": [
+        0,
+        2,
+        3,
+        5,
+        7,
+        8,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "4",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "Natural minor with a raised 7th, adding a strong leading tone and a dramatic augmented-2nd step."
+    },
+    {
+      "name": "melodic minor",
+      "intervals": [
+        0,
+        2,
+        3,
+        5,
+        7,
+        9,
+        11
+      ],
+      "aliases": [
+        "jazz minor",
+        "melodic minor ascending"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "description": "Natural minor with raised 6th and 7th; smooths melodies to the tonic and is the parent scale of much jazz."
+    },
+    {
+      "name": "dorian b2",
+      "intervals": [
+        0,
+        1,
+        3,
+        5,
+        7,
+        9,
+        10
+      ],
+      "aliases": [
+        "phrygian #6",
+        "assyrian"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "4",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "The 2nd mode of melodic minor; dorian brightness over a phrygian flat-2nd, restless and exotic."
+    },
+    {
+      "name": "lydian augmented",
+      "intervals": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        9,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "#4",
+        "#5",
+        "6",
+        "7"
+      ],
+      "description": "The 3rd mode of melodic minor; a lydian scale with a raised 5th, shimmering and unresolved."
+    },
+    {
+      "name": "lydian dominant",
+      "intervals": [
+        0,
+        2,
+        4,
+        6,
+        7,
+        9,
+        10
+      ],
+      "aliases": [
+        "lydian b7",
+        "mixolydian #4",
+        "overtone",
+        "acoustic"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "#4",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "The 4th mode of melodic minor: a dominant scale with a raised 4th, matching the natural overtone series."
+    },
+    {
+      "name": "mixolydian b6",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        7,
+        8,
+        10
+      ],
+      "aliases": [
+        "melodic major",
+        "hindu"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "b6",
+        "b7"
+      ],
+      "description": "Mixolydian with a flat 6th; a dominant scale that leans melancholy, good moving to minor."
+    },
+    {
+      "name": "locrian #2",
+      "intervals": [
+        0,
+        2,
+        3,
+        5,
+        6,
+        8,
+        10
+      ],
+      "aliases": [
+        "half-diminished scale",
+        "aeolian b5"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "4",
+        "b5",
+        "b6",
+        "b7"
+      ],
+      "description": "The 6th mode of melodic minor; locrian with a natural 2nd, the smoothest scale for m7b5 chords."
+    },
+    {
+      "name": "altered",
+      "intervals": [
+        0,
+        1,
+        3,
+        4,
+        6,
+        8,
+        10
+      ],
+      "aliases": [
+        "super locrian",
+        "altered dominant",
+        "diminished whole tone"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6",
+        "b7"
+      ],
+      "description": "The 7th mode of melodic minor; packed with every altered tension (b9 #9 #11 b13) for maximally tense dominants."
+    },
+    {
+      "name": "harmonic major",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        7,
+        8,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "Major with a flat 6th; blends major brightness with a touch of minor shadow and an augmented-2nd step."
+    },
+    {
+      "name": "phrygian dominant",
+      "intervals": [
+        0,
+        1,
+        4,
+        5,
+        7,
+        8,
+        10
+      ],
+      "aliases": [
+        "spanish phrygian",
+        "freygish",
+        "ahava raba"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "3",
+        "4",
+        "5",
+        "b6",
+        "b7"
+      ],
+      "description": "The 5th mode of harmonic minor; a major 3rd over a phrygian b2, the sound of flamenco and Klezmer."
+    },
+    {
+      "name": "double harmonic",
+      "intervals": [
+        0,
+        1,
+        4,
+        5,
+        7,
+        8,
+        11
+      ],
+      "aliases": [
+        "byzantine",
+        "arabic",
+        "gypsy major"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "3",
+        "4",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "Two augmented 2nds give this scale a vivid Middle-Eastern/Byzantine character."
+    },
+    {
+      "name": "hungarian minor",
+      "intervals": [
+        0,
+        2,
+        3,
+        6,
+        7,
+        8,
+        11
+      ],
+      "aliases": [
+        "gypsy minor"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "#4",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "Harmonic minor with a raised 4th; the gypsy-minor scale with two dramatic augmented 2nds."
+    },
+    {
+      "name": "hungarian major",
+      "intervals": [
+        0,
+        3,
+        4,
+        6,
+        7,
+        9,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "#2",
+        "3",
+        "#4",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "A bright, fiery scale opening on a raised 2nd and carrying a flat 7th; rooted in Hungarian folk music."
+    },
+    {
+      "name": "neapolitan minor",
+      "intervals": [
+        0,
+        1,
+        3,
+        5,
+        7,
+        8,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "4",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "Harmonic minor with a flat 2nd; somber and exotic, resolving with a strong leading tone."
+    },
+    {
+      "name": "neapolitan major",
+      "intervals": [
+        0,
+        1,
+        3,
+        5,
+        7,
+        9,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "description": "Melodic minor with a flat 2nd; smooth and slightly unusual, major on top of a phrygian start."
+    },
+    {
+      "name": "persian",
+      "intervals": [
+        0,
+        1,
+        4,
+        5,
+        6,
+        8,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "3",
+        "4",
+        "b5",
+        "b6",
+        "7"
+      ],
+      "description": "A flat-2nd, flat-5th scale with two augmented 2nds; intensely ornamental and Middle-Eastern."
+    },
+    {
+      "name": "ukrainian dorian",
+      "intervals": [
+        0,
+        2,
+        3,
+        6,
+        7,
+        9,
+        10
+      ],
+      "aliases": [
+        "romanian minor",
+        "altered dorian"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "#4",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "Dorian with a raised 4th; plaintive and folk-like across Eastern European and Klezmer music."
+    },
+    {
+      "name": "enigmatic",
+      "intervals": [
+        0,
+        1,
+        4,
+        6,
+        8,
+        10,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "3",
+        "#4",
+        "#5",
+        "#6",
+        "7"
+      ],
+      "description": "Verdi's invented scale mixing whole tones with leading tones; strange, bright and unresolved."
+    },
+    {
+      "name": "major pentatonic",
+      "intervals": [
+        0,
+        2,
+        4,
+        7,
+        9
+      ],
+      "aliases": [
+        "pentatonic",
+        "pentatonic major"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "5",
+        "6"
+      ],
+      "description": "A five-note major scale with no semitones; open, singable and consonant in any combination."
+    },
+    {
+      "name": "minor pentatonic",
+      "intervals": [
+        0,
+        3,
+        5,
+        7,
+        10
+      ],
+      "aliases": [
+        "pentatonic minor"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "4",
+        "5",
+        "b7"
+      ],
+      "description": "The five-note minor scale at the core of blues, rock and pop soloing."
+    },
+    {
+      "name": "blues",
+      "intervals": [
+        0,
+        3,
+        5,
+        6,
+        7,
+        10
+      ],
+      "aliases": [
+        "minor blues",
+        "blues minor"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "4",
+        "b5",
+        "5",
+        "b7"
+      ],
+      "description": "Minor pentatonic plus a chromatic 'blue note' (b5); the gritty, vocal sound of the blues."
+    },
+    {
+      "name": "major blues",
+      "intervals": [
+        0,
+        2,
+        3,
+        4,
+        7,
+        9
+      ],
+      "aliases": [
+        "blues major"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "3",
+        "5",
+        "6"
+      ],
+      "description": "Major pentatonic with an added b3 blue note; bright yet bluesy, common in country and rock."
+    },
+    {
+      "name": "egyptian",
+      "intervals": [
+        0,
+        2,
+        5,
+        7,
+        10
+      ],
+      "aliases": [
+        "suspended pentatonic"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "4",
+        "5",
+        "b7"
+      ],
+      "description": "A suspended-sounding mode of the major pentatonic built on stacked 4ths and 5ths; open and unresolved."
+    },
+    {
+      "name": "whole tone",
+      "intervals": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ],
+      "aliases": [
+        "wholetone",
+        "messiaen mode 1",
+        "messiaen 1"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "#4",
+        "#5",
+        "b7"
+      ],
+      "description": "Six notes a whole step apart; dreamlike and rootless with no leading tone, beloved by Debussy."
+    },
+    {
+      "name": "augmented",
+      "intervals": [
+        0,
+        3,
+        4,
+        7,
+        8,
+        11
+      ],
+      "aliases": [
+        "symmetric augmented"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "3",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "A six-note symmetric scale alternating minor 3rds and half steps; stark and built from two augmented triads."
+    },
+    {
+      "name": "diminished whole-half",
+      "intervals": [
+        0,
+        2,
+        3,
+        5,
+        6,
+        8,
+        9,
+        11
+      ],
+      "aliases": [
+        "diminished",
+        "octatonic",
+        "whole-half diminished"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "4",
+        "b5",
+        "b6",
+        "6",
+        "7"
+      ],
+      "description": "An eight-note symmetric scale alternating whole and half steps; played over diminished-7th chords."
+    },
+    {
+      "name": "diminished half-whole",
+      "intervals": [
+        0,
+        1,
+        3,
+        4,
+        6,
+        7,
+        9,
+        10
+      ],
+      "aliases": [
+        "dominant diminished",
+        "half-whole diminished",
+        "messiaen mode 2",
+        "messiaen 2"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "3",
+        "b5",
+        "5",
+        "6",
+        "b7"
+      ],
+      "description": "The octatonic scale starting with a half step; the go-to choice over dominant 7b9/#9 chords."
+    },
+    {
+      "name": "prometheus",
+      "intervals": [
+        0,
+        2,
+        4,
+        6,
+        9,
+        10
+      ],
+      "aliases": [
+        "mystic"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "#4",
+        "6",
+        "b7"
+      ],
+      "description": "Scriabin's six-note 'mystic' scale built from the mystic chord; hovering, ambiguous and tense."
+    },
+    {
+      "name": "messiaen mode 3",
+      "intervals": [
+        0,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8,
+        10,
+        11
+      ],
+      "aliases": [
+        "messiaen 3"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "3",
+        "b5",
+        "5",
+        "b6",
+        "b7",
+        "7"
+      ],
+      "description": "Messiaen's third mode of limited transposition: nine notes, only four transpositions; luminous and chromatic."
+    },
+    {
+      "name": "messiaen mode 4",
+      "intervals": [
+        0,
+        1,
+        2,
+        5,
+        6,
+        7,
+        8,
+        11
+      ],
+      "aliases": [
+        "messiaen 4"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "2",
+        "4",
+        "b5",
+        "5",
+        "b6",
+        "7"
+      ],
+      "description": "Messiaen's fourth mode: two chromatic clusters a tritone apart; six transpositions, hushed and mysterious."
+    },
+    {
+      "name": "messiaen mode 5",
+      "intervals": [
+        0,
+        1,
+        5,
+        6,
+        7,
+        11
+      ],
+      "aliases": [
+        "messiaen 5"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "4",
+        "b5",
+        "5",
+        "7"
+      ],
+      "description": "Messiaen's fifth mode: a sparse six-note subset of mode 4; stark and bell-like."
+    },
+    {
+      "name": "messiaen mode 6",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        6,
+        8,
+        10,
+        11
+      ],
+      "aliases": [
+        "messiaen 6"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "b5",
+        "b6",
+        "b7",
+        "7"
+      ],
+      "description": "Messiaen's sixth mode: whole tones with added semitones, repeating at the tritone; bright and unstable."
+    },
+    {
+      "name": "messiaen mode 7",
+      "intervals": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8,
+        9,
+        11
+      ],
+      "aliases": [
+        "messiaen 7"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "2",
+        "b3",
+        "4",
+        "b5",
+        "5",
+        "b6",
+        "6",
+        "7"
+      ],
+      "description": "Messiaen's seventh mode: ten notes repeating at the tritone; dense, iridescent harmony."
+    },
+    {
+      "name": "bebop dominant",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        7,
+        9,
+        10,
+        11
+      ],
+      "aliases": [
+        "bebop"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "b7",
+        "7"
+      ],
+      "description": "Mixolydian plus a passing major 7th; the extra note keeps chord tones on the beat in fast bebop lines."
+    },
+    {
+      "name": "bebop major",
+      "intervals": [
+        0,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "b6",
+        "6",
+        "7"
+      ],
+      "description": "The major scale with a passing b6 (#5); aligns chord tones to strong beats over major harmony."
+    },
+    {
+      "name": "spanish 8-tone",
+      "intervals": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        8,
+        10
+      ],
+      "aliases": [
+        "spanish gypsy",
+        "jewish 8-tone"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "3",
+        "4",
+        "b5",
+        "b6",
+        "b7"
+      ],
+      "description": "An eight-note flamenco scale extending phrygian dominant with chromatic passing tones for both 3rds."
+    },
+    {
+      "name": "hirajoshi",
+      "intervals": [
+        0,
+        2,
+        3,
+        7,
+        8
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "5",
+        "b6"
+      ],
+      "description": "A Japanese pentatonic with two semitone steps; sparse, dark and contemplative on koto and shakuhachi."
+    },
+    {
+      "name": "in sen",
+      "intervals": [
+        0,
+        1,
+        5,
+        7,
+        10
+      ],
+      "aliases": [
+        "in",
+        "insen"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "4",
+        "5",
+        "b7"
+      ],
+      "description": "A dark Japanese pentatonic built on the flat 2nd; haunting and traditional."
+    },
+    {
+      "name": "iwato",
+      "intervals": [
+        0,
+        1,
+        5,
+        6,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "4",
+        "b5",
+        "b7"
+      ],
+      "description": "A somber Japanese pentatonic with two tritone-flavored tensions; tense and shadowy."
+    },
+    {
+      "name": "kumoi",
+      "intervals": [
+        0,
+        2,
+        3,
+        7,
+        9
+      ],
+      "aliases": [
+        "kumoijoshi"
+      ],
+      "degrees": [
+        "1",
+        "2",
+        "b3",
+        "5",
+        "6"
+      ],
+      "description": "A Japanese pentatonic with a bright opening and minor color; delicate and evocative."
+    },
+    {
+      "name": "yo",
+      "intervals": [
+        0,
+        2,
+        5,
+        7,
+        9
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "4",
+        "5",
+        "6"
+      ],
+      "description": "A bright, semitone-free Japanese pentatonic used in folk songs and Buddhist chant."
+    },
+    {
+      "name": "balinese pelog",
+      "intervals": [
+        0,
+        1,
+        3,
+        7,
+        8
+      ],
+      "aliases": [
+        "pelog"
+      ],
+      "degrees": [
+        "1",
+        "b2",
+        "b3",
+        "5",
+        "b6"
+      ],
+      "description": "A five-note scale approximating Indonesian gamelan pelog tuning in 12-tone equal temperament; exotic and uneven."
+    },
+    {
+      "name": "chromatic",
+      "intervals": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "b2",
+        "2",
+        "b3",
+        "3",
+        "4",
+        "b5",
+        "5",
+        "b6",
+        "6",
+        "b7",
+        "7"
+      ],
+      "description": "All twelve semitones; not a tonal scale but the complete palette for passing tones and atonal writing."
+    }
+  ],
+  "chords": [
+    {
+      "name": "major",
+      "intervals": [
+        0,
+        4,
+        7
+      ],
+      "aliases": [
+        "maj",
+        "M"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5"
+      ],
+      "suffix": "",
+      "description": "The bright, stable major triad: root, major 3rd, perfect 5th."
+    },
+    {
+      "name": "minor",
+      "intervals": [
+        0,
+        3,
+        7
+      ],
+      "aliases": [
+        "min",
+        "-"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5"
+      ],
+      "suffix": "m",
+      "description": "The dark, sad minor triad: root, minor 3rd, perfect 5th."
+    },
+    {
+      "name": "diminished",
+      "intervals": [
+        0,
+        3,
+        6
+      ],
+      "aliases": [
+        "°",
+        "o"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "b5"
+      ],
+      "suffix": "dim",
+      "description": "A tense triad of stacked minor 3rds (minor 3rd plus flat 5th) that wants to resolve."
+    },
+    {
+      "name": "augmented",
+      "intervals": [
+        0,
+        4,
+        8
+      ],
+      "aliases": [
+        "+"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "#5"
+      ],
+      "suffix": "aug",
+      "description": "An unstable, symmetrical triad of stacked major 3rds (major 3rd plus sharp 5th); dreamlike."
+    },
+    {
+      "name": "power chord",
+      "intervals": [
+        0,
+        7
+      ],
+      "aliases": [
+        "power"
+      ],
+      "degrees": [
+        "1",
+        "5"
+      ],
+      "suffix": "5",
+      "description": "Just the root and 5th, no 3rd; neither major nor minor, the staple of rock and metal."
+    },
+    {
+      "name": "suspended 2",
+      "intervals": [
+        0,
+        2,
+        7
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "5"
+      ],
+      "suffix": "sus2",
+      "description": "A suspended triad replacing the 3rd with the 2nd; open and unresolved."
+    },
+    {
+      "name": "suspended 4",
+      "intervals": [
+        0,
+        5,
+        7
+      ],
+      "aliases": [
+        "sus"
+      ],
+      "degrees": [
+        "1",
+        "4",
+        "5"
+      ],
+      "suffix": "sus4",
+      "description": "A suspended triad replacing the 3rd with the 4th; tense, wanting to fall to the major 3rd."
+    },
+    {
+      "name": "major 6",
+      "intervals": [
+        0,
+        4,
+        7,
+        9
+      ],
+      "aliases": [
+        "maj6",
+        "M6"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "6"
+      ],
+      "suffix": "6",
+      "description": "A major triad plus the 6th; sweet and nostalgic, common in jazz and swing."
+    },
+    {
+      "name": "minor 6",
+      "intervals": [
+        0,
+        3,
+        7,
+        9
+      ],
+      "aliases": [
+        "min6"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "6"
+      ],
+      "suffix": "m6",
+      "description": "A minor triad plus a major 6th; bittersweet, a favorite in jazz and bossa nova."
+    },
+    {
+      "name": "dominant 7",
+      "intervals": [
+        0,
+        4,
+        7,
+        10
+      ],
+      "aliases": [
+        "dom7"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7"
+      ],
+      "suffix": "7",
+      "description": "A major triad plus a flat 7th; restless and bluesy, the engine of tension and release."
+    },
+    {
+      "name": "major 7",
+      "intervals": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "aliases": [
+        "M7",
+        "ma7",
+        "Δ",
+        "Δ7"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "7"
+      ],
+      "suffix": "maj7",
+      "description": "A major triad plus a major 7th; lush, warm and dreamy."
+    },
+    {
+      "name": "minor 7",
+      "intervals": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "aliases": [
+        "min7",
+        "-7"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "b7"
+      ],
+      "suffix": "m7",
+      "description": "A minor triad plus a flat 7th; smooth and mellow, the workhorse of jazz and soul."
+    },
+    {
+      "name": "minor major 7",
+      "intervals": [
+        0,
+        3,
+        7,
+        11
+      ],
+      "aliases": [
+        "mM7",
+        "minmaj7",
+        "m(maj7)",
+        "mΔ7",
+        "mΔ"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "7"
+      ],
+      "suffix": "mMaj7",
+      "description": "A minor triad with a major 7th; haunting and noir, famous from spy and horror themes."
+    },
+    {
+      "name": "diminished 7",
+      "intervals": [
+        0,
+        3,
+        6,
+        9
+      ],
+      "aliases": [
+        "°7",
+        "o7"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "b5",
+        "bb7"
+      ],
+      "suffix": "dim7",
+      "description": "Four stacked minor 3rds; fully symmetrical, maximally tense and endlessly modulating."
+    },
+    {
+      "name": "half-diminished",
+      "intervals": [
+        0,
+        3,
+        6,
+        10
+      ],
+      "aliases": [
+        "ø",
+        "ø7",
+        "min7b5",
+        "m7(b5)",
+        "half-diminished 7"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "b5",
+        "b7"
+      ],
+      "suffix": "m7b5",
+      "description": "A diminished triad plus a flat 7th; the classic ii of a minor key, darker than m7 but softer than dim7."
+    },
+    {
+      "name": "augmented 7",
+      "intervals": [
+        0,
+        4,
+        8,
+        10
+      ],
+      "aliases": [
+        "aug7",
+        "+7",
+        "7+",
+        "7aug"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "#5",
+        "b7"
+      ],
+      "suffix": "7#5",
+      "description": "A dominant 7th with a raised 5th; an altered dominant that pulls hard toward resolution."
+    },
+    {
+      "name": "augmented major 7",
+      "intervals": [
+        0,
+        4,
+        8,
+        11
+      ],
+      "aliases": [
+        "augmaj7",
+        "+M7"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "#5",
+        "7"
+      ],
+      "suffix": "maj7#5",
+      "description": "A major 7th with a raised 5th; shimmering and unstable."
+    },
+    {
+      "name": "dominant 7 flat 5",
+      "intervals": [
+        0,
+        4,
+        6,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "3",
+        "b5",
+        "b7"
+      ],
+      "suffix": "7b5",
+      "description": "A dominant 7th with a lowered 5th; whole-tone flavored and tense."
+    },
+    {
+      "name": "dominant 7 sus 4",
+      "intervals": [
+        0,
+        5,
+        7,
+        10
+      ],
+      "aliases": [
+        "7sus"
+      ],
+      "degrees": [
+        "1",
+        "4",
+        "5",
+        "b7"
+      ],
+      "suffix": "7sus4",
+      "description": "A dominant 7th with a suspended 4th instead of the 3rd; a soulful, delayed resolution."
+    },
+    {
+      "name": "dominant 7 sus 2",
+      "intervals": [
+        0,
+        2,
+        7,
+        10
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "2",
+        "5",
+        "b7"
+      ],
+      "suffix": "7sus2",
+      "description": "A dominant 7th with the 2nd in place of the 3rd; airy and open."
+    },
+    {
+      "name": "add 9",
+      "intervals": [
+        0,
+        4,
+        7,
+        14
+      ],
+      "aliases": [
+        "majadd9"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "9"
+      ],
+      "suffix": "add9",
+      "description": "A major triad with an added 9th and no 7th; bright and colorful."
+    },
+    {
+      "name": "minor add 9",
+      "intervals": [
+        0,
+        3,
+        7,
+        14
+      ],
+      "aliases": [
+        "m(add9)"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "9"
+      ],
+      "suffix": "madd9",
+      "description": "A minor triad with an added 9th; wistful and modern."
+    },
+    {
+      "name": "add 4",
+      "intervals": [
+        0,
+        4,
+        5,
+        7
+      ],
+      "aliases": [
+        "add11"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "4",
+        "5"
+      ],
+      "suffix": "add4",
+      "description": "A major triad with an added 4th; lush and gently clashing, unlike sus4 which omits the 3rd."
+    },
+    {
+      "name": "six nine",
+      "intervals": [
+        0,
+        4,
+        7,
+        9,
+        14
+      ],
+      "aliases": [
+        "69",
+        "6add9",
+        "maj6/9",
+        "maj69"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "6",
+        "9"
+      ],
+      "suffix": "6/9",
+      "description": "A major 6th chord with an added 9th; a rich, stable jazz ending chord."
+    },
+    {
+      "name": "minor six nine",
+      "intervals": [
+        0,
+        3,
+        7,
+        9,
+        14
+      ],
+      "aliases": [
+        "m69"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "6",
+        "9"
+      ],
+      "suffix": "m6/9",
+      "description": "A minor 6th with an added 9th; smooth and sophisticated."
+    },
+    {
+      "name": "dominant 9",
+      "intervals": [
+        0,
+        4,
+        7,
+        10,
+        14
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7",
+        "9"
+      ],
+      "suffix": "9",
+      "description": "A dominant 7th extended with the 9th; funky and full."
+    },
+    {
+      "name": "major 9",
+      "intervals": [
+        0,
+        4,
+        7,
+        11,
+        14
+      ],
+      "aliases": [
+        "M9"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "7",
+        "9"
+      ],
+      "suffix": "maj9",
+      "description": "A major 7th extended with the 9th; rich, open and lush."
+    },
+    {
+      "name": "minor 9",
+      "intervals": [
+        0,
+        3,
+        7,
+        10,
+        14
+      ],
+      "aliases": [
+        "min9"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "b7",
+        "9"
+      ],
+      "suffix": "m9",
+      "description": "A minor 7th extended with the 9th; warm and soulful."
+    },
+    {
+      "name": "dominant 7 flat 9",
+      "intervals": [
+        0,
+        4,
+        7,
+        10,
+        13
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7",
+        "b9"
+      ],
+      "suffix": "7b9",
+      "description": "A dominant 7th with a flat 9th; dark and tense, resolving strongly to minor."
+    },
+    {
+      "name": "dominant 7 sharp 9",
+      "intervals": [
+        0,
+        4,
+        7,
+        10,
+        15
+      ],
+      "aliases": [
+        "hendrix"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7",
+        "#9"
+      ],
+      "suffix": "7#9",
+      "description": "A dominant 7th with a sharp 9th; the gritty 'Hendrix chord' clashing major and minor 3rds."
+    },
+    {
+      "name": "dominant 7 sharp 11",
+      "intervals": [
+        0,
+        4,
+        7,
+        10,
+        18
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7",
+        "#11"
+      ],
+      "suffix": "7#11",
+      "description": "A dominant 7th with a raised 11th; lydian-dominant color, bright and edgy."
+    },
+    {
+      "name": "major 7 sharp 11",
+      "intervals": [
+        0,
+        4,
+        7,
+        11,
+        18
+      ],
+      "aliases": [
+        "maj7#4",
+        "lydian chord"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "7",
+        "#11"
+      ],
+      "suffix": "maj7#11",
+      "description": "A major 7th with a raised 11th; the floating, modern 'lydian' chord."
+    },
+    {
+      "name": "dominant 11",
+      "intervals": [
+        0,
+        4,
+        7,
+        10,
+        14,
+        17
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7",
+        "9",
+        "11"
+      ],
+      "suffix": "11",
+      "description": "A dominant 9th extended with the 11th; usually voiced without the 3rd, giving a suspended feel."
+    },
+    {
+      "name": "minor 11",
+      "intervals": [
+        0,
+        3,
+        7,
+        10,
+        14,
+        17
+      ],
+      "aliases": [
+        "min11"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "b7",
+        "9",
+        "11"
+      ],
+      "suffix": "m11",
+      "description": "A minor 9th extended with the 11th; spacious and modal, a quintessential modern-jazz minor sound."
+    },
+    {
+      "name": "dominant 13",
+      "intervals": [
+        0,
+        4,
+        7,
+        10,
+        14,
+        21
+      ],
+      "aliases": [],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "b7",
+        "9",
+        "13"
+      ],
+      "suffix": "13",
+      "description": "A dominant chord extended to the 13th; full and brassy, the lush dominant of big-band jazz."
+    },
+    {
+      "name": "major 13",
+      "intervals": [
+        0,
+        4,
+        7,
+        11,
+        14,
+        21
+      ],
+      "aliases": [
+        "M13"
+      ],
+      "degrees": [
+        "1",
+        "3",
+        "5",
+        "7",
+        "9",
+        "13"
+      ],
+      "suffix": "maj13",
+      "description": "A major 7th extended to the 13th; maximally lush and resolved."
+    },
+    {
+      "name": "minor 13",
+      "intervals": [
+        0,
+        3,
+        7,
+        10,
+        14,
+        21
+      ],
+      "aliases": [
+        "min13"
+      ],
+      "degrees": [
+        "1",
+        "b3",
+        "5",
+        "b7",
+        "9",
+        "13"
+      ],
+      "suffix": "m13",
+      "description": "A minor 7th extended to the 13th; deep, warm and modal."
+    }
+  ]
+}

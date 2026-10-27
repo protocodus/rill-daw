@@ -535,6 +535,7 @@ pub fn song_tool_specs() -> Vec<ToolSpec> {
         .input_schema
         .clone();
     specs.push(ToolSpec{name:"create_instrument_part".into(),description:"Create an audible instrument part in one undoable call: resolve a trusted catalog plugin_id and create the MIDI part together. part uses create_midi_part arguments; set generate=true and use generate_part arguments for seeded generation. Optional track_id in part uses an existing MIDI track.".into(),input_schema:object(json!({"plugin_id":string(),"generate":boolean(),"part":{"oneOf":[midi_part,generated_part]}}),&["plugin_id","part"])});
+    specs.extend(crate::composer::tool_specs());
     specs.extend(host_tool_specs());
     specs.extend(recording_tool_specs());
     specs
