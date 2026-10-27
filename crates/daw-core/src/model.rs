@@ -1,4 +1,6 @@
-use crate::{AudioCrossfade, AudioEnvelope, AudioProcessing, AutomationLane, FadeCurve};
+use crate::{
+    AudioBoundaryFades, AudioCrossfade, AudioEnvelope, AudioProcessing, AutomationLane, FadeCurve,
+};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -227,6 +229,9 @@ pub enum ClipContent {
         reverse: bool,
         #[serde(default)]
         envelope: Option<AudioEnvelope>,
+        /// Occurrence-local anti-click envelope; shared musical fades stay intact.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        boundary_fades: Option<AudioBoundaryFades>,
         #[serde(default)]
         crossfade: Option<AudioCrossfade>,
     },
@@ -294,6 +299,7 @@ impl Clip {
                 fade_out_curve: FadeCurve::Linear,
                 reverse: false,
                 envelope: None,
+                boundary_fades: None,
                 crossfade: None,
             },
         }
@@ -599,6 +605,17 @@ impl Project {
             );
         }
         let mut right = clip.clone();
+        if let ClipContent::Audio {
+            boundary_fades: Some(boundary),
+            ..
+        } = &mut right.content
+        {
+            ensure!(
+                (boundary.offset + delta * clip.source_rate).abs() <= MAX_BEAT,
+                "Split exceeds the boundary fade range"
+            );
+            boundary.offset += delta * clip.source_rate;
+        }
         if right.link_group.is_some() {
             right.id = new_id();
         } else {
@@ -708,7 +725,22 @@ impl Project {
             valid_range(new_offset, new_length * clip.source_rate),
             "Trim extends before the source or overflows its range"
         );
-        if let ClipContent::Audio { envelope, .. } = &mut clip.content {
+        if let ClipContent::Audio {
+            boundary_fades: Some(boundary),
+            ..
+        } = &clip.content
+        {
+            ensure!(
+                (boundary.offset + delta * clip.source_rate).abs() <= MAX_BEAT,
+                "Trim exceeds the boundary fade range"
+            );
+        }
+        if let ClipContent::Audio {
+            envelope,
+            boundary_fades,
+            ..
+        } = &mut clip.content
+        {
             let original = envelope.unwrap_or(AudioEnvelope {
                 offset: 0.0,
                 length: clip.length * clip.source_rate,
@@ -721,6 +753,9 @@ impl Project {
                 offset: original.offset + delta * clip.source_rate,
                 ..original
             });
+            if let Some(boundary) = boundary_fades {
+                boundary.offset += delta * clip.source_rate;
+            }
         }
         clip.offset = new_offset;
         clip.start = new_start;
@@ -917,6 +952,7 @@ impl Project {
                         fade_in,
                         fade_out,
                         envelope,
+                        boundary_fades,
                         crossfade,
                         ..
                     } => {
@@ -928,6 +964,9 @@ impl Project {
                         processing.validate()?;
                         if let Some(crossfade) = crossfade {
                             crossfade.validate()?;
+                        }
+                        if let Some(boundary) = boundary_fades {
+                            boundary.validate()?;
                         }
                         ensure!(gain.is_finite() && *gain >= 0.0, "Invalid audio gain");
                         let envelope_length =
@@ -960,6 +999,7 @@ impl Project {
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         self.validate()?;
         let path = path.as_ref();
+        self.validate_audio_destination(path)?;
         if crate::archive::is_bundle(path) {
             return crate::archive::save(self, path);
         }

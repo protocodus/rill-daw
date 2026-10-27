@@ -17,6 +17,52 @@ pub fn button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(button_widget(label))
 }
 
+/// A command that changes presentation without editing the document or tool.
+pub fn view_button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
+    let label = label.into();
+    crate::IconButton::with_icon(
+        crate::Icon::for_label(label.text()).unwrap_or(crate::Icon::View),
+        label,
+    )
+    .presentation()
+}
+
+pub fn view_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
+    ui.add(view_button_widget(label))
+}
+
+/// A persistent workspace or presentation choice, using the quiet view outline.
+/// The owner handles navigation; this component never changes a tool or document.
+pub fn view_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> Response {
+    ui.add(button_widget(label).presentation().selected(selected))
+}
+
+/// A presentation or playback-guide toggle with the same view affordance.
+/// State and any project/history semantics remain with the caller.
+pub fn view_toggle(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Response {
+    let mut response = view_choice(ui, *value, label);
+    if response.clicked() {
+        *value = !*value;
+        response.mark_changed();
+    }
+    response
+}
+
+/// A persistent, exclusive interaction mode. Application state stays with the caller.
+pub fn tool_value<T: PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    value: T,
+    label: impl Into<WidgetText>,
+) -> Response {
+    let mut response = ui.add(crate::IconButton::tool(*current == value, label));
+    if response.clicked() && *current != value {
+        *current = value;
+        response.mark_changed();
+    }
+    response
+}
+
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(button_widget(label).fill(theme::palette(ui.ctx()).track_selected))
 }
@@ -83,6 +129,40 @@ pub fn menu_button<R>(
     }
 }
 
+/// Keep full-size commands reachable with the mouse in a short window.
+pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> R {
+    let max_height = (ui.ctx().content_rect().height() - 72.0).max(tokens::CONTROL_HEIGHT * 2.0);
+    let frame = ui.ctx().cumulative_frame_nr();
+    let seen_id = ui.id().with("command_menu_seen");
+    let newly_open = ui
+        .ctx()
+        .data(|data| data.get_temp::<u64>(seen_id))
+        .is_none_or(|last| frame > last.saturating_add(1));
+    let mut area = egui::ScrollArea::vertical()
+        .id_salt(ui.id().with("command_menu_scroll"))
+        .max_height(max_height)
+        .auto_shrink([true, true]);
+    if newly_open {
+        area = area.vertical_scroll_offset(0.0);
+    }
+    let scroll = area.show(ui, contents);
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(seen_id, frame);
+        data.insert_temp(
+            egui::Id::new("command_menu_scroll_rect"),
+            (frame, scroll.inner_rect),
+        );
+    });
+    scroll.inner
+}
+
+pub fn command_menu_scroll_rect(ctx: &egui::Context) -> Option<egui::Rect> {
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data(|data| data.get_temp::<(u64, egui::Rect)>(egui::Id::new("command_menu_scroll_rect")))
+        .filter(|(drawn, _)| frame <= drawn.saturating_add(1))
+        .map(|(_, rect)| rect)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MenuRole {
     Action,
@@ -101,7 +181,19 @@ pub(crate) fn semantic_menu<R>(
     if egui::containers::menu::is_in_menu(ui) && role == MenuRole::Action {
         return menu_button(ui, label, contents);
     }
-    let (response, inner) = semantic_picker(ui, label, role, contents);
+    let (response, inner) = semantic_picker(ui, label, role, false, contents);
+    InnerResponse::new(inner.map(|inner| inner.inner), response)
+}
+
+pub(crate) fn semantic_compact_action_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    if egui::containers::menu::is_in_menu(ui) {
+        return menu_button(ui, label, contents);
+    }
+    let (response, inner) = semantic_picker(ui, label, MenuRole::Action, true, contents);
     InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
@@ -109,6 +201,7 @@ fn semantic_picker<R>(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
     role: MenuRole,
+    compact: bool,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
     use egui::containers::menu::{MenuConfig, MenuState, SubMenu};
@@ -117,7 +210,8 @@ fn semantic_picker<R>(
     let label = label.into();
     let icon = match role {
         MenuRole::View => Some(crate::Icon::View),
-        MenuRole::Action => crate::Icon::for_label(label.text()),
+        MenuRole::Action if !compact => crate::Icon::for_label(label.text()),
+        MenuRole::Action => None,
         MenuRole::Choice => None,
     };
     let icon_id = egui::Id::new("rill-menu-role-icon");
@@ -132,8 +226,14 @@ fn semantic_picker<R>(
     // Avoid a nested Ui scope so horizontal_wrapped can wrap each whole control.
     let previous_style = ui.style().clone();
     let colors = theme::palette(ui.ctx());
-    ui.spacing_mut().button_padding =
-        egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+    ui.spacing_mut().button_padding = egui::vec2(
+        if compact {
+            tokens::SPACE_SM
+        } else {
+            tokens::BUTTON_PADDING_X
+        },
+        tokens::BUTTON_PADDING_Y,
+    );
     let visuals = &mut ui.visuals_mut().widgets;
     match role {
         MenuRole::Action => {
@@ -245,7 +345,7 @@ pub fn picker_button<R>(
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
-    semantic_picker(ui, label, MenuRole::Choice, contents)
+    semantic_picker(ui, label, MenuRole::Choice, false, contents)
 }
 
 /// Application command bar; menus use the same native focus and popup behavior

@@ -594,6 +594,10 @@ fn generation_preview_never_promotes_folded_notes_into_the_editing_selection() {
                 .expect("Preview exposes the hidden pitch without selecting it");
             assert_eq!(shown_hidden["selected"], false);
             let closed = if apply {
+                // This case tests folded selection, so generate after the old
+                // phrase. Covered-note merging has its own running-app cases.
+                number(&mut app, "start_bar", "3");
+                number(&mut app, "length_bars", "1");
                 app.click("Add notes");
                 app.click("Done")
             } else if escape {

@@ -32,6 +32,8 @@ pub struct CurveResponse {
     pub edit: Option<CurveEdit>,
     pub navigation: TimelineNavigation,
     pub viewport: Option<TimelineViewport>,
+    pub selection: Vec<u64>,
+    pub delete_selection: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -41,6 +43,8 @@ pub struct CurveTimeline {
     pub tempo: f64,
     pub beats_per_bar: u8,
     pub fit: bool,
+    /// Route view shortcuts here when this is the foreground editor.
+    pub keyboard_active: bool,
 }
 
 /// Paint a normalized curve in a caller-owned rectangle without allocating UI
@@ -123,6 +127,49 @@ fn curve_editor_inner(
         Sense::click(),
     );
     let musical = timeline.is_some();
+    let keyboard_active = timeline
+        .as_ref()
+        .is_some_and(|(_, timeline)| timeline.keyboard_active);
+    let selection_id = id.with("selection");
+    let mut selection = ui.ctx().data_mut(|data| {
+        data.get_temp::<std::collections::HashSet<u64>>(selection_id)
+            .unwrap_or_default()
+    });
+    let valid_ids: std::collections::HashSet<_> = points.iter().map(|point| point.id).collect();
+    selection.retain(|id| valid_ids.contains(id));
+    if let Some(current) = *selected {
+        if !selection.contains(&current) {
+            selection.clear();
+            selection.insert(current);
+        }
+    } else {
+        selection.clear();
+    }
+    let mut reveal = None;
+    if (keyboard_active || response.has_focus())
+        && let Some((direction, extend)) = crate::selection_navigation_input(ui, Some(response.id))
+    {
+        let items: Vec<_> = points
+            .iter()
+            .map(|point| crate::SelectionItem {
+                id: point.id,
+                start: point.x,
+                end: point.x,
+                row: f64::from(1.0 - point.value),
+            })
+            .collect();
+        if let Some(next) = crate::adjacent_selection_item(&items, *selected, direction) {
+            if !extend {
+                selection.clear();
+            }
+            selection.insert(next);
+            *selected = Some(next);
+            reveal = points
+                .iter()
+                .find(|point| point.id == next)
+                .map(|point| point.x);
+        }
+    }
     let plot = Rect::from_min_max(
         rect.min
             + Vec2::new(
@@ -165,10 +212,23 @@ fn curve_editor_inner(
         if timeline.fit {
             viewport.fit_bounds(plot, bounds);
         }
-        navigation = TimelinePane::new(id.with("timeline"), plot)
+        let pane = TimelinePane::new(id.with("timeline"), plot)
             .horizontal_only()
-            .keyboard_focus(response.id)
-            .navigate(ui, viewport, bounds);
+            .keyboard_focus(response.id);
+        navigation = if timeline.keyboard_active {
+            pane.keyboard_active()
+        } else {
+            pane
+        }
+        .navigate(ui, viewport, bounds);
+        if let Some(beat) = reveal {
+            let visible = f64::from(plot.width()) / f64::from(viewport.pixels_per_beat);
+            if beat < viewport.start_beat {
+                viewport.start_beat = beat.max(0.0);
+            } else if beat > viewport.start_beat + visible {
+                viewport.start_beat = (beat - visible).max(0.0);
+            }
+        }
         // Vertical display remains the complete parameter range, independent of
         // fit padding, vertical pan, and pitch-zoom shortcuts in other editors.
         viewport.row_offset = 0.0;
@@ -263,7 +323,21 @@ fn curve_editor_inner(
         point_hit |=
             point_response.hovered() || point_response.dragged() || point_response.clicked();
         if editing && (point_response.clicked() || point_response.drag_started()) {
-            *selected = Some(point.id);
+            if ui.input(|input| input.modifiers.shift) {
+                if point_response.clicked() && !selection.insert(point.id) {
+                    selection.remove(&point.id);
+                } else {
+                    selection.insert(point.id);
+                }
+                *selected = selection
+                    .contains(&point.id)
+                    .then_some(point.id)
+                    .or_else(|| selection.iter().copied().min());
+            } else {
+                selection.clear();
+                selection.insert(point.id);
+                *selected = Some(point.id);
+            }
             response.request_focus();
         }
         if editing && point_response.drag_started() {
@@ -284,6 +358,18 @@ fn curve_editor_inner(
         }
         if !navigation.navigating {
             point_response.context_menu(|ui| {
+                let selected_point = selection.contains(&point.id);
+                if crate::selection_membership_action(ui, selected_point) {
+                    if selected_point {
+                        selection.remove(&point.id);
+                        if *selected == Some(point.id) {
+                            *selected = selection.iter().copied().min();
+                        }
+                    } else {
+                        selection.insert(point.id);
+                        *selected = Some(point.id);
+                    }
+                }
                 if crate::button(ui, "Delete point").clicked() {
                     edit = Some(CurveEdit::Delete { id: point.id });
                     ui.close();
@@ -292,14 +378,14 @@ fn curve_editor_inner(
         }
         painter.circle_filled(
             position,
-            if *selected == Some(point.id) {
+            if selection.contains(&point.id) {
                 5.5
             } else {
                 4.0
             },
             theme::palette(ui.ctx()).accent,
         );
-        if *selected == Some(point.id) {
+        if selection.contains(&point.id) {
             painter.circle_stroke(
                 position,
                 8.0,
@@ -321,23 +407,32 @@ fn curve_editor_inner(
             value: ((plot.bottom() - position.y) / plot.height()).clamp(0.0, 1.0),
         });
     }
-    if response.has_focus()
+    let mut delete_selection = false;
+    if (keyboard_active || response.has_focus())
         && editing
+        && (!ui.ctx().wants_keyboard_input() || response.has_focus())
         && ui.input(|input| {
             input.key_pressed(egui::Key::Delete) || input.key_pressed(egui::Key::Backspace)
         })
         && let Some(id) = *selected
     {
         edit = Some(CurveEdit::Delete { id });
+        delete_selection = true;
     }
     if edit.is_some() {
         response.mark_changed();
     }
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(selection_id, selection.clone()));
+    let mut selection: Vec<_> = selection.into_iter().collect();
+    selection.sort_unstable();
     CurveResponse {
         response,
         plot_rect: plot,
         edit,
         navigation,
         viewport,
+        selection,
+        delete_selection,
     }
 }

@@ -190,6 +190,77 @@ fn cursor_clip_bounds_snap_cut_copy_paste_duplicate_and_undo() {
 }
 
 #[test]
+fn audio_parameter_groups_wrap_together_and_keep_precise_edits_undoable() {
+    let mut app = open(4.0, false);
+    let original = app.inspect()["project"].clone();
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        app.command(json!({"command":"system_theme","dark":dark}));
+        for width in (800..=1400).step_by(25) {
+            let state = app.command(json!({"command":"viewport","width":width,"height":760.0,"pixels_per_point":density}));
+            let label = state["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|rect| rect["text"] == "Gain")
+                .expect("clip gain label");
+            let input = &state["audio_editor"]["gain_rect"];
+            let label_center =
+                (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) * 0.5;
+            assert!(
+                (input[1].as_f64().unwrap()..=input[3].as_f64().unwrap()).contains(&label_center),
+                "Gain label separated from its input at width {width}: {label}, {input}"
+            );
+            assert!(input[0].as_f64().unwrap() >= label["max"][0].as_f64().unwrap());
+            assert!(input[2].as_f64().unwrap() <= f64::from(width));
+            assert_eq!(state["project"], original);
+        }
+    }
+    let edit_number = |app: &mut Harness, rect: &Value, value: &str| {
+        let x = (rect[0].as_f64().unwrap() + rect[2].as_f64().unwrap()) * 0.5;
+        let y = (rect[1].as_f64().unwrap() + rect[3].as_f64().unwrap()) * 0.5;
+        app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
+        app.command(json!({"command":"key","key":"A","cmd":true}));
+        app.command(json!({"command":"text","text":value}));
+        app.key("Enter")
+    };
+    let rect = app.inspect()["audio_editor"]["gain_rect"].clone();
+    let gain = edit_number(&mut app, &rect, "-6.3");
+    near(
+        audio(&gain)["gain"].as_f64().unwrap(),
+        10.0_f64.powf(-6.3 / 20.0),
+    );
+    assert_eq!(undo(&mut app)["project"], original);
+
+    app.command(json!({"command":"viewport","width":800.0,"height":760.0}));
+    let state = app.key("I");
+    let duration = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|rect| {
+            rect["text"]
+                .as_str()
+                .is_some_and(|text| text.ends_with(" beats"))
+        })
+        .expect("fade duration");
+    let rect = json!([
+        duration["min"][0],
+        duration["min"][1],
+        duration["max"][0],
+        duration["max"][1]
+    ]);
+    let fade = edit_number(&mut app, &rect, "0.125");
+    near(audio(&fade)["fade_in"].as_f64().unwrap(), 0.125);
+    app.click("Linear");
+    let curve = app.click("Equal power");
+    assert_eq!(audio(&curve)["fade_in_curve"], "EqualPower");
+    assert_eq!(audio(&undo(&mut app))["fade_in_curve"], "Linear");
+    assert_eq!(undo(&mut app)["project"], original);
+    app.quit();
+}
+
+#[test]
 fn fades_curves_reverse_gain_normalize_and_export_match_source() {
     let mut app = open(4.0, false);
     app.key("I");

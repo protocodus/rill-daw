@@ -142,7 +142,13 @@ fn clips(state: &Value) -> &[Value] {
     state["project"]["tracks"][0]["clips"].as_array().unwrap()
 }
 fn clip(state: &Value, id: u64) -> &Value {
-    clips(state).iter().find(|clip| clip["id"] == id).unwrap()
+    state["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|track| track["clips"].as_array().unwrap())
+        .find(|clip| clip["id"] == id)
+        .unwrap()
 }
 fn selected(state: &Value) -> u64 {
     state["selected_clip"].as_u64().unwrap()
@@ -510,14 +516,7 @@ fn ghost_stretch_is_local_survives_portable_recall_and_join_preserves_rendered_t
         let state = app.key("T");
         let popup = pointer(&mut app, "click", center(&state, ghost));
         assert_eq!(popup["popups"]["join"], true);
-        let occurrence = popup["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|text| *text == "Join")
-            .count()
-            - 1;
-        app.command(json!({"command":"click","label":"Join","occurrence":occurrence}));
+        app.click("Join");
         let joined = wait_join(&mut app);
         assert_eq!(clips(&joined).len(), 1);
         let id = selected(&joined);
@@ -703,5 +702,47 @@ fn rejected_shift_duplicate_cannot_turn_into_a_move_of_the_original_while_held()
     let alive = app.raw_command(json!({"command":"inspect"}));
     assert_eq!(alive["ok"], true);
     assert_eq!(alive["state"]["project"], before["project"]);
+    app.quit();
+}
+
+#[test]
+fn join_tool_prepares_the_clicked_track_before_opening_its_context() {
+    let (mut app, original, _) = fixture(Kind::Midi);
+    let mut project: Project = serde_json::from_value(app.inspect()["project"].clone()).unwrap();
+    let track = project.add_midi_track("Join destination");
+    let first = Clip::midi("First target", 8.0, 1.0, vec![Note::new(62, 0.0, 1.0, 90)]);
+    let first_id = first.id;
+    let second = Clip::midi(
+        "Second target",
+        10.0,
+        1.0,
+        vec![Note::new(64, 0.0, 1.0, 80)],
+    );
+    project
+        .track_mut(track)
+        .unwrap()
+        .clips
+        .extend([first, second]);
+    let path = app.directory.path().join("cross-track-join.daw.json");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.click("Source");
+    let before = app.click("Fit");
+    assert_eq!(selected(&before), original);
+    let state = app.key("T");
+    let popup = pointer(&mut app, "click", center(&state, first_id));
+    assert_eq!(popup["selected_track"], track);
+    assert_eq!(popup["popups"]["join"], true);
+    app.click("Join");
+    let joined = wait_join(&mut app);
+    assert_eq!(
+        joined["project"]["tracks"][0],
+        before["project"]["tracks"][0]
+    );
+    let target = joined["project"]["tracks"][1]["clips"].as_array().unwrap();
+    assert_eq!(target.len(), 1);
+    near(target[0]["start"].as_f64().unwrap(), 8.0);
+    near(target[0]["length"].as_f64().unwrap(), 3.0);
+    assert_eq!(undo(&mut app, false)["project"], before["project"]);
     app.quit();
 }

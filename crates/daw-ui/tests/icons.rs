@@ -9,6 +9,11 @@ fn editor_actions_use_a_window_icon_and_prefixed_actions_keep_one_plus() {
     assert_eq!(Icon::for_label("+ Insert"), None);
     assert_eq!(Icon::for_label("+ Send"), None);
     assert_eq!(Icon::for_label("Add point"), Some(Icon::Add));
+    assert_eq!(Icon::for_label("Cut notes"), Some(Icon::Cut));
+    assert_eq!(
+        Icon::for_label("Duplicate selection"),
+        Some(Icon::Duplicate)
+    );
 }
 
 #[test]

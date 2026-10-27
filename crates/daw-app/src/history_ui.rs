@@ -4,7 +4,12 @@ use eframe::egui;
 
 impl DawApp {
     pub(crate) fn flush_pending_edit(&mut self) {
+        // Save/Undo can explicitly commit while the pointer is still held.
+        // End that gesture before overlap merging replaces any of its IDs.
+        self.midi_editor.end_edit_gesture();
+        self.finish_pending_midi_overlap_merges();
         let before = self.before_edit.take();
+        let before_selection = self.before_selection.take();
         let preview_submitted = std::mem::take(&mut self.playback_preview_submitted);
         let preview_matches_current = std::mem::take(&mut self.playback_preview_matches_current);
         self.playback_preview_dirty = false;
@@ -23,11 +28,21 @@ impl DawApp {
         if let Some(before) = before
             && before != self.project
         {
+            let before_state = self.history.state_id();
+            self.song_session.bump();
             let label = label.unwrap_or_else(|| edit_name(&before, &self.project).into());
             if let Some(group) = group {
                 self.history.commit_grouped(&before, label, group);
             } else {
                 self.history.commit_named(&before, label);
+            }
+            if let Some(selection) = before_selection {
+                let after = self.capture_selection();
+                self.selection_history.record(
+                    (before_state, selection),
+                    (self.history.state_id(), after),
+                    self.history.retained_state_ids(),
+                );
             }
         }
         self.modified = !self.history.is_saved();

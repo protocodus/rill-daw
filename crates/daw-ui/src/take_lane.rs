@@ -25,6 +25,40 @@ pub fn audio_take_lane_with_background(
     lane: &TakeLane<'_>,
     background: impl FnOnce(&egui::Painter, Rect),
 ) -> Response {
+    audio_take_lane_with_waveform(ui, lane, |painter, plot| {
+        background(painter, plot);
+        let (a, b) = lane.span;
+        for (i, (low, high)) in lane.peaks.iter().enumerate() {
+            let fraction = a + (b - a) * (i as f32 + 0.5) / lane.peaks.len().max(1) as f32;
+            if !(0.0..=1.0).contains(&fraction) {
+                continue;
+            }
+            let x = plot.left() + fraction * plot.width();
+            painter.line_segment(
+                [
+                    egui::pos2(
+                        x,
+                        plot.center().y - high.clamp(-1.0, 1.0) * plot.height() * 0.5,
+                    ),
+                    egui::pos2(
+                        x,
+                        plot.center().y - low.clamp(-1.0, 1.0) * plot.height() * 0.5,
+                    ),
+                ],
+                Stroke::new(1.5_f32, lane.color),
+            );
+        }
+    })
+}
+
+/// Reuse the take choice layout with a caller-supplied waveform renderer.
+/// The painter is clipped to the shared plot, so progressive source previews
+/// cannot paint over the title, details, selection controls or neighbouring rows.
+pub fn audio_take_lane_with_waveform(
+    ui: &mut Ui,
+    lane: &TakeLane<'_>,
+    waveform: impl FnOnce(&egui::Painter, Rect),
+) -> Response {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 86.0), Sense::click());
     response.widget_info(|| {
@@ -99,28 +133,10 @@ pub fn audio_take_lane_with_background(
                 colors.accent.gamma_multiply(0.18),
             );
         }
-        let (a, b) = lane.span;
-        background(&painter, plot);
-        for (i, (low, high)) in lane.peaks.iter().enumerate() {
-            let fraction = a + (b - a) * (i as f32 + 0.5) / lane.peaks.len().max(1) as f32;
-            if !(0.0..=1.0).contains(&fraction) {
-                continue;
-            }
-            let x = plot.left() + fraction * plot.width();
-            painter.line_segment(
-                [
-                    egui::pos2(
-                        x,
-                        plot.center().y - high.clamp(-1.0, 1.0) * plot.height() * 0.5,
-                    ),
-                    egui::pos2(
-                        x,
-                        plot.center().y - low.clamp(-1.0, 1.0) * plot.height() * 0.5,
-                    ),
-                ],
-                Stroke::new(1.5_f32, lane.color),
-            );
-        }
+        waveform(
+            &painter.with_clip_rect(plot.intersect(painter.clip_rect())),
+            plot,
+        );
     }
     response.on_hover_text(format!("{}\n{}", lane.name, lane.detail))
 }

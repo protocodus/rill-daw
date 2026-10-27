@@ -6,5 +6,7 @@ Add every new UI component to `crates/daw-ui` first, then reuse it from applicat
 
 Keep the interface simple and focused on one workspace at a time. Clip Editor, Instrument, Effects, Mixer, Routing, Library, Setup, and Properties open on demand from the menu bar. Keep persistent labels and explanatory text concise.
 
+Every operation must be possible using only the mouse. Keyboard shortcuts accelerate the same operations; provide a visible control or context-menu action for each operation, including selection changes.
+
 
 Every new user-facing functionality must include an executable end-to-end test that exercises it through the running app. Keep the headless subprocess suite container-compatible; run the relevant E2E tests before considering the feature complete.

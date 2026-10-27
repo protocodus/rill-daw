@@ -368,7 +368,12 @@ fn slice_audio(source: &Clip, start: f64, end: f64) -> Clip {
     } else {
         delta * source.source_rate
     };
-    if let ClipContent::Audio { envelope, .. } = &mut clip.content {
+    if let ClipContent::Audio {
+        envelope,
+        boundary_fades,
+        ..
+    } = &mut clip.content
+    {
         let original = envelope.unwrap_or(AudioEnvelope {
             offset: 0.0,
             length: source.source_length(),
@@ -377,6 +382,9 @@ fn slice_audio(source: &Clip, start: f64, end: f64) -> Clip {
             offset: original.offset + delta * source.source_rate,
             ..original
         });
+        if let Some(boundary) = boundary_fades {
+            boundary.offset += delta * source.source_rate;
+        }
     }
     clip.start = start;
     clip.length = length;

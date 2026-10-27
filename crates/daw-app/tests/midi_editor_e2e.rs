@@ -567,18 +567,20 @@ fn legato_preserves_chords_and_transpose_and_nudge_preserve_group_spacing() {
     app.click("Notes");
     let octave = notes(&app.click("+1 octave"));
     assert_eq!(octave[0]["pitch"], 73);
-    app.key("ArrowDown");
-    let restored = app.command(json!({"command":"key","key":"ArrowDown","shift":true}));
+    app.command(json!({"command":"key","key":"ArrowDown","cmd":true}));
+    let restored = app.command(json!({"command":"key","key":"ArrowDown","shift":true,"cmd":true}));
     for (note, original) in notes(&restored).iter().zip(&original) {
         assert_eq!(note["pitch"], original["pitch"]);
         assert_eq!(note["id"], original["id"]);
     }
-    let right = notes(&app.key("ArrowRight"));
+    let right = notes(&app.command(json!({"command":"key","key":"ArrowRight","cmd":true})));
     close_enough(right[0]["start"].as_f64().unwrap(), 0.25);
-    let bar = notes(&app.command(json!({"command":"key","key":"ArrowRight","shift":true})));
+    let bar =
+        notes(&app.command(json!({"command":"key","key":"ArrowRight","shift":true,"cmd":true})));
     close_enough(bar[0]["start"].as_f64().unwrap(), 4.25);
-    app.key("ArrowLeft");
-    let left = notes(&app.command(json!({"command":"key","key":"ArrowLeft","shift":true})));
+    app.command(json!({"command":"key","key":"ArrowLeft","cmd":true}));
+    let left =
+        notes(&app.command(json!({"command":"key","key":"ArrowLeft","shift":true,"cmd":true})));
     close_enough(left[0]["start"].as_f64().unwrap(), 0.0);
     close_enough(left[2]["start"].as_f64().unwrap(), 1.0);
     app.quit();
@@ -731,7 +733,7 @@ fn folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_not
             .iter()
             .any(|note| note["pitch"] == 62 && note["start"] == 2.0)
     );
-    let state = app.key("ArrowUp");
+    let state = app.command(json!({"command":"key","key":"ArrowUp","cmd":true}));
     assert!(
         notes(&state)
             .iter()

@@ -58,7 +58,9 @@ In PowerShell, compare `(Get-FileHash .\rill-VERSION-TARGET.zip -Algorithm SHA25
 
 ## CI artifacts and tagged releases
 
-Pull requests, pushes to `main`, and manual CI runs upload one artifact per target after that target's checks pass. These artifacts expire after 14 days. Download them from the workflow run's Artifacts section. A failed target does not create a public release.
+Pull requests, pushes to `main`, and manual CI runs upload one artifact per target after that target's checks pass. The main [README download table](../README.md#download) links every target through [nightly.link](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main), which serves artifacts from the latest successful `main` push without requiring a GitHub login. The links keep serving the previous successful build while a newer build runs or fails. Each artifact is an outer ZIP containing the native archive and its adjacent checksum; extract both layers before launching the app.
+
+These artifacts expire after 14 days. You can also download them from the [workflow run's Artifacts section](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml) while signed into GitHub. If artifacts have expired, rerun the latest successful `main` push workflow or push a new commit to `main`. A failed target does not create a public release. Tagged release assets do not use CI artifact retention.
 
 The release workflow reuses the same CI workflow. A manual release-workflow run builds and verifies artifacts only. A pushed `vVERSION` tag triggers verification across all five targets and then publication. The tag must exactly match `[workspace.package].version` in `Cargo.toml`; for example, version `0.1.0` requires tag `v0.1.0`. Version changes must also update the workspace package entries in `Cargo.lock`.
 

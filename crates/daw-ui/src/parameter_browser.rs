@@ -216,12 +216,21 @@ pub fn parameter_browser<R>(
             state.focus_search = true;
         }
         // Read the key before TextEdit processes it, but activate only when the
-        // search/list owns focus. Enter in a caller's value editor stays there.
+        // search/list owns focus. Match each event's modifiers so text-selection
+        // chords and released modifiers do not become list navigation.
         let (up, down, enter) = ui.input(|input| {
+            let pressed = |key| {
+                input.events.iter().any(|event| {
+                    matches!(event,
+                        egui::Event::Key { key: candidate, pressed: true, modifiers, .. }
+                            if *candidate == key && !modifiers.any()
+                    )
+                })
+            };
             (
-                input.key_pressed(Key::ArrowUp),
-                input.key_pressed(Key::ArrowDown),
-                input.key_pressed(Key::Enter),
+                pressed(Key::ArrowUp),
+                pressed(Key::ArrowDown),
+                pressed(Key::Enter),
             )
         });
         let previous_query = state.query.clone();

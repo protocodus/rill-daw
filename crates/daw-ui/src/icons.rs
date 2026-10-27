@@ -71,10 +71,12 @@ impl Icon {
         Some(match label {
             "Select" => Self::Select,
             "Pencil" => Self::Pencil,
-            "Cut" | "Cut selection" | "Split at cursor" | "Split transients" => Self::Cut,
+            "Cut" | "Cut notes" | "Cut selection" | "Split at cursor" | "Split transients" => {
+                Self::Cut
+            }
             "Copy" | "Copy notes" | "Copy path" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
-            "Duplicate" | "Duplicate clip" => Self::Duplicate,
+            "Duplicate" | "Duplicate clip" | "Duplicate selection" => Self::Duplicate,
             "Ghost copy" => Self::Link,
             "Stretch" => Self::Stretch,
             "Slip" => Self::Slip,
@@ -525,7 +527,16 @@ pub struct IconButton {
     id: Id,
     selected: bool,
     accessible_label: Option<String>,
+    role: ButtonRole,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ButtonRole {
+    Action,
+    Tool,
+    View,
+}
+
 impl IconButton {
     pub fn new(label: impl Into<WidgetText>) -> Self {
         let label = label.into();
@@ -534,6 +545,23 @@ impl IconButton {
     }
     pub fn with_icon(icon: Icon, label: impl Into<WidgetText>) -> Self {
         Self::from_parts(label.into(), Some(icon))
+    }
+    /// An exclusive interaction mode, with a persistent active indicator.
+    pub fn tool(selected: bool, label: impl Into<WidgetText>) -> Self {
+        let label = label.into();
+        let accessible_label = label.text().to_owned();
+        let mut button = Self::new(label)
+            .selected(selected)
+            .frame_when_inactive(selected);
+        button.role = ButtonRole::Tool;
+        button.accessible_label = Some(accessible_label);
+        button
+    }
+    /// Presentation commands have an outline rather than an action fill.
+    pub fn presentation(mut self) -> Self {
+        self.role = ButtonRole::View;
+        self.button = self.button.frame(true).frame_when_inactive(true);
+        self
     }
     /// An icon-only control still exposes its action to assistive technology.
     pub fn icon_only(icon: Icon, accessible_label: impl Into<String>) -> Self {
@@ -561,6 +589,7 @@ impl IconButton {
             id,
             selected: false,
             accessible_label: None,
+            role: ButtonRole::Action,
         }
     }
     pub fn fill(mut self, fill: Color32) -> Self {
@@ -612,6 +641,12 @@ impl Widget for IconButton {
         let previous_style = ui.style().clone();
         ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
         ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::NONE;
+        if self.role == ButtonRole::View {
+            let colors = crate::theme::palette(ui.ctx());
+            ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+            ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
+            ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.accent);
+        }
         let native_event_index = self
             .accessible_label
             .as_ref()
@@ -625,14 +660,40 @@ impl Widget for IconButton {
             ui.output_mut(|output| {
                 if output.events.get(index).is_some_and(|event| {
                     let info = event.widget_info();
-                    info.typ == egui::WidgetType::Button && info.label.is_none()
+                    info.typ == egui::WidgetType::Button
+                        && (self.role == ButtonRole::Tool || info.label.is_none())
                 }) {
                     output.events.remove(index);
                 }
             });
             output.response.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &label)
+                if self.role == ButtonRole::Tool {
+                    egui::WidgetInfo::selected(
+                        egui::WidgetType::RadioButton,
+                        ui.is_enabled(),
+                        self.selected,
+                        &label,
+                    )
+                } else {
+                    egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &label)
+                }
             });
+        }
+        if self.role == ButtonRole::Tool && self.selected {
+            // A shape cue remains legible without relying on accent color alone.
+            let rect = output.response.rect;
+            let indicator = Rect::from_min_max(
+                egui::pos2(rect.left() + crate::tokens::SPACE_SM, rect.bottom() - 3.0),
+                egui::pos2(rect.right() - crate::tokens::SPACE_SM, rect.bottom()),
+            );
+            ui.painter().rect_filled(
+                indicator,
+                1.0,
+                ui.style()
+                    .interact_selectable(&output.response, true)
+                    .fg_stroke
+                    .color,
+            );
         }
         if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {
             let color = if self.selected {

@@ -457,6 +457,29 @@ fn generation_preview_commit_and_undo_keep_running_plugins_and_continuous_pcm() 
             .iter()
             .all(|note| note["start"] == 8.0 && note["length"] == 4.0)
     );
+    let covered: Vec<_> = draft
+        .iter()
+        .filter(|note| note["pitch"] == original_held["pitch"])
+        .collect();
+    assert_eq!(covered.len(), 1);
+    assert!(
+        covered[0]["start"].as_f64().unwrap() >= original_held["start"].as_f64().unwrap()
+            && covered[0]["start"].as_f64().unwrap() + covered[0]["length"].as_f64().unwrap()
+                <= original_held["start"].as_f64().unwrap()
+                    + original_held["length"].as_f64().unwrap(),
+        "The draft C is already covered by the playing note"
+    );
+    let new_tones: Vec<_> = draft
+        .iter()
+        .filter(|note| note["pitch"] != original_held["pitch"])
+        .collect();
+    assert_eq!(
+        new_tones
+            .iter()
+            .map(|note| note["pitch"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        vec![64, 67]
+    );
     app.click("Add notes");
     app.click("Done");
     let added = settled(&mut app);
@@ -464,10 +487,41 @@ fn generation_preview_commit_and_undo_keep_running_plugins_and_continuous_pcm() 
     let notes = track(&added, synth)["clips"][0]["content"]["Midi"]["notes"]
         .as_array()
         .unwrap();
-    assert_eq!(notes.len(), original_notes.as_array().unwrap().len() + 3);
+    assert_eq!(notes.len(), original_notes.as_array().unwrap().len() + 2);
+    let added_notes: Vec<_> = notes
+        .iter()
+        .filter(|note| {
+            !original_notes
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|old| old["id"] == note["id"])
+        })
+        .collect();
+    assert_eq!(
+        added_notes.len(),
+        2,
+        "Only uncovered draft tones are inserted"
+    );
+    for expected in new_tones {
+        assert!(added_notes.iter().any(|actual| {
+            ["pitch", "start", "length", "velocity"]
+                .into_iter()
+                .all(|field| actual[field] == expected[field])
+        }));
+    }
     assert_eq!(
         notes.iter().find(|note| note["id"] == held).unwrap(),
         &original_held
+    );
+    assert_eq!(notes.iter().filter(|note| note["pitch"] == 60).count(), 1);
+    assert!(
+        added["midi_editor"]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note["id"] == held && note["selected"] == true),
+        "The covered generated C selects the existing held identity"
     );
     assert_eq!(
         added["history"]["undo"].as_array().unwrap().len(),
@@ -482,6 +536,12 @@ fn generation_preview_commit_and_undo_keep_running_plugins_and_continuous_pcm() 
     assert_eq!(restored["project"], baseline["project"]);
     assert_eq!(restored["history"]["undo"], baseline["history"]["undo"]);
     let final_audio = pump(&mut app, &previous, [0.1, 0.1], true);
+    assert!(final_audio["engine"]["position_beats"].as_f64().unwrap() < 4.0);
+    assert_held();
+    undo(&mut app, true);
+    let redone = settled(&mut app);
+    assert_eq!(redone["project"], added["project"]);
+    let final_audio = pump(&mut app, &final_audio, [0.1, 0.1], true);
     assert!(final_audio["engine"]["position_beats"].as_f64().unwrap() < 4.0);
     assert_held();
     app.quit();
@@ -730,6 +790,14 @@ fn moving_trimming_splitting_duplicating_and_importing_clips_keep_live_dsp() {
     let state = settled(&mut app);
     assert_eq!(track(&state, audio)["clips"].as_array().unwrap().len(), 2);
     previous = pump(&mut app, &previous, [0.2, 0.2], true);
+    // Split retains both cues as a group. This scenario intentionally copies
+    // only its right-hand cue while the same DSP instances keep sounding.
+    let right = state["selected_clip"].as_u64().unwrap();
+    let at = center(&clip_rect(&state, right));
+    app.command(
+        json!({"command":"pointer","phase":"click","button":"secondary","x":at.0,"y":at.1}),
+    );
+    app.click("Select only this clip");
     app.command(json!({"command":"key", "key":"D", "cmd":true}));
     let state = settled(&mut app);
     assert_eq!(track(&state, audio)["clips"].as_array().unwrap().len(), 3);

@@ -92,6 +92,89 @@ fn offline_export_accepts_a_slow_first_block_and_advertises_offline_processing()
 }
 
 #[test]
+fn local_audio_analysis_uses_offline_processing_without_changing_the_song() {
+    let plugin = EditorProbeFixture::build_for_offline(Duration::from_millis(400));
+    let mut app = Harness::with_plugin_host(plugin.path.parent().unwrap(), &helper());
+    let original = open_native_song(&mut app, &plugin);
+    // Application dispatch uses the same local worker as song tools, MCP and
+    // the assistant. This call does not start a model/provider or use a network.
+    let measured = app.command(json!({"command":"application_tool", "name":"audio_analyze",
+        "arguments":{"start_beat":0.0,"end_beat":0.25}}));
+    assert_eq!(measured["tool_result"]["ok"], true, "{measured}");
+    let result = &measured["tool_result"]["result"];
+    assert_eq!(result["frames"], 6_000);
+    assert_eq!(result["silent"], false);
+    assert!(result["sample_peak_linear"]["left"].as_f64().unwrap() > 0.01);
+    assert_eq!(measured["project"], original["project"]);
+    assert_eq!(measured["history"], original["history"]);
+    assert_eq!(measured["song_session"], original["song_session"]);
+    assert_eq!(measured["device_open"], false);
+    app.quit();
+}
+
+#[test]
+fn stopping_a_local_analysis_job_keeps_notes_and_ignores_its_late_result() {
+    let plugin = EditorProbeFixture::build_for_offline(Duration::from_secs(2));
+    let mut app = Harness::with_plugin_host(plugin.path.parent().unwrap(), &helper());
+    let original = open_native_song(&mut app, &plugin);
+    // A deterministic in-process script supplies the tool request. No API key,
+    // external provider or network is involved in this cancellation regression.
+    app.command(json!({"command":"assistant_script", "turns":[
+        {"calls":[{"id":"measure", "name":"audio_analyze",
+            "arguments":{"start_beat":0.0,"end_beat":0.25}}]},
+        {"text":"Analysis completed after the result."}
+    ]}));
+    app.click("Window");
+    let opened = app.click("Assistant");
+    let rect = &opened["assistant"]["prompt_rect"];
+    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    app.command(json!({"command":"text","text":"Measure this short phrase locally."}));
+    app.click("Send");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let state = app.inspect();
+        if state["assistant"]["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|message| message["role"] == "Tool" && message["text"] == "audio analyze")
+        {
+            assert_eq!(state["assistant"]["busy"], true);
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Local analysis was not dispatched: {state}"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    app.click("Stop");
+    // Let an already-running native block finish, so a late successful response
+    // cannot silently replace the user's explicit stopped state.
+    let deadline = Instant::now() + Duration::from_millis(2_500);
+    loop {
+        let state = app.inspect();
+        assert_eq!(state["assistant"]["busy"], false);
+        assert_eq!(state["assistant"]["status"], "Stopped");
+        assert_eq!(state["project"], original["project"]);
+        assert_eq!(state["history"], original["history"]);
+        assert_eq!(state["song_session"], original["song_session"]);
+        assert!(
+            !state["assistant"]["messages"]
+                .to_string()
+                .contains("Analysis completed after")
+        );
+        if Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    app.quit();
+}
+
+#[test]
 fn offline_hung_block_still_fails_with_a_bounded_deadline_and_preserves_the_old_wav() {
     let plugin = EditorProbeFixture::build_for_offline(Duration::from_secs(10));
     let mut app = Harness::with_plugin_host(plugin.path.parent().unwrap(), &helper());

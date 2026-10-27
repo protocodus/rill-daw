@@ -180,10 +180,10 @@ fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_p
         assert_eq!(app.key("Escape")["view"], "Clip");
     }
     let menu_open = app.click("Edit");
-    assert!(visible(&menu_open, "Split at cursor"));
+    assert!(visible(&menu_open, "History…"));
     let menu_closed = app.key("Escape");
     assert_eq!(menu_closed["view"], "Clip");
-    assert!(!visible(&menu_closed, "Split at cursor"));
+    assert!(!visible(&menu_closed, "History…"));
 
     app.click("Properties");
     menu(&mut app, "File", "New");
@@ -368,11 +368,11 @@ fn properties_assign_folder_membership_and_compact_tracks_without_losing_channel
     let state = app.click("Compact track");
     assert_eq!(state["project"]["tracks"][0]["collapsed"], true);
     app.key("Escape");
-    let state = app.click("▾ New folder");
+    let state = app.click("New folder");
     assert_eq!(state["project"]["tracks"][1]["collapsed"], true, "{state}");
     assert!(!visible(&state, "New instrument"));
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
-    let state = app.click("▸ New folder");
+    let state = app.click("New folder");
     assert!(visible(&state, "New instrument"));
     assert_eq!(state["project"]["tracks"][1]["collapsed"], false);
     app.quit();

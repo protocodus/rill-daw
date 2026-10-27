@@ -173,6 +173,14 @@ impl DawApp {
         }
         let track_name = track.name.clone();
         let mut create_send = false;
+        let mut create_bus_send = false;
+        let eligible: std::collections::HashSet<_> = self
+            .project
+            .eligible_output_buses(track_id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|track| track.id)
+            .collect();
         let buses: Vec<_> = self
             .project
             .tracks
@@ -252,14 +260,26 @@ impl DawApp {
                     }
                     let mut add_bus = None;
                     widgets::menu_button(ui, "+ Send", |ui| {
-                        if buses.is_empty() {
-                            ui.label("No buses available");
+                        let available: Vec<_> = buses
+                            .iter()
+                            .filter(|(id, _)| {
+                                eligible.contains(id)
+                                    && !track.sends.iter().any(|send| send.target_bus == *id)
+                            })
+                            .collect();
+                        if available.is_empty() {
+                            ui.label("No eligible buses");
                         }
-                        for (id, name) in &buses {
+                        for (id, name) in available {
                             if widgets::button(ui, name).clicked() {
                                 add_bus = Some(*id);
                                 ui.close();
                             }
+                        }
+                        ui.separator();
+                        if widgets::button(ui, "+ Bus and send").clicked() {
+                            create_bus_send = true;
+                            ui.close();
                         }
                     })
                     .response
@@ -290,7 +310,7 @@ impl DawApp {
                     )
                     .show_ui(ui, |ui| {
                         widgets::selectable_value(ui, &mut output, None, "Master output");
-                        for (id, name) in &buses {
+                        for (id, name) in buses.iter().filter(|(id, _)| eligible.contains(id)) {
                             widgets::selectable_value(ui, &mut output, Some(*id), name);
                         }
                     })
@@ -312,6 +332,19 @@ impl DawApp {
         }
         if create_send {
             self.open_effect_library(track_id, true);
+        }
+        if create_bus_send {
+            self.begin_edit();
+            let name = self.available_bus_name();
+            let bus = self.project.add_bus(name);
+            let result = self.project.add_send(track_id, bus, 0.25, false);
+            if result.is_ok() {
+                self.edit_label = Some("Add bus send".into());
+                self.changed();
+            } else {
+                self.project.delete_track(bus).ok();
+            }
+            self.message(result, "Bus send added");
         }
     }
 }

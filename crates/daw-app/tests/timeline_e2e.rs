@@ -130,6 +130,25 @@ fn arranger_common_tool_shortcuts_draw_cut_duplicate_erase_and_seek() {
             .len(),
         2
     );
+    // Split keeps both pieces selected. Exercise a single clicked-piece copy
+    // explicitly, using the same mouse selection action as the arranger menu.
+    let left_id = split["project"]["tracks"][0]["clips"][0]["id"]
+        .as_u64()
+        .unwrap();
+    let rect = &split["timeline"]["clips"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|clip| clip["id"] == left_id)
+        .unwrap()["rect"];
+    let at = (
+        (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+        (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
+    );
+    app.command(
+        json!({"command":"pointer","phase":"click","button":"secondary","x":at.0,"y":at.1}),
+    );
+    app.click("Select only this clip");
     app.key("R");
     let copied = app.command(json!({"command":"pointer","phase":"click","x":left+30.0,"y":y}));
     assert_eq!(

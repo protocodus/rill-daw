@@ -26,6 +26,26 @@ fn one_key_press() -> usize {
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    SongTool {
+        name: String,
+        arguments: Value,
+    },
+    ApplicationTool {
+        name: String,
+        arguments: Value,
+    },
+    McpRequest {
+        request: Value,
+        #[serde(default)]
+        application: bool,
+    },
+    AssistantScript {
+        turns: Vec<daw_ai::ScriptedTurn>,
+    },
+    WaitAssistant {
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
     /// Consume the real engine queue through its callback with no audio device.
     PumpAudio {
         frames: usize,
@@ -135,6 +155,14 @@ enum Command {
     Text {
         text: String,
     },
+    /// Deliver the clipboard events emitted by the native window integration.
+    Clipboard {
+        action: TestClipboardAction,
+        text: Option<String>,
+        /// Some integrations send the key alongside the native event.
+        #[serde(default)]
+        with_key: bool,
+    },
     Drop {
         paths: Vec<PathBuf>,
         /// Zero-based project track index. Omit to use the empty arrangement area.
@@ -173,6 +201,14 @@ enum TestDocumentDialog {
     Open,
     Export,
     ExportMidi,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum TestClipboardAction {
+    Copy,
+    Cut,
+    Paste,
 }
 
 #[derive(Deserialize)]
@@ -227,6 +263,9 @@ fn default_timeout() -> u64 {
 }
 
 struct Harness {
+    tool_result: Option<Value>,
+    mcp_result: Option<Value>,
+    mcp_server: daw_mcp::McpServer,
     ctx: egui::Context,
     app: DawApp,
     time: f64,
@@ -236,6 +275,7 @@ struct Harness {
     inspect_paint: bool,
     painted_rects: Vec<Value>,
     painted_images: Vec<Value>,
+    painted_meshes: Vec<Value>,
     audio_output: Option<Vec<[f32; 2]>>,
     clipboard_text: Option<String>,
     close_requested: bool,
@@ -290,12 +330,16 @@ impl Harness {
             ctx,
             app,
             time: 0.0,
+            tool_result: None,
+            mcp_result: None,
+            mcp_server: Default::default(),
             labels: Vec::new(),
             menu_labels: Vec::new(),
             window_labels: Vec::new(),
             inspect_paint: false,
             painted_rects: Vec::new(),
             painted_images: Vec::new(),
+            painted_meshes: Vec::new(),
             audio_output: None,
             clipboard_text: None,
             close_requested: false,
@@ -337,11 +381,7 @@ impl Harness {
                         .collect::<Vec<_>>()
                 });
                 for layer in layers {
-                    let labels = if layer.order == egui::Order::Foreground {
-                        &mut *menu_labels
-                    } else {
-                        &mut *window_labels
-                    };
+                    let mut layer_labels = Vec::new();
                     let transform = ctx.layer_transform_to_global(layer);
                     ctx.graphics(|graphics| {
                         if let Some(list) = graphics.get(layer) {
@@ -350,10 +390,22 @@ impl Harness {
                                 if let Some(transform) = transform {
                                     shape.transform(transform);
                                 }
-                                collect_labels(&shape.shape, shape.clip_rect, labels);
+                                collect_labels(&shape.shape, shape.clip_rect, &mut layer_labels);
                             }
                         }
                     });
+                    if layer.order == egui::Order::Foreground {
+                        // Retained backdrops can repeat toolbar text on another
+                        // foreground layer. Only the actual pointer-owning area
+                        // is an interactive menu target.
+                        menu_labels.extend(
+                            layer_labels
+                                .into_iter()
+                                .filter(|(_, rect)| ctx.layer_id_at(rect.center()) == Some(layer)),
+                        );
+                    } else {
+                        window_labels.extend(layer_labels);
+                    }
                 }
             }
         });
@@ -371,11 +423,13 @@ impl Harness {
         self.labels.clear();
         self.painted_rects.clear();
         self.painted_images.clear();
+        self.painted_meshes.clear();
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
             if self.inspect_paint {
                 collect_painted_rects(&clipped.shape, clipped.clip_rect, &mut self.painted_rects);
                 collect_painted_images(&clipped.shape, clipped.clip_rect, &mut self.painted_images);
+                collect_painted_meshes(&clipped.shape, clipped.clip_rect, &mut self.painted_meshes);
             }
         }
     }
@@ -419,6 +473,57 @@ impl Harness {
     }
 
     fn click(&mut self, label: &str, occurrence: usize) -> Result<()> {
+        // Semantic clicks reveal a command using real wheel input, just as a
+        // mouse user does when the menu is taller than the application window.
+        let foreground_has_label = |this: &Self| {
+            this.menu_labels
+                .iter()
+                .any(|(text, _)| text.trim() == label)
+        };
+        if egui::Popup::is_any_open(&self.ctx)
+            && let Some(rect) = daw_ui::command_menu_scroll_rect(&self.ctx)
+            && !foreground_has_label(self)
+            && self
+                .label_rect(label, occurrence)
+                .map_or(true, |target| target.center().y >= rect.top())
+        {
+            self.frame(RawInput {
+                events: vec![
+                    Event::PointerMoved(rect.center()),
+                    Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: egui::vec2(0.0, 10_000.0),
+                        modifiers: Default::default(),
+                    },
+                ],
+                ..Default::default()
+            });
+            self.settle();
+            for _ in 0..12 {
+                if foreground_has_label(self) {
+                    break;
+                }
+                self.frame(RawInput {
+                    events: vec![
+                        Event::PointerMoved(rect.center()),
+                        Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta: egui::vec2(0.0, -180.0),
+                            modifiers: Default::default(),
+                        },
+                    ],
+                    ..Default::default()
+                });
+                self.settle();
+                if foreground_has_label(self) {
+                    break;
+                }
+            }
+            ensure!(
+                foreground_has_label(self),
+                "Command {label:?} was not visible in the active scrolling menu"
+            );
+        }
         let pos = self.label_rect(label, occurrence)?.center();
         for pressed in [true, false] {
             self.frame(RawInput {
@@ -591,6 +696,95 @@ impl Harness {
         self.painted_rects.clear();
         self.painted_images.clear();
         match command {
+            Command::SongTool { name, arguments } => {
+                let result = self.execute_tool_wait(&name, arguments);
+                self.tool_result = Some(match result {
+                    Ok(result) => json!({"ok":true,"result":result}),
+                    Err(error) => json!({"ok":false,"error":error}),
+                });
+                self.settle();
+            }
+            Command::ApplicationTool { name, arguments } => {
+                let mut result = self.execute_tool_wait_profile(
+                    daw_tools::ToolProfile::Application,
+                    &name,
+                    arguments,
+                );
+                if result.as_ref().is_ok_and(|value| value["accepted"] == true) {
+                    let deadline = Instant::now() + Duration::from_secs(120);
+                    while self.app.project_io_pending()
+                        || self.app.state_sync_pending()
+                        || self.app.document_guard.is_some()
+                        || self.app.export_job.is_some()
+                        || self.app.loading.is_some()
+                    {
+                        if Instant::now() >= deadline {
+                            result = Err(daw_tools::ToolError::new(
+                                "timeout",
+                                "Application operation timed out",
+                            ));
+                            break;
+                        }
+                        self.frame(RawInput::default());
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    if self.app.error {
+                        result = Err(daw_tools::ToolError::new(
+                            "operation_failed",
+                            self.app.status.clone(),
+                        ));
+                    }
+                }
+                self.tool_result = Some(match result {
+                    Ok(value) => json!({"ok":true,"result":value}),
+                    Err(error) => json!({"ok":false,"error":error}),
+                });
+                self.settle();
+            }
+            Command::McpRequest {
+                request,
+                application,
+            } => {
+                let profile = if application {
+                    daw_tools::ToolProfile::Application
+                } else {
+                    daw_tools::ToolProfile::CurrentSong
+                };
+                struct DriverHost<'a>(&'a mut Harness, daw_tools::ToolProfile);
+                impl daw_tools::ToolHost for DriverHost<'_> {
+                    fn tool_specs(&self) -> Vec<daw_tools::ToolSpec> {
+                        daw_tools::tool_specs_for(self.1)
+                    }
+                    fn call_tool(
+                        &mut self,
+                        name: &str,
+                        args: Value,
+                    ) -> std::result::Result<Value, daw_tools::ToolError> {
+                        self.0.execute_tool_wait_profile(self.1, name, args)
+                    }
+                }
+                let mut server = std::mem::take(&mut self.mcp_server);
+                self.mcp_result = server.handle_request(&mut DriverHost(self, profile), request);
+                self.mcp_server = server;
+                self.settle();
+            }
+            Command::AssistantScript { turns } => {
+                self.app.assistant.set_script(turns);
+                self.settle();
+            }
+            Command::WaitAssistant { timeout_ms } => {
+                ensure!(
+                    (1..=120000).contains(&timeout_ms),
+                    "Assistant timeout must be between 1 and 120000 ms"
+                );
+                let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+                while self.app.assistant.busy() {
+                    ensure!(Instant::now() < deadline, "Assistant timed out");
+                    self.frame(RawInput::default());
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                self.settle();
+            }
             Command::PumpAudio { frames } => {
                 ensure!(self.app.virtual_audio, "Virtual audio is not enabled");
                 ensure!(
@@ -915,6 +1109,40 @@ impl Harness {
                 });
                 self.settle();
             }
+            Command::Clipboard {
+                action,
+                text,
+                with_key,
+            } => {
+                let (event, key) = match action {
+                    TestClipboardAction::Copy => (Event::Copy, egui::Key::C),
+                    TestClipboardAction::Cut => (Event::Cut, egui::Key::X),
+                    TestClipboardAction::Paste => (
+                        Event::Paste(
+                            text.or_else(|| self.clipboard_text.clone())
+                                .unwrap_or_default(),
+                        ),
+                        egui::Key::V,
+                    ),
+                };
+                let mut events = vec![event];
+                if with_key {
+                    for pressed in [true, false] {
+                        events.push(Event::Key {
+                            key,
+                            physical_key: None,
+                            pressed,
+                            repeat: false,
+                            modifiers: egui::Modifiers::COMMAND,
+                        });
+                    }
+                }
+                self.frame(RawInput {
+                    events,
+                    ..Default::default()
+                });
+                self.settle();
+            }
             Command::Drop { paths, track, beat } => self.drop_files(paths, track, beat)?,
             Command::Open { path, wait } => {
                 self.app.request_open_project(path, false);
@@ -1004,6 +1232,45 @@ impl Harness {
         Ok(())
     }
 
+    fn execute_tool_wait(
+        &mut self,
+        name: &str,
+        args: Value,
+    ) -> std::result::Result<Value, daw_tools::ToolError> {
+        self.execute_tool_wait_profile(daw_tools::ToolProfile::CurrentSong, name, args)
+    }
+
+    fn execute_tool_wait_profile(
+        &mut self,
+        profile: daw_tools::ToolProfile,
+        name: &str,
+        args: Value,
+    ) -> std::result::Result<Value, daw_tools::ToolError> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.app
+            .dispatch_profile_tool(profile, name.into(), args, sender, cancel.clone());
+        let deadline = Instant::now() + Duration::from_secs(90);
+        loop {
+            match receiver.try_recv() {
+                Ok(result) => return result,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err(daw_tools::ToolError::new(
+                        "unavailable",
+                        "Tool dispatcher closed",
+                    ));
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+            if Instant::now() >= deadline {
+                cancel.store(true, std::sync::atomic::Ordering::Release);
+                return Err(daw_tools::ToolError::new("timeout", "Tool timed out"));
+            }
+            self.frame(RawInput::default());
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     fn state(&self) -> Value {
         let mut state = json!({
             "effective_theme": format!("{:?}", self.ctx.theme()),
@@ -1023,10 +1290,6 @@ impl Harness {
             "waveform_warning": self.app.waveform_warning,
             "native_editor": self.app.instrument_diagnostics(),
             "audition_request": self.app.audition_request,
-            "midi_editor": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("midi_editor_diagnostics"))),
-            "audio_editor": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("audio_editor_diagnostics"))),
-            "timeline": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("timeline_diagnostics"))),
-            "crossfade": self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("crossfade_diagnostics"))),
             "join_pending": self.app.join_ui.pending(),
             "plugin_catalog": self.app.vst_catalog.iter().map(|entry| json!({
                 "name": entry.plugin.name, "class_id": entry.plugin.class_id,
@@ -1060,6 +1323,18 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        for (field, diagnostic) in [
+            ("midi_editor", "midi_editor_diagnostics"),
+            ("audio_editor", "audio_editor_diagnostics"),
+            ("timeline", "timeline_diagnostics"),
+            ("mixer", "mixer_diagnostics"),
+            ("crossfade", "crossfade_diagnostics"),
+        ] {
+            state[field] = self
+                .ctx
+                .data(|data| data.get_temp::<Value>(egui::Id::new(diagnostic)))
+                .unwrap_or(Value::Null);
+        }
         state["last_error_report"] = self.app.last_error_report.as_ref().map_or(
             Value::Null,
             |report| {
@@ -1068,6 +1343,11 @@ impl Harness {
                 })
             },
         );
+        state["tool_join_pending"] = json!(self.app.tool_joins.pending());
+        state["song_session"] = json!(self.app.song_session);
+        state["assistant"] = self.app.assistant_diagnostics(&self.ctx);
+        state["tool_result"] = json!(self.tool_result);
+        state["mcp_result"] = json!(self.mcp_result);
         state["revision"] = json!(self.app.revision);
         state["audio_silence"] = crate::audio_silence::diagnostics(&self.ctx);
         state["popups"]["about"] = json!(self.app.about_open);
@@ -1108,9 +1388,27 @@ impl Harness {
             .into();
         state["exported_file"] = json!(self.app.exported_file);
         state["export_run"] = self.app.export_diagnostics();
+        state["selected_clips"] = json!(self.app.arranger_selection_ids());
+        state["selection_span"] = json!(self.app.arranger_phrase_span());
+        state["boundary_fades_dialog"] = crate::audio_batch::diagnostics(&self.ctx);
+        state["audio_batch_fades"] = state["boundary_fades_dialog"].clone();
+        state["finishing"] = self.app.finishing_diagnostics();
+        state["menu_label_rects"] =
+            json!(self.menu_labels.iter().map(|(label,rect)| json!({
+            "text":label,"min":[rect.left(),rect.top()],"max":[rect.right(),rect.bottom()]
+        })).collect::<Vec<_>>());
+        state["native_menu"] = json!({
+            "open": egui::Popup::is_any_open(&self.ctx),
+            "scroll_rect": daw_ui::command_menu_scroll_rect(&self.ctx).map(|rect| [rect.left(),rect.top(),rect.right(),rect.bottom()]),
+            "foreground_areas": self.ctx.memory(|memory| memory.layer_ids()
+                .filter(|layer| layer.order == egui::Order::Foreground && memory.areas().is_visible(layer))
+                .filter_map(|layer| memory.area_rect(layer.id).map(|rect| [rect.left(),rect.top(),rect.right(),rect.bottom()]))
+                .collect::<Vec<_>>()),
+        });
         if self.inspect_paint {
             state["painted_rects"] = json!(self.painted_rects);
             state["painted_images"] = json!(self.painted_images);
+            state["painted_meshes"] = json!(self.painted_meshes);
         }
         state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
         state["popup_context"] = self.app.popup_context_diagnostics();
@@ -1122,6 +1420,7 @@ impl Harness {
         state["input_device_name"] = json!(self.app.settings.input_device_name);
         state["audio_takes"] = self.app.audio_takes_diagnostics();
         state["spectrogram"] = crate::spectrogram::diagnostics(&self.ctx);
+        state["waveform"] = crate::spectrogram::waveform_diagnostics(&self.ctx);
         state["popups"]["audio_takes"] = json!(self.app.audio_takes_open);
         state["error_details"] = self.app.error_details_diagnostics();
         state["document_guard"] = self.app.document_guard_diagnostics();
@@ -1184,12 +1483,40 @@ fn collect_painted_images(shape: &egui::Shape, clip: Rect, output: &mut Vec<Valu
                 output.push(json!({
                     "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
                     "texture_id": format!("{:?}", mesh.texture_id),
+                    "vertex_colors": mesh.vertices.iter().map(|vertex| vertex.color.to_array()).collect::<Vec<_>>(),
                 }));
             }
         }
         egui::Shape::Vec(shapes) => {
             for shape in shapes {
                 collect_painted_images(shape, clip, output);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Inspect raw untextured geometry only when requested. This observes the mesh
+/// submitted by the renderer rather than trusting a visualization-stage flag.
+fn collect_painted_meshes(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value>) {
+    match shape {
+        egui::Shape::Mesh(mesh) if mesh.texture_id == egui::TextureId::default() => {
+            let bounds = mesh.calc_bounds();
+            let rect = bounds.intersect(clip);
+            if rect.is_positive() {
+                output.push(json!({
+                    "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
+                    "bounds": [bounds.left(), bounds.top(), bounds.right(), bounds.bottom()],
+                    "vertices": mesh.vertices.len(), "indices": mesh.indices.len(),
+                    "transparent_vertices": mesh.vertices.iter().filter(|vertex| vertex.color.a() == 0).count(),
+                    "max_alpha": mesh.vertices.iter().map(|vertex| vertex.color.a()).max().unwrap_or(0),
+                    "valid": mesh.is_valid(),
+                }));
+            }
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_meshes(shape, clip, output);
             }
         }
         _ => {}

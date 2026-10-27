@@ -215,6 +215,7 @@ impl DawApp {
         // Applying it must not interrupt a playing session or close its editor.
         let mut same_audio_and_storage = self.settings.clone();
         same_audio_and_storage.appearance = settings.appearance;
+        same_audio_and_storage.ai = settings.ai.clone();
         if same_audio_and_storage == settings {
             self.apply_appearance_settings(settings);
             return;
@@ -1285,6 +1286,8 @@ impl DawApp {
         let (saved, overrides) = self.editor_state_mut(target).unwrap();
         *saved = state;
         overrides.clear();
+        self.song_session.bump();
+        self.assistant.known_parameters.clear();
         // A first capture or representation consolidation has no extra Undo
         // step, but it still changes the document that must be persisted.
         if self.history.is_saved() {
@@ -1342,6 +1345,7 @@ impl DawApp {
                 label,
                 format!("plugin:{}:{:?}:{ids:?}", target.track, target.effect),
             );
+            self.song_session.bump();
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
         }

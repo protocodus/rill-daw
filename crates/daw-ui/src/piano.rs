@@ -158,6 +158,16 @@ pub fn piano_key(
     }
 }
 
+/// Keyboard navigation marks a key independently of whether it is sounding.
+pub fn paint_piano_key_selection(painter: &Painter, rect: Rect) {
+    painter.rect_stroke(
+        rect.shrink(1.5),
+        2.0,
+        Stroke::new(2.0_f32, theme::palette(painter.ctx()).accent),
+        StrokeKind::Inside,
+    );
+}
+
 pub fn velocity_marker(painter: &Painter, bounds: Rect, normalized: f32, selected: bool) {
     let y = bounds.bottom() - normalized.clamp(0.0, 1.0) * bounds.height();
     let colors = theme::palette(painter.ctx());

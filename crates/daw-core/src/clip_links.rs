@@ -11,6 +11,7 @@ fn shared_source(clip: &Clip) -> (String, ClipContent) {
     let mut content = clip.content.clone();
     if let ClipContent::Audio {
         envelope,
+        boundary_fades,
         crossfade,
         ..
     } = &mut content
@@ -20,6 +21,7 @@ fn shared_source(clip: &Clip) -> (String, ClipContent) {
             length: envelope.map_or(clip.source_length(), |region| region.length),
         });
         *crossfade = None;
+        *boundary_fades = None;
     }
     (clip.name.clone(), content)
 }
@@ -89,11 +91,13 @@ fn apply_source(clip: &mut Clip, source: &(String, ClipContent)) {
     if let (
         ClipContent::Audio {
             envelope: old_envelope,
+            boundary_fades: old_boundary_fades,
             crossfade: old_crossfade,
             ..
         },
         ClipContent::Audio {
             envelope,
+            boundary_fades,
             crossfade,
             ..
         },
@@ -104,6 +108,7 @@ fn apply_source(clip: &mut Clip, source: &(String, ClipContent)) {
         envelope.as_mut().expect("canonical audio envelope").offset =
             old_envelope.map_or(0.0, |region| region.offset);
         *crossfade = *old_crossfade;
+        *boundary_fades = *old_boundary_fades;
     }
     clip.name.clone_from(&source.0);
     clip.content = content;

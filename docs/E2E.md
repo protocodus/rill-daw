@@ -21,7 +21,36 @@ Header-picker scenarios change the output bus directly from the sequencer, retur
 
 The headless tests cover application behavior, UI event handling, model changes, decoding, rendering, export, and shutdown. Metadata-only VST fixtures verify folder setup, scans, search, multi-class instrument assignment, insert chains, and automation without claiming to execute a real plug-in. Native window tests are separate; platform file dialogs and hardware drivers still need manual testing.
 
+`source_preservation_e2e` rejects Save As and export destinations that alias audio
+referenced by the project, including inactive takes and muted tracks. It checks
+direct paths, relative paths, hard links and symbolic links; distinct destinations
+remain usable. Byte comparisons cover original WAVs, full portable assets and
+freshly extracted copies, with command-line and engine export coverage too.
+
 `focus_e2e` checks that only the foreground view exposes interactive controls, while retained caller paint remains visible beneath utilities. It checks backdrop source/depth, ignores clicks on a former background Back target, restores nested Properties and the editor viewport, and keeps navigation out of project history. It exercises both themes at 1100×760. Editor and library scenarios also exercise their on-demand menus through real pointer events.
+
+`foreground_shortcuts_e2e` uses F and plus/minus with the pointer over the toolbar
+in Arrangement, MIDI, audio and automation. It checks selection and history stay
+intact and guards text/numeric entry, menus, utilities and document decisions.
+`beat_ruler_e2e` checks readable beat and subdivision labels across those same
+editors, including 3/4 and 4/4, both themes and display densities.
+`mixer_gain_entry_e2e` types an exact dB value, checks Undo/Redo and portable
+recall against exported level, and ensures middle-drag scrolling and stored
+values outside the editing range do not change gain.
+
+`main_toolbar_roles_e2e` checks complete control groups at 800–1600 px, their
+painted action/view roles, and real transport/Click/Loop behavior. The spectrum
+view tests check intensity and both cached palettes in actual uploaded textures
+and painted quads, with unchanged playback, source files and exports.
+`arranger_layout_e2e` drives label and global row resizing, verifies the loop's
+separate painted lane, and creates/reparents nested folders with safe choices,
+Undo and portable recall. `mixer_flow_e2e` verifies signal-stage order and actual
+arrow geometry, multiple pre/post bus sends against rendered samples, feedback
+rejection, retained route preview, Undo and save/reopen.
+`midi_overlap_merge_e2e` creates and moves fully covered notes through normal
+pointer/keyboard/native clipboard input. It checks release-time merging,
+selection, Undo, stretched ghosts, untouched imported overlaps and saving during
+a held draw. Chords and partial overlaps remain distinct.
 
 `popup_backdrop_e2e` inspects actual paint order to require one theme-aware dim layer behind the active popup. It covers utilities, nested navigation, menu-bar and context menus, output and color pickers, combo boxes over both workspaces and utilities, and the unsaved-project confirmation. Closing or cancelling restores the caller and removes the dim when no popup remains; both appearances are exercised.
 
@@ -149,6 +178,7 @@ Supported commands:
 | `key` | `key`, optional `shift`, `ctrl`, `alt`, `cmd`, `release_modifiers`, `repetitions` (1–32) | Send a keyboard press/release. Names include `Escape`, `Tab`, `Enter`, `Delete`, `A`, and `Z`. `cmd` is the platform command shortcut modifier. `release_modifiers: true` delivers the complete chord in one frame with no modifiers held at repaint; repeated presses are also delivered in one frame. Defaults preserve separate press/release frames. |
 | `focused` | `focused` boolean | Change window focus for held-note release tests. |
 | `text` | `text` | Send text input to the focused control. |
+| `clipboard` | `action` (`copy`, `cut`, `paste`), optional `text`, `with_key` | Deliver native clipboard events from the desktop integration. Paste defaults to the last clipboard output; `with_key` also supplies the matching command key to check that an edit happens only once. |
 | `drop` | `paths`, optional `track`, `beat` | Drop files onto a visible audio track by project index, or omit `track` to create new tracks in empty arrangement space. Beat must be visible and align to current snap. |
 | `export` | `path` | Start the application's background WAV export. |
 | `wait_export` | optional `timeout_ms` | Pump application frames until export completes; maximum timeout is 60 seconds. |
@@ -255,6 +285,66 @@ cover live note drags, quantize preview/cancel/apply, and rejected boundary edit
 
 ```sh
 cargo test --locked -p daw-app --test clones_e2e
+```
+
+`midi_clipboard_e2e` delivers native Copy/Cut/Paste events through the running
+piano roll, including duplicate key events, text-field focus, menu copying,
+relative note timing and velocities, and Undo/Redo. Shift-click selection toggles
+must leave notes and history untouched while Shift-drag still duplicates.
+`audio_common_e2e` also checks that **Duplicate selection** and **Duplicate clip**
+name the active scope, with rendered sample checks in both appearances.
+
+`song_workflow_e2e` builds an eight-bar song from three original generated WAV
+parts and an unassigned MIDI guide. It draws notes, repeats linked patterns,
+varies an independent ending, balances channels, and checks Undo/Redo. After
+saving a portable project and deleting the original sources, a fresh app process
+must export the same finite, unclipped 16-second audio with sound in every bar.
+Set `RILL_SONG_ARTIFACT_DIR` to retain the app-produced `.rill` and `.wav` files.
+
+`quiet_current_e2e` makes a second eight-bar song in 3/4 at 90 BPM, using audio
+range variations, precise fades and channel balance, then checks portable recall.
+The opt-in `cut_current_e2e` makes a third song entirely from four original audio
+loops at 105 BPM. Normal UI gestures isolate and rearrange 93 drum hits and bass,
+keys and chord cues; Slip, reverse, fades and precise channel gains complete its
+eight-bar arrangement. Byte checks retain all four originals and verify complete
+embedded WAVs, followed by identical export from a fresh process. Set
+`RILL_FOUR_LOOP_SOURCES` to the four source loops and `RILL_SONG_ARTIFACT_DIR` to
+retain the project, mix and intermediate checkpoints.
+
+`tool_hints_e2e` switches every supported arranger, MIDI and audio tool using
+pointer and keyboard input. Its persistent panels and automation interaction
+guide must remain readable in narrow windows without changing selection or
+history. `waveform_scale_e2e` checks Default/Fit against actual painted meshes,
+stereo balance, fractional trims, faded and very quiet audio, unchanged exports
+and source bytes, and warm caching with hundreds of short visible clips.
+
+```sh
+cargo test --locked -p daw-app --test midi_clipboard_e2e --test audio_common_e2e --test song_workflow_e2e -- --test-threads=1
+```
+
+`control_roles_e2e` checks filled commands, persistent tool selection, and
+outlined presentation controls in both appearances at narrow and wide sizes.
+Commands operate on notes without changing the chosen tool; highlighting,
+folding, and Fit preserve the project and history. Shared `control_roles` tests
+also check native radio accessibility, keyboard activation, disabled behavior,
+and style isolation. Audio editor tests resize through 800–1400 points, requiring
+gain labels and controls to stay together, then enter precise dB/fade values and
+Undo each edit.
+
+Parameter-search regressions keep modified arrows and Enter out of list
+navigation, including when modifiers are released before repaint. Shared timeline
+tests nest a horizontal-only canvas in a real scroll area to check vertical-wheel
+delegation, while automation E2E verifies that navigation preserves points,
+selection, and project history.
+
+`mixer_navigation_e2e` starts middle-drags directly over Mixer gain and pan,
+checks that press/held/release preserve every channel and selection, and verifies
+horizontal scrolling without a press jump or release fling. Primary fader edits
+and Undo remain available. Both themes and display densities are covered.
+
+```sh
+cargo test --locked -p daw-ui --test control_roles --test timeline --test parameter_browser
+cargo test --locked -p daw-app --test control_roles_e2e --test audio_editor_e2e --test automation_e2e --test parameter_search_e2e -- --test-threads=1
 ```
 
 `components_e2e` checks shared controls and popup navigation at the 1100×720 minimum viewport in both
@@ -523,3 +613,52 @@ installed plug-in or network connection.
 cargo test --locked -p daw-app --test numeric_replacement_e2e --test instrument_targets_e2e --test document_context_e2e --test generation_workflow_e2e --test offline_processing_e2e --test export_retry_e2e --test render_error_e2e -- --test-threads=1
 cargo test --locked -p daw-ui --test numeric_entry
 ```
+
+`waveform_refinement_e2e` checks the immediate raw preview, subsequent exact source
+peaks, and actual antialiased mesh/fringe geometry in Arrangement, Clip Editor,
+neighbouring clips and takes. It verifies single-sample transient preservation,
+gain/reverse/trim/stretch mapping, bounded visible-column work, cached redraws
+without PCM access, and identical playback/export. A silent source window with
+loud samples immediately outside both boundaries stays silent in forward and
+reverse previews and WAV output. `inspect` with `paint: true` reports compact
+`painted_meshes` summaries; ordinary snapshots include `waveform` cache/stage
+observations. No test substitutes a diagnostic flag for actual mesh submission.
+
+```sh
+cargo test --locked -p daw-core waveform
+cargo test --locked -p daw-ui --test waveform_refinement
+cargo test --locked -p daw-app --test waveform_refinement_e2e --test spectrum_e2e --test audio_takes_e2e -- --test-threads=1
+```
+
+The optional `daw-ui` `waveform_bench` example compares bar drawing/tessellation
+with rebuilt and cached envelopes at 1× and 2× density. It excludes source queries
+and FFT work, so it measures painting rather than total application frame time.
+
+### Phrase, cue and mouse-only workflows
+
+`arranger_selection_e2e` covers cross-track marquee and time-block selection,
+mouse Add/Remove, group move/copy/cut/duplicate/delete, preserved rests and
+partial source windows, retained takes, Slip/fade handles, history cancellation
+of held gestures, and nested folder Fit selection/Previous view.
+`batch_audio_fades_e2e` checks mixed audio/MIDI selections, unchanged original
+WAVs and unselected/interior PCM, musical fade preservation, idempotence,
+Apply/Remove/Cancel, Undo/Redo and portable recall. Core/engine boundary fade
+checks cover reverse, stretch, comp regions and live decoded-PCM reuse.
+
+`cue_editor_flow_e2e` exercises header and View navigation, arrow selection,
+retained tool/zoom, bounded grid preview/splitting, all-cue result selection,
+exact exported PCM and source bytes. `precise_clip_editing_e2e` covers mouse
+Rename and F2, exact Start/Duration/Source offset, explicit Trim/Stretch, ghosts,
+retained sources, text-field arrows, Undo, save and recall.
+
+`navigation_selection_e2e` checks notes, folded piano keys and automation
+points: plain/Shift arrows select, modified arrows edit, mouse-only scattered
+selection and group deletion, text/modal guards, auto-reveal, Fit selection and
+Previous view. Shared `selection_navigation`, `curves` and `timeline_views`
+checks verify deterministic ordering, focus handling and complete pan recall.
+
+`finishing_actions_e2e` covers mouse-only channel batch routing, cycle rejection,
+phrase repeat with rests and partial final windows, bounded allocations,
+re-export after successful and failed attempts, remembered tail options, and
+reset on Open. `time_signature_e2e` chooses 3/4 entirely through the UI, verifies
+Undo/Redo and portable recall, and disables the choice during live capture.

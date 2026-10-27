@@ -72,6 +72,7 @@ impl Clip {
         region.length = end - start;
         if let ClipContent::Audio {
             envelope,
+            boundary_fades,
             crossfade,
             ..
         } = &mut region.content
@@ -88,6 +89,13 @@ impl Clip {
                 offset: original.offset + delta * self.source_rate,
                 ..original
             });
+            if let Some(boundary) = boundary_fades {
+                ensure!(
+                    (boundary.offset + delta * self.source_rate).abs() <= MAX_BEAT,
+                    "Selection exceeds the boundary fade range"
+                );
+                boundary.offset += delta * self.source_rate;
+            }
             // A transition belongs to the existing left edge, not an arbitrary
             // new boundary created inside the region.
             if start != self.start {
@@ -104,6 +112,7 @@ impl Clip {
             fade_in_curve,
             fade_out_curve,
             envelope,
+            boundary_fades,
             ..
         } = &self.content
         else {
@@ -124,7 +133,9 @@ impl Clip {
         } else {
             1.0
         };
-        attack * release
+        attack
+            * release
+            * boundary_fades.map_or(1.0, |boundary| boundary.gain(beat * self.source_rate))
     }
 
     pub fn audio_source_frame(&self, beat: f64, tempo: f64, sample_rate: u32) -> f64 {
@@ -784,6 +795,20 @@ impl Project {
             );
         }
         let start = original.start;
+        if let ClipContent::Audio {
+            boundary_fades: Some(boundary),
+            ..
+        } = original.content
+        {
+            ensure!(
+                beats
+                    .last()
+                    .is_none_or(
+                        |beat| (boundary.offset + beat * original.source_rate).abs() <= MAX_BEAT
+                    ),
+                "Split exceeds the boundary fade range"
+            );
+        }
         let mut current = clip;
         let mut ids = vec![clip];
         for beat in beats {

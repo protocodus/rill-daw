@@ -189,6 +189,18 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
             zoomed["automation_editor"]["plot"]
         );
         assert_eq!(unchanged["project"], baseline["project"]);
+        // Plain vertical wheel belongs to the enclosing popup, rather than
+        // changing the automation's time or normalized parameter scale.
+        let (x, y) = position(&unchanged, 40.0, 0.5);
+        let scrolled = app.command(json!({"command":"scroll","x":x,"y":y,"delta":-120.0}));
+        for field in ["start_beat", "end_beat", "pixels_per_beat", "point_beat"] {
+            assert_eq!(
+                scrolled["automation_editor"][field],
+                unchanged["automation_editor"][field]
+            );
+        }
+        assert_eq!(scrolled["project"], baseline["project"]);
+        assert_eq!(scrolled["history"], baseline["history"]);
         let fitted = app.click("Fit");
         let (x, y) = position(&fitted, 40.0, 0.5);
         let selected = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
