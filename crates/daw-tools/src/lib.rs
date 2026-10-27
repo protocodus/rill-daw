@@ -207,6 +207,15 @@ struct TransformArgs {
     ends: bool,
     #[serde(default)]
     velocity: Option<u8>,
+    #[serde(default)]
+    mode: LegatoMode,
+    #[serde(default)]
+    timing: f64,
+    #[serde(default = "randomize_seed")]
+    seed: u32,
+}
+fn randomize_seed() -> u32 {
+    1
 }
 fn quarter() -> f64 {
     0.25
@@ -482,6 +491,15 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
                     track,
                     clip,
                     note_ids: q.note_ids,
+                    mode: q.mode,
+                },
+                "randomize" => SongEdit::RandomizeNotes {
+                    track,
+                    clip,
+                    note_ids: q.note_ids,
+                    velocity: q.velocity.unwrap_or(16),
+                    timing: q.timing,
+                    seed: q.seed,
                 },
                 "velocity" => {
                     let velocity = q.velocity.ok_or_else(|| {

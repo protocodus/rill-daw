@@ -13,7 +13,14 @@ including a deep scrolling menu. It compares editor highlighting, octave
 stacks, Generate previews/commits, and AI tool generation against the shared
 catalogue, while preserving legacy Add9 and scale choices.
 
+`piano_roll_refinement_e2e` checks blue velocity shades and optional red scale
+warnings in both themes, selection outlines, independent green guides, and
+mouse-driven Randomize/Quantize/Legato actions. It verifies preview cancellation,
+seeded rerolls, selection scope, stretched source timing, both legato modes,
+single-step Undo/Redo, and semantic tool parity.
+
 ```sh
+cargo test --locked -p daw-app --test piano_roll_refinement_e2e
 cargo test --locked -p daw-composer -p daw-tools
 cargo test --locked -p daw-app --test composer_e2e
 cargo test --locked -p daw-app --test shared_theory_e2e

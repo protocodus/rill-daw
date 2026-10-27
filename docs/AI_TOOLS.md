@@ -51,7 +51,7 @@ execution must derive from the canonical registry rather than separate lists.
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
 
 The current registry contains **36 tools**, of which **32 are current-song
-tools**, with **65 typed `SongEdit` variants**
+tools**, with **66 typed `SongEdit` variants**
 available through `apply_edits`. Its high-level operations avoid one call per
 note, control, or input assignment. This is substantial current-song coverage,
 not complete migration of every GUI action in the inventory below. Source tool
@@ -97,6 +97,17 @@ Replacing unsaved work requires `discard_unsaved:true`; native-editor snapshots
 are still acknowledged, and newly revealed changes cause rejection rather than
 a confirmation dialog. Operations may report acceptance before background work
 finishes; poll `document_status` for completion and errors.
+
+`transform_phrase` shares the piano roll's note transformations. For
+`operation:"randomize"`, `velocity` is a symmetric amount (default 16, range 0–127),
+`timing` is onset jitter in audible quarter-note beats (default 0, maximum 0.25),
+and `seed` is a deterministic 32-bit integer (default 1). Pitch and length stay
+fixed. For `operation:"legato"`, `mode:"next_onset"` preserves the existing
+chord-aware behavior; `mode:"top_to_bottom"` connects voices ranked by pitch at
+each onset, bridging missing lower voices. `note_ids` restricts either operation;
+omitting them transforms every note in the source. `operation:"quantize"` uses
+`grid`, `strength`, `swing`, and `ends`. All commit through the same atomic
+session boundary as their GUI actions, with normal history and revision fences.
 
 ## Native composition module
 
@@ -200,7 +211,7 @@ functionality must add its tool mapping in the same change.
 | Song and selection inspection | Song/track/clip/note overview, musical range and selection reads, stable IDs | `daw-core/src/model.rs`, `daw-app/src/app.rs` |
 | Tracks, buses, folders | Create/remove/reorder; rename/color; folder membership; mute/solo; gain/pan | `model.rs`, `routing.rs`, `app.rs`, `arrangement.rs` |
 | Arrangement clips | Create/move/trim/stretch/split/duplicate/delete; ghost copy/unlink; join/consolidate | `model.rs`, `clip_links.rs`, `join.rs`, `arrangement.rs`, `join_ui.rs` |
-| MIDI composition/editing | Bulk note insertion/replacement/deletion; move/resize/transpose/velocity; cut/copy/paste; split/glue; quantize; generation | `midi_edit.rs`, `midi_generate.rs`, `chords.rs`, `midi_editor.rs`, `midi_generate_ui.rs` |
+| MIDI composition/editing | Bulk note insertion/replacement/deletion; move/resize/transpose/velocity; cut/copy/paste; split/glue; randomize; quantize; both legato modes; generation | `midi_edit.rs`, `midi_generate.rs`, `chords.rs`, `midi_editor.rs`, `midi_generate_ui.rs` |
 | Audio regions | Range copy/cut/paste/duplicate/delete; gap/ripple delete; slip/nudge; clip gain/fades/crossfade; reverse; stretch/pitch; silence removal | `audio_edit.rs`, `audio_processing.rs`, `audio_silence.rs`, `audio_editor.rs`, `crossfade_ui.rs` |
 | Takes and comping | Inspect alternatives; choose whole/range takes; comp boundaries; overdub layer; retain/discard alternatives | `audio_takes.rs`, `audio_takes_ui.rs` |
 | Instruments and effects | Discover/select instance; inspect/set parameters; preset/state edits; insert/remove/reorder/bypass | `daw-plugins`, `plugin_ui.rs`, `library.rs` |

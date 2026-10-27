@@ -534,7 +534,8 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     assert!(visible(&multi, "C · Natural minor"));
     assert!(
         multi["midi_editor"]["plot"]["min"][1].as_f64().unwrap() < 330.0,
-        "Context controls wrap without crowding out the editor"
+        "Context controls wrap without crowding out the editor: {}",
+        multi["midi_editor"]["plot"]
     );
     let select = app.key("Q");
     assert!(!visible(&select, "Chord stack"));

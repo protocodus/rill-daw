@@ -17,6 +17,15 @@ fn string() -> Value {
 fn boolean() -> Value {
     json!({"type":"boolean"})
 }
+fn randomize_velocity() -> Value {
+    json!({"type":"integer","minimum":0,"maximum":127,"default":16,"description":"Symmetric velocity variation, plus or minus this amount, clamped to MIDI velocity 1–127. Zero keeps velocity unchanged."})
+}
+fn randomize_timing() -> Value {
+    json!({"type":"number","minimum":0,"maximum":0.25,"default":0,"description":"Symmetric onset jitter, plus or minus this many audible quarter-note beats. Zero preserves timing; pitches and note lengths are preserved."})
+}
+fn randomize_seed() -> Value {
+    json!({"type":"integer","minimum":0,"maximum":4294967295_u64,"default":1,"description":"Deterministic 32-bit seed; the same source notes, selection and settings produce the same result."})
+}
 fn id() -> Value {
     json!({"type":"integer","minimum":1})
 }
@@ -205,17 +214,18 @@ pub fn song_edit_schema() -> Value {
         json!({"track":reference(),"clip":reference(),"notes":array(object(json!({"id":id(),"pitch":integer(),"start":number(),"length":number(),"velocity":integer()}),&["id"]),8192)}),
         ["track", "clip", "notes"]
     );
-    for op in ["delete_notes", "glue_notes", "legato_notes"] {
+    for op in ["delete_notes", "glue_notes"] {
         v.push(edit(
             op,
             json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192)}),
-            if op == "legato_notes" {
-                &["track", "clip"]
-            } else {
-                &["track", "clip", "note_ids"]
-            },
+            &["track", "clip", "note_ids"],
         ));
     }
+    add!(
+        "legato_notes",
+        json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"mode":{"type":"string","enum":["next_onset","top_to_bottom"],"default":"next_onset","description":"next_onset connects each note to the next distinct onset. top_to_bottom ranks simultaneous notes from high to low and connects matching ranks across later onset groups."}}),
+        ["track", "clip"]
+    );
     add!(
         "transform_notes",
         json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"beats":number(),"semitones":{"type":"integer"}}),
@@ -225,6 +235,11 @@ pub fn song_edit_schema() -> Value {
         "quantize_notes",
         json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"grid":number(),"strength":number(),"swing":number(),"ends":boolean()}),
         ["track", "clip", "grid", "strength", "swing", "ends"]
+    );
+    add!(
+        "randomize_notes",
+        json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"velocity":randomize_velocity(),"timing":randomize_timing(),"seed":randomize_seed()}),
+        ["track", "clip"]
     );
     add!(
         "split_note",
@@ -479,9 +494,9 @@ pub fn song_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "transform_phrase",
-            "Transform all notes (omit note_ids) or a chosen subset in a single undoable action: transpose/move, quantize, legato or set velocity.",
+            "Transform all source notes (omit note_ids) or a chosen subset in a single undoable action: transpose/move, quantize, legato, set velocity, or randomize velocity/onsets. Legato defaults to next_onset; top_to_bottom connects matching high-to-low voice ranks across later onset groups. Randomize uses symmetric velocity and audible-beat timing intensities with a deterministic seed; pitch and note length stay unchanged.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"clip_id":id(),"operation":choices(&["transpose","move","quantize","legato","velocity"]),"note_ids":array(id(),8192),"semitones":json!({"type":"integer"}),"beats":number(),"grid":number(),"strength":number(),"swing":number(),"ends":boolean(),"velocity":integer()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"clip_id":id(),"operation":choices(&["transpose","move","quantize","legato","velocity","randomize"]),"note_ids":array(id(),8192),"semitones":json!({"type":"integer"}),"beats":number(),"grid":number(),"strength":number(),"swing":number(),"ends":boolean(),"velocity":{"type":"integer","minimum":0,"maximum":127,"description":"For velocity: the absolute target velocity (1–127), required. For randomize: the symmetric plus/minus intensity (0–127), default 16."},"mode":{"type":"string","enum":["next_onset","top_to_bottom"],"default":"next_onset","description":"Legato voice connection mode."},"timing":randomize_timing(),"seed":randomize_seed()}),
                 &[
                     "session_id",
                     "expected_revision",

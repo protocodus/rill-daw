@@ -45,7 +45,7 @@ impl ToolHintContext {
                 "Click a clip to create a linked copy after it. Source edits stay shared; placement, trim, and stretch stay independent."
             }
             (Self::Midi, Select) => {
-                "Click or box-select; Shift-click toggles. Arrows select; Shift+arrows extend; Ctrl/Cmd+arrows nudge or transpose. Drag notes to move or edges to resize; Shift-drag copies. Fully overlapping notes of the same pitch merge on release."
+                "Click or box-select notes; Shift-click toggles. Drag bodies to move or edges to resize. Right-click changes selection."
             }
             (Self::Midi, Pencil) => {
                 "Click empty space to draw a note; drag to set length. Fully overlapping notes of the same pitch merge on release."
@@ -55,7 +55,7 @@ impl ToolHintContext {
             (Self::Midi, Glue) => "Click notes to join them with the selection.",
             (Self::Midi, Erase) => "Click a note to delete it; drag across notes to erase.",
             (Self::Midi, MultiDraw) => {
-                "Draw the chosen chord or scale; drag to set length. Fully overlapping notes of the same pitch merge on release."
+                "Draw the chosen chord or scale; drag to set length. Same-pitch overlaps merge on release."
             }
             (Self::Audio, Cursor) => {
                 "Click to place the playback cursor; drag to select time for copy, cut, or trimming."

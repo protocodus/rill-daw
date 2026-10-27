@@ -1,6 +1,7 @@
 //! Atomic, source-time MIDI transformations shared by editor preview and Apply.
 use crate::{MAX_BEAT, Note, new_id};
 use anyhow::{Result, ensure};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,6 +21,122 @@ impl Default for QuantizeSettings {
             ends: false,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RandomizeSettings {
+    /// Symmetric MIDI velocity variation, clamped to the audible range 1–127.
+    pub velocity: u8,
+    /// Symmetric onset variation in the caller's beat coordinates. Durations stay fixed.
+    pub timing: f64,
+    pub seed: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LegatoMode {
+    /// End at the next distinct onset, preserving simultaneous chords.
+    #[default]
+    NextOnset,
+    /// Connect the highest note of each onset to the next highest, then the
+    /// second-highest to the next second-highest, and so on. Missing ranks skip
+    /// forward to the next onset containing that voice.
+    TopToBottom,
+}
+
+impl Default for RandomizeSettings {
+    fn default() -> Self {
+        Self {
+            velocity: 16,
+            timing: 0.0,
+            seed: 1,
+        }
+    }
+}
+
+/// Stable per-note streams keep a preview reproducible when selection or vector
+/// order changes. Each field has its own stream, so adding timing leaves the
+/// velocity result unchanged. This is deliberately independent of thread RNGs.
+fn randomize_bits(seed: u32, id: u64, stream: u64) -> u64 {
+    let mut value = (id ^ (u64::from(seed) << 32) ^ stream).wrapping_add(0x9e3779b97f4a7c15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d049bb133111eb);
+    value ^ (value >> 31)
+}
+
+/// Vary selected velocities and, optionally, onsets without changing identities,
+/// pitches, durations or unselected notes. Timing is in the same coordinates as
+/// `notes`. Use [`randomize_source_notes`] for a stretched clip's source data.
+/// Onsets stop at valid beat bounds.
+pub fn randomize_notes(
+    notes: &[Note],
+    selected: &HashSet<u64>,
+    settings: RandomizeSettings,
+) -> Result<Vec<Note>> {
+    randomize_source_notes(notes, selected, settings, 1.0)
+}
+
+/// Randomize a clip's unmodified source notes with timing expressed in audible
+/// beats. Preview and commit use the same source result, including source-time
+/// clamps. Durations and unselected timing never undergo a stretch round trip.
+pub fn randomize_source_notes(
+    notes: &[Note],
+    selected: &HashSet<u64>,
+    settings: RandomizeSettings,
+    source_rate: f64,
+) -> Result<Vec<Note>> {
+    validate_notes(notes, selected)?;
+    ensure!(
+        selected.len() <= crate::MAX_BATCH_NOTES,
+        "Too many selected notes"
+    );
+    ensure!(
+        settings.velocity <= 127
+            && settings.timing.is_finite()
+            && (0.0..=0.25).contains(&settings.timing),
+        "Invalid randomize settings"
+    );
+    ensure!(
+        source_rate.is_finite()
+            && (crate::MIN_SOURCE_RATE..=crate::MAX_SOURCE_RATE).contains(&source_rate),
+        "Invalid clip source rate"
+    );
+    let mut edited = notes.to_vec();
+    for note in &mut edited {
+        if !selected.contains(&note.id) {
+            continue;
+        }
+        if settings.velocity > 0 {
+            let width = 2 * u64::from(settings.velocity) + 1;
+            let delta = (randomize_bits(settings.seed, note.id, 0) % width) as i16
+                - i16::from(settings.velocity);
+            note.velocity = (i16::from(note.velocity) + delta).clamp(1, 127) as u8;
+        }
+        if settings.timing > 0.0 {
+            let unit = (randomize_bits(settings.seed, note.id, 1) >> 11) as f64
+                * (1.0 / ((1_u64 << 53) as f64));
+            let delta = (2.0 * unit - 1.0) * settings.timing;
+            let mut last_start = MAX_BEAT - note.length;
+            if last_start + note.length > MAX_BEAT {
+                last_start = last_start.next_down();
+            }
+            let audible = note.start / source_rate;
+            let moved = audible + delta;
+            let start = if moved == audible {
+                note.start
+            } else {
+                moved * source_rate
+            }
+            .clamp(0.0, last_start);
+            // Tiny existing durations can stop being representable if a move
+            // crosses a floating-point exponent boundary. Keep their onset.
+            if start + note.length > start {
+                note.start = start;
+            }
+        }
+    }
+    validate_notes(&edited, selected)?;
+    Ok(edited)
 }
 
 fn validate_notes(notes: &[Note], selected: &HashSet<u64>) -> Result<()> {
@@ -147,16 +264,63 @@ pub fn move_midi_notes(
 /// End selected notes at the next distinct onset, preserving simultaneous chords.
 /// Final notes with no later onset retain their original lengths.
 pub fn legato_notes(notes: &[Note], selected: &HashSet<u64>) -> Result<Vec<Note>> {
+    legato_notes_with_mode(notes, selected, LegatoMode::NextOnset)
+}
+
+/// Close gaps in the selected durations, using all notes to establish either
+/// the next onset or the ordered voices. Input order and other fields stay fixed.
+pub fn legato_notes_with_mode(
+    notes: &[Note],
+    selected: &HashSet<u64>,
+    mode: LegatoMode,
+) -> Result<Vec<Note>> {
     validate_notes(notes, selected)?;
-    let mut onsets: Vec<_> = notes.iter().map(|note| note.start).collect();
-    onsets.sort_by(f64::total_cmp);
-    onsets.dedup();
     let mut edited = notes.to_vec();
-    for note in &mut edited {
-        if selected.contains(&note.id)
-            && let Some(next) = onsets.get(onsets.partition_point(|start| *start <= note.start))
-        {
-            note.length = *next - note.start;
+    match mode {
+        LegatoMode::NextOnset => {
+            let mut onsets: Vec<_> = notes.iter().map(|note| note.start).collect();
+            onsets.sort_by(f64::total_cmp);
+            onsets.dedup();
+            for note in &mut edited {
+                if selected.contains(&note.id)
+                    && let Some(next) =
+                        onsets.get(onsets.partition_point(|start| *start <= note.start))
+                {
+                    note.length = *next - note.start;
+                }
+            }
+        }
+        LegatoMode::TopToBottom => {
+            let mut order: Vec<_> = (0..notes.len()).collect();
+            order.sort_by(|left, right| {
+                notes[*left]
+                    .start
+                    .partial_cmp(&notes[*right].start)
+                    .expect("validated finite note time")
+                    .then_with(|| notes[*right].pitch.cmp(&notes[*left].pitch))
+                    .then_with(|| notes[*left].id.cmp(&notes[*right].id))
+            });
+            let mut next_onsets: Vec<Option<f64>> = Vec::new();
+            let mut end = order.len();
+            while end > 0 {
+                let onset = notes[order[end - 1]].start;
+                let mut start = end - 1;
+                while start > 0 && notes[order[start - 1]].start == onset {
+                    start -= 1;
+                }
+                if next_onsets.len() < end - start {
+                    next_onsets.resize(end - start, None);
+                }
+                for (rank, index) in order[start..end].iter().copied().enumerate() {
+                    if selected.contains(&notes[index].id)
+                        && let Some(next) = next_onsets[rank]
+                    {
+                        edited[index].length = next - onset;
+                    }
+                    next_onsets[rank] = Some(onset);
+                }
+                end = start;
+            }
         }
     }
     validate_notes(&edited, selected)?;
@@ -849,6 +1013,134 @@ mod tests {
         );
     }
     #[test]
+    fn randomize_is_repeatable_per_note_and_preserves_other_fields() {
+        let notes = vec![
+            Note::new(60, 1.0, 0.3, 80),
+            Note::new(64, 2.0, 0.4, 90),
+            Note::new(67, 3.0, 0.5, 100),
+        ];
+        let selected = HashSet::from([notes[0].id, notes[1].id]);
+        let settings = RandomizeSettings {
+            velocity: 16,
+            timing: 0.125,
+            seed: 123,
+        };
+        let edited = randomize_notes(&notes, &selected, settings).unwrap();
+        assert_eq!(
+            edited,
+            randomize_notes(&notes, &selected, settings).unwrap()
+        );
+        assert_eq!(edited[2], notes[2]);
+        assert!(edited[..2].iter().zip(&notes).any(|(a, b)| a != b));
+        for (a, b) in edited.iter().zip(&notes) {
+            assert_eq!(
+                (a.id, a.pitch, a.length.to_bits()),
+                (b.id, b.pitch, b.length.to_bits())
+            );
+            assert!((a.start - b.start).abs() <= settings.timing);
+            assert!((i16::from(a.velocity) - i16::from(b.velocity)).abs() <= 16);
+        }
+        let mut reversed = notes.clone();
+        reversed.reverse();
+        let mut reordered = randomize_notes(&reversed, &selected, settings).unwrap();
+        reordered.reverse();
+        assert_eq!(edited, reordered);
+        let subset = randomize_notes(&notes, &HashSet::from([notes[0].id]), settings).unwrap();
+        assert_eq!(edited[0], subset[0]);
+        assert_eq!(notes[1], subset[1]);
+        let velocities = randomize_notes(
+            &notes,
+            &selected,
+            RandomizeSettings {
+                timing: 0.0,
+                ..settings
+            },
+        )
+        .unwrap();
+        for (a, b) in velocities.iter().zip(&edited) {
+            assert_eq!(a.velocity, b.velocity);
+        }
+        assert_eq!(
+            notes,
+            randomize_notes(
+                &notes,
+                &selected,
+                RandomizeSettings {
+                    velocity: 0,
+                    timing: 0.0,
+                    seed: 0
+                },
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn randomize_enforces_amount_selection_and_midi_time_bounds() {
+        let notes = vec![
+            Note::new(0, 0.0, 0.5, 1),
+            Note::new(127, MAX_BEAT - 0.5, 0.5, 127),
+        ];
+        let selected = notes.iter().map(|note| note.id).collect();
+        for source_rate in [crate::MIN_SOURCE_RATE, 1.0, crate::MAX_SOURCE_RATE] {
+            for seed in 0..128 {
+                let edited = randomize_source_notes(
+                    &notes,
+                    &selected,
+                    RandomizeSettings {
+                        velocity: 127,
+                        timing: 0.25,
+                        seed,
+                    },
+                    source_rate,
+                )
+                .unwrap();
+                for (a, b) in edited.iter().zip(&notes) {
+                    assert!((1..=127).contains(&a.velocity));
+                    assert!(a.start >= 0.0 && a.start + a.length <= MAX_BEAT);
+                    assert!((a.start - b.start).abs() / source_rate <= 0.25 + 1e-9);
+                    assert_eq!((a.pitch, a.length), (b.pitch, b.length));
+                }
+            }
+        }
+        for settings in [
+            RandomizeSettings {
+                velocity: 128,
+                ..Default::default()
+            },
+            RandomizeSettings {
+                timing: -0.1,
+                ..Default::default()
+            },
+            RandomizeSettings {
+                timing: 0.251,
+                ..Default::default()
+            },
+            RandomizeSettings {
+                timing: f64::NAN,
+                ..Default::default()
+            },
+            RandomizeSettings {
+                timing: f64::INFINITY,
+                ..Default::default()
+            },
+        ] {
+            assert!(randomize_notes(&notes, &selected, settings).is_err());
+        }
+        for source_rate in [0.0, f64::NAN, f64::INFINITY, 0.1, 5.0] {
+            assert!(
+                randomize_source_notes(&notes, &selected, Default::default(), source_rate).is_err()
+            );
+        }
+        assert!(randomize_notes(&notes, &HashSet::from([u64::MAX]), Default::default()).is_err());
+        let too_many: Vec<_> = (0..=crate::MAX_BATCH_NOTES)
+            .map(|_| Note::new(60, 0.0, 1.0, 90))
+            .collect();
+        let selected = too_many.iter().map(|note| note.id).collect();
+        assert!(randomize_notes(&too_many, &selected, Default::default()).is_err());
+    }
+
+    #[test]
     fn legato_preserves_chords_and_last_onset_lengths() {
         let notes = vec![
             Note::new(60, 0.0, 0.2, 90),
@@ -872,6 +1164,52 @@ mod tests {
                 .map(|note| (note.id, note.pitch, note.velocity))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn top_to_bottom_legato_connects_ranks_skips_missing_voices_and_keeps_selection() {
+        let notes = vec![
+            Note::new(60, 0.0, 0.1, 90),
+            Note::new(67, 0.0, 0.2, 80),
+            Note::new(64, 0.0, 0.3, 100),
+            Note::new(65, 1.0, 0.1, 90),
+            Note::new(69, 2.0, 0.5, 90),
+            Note::new(62, 2.0, 0.75, 90),
+            Note::new(71, 4.0, 0.3, 90),
+            Note::new(64, 4.0, 0.4, 90),
+            Note::new(60, 4.0, 0.5, 90),
+        ];
+        let all = notes.iter().map(|note| note.id).collect();
+        let edited = legato_notes_with_mode(&notes, &all, LegatoMode::TopToBottom).unwrap();
+        assert_eq!(
+            edited.iter().map(|note| note.length).collect::<Vec<_>>(),
+            vec![4.0, 1.0, 2.0, 1.0, 2.0, 2.0, 0.3, 0.4, 0.5]
+        );
+        for (a, b) in edited.iter().zip(&notes) {
+            assert_eq!(
+                (a.id, a.pitch, a.start, a.velocity),
+                (b.id, b.pitch, b.start, b.velocity)
+            );
+        }
+        let subset = HashSet::from([notes[0].id, notes[2].id]);
+        let chosen = legato_notes_with_mode(&notes, &subset, LegatoMode::TopToBottom).unwrap();
+        for (i, note) in chosen.iter().enumerate() {
+            assert_eq!(
+                note,
+                if subset.contains(&note.id) {
+                    &edited[i]
+                } else {
+                    &notes[i]
+                }
+            );
+        }
+        let mut reverse = notes.clone();
+        reverse.reverse();
+        let mut reordered =
+            legato_notes_with_mode(&reverse, &all, LegatoMode::TopToBottom).unwrap();
+        reordered.reverse();
+        assert_eq!(edited, reordered);
+        assert_eq!(legato_notes(&notes, &all).unwrap()[0].length, 1.0);
     }
     #[test]
     fn group_bounds_clipboard_ids_and_invalid_paste_are_atomic() {
