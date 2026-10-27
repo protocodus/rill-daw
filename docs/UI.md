@@ -58,6 +58,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Native pane middle-drag navigation | `scroll_area`, `scroll_area_is_panning` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
+| Assistant transcript and prompt | `assistant`, `AssistantOptions`, `AssistantMessage`, `AssistantResponse` |
+| Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
 | Ghost clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Dropdown choices | `select`, `select_labeled` |
@@ -78,6 +80,19 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Compact section label | `theme::label` |
 
 Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
+
+`assistant(ui, prompt, options)` provides a bounded, selectable conversation,
+captured-context label, optional progress, multiline **AI prompt**, and fixed
+**Send**, **Stop**, and **Undo** controls. Enter adds a newline; Ctrl/Cmd+Enter
+submits only while the prompt owns focus. The application owns execution,
+conversation retention, cancellation, permission checks, and undo; closing its
+window does not imply cancellation. Returned responses expose interaction bounds
+for app-level tests. Prompt input is capped at 16,384 characters; rendering uses
+the latest 64 messages and at most 8,192 characters per message so provider output
+cannot cause unbounded transcript layout. The composer scrolls independently,
+keeping actions visible even for a long draft. `secret_field` masks a credential
+using ordinary shared input spacing; callers still protect its backing value and
+must never include it in diagnostic or conversation text.
 
 `paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases remain flat. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
 

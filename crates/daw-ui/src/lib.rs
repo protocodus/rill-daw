@@ -4,6 +4,7 @@
 //! Components return native egui responses/builders so callers
 //! retain keyboard focus, tooltips, disabled state, and layout composition.
 
+pub mod assistant;
 pub mod audio_clip_controls;
 pub mod batch_actions;
 pub mod batch_fades;
@@ -47,6 +48,7 @@ pub mod track_layout;
 pub mod waveform;
 pub mod widgets;
 
+pub use assistant::*;
 pub use audio_clip_controls::*;
 pub use batch_actions::*;
 pub use batch_fades::*;

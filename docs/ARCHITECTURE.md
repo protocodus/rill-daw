@@ -10,6 +10,9 @@ Rill is a native Rust desktop DAW with separate project, rendering, plugin, and 
 | `daw-engine` | Compile a project into a playback graph; render audio clips and isolated VST3 instruments/effects, sends, and buses; compensate path latency; expose device playback, input capture, dry monitoring, and offline export. |
 | `daw-plugins` | Discover VST3 metadata without loading native code into the app; host selected instruments and effects in separate `daw-plugin-host` processes. |
 | `daw-ui` | Shared egui component library, accessible controls, surfaces, popup windows, and design tokens; no audio or application dependencies. |
+| `daw-tools` | Canonical schemas, typed song-tool dispatch, and host interfaces shared by the agent and MCP. |
+| `daw-mcp` | MCP discovery and stdio execution over the canonical tool host; no separate song or persistence implementation. |
+| `daw-ai` | Provider-neutral bounded agent loop, OpenAI/Anthropic requests, and settings-key encryption; tool calls return to the app's control thread. |
 | `daw-app` | Native `eframe`/`egui` arrangement, menu bar, and on-demand Clip Editor, Instrument, Effects, Mixer, Routing, Recording, Automation, Library, Setup, and Properties windows; persistence and transport UI. |
 
 ```mermaid
@@ -61,6 +64,56 @@ Undo/redo keeps up to 128 project snapshots on the control/UI side. The UI commi
 Projects retain a versioned JSON model. `.rill` saves package its manifest and source WAV files in an atomic ZIP archive; legacy JSON remains readable and writable. Archive loading validates bounded ZIP entries and extracts referenced audio into a fresh configured scratch directory before changing the active project. Plugin binaries and plugin-owned sample data remain external. See [PROJECT_FORMAT.md](PROJECT_FORMAT.md) for the schema, validation limits, and scratch lifetime.
 
 Validation rejects nonfinite values, invalid note ranges, duplicate object IDs, invalid routing, and positions beyond 1,000,000 beats. This generous timeline limit prevents malformed files from saturating integer sample positions. A project has a single tempo between 20 and 400 BPM and a constant meter with quarter-note denominator.
+
+## AI and current-song tools
+
+`daw-core::commands` provides 65 typed edit variants and atomic `EditBatch`
+application. Batch-local keys let a single operation create a track, populate
+clips, and set musical properties without rediscovering IDs between calls.
+The app's `session_service` validates and commits candidates, records normal
+undo history, reconciles selection/native editors, increments song revision,
+and enters the established engine update path.
+
+`daw-tools` defines one catalog of 30 tool schemas, including 26 current-song
+tools and four application tools. Its high-level operations
+include generated phrases, notes-plus-instrument creation, bulk channel edits,
+selection, source-backed audio processing, MIDI/audio joining, and five recording tools. Pure song
+tools dispatch through `SongToolHost`; app-specific instrument, transport,
+recording, and worker operations enter the same app-owned boundary. The shared
+`daw-ui::assistant` component is used from the app's Assistant view; **AI** in the
+transport opens it, and **Setup → AI** stores provider/model/key preferences.
+
+The embedded `daw-ai` worker owns conversation state and provider I/O, not the
+live song. It sends tool-call events back to the app and waits for structured
+results. `daw-mcp` wraps the same `ToolHost`, with a channel bridge to the native
+app when launched as `rill --mcp`. No external chat UI is needed. Model requests,
+plugin metadata discovery, source analysis, and offline audio rendering stay
+away from the hardware callback.
+
+Current-song tools are restricted to the active song. Mutations require the host-issued
+session identity and current revision; document replacement revokes old work.
+Background results are checked before being returned or committed. No current-song tool
+accepts a project save/load request, arbitrary path, shell command, or provider
+credential. Explicit `ToolProfile::CurrentSong` and `Application` catalogs are
+enforced at MCP discovery and execution. `rill --mcp-application` opts an external
+client into document I/O and redacted Setup/configuration tools; the embedded
+agent always receives the current-song catalog. Additional granular permissions
+remain future work. Provider keys use a versioned AES-GCM envelope in `settings.json` with a
+built-in application key; this obscures them against casual inspection rather
+than protecting against someone who can extract the shipped key.
+
+Rendered analysis reports numerical peak/RMS, clipping, correlation, and
+approximate spectral measurements. Clip analysis can propose normalization,
+transient-split, and silence-removal edits; `audio_process_clip` analyzes and
+commits one requested operation against the unchanged revision. This is not
+provider audio input or perceptual listening. Multiple mutating calls can add
+multiple history entries; history is atomic per operation/batch.
+
+The all-actions tool requirement is a migration target: existing GUI mutation
+paths and missing tool mappings still need auditing. Some native preset,
+take/overdub, and application workflows remain outside the current tool surface.
+See [AI tool contracts, coverage inventory, and E2Es](AI_TOOLS.md) and the
+project's [implementation rules](../claude.md).
 
 ## Parameter automation
 

@@ -29,6 +29,7 @@ impl DawApp {
             && before != self.project
         {
             let before_state = self.history.state_id();
+            self.song_session.bump();
             let label = label.unwrap_or_else(|| edit_name(&before, &self.project).into());
             if let Some(group) = group {
                 self.history.commit_grouped(&before, label, group);

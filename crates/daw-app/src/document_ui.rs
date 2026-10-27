@@ -34,6 +34,7 @@ pub(crate) struct DocumentGuard {
     transition: DocumentTransition,
     stage: Stage,
     error: Option<String>,
+    tool_discard: Option<bool>,
 }
 
 impl DawApp {
@@ -77,6 +78,8 @@ impl DawApp {
         if self.document_guard.is_some() {
             return;
         }
+        self.assistant.stop();
+        self.tool_joins.cancel();
         if self.recording_busy() {
             self.finish_recording(crate::recording_ui::AfterRecording::Pause);
         }
@@ -91,7 +94,40 @@ impl DawApp {
             transition,
             stage: Stage::Waiting,
             error: None,
+            tool_discard: None,
         });
+    }
+
+    /// Application-profile transitions never require a GUI confirmation. Dirty
+    /// state discovered in acknowledged native snapshots is checked again.
+    pub(crate) fn request_tool_document_transition(
+        &mut self,
+        transition: DocumentTransition,
+        discard_unsaved: bool,
+    ) -> Result<(), daw_tools::ToolError> {
+        if self.document_guard.is_some()
+            || self.recording_busy()
+            || self.project_io_pending()
+            || self.state_sync_pending()
+            || self.edit_dirty
+            || self.drag.is_some()
+        {
+            return Err(daw_tools::ToolError::new(
+                "busy",
+                "Finish the current edit or document operation first",
+            ));
+        }
+        if self.modified && !discard_unsaved {
+            return Err(daw_tools::ToolError::new(
+                "unsaved_changes",
+                "Save the song or explicitly set discard_unsaved before replacing it",
+            ));
+        }
+        self.request_document_transition(transition);
+        if let Some(guard) = &mut self.document_guard {
+            guard.tool_discard = Some(discard_unsaved);
+        }
+        Ok(())
     }
 
     pub(crate) fn poll_document_guard(&mut self, ctx: &egui::Context) {
@@ -108,7 +144,8 @@ impl DawApp {
                     && !self.project_io_pending()
                     && !self.state_sync_pending()
                     && self.export_job.is_none()
-                    && !self.join_ui.pending() =>
+                    && !self.join_ui.pending()
+                    && !self.tool_joins.pending() =>
             {
                 self.document_guard.as_mut().unwrap().stage = Stage::Checking;
                 self.request_document_snapshot(false);
@@ -134,6 +171,29 @@ impl DawApp {
             return;
         };
         self.flush_pending_edit();
+        let tool_discard = self
+            .document_guard
+            .as_ref()
+            .and_then(|guard| guard.tool_discard);
+        if let Some(discard) = tool_discard {
+            if self.modified
+                && !discard
+                && matches!(stage, Stage::Checking | Stage::PreparingTransition)
+            {
+                self.document_guard = None;
+                self.message(Err(anyhow::anyhow!("Unsaved changes were discovered; save or explicitly discard them before replacing the song")),"");
+                return;
+            }
+            if matches!(stage, Stage::Checking) {
+                self.document_guard.as_mut().unwrap().stage = Stage::PreparingTransition;
+                self.request_document_snapshot(true);
+                return;
+            }
+            if matches!(stage, Stage::PreparingTransition) {
+                self.document_guard.as_mut().unwrap().stage = Stage::Ready;
+                return;
+            }
+        }
         match stage {
             Stage::Checking => {
                 if self.modified {
@@ -159,6 +219,15 @@ impl DawApp {
     }
 
     pub(crate) fn document_snapshot_failed(&mut self, error: String) {
+        if self
+            .document_guard
+            .as_ref()
+            .is_some_and(|guard| guard.tool_discard.is_some())
+        {
+            self.document_guard = None;
+            self.message(Err(anyhow::anyhow!(error)), "");
+            return;
+        }
         if let Some(guard) = self.document_guard.as_mut() {
             guard.stage = Stage::Confirm;
             guard.error = Some(error);

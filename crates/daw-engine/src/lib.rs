@@ -20,7 +20,8 @@ pub use device::{
 };
 pub use render::{
     CompensationDelay, ExportOptions, export_project_wav, export_project_wav_with_options,
-    export_wav, export_wav_with_options, render, render_with_options, render_with_workers,
+    export_wav, export_wav_with_options, render, render_range_cancellable, render_with_options,
+    render_with_workers,
 };
 
 #[cfg(test)]

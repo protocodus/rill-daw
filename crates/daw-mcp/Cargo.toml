@@ -1,0 +1,13 @@
+[package]
+name = "daw-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+daw-tools = { path = "../daw-tools" }
+serde_json.workspace = true
+
+[dev-dependencies]
+daw-core.workspace = true

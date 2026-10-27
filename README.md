@@ -64,8 +64,27 @@ The initial session contains an original generated audio loop. Rill includes no 
 - One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
 - Input/output-device, sample-rate, and buffer-size setup; writable scratch directory and custom VST3 scan directories.
 - Portable `.rill` ZIP projects with a JSON manifest and source WAV assets, automatic plugin-state recall, scratch recovery, MIDI import/export, and background stereo WAV mixdown.
+- An integrated OpenAI/Anthropic assistant and shared MCP tools for current-song composition, instrument assignment, mixing, audio processing/analysis, and recording.
 
 See the [audio editor coverage and shortcuts](docs/AUDIO_EDITOR.md) for common workflows, verification, and remaining advanced tools.
+
+## AI assistant and MCP
+
+Choose **Window → Setup → AI**, select OpenAI or Anthropic, enter your model and
+API key, and apply. Open **AI** in the menu bar or **Window → Assistant** to ask
+for edits, such as “Transpose the selected phrase up an octave” or “Normalize
+this audio clip to −1 dBFS.” The assistant edits the current song through the
+same undoable tools used by MCP; it cannot open or save projects. Keys are
+encrypted in `settings.json` with the built-in application key, which protects
+against casual inspection.
+
+Launch `rill --mcp` to expose the running native app's current song over MCP
+stdio. `rill --mcp-application` explicitly adds project I/O and global Setup
+tools for external clients; the embedded assistant remains song-only.
+The initial tool surface covers composition, VST3 assignment/parameters,
+mixing, clip processing, transport, and recording; complete GUI tool parity is
+ongoing. Audio analysis uses local measurements; models do not yet receive audio.
+See [AI architecture, tool inventory, and verification](docs/AI_TOOLS.md).
 
 ![Rill piano roll in dark mode](artifacts/rill-piano-dark.png)
 
@@ -88,7 +107,8 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Automation** | Create parameter tracks and edit curves for channel, send, insert, and VST3 controls. |
 | **Properties** | Edit names, levels, audio fades, colors, folder membership, and compact/collapsed state; inspect clip timing. |
 | **Library** | Search, scan, and assign instruments. |
-| **Setup** | Configure Audio, Storage, Plug-ins, and Appearance on separate pages. |
+| **Assistant** | Prompt the integrated agent to inspect and edit the current song. |
+| **Setup** | Configure Audio, Storage, Plug-ins, Appearance, and AI on separate pages. |
 
 Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups on a quiet canvas; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
 

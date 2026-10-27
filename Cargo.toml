@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/daw-core", "crates/daw-engine", "crates/daw-plugins", "crates/daw-ui", "crates/daw-app"]
+members = ["crates/daw-core", "crates/daw-engine", "crates/daw-plugins", "crates/daw-ui", "crates/daw-app", "crates/daw-tools", "crates/daw-mcp", "crates/daw-ai"]
 exclude = ["vendor/vst3-host"]
 resolver = "2"
 
@@ -17,6 +17,9 @@ daw-core = { path = "crates/daw-core" }
 daw-engine = { path = "crates/daw-engine" }
 daw-plugins = { path = "crates/daw-plugins" }
 daw-ui = { path = "crates/daw-ui" }
+daw-tools = { path = "crates/daw-tools" }
+daw-mcp = { path = "crates/daw-mcp" }
+daw-ai = { path = "crates/daw-ai" }
 
 [profile.release]
 lto = "thin"

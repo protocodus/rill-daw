@@ -1,0 +1,16 @@
+[package]
+name = "daw-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+daw-tools = { path = "../daw-tools" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls-native-roots"] }
+aes-gcm = "0.10"
+base64 = "0.22"
+getrandom = "0.3"
+zeroize = "1"

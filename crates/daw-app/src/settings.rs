@@ -11,6 +11,7 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    pub ai: AiSettings,
     pub appearance: daw_ui::theme::Appearance,
     pub device_name: Option<String>,
     pub input_device_name: Option<String>,
@@ -20,6 +21,25 @@ pub struct Settings {
     pub resample_quality: daw_engine::ResampleQuality,
     pub scratch_dir: PathBuf,
     pub vst_dirs: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AiSettings {
+    pub provider: daw_ai::Provider,
+    pub model: String,
+    pub api_key: Option<daw_ai::EncryptedSecret>,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        let provider = daw_ai::Provider::default();
+        Self {
+            provider,
+            model: provider.default_model().into(),
+            api_key: None,
+        }
+    }
 }
 
 fn config_dir() -> PathBuf {
@@ -49,6 +69,7 @@ fn config_dir() -> PathBuf {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            ai: AiSettings::default(),
             appearance: daw_ui::theme::Appearance::System,
             device_name: None,
             input_device_name: None,

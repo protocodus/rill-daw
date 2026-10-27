@@ -57,6 +57,7 @@ struct Session {
     timing_committed: bool,
     finishing: bool,
     after: AfterRecording,
+    select_result: bool,
 }
 struct FinalizedRecording {
     result: RecordingResult,
@@ -84,6 +85,35 @@ pub(crate) struct RecordingUi {
 }
 
 impl DawApp {
+    /// Shared control-side recording configuration. Call only after validating
+    /// every requested route; no UI selection or popup is needed.
+    pub(crate) fn configure_recording_controls(
+        &mut self,
+        controls: &[(u64, Option<bool>, Option<MonitorMode>)],
+        placement: Option<RecordingPlacement>,
+    ) {
+        for &(track, armed, monitor) in controls {
+            if let Some(armed) = armed
+                && self.recording.armed.contains(&track) != armed
+            {
+                self.toggle_record_arm(track);
+            }
+            if let Some(monitor) = monitor {
+                self.recording.monitors.insert(track, monitor);
+            }
+        }
+        if let Some(placement) = placement {
+            self.recording.placement = placement;
+        }
+        self.recording.failed_input = false;
+    }
+
+    pub(crate) fn retry_recording_input(&mut self) {
+        self.recording.failed_input = false;
+        self.recording.signature = None;
+        self.recording.midi_signature = None;
+    }
+
     pub(crate) fn recording_busy(&self) -> bool {
         self.recording.session.is_some()
     }
@@ -321,6 +351,7 @@ impl DawApp {
             timing_committed: false,
             finishing: false,
             after: AfterRecording::Continue,
+            select_result: true,
         });
         self.recording.failed_input = false;
         self.recording.signature = None;
@@ -333,6 +364,15 @@ impl DawApp {
         self.error = false;
         if self.engine.is_none() && self.loading.is_none() {
             self.prepare_engine(false);
+        }
+    }
+
+    /// Tool-driven capture leaves the user's editing selection in place, even
+    /// when its asynchronously finalized clips are published later.
+    pub(crate) fn begin_recording_from_tool(&mut self) {
+        self.begin_recording();
+        if let Some(session) = self.recording.session.as_mut() {
+            session.select_result = false;
         }
     }
 
@@ -805,7 +845,9 @@ impl DawApp {
                 );
                 self.changed();
                 self.flush_pending_edit();
-                if let Some(first) = commits.first() {
+                if session.select_result
+                    && let Some(first) = commits.first()
+                {
                     self.selected_track = Some(first.track);
                     self.selected_clip = Some(first.clip);
                 }
@@ -1017,7 +1059,7 @@ impl DawApp {
         self.recording_open &= open;
     }
 
-    pub(crate) fn recording_diagnostics(&self, ctx: &egui::Context) -> serde_json::Value {
+    pub(crate) fn recording_state(&self) -> serde_json::Value {
         let snapshot = self
             .engine
             .as_ref()
@@ -1060,7 +1102,16 @@ impl DawApp {
             "frames":snapshot.frames,"completed_passes":snapshot.completed_passes,"dropped_frames":snapshot.dropped_frames,"input_peaks":snapshot.input_peaks,
             "dummy_device":{"input_channels":self.virtual_io.input_channels,"input_latency_frames":self.virtual_io.input_latency_frames,"output_latency_frames":self.virtual_io.output_latency_frames},
             "last_commit":self.recording.last_commit,"error":self.recording.last_error,"input_device_name":self.settings.input_device_name,
-            "input_device_rect":ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("input_device_picker_rect"))).map(|rect| [rect.left(),rect.top(),rect.right(),rect.bottom()])})
+            "placement":if self.recording.placement == RecordingPlacement::Take {"take"} else {"overdub"}})
+    }
+
+    pub(crate) fn recording_diagnostics(&self, ctx: &egui::Context) -> serde_json::Value {
+        let mut state = self.recording_state();
+        state["input_device_rect"] = serde_json::json!(
+            ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("input_device_picker_rect")))
+                .map(|rect| [rect.left(), rect.top(), rect.right(), rect.bottom()])
+        );
+        state
     }
 }
 

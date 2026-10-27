@@ -1675,6 +1675,86 @@ pub fn render_with_workers(
     )
 }
 
+/// Render an end-exclusive range without writing a file or moving live transport.
+/// Processing starts at beat zero so instruments, automation and effect tails have
+/// their preceding history. Only the requested stereo samples are retained.
+/// Cancellation is checked during preparation and between processing blocks;
+/// a currently executing isolated plug-in command retains its existing timeout.
+pub fn render_range_cancellable(
+    project: &Project,
+    sample_rate: u32,
+    start_beat: f64,
+    end_beat: f64,
+    options: RenderOptions,
+    cancel: &AtomicBool,
+) -> Result<Vec<f32>> {
+    ensure!(
+        start_beat.is_finite()
+            && end_beat.is_finite()
+            && start_beat >= 0.0
+            && end_beat > start_beat,
+        "Render range must have finite, increasing, nonnegative bounds"
+    );
+    ensure!(
+        project.tempo.is_finite() && project.tempo > 0.0,
+        "Tempo must be positive and finite"
+    );
+    ensure!(
+        (8_000..=384_000).contains(&sample_rate),
+        "Sample rate must be between 8000 and 384000 Hz"
+    );
+    let samples_per_beat = sample_rate as f64 * 60.0 / project.tempo;
+    let start = (start_beat * samples_per_beat).round();
+    let end = (end_beat * samples_per_beat).round();
+    ensure!(
+        end <= sample_rate as f64 * 60.0 * 60.0 * 4.0,
+        "Render range exceeds the four-hour processing limit"
+    );
+    ensure!(end > start, "Render range contains no samples");
+    let check_cancelled = || -> Result<()> {
+        ensure!(!cancel.load(Ordering::Acquire), "Audio analysis cancelled");
+        Ok(())
+    };
+    check_cancelled()?;
+    let renderer =
+        Renderer::new_with_options_cancelled(project, sample_rate, false, options, cancel)?;
+    render_range_prepared(renderer, start as u64, end as u64, check_cancelled)
+}
+
+fn render_range_prepared(
+    mut renderer: Renderer,
+    start: u64,
+    end: u64,
+    mut check_cancelled: impl FnMut() -> Result<()>,
+) -> Result<Vec<f32>> {
+    let samples = usize::try_from(end - start)?
+        .checked_mul(2)
+        .context("Render range is too large")?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(samples)
+        .context("Allocating range render output")?;
+    let mut block = [[0.0; 2]; BLOCK];
+    let mut positions = [0.0; BLOCK];
+    let mut rendered = 0;
+    while rendered < end {
+        check_cancelled()?;
+        let count = (end - rendered).min(BLOCK as u64) as usize;
+        renderer.render(&mut block[..count], &mut positions[..count])?;
+        let first = start.saturating_sub(rendered).min(count as u64) as usize;
+        for frame in &block[first..count] {
+            ensure!(
+                frame[0].is_finite() && frame[1].is_finite(),
+                "Rendered audio contains nonfinite samples"
+            );
+            output.extend_from_slice(frame);
+        }
+        rendered += count as u64;
+    }
+    check_cancelled()?;
+    Ok(output)
+}
+
 fn render_prepared(mut renderer: Renderer, length_beats: f64) -> Result<Vec<f32>> {
     ensure!(
         length_beats.is_finite() && length_beats > 0.0,
@@ -1941,6 +2021,53 @@ mod tests {
             .push(Clip::audio("Tone", 0.0, 1.0, path.to_string_lossy()));
         project.tracks.push(track);
         (project, directory)
+    }
+
+    #[test]
+    fn range_render_matches_full_render_and_retains_only_selected_samples() {
+        let (project, _directory) = loop_project();
+        let full = render(&project, 8_000, 1.0).unwrap();
+        let range = render_range_cancellable(
+            &project,
+            8_000,
+            0.125,
+            0.625,
+            RenderOptions::default(),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        // At 120 BPM and 8 kHz, one beat is exactly 4,000 frames.
+        assert_eq!(range, full[1_000..5_000]);
+    }
+
+    #[test]
+    fn range_render_checks_cancellation_between_processing_blocks() {
+        let (project, _directory) = loop_project();
+        let renderer = Renderer::new(&project, 8_000, false).unwrap();
+        let mut checks = 0;
+        let result = render_range_prepared(renderer, 0, 4_000, || {
+            checks += 1;
+            ensure!(checks < 3, "cancelled by test after two blocks");
+            Ok(())
+        });
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cancelled by test")
+        );
+        assert_eq!(checks, 3);
+        assert!(
+            render_range_cancellable(
+                &project,
+                8_000,
+                0.0,
+                1.0,
+                RenderOptions::default(),
+                &AtomicBool::new(true),
+            )
+            .is_err()
+        );
     }
 
     #[test]

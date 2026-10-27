@@ -26,6 +26,26 @@ fn one_key_press() -> usize {
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    SongTool {
+        name: String,
+        arguments: Value,
+    },
+    ApplicationTool {
+        name: String,
+        arguments: Value,
+    },
+    McpRequest {
+        request: Value,
+        #[serde(default)]
+        application: bool,
+    },
+    AssistantScript {
+        turns: Vec<daw_ai::ScriptedTurn>,
+    },
+    WaitAssistant {
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
     /// Consume the real engine queue through its callback with no audio device.
     PumpAudio {
         frames: usize,
@@ -242,6 +262,9 @@ fn default_timeout() -> u64 {
 }
 
 struct Harness {
+    tool_result: Option<Value>,
+    mcp_result: Option<Value>,
+    mcp_server: daw_mcp::McpServer,
     ctx: egui::Context,
     app: DawApp,
     time: f64,
@@ -306,6 +329,9 @@ impl Harness {
             ctx,
             app,
             time: 0.0,
+            tool_result: None,
+            mcp_result: None,
+            mcp_server: Default::default(),
             labels: Vec::new(),
             menu_labels: Vec::new(),
             window_labels: Vec::new(),
@@ -669,6 +695,95 @@ impl Harness {
         self.painted_rects.clear();
         self.painted_images.clear();
         match command {
+            Command::SongTool { name, arguments } => {
+                let result = self.execute_tool_wait(&name, arguments);
+                self.tool_result = Some(match result {
+                    Ok(result) => json!({"ok":true,"result":result}),
+                    Err(error) => json!({"ok":false,"error":error}),
+                });
+                self.settle();
+            }
+            Command::ApplicationTool { name, arguments } => {
+                let mut result = self.execute_tool_wait_profile(
+                    daw_tools::ToolProfile::Application,
+                    &name,
+                    arguments,
+                );
+                if result.as_ref().is_ok_and(|value| value["accepted"] == true) {
+                    let deadline = Instant::now() + Duration::from_secs(120);
+                    while self.app.project_io_pending()
+                        || self.app.state_sync_pending()
+                        || self.app.document_guard.is_some()
+                        || self.app.export_job.is_some()
+                        || self.app.loading.is_some()
+                    {
+                        if Instant::now() >= deadline {
+                            result = Err(daw_tools::ToolError::new(
+                                "timeout",
+                                "Application operation timed out",
+                            ));
+                            break;
+                        }
+                        self.frame(RawInput::default());
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    if self.app.error {
+                        result = Err(daw_tools::ToolError::new(
+                            "operation_failed",
+                            self.app.status.clone(),
+                        ));
+                    }
+                }
+                self.tool_result = Some(match result {
+                    Ok(value) => json!({"ok":true,"result":value}),
+                    Err(error) => json!({"ok":false,"error":error}),
+                });
+                self.settle();
+            }
+            Command::McpRequest {
+                request,
+                application,
+            } => {
+                let profile = if application {
+                    daw_tools::ToolProfile::Application
+                } else {
+                    daw_tools::ToolProfile::CurrentSong
+                };
+                struct DriverHost<'a>(&'a mut Harness, daw_tools::ToolProfile);
+                impl daw_tools::ToolHost for DriverHost<'_> {
+                    fn tool_specs(&self) -> Vec<daw_tools::ToolSpec> {
+                        daw_tools::tool_specs_for(self.1)
+                    }
+                    fn call_tool(
+                        &mut self,
+                        name: &str,
+                        args: Value,
+                    ) -> std::result::Result<Value, daw_tools::ToolError> {
+                        self.0.execute_tool_wait_profile(self.1, name, args)
+                    }
+                }
+                let mut server = std::mem::take(&mut self.mcp_server);
+                self.mcp_result = server.handle_request(&mut DriverHost(self, profile), request);
+                self.mcp_server = server;
+                self.settle();
+            }
+            Command::AssistantScript { turns } => {
+                self.app.assistant.set_script(turns);
+                self.settle();
+            }
+            Command::WaitAssistant { timeout_ms } => {
+                ensure!(
+                    (1..=120000).contains(&timeout_ms),
+                    "Assistant timeout must be between 1 and 120000 ms"
+                );
+                let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+                while self.app.assistant.busy() {
+                    ensure!(Instant::now() < deadline, "Assistant timed out");
+                    self.frame(RawInput::default());
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                self.settle();
+            }
             Command::PumpAudio { frames } => {
                 ensure!(self.app.virtual_audio, "Virtual audio is not enabled");
                 ensure!(
@@ -1115,6 +1230,45 @@ impl Harness {
         Ok(())
     }
 
+    fn execute_tool_wait(
+        &mut self,
+        name: &str,
+        args: Value,
+    ) -> std::result::Result<Value, daw_tools::ToolError> {
+        self.execute_tool_wait_profile(daw_tools::ToolProfile::CurrentSong, name, args)
+    }
+
+    fn execute_tool_wait_profile(
+        &mut self,
+        profile: daw_tools::ToolProfile,
+        name: &str,
+        args: Value,
+    ) -> std::result::Result<Value, daw_tools::ToolError> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.app
+            .dispatch_profile_tool(profile, name.into(), args, sender, cancel.clone());
+        let deadline = Instant::now() + Duration::from_secs(90);
+        loop {
+            match receiver.try_recv() {
+                Ok(result) => return result,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err(daw_tools::ToolError::new(
+                        "unavailable",
+                        "Tool dispatcher closed",
+                    ));
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+            if Instant::now() >= deadline {
+                cancel.store(true, std::sync::atomic::Ordering::Release);
+                return Err(daw_tools::ToolError::new("timeout", "Tool timed out"));
+            }
+            self.frame(RawInput::default());
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     fn state(&self) -> Value {
         let mut state = json!({
             "effective_theme": format!("{:?}", self.ctx.theme()),
@@ -1187,6 +1341,11 @@ impl Harness {
                 })
             },
         );
+        state["tool_join_pending"] = json!(self.app.tool_joins.pending());
+        state["song_session"] = json!(self.app.song_session);
+        state["assistant"] = self.app.assistant_diagnostics(&self.ctx);
+        state["tool_result"] = json!(self.tool_result);
+        state["mcp_result"] = json!(self.mcp_result);
         state["revision"] = json!(self.app.revision);
         state["audio_silence"] = crate::audio_silence::diagnostics(&self.ctx);
         state["popups"]["about"] = json!(self.app.about_open);
