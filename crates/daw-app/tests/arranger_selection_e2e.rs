@@ -234,6 +234,48 @@ fn time_block_duplicate_preserves_rests_and_clips_partial_source_windows() {
 }
 
 #[test]
+fn moving_or_copying_a_time_phrase_preserves_its_leading_and_trailing_rests() {
+    for copying in [false, true] {
+        let mut app = fixture();
+        let marked = phrase(&mut app, 1.0, 4.0);
+        assert_eq!(selected(&marked).len(), 2);
+        assert_eq!(marked["timeline"]["selection_span"], json!([1.0, 4.0]));
+        app.click("Select");
+        let view = app.inspect();
+        let id = selected(&view)[0];
+        let p = rect_center(clip_rect(&view, id));
+        let scale = view["timeline"]["pixels_per_beat"].as_f64().unwrap();
+        let dragged = app.command(json!({
+            "command":"pointer", "phase":"drag", "shift":copying,
+            "x":p.0, "y":p.1, "to_x":p.0+scale, "to_y":p.1
+        }));
+        assert_eq!(
+            dragged["timeline"]["selection_span"],
+            json!([2.0, 5.0]),
+            "The whole phrase moves with its clips (copying={copying})"
+        );
+        let duplicated = menu(&mut app, "Edit", "Duplicate");
+        assert_eq!(
+            duplicated["timeline"]["selection_span"],
+            json!([5.0, 8.0]),
+            "Duplicate keeps the three-beat phrase spacing (copying={copying})"
+        );
+        let ids = selected(&duplicated);
+        for track in [0, 1] {
+            let additions = duplicated["project"]["tracks"][track]["clips"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|clip| ids.contains(&clip["id"].as_u64().unwrap()))
+                .collect::<Vec<_>>();
+            assert_eq!(additions.len(), 1);
+            assert_eq!(additions[0]["start"], 6.0);
+        }
+        app.quit();
+    }
+}
+
+#[test]
 fn marquee_group_move_shift_copy_and_arrow_selection_preserve_relative_placement() {
     let mut app = fixture();
     let before = app.inspect();

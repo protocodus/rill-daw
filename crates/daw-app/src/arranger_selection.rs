@@ -168,6 +168,13 @@ impl DawApp {
     ) {
         self.sync_arranger_selection();
         let mut clips = self.arranger_selection_ids();
+        // Starting a drag inside the selected phrase must carry its rests along
+        // with the clips. A fresh click or membership change clears the span.
+        let span = if dragging && clips.contains(&(track, clip)) {
+            self.arranger_phrase_span()
+        } else {
+            None
+        };
         if shift && !dragging {
             if clips.contains(&(track, clip)) {
                 clips.retain(|item| *item != (track, clip));
@@ -177,7 +184,7 @@ impl DawApp {
         } else if !clips.contains(&(track, clip)) {
             clips = vec![(track, clip)];
         }
-        self.arranger_select_clips(clips, None);
+        self.arranger_select_clips(clips, span);
         if self.arranger_selection.ids.contains(&clip) {
             self.selected_track = Some(track);
             self.selected_clip = Some(clip);

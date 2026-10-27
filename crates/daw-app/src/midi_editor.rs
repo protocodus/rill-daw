@@ -67,6 +67,7 @@ pub(crate) struct MidiEditorState {
     gesture: Option<Gesture>,
     audition: Option<(u64, u8, u8)>,
     audition_from_keys: bool,
+    audition_from_keyboard: bool,
     last_click: Option<(Option<u64>, Pos2, f64)>,
     last_created: Option<(Vec<u64>, f64)>,
     clipboard: Vec<Note>,
@@ -101,6 +102,7 @@ impl Default for MidiEditorState {
             gesture: None,
             audition: None,
             audition_from_keys: false,
+            audition_from_keyboard: false,
             last_click: None,
             last_created: None,
             clipboard: Vec::new(),
@@ -187,11 +189,17 @@ impl MidiEditorState {
 
     pub(crate) fn end_edit_gesture(&mut self) {
         self.gesture = None;
-        self.audition = None;
+        // Transactions also flush on idle frames. A held keyboard audition has
+        // its own release/focus lifetime and must not retrigger at each flush.
+        if !self.audition_from_keyboard {
+            self.audition = None;
+        }
     }
 
     pub(crate) fn select_clip_preserving_view(&mut self, clip: u64) {
         self.end_edit_gesture();
+        self.audition = None;
+        self.audition_from_keyboard = false;
         if self.clip.is_some() {
             self.clip = Some(clip);
         }
@@ -1560,6 +1568,7 @@ impl DawApp {
         }
         state.audition = None;
         state.audition_from_keys = false;
+        state.audition_from_keyboard = false;
         if down
             && owns_pointer
             && !navigation.navigating
@@ -1583,12 +1592,13 @@ impl DawApp {
             && state.generate.is_none()
             && !ui.ctx().wants_keyboard_input()
             && !egui::Popup::is_any_open(ui.ctx())
-            && ui.input(|input| input.key_down(egui::Key::Enter));
+            && ui.input(|input| input.focused && input.key_down(egui::Key::Enter));
         if keyboard_audition && let Some(pitch) = state.keyboard_pitch {
             state.audition = self
                 .selected_track
                 .map(|track| (track, pitch, state.velocity));
             state.audition_from_keys = true;
+            state.audition_from_keyboard = true;
         }
         if !navigation.navigating
             && owns_pointer
@@ -2216,6 +2226,10 @@ mod tests {
         let ctx = egui::Context::default();
         let mut project = daw_core::Project::new();
         let track = project.add_midi_track("Keyboard audition");
+        project.track_mut(track).unwrap().instrument = daw_core::Instrument::Vst3 {
+            path: "keyboard-audition-test.vst3".into(),
+            class_id: None,
+        };
         project
             .track_mut(track)
             .unwrap()
@@ -2228,6 +2242,7 @@ mod tests {
             ));
         let before = project.clone();
         let mut app = DawApp::with_context(&ctx, project, None);
+        app.audio_device_enabled = false;
         app.view = crate::app::WorkspaceView::Clip;
         let frame = |app: &mut DawApp, events: Vec<egui::Event>, focused: bool| {
             let _ = ctx.run(
@@ -2237,9 +2252,7 @@ mod tests {
                     focused,
                     ..Default::default()
                 },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.piano_roll(ui));
-                },
+                |ctx| app.ui_frame(ctx),
             );
         };
         frame(&mut app, vec![], true);
@@ -2287,16 +2300,24 @@ mod tests {
         };
         frame(&mut app, vec![key(egui::Key::Enter, true)], true);
         assert_eq!(app.midi_audition(&ctx), Some((track, 60, 100)));
+        assert_eq!(app.audition_request, Some((track, 60, 100)));
+        for _ in 0..3 {
+            frame(&mut app, vec![], true);
+            assert_eq!(app.midi_audition(&ctx), Some((track, 60, 100)));
+            assert_eq!(app.audition_request, Some((track, 60, 100)));
+        }
         frame(&mut app, vec![key(egui::Key::ArrowUp, true)], true);
         assert_eq!(app.midi_audition(&ctx), Some((track, 61, 100)));
         frame(&mut app, vec![], false);
         assert_eq!(app.midi_audition(&ctx), None);
+        assert_eq!(app.audition_request, None);
         frame(
             &mut app,
             vec![key(egui::Key::Enter, false), key(egui::Key::ArrowUp, false)],
             true,
         );
         assert_eq!(app.midi_audition(&ctx), None);
+        assert_eq!(app.audition_request, None);
         assert_eq!(app.project, before);
         assert!(!app.modified);
         assert!(!app.history.can_undo());
