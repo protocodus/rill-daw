@@ -468,6 +468,11 @@ impl DawApp {
             fit |= daw_ui::timeline_fit_button(ui).clicked();
             add_parameter = daw_ui::button(ui, "Add parameter").clicked();
         });
+        daw_ui::interaction_hint(
+            ui,
+            "Edit points",
+            "Click empty space to add a point; drag to move. Arrows select; Shift+arrows extend. Right-click a point to add or remove it from the selection; Delete removes the selection.",
+        );
         if add_parameter {
             state.creating = true;
             state.source = Some(lane.target.track);
@@ -502,6 +507,7 @@ impl DawApp {
                 tempo: self.project.tempo,
                 beats_per_bar: self.project.beats_per_bar,
                 fit,
+                keyboard_active: true,
             },
             |beat| lane.value_at(beat).unwrap_or(0.5),
         );
@@ -514,6 +520,7 @@ impl DawApp {
             );
         });
         let mut edit = response.edit;
+        let mut delete_selection = response.delete_selection;
         let mut point_beat_rect = None;
         let mut displayed_beat = None;
         daw_ui::toolbar(ui, |ui| {
@@ -567,8 +574,18 @@ impl DawApp {
                         value: lane.target.parameter.normalize(value),
                     });
                 }
-                if daw_ui::button(ui, "Delete point").clicked() {
+                if daw_ui::button(
+                    ui,
+                    if response.selection.len() > 1 {
+                        "Delete selected points"
+                    } else {
+                        "Delete point"
+                    },
+                )
+                .clicked()
+                {
                     edit = Some(CurveEdit::Delete { id: point.id });
+                    delete_selection = response.selection.len() > 1;
                 }
             } else {
                 ui.label("Click the curve to add a point");
@@ -582,6 +599,7 @@ impl DawApp {
             "end_beat":state.viewport.beat_at(response.plot_rect,response.plot_rect.right()),
             "point_beat_rect":point_beat_rect.map(rect), "point_beat":displayed_beat,
             "navigating":response.navigation.navigating,
+            "selected_point":state.point,"selected_points":response.selection,
         }))
         });
         if let Some(edit) = edit {
@@ -596,10 +614,19 @@ impl DawApp {
                     x,
                     value,
                 } => self.project.move_automation_point(id, point, x, value),
-                CurveEdit::Delete { id: point } => self
-                    .project
-                    .remove_automation_point(id, point)
-                    .map(|_| state.point = None),
+                CurveEdit::Delete { id: point } => {
+                    let selected = if delete_selection {
+                        response.selection.clone()
+                    } else {
+                        vec![point]
+                    };
+                    selected
+                        .into_iter()
+                        .try_for_each(|point| {
+                            self.project.remove_automation_point(id, point).map(|_| ())
+                        })
+                        .map(|_| state.point = None)
+                }
             };
             if result.is_ok() {
                 self.changed();

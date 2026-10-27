@@ -263,6 +263,58 @@ fn range_copy_paste_and_duplicate_preserve_samples_and_project_recall() {
 }
 
 #[test]
+fn duplicate_menu_names_the_active_audio_scope_and_matches_the_rendered_result() {
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = fixture(true, false);
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.command(
+            json!({"command":"viewport","width":1100.0,"height":760.0,"pixels_per_point":density}),
+        );
+        let original = app.inspect()["project"].clone();
+        let baseline = export(&mut app, "baseline.wav");
+        let visible = |state: &Value, label: &str| {
+            state["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == label)
+        };
+
+        let whole_clip = app.click("Clip");
+        assert!(visible(&whole_clip, "Duplicate clip"));
+        assert!(!visible(&whole_clip, "Duplicate selection"));
+        app.key("Escape");
+        range(&mut app);
+        let selection = app.click("Clip");
+        assert!(visible(&selection, "Duplicate selection"));
+        assert!(!visible(&selection, "Duplicate clip"));
+        let cleared = app.click("Clear selection");
+        assert!(cleared["audio_editor"]["range"].is_null());
+        assert_eq!(cleared["project"], original);
+        assert!(visible(&app.click("Clip"), "Duplicate clip"));
+        app.key("Escape");
+
+        range(&mut app);
+        app.click("Clip");
+        let duplicated = app.click("Duplicate selection");
+        near(&selected(&duplicated)["start"], 3.0);
+        near(&selected(&duplicated)["length"], 1.0);
+        let rendered = export(&mut app, "duplicated.wav");
+        assert_eq!(frames(&rendered, 3.0, 4.0), frames(&baseline, 2.0, 3.0));
+        assert_eq!(chord(&mut app, "Z")["project"], original);
+
+        app.click("Clip");
+        let duplicated = app.click("Duplicate clip");
+        near(&selected(&duplicated)["start"], 5.0);
+        near(&selected(&duplicated)["length"], 4.0);
+        let rendered = export(&mut app, "whole-clip.wav");
+        assert_eq!(frames(&rendered, 5.0, 9.0), frames(&baseline, 1.0, 5.0));
+        assert_eq!(chord(&mut app, "Z")["project"], original);
+        app.quit();
+    }
+}
+
+#[test]
 fn slip_drag_moves_audio_inside_fixed_edges_and_retains_reverse_stereo_mapping() {
     for reverse in [false, true] {
         let mut app = fixture(reverse, false);
@@ -348,7 +400,7 @@ fn nudge_uses_shared_sample_millisecond_and_grid_steps_in_both_workspaces() {
     app.click("Nudge");
     app.click("1 sample");
     dismiss_menu(&mut app);
-    let nudged = app.key("ArrowRight");
+    let nudged = chord(&mut app, "ArrowRight");
     near(&selected(&nudged)["start"], 1.0 + 1.0 / 24000.0);
     let source = AudioData::load_wav(app.directory.path().join("common-source.wav")).unwrap();
     let rendered = export(&mut app, "sample-nudge.wav");
@@ -360,15 +412,15 @@ fn nudge_uses_shared_sample_millisecond_and_grid_steps_in_both_workspaces() {
     app.click("Nudge");
     app.click("1 ms");
     dismiss_menu(&mut app);
-    near(&selected(&app.key("ArrowRight"))["start"], 1.002);
+    near(&selected(&chord(&mut app, "ArrowRight"))["start"], 1.002);
     assert_eq!(chord(&mut app, "Z")["project"], original);
     app.click("Arranger");
-    near(&selected(&app.key("ArrowRight"))["start"], 1.002);
+    near(&selected(&chord(&mut app, "ArrowRight"))["start"], 1.002);
     assert_eq!(chord(&mut app, "Z")["project"], original);
     app.click("Nudge");
     app.click("Grid");
     dismiss_menu(&mut app);
-    near(&selected(&app.key("ArrowLeft"))["start"], 0.75);
+    near(&selected(&chord(&mut app, "ArrowLeft"))["start"], 0.75);
     assert_eq!(chord(&mut app, "Z")["project"], original);
     app.quit();
 }

@@ -791,6 +791,7 @@ dependencies = [
  "hound",
  "midly",
  "rustfft",
+ "same-file",
  "serde",
  "serde_json",
  "tempfile",

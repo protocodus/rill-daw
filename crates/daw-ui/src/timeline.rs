@@ -1,5 +1,5 @@
 //! Shared musical-time viewport and gestures for every editing canvas.
-use egui::{Id, Key, PointerButton, Pos2, Rect, Ui, Vec2};
+use egui::{Id, Key, PointerButton, Pos2, Rect, Response, Ui, Vec2};
 use std::hash::Hash;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -134,17 +134,20 @@ pub fn editor_tools_with_labels(
     label: impl Fn(EditorTool) -> &'static str,
 ) {
     for candidate in supported {
-        crate::selectable_value(ui, tool, *candidate, label(*candidate)).on_hover_text(format!(
-            "{} · {}\n{}",
+        crate::tool_value(ui, tool, *candidate, label(*candidate)).on_hover_text(format!(
+            "{} tool · {}\n{}",
             label(*candidate),
             candidate.key().name(),
             candidate.hint(),
         ));
     }
+    if !supported.is_empty() {
+        ui.separator();
+    }
 }
 
 pub fn timeline_fit_button(ui: &mut Ui) -> egui::Response {
-    crate::button(ui, "Fit").on_hover_text("Fit all content on both axes · F")
+    crate::view_button(ui, "Fit").on_hover_text("Fit all content on both axes · F")
 }
 
 /// Shared by the arranger and focused audio editor. This is an edit increment,
@@ -194,8 +197,16 @@ pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
         }
         ui.separator();
         for (value, label, hint) in [
-            (-1, "Nudge left", "Move selected clip left · Left arrow"),
-            (1, "Nudge right", "Move selected clip right · Right arrow"),
+            (
+                -1,
+                "Nudge left",
+                "Move selected clip left · Ctrl/Cmd+Left arrow",
+            ),
+            (
+                1,
+                "Nudge right",
+                "Move selected clip right · Ctrl/Cmd+Right arrow",
+            ),
         ] {
             if ui
                 .add_enabled(enabled, crate::button_widget(label))
@@ -212,7 +223,33 @@ pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
     direction
 }
 
-/// Musical bars and elapsed clock time share the exact same horizontal mapping.
+/// The current project model counts quarter-note beats per bar. This compact
+/// choice deliberately exposes only its supported numerators and denominator.
+pub fn time_signature_choice(ui: &mut Ui, beats_per_bar: &mut u8) -> Response {
+    let before = *beats_per_bar;
+    let height = (ui.ctx().content_rect().height() - 100.0).clamp(68.0, 240.0);
+    let mut response = crate::select("time_signature", format!("{}/4", *beats_per_bar))
+        .width(56.0)
+        .height(height)
+        .show_ui(ui, |ui| {
+            for beats in 1..=32 {
+                if crate::selectable_value(ui, beats_per_bar, beats, format!("{beats}/4")).clicked()
+                {
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .on_hover_text("Time signature · quarter-note beats per bar");
+    if *beats_per_bar != before {
+        response.mark_changed();
+    }
+    response
+}
+
+/// Musical position and elapsed clock time use the canvas's exact mapping.
+/// At closer zoom, beat and quarter-beat anchors keep a view between bar lines
+/// readable. Bar labels remain primary; all labels require their full bounds.
 pub fn paint_timeline_ruler(
     painter: &egui::Painter,
     rect: Rect,
@@ -220,45 +257,120 @@ pub fn paint_timeline_ruler(
     tempo: f64,
     beats_per_bar: u8,
 ) {
+    if !rect.is_finite()
+        || !rect.is_positive()
+        || !view.start_beat.is_finite()
+        || !view.pixels_per_beat.is_finite()
+        || view.pixels_per_beat <= 0.0
+    {
+        return;
+    }
+    let end_beat = view.beat_at(rect, rect.right());
+    if !end_beat.is_finite() {
+        return;
+    }
     let bar = usize::from(beats_per_bar.max(1));
-    let step = ((80.0 / view.pixels_per_beat).ceil() as usize)
+    const LABEL_SPACING: f32 = 80.0;
+    let step = ((LABEL_SPACING / view.pixels_per_beat).ceil() as usize)
         .max(bar)
         .div_ceil(bar)
-        * bar;
+        .saturating_mul(bar);
     let start = (view.start_beat.max(0.0) as usize / step) * step;
-    let end = view.beat_at(rect, rect.right()).ceil().max(0.0) as usize;
-    let painter = painter.with_clip_rect(rect);
+    let end = end_beat.ceil().max(0.0) as usize;
+    let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     let palette = crate::theme::palette(painter.ctx());
     let font = egui::FontId::monospace(crate::tokens::FONT_CANVAS);
-    for beat in (start..=end).step_by(step) {
-        let x = view.x_at(rect, beat as f64);
-        let seconds = beat as f64 * 60.0 / tempo.max(1.0);
-        for (text, anchor, alignment, color) in [
-            (
-                format!("{}", beat / bar + 1),
-                egui::pos2(x + 4.0, rect.top() + 2.0),
-                egui::Align2::LEFT_TOP,
-                palette.text,
-            ),
-            (
-                format!("{}:{:05.2}", seconds as u64 / 60, seconds % 60.0),
-                egui::pos2(x + 4.0, rect.bottom() - 2.0),
-                egui::Align2::LEFT_BOTTOM,
-                palette.muted,
-            ),
-        ] {
-            let galley = painter.layout_no_wrap(text, font.clone(), color);
-            let position = alignment.anchor_size(anchor, galley.size()).min;
-            let bounds = galley
-                .rect
-                .union(galley.mesh_bounds)
-                .translate(position.to_vec2());
-            // Partial bar/time glyphs can imply a different position. Preserve
-            // their time anchors and omit labels that do not fit in full.
-            if painter.clip_rect().contains_rect(bounds) {
-                painter.galley(position, galley, color);
-            }
+    let mut upper = Vec::new();
+    let mut lower = Vec::new();
+    let label = |text: String, x: f32, top: bool, color, placed: &mut Vec<Rect>| {
+        let anchor = egui::pos2(
+            x + crate::tokens::SPACE_XS,
+            if top {
+                rect.top() + 2.0
+            } else {
+                rect.bottom() - 2.0
+            },
+        );
+        let alignment = if top {
+            egui::Align2::LEFT_TOP
+        } else {
+            egui::Align2::LEFT_BOTTOM
+        };
+        let galley = painter.layout_no_wrap(text, font.clone(), color);
+        let position = alignment.anchor_size(anchor, galley.size()).min;
+        let bounds = galley
+            .rect
+            .union(galley.mesh_bounds)
+            .translate(position.to_vec2());
+        if painter.clip_rect().contains_rect(bounds)
+            && placed
+                .iter()
+                .all(|previous| !previous.expand(crate::tokens::SPACE_XS).intersects(bounds))
+        {
+            placed.push(bounds);
+            painter.galley(position, galley, color);
         }
+    };
+    let clock = |beat: f64| {
+        let seconds = beat * 60.0 / tempo.max(1.0);
+        seconds
+            .is_finite()
+            .then(|| format!("{}:{:05.2}", seconds as u64 / 60, seconds % 60.0))
+    };
+    let tick = |x: f32, length: f32| {
+        if x >= rect.left() && x <= rect.right() {
+            painter.line_segment(
+                [
+                    egui::pos2(x, rect.bottom() - length),
+                    egui::pos2(x, rect.bottom()),
+                ],
+                egui::Stroke::new(1.0_f32, palette.line),
+            );
+        }
+    };
+    // Reserve the primary bar and clock labels first so finer anchors cannot
+    // displace them, including at large bar numbers or a clipped viewport edge.
+    for beat in (start..=end).step_by(step).take(2048) {
+        let x = view.x_at(rect, beat as f64);
+        label(
+            format!("{}", (beat / bar).saturating_add(1)),
+            x,
+            true,
+            palette.text,
+            &mut upper,
+        );
+        if let Some(text) = clock(beat as f64) {
+            label(text, x, false, palette.muted, &mut lower);
+        }
+        tick(x, 8.0);
+    }
+    let divisions = [4, 2, 1]
+        .into_iter()
+        .find(|division| view.pixels_per_beat / *division as f32 >= LABEL_SPACING);
+    let Some(divisions) = divisions else {
+        return;
+    };
+    let tick_step = 4 / divisions;
+    let first = (view.start_beat.max(0.0) * 4.0).floor() as usize / tick_step * tick_step;
+    let last = (end_beat.max(0.0) * 4.0).ceil() as usize;
+    for quarter in (first..=last).step_by(tick_step).take(2048) {
+        if quarter % (bar * 4) == 0 {
+            continue;
+        }
+        let beat = quarter as f64 / 4.0;
+        let x = view.x_at(rect, beat);
+        let bar_number = (quarter / (bar * 4)).saturating_add(1);
+        let beat_number = quarter / 4 % bar + 1;
+        let text = if quarter.is_multiple_of(4) {
+            format!("{bar_number}.{beat_number}")
+        } else {
+            format!("{bar_number}.{beat_number}.{}", quarter % 4 + 1)
+        };
+        label(text, x, true, palette.muted, &mut upper);
+        if let Some(text) = clock(beat) {
+            label(text, x, false, palette.muted, &mut lower);
+        }
+        tick(x, if quarter.is_multiple_of(4) { 5.0 } else { 3.0 });
     }
 }
 
@@ -346,6 +458,7 @@ pub struct TimelinePane {
     id: Id,
     rect: Rect,
     horizontal_only: bool,
+    keyboard_active: bool,
     keyboard_focus: Option<Id>,
 }
 
@@ -355,15 +468,25 @@ impl TimelinePane {
             id: Id::new(id),
             rect,
             horizontal_only: false,
+            keyboard_active: false,
             keyboard_focus: None,
         }
     }
 
     /// A normalized parameter curve keeps its complete vertical range visible.
-    /// Horizontal gestures stay identical to music editors; vertical gestures
-    /// are consumed without changing its value scale.
+    /// Horizontal gestures stay identical to music editors. Ordinary vertical
+    /// scrolling remains available to a containing list or popup; explicit
+    /// vertical zoom gestures never change the parameter's value scale.
     pub fn horizontal_only(mut self) -> Self {
         self.horizontal_only = true;
+        self
+    }
+
+    /// Route view shortcuts to the foreground editor even outside its canvas.
+    /// The owner must enable this for only one editor. Text entry, disabled UI,
+    /// and open menus continue to keep their keyboard input.
+    pub fn keyboard_active(mut self) -> Self {
+        self.keyboard_active = true;
         self
     }
 
@@ -474,16 +597,27 @@ impl TimelinePane {
                 } else if modifiers.shift {
                     view.pan(Vec2::new(delta.x + delta.y, 0.0));
                 } else {
-                    view.pan(delta);
+                    view.pan(Vec2::new(
+                        delta.x,
+                        if self.horizontal_only { 0.0 } else { delta.y },
+                    ));
                 }
                 ui.input_mut(|i| {
-                    i.raw_scroll_delta = Vec2::ZERO;
-                    i.smooth_scroll_delta = Vec2::ZERO;
+                    i.raw_scroll_delta.x = 0.0;
+                    i.smooth_scroll_delta.x = 0.0;
+                    if !self.horizontal_only
+                        || modifiers.ctrl
+                        || modifiers.command
+                        || modifiers.shift
+                    {
+                        i.raw_scroll_delta.y = 0.0;
+                        i.smooth_scroll_delta.y = 0.0;
+                    }
                 });
             }
         }
         let focused = ui.ctx().data_mut(|data| data.get_temp::<Id>(focus_id)) == Some(self.id);
-        if (hovered || focused)
+        if (hovered || focused || self.keyboard_active)
             && (!ui.ctx().wants_keyboard_input()
                 || self
                     .keyboard_focus

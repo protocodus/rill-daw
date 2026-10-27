@@ -33,12 +33,22 @@ pub fn toolbar_group_sized<R>(
     minimum_width: f32,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<R> {
+    toolbar_group_sized_with_spacing(ui, minimum_width, tokens::SPACE_SM, contents)
+}
+
+/// Reserve a complete group before painting, with compact parent spacing.
+pub fn toolbar_group_sized_with_spacing<R>(
+    ui: &mut Ui,
+    minimum_width: f32,
+    spacing: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
     let width = minimum_width.max(0.0).min(ui.max_rect().width().max(0.0));
     ui.allocate_ui_with_layout(
         egui::vec2(width, tokens::CONTROL_HEIGHT),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
+            ui.spacing_mut().item_spacing.x = spacing.max(0.0);
             contents(ui)
         },
     )
@@ -69,6 +79,16 @@ pub fn action_menu<R>(
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
     crate::widgets::semantic_menu(ui, label, crate::widgets::MenuRole::Action, contents)
+}
+
+/// A text-first action menu for narrow columns. The opener retains its full
+/// control height and native menu behavior, with compact horizontal padding.
+pub fn compact_action_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    crate::widgets::semantic_compact_action_menu(ui, label, contents)
 }
 
 /// Presentation settings use a quiet outlined eye button. Unlike action menus,
@@ -160,6 +180,7 @@ pub fn bounded_columns<R>(
 
 pub struct WorkspaceHeaderResponse<R> {
     pub back: Response,
+    pub title: Response,
     pub inner: R,
     pub response: Response,
 }
@@ -187,14 +208,14 @@ pub fn workspace_header<R>(
                             let back = crate::button(ui, "Back")
                                 .on_hover_text("Return to the previous workspace");
                             ui.add_space(tokens::SPACE_XS);
-                            ui.add(
+                            let title = ui.add(
                                 egui::Label::new(title.into().text_style(egui::TextStyle::Heading))
                                     .truncate(),
                             );
-                            back
+                            (back, title)
                         })
                         .inner;
-                    (back, inner)
+                    (back.0, back.1, inner)
                 })
                 .inner
             })
@@ -203,7 +224,8 @@ pub fn workspace_header<R>(
     );
     WorkspaceHeaderResponse {
         back: row.inner.0,
-        inner: row.inner.1,
+        title: row.inner.1,
+        inner: row.inner.2,
         response: row.response,
     }
 }
@@ -240,6 +262,30 @@ pub fn mixer_channel_button(ui: &mut Ui, name: &str, width: f32, color: egui::Co
         );
     }
     response
+}
+
+/// Bus headers retain native button input and a distinct, reserved BUS badge.
+/// The name truncates before the badge instead of painting beneath it.
+pub fn mixer_bus_button(ui: &mut Ui, name: &str, width: f32, tint: egui::Color32) -> Response {
+    let fill = crate::bus_header_fill(ui.ctx(), tint);
+    let foreground = theme::contrast_text(fill);
+    let badge_id = egui::Id::new("mixer_bus_badge");
+    let mut atoms = egui::Atoms::new(
+        crate::text::TextRole::Label
+            .rich(ui.ctx(), name)
+            .color(foreground),
+    );
+    atoms.push_right(egui::Atom::custom(badge_id, egui::vec2(32.0, 18.0)));
+    let button = egui::Button::new(atoms)
+        .min_size(egui::vec2(width, tokens::CONTROL_HEIGHT))
+        .fill(fill)
+        .corner_radius(tokens::RADIUS)
+        .truncate()
+        .atom_ui(ui);
+    if let Some(rect) = button.rect(badge_id) {
+        crate::paint_bus_badge(ui.painter(), rect, tint);
+    }
+    button.response
 }
 
 /// A uniform mixer channel with a quiet wash of its arranger track color.

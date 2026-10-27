@@ -178,7 +178,11 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     app.command(json!({"command":"viewport","width":1100,"height":720}));
     let state = menu(&mut app, "Window", "Mixer");
     assert_eq!(label_count(&state, "Channel"), 3);
-    assert!(!visible(&state, "Effects"));
+    assert_eq!(
+        label_count(&state, "Effects"),
+        3,
+        "inserts precede channel volume"
+    );
     assert!(!visible(&state, "Instrument"));
     let route_rows: Vec<_> = state["label_rects"]
         .as_array()
@@ -244,18 +248,21 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     for _ in 0..20 {
         scrolled = app.inspect();
     }
-    assert!(visible(&scrolled, "Channel"));
+    assert!(visible(&scrolled, "Target"));
     assert!(visible(&scrolled, "Back"));
     assert!(
         scrolled["label_rects"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|row| row["text"] == "Channel")
+            .filter(|row| row["text"] == "Target")
             .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
     );
-    app.click("Channel");
-    assert!(visible(&app.inspect(), "Effects"));
+    let routing = app.click("Ch 1 > Master");
+    assert_eq!(
+        routing["popups"]["routing"], true,
+        "the output target remains usable at the end of the signal chain"
+    );
     app.quit();
 }
 

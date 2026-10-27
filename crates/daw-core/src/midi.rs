@@ -150,6 +150,7 @@ pub fn import_midi(path: impl AsRef<Path>) -> Result<MidiImport> {
 
 pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
     project.validate()?;
+    project.validate_audio_destination(path.as_ref())?;
     const PPQ: u16 = 960;
     let mut tracks = vec![vec![
         TrackEvent {

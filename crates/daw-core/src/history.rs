@@ -188,6 +188,13 @@ impl History {
     pub fn state_id(&self) -> u64 {
         self.state
     }
+
+    /// UI-only edit context can follow exactly the same bounded set of states.
+    pub fn retained_state_ids(&self) -> impl Iterator<Item = u64> + '_ {
+        std::iter::once(self.state)
+            .chain(self.undo.iter().map(|entry| entry.state))
+            .chain(self.redo.iter().map(|entry| entry.state))
+    }
     pub fn seal_group(&mut self) {
         self.group = None;
     }

@@ -107,24 +107,79 @@ impl Harness {
         let output = self.settle_full();
         let menu = text_position(&output, menu, 0.0) + Vec2::new(8.0, 8.0);
         self.full_click(menu);
-        let output = self.settle_full();
+        let mut output = self.settle_full();
         // Menus are painted in front of the workspace, which may contain another
         // label with the same name as a menu entry (for example Properties).
-        let item = output
-            .shapes
-            .iter()
-            .rev()
-            .find_map(|shape| {
-                if let egui::epaint::Shape::Text(shape) = &shape.shape
+        let find = |output: &FullOutput, menu_rect: Option<Rect>| {
+            output.shapes.iter().rev().find_map(|clipped| {
+                if let egui::epaint::Shape::Text(shape) = &clipped.shape
                     && shape.galley.job.text == item
+                    && menu_rect.is_none_or(|rect| {
+                        rect.contains(shape.pos + Vec2::new(8.0, 8.0))
+                            && clipped.clip_rect.height() <= rect.height() + 8.0
+                    })
                 {
                     Some(shape.pos + Vec2::new(8.0, 8.0))
                 } else {
                     None
                 }
             })
-            .unwrap_or_else(|| panic!("Could not find menu entry {item:?}"));
-        self.full_click(item);
+        };
+        let mut target = find(&output, daw_ui::command_menu_scroll_rect(&self.ctx));
+        if target.is_none()
+            && let Some(rect) = daw_ui::command_menu_scroll_rect(&self.ctx)
+        {
+            self.full_frame(RawInput {
+                events: vec![
+                    Event::PointerMoved(rect.center()),
+                    Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: Vec2::new(0.0, 10_000.0),
+                        modifiers: Default::default(),
+                    },
+                ],
+                ..Default::default()
+            });
+            output = self.settle_full();
+            for _ in 0..12 {
+                let rect = daw_ui::command_menu_scroll_rect(&self.ctx)
+                    .expect("Command menu remains open while scrolling");
+                target = find(&output, Some(rect));
+                if target.is_some() {
+                    break;
+                }
+                self.full_frame(RawInput {
+                    events: vec![
+                        Event::PointerMoved(rect.center()),
+                        Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta: Vec2::new(0.0, -180.0),
+                            modifiers: Default::default(),
+                        },
+                    ],
+                    ..Default::default()
+                });
+                output = self.settle_full();
+            }
+            target = target.or_else(|| find(&output, daw_ui::command_menu_scroll_rect(&self.ctx)));
+        }
+        let target = target.unwrap_or_else(|| {
+            let candidates: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|clipped| match &clipped.shape {
+                    egui::epaint::Shape::Text(shape) if shape.galley.job.text == item => {
+                        Some((shape.pos, clipped.clip_rect))
+                    }
+                    _ => None,
+                })
+                .collect();
+            panic!(
+                "Could not find menu entry {item:?}; menu={:?}, matching text={candidates:?}",
+                daw_ui::command_menu_scroll_rect(&self.ctx)
+            );
+        });
+        self.full_click(target);
         self.settle_full()
     }
 
@@ -191,6 +246,23 @@ fn has_text(output: &FullOutput, text: &str) -> bool {
     output.shapes.iter().any(|shape| {
         matches!(&shape.shape, egui::epaint::Shape::Text(shape) if shape.galley.job.text == text)
     })
+}
+
+fn front_text_position(output: &FullOutput, text: &str) -> Pos2 {
+    output
+        .shapes
+        .iter()
+        .rev()
+        .find_map(|shape| {
+            if let egui::epaint::Shape::Text(shape) = &shape.shape
+                && shape.galley.job.text == text
+            {
+                Some(shape.pos)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| panic!("Could not find foreground {text:?}"))
 }
 
 fn note_position(output: &FullOutput, text: &str) -> Pos2 {
@@ -269,9 +341,9 @@ fn piano_roll_drag_uses_total_displacement_across_multiple_frames() {
 #[test]
 fn pencil_click_creates_a_snapped_note_at_the_selected_pitch() {
     let mut harness = Harness::new(0.0);
+    harness.app.tool = Tool::Pencil;
     let output = harness.settle(true);
     let reference = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
-    harness.app.tool = Tool::Pencil;
     let target = reference + Vec2::new(harness.app.note_zoom * 2.0, -36.0);
     harness.pointer(target, true, true);
     harness.pointer(target, false, true);
@@ -311,11 +383,11 @@ fn arrangement_clip_drag_accumulates_movement_and_preserves_source_offset() {
 #[test]
 fn cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input() {
     let mut harness = Harness::new(0.0);
+    harness.app.tool = Tool::Cut;
     let output = harness.settle(true);
     let label = note_position(&output, "C4");
     // The note label begins five points inside the note; half a beat lands in its middle.
     let cut = label + Vec2::new(harness.app.note_zoom * 0.5 - 5.0, 5.0);
-    harness.app.tool = Tool::Cut;
     harness.pointer(cut, true, true);
     harness.pointer(cut, false, true);
     assert_eq!(harness.notes().len(), 2);
@@ -359,10 +431,22 @@ fn dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_ed
     let mut harness = Harness::new(0.0);
     let target = harness.app.project.add_audio_track("Drop target");
     let before = harness.app.project.clone();
-    let output = harness.settle_full();
-    let label = text_position(&output, " Drop target", 0.0);
-    // Track labels start 14 points inside a 248-point header.
-    let pos = label + Vec2::new(234.0 + harness.app.zoom * 2.0, 30.0);
+    harness.settle_full();
+    let timeline = harness
+        .ctx
+        .data(|data| data.get_temp::<serde_json::Value>(egui::Id::new("timeline_diagnostics")))
+        .unwrap();
+    let header = &timeline["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|track| track["track"] == target)
+        .unwrap()["header"];
+    // Source icons and label padding are independent of the beat mapping.
+    let pos = Pos2::new(
+        timeline["canvas"]["min"][0].as_f64().unwrap() as f32 + harness.app.zoom * 2.0,
+        ((header["min"][1].as_f64().unwrap() + header["max"][1].as_f64().unwrap()) * 0.5) as f32,
+    );
     harness.drop_wav(pos, &path);
     assert_eq!(harness.app.project.tracks.len(), 2);
     let clips = &harness.app.project.track(target).unwrap().clips;
@@ -410,21 +494,21 @@ fn folder_header_toggles_child_visibility_without_removing_clips() {
         .unwrap();
     harness.app.project.add_audio_track("Outside");
     let output = harness.settle_full();
-    assert!(has_text(&output, " Test instrument"));
-    let header = text_position(&output, "▾ Group", 0.0) + Vec2::new(20.0, 5.0);
+    assert!(has_text(&output, "Test instrument"));
+    let header = text_position(&output, "Group", 0.0) + Vec2::new(20.0, 5.0);
     harness.full_pointer(header, PointerButton::Primary, true);
     harness.full_pointer(header, PointerButton::Primary, false);
     let output = harness.settle_full();
     assert!(harness.app.project.track(folder).unwrap().collapsed);
-    assert!(!has_text(&output, " Test instrument"));
-    assert!(has_text(&output, " Outside"));
+    assert!(!has_text(&output, "Test instrument"));
+    assert!(has_text(&output, "Outside"));
     assert_eq!(harness.app.project.track(child).unwrap().clips.len(), 1);
-    let header = text_position(&output, "▸ Group", 0.0) + Vec2::new(20.0, 5.0);
+    let header = text_position(&output, "Group", 0.0) + Vec2::new(20.0, 5.0);
     harness.full_pointer(header, PointerButton::Primary, true);
     harness.full_pointer(header, PointerButton::Primary, false);
     let output = harness.settle_full();
     assert!(!harness.app.project.track(folder).unwrap().collapsed);
-    assert!(has_text(&output, " Test instrument"));
+    assert!(has_text(&output, "Test instrument"));
 }
 
 #[test]
@@ -433,8 +517,8 @@ fn track_context_menu_compacts_its_row_while_keeping_the_clip_visible() {
     let first = harness.app.project.tracks[0].id;
     harness.app.project.add_audio_track("After");
     let output = harness.settle_full();
-    let old_y = text_position(&output, " After", 0.0).y;
-    let header = text_position(&output, " Test instrument", 0.0) + Vec2::new(20.0, 5.0);
+    let old_y = text_position(&output, "After", 0.0).y;
+    let header = text_position(&output, "Test instrument", 0.0) + Vec2::new(20.0, 5.0);
     harness.full_pointer(header, PointerButton::Secondary, true);
     harness.full_pointer(header, PointerButton::Secondary, false);
     let output = harness.settle_full();
@@ -444,7 +528,7 @@ fn track_context_menu_compacts_its_row_while_keeping_the_clip_visible() {
     let output = harness.settle_full();
     assert!(harness.app.project.track(first).unwrap().collapsed);
     assert!(
-        text_position(&output, " After", 0.0).y < old_y,
+        text_position(&output, "After", 0.0).y < old_y,
         "Compacting must reduce the row height while retaining its controls"
     );
     assert!(has_text(&output, "Pattern"));
@@ -454,9 +538,9 @@ fn track_context_menu_compacts_its_row_while_keeping_the_clip_visible() {
 fn duplicating_the_final_note_extends_the_clip_and_renders_both_notes() {
     let mut harness = Harness::new(0.0);
     harness.app.project.tracks[0].clips[0].length = 2.0;
+    harness.app.tool = Tool::Duplicate;
     let output = harness.settle(true);
     let note = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
-    harness.app.tool = Tool::Duplicate;
     harness.pointer(note, true, true);
     harness.pointer(note, false, true);
     assert_eq!(harness.notes().len(), 2);
@@ -508,7 +592,10 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     let channel = text_position(&output, "Channel", 0.0) + Vec2::new(12.0, 8.0);
     harness.full_click(channel);
     let output = harness.settle_full();
-    let effects = text_position(&output, "Effects", 0.0) + Vec2::new(12.0, 8.0);
+    assert!(egui::Popup::is_any_open(&harness.ctx));
+    // Mixer also has a direct Effects button behind the Channel menu. Click
+    // the foreground menu entry, as the menu helper does for duplicate labels.
+    let effects = front_text_position(&output, "Effects") + Vec2::new(12.0, 8.0);
     harness.full_click(effects);
     let output = harness.settle_full();
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
@@ -692,6 +779,10 @@ fn leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the
     harness.menu("Window", "Arrangement");
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
     assert!(harness.app.selected_notes.is_empty());
+    assert!(
+        harness.app.selected().is_some(),
+        "Returning to Arrangement retains the selected clip"
+    );
 
     harness.menu("Edit", "Duplicate");
     let clips = &harness.app.project.tracks[0].clips;

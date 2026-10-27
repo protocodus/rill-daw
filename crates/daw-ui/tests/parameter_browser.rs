@@ -171,6 +171,47 @@ fn focused_search_ranks_tokens_and_keyboard_activates_only_visible_selection() {
 }
 
 #[test]
+fn modified_navigation_keys_preserve_selection_and_never_activate_a_parameter() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let items = items();
+    let mut state = ParameterBrowserState::default();
+    for _ in 0..3 {
+        frame(&ctx, &mut state, &items, vec![]);
+    }
+    assert_eq!(state.selected, Some(10));
+    for modifiers in [
+        Modifiers::SHIFT,
+        Modifiers::CTRL,
+        Modifiers::ALT,
+        Modifiers::COMMAND,
+    ] {
+        for navigation in [Key::ArrowDown, Key::Enter] {
+            // The frame's final modifiers are NONE: the chord's own event
+            // must decide whether this is result navigation.
+            let (_, response) = frame(&ctx, &mut state, &items, vec![key(navigation, modifiers)]);
+            assert_eq!(state.selected, Some(10));
+            assert_eq!(response.activated, None);
+        }
+    }
+    let (_, response) = frame(
+        &ctx,
+        &mut state,
+        &items,
+        vec![key(Key::ArrowDown, Modifiers::NONE)],
+    );
+    assert_eq!(state.selected, Some(11));
+    assert_eq!(response.activated, None);
+    let (_, response) = frame(
+        &ctx,
+        &mut state,
+        &items,
+        vec![key(Key::Enter, Modifiers::NONE)],
+    );
+    assert_eq!(response.activated, Some(11));
+}
+
+#[test]
 fn scope_clicks_and_rows_update_the_detail_pane_immediately_and_activate_with_enter() {
     let ctx = Context::default();
     theme::apply(&ctx);

@@ -128,6 +128,7 @@ struct AudioClip {
     fade_out_curve: FadeCurve,
     envelope_offset: f64,
     envelope_length: f64,
+    boundary_fades: Option<daw_core::AudioBoundaryFades>,
     source_length: f64,
     reverse: bool,
     data: Arc<AudioData>,
@@ -167,7 +168,12 @@ impl AudioClip {
         } else {
             1.0
         };
-        let gain = self.gain * fade_in * fade_out;
+        let gain = self.gain
+            * fade_in
+            * fade_out
+            * self
+                .boundary_fades
+                .map_or(1.0, |boundary| boundary.gain(elapsed as f64));
         let channel = |channel: usize| {
             let channel = channel.min(self.data.channels - 1);
             let a = self.data.samples[frame * self.data.channels + channel];
@@ -1722,6 +1728,7 @@ pub fn export_wav_with_options(
     length_beats: f64,
     options: RenderOptions,
 ) -> Result<()> {
+    project.validate_audio_destination(path.as_ref())?;
     ensure!(
         length_beats.is_finite() && length_beats > 0.0,
         "Render length must be positive and finite"
@@ -1780,6 +1787,7 @@ pub fn export_project_wav_with_options(
     sample_rate: u32,
     options: impl Into<ExportOptions>,
 ) -> Result<()> {
+    project.validate_audio_destination(path.as_ref())?;
     let options = options.into();
     let renderer = Renderer::new_with_options(project, sample_rate, false, options.render)?;
     let frames = if options.include_effect_tails {

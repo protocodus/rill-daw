@@ -5,7 +5,8 @@ use crate::{
 };
 use daw_core::{
     Chord, ClipContent, GenerateHarmony, GenerateSettings, Note, NoteStack, QuantizeSettings,
-    Scale, copy_midi_notes, legato_notes, move_midi_notes, paste_midi_notes, quantize_notes,
+    Scale, copy_midi_notes, legato_notes, merge_fully_overlapping_midi_notes, move_midi_notes,
+    paste_midi_notes, quantize_notes,
 };
 use daw_ui::{PianoRows, TimelineBounds, TimelinePane, TimelineViewport};
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
@@ -23,10 +24,14 @@ enum Gesture {
         origin: Pos2,
         edge: i8,
         duplicate: bool,
+        dragged: bool,
+        shift_pressed: bool,
+        deselect_on_click: Option<u64>,
     },
     Draw {
         originals: Vec<Note>,
         origin: Pos2,
+        dragged: bool,
     },
     Marquee {
         origin: Pos2,
@@ -62,12 +67,18 @@ pub(crate) struct MidiEditorState {
     gesture: Option<Gesture>,
     audition: Option<(u64, u8, u8)>,
     audition_from_keys: bool,
+    audition_from_keyboard: bool,
     last_click: Option<(Option<u64>, Pos2, f64)>,
     last_created: Option<(Vec<u64>, f64)>,
     clipboard: Vec<Note>,
     quantize: Option<QuantizePreview>,
     quantize_settings: QuantizeSettings,
     generate: Option<crate::midi_generate_ui::GenerateDialog>,
+    pending_merge_owners: HashSet<(u64, u64)>,
+    navigation_note: Option<u64>,
+    keyboard_pitch: Option<u8>,
+    keyboard_focus: bool,
+    reveal_clip: bool,
 }
 
 impl Default for MidiEditorState {
@@ -91,17 +102,61 @@ impl Default for MidiEditorState {
             gesture: None,
             audition: None,
             audition_from_keys: false,
+            audition_from_keyboard: false,
             last_click: None,
             last_created: None,
             clipboard: Vec::new(),
             quantize: None,
             quantize_settings: QuantizeSettings::default(),
             generate: None,
+            pending_merge_owners: HashSet::new(),
+            navigation_note: None,
+            keyboard_pitch: None,
+            keyboard_focus: false,
+            reveal_clip: false,
         }
     }
 }
 
 impl MidiEditorState {
+    fn clipboard_action(
+        &mut self,
+        ctx: &egui::Context,
+        action: MidiClipboardAction,
+        notes: &[Note],
+        selected: &HashSet<u64>,
+        at: f64,
+    ) -> anyhow::Result<Option<NoteEdit>> {
+        match action {
+            MidiClipboardAction::Copy | MidiClipboardAction::Cut => {
+                let copied = copy_midi_notes(notes, selected)?;
+                if copied.is_empty() {
+                    return Ok(None);
+                }
+                // Native integrations only emit Paste when the OS clipboard
+                // contains text; the actual note data stays in audible beats.
+                ctx.copy_text(format!("RILL MIDI notes · {}", copied.len()));
+                self.clipboard = copied;
+                Ok(matches!(action, MidiClipboardAction::Cut).then(|| {
+                    NoteEdit::Replace(
+                        notes
+                            .iter()
+                            .filter(|note| !selected.contains(&note.id))
+                            .cloned()
+                            .collect(),
+                        HashSet::new(),
+                        "Cut notes",
+                    )
+                }))
+            }
+            MidiClipboardAction::Paste if !self.clipboard.is_empty() => {
+                let (edited, selected) = paste_midi_notes(notes, &self.clipboard, at)?;
+                Ok(Some(NoteEdit::Replace(edited, selected, "Paste notes")))
+            }
+            MidiClipboardAction::Paste => Ok(None),
+        }
+    }
+
     pub(crate) fn clear_hidden_selection(&mut self) {
         self.hidden_selection.clear();
     }
@@ -131,6 +186,30 @@ impl MidiEditorState {
             false
         }
     }
+
+    pub(crate) fn end_edit_gesture(&mut self) {
+        self.gesture = None;
+        // Transactions also flush on idle frames. A held keyboard audition has
+        // its own release/focus lifetime and must not retrigger at each flush.
+        if !self.audition_from_keyboard {
+            self.audition = None;
+        }
+    }
+
+    pub(crate) fn select_clip_preserving_view(&mut self, clip: u64) {
+        self.end_edit_gesture();
+        self.audition = None;
+        self.audition_from_keyboard = false;
+        if self.clip.is_some() {
+            self.clip = Some(clip);
+        }
+        self.reveal_clip = true;
+        self.navigation_note = None;
+        self.keyboard_focus = false;
+        self.hidden_selection.clear();
+        self.quantize = None;
+        self.generate = None;
+    }
 }
 
 enum NoteEdit {
@@ -144,6 +223,57 @@ enum NoteEdit {
     Glue(Vec<u64>),
     Velocity(Vec<(u64, u8)>),
     Replace(Vec<Note>, HashSet<u64>, &'static str),
+}
+
+#[derive(Clone, Copy)]
+enum MidiClipboardAction {
+    Copy,
+    Cut,
+    Paste,
+}
+
+fn clipboard_shortcuts(ctx: &egui::Context) -> Vec<MidiClipboardAction> {
+    ctx.input_mut(|input| {
+        let native_copy = input
+            .events
+            .iter()
+            .any(|event| matches!(event, egui::Event::Copy));
+        let native_cut = input
+            .events
+            .iter()
+            .any(|event| matches!(event, egui::Event::Cut));
+        let native_paste = input
+            .events
+            .iter()
+            .any(|event| matches!(event, egui::Event::Paste(_)));
+        let mut actions = Vec::new();
+        input.events.retain(|event| {
+            let action = match event {
+                egui::Event::Copy => Some(MidiClipboardAction::Copy),
+                egui::Event::Cut => Some(MidiClipboardAction::Cut),
+                egui::Event::Paste(_) => Some(MidiClipboardAction::Paste),
+                egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if modifiers.command && !modifiers.shift && !modifiers.alt => match key {
+                    egui::Key::C if !native_copy => Some(MidiClipboardAction::Copy),
+                    egui::Key::X if !native_cut => Some(MidiClipboardAction::Cut),
+                    egui::Key::V if !native_paste => Some(MidiClipboardAction::Paste),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(action) = action {
+                actions.push(action);
+                false
+            } else {
+                true
+            }
+        });
+        actions
+    })
 }
 
 /// Editor gestures and the clipboard use audible beats. Persisted notes keep
@@ -180,13 +310,124 @@ impl NoteEdit {
 }
 
 impl DawApp {
+    /// Note IDs must remain stable while a pointer gesture is updating them.
+    /// The central transaction flush resolves overlaps after release, including
+    /// when the user has left the editor or a keyboard action edited the source.
+    pub(crate) fn queue_midi_overlap_merge(&mut self, track: u64, clip: u64) {
+        self.midi_editor.pending_merge_owners.insert((track, clip));
+    }
+
+    pub(crate) fn finish_pending_midi_overlap_merges(&mut self) {
+        let mut owners: Vec<_> = std::mem::take(&mut self.midi_editor.pending_merge_owners)
+            .into_iter()
+            .collect();
+        owners.sort_unstable();
+        if self.before_edit.is_none() {
+            return;
+        }
+        let mut sources = HashSet::new();
+        for (track, clip_id) in owners {
+            let Some(current) = self.project.clip(track, clip_id).cloned() else {
+                continue;
+            };
+            let ClipContent::Midi { notes } = &current.content else {
+                continue;
+            };
+            let source = current
+                .link_group
+                .map_or((false, clip_id), |group| (true, group));
+            if !sources.insert(source) {
+                continue;
+            }
+            let previous = self
+                .before_edit
+                .as_ref()
+                .and_then(|project| project.clip(track, clip_id))
+                .and_then(|clip| match &clip.content {
+                    ClipContent::Midi { notes } => Some(notes),
+                    _ => None,
+                });
+            let previous: HashMap<_, _> = previous
+                .into_iter()
+                .flatten()
+                .map(|note| (note.id, note))
+                .collect();
+            let same_time = |a: f64, b: f64| {
+                let tolerance = (8.0 * f64::EPSILON * a.abs().max(b.abs()).max(1.0)).min(1e-9);
+                (a - b).abs() <= tolerance
+            };
+            let affected: HashSet<_> = notes
+                .iter()
+                .filter(|note| {
+                    previous.get(&note.id).is_none_or(|old| {
+                        old.pitch != note.pitch
+                            || !same_time(old.start, note.start)
+                            || !same_time(old.length, note.length)
+                    })
+                })
+                .map(|note| note.id)
+                .collect();
+            if affected.is_empty() {
+                continue;
+            }
+            let merged = match merge_fully_overlapping_midi_notes(notes, &affected) {
+                Ok(merged) => merged,
+                Err(error) => {
+                    self.message(Err(error), "");
+                    continue;
+                }
+            };
+            if merged.notes == *notes {
+                continue;
+            }
+            let selection = self.selected_notes.clone();
+            let selected_source = self.selected().is_some_and(|clip| {
+                clip.id == clip_id
+                    || current.link_group.is_some() && clip.link_group == current.link_group
+            });
+            let remap = |ids: &mut HashSet<u64>| {
+                *ids = ids
+                    .iter()
+                    .map(|id| merged.remapped.get(id).copied().unwrap_or(*id))
+                    .collect();
+            };
+            if selected_source {
+                remap(&mut self.selected_notes);
+            }
+            if self.midi_editor.clip == Some(clip_id) || selected_source {
+                remap(&mut self.midi_editor.hidden_selection);
+                if let Some((ids, _)) = &mut self.midi_editor.last_created {
+                    for id in ids.iter_mut() {
+                        *id = merged.remapped.get(id).copied().unwrap_or(*id);
+                    }
+                }
+            }
+            if let Some(notes) = self.project.midi_notes_mut(track, clip_id) {
+                *notes = merged.notes;
+            }
+            // Union bounds cannot exceed the notes already validated by the
+            // gesture. Keep each ghost instance's trim/stretch unchanged.
+            self.finish_midi_edit(track, current, selection, Ok(()), false, None);
+        }
+        // finish_midi_edit also stages its validated source; this pass already
+        // resolved that source and must not reconsider unrelated old doubles.
+        self.midi_editor.pending_merge_owners.clear();
+    }
+
     /// The application routes this held note through the assigned VST instrument.
     /// It must call this each frame, including when the editor is no longer shown.
     pub(crate) fn midi_audition(&self, ctx: &egui::Context) -> Option<(u64, u8, u8)> {
+        let keyboard = self.midi_editor.keyboard_focus
+            && !ctx.wants_keyboard_input()
+            && !egui::Popup::is_any_open(ctx);
         if self.view != crate::app::WorkspaceView::Clip
             || self.midi_editor.generate_active()
             || self.playing() && !self.midi_editor.audition_from_keys
-            || !ctx.input(|input| input.focused && input.pointer.primary_down())
+            || !ctx.input(|input| {
+                input.focused
+                    && (input.pointer.primary_down()
+                        || keyboard && input.key_down(egui::Key::Enter))
+            })
             || !matches!(
                 self.selected().map(|clip| &clip.content),
                 Some(ClipContent::Midi { .. })
@@ -218,6 +459,9 @@ impl DawApp {
         local_note_times(&mut source_notes, source_rate);
         let mut notes = source_notes.clone();
         let mut state = std::mem::take(&mut self.midi_editor);
+        let previous_view = state.viewport;
+        let same_clip = state.clip == Some(clip_id);
+        let mut view_action = daw_ui::TimelineViewAction::None;
         let previous_rows = PianoRows::new(|pitch| {
             state.generate.is_some()
                 || !state.only_scale_keys
@@ -242,6 +486,8 @@ impl DawApp {
         let mut actions = Vec::new();
         let mut fit = false;
         let mut open_generate = false;
+        let mut reveal_note = None;
+        let mut reveal_key = None;
         let supported = [
             Tool::Select,
             Tool::Pencil,
@@ -316,10 +562,24 @@ impl DawApp {
                                 ui.close();
                             }
                         }
-                        if daw_ui::button(ui, "Copy notes").clicked() {
-                            state.clipboard = copy_midi_notes(&source_notes, &self.selected_notes)
-                                .unwrap_or_default();
-                            ui.close();
+                        for (label, action) in [
+                            ("Copy notes", MidiClipboardAction::Copy),
+                            ("Cut notes", MidiClipboardAction::Cut),
+                        ] {
+                            if daw_ui::button(ui, label).clicked() {
+                                match state.clipboard_action(
+                                    ui.ctx(),
+                                    action,
+                                    &source_notes,
+                                    &self.selected_notes,
+                                    0.0,
+                                ) {
+                                    Ok(Some(edit)) => actions.push(edit),
+                                    Ok(None) => {}
+                                    Err(error) => self.message(Err(error), ""),
+                                }
+                                ui.close();
+                            }
                         }
                     },
                 );
@@ -429,6 +689,14 @@ impl DawApp {
                 state.chord.name()
             ));
             daw_ui::view_menu(ui, "View", |ui| {
+                self.clip_navigation_controls(ui);
+                ui.separator();
+                view_action = daw_ui::timeline_selection_view_actions(
+                    ui,
+                    "midi",
+                    !self.selected_notes.is_empty(),
+                );
+                ui.separator();
                 daw_ui::checkbox(ui, &mut state.highlight_scale, "Highlight scale");
                 daw_ui::checkbox(ui, &mut state.highlight_chord, "Highlight chord");
                 daw_ui::checkbox(ui, &mut state.only_scale_keys, "Only scale keys")
@@ -440,7 +708,7 @@ impl DawApp {
                 .filter(|note| state.only_scale_keys && !self.scale.contains(self.root, note.pitch))
                 .count();
             if hidden_count > 0
-                && daw_ui::button(
+                && daw_ui::view_button(
                     ui,
                     format!(
                         "{hidden_count} {} hidden · Show all",
@@ -509,6 +777,7 @@ impl DawApp {
                 );
             }
         });
+        daw_ui::editor_tool_hint(ui, self.tool, daw_ui::ToolHintContext::Midi);
         // Preview always exposes its pitches; closing restores the original
         // scale-only view and viewport without changing that view preference.
         let mut rows = PianoRows::new(|pitch| {
@@ -602,46 +871,113 @@ impl DawApp {
             && !ui.ctx().wants_keyboard_input()
             && !egui::Popup::is_any_open(ui.ctx())
         {
-            let modifiers = ui.input(|input| input.modifiers);
-            if ui.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::C)) {
-                state.clipboard =
-                    copy_midi_notes(&source_notes, &self.selected_notes).unwrap_or_default();
-            }
-            if ui.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::V))
-                && !state.clipboard.is_empty()
-            {
-                match paste_midi_notes(
-                    &source_notes,
-                    &state.clipboard,
-                    (self.cursor - clip_start).max(0.0) + clip_offset,
-                ) {
-                    Ok((edited, selected)) => {
-                        actions.push(NoteEdit::Replace(edited, selected, "Paste notes"))
+            let clipboard_actions = clipboard_shortcuts(ui.ctx());
+            if !clipboard_actions.is_empty() {
+                let mut clipboard_source = source_notes.clone();
+                let mut clipboard_selection = self.selected_notes.clone();
+                for action in clipboard_actions {
+                    match state.clipboard_action(
+                        ui.ctx(),
+                        action,
+                        &clipboard_source,
+                        &clipboard_selection,
+                        (self.cursor - clip_start).max(0.0) + clip_offset,
+                    ) {
+                        Ok(Some(edit)) => {
+                            if let NoteEdit::Replace(edited, selected, _) = &edit {
+                                clipboard_source = edited.clone();
+                                clipboard_selection = selected.clone();
+                            }
+                            actions.push(edit);
+                        }
+                        Ok(None) => {}
+                        Err(error) => self.message(Err(error), ""),
                     }
-                    Err(error) => self.message(Err(error), ""),
                 }
             }
-            if !modifiers.command
-                && !modifiers.ctrl
-                && !modifiers.alt
-                && !self.selected_notes.is_empty()
-            {
+            if let Some((direction, extend)) = daw_ui::selection_navigation_input(ui, None) {
+                if state.keyboard_focus {
+                    let current = state.keyboard_pitch.unwrap_or(60);
+                    let row = rows.nearest_row(current);
+                    let next = match direction {
+                        daw_ui::SelectionDirection::Up | daw_ui::SelectionDirection::Right => {
+                            row.saturating_sub(1)
+                        }
+                        daw_ui::SelectionDirection::Down | daw_ui::SelectionDirection::Left => {
+                            (row + 1).min(rows.pitches().len() - 1)
+                        }
+                    };
+                    let pitch = rows.pitches()[next];
+                    state.keyboard_pitch = Some(pitch);
+                    reveal_key = Some(pitch);
+                } else {
+                    let items: Vec<_> = source_notes
+                        .iter()
+                        .filter_map(|note| {
+                            let row = rows.row(note.pitch)?;
+                            (note.start + note.length > clip_offset
+                                && note.start < clip_offset + clip_length)
+                                .then_some(daw_ui::SelectionItem {
+                                    id: note.id,
+                                    start: note.start,
+                                    end: note.start + note.length,
+                                    row: row as f64,
+                                })
+                        })
+                        .collect();
+                    let current = state
+                        .navigation_note
+                        .filter(|id| self.selected_notes.contains(id))
+                        .or_else(|| {
+                            items
+                                .iter()
+                                .filter(|item| self.selected_notes.contains(&item.id))
+                                .min_by(|a, b| {
+                                    a.start
+                                        .total_cmp(&b.start)
+                                        .then(a.row.total_cmp(&b.row))
+                                        .then(a.id.cmp(&b.id))
+                                })
+                                .map(|item| item.id)
+                        });
+                    if let Some(id) = daw_ui::adjacent_selection_item(&items, current, direction) {
+                        if !extend {
+                            self.selected_notes.clear();
+                        }
+                        self.selected_notes.insert(id);
+                        state.navigation_note = Some(id);
+                        state.clear_hidden_selection();
+                        reveal_note = Some(id);
+                    }
+                }
+            }
+            if !self.selected_notes.is_empty() {
                 for (key, time, pitch) in [
                     (egui::Key::ArrowLeft, -1.0, 0),
                     (egui::Key::ArrowRight, 1.0, 0),
                     (egui::Key::ArrowUp, 0.0, 1),
                     (egui::Key::ArrowDown, 0.0, -1),
                 ] {
-                    let shift = ui.input_mut(|input| {
-                        if input.consume_key(egui::Modifiers::SHIFT, key) {
-                            Some(true)
-                        } else if input.consume_key(egui::Modifiers::NONE, key) {
-                            Some(false)
-                        } else {
-                            None
-                        }
+                    let modifiers = ui.input(|input| {
+                        input.events.iter().find_map(|event| match event {
+                            egui::Event::Key {
+                                key: pressed_key,
+                                pressed: true,
+                                modifiers,
+                                ..
+                            } if *pressed_key == key
+                                && (modifiers.command || modifiers.ctrl)
+                                && !modifiers.alt =>
+                            {
+                                Some(*modifiers)
+                            }
+                            _ => None,
+                        })
                     });
-                    if let Some(shift) = shift {
+                    if let Some(modifiers) = modifiers
+                        && ui.input_mut(|input| input.consume_key(modifiers, key))
+                    {
+                        let shift = modifiers.shift;
                         let beats = time
                             * if shift {
                                 self.project.beats_per_bar as f64
@@ -729,6 +1065,8 @@ impl DawApp {
             };
             state.clip = Some(clip_id);
             state.gesture = None;
+            state.navigation_note = None;
+            state.keyboard_focus = false;
         } else if rows != previous_rows {
             let center = previous_rows.pitch_at(
                 state.viewport.row_offset + plot.height() / state.viewport.row_height * 0.5,
@@ -736,6 +1074,11 @@ impl DawApp {
             state.viewport.row_offset = (rows.nearest_row(center) as f32 + 0.5
                 - plot.height() / state.viewport.row_height * 0.5)
                 .max(0.0);
+            if let Some(pitch) = state.keyboard_pitch
+                && rows.row(pitch).is_none()
+            {
+                state.keyboard_pitch = Some(rows.pitches()[rows.nearest_row(pitch)]);
+            }
         }
         self.last_editor_clip = Some(clip_id);
         let visible: Vec<_> = notes
@@ -776,11 +1119,85 @@ impl DawApp {
         if fit {
             state.viewport.fit_bounds(plot, bounds);
         }
+        if view_action == daw_ui::TimelineViewAction::FitSelection {
+            let selected: Vec<_> = visible
+                .iter()
+                .filter(|note| self.selected_notes.contains(&note.id))
+                .collect();
+            if !selected.is_empty() {
+                state.viewport.fit_bounds(
+                    plot,
+                    TimelineBounds {
+                        start_beat: selected
+                            .iter()
+                            .map(|note| (note.start - clip_offset).max(0.0))
+                            .fold(f64::INFINITY, f64::min),
+                        end_beat: selected
+                            .iter()
+                            .map(|note| (note.start + note.length - clip_offset).min(clip_length))
+                            .fold(0.0, f64::max),
+                        start_row: selected
+                            .iter()
+                            .map(|note| rows.row(note.pitch).unwrap() as f32)
+                            .fold(f32::INFINITY, f32::min),
+                        end_row: selected
+                            .iter()
+                            .map(|note| (rows.row(note.pitch).unwrap() + 1) as f32)
+                            .fold(0.0, f32::max),
+                    },
+                );
+            }
+        } else if view_action == daw_ui::TimelineViewAction::Previous {
+            daw_ui::restore_previous_timeline_view(ui.ctx(), "midi", &mut state.viewport);
+        }
+        let fit_key = !ui.ctx().wants_keyboard_input()
+            && !egui::Popup::is_any_open(ui.ctx())
+            && ui.input(|input| input.key_pressed(egui::Key::F));
         let navigation = ui
             .add_enabled_ui(state.generate.is_none(), |ui| {
-                TimelinePane::new("midi_timeline", plot).navigate(ui, &mut state.viewport, bounds)
+                TimelinePane::new("midi_timeline", plot)
+                    .keyboard_active()
+                    .navigate(ui, &mut state.viewport, bounds)
             })
             .inner;
+        if std::mem::take(&mut state.reveal_clip) && reveal_note.is_none() {
+            reveal_note = visible
+                .iter()
+                .min_by(|a, b| {
+                    a.start
+                        .total_cmp(&b.start)
+                        .then(a.pitch.cmp(&b.pitch))
+                        .then(a.id.cmp(&b.id))
+                })
+                .map(|note| note.id);
+            if reveal_note.is_none() {
+                state.viewport.start_beat = 0.0;
+                reveal_key = Some(60);
+            }
+        }
+        if let Some(note) = reveal_note.and_then(|id| notes.iter().find(|note| note.id == id)) {
+            let start = (note.start - clip_offset).max(0.0);
+            let stop = (note.start + note.length - clip_offset).min(clip_length);
+            let visible_beats = f64::from(plot.width()) / f64::from(state.viewport.pixels_per_beat);
+            if start < state.viewport.start_beat {
+                state.viewport.start_beat = start;
+            } else if stop > state.viewport.start_beat + visible_beats {
+                state.viewport.start_beat = if stop - start > visible_beats {
+                    start
+                } else {
+                    (stop - visible_beats).max(0.0)
+                };
+            }
+            reveal_key = Some(note.pitch);
+        }
+        if let Some(row) = reveal_key.and_then(|pitch| rows.row(pitch)) {
+            let visible_rows = plot.height() / state.viewport.row_height;
+            if (row as f32) < state.viewport.row_offset {
+                state.viewport.row_offset = row as f32;
+            } else if row as f32 + 1.0 > state.viewport.row_offset + visible_rows {
+                state.viewport.row_offset = (row as f32 + 1.0 - visible_rows).max(0.0);
+            }
+        }
         state.viewport.row_offset = state.viewport.row_offset.clamp(
             0.0,
             (rows.pitches().len() as f32 - plot.height() / state.viewport.row_height).max(0.0),
@@ -859,6 +1276,18 @@ impl DawApp {
             }
         }
         self.note_zoom = state.viewport.pixels_per_beat;
+        if same_clip
+            && state.generate.is_none()
+            && view_action != daw_ui::TimelineViewAction::Previous
+        {
+            daw_ui::remember_timeline_view(
+                ui.ctx(),
+                "midi",
+                previous_view,
+                state.viewport,
+                fit || fit_key || view_action == daw_ui::TimelineViewAction::FitSelection,
+            );
+        }
         let view = state.viewport;
         let painter = ui.painter_at(canvas);
         painter.rect_filled(canvas, 2.0, palette(ui.ctx()).bg);
@@ -874,8 +1303,35 @@ impl DawApp {
             && !open_generate
             && ui.rect_contains_pointer(canvas)
             && !egui::Popup::is_any_open(ui.ctx());
+        if pressed
+            && owns_pointer
+            && let Some(pos) = pointer
+        {
+            state.keyboard_focus = keys.contains(pos);
+            if state.keyboard_focus {
+                state.keyboard_pitch = Some(rows.pitch_at(view.row_at(plot, pos.y)));
+            } else if plot.contains(pos) || velocity_rect.contains(pos) {
+                state.navigation_note = None;
+            }
+        }
         let mut double = false;
         let modifiers = ui.input(|i| i.modifiers);
+        let press_shift = ui.input(|input| {
+            input
+                .events
+                .iter()
+                .rev()
+                .find_map(|event| match event {
+                    egui::Event::PointerButton {
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } => Some(modifiers.shift),
+                    _ => None,
+                })
+                .unwrap_or(input.modifiers.shift)
+        });
         let pitch_at = |pos: Pos2| rows.pitch_at(view.row_at(plot, pos.y));
         let snap = self.snap;
         let snap_beat = |beat: f64| {
@@ -940,7 +1396,10 @@ impl DawApp {
                 },
                 active,
             );
-            key_diagnostics.push(serde_json::json!({"pitch":pitch,"row":row_index,"rect":rect_json(key),"scale":scale,"chord":chord,"black":black,"row_color":row_color.to_array(),"outside_color":row_color.blend(palette(ui.ctx()).inactive_clip_tint()).to_array()}));
+            if state.keyboard_focus && state.keyboard_pitch == Some(pitch) {
+                daw_ui::paint_piano_key_selection(&key_painter, key);
+            }
+            key_diagnostics.push(serde_json::json!({"pitch":pitch,"row":row_index,"rect":rect_json(key),"scale":scale,"chord":chord,"black":black,"selected":state.keyboard_focus && state.keyboard_pitch == Some(pitch),"row_color":row_color.to_array(),"outside_color":row_color.blend(palette(ui.ctx()).inactive_clip_tint()).to_array()}));
         }
         let grid = if snap > 0.0 { snap.max(0.0625) } else { 1.0 };
         let grid = grid.max((12.0 / view.pixels_per_beat) as f64);
@@ -1009,6 +1468,28 @@ impl DawApp {
             );
             let selected = self.selected_notes.contains(&note.id);
             if rect.intersects(plot) {
+                if !navigation.navigating && state.quantize.is_none() && state.generate.is_none() {
+                    daw_ui::selection_item_context_menu(
+                        ui,
+                        egui::Id::new(("midi_note_selection", clip_id, note.id)),
+                        rect.intersect(plot),
+                        |ui| {
+                            state.last_click = None;
+                            if daw_ui::selection_membership_action(
+                                ui,
+                                self.selected_notes.contains(&note.id),
+                            ) {
+                                if !self.selected_notes.remove(&note.id) {
+                                    self.selected_notes.insert(note.id);
+                                }
+                                state.navigation_note =
+                                    self.selected_notes.contains(&note.id).then_some(note.id);
+                                state.keyboard_focus = false;
+                                state.clear_hidden_selection();
+                            }
+                        },
+                    );
+                }
                 let fill = palette(ui.ctx()).note_fill(selected, note.velocity);
                 row_painter.rect_filled(rect, 3.0, fill);
                 if selected {
@@ -1065,10 +1546,21 @@ impl DawApp {
         {
             let identity = note_hit.as_ref().map(|(note, _)| note.id);
             let now = ui.input(|input| input.time);
-            double = state.last_click.is_some_and(|(last, position, time)| {
-                last == identity && position.distance(pos) < 8.0 && now - time < 0.4
-            });
-            state.last_click = if double {
+            // Selection intent belongs to the press, even if Shift is released
+            // before the mouse. Such a click must never become a double-delete.
+            let shift_click = press_shift
+                || matches!(
+                    state.gesture,
+                    Some(Gesture::Notes {
+                        shift_pressed: true,
+                        ..
+                    })
+                );
+            double = !shift_click
+                && state.last_click.is_some_and(|(last, position, time)| {
+                    last == identity && position.distance(pos) < 8.0 && now - time < 0.4
+                });
+            state.last_click = if double || shift_click {
                 None
             } else {
                 Some((identity, pos, now))
@@ -1076,6 +1568,7 @@ impl DawApp {
         }
         state.audition = None;
         state.audition_from_keys = false;
+        state.audition_from_keyboard = false;
         if down
             && owns_pointer
             && !navigation.navigating
@@ -1092,6 +1585,20 @@ impl DawApp {
                 });
             state.audition = self.selected_track.map(|track| (track, pitch, velocity));
             state.audition_from_keys = keys.contains(pos);
+        }
+        let keyboard_audition = ui.is_enabled()
+            && state.keyboard_focus
+            && state.quantize.is_none()
+            && state.generate.is_none()
+            && !ui.ctx().wants_keyboard_input()
+            && !egui::Popup::is_any_open(ui.ctx())
+            && ui.input(|input| input.focused && input.key_down(egui::Key::Enter));
+        if keyboard_audition && let Some(pitch) = state.keyboard_pitch {
+            state.audition = self
+                .selected_track
+                .map(|track| (track, pitch, state.velocity));
+            state.audition_from_keys = true;
+            state.audition_from_keyboard = true;
         }
         if !navigation.navigating
             && owns_pointer
@@ -1151,8 +1658,11 @@ impl DawApp {
                         }
                         Tool::Cursor => self.seek(clip_start + beat_at(pos)),
                         _ => {
+                            let deselect_on_click = (press_shift
+                                && self.selected_notes.contains(&note.id))
+                            .then_some(note.id);
                             if !self.selected_notes.contains(&note.id) {
-                                if !modifiers.shift {
+                                if !press_shift {
                                     state.clear_hidden_selection();
                                     self.selected_notes.clear();
                                 }
@@ -1168,7 +1678,10 @@ impl DawApp {
                                     .collect(),
                                 origin: pos,
                                 edge,
-                                duplicate: modifiers.shift && edge == 0,
+                                duplicate: press_shift && edge == 0,
+                                dragged: false,
+                                shift_pressed: press_shift,
+                                deselect_on_click,
                             });
                         }
                     }
@@ -1184,12 +1697,6 @@ impl DawApp {
                         };
                         let drawn: Vec<_> = pitches
                             .into_iter()
-                            .filter(|pitch| {
-                                !notes.iter().any(|note| {
-                                    note.pitch == *pitch
-                                        && (note.start - clip_offset - beat).abs() < 1e-8
-                                })
-                            })
                             .map(|pitch| {
                                 Note::new(
                                     pitch,
@@ -1208,13 +1715,14 @@ impl DawApp {
                             state.gesture = Some(Gesture::Draw {
                                 originals: drawn,
                                 origin: pos,
+                                dragged: false,
                             });
                         }
                     }
                 } else if self.tool == Tool::Cursor {
                     self.seek(clip_start + beat_at(pos));
                 } else if self.tool == Tool::Select {
-                    let selected = if modifiers.shift {
+                    let selected = if press_shift {
                         self.selected_notes.clone()
                     } else {
                         state.clear_hidden_selection();
@@ -1261,7 +1769,10 @@ impl DawApp {
                         origin,
                         edge,
                         duplicate,
-                    } if pos.distance(origin) > 2.0 => {
+                        dragged,
+                        shift_pressed,
+                        ..
+                    } if dragged || pos.distance(origin) > 2.0 => {
                         let raw_delta = (pos.x - origin.x) as f64 / view.pixels_per_beat as f64;
                         let delta = if edge != 0 && modifiers.shift {
                             raw_delta
@@ -1282,11 +1793,25 @@ impl DawApp {
                                 origin,
                                 edge,
                                 duplicate: false,
+                                dragged: true,
+                                shift_pressed,
+                                deselect_on_click: None,
                             });
                             copied
                         } else {
                             originals
                         };
+                        // A drag owns the selection even if it later returns
+                        // to its origin; only an untouched click toggles it.
+                        if let Some(Gesture::Notes {
+                            deselect_on_click,
+                            dragged,
+                            ..
+                        }) = &mut state.gesture
+                        {
+                            *deselect_on_click = None;
+                            *dragged = true;
+                        }
                         if edge == 0 {
                             let row_delta = rows.clamp_move(
                                 originals.iter().map(|note| note.pitch),
@@ -1303,10 +1828,17 @@ impl DawApp {
                             actions.push(NoteEdit::Resize(originals, delta, edge < 0));
                         }
                     }
-                    Gesture::Draw { originals, origin } if (pos.x - origin.x).abs() > 4.0 => {
+                    Gesture::Draw {
+                        originals,
+                        origin,
+                        dragged,
+                    } if dragged || (pos.x - origin.x).abs() > 4.0 => {
                         let length = (beat_at(pos) + clip_offset - originals[0].start)
                             .max(snap.max(MIN_NOTE));
                         state.last_length = length;
+                        if let Some(Gesture::Draw { dragged, .. }) = &mut state.gesture {
+                            *dragged = true;
+                        }
                         actions.push(NoteEdit::Resize(
                             originals.clone(),
                             length - originals[0].length,
@@ -1406,6 +1938,15 @@ impl DawApp {
             }
         }
         if released
+            && let Some(Gesture::Notes {
+                deselect_on_click: Some(id),
+                ..
+            }) = &state.gesture
+        {
+            self.selected_notes.remove(id);
+            state.clear_hidden_selection();
+        }
+        if released
             && let Some(Gesture::Velocity {
                 originals,
                 origin,
@@ -1423,7 +1964,9 @@ impl DawApp {
         }
         if released || !down {
             state.gesture = None;
-            state.audition = None;
+            if !keyboard_audition {
+                state.audition = None;
+            }
         }
         let generate_diagnostics = if let Some(draft) = &state.generate {
             daw_ui::paint_generation_backdrop(&painter, canvas);
@@ -1480,6 +2023,7 @@ impl DawApp {
             "tool":format!("{:?}",self.tool),"cursor":self.cursor,"chord":state.chord.name(),"stack":state.stack.name(),"audition":state.audition,
             "quantize":quantize_controls,"preview_notes":if state.quantize.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),
             "generate":generate_diagnostics,
+            "keyboard_pitch":state.keyboard_pitch,"keyboard_focus":state.keyboard_focus,"navigation_note":state.navigation_note,
         })));
         self.midi_editor = state;
         let edited = !actions.is_empty();
@@ -1676,6 +2220,108 @@ fn pitch_class(pitch: u8) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyboard_key_cursor_auditions_while_enter_is_held_and_stops_on_focus_loss() {
+        let ctx = egui::Context::default();
+        let mut project = daw_core::Project::new();
+        let track = project.add_midi_track("Keyboard audition");
+        project.track_mut(track).unwrap().instrument = daw_core::Instrument::Vst3 {
+            path: "keyboard-audition-test.vst3".into(),
+            class_id: None,
+        };
+        project
+            .track_mut(track)
+            .unwrap()
+            .clips
+            .push(daw_core::Clip::midi(
+                "Keys",
+                0.0,
+                4.0,
+                vec![Note::new(60, 0.0, 1.0, 90)],
+            ));
+        let before = project.clone();
+        let mut app = DawApp::with_context(&ctx, project, None);
+        app.audio_device_enabled = false;
+        app.view = crate::app::WorkspaceView::Clip;
+        let frame = |app: &mut DawApp, events: Vec<egui::Event>, focused: bool| {
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1200.0, 800.0))),
+                    events,
+                    focused,
+                    ..Default::default()
+                },
+                |ctx| app.ui_frame(ctx),
+            );
+        };
+        frame(&mut app, vec![], true);
+        frame(&mut app, vec![], true);
+        let at = ctx.data(|data| {
+            let diagnostic = data
+                .get_temp::<serde_json::Value>(egui::Id::new("midi_editor_diagnostics"))
+                .unwrap();
+            let key = diagnostic["keys"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|key| key["pitch"] == 60)
+                .unwrap();
+            Pos2::new(
+                ((key["rect"]["min"][0].as_f64().unwrap()
+                    + key["rect"]["max"][0].as_f64().unwrap())
+                    * 0.5) as f32,
+                ((key["rect"]["min"][1].as_f64().unwrap()
+                    + key["rect"]["max"][1].as_f64().unwrap())
+                    * 0.5) as f32,
+            )
+        });
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                true,
+            );
+        }
+        let key = |key, pressed| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut app, vec![key(egui::Key::Enter, true)], true);
+        assert_eq!(app.midi_audition(&ctx), Some((track, 60, 100)));
+        assert_eq!(app.audition_request, Some((track, 60, 100)));
+        for _ in 0..3 {
+            frame(&mut app, vec![], true);
+            assert_eq!(app.midi_audition(&ctx), Some((track, 60, 100)));
+            assert_eq!(app.audition_request, Some((track, 60, 100)));
+        }
+        frame(&mut app, vec![key(egui::Key::ArrowUp, true)], true);
+        assert_eq!(app.midi_audition(&ctx), Some((track, 61, 100)));
+        frame(&mut app, vec![], false);
+        assert_eq!(app.midi_audition(&ctx), None);
+        assert_eq!(app.audition_request, None);
+        frame(
+            &mut app,
+            vec![key(egui::Key::Enter, false), key(egui::Key::ArrowUp, false)],
+            true,
+        );
+        assert_eq!(app.midi_audition(&ctx), None);
+        assert_eq!(app.audition_request, None);
+        assert_eq!(app.project, before);
+        assert!(!app.modified);
+        assert!(!app.history.can_undo());
+    }
 
     #[test]
     fn stretched_ghost_edits_use_audible_beats_and_extend_only_that_instance() {

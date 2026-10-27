@@ -244,6 +244,36 @@ fn instrument_search_handles_empty_results_keyboard_activation_reuse_and_recall(
 }
 
 #[test]
+fn modified_result_navigation_does_not_change_selection_or_create_automation() {
+    let fixture = Fixture::new();
+    let (mut app, track, _) = fixture.app();
+    menu(&mut app, "Instrument");
+    app.click("Automate…");
+    ready(&mut app);
+    let original = query(&mut app, "Filter");
+    assert_eq!(original["native_editor"]["selected"], 7);
+    for modifier in ["shift", "ctrl", "alt", "cmd"] {
+        for key in ["ArrowDown", "Enter"] {
+            let mut command = json!({"command":"key", "key":key, "release_modifiers":true});
+            command[modifier] = json!(true);
+            let state = app.command(command);
+            assert_eq!(
+                state["native_editor"]["selected"], 7,
+                "{modifier}+{key} changed the result"
+            );
+            assert_eq!(state["native_editor"]["parameter_query"], "Filter");
+            assert_eq!(state["project"], original["project"]);
+            assert!(lanes(&state).is_empty());
+            assert_eq!(state["popups"]["instrument"], true);
+        }
+    }
+    assert_eq!(app.key("ArrowDown")["native_editor"]["selected"], 8);
+    let created = app.key("Enter");
+    assert_lane(lanes(&created)[0], track, None, 8, 0.5);
+    app.quit();
+}
+
+#[test]
 fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_touched() {
     let fixture = Fixture::new();
     let (mut app, track, effects) = fixture.app();

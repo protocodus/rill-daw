@@ -43,7 +43,7 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Audio take selection and non-destructive range comping, smooth boundary crossfades, imported alternatives, and retained sources in portable projects.
 - Responsive audio move/trim/stretch gestures, time selections, transient/edge snapping, and quick live previews that refine in the background; exports retain full quality.
 - Source slip, sample/millisecond/grid nudging, zero-crossing snap, track-local ripple deletion, and previewed Strip silence.
-- Subtle source spectrograms behind arranger, editor, and take waveforms, calculated asynchronously and shared through a bounded cache.
+- Progressive audio waveforms: immediate coarse previews refine into transient-preserving, anti-aliased envelopes, with subtle spectral backdrops. Shared background analysis and cached geometry keep redraws light.
 - Named undo/redo history with grouped gestures, saved checkpoints, and bounded memory.
 - One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
 - Input/output-device, sample-rate, and buffer-size setup; writable scratch directory and custom VST3 scan directories.

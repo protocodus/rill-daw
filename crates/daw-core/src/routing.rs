@@ -110,16 +110,28 @@ impl Project {
     /// project. It assumes the existing routing is valid; apply the choice with
     /// `set_output` for final validation. Master is represented separately by `None`.
     pub fn eligible_output_buses(&self, track_id: u64) -> Result<Vec<&Track>> {
-        let source = self.track(track_id).context("Source track not found")?;
-        ensure!(
-            matches!(
-                source.kind,
-                TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
-            ),
-            "Only audio, MIDI, and bus tracks have an audio output"
-        );
+        self.eligible_output_buses_for(&[track_id])
+    }
+
+    /// Destinations valid for every source in a channel selection. A single
+    /// reverse-graph traversal computes the intersection, rather than rebuilding
+    /// and walking the graph once per selected channel on each menu frame.
+    pub fn eligible_output_buses_for(&self, track_ids: &[u64]) -> Result<Vec<&Track>> {
+        ensure!(!track_ids.is_empty(), "Select at least one source channel");
+        let selected: HashSet<_> = track_ids.iter().copied().collect();
+        let mut found = 0;
         let mut incoming: HashMap<u64, Vec<u64>> = HashMap::new();
         for track in &self.tracks {
+            if selected.contains(&track.id) {
+                ensure!(
+                    matches!(
+                        track.kind,
+                        TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+                    ),
+                    "Only audio, MIDI, and bus tracks have an audio output"
+                );
+                found += 1;
+            }
             for destination in track
                 .output_bus
                 .into_iter()
@@ -128,8 +140,9 @@ impl Project {
                 incoming.entry(destination).or_default().push(track.id);
             }
         }
-        let mut excluded = HashSet::from([track_id]);
-        let mut pending = vec![track_id];
+        ensure!(found == selected.len(), "Source track not found");
+        let mut excluded = selected;
+        let mut pending: Vec<_> = excluded.iter().copied().collect();
         while let Some(destination) = pending.pop() {
             if let Some(sources) = incoming.get(&destination) {
                 for &source in sources {

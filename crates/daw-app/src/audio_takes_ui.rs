@@ -5,7 +5,6 @@ use anyhow::{Context, Result, ensure};
 use daw_core::{AudioData, Clip, ClipContent, Project, new_id};
 use eframe::egui;
 use std::{
-    collections::HashMap,
     path::PathBuf,
     sync::{
         Arc,
@@ -76,7 +75,6 @@ pub(crate) struct AudioTakesUi {
     source: Option<u64>,
     range: Option<(f64, f64)>,
     crossfade_ms: f64,
-    peaks: HashMap<u64, Vec<(f32, f32)>>,
     pending: Option<TakeImport>,
     pub(crate) next_files: Option<Option<Vec<PathBuf>>>,
     rows: Vec<(u64, egui::Rect)>,
@@ -102,7 +100,6 @@ impl DawApp {
         self.audio_takes_ui.source = None;
         self.audio_takes_ui.range = range;
         self.audio_takes_ui.crossfade_ms = 10.0;
-        self.audio_takes_ui.peaks.clear();
         self.open_popup(PopupKind::AudioTakes);
     }
 
@@ -358,20 +355,6 @@ impl DawApp {
             .map(|clip| clip.end())
             .fold(start, f64::max);
         let span = (end - start).max(0.001);
-        for clip in &candidates {
-            if self.audio_takes_ui.peaks.contains_key(&clip.id) {
-                continue;
-            }
-            let peaks = if let ClipContent::Audio { path, .. } = &clip.content {
-                self.waveforms
-                    .get(path)
-                    .map(|audio| take_peaks(audio, clip, self.project.tempo))
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-            self.audio_takes_ui.peaks.insert(clip.id, peaks);
-        }
         let track_name = self
             .project
             .track(track_id)
@@ -397,6 +380,7 @@ impl DawApp {
         let mut open = true;
         daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
+                daw_ui::view_menu(ui, "View", crate::spectrogram::view_options);
                 if groups.len() > 1 {
                     daw_ui::picker_button(ui, "Take group", |ui| {
                         for (id, source, name) in &groups {
@@ -406,7 +390,6 @@ impl DawApp {
                                 self.audio_takes_ui.invalidate_import();
                                 self.audio_takes_ui.source = Some(*source);
                                 self.audio_takes_ui.range = None;
-                                self.audio_takes_ui.peaks.clear();
                                 ui.close();
                             }
                         }
@@ -455,10 +438,10 @@ impl DawApp {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));
                     let detail = format!("{:.2} beats · {}", clip.length, if in_comp || group.is_none() { "In comp" } else { "Alternative" });
-                    let response = ui.push_id(clip.id, |ui| daw_ui::audio_take_lane_with_background(ui, &daw_ui::TakeLane {
+                    let response = ui.push_id(clip.id, |ui| daw_ui::audio_take_lane_with_waveform(ui, &daw_ui::TakeLane {
                         name: &clip.name, detail: &detail,
                         selected: Some(clip.id) == self.audio_takes_ui.source,
-                        color, peaks: self.audio_takes_ui.peaks.get(&clip.id).map(Vec::as_slice).unwrap_or_default(),
+                        color, peaks: &[],
                         span: (((clip.start - start) / span) as f32, ((clip.end() - start) / span) as f32),
                         selection: self.audio_takes_ui.range.map(|(a, b)| (((a - start) / span) as f32, ((b - start) / span) as f32)),
                     }, |painter, plot| {
@@ -466,8 +449,18 @@ impl DawApp {
                             egui::pos2(plot.left() + ((clip.start - start) / span) as f32 * plot.width(), plot.top()),
                             egui::pos2(plot.left() + ((clip.end() - start) / span) as f32 * plot.width(), plot.bottom()),
                         );
-                        let audio = if let ClipContent::Audio { path, .. } = &clip.content { self.waveforms.get(path) } else { None };
-                        crate::spectrogram::paint(painter, rect, clip, self.project.tempo, (clip.start, clip.end()), color, "takes", audio);
+                        if let ClipContent::Audio { path, .. } = &clip.content
+                            && let Some(audio) = self.waveforms.get(path)
+                        {
+                            crate::audio_editor::paint_audio_clip_in_view(
+                                painter, rect, audio, clip, self.project.tempo, color, "takes",
+                            );
+                        } else {
+                            crate::spectrogram::paint(
+                                painter, rect, clip, self.project.tempo,
+                                (clip.start, clip.end()), color, "takes", None,
+                            );
+                        }
                     })).inner;
                     self.audio_takes_ui.rows.push((clip.id, response.rect));
                     if response.clicked() { self.audio_takes_ui.source = Some(clip.id); }
@@ -535,34 +528,6 @@ impl DawApp {
             "rows": self.audio_takes_ui.rows.iter().map(|(id, rect)| serde_json::json!({"id": id, "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})).collect::<Vec<_>>(),
         })
     }
-}
-
-/// Bounded thumbnail sampling: never scan an entire recording on a UI frame.
-/// Detailed editor waveforms and playback continue to use the original PCM.
-fn take_peaks(audio: &AudioData, clip: &Clip, tempo: f64) -> Vec<(f32, f32)> {
-    (0..256)
-        .map(|column| {
-            let mut low = 0.0_f32;
-            let mut high = 0.0_f32;
-            for sample in 0..16 {
-                let beat = clip.length * (column as f64 + sample as f64 / 16.0) / 256.0;
-                let frame = clip.audio_source_frame(beat, tempo, audio.sample_rate);
-                let frame = (frame.is_finite() && frame >= 0.0).then_some(frame as usize);
-                if let Some(frame) = frame {
-                    for channel in 0..audio.channels.min(2) {
-                        if let Some(value) = audio
-                            .samples
-                            .get(frame.saturating_mul(audio.channels).saturating_add(channel))
-                        {
-                            low = low.min(*value);
-                            high = high.max(*value);
-                        }
-                    }
-                }
-            }
-            (low, high)
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -649,22 +614,5 @@ mod tests {
                 assert!(!app.modified);
             }
         }
-    }
-
-    #[test]
-    fn take_thumbnail_uses_trimmed_reverse_source_mapping() {
-        let audio = AudioData {
-            sample_rate: 8000,
-            channels: 1,
-            samples: (0..16000).map(|i| i as f32 / 16000.0).collect(),
-        };
-        let mut clip = Clip::audio("Trimmed", 0.0, 1.0, "unused.wav");
-        clip.offset = 0.5;
-        if let ClipContent::Audio { reverse, .. } = &mut clip.content {
-            *reverse = true;
-        }
-        let peaks = take_peaks(&audio, &clip, 120.0);
-        assert!((peaks[0].1 - 0.375).abs() < 0.001);
-        assert!((peaks[255].1 - 0.125).abs() < 0.002);
     }
 }
