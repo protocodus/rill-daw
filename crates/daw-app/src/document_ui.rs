@@ -12,6 +12,14 @@ pub(crate) enum DocumentDialog {
     ExportMidi,
 }
 
+/// A headless picker result still passes through the production destination
+/// checks. Missing replacement decisions are cancellations, never approval.
+pub(crate) struct DocumentDialogSelection {
+    pub kind: DocumentDialog,
+    pub path: Option<PathBuf>,
+    pub replace_existing: Option<bool>,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum DocumentTransition {
     New,
@@ -126,41 +134,63 @@ impl DawApp {
     }
 
     pub(crate) fn pick_document_path(&mut self, kind: DocumentDialog) -> Option<PathBuf> {
-        if self
+        let injected = self
             .next_document_dialog
             .as_ref()
-            .is_some_and(|(next, _)| *next == kind)
+            .is_some_and(|selection| selection.kind == kind);
+        let (chosen, replacement_decision) = if injected {
+            let selection = self.next_document_dialog.take().unwrap();
+            (
+                selection.path?,
+                Some(selection.replace_existing.unwrap_or(false)),
+            )
+        } else {
+            let dialog = match kind {
+                DocumentDialog::Export => rfd::FileDialog::new().add_filter("Wave audio", &["wav"]),
+                DocumentDialog::ExportMidi => {
+                    rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
+                }
+                _ => rfd::FileDialog::new()
+                    .add_filter("Rill project", &["rill"])
+                    .add_filter("Legacy Rill session", &["json"]),
+            };
+            let dialog = if let Some(parent) = self.document_dialog_directory() {
+                dialog.set_directory(parent)
+            } else {
+                dialog
+            };
+            let dialog = if let Some(filename) = self.document_dialog_filename(kind) {
+                dialog.set_file_name(filename)
+            } else {
+                dialog
+            };
+            let chosen = daw_ui::with_native_dialog_menu(|| match kind {
+                DocumentDialog::Open => dialog.pick_file(),
+                _ => dialog.save_file(),
+            })?;
+            (chosen, None)
+        };
+        if kind != DocumentDialog::Open
+            && let Err(error) = self
+                .project
+                .validate_audio_destination(&chosen)
+                .and_then(|_| {
+                    self.project
+                        .validate_audio_destination(&normalize_document_path(chosen.clone(), kind))
+                })
         {
-            return self
-                .next_document_dialog
-                .take()
-                .and_then(|(_, path)| path)
-                .map(|path| normalize_document_path(path, kind));
-        }
-        let dialog = match kind {
-            DocumentDialog::Export => rfd::FileDialog::new().add_filter("Wave audio", &["wav"]),
-            DocumentDialog::ExportMidi => {
-                rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
+            // Selecting active source media remains an error even when a file
+            // suffix would redirect the write. Check the final name as well,
+            // before offering to replace any existing entry at that path.
+            self.message(Err(error), "");
+            if let Some(guard) = self.document_guard.as_mut() {
+                guard.error = Some(self.status.clone());
             }
-            _ => rfd::FileDialog::new()
-                .add_filter("Rill project", &["rill"])
-                .add_filter("Legacy Rill session", &["json"]),
-        };
-        let dialog = if let Some(parent) = self.document_dialog_directory() {
-            dialog.set_directory(parent)
-        } else {
-            dialog
-        };
-        let dialog = if let Some(filename) = self.document_dialog_filename(kind) {
-            dialog.set_file_name(filename)
-        } else {
-            dialog
-        };
-        daw_ui::with_native_dialog_menu(|| match kind {
-            DocumentDialog::Open => dialog.pick_file(),
-            _ => dialog.save_file(),
+            return None;
+        }
+        normalize_and_confirm_document_path(chosen, kind, |destination| {
+            replacement_decision.unwrap_or_else(|| confirm_normalized_replacement(destination))
         })
-        .map(|path| normalize_document_path(path, kind))
     }
 
     pub(crate) fn request_document_transition(&mut self, transition: DocumentTransition) {
@@ -557,10 +587,145 @@ fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
     path
 }
 
+/// A native picker only confirms replacement of the exact name it returned.
+/// Appending an extension can target a different existing entry, so protect
+/// that destination before starting any save, export, or editor-state barrier.
+fn normalize_and_confirm_document_path(
+    chosen: PathBuf,
+    kind: DocumentDialog,
+    confirm_replacement: impl FnOnce(&Path) -> bool,
+) -> Option<PathBuf> {
+    let destination = normalize_document_path(chosen.clone(), kind);
+    let entry_exists = match std::fs::symlink_metadata(&destination) {
+        Ok(_) => true,
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+    };
+    if destination != chosen && entry_exists && !confirm_replacement(&destination) {
+        return None;
+    }
+    Some(destination)
+}
+
+fn confirm_normalized_replacement(destination: &Path) -> bool {
+    let result = daw_ui::with_native_dialog_menu(|| {
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Warning)
+            .set_title("Replace existing file?")
+            .set_description(format!(
+                "The filename will be saved as:\n{}\n\nAn entry already exists at this path. Replace it?",
+                destination.display()
+            ))
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                "Replace".into(),
+                "Cancel".into(),
+            ))
+            .show()
+    });
+    // Older Windows common controls display standard OK/Cancel for custom
+    // labels; both APIs still require an explicit affirmative button.
+    result == rfd::MessageDialogResult::Ok
+        || result == rfd::MessageDialogResult::Custom("Replace".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use daw_core::Project;
+
+    #[test]
+    fn normalized_destination_confirmation_receives_the_actual_changed_path_only() {
+        let directory = tempfile::tempdir().unwrap();
+        for (kind, extension) in [
+            (DocumentDialog::Save, "rill"),
+            (DocumentDialog::Export, "wav"),
+            (DocumentDialog::ExportMidi, "mid"),
+        ] {
+            let chosen = directory.path().join(format!("Song.{extension}.other"));
+            let normalized = directory
+                .path()
+                .join(format!("Song.{extension}.other.{extension}"));
+            std::fs::write(&normalized, b"preserve me").unwrap();
+            let mut asked = false;
+            let cancelled = normalize_and_confirm_document_path(chosen.clone(), kind, |path| {
+                assert_eq!(path, normalized);
+                asked = true;
+                false
+            });
+            assert!(asked);
+            assert!(cancelled.is_none());
+            assert_eq!(std::fs::read(&normalized).unwrap(), b"preserve me");
+            let accepted = normalize_and_confirm_document_path(chosen, kind, |path| {
+                assert_eq!(path, normalized);
+                true
+            });
+            assert_eq!(accepted, Some(normalized.clone()));
+
+            // The picker already confirmed an existing exact filename, while
+            // an absent normalized filename has nothing to replace.
+            assert_eq!(
+                normalize_and_confirm_document_path(normalized.clone(), kind, |_| panic!(
+                    "second overwrite prompt"
+                )),
+                Some(normalized)
+            );
+            let absent = directory.path().join(format!("New {extension}"));
+            assert!(
+                normalize_and_confirm_document_path(absent, kind, |_| panic!("new file prompt"))
+                    .is_some()
+            );
+        }
+        let existing = directory.path().join("Existing without extension");
+        std::fs::write(&existing, b"open me").unwrap();
+        assert_eq!(
+            normalize_and_confirm_document_path(
+                existing.clone(),
+                DocumentDialog::Open,
+                |_| panic!("open replacement prompt")
+            ),
+            Some(existing)
+        );
+    }
+
+    #[test]
+    fn normalized_directory_entries_require_replacement_confirmation() {
+        let directory = tempfile::tempdir().unwrap();
+        let chosen = directory.path().join("Directory");
+        let normalized = chosen.with_extension("rill");
+        std::fs::create_dir(&normalized).unwrap();
+        let mut asked = false;
+        assert!(
+            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, |path| {
+                assert_eq!(path, normalized);
+                asked = true;
+                false
+            })
+            .is_none()
+        );
+        assert!(asked);
+        assert!(normalized.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlinks_are_existing_destinations_for_normalization_confirmation() {
+        let directory = tempfile::tempdir().unwrap();
+        let chosen = directory.path().join("Linked song");
+        let normalized = chosen.with_extension("rill");
+        let target = directory.path().join("Missing target");
+        std::os::unix::fs::symlink(&target, &normalized).unwrap();
+        assert!(!normalized.exists());
+        let mut asked = false;
+        assert!(
+            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, |path| {
+                assert_eq!(path, normalized);
+                asked = true;
+                false
+            })
+            .is_none()
+        );
+        assert!(asked);
+        assert_eq!(std::fs::read_link(&normalized).unwrap(), target);
+    }
 
     #[test]
     fn picker_uses_existing_current_parent_then_remembered_folder_and_accepts_relative_files() {

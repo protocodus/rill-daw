@@ -82,6 +82,7 @@ enum Command {
     FileDialog {
         kind: TestDocumentDialog,
         path: Option<PathBuf>,
+        replace_existing: Option<bool>,
     },
     AudioTakeFiles {
         paths: Option<Vec<PathBuf>>,
@@ -930,17 +931,22 @@ impl Harness {
                     .fail_virtual_input()?;
                 self.settle();
             }
-            Command::FileDialog { kind, path } => {
-                use crate::document_ui::DocumentDialog;
-                self.app.next_document_dialog = Some((
-                    match kind {
+            Command::FileDialog {
+                kind,
+                path,
+                replace_existing,
+            } => {
+                use crate::document_ui::{DocumentDialog, DocumentDialogSelection};
+                self.app.next_document_dialog = Some(DocumentDialogSelection {
+                    kind: match kind {
                         TestDocumentDialog::Save => DocumentDialog::Save,
                         TestDocumentDialog::Open => DocumentDialog::Open,
                         TestDocumentDialog::Export => DocumentDialog::Export,
                         TestDocumentDialog::ExportMidi => DocumentDialog::ExportMidi,
                     },
                     path,
-                ));
+                    replace_existing,
+                });
             }
             Command::AudioTakeFiles { paths } => {
                 self.app.audio_takes_ui.next_files = Some(paths);

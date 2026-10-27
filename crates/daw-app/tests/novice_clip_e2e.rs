@@ -2,7 +2,7 @@
 mod common;
 
 use common::Harness;
-use daw_core::{AudioData, Clip, ClipContent, Note, Project};
+use daw_core::{AudioData, Clip, ClipContent, MAX_BEAT, Note, Project};
 use serde_json::{Value, json};
 
 fn window(app: &mut Harness, name: &str) -> Value {
@@ -128,9 +128,27 @@ fn midi_timing_controls_move_trim_validate_and_recall_without_changing_ghost_pee
     assert_eq!(invalid["project"], trimmed["project"]);
     assert_eq!(invalid["history"], trimmed["history"]);
     assert_eq!(invalid["error"], true);
-    let invalid_start = edit_timing(&mut app, "Start", "1000001");
-    assert_eq!(invalid_start["project"], trimmed["project"]);
-    assert_eq!(invalid_start["history"], trimmed["history"]);
+    app.click("Dismiss");
+
+    // Shared precise timing bounds Start by the existing duration, so an
+    // excessive value clamps to the latest valid occurrence placement.
+    let clamped = edit_timing(&mut app, "Start", "1000001");
+    let bounded = clip(&clamped, first);
+    let length = clip(&trimmed, first)["length"].as_f64().unwrap();
+    assert_eq!(bounded["start"], MAX_BEAT - length);
+    assert_eq!(bounded["start"].as_f64().unwrap() + length, MAX_BEAT);
+    for field in ["offset", "length", "source_rate", "content", "link_group"] {
+        assert_eq!(bounded[field], clip(&trimmed, first)[field]);
+    }
+    assert_eq!(clip(&clamped, peer), clip(&trimmed, peer));
+    assert_eq!(clamped["error"], false);
+    assert_eq!(
+        clamped["history"]["undo"].as_array().unwrap().len(),
+        trimmed["history"]["undo"].as_array().unwrap().len() + 1
+    );
+    assert_eq!(undo(&mut app, false)["project"], trimmed["project"]);
+    assert_eq!(undo(&mut app, true)["project"], clamped["project"]);
+    assert_eq!(undo(&mut app, false)["project"], trimmed["project"]);
 
     let path = app.directory.path().join("edited-timing.rill");
     let saved = app.command(json!({"command":"save", "path":path}));

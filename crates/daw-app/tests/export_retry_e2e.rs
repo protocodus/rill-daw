@@ -123,7 +123,10 @@ fn retry_uses_the_failed_mix_destination_and_options_after_later_edits() {
     let y = (tempo["min"][1].as_f64().unwrap() + tempo["max"][1].as_f64().unwrap()) / 2.0;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":"60"}));
-    let edited = app.click("TRACKS");
+    let canvas = &app.inspect()["timeline"]["canvas"];
+    let edited = app.command(json!({"command":"pointer","phase":"click",
+        "x":canvas["max"][0].as_f64().unwrap()-12.0,
+        "y":canvas["max"][1].as_f64().unwrap()-12.0}));
     assert_eq!(edited["project"]["tempo"], 60.0);
     assert!(
         has(&edited, "Retry export"),

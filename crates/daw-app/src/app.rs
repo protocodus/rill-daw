@@ -133,7 +133,7 @@ pub struct DawApp {
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
     pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
-    pub(crate) next_document_dialog: Option<(crate::document_ui::DocumentDialog, Option<PathBuf>)>,
+    pub(crate) next_document_dialog: Option<crate::document_ui::DocumentDialogSelection>,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
     pub(crate) export_run: Option<crate::export_ui::ExportRun>,
     pub(crate) finishing: crate::finishing_actions::FinishingActions,
