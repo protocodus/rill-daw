@@ -2,6 +2,147 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
+## Component gallery
+
+These previews render the actual `daw-ui` components with Rill's theme and fonts.
+They use fixed example values for waveforms, meters, device metadata, and the
+assistant transcript. Each preview follows your page's light or dark theme;
+the links below it open either version at full size.
+
+[Actions and control roles](#actions-and-control-roles) · [Inputs and forms](#inputs-and-forms) · [Navigation and menus](#navigation-and-menus) · [Musical canvas primitives](#musical-canvas-primitives) · [Mixer and recording](#mixer-and-recording) · [Curves and crossfades](#curves-and-crossfades) · [Devices and parameters](#devices-and-parameters) · [Feedback and assistant](#feedback-and-assistant)
+
+### Actions and control roles
+
+Filled commands, selected tools, outlined view controls, icons, and disabled states.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/actions-dark.png">
+  <img alt="Filled action buttons, an active editing tool, outlined view controls, vector icons, and disabled controls." src="assets/ui-gallery/actions-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/actions-light.png) · [Dark preview](assets/ui-gallery/actions-dark.png)
+
+[`button`, `primary_button`, `tool_value`, `view_button`](../crates/daw-ui/src/widgets.rs) · [`IconButton`](../crates/daw-ui/src/icons.rs)
+
+### Inputs and forms
+
+Text, precise numbers, continuous sliders, choices, and boolean settings share the same spacing and focus treatment.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/inputs-dark.png">
+  <img alt="Text and masked inputs, numeric fields, sliders, dropdown choices, switches, and aligned form labels." src="assets/ui-gallery/inputs-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/inputs-light.png) · [Dark preview](assets/ui-gallery/inputs-dark.png)
+
+[`text_field`, `number`, `slider`, `select`, `checkbox`](../crates/daw-ui/src/widgets.rs) · [`secret_field`](../crates/daw-ui/src/assistant.rs) · [`form_grid`, `path_row`](../crates/daw-ui/src/form.rs)
+
+### Navigation and menus
+
+Workspace headers, grouped toolbars, related-view links, a properties popup, and an open choice menu.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/navigation-dark.png">
+  <img alt="Workspace navigation, a grouped toolbar, related-view links, a properties popup, and an open choice menu." src="assets/ui-gallery/navigation-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/navigation-light.png) · [Dark preview](assets/ui-gallery/navigation-dark.png)
+
+[`workspace_header`, `toolbar`](../crates/daw-ui/src/layout.rs) · [`view_links`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs)
+
+### Musical canvas primitives
+
+Musical time, piano-key states, velocities, waveforms, and clip regions use the shared canvas palette.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/timeline-dark.png">
+  <img alt="A musical ruler, piano-key states, velocity markers, and an audio waveform." src="assets/ui-gallery/timeline-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/timeline-light.png) · [Dark preview](assets/ui-gallery/timeline-dark.png)
+
+[`paint_timeline_ruler`](../crates/daw-ui/src/timeline.rs) · [`piano_key`, `velocity_marker`](../crates/daw-ui/src/piano.rs) · [`paint_audio_waveform`](../crates/daw-ui/src/waveform.rs)
+
+### Mixer and recording
+
+Channel strips, meters, gain/pan controls, and recording controls with fixed demonstration levels.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/mixer-dark.png">
+  <img alt="Mixer strips with stereo meters, gain and pan controls, recording buttons, and input metering." src="assets/ui-gallery/mixer-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/mixer-light.png) · [Dark preview](assets/ui-gallery/mixer-dark.png)
+
+[`mixer_strip`, `stereo_meter`](../crates/daw-ui/src/layout.rs) · [`channel_controls_at`](../crates/daw-ui/src/channel_controls.rs) · [`record_button`, `input_meter`](../crates/daw-ui/src/recording.rs)
+
+### Curves and crossfades
+
+Breakpoint editing and complementary crossfade curves keep their data and evaluation callbacks with the caller.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/curves-dark.png">
+  <img alt="An editable breakpoint curve and the shared crossfade editor with complementary fade curves." src="assets/ui-gallery/curves-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/curves-light.png) · [Dark preview](assets/ui-gallery/curves-dark.png)
+
+[`curve_editor`](../crates/daw-ui/src/curve.rs) · [`crossfade_editor`](../crates/daw-ui/src/crossfade.rs)
+
+### Devices and parameters
+
+Selectable device cards and a searchable parameter browser with example catalogue data.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/devices-dark.png">
+  <img alt="Device cards with selected states and a parameter browser showing example values and automation indicators." src="assets/ui-gallery/devices-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/devices-light.png) · [Dark preview](assets/ui-gallery/devices-dark.png)
+
+[`device_card`](../crates/daw-ui/src/device_cards.rs) · [`parameter_browser`](../crates/daw-ui/src/parameter_browser.rs)
+
+### Feedback and assistant
+
+Progress and result notices sit alongside the bounded assistant transcript and prompt composer.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/feedback-dark.png">
+  <img alt="Progress, success, warning, and error notices alongside the Assistant component with a sample conversation." src="assets/ui-gallery/feedback-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/feedback-light.png) · [Dark preview](assets/ui-gallery/feedback-dark.png)
+
+[`notice`](../crates/daw-ui/src/notice.rs) · [`assistant`](../crates/daw-ui/src/assistant.rs)
+
+### Regenerate the previews
+
+Run the interactive component example to explore the same widgets locally:
+
+```sh
+cargo run --locked -p daw-ui --example component_gallery
+```
+
+Capture every gallery page in both themes:
+
+```sh
+cargo run --locked -p daw-ui --example component_gallery -- --capture docs/assets/ui-gallery
+```
+
+Capturing requires a desktop display. On Linux, a private Xvfb display can render
+the previews with software OpenGL:
+
+```sh
+LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a cargo run --locked -p daw-ui --example component_gallery -- --capture docs/assets/ui-gallery
+```
+
+The example renders through a development-only `eframe` host; the shared library
+retains its runtime independence from application state, audio, and windowing.
+After changing a component or its theme, regenerate the previews and inspect both
+variants. The API reference and interaction rules continue below.
+
+## Workspace conventions
+
 Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as dimmed, inactive context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 ## Theme and tokens
