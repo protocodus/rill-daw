@@ -1749,14 +1749,11 @@ impl DawApp {
                     } else {
                         vec![pitch_at(pos)]
                     };
+                    // Keep the complete chord in this edit. Release-time
+                    // overlap merging remaps a covered tone to its existing
+                    // note ID and includes that retained tone in selection.
                     let drawn: Vec<_> = pitches
                         .into_iter()
-                        .filter(|pitch| {
-                            !notes.iter().any(|note| {
-                                note.pitch == *pitch
-                                    && (note.start - clip_offset - beat).abs() < 1e-8
-                            })
-                        })
                         .map(|pitch| {
                             Note::new(pitch, clip_offset + beat, drawing_length, state.velocity)
                         })

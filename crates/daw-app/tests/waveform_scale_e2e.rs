@@ -196,9 +196,19 @@ fn fit_fills_each_clip_independently_preserves_stereo_and_changes_only_presentat
     let before = paint(&mut app);
     assert_eq!(before["timeline"]["waveform_amplitude"], "Default");
     let (top, _) = envelope_bounds(&before, ids[0]);
-    let rect = &preview(&before, ids[0])["rect"];
+    let default = preview(&before, ids[0]);
+    assert_eq!(default["amplitude_reference"], 1.0);
+    assert!((default["maximum"].as_f64().unwrap() - 0.01).abs() < 1e-6);
+    let rect = &default["rect"];
     let row = (rect[3].as_f64().unwrap() - rect[1].as_f64().unwrap()) / 4.0;
-    assert!(top > rect[1].as_f64().unwrap() + row * 0.95);
+    // Mesh bounds include a one-physical-pixel antialias coverage fringe.
+    // At the fixture's 1x density this must be an absolute tolerance: after
+    // Fit caps sparse tracks at 96 points it exceeds 5% of this small row.
+    let coverage_fringe = 1.0;
+    assert!(
+        top + coverage_fringe > rect[1].as_f64().unwrap() + row * 0.95,
+        "Default quiet waveform must remain near its channel center: top={top}, rect={rect}"
+    );
     scale(&mut app, "Fit");
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         app.command(json!({"command":"system_theme", "dark":dark}));
