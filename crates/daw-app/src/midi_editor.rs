@@ -2132,10 +2132,12 @@ impl DawApp {
         let selection = self.selected_notes.clone();
         self.begin_edit();
         let mut edit_label = None;
+        // Generated phrases already set an explicit range below, including
+        // rests. Gesture extension intentionally follows selected note ends and
+        // may shrink back during a drag, so it must not replace that range.
         let extend = matches!(
             action,
             NoteEdit::Add(_)
-                | NoteEdit::Generate(..)
                 | NoteEdit::Move(..)
                 | NoteEdit::Resize(..)
                 | NoteEdit::Duplicate(_)
