@@ -376,7 +376,7 @@ impl GenerateDialog {
                 // View-only controls are grouped apart from generation actions.
                 ui.horizontal(|ui| {
                     daw_ui::checkbox(ui, &mut self.preview, "Preview");
-                    action.fit = daw_ui::button(ui, "Fit preview").clicked();
+                    action.fit = daw_ui::view_button(ui, "Fit preview").clicked();
                     daw_ui::text::note(ui, format!("{} notes", self.notes.len()));
                 });
                 if let Some(error) = &self.error {

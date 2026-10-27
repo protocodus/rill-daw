@@ -184,6 +184,7 @@ impl TimelineCurve {
                             tempo: 120.0,
                             beats_per_bar: 4,
                             fit,
+                            keyboard_active: false,
                         },
                         |_| 0.5,
                     ));

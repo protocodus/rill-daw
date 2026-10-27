@@ -80,11 +80,19 @@ fn rails(state: &Value, strip: Bounds) -> Vec<Bounds> {
 fn assert_layout(state: &Value, height: f64) -> f64 {
     assert_eq!(state["view"], "Mixer");
     let strips = mixer_strips(state);
+    let routes = state["mixer"]["routes"].as_array().unwrap();
+    assert!(
+        !routes.is_empty(),
+        "the active channel must have an output lane"
+    );
+    let routing_top = routes[0]["lane"]["min"][1].as_f64().unwrap();
     for strip in &strips {
         assert!(
-            strip.bottom >= height - 20.0 && strip.bottom <= height + 0.1,
-            "channel strips must use the available height at {height}: {strips:?}"
+            strip.bottom <= routing_top + 0.1
+                && routing_top - strip.bottom <= f64::from(daw_ui::tokens::SPACE_SM),
+            "channel controls must end immediately above the separate routing lanes at {height}: {strips:?}"
         );
+        assert!(strip.bottom <= height);
         assert!((strip.top - strips[0].top).abs() < 0.1);
         assert!((strip.bottom - strips[0].bottom).abs() < 0.1);
     }
@@ -152,14 +160,22 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
             app.inspect();
         }
         let compact = painted(&mut app);
-        let actions = labels(&compact, "Channel");
-        assert_eq!(actions.len(), 3);
+        let actions = labels(&compact, "Target");
+        assert_eq!(
+            actions.len(),
+            4,
+            "three channel targets plus the output sink"
+        );
         assert!(
             actions
                 .iter()
                 .all(|action| action.bottom <= 600.0 && action.height() >= 17.0)
         );
         assert!((labels(&compact, "Back")[0].top - back.top).abs() < 0.1);
+        app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":1000.0}));
+        for _ in 0..20 {
+            app.inspect();
+        }
         app.click("Channel");
         let effects = app.click("Effects");
         assert_eq!(effects["popups"]["effects"], true);

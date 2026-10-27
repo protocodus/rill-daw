@@ -2,6 +2,35 @@
 use egui::{Rect, Response, Ui};
 use std::hash::Hash;
 
+/// Display the channel's actual gain without normalizing stored quiet values.
+/// Zero uses the editing floor; choosing that floor intentionally silences it.
+pub fn channel_gain_to_db(gain: f32) -> f32 {
+    if gain > 0.0 {
+        20.0 * gain.log10()
+    } else {
+        -60.0
+    }
+}
+
+pub fn channel_gain_from_db(db: f32) -> f32 {
+    if db <= -60.0 {
+        0.0
+    } else {
+        10.0_f32.powf(db / 20.0)
+    }
+}
+
+/// The same precise channel-level field in Mixer and expanded track headers.
+/// Values outside the editing range remain intact until an intentional edit.
+pub fn channel_gain_number(db: &mut f32) -> egui::DragValue<'_> {
+    crate::number(db)
+        .range(-60.0..=20.0 * 1.5_f32.log10())
+        .clamp_existing_to_range(false)
+        .speed(0.1)
+        .fixed_decimals(1)
+        .suffix(" dB")
+}
+
 pub struct ChannelControlsResponse {
     pub gain: Response,
     pub pan: Response,
@@ -69,7 +98,7 @@ pub fn channel_controls_at(
         egui::pos2(control_right, gain_rect.bottom()),
     );
     let pan_value_rect = gain_value_rect.translate(egui::vec2(0.0, row_height + gap));
-    let mut db = 20.0 * gain.max(0.001).log10();
+    let mut db = channel_gain_to_db(*gain);
     let mut gain_response = slider_at(
         ui,
         gain_rect,
@@ -83,20 +112,11 @@ pub fn channel_controls_at(
             ui,
             gain_value_rect,
             id.with("gain_value"),
-            crate::number(&mut db)
-                .range(-60.0..=20.0 * 1.5_f32.log10())
-                .clamp_existing_to_range(false)
-                .speed(0.1)
-                .fixed_decimals(1)
-                .suffix(" dB"),
+            channel_gain_number(&mut db),
         ));
     }
     if ui.is_enabled() && gain_response.changed() {
-        *gain = if db <= -60.0 {
-            0.0
-        } else {
-            10.0_f32.powf(db / 20.0)
-        };
+        *gain = channel_gain_from_db(db);
     }
     gain_response = gain_response.on_hover_text(format!(
         "Channel volume · {db:.1} dB\nDrag the slider or double-click the number to type"

@@ -129,6 +129,7 @@ pub fn export_audio_join_cancelled(
     options: RenderOptions,
     cancel: &AtomicBool,
 ) -> Result<()> {
+    project.validate_audio_destination(path.as_ref())?;
     let (renderer, frames) = prepare(
         project,
         track,

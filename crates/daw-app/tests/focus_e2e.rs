@@ -46,7 +46,7 @@ fn one_workspace_at_a_time_and_back_preserve_the_project_and_editor_view() {
             1,
             "Only the active editor has tools"
         );
-        assert_eq!(labels(&editor, "TRACKS"), 0);
+        assert_eq!(labels(&editor, "Tracks"), 0);
         assert_eq!(labels(&editor, "Back"), 1);
         assert_eq!(labels(&editor, "Focused track"), 0);
         for action in ["Back", "Properties", "Play", "File", "Window"] {
@@ -114,11 +114,17 @@ fn one_workspace_at_a_time_and_back_preserve_the_project_and_editor_view() {
         let arrangement = app.click("Back");
         assert_eq!(arrangement["view"], "Arrangement");
         assert_eq!(labels(&arrangement, "Fit"), 1);
-        assert_eq!(labels(&arrangement, "TRACKS"), 1);
+        assert_eq!(labels(&arrangement, "Tracks"), 1);
         assert_eq!(labels(&arrangement, "Back"), 0);
         let mixer = window(&mut app, "Mixer");
         assert_eq!(mixer["view"], "Mixer");
-        assert_eq!(labels(&mixer, "TRACKS"), 0);
+        assert_eq!(
+            labels(&mixer, "Tracks"),
+            1,
+            "Mixer's own channel group heading"
+        );
+        assert_eq!(labels(&mixer, "Select"), 0, "Arranger tools stay inactive");
+        assert_eq!(labels(&mixer, "Nudge"), 0);
         assert_eq!(labels(&mixer, "Fit"), 0);
         assert_eq!(labels(&mixer, "Back"), 1);
         let restored = app.click("Back");

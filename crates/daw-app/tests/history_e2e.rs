@@ -68,6 +68,19 @@ fn a_multi_frame_note_resize_is_one_reversible_step_and_navigation_is_not_an_edi
     app.click("Window");
     app.click("Clip Editor");
     app.key("F");
+    // Fit frames the single note tightly. Make room for its longer duration
+    // before dragging; navigation itself must remain outside document history.
+    for _ in 0..12 {
+        let state = app.inspect();
+        let right = state["midi_editor"]["notes"][0]["rect"]["max"][0]
+            .as_f64()
+            .unwrap();
+        let zoom = state["midi_editor"]["pixels_per_beat"].as_f64().unwrap();
+        if right + zoom * 0.75 < state["viewport"][0].as_f64().unwrap() - 4.0 {
+            break;
+        }
+        app.key("Minus");
+    }
     let state = app.inspect();
     assert!(state["history"]["undo"].as_array().unwrap().is_empty());
     let note = &state["midi_editor"]["notes"][0]["rect"];

@@ -1,6 +1,34 @@
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
+impl crate::Project {
+    /// Reject outputs that would replace audio used by this project, including
+    /// inactive retained takes. File identity covers hard links and native path
+    /// aliases in addition to canonical paths and symbolic links.
+    pub fn validate_audio_destination(&self, destination: &Path) -> Result<()> {
+        let canonical_destination = std::fs::canonicalize(destination).ok();
+        let destination_file = same_file::Handle::from_path(destination).ok();
+        for track in &self.tracks {
+            for clip in &track.clips {
+                let crate::ClipContent::Audio { path, .. } = &clip.content else {
+                    continue;
+                };
+                let canonical_match = canonical_destination.as_ref().is_some_and(|destination| {
+                    std::fs::canonicalize(path).is_ok_and(|source| source == *destination)
+                });
+                let identity_match = destination_file.as_ref().is_some_and(|destination| {
+                    same_file::Handle::from_path(path).is_ok_and(|source| source == *destination)
+                });
+                ensure!(
+                    !canonical_match && !identity_match,
+                    "Choose a different output file; this destination is an audio source: {path}"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Decoded, interleaved floating point samples. Decode outside the audio callback.
 #[derive(Clone, Debug)]
 pub struct AudioData {
@@ -10,6 +38,19 @@ pub struct AudioData {
 }
 
 impl AudioData {
+    /// Read a source's bounds without decoding or allocating PCM samples.
+    pub fn wav_duration_seconds(path: impl AsRef<Path>) -> Result<f64> {
+        let path = path.as_ref();
+        let reader =
+            hound::WavReader::open(path).with_context(|| format!("Open WAV {}", path.display()))?;
+        let spec = reader.spec();
+        ensure!(
+            spec.channels > 0 && spec.sample_rate > 0,
+            "WAV has invalid channel count or sample rate"
+        );
+        Ok(f64::from(reader.duration()) / f64::from(spec.sample_rate))
+    }
+
     /// Decode at most 512 MiB of samples. Streaming long assets is a separate
     /// operation; malformed headers must not reserve unbounded process memory.
     pub fn load_wav(path: impl AsRef<Path>) -> Result<Self> {

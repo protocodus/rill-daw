@@ -656,6 +656,7 @@ pub(super) fn compile_content(
                 fade_out_curve,
                 reverse,
                 envelope,
+                boundary_fades,
                 ..
             } => {
                 let requested = PathBuf::from(path);
@@ -754,6 +755,15 @@ pub(super) fn compile_content(
                         .map_or(clip.source_length(), |envelope| envelope.length)
                         * samples_per_beat
                         / clip.source_rate,
+                    boundary_fades: boundary_fades.map(|boundary| {
+                        let scale = samples_per_beat / clip.source_rate;
+                        daw_core::AudioBoundaryFades {
+                            offset: boundary.offset * scale,
+                            length: boundary.length * scale,
+                            fade_in: boundary.fade_in * scale,
+                            fade_out: boundary.fade_out * scale,
+                        }
+                    }),
                     source_length: clip.length * 60.0 / tempo * data.sample_rate as f64,
                     reverse: *reverse,
                     data,

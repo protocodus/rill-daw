@@ -1,6 +1,13 @@
 # Clip editors
 
-Double-click a clip, or select it and choose **Window > Clip Editor**. Each editor uses the same timeline gestures: middle-drag or Alt-drag to pan, Ctrl/Cmd-wheel to zoom time, and Ctrl/Cmd-Shift-wheel to zoom vertically. **Fit** or **F** restores the complete clip and its vertical content. Bars and elapsed time appear together in the ruler. Opening a utility popup preserves the editor context; Escape returns to it after dismissing an open menu first.
+Double-click a clip, or select it and choose **Window > Clip Editor**. Each editor uses the same timeline gestures: middle-drag or Alt-drag to pan, Ctrl/Cmd-wheel to zoom time, and Ctrl/Cmd-Shift-wheel to zoom vertically. **Fit** or **F** shows all relevant content on both axes. Bars and elapsed time appear together in the ruler. Opening a utility popup preserves the editor context; Escape returns to it after dismissing an open menu first.
+
+Previous/Next buttons in the existing editor header inspect neighbouring clips;
+the View menu provides the same commands and Tab/Shift+Tab are shortcuts. Tool
+and zoom stay in place. View also offers Fit selection and Previous view. Mouse
+context menus provide Add/Remove selection, and Edit offers Select all/Clear.
+Plain arrows navigate notes, clips, keys or curve points in the focused pane;
+Shift extends selection. Text fields keep ordinary text cursor navigation.
 
 ## Audio
 
@@ -13,7 +20,7 @@ The **Clip** menu contains cursor jumps, trimming, splitting and clipboard actio
 - **Fade in (I)** and **Fade out (O)** set the duration by clicking or dragging the waveform. Durations can also be entered in beats. Each fade offers **Linear**, **Equal power**, and **S curve** shapes. Editing a fade explicitly anchors a new envelope to the current clip bounds.
 - **Gain** sets the clip level in dB. **Normalize** analyzes the selected source window across its channels and sets its sample peak to −1 dBFS, before fades. Repeating it has no cumulative effect. Silent clips report an error without changing gain.
 - **Reverse** reverses the selected source window while retaining stereo channel order. It does not rewrite the source or reverse the entire underlying recording.
-- **Copy**, **Paste**, and **Duplicate clip** preserve all clip parameters. Paste creates a new clip at the cursor on the current audio track; duplicate places a new clip immediately after the selected one.
+- **Copy**, **Paste**, and **Duplicate clip** preserve all clip parameters. Paste creates a new clip at the cursor on the current audio track. With a time range selected, **Duplicate selection** copies that range immediately after its end; otherwise **Duplicate clip** copies the whole clip immediately after it.
 - **Transients** opens onset detection. **Energy rise** finds short increases in RMS energy; **Amplitude gate** finds threshold crossings with hysteresis. Sensitivity controls the threshold, and the minimum gap suppresses closely spaced detections. **Analyze** shows markers without editing. **Split transients** cuts at those unsnapped onset positions as one undoable edit. Changing the clip or analysis settings clears an obsolete preview.
 
 Normalization and transient analysis run in background workers. Their results apply only while the source clip, tempo, and analysis settings still match. Fit covers the entire selected clip horizontally and scales both audio channels to its visible peak, including gain and fades. That amplitude reference stays fixed during edits until the next Fit; silence uses a unity reference. Navigation never changes clip data. Undo and Redo cover audio editing operations; portable `.rill` projects preserve their parameters and bundle the referenced source audio.
@@ -22,16 +29,23 @@ The waveform is a bounded display preview; normalization scans every source samp
 
 ## MIDI
 
-The piano roll uses **Select (Q)**, **Pencil (W)**, **Cut (E)**, **Duplicate (R)**, **Glue (T)**, **Erase (Z)**, **Multi-draw (U)**, and **Cursor (P)**. Pencil creates a note with a click or sets its length by dragging. Select moves note bodies and resizes either edge. Shift adds to the selection; Cmd/Ctrl+A selects all visible notes, Delete removes the selection, and Cmd/Ctrl+D duplicates it. An empty note selection never deletes or duplicates the containing clip. Double-clicking empty space creates a note; double-clicking an existing note deletes it in Select, Pencil, or Multi-draw mode.
+The piano roll uses **Select (Q)**, **Pencil (W)**, **Cut (E)**, **Duplicate (R)**, **Glue (T)**, **Erase (Z)**, **Multi-draw (U)**, and **Cursor (P)**. Pencil creates a note with a click or sets its length by dragging. Select moves note bodies and resizes either edge. Shift-click adds or removes a note from the selection; Cmd/Ctrl+A selects all visible notes, Delete removes the selection, and Cmd/Ctrl+D duplicates it. An empty note selection never deletes or duplicates the containing clip. Double-clicking empty space creates a note; double-clicking an existing note deletes it in Select, Pencil, or Multi-draw mode.
 
 **Notes** opens selection operations without leaving the editor:
 
 - **Quantize...** previews a grid, strength, and swing against the arrangement timeline. Strength moves each selected start partway toward its nearest grid point. Swing delays alternate grid points; 50% is straight. Durations stay unchanged unless **Note ends** is enabled. **Apply quantize** commits one undoable edit; **Cancel quantize** or Escape discards the preview. Editing controls are suspended during the preview, and changing the clip or undoing cancels it.
 - **Legato** ends selected notes at the next distinct note onset. Simultaneous chord notes share that endpoint; notes with no later onset keep their existing duration.
-- **+1/-1 semitone** and **+1/-1 octave** transpose the selection. Up/Down arrows transpose by a semitone, or by the next visible scale pitch with **Only scale keys** enabled. Shift+Up/Down always moves by an octave. Left/Right arrows nudge by the current grid, or a bar with Shift. A group stops together at pitch and time limits so its intervals and spacing stay intact.
-- **Copy notes** or Cmd/Ctrl+C stores the selection with its relative timing and velocities. **Paste notes at cursor** or Cmd/Ctrl+V creates new note IDs on the selected MIDI clip, extending it when needed.
+- **+1/-1 semitone** and **+1/-1 octave** transpose the selection. Ctrl/Cmd+Up/Down transposes by a semitone, or by the next visible scale pitch with **Only scale keys** enabled. Ctrl/Cmd+Shift+Up/Down moves by an octave. Ctrl/Cmd+Left/Right nudges by the current grid, or a bar with Shift. Plain arrows navigate selected notes; Shift+arrows extends the selection. A group stops together at pitch and time limits so its intervals and spacing stay intact.
+- **Copy notes** or Cmd/Ctrl+C stores the selection with its relative timing and velocities. **Cut notes** or Cmd/Ctrl+X also removes those notes in one undoable step. **Paste notes at cursor** or Cmd/Ctrl+V adds notes to the selected MIDI clip, extending it when needed and applying the overlap rule below. These shortcuts use the native desktop clipboard events; focused text fields retain ordinary text copy, cut, and paste.
 
 Shift-dragging a selected note body makes one copy of the selection and moves the copies. Shift-dragging an edge temporarily bypasses the resize grid; ordinary resizing stays snapped. Alt and middle-drag remain reserved for panning.
+
+Creating, moving or resizing notes merges fully overlapping notes of the same
+pitch: exact matches and containment become one note covering the outer range,
+with the existing note's velocity. Different pitches and partial overlaps remain
+separate. Pointer gestures merge on release; keyboard and clipboard commands
+commit the merge together with their edit. Undo restores the complete gesture.
+Selecting notes or changing velocity alone does not clean up imported overlaps.
 
 The root/scale field, such as **C · Natural minor**, opens root, scale and chord choices. **View** contains separate **Highlight scale**, **Highlight chord**, and **Only scale keys** switches. Highlighting preserves the contrast between black and white keys; folding hides other pitch rows without changing their notes. These view controls are visually distinct from the **Notes** actions and the root/scale choice field.
 

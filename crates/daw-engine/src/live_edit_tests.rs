@@ -223,6 +223,38 @@ fn live_audio_edits_use_cached_sources_and_new_assets_without_restarting_the_tim
 }
 
 #[test]
+fn live_boundary_fades_reuse_decoded_pcm_and_preserve_running_position() {
+    let (mut project, directory, track) = audio_project();
+    let clip = project.track(track).unwrap().clips[0].id;
+    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    let baseline = render_block(&mut renderer);
+    let original = Arc::clone(&renderer.tracks[0].as_ref().unwrap().audio[0].original);
+    let processed = Arc::clone(&renderer.tracks[0].as_ref().unwrap().audio[0].data);
+    let position = (renderer.logical_sample, renderer.source_sample);
+    // This private fixture makes any accidental source re-read fail.
+    std::fs::remove_file(directory.path().join("source.wav")).unwrap();
+    project
+        .smooth_audio_boundaries(&[(track, clip)], 3.0, 5.0)
+        .unwrap();
+    let mut update = prepare
+        .prepare(&project)
+        .expect("Parameter edits reuse the cached source");
+    renderer.apply_live_edit(&mut update).unwrap();
+    assert_eq!((renderer.logical_sample, renderer.source_sample), position);
+    let audio = &renderer.tracks[0].as_ref().unwrap().audio[0];
+    assert!(Arc::ptr_eq(&audio.original, &original));
+    assert!(Arc::ptr_eq(&audio.data, &processed));
+    assert_eq!(audio.boundary_fades.unwrap().fade_in, 24.0);
+    assert_eq!(audio.boundary_fades.unwrap().fade_out, 40.0);
+    assert_eq!(
+        render_block(&mut renderer),
+        baseline,
+        "Playback remains continuous away from edited boundaries"
+    );
+}
+
+#[test]
 fn live_update_reverts_superseded_preparations_and_rejects_foreign_graph_before_mutation() {
     let (project, _directory, id) = audio_project();
     let mut renderer = Renderer::new(&project, 8_000, true).unwrap();

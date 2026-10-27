@@ -70,7 +70,7 @@ fn select_track(app: &mut Harness, name: &str) {
     let arrangement = window(app, "Arrangement");
     if name == "Track folder" {
         // The folder header toggles collapse; its empty timeline row only selects.
-        let y = center(rect(&arrangement, "▾ Track folder")).1;
+        let y = center(rect(&arrangement, "Track folder")).1;
         let x = arrangement["timeline"]["canvas"]["min"][0]
             .as_f64()
             .unwrap()

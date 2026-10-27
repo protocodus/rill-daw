@@ -21,15 +21,8 @@ fn audio(state: &Value, id: u64) -> &Value {
     &clip(state, id)["content"]["Audio"]
 }
 fn menu(app: &mut Harness, menu: &str, action: &str) -> Value {
-    let state = app.click(menu);
-    let occurrence = state["visible_labels"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|label| *label == action)
-        .count()
-        - 1;
-    app.command(json!({"command":"click","label":action,"occurrence":occurrence}))
+    app.click(menu);
+    app.click(action)
 }
 fn undo(app: &mut Harness, redo: bool) -> Value {
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":redo}))

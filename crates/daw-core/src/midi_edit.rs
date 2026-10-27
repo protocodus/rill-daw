@@ -1,7 +1,7 @@
 //! Atomic, source-time MIDI transformations shared by editor preview and Apply.
 use crate::{MAX_BEAT, Note, new_id};
 use anyhow::{Result, ensure};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct QuantizeSettings {
@@ -37,7 +37,8 @@ fn validate_notes(notes: &[Note], selected: &HashSet<u64>) -> Result<()> {
                 && note.start >= 0.0
                 && note.length.is_finite()
                 && note.length > 0.0
-                && note.start + note.length <= MAX_BEAT,
+                && note.start + note.length <= MAX_BEAT
+                && note.start + note.length > note.start,
             "Invalid MIDI note"
         );
     }
@@ -204,9 +205,403 @@ pub fn paste_midi_notes(
     Ok((edited, inserted))
 }
 
+/// Source notes after a containment merge, with every removed ID mapped directly
+/// to its surviving identity. Surviving notes retain their original vector order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MidiNoteMerge {
+    pub notes: Vec<Note>,
+    pub remapped: HashMap<u64, u64>,
+}
+
+fn equivalent_note_time(a: f64, b: f64) -> bool {
+    // Accommodate a local/source stretch round trip, without merging genuinely
+    // different timing. The absolute cap stays far below a sample at any tempo.
+    (a - b).abs() <= (8.0 * f64::EPSILON * a.abs().max(b.abs()).max(1.0)).min(1e-9)
+}
+
+fn contains_note(outer: &Note, inner: &Note) -> bool {
+    (outer.start <= inner.start || equivalent_note_time(outer.start, inner.start))
+        && (outer.start + outer.length >= inner.start + inner.length
+            || equivalent_note_time(outer.start + outer.length, inner.start + inner.length))
+}
+
+fn equivalent_note_range(a: &Note, b: &Note) -> bool {
+    equivalent_note_time(a.start, b.start)
+        && equivalent_note_time(a.start + a.length, b.start + b.length)
+}
+
+fn merge_root(parents: &mut [usize], mut index: usize) -> usize {
+    while parents[index] != index {
+        parents[index] = parents[parents[index]];
+        index = parents[index];
+    }
+    index
+}
+
+/// Merge only newly created or geometrically edited notes with fully overlapping
+/// notes of the same pitch. Exact matches and containment merge; partial overlaps
+/// and other pitches remain separate. Existing identities/velocities are preferred
+/// over affected ones, with exact matches first and vector order breaking ties.
+///
+/// An edited long note absorbs directly contained notes. An edited short note
+/// inside an existing note is consumed into that note, without normalizing other
+/// pre-existing overlapping notes. No edit is published on invalid input.
+pub fn merge_fully_overlapping_midi_notes(
+    notes: &[Note],
+    affected: &HashSet<u64>,
+) -> Result<MidiNoteMerge> {
+    validate_notes(notes, affected)?;
+    let mut edited = notes.to_vec();
+    let mut parents: Vec<_> = (0..notes.len()).collect();
+    let mut alive = vec![true; notes.len()];
+    let mut pitches: [Vec<usize>; 128] = std::array::from_fn(|_| Vec::new());
+    let mut existing: [Vec<usize>; 128] = std::array::from_fn(|_| Vec::new());
+    for (index, note) in notes.iter().enumerate() {
+        pitches[usize::from(note.pitch)].push(index);
+        if !affected.contains(&note.id) {
+            existing[usize::from(note.pitch)].push(index);
+        }
+    }
+    // A static interval index remains valid after merging: containment chooses
+    // one of the original outer ranges, and removed entries resolve to its owner.
+    let mut prefix_ends: [Vec<f64>; 128] = std::array::from_fn(|_| Vec::new());
+    for (pitch, indices) in pitches.iter_mut().enumerate() {
+        indices.sort_by(|a, b| notes[*a].start.total_cmp(&notes[*b].start).then(a.cmp(b)));
+        let mut end = 0.0_f64;
+        for &index in indices.iter() {
+            end = end.max(notes[index].start + notes[index].length);
+            prefix_ends[pitch].push(end);
+        }
+    }
+    let absorb = |target: usize,
+                  source: usize,
+                  edited: &mut [Note],
+                  alive: &mut [bool],
+                  parents: &mut [usize]| {
+        let old = &edited[target];
+        let other = &edited[source];
+        // Preserve existing source bits when the difference is only roundoff.
+        let start = if equivalent_note_time(old.start, other.start) {
+            old.start
+        } else {
+            old.start.min(other.start)
+        };
+        let old_end = old.start + old.length;
+        let other_end = other.start + other.length;
+        let end = if equivalent_note_time(old_end, other_end) {
+            old_end
+        } else {
+            old_end.max(other_end)
+        };
+        if start != old.start || end != old_end {
+            edited[target].start = start;
+            edited[target].length = end - start;
+        }
+        alive[source] = false;
+        parents[source] = target;
+    };
+    for (original, note) in notes.iter().enumerate() {
+        if !affected.contains(&note.id) || !alive[original] {
+            continue;
+        }
+        let mut current = original;
+        loop {
+            let pitch = usize::from(edited[current].pitch);
+            // This fast path also avoids repeatedly scanning thousands of new
+            // notes when they all land inside one existing sustained note.
+            let covering = existing[pitch]
+                .iter()
+                .copied()
+                .filter(|&index| {
+                    alive[index]
+                        && index != current
+                        && contains_note(&edited[index], &edited[current])
+                })
+                .min_by_key(|&index| {
+                    (
+                        !equivalent_note_range(&edited[index], &edited[current]),
+                        index,
+                    )
+                });
+            if let Some(target) = covering {
+                absorb(target, current, &mut edited, &mut alive, &mut parents);
+                break;
+            }
+            let preferred = existing[pitch].iter().copied().find(|&index| {
+                alive[index] && index != current && contains_note(&edited[current], &edited[index])
+            });
+            let start = edited[current].start;
+            let end = start + edited[current].length;
+            let indices = &pitches[pitch];
+            let first = prefix_ends[pitch].partition_point(|&value| value < start - 1e-9);
+            let last = indices.partition_point(|&index| notes[index].start <= end + 1e-9);
+            let mut seen = HashSet::new();
+            let mut contained = Vec::new();
+            let mut containers = Vec::new();
+            for &index in &indices[first.min(last)..last] {
+                let root = merge_root(&mut parents, index);
+                if root == current || !seen.insert(root) {
+                    continue;
+                }
+                if contains_note(&edited[current], &edited[root]) {
+                    contained.push(root);
+                } else if contains_note(&edited[root], &edited[current]) {
+                    containers.push(root);
+                }
+            }
+            let target = if !affected.contains(&edited[current].id) {
+                current
+            } else {
+                preferred.unwrap_or_else(|| {
+                    contained
+                        .iter()
+                        .copied()
+                        .chain(std::iter::once(current))
+                        .min()
+                        .unwrap()
+                })
+            };
+            // The preferred existing note is contained or equivalent here.
+            // Absorb the whole contained batch without a repeated full scan.
+            if target != current {
+                absorb(target, current, &mut edited, &mut alive, &mut parents);
+            }
+            for source in contained {
+                if source != target {
+                    absorb(target, source, &mut edited, &mut alive, &mut parents);
+                }
+            }
+            current = target;
+            let Some(container) = containers.into_iter().min() else {
+                break;
+            };
+            let existing_container = !affected.contains(&edited[container].id);
+            let survivor = if !affected.contains(&edited[current].id) {
+                current
+            } else if existing_container {
+                container
+            } else {
+                current.min(container)
+            };
+            let removed = if survivor == current {
+                container
+            } else {
+                current
+            };
+            absorb(survivor, removed, &mut edited, &mut alive, &mut parents);
+            current = survivor;
+            if existing_container {
+                break;
+            }
+        }
+    }
+    let mut remapped = HashMap::new();
+    for (index, note) in notes.iter().enumerate() {
+        if !alive[index] {
+            let root = merge_root(&mut parents, index);
+            remapped.insert(note.id, edited[root].id);
+        }
+    }
+    let notes: Vec<_> = edited
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, note)| alive[index].then_some(note))
+        .collect();
+    validate_notes(&notes, &HashSet::new())?;
+    Ok(MidiNoteMerge { notes, remapped })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn containment_merge_keeps_existing_identity_velocity_and_unrelated_overlaps() {
+        let first = Note::new(60, 2.0, 0.5, 77);
+        let second = Note::new(60, 4.0, 0.5, 84);
+        let partial = Note::new(60, 5.5, 2.0, 91);
+        let chord = Note::new(64, 1.0, 5.0, 103);
+        let inserted = Note::new(60, 1.0, 5.0, 110);
+        let notes = vec![
+            first.clone(),
+            second.clone(),
+            partial.clone(),
+            chord.clone(),
+            inserted.clone(),
+        ];
+        let result =
+            merge_fully_overlapping_midi_notes(&notes, &HashSet::from([inserted.id])).unwrap();
+        let mut expected = first.clone();
+        expected.start = 1.0;
+        expected.length = 5.0;
+        assert_eq!(result.notes, vec![expected, partial, chord]);
+        assert_eq!(
+            result.remapped,
+            HashMap::from([(inserted.id, first.id), (second.id, first.id)])
+        );
+        assert_eq!(notes[0], first);
+        assert_eq!(notes[1], second);
+
+        let a = Note::new(60, 1.0, 4.0, 45);
+        let b = Note::new(60, 1.0, 4.0, 88);
+        let small = Note::new(60, 2.0, 1.0, 100);
+        let result = merge_fully_overlapping_midi_notes(
+            &[a.clone(), b.clone(), small.clone()],
+            &HashSet::from([small.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes, vec![a.clone(), b]);
+        assert_eq!(result.remapped, HashMap::from([(small.id, a.id)]));
+
+        // A covering old note wins even when an earlier old note sits inside
+        // the incoming span; that earlier imported pair stays untouched.
+        let inner = Note::new(60, 2.0, 1.0, 65);
+        let outer = Note::new(60, 0.0, 6.0, 78);
+        let incoming = Note::new(60, 1.0, 4.0, 110);
+        let result = merge_fully_overlapping_midi_notes(
+            &[inner.clone(), outer.clone(), incoming.clone()],
+            &HashSet::from([incoming.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes, vec![inner, outer.clone()]);
+        assert_eq!(result.remapped, HashMap::from([(incoming.id, outer.id)]));
+    }
+
+    #[test]
+    fn merge_prefers_exact_existing_source_bits_and_accepts_stretch_roundoff_only() {
+        let inner = Note::new(60, 2.0, 1.0, 60);
+        let exact = Note::new(60, 1.0, 4.0, 83);
+        let moved = Note::new(60, 1.0, 4.0, 110);
+        let result = merge_fully_overlapping_midi_notes(
+            &[inner.clone(), exact.clone(), moved.clone()],
+            &HashSet::from([moved.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes, vec![inner.clone(), exact.clone()]);
+        assert_eq!(result.remapped[&moved.id], exact.id);
+        assert_eq!(result.remapped, HashMap::from([(moved.id, exact.id)]));
+
+        let duplicate = Note::new(60, exact.start, exact.length, 95);
+        let result = merge_fully_overlapping_midi_notes(
+            &[exact.clone(), duplicate.clone(), moved.clone()],
+            &HashSet::from([moved.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes, vec![exact.clone(), duplicate]);
+        assert_eq!(result.remapped, HashMap::from([(moved.id, exact.id)]));
+
+        let existing = Note::new(62, 0.7, 0.7, 76);
+        let mut roundtrip = Note::new(
+            62,
+            existing.start / 1.3 * 1.3,
+            existing.length / 1.3 * 1.3,
+            115,
+        );
+        // Force one ULP at both bounds independently of host constant folding.
+        roundtrip.start = f64::from_bits(existing.start.to_bits() + 1);
+        let result = merge_fully_overlapping_midi_notes(
+            &[existing.clone(), roundtrip.clone()],
+            &HashSet::from([roundtrip.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes, vec![existing.clone()]);
+        assert_eq!(result.remapped[&roundtrip.id], existing.id);
+
+        let partial = Note::new(62, existing.start + 1e-6, existing.length, 90);
+        let notes = vec![existing, partial.clone()];
+        let result =
+            merge_fully_overlapping_midi_notes(&notes, &HashSet::from([partial.id])).unwrap();
+        assert_eq!(result.notes, notes);
+        assert!(result.remapped.is_empty());
+    }
+
+    #[test]
+    fn affected_merge_cascades_flatten_selection_ids_without_joining_partial_neighbors() {
+        let existing = Note::new(60, 2.0, 0.25, 71);
+        let small = Note::new(60, 1.0, 2.0, 90);
+        let large = Note::new(60, 0.0, 4.0, 100);
+        let later_existing = Note::new(60, 3.25, 0.25, 82);
+        let partial = Note::new(60, 3.5, 2.0, 94);
+        let result = merge_fully_overlapping_midi_notes(
+            &[
+                existing.clone(),
+                small.clone(),
+                large.clone(),
+                later_existing.clone(),
+                partial.clone(),
+            ],
+            &HashSet::from([small.id, large.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes.len(), 2);
+        assert_eq!(
+            (
+                result.notes[0].id,
+                result.notes[0].start,
+                result.notes[0].length,
+                result.notes[0].velocity
+            ),
+            (existing.id, 0.0, 4.0, existing.velocity)
+        );
+        assert_eq!(result.notes[1], partial);
+        for id in [small.id, large.id, later_existing.id] {
+            assert_eq!(result.remapped[&id], existing.id);
+        }
+
+        let left = Note::new(64, 0.0, 4.0, 80);
+        let right = Note::new(64, 1.0, 4.0, 85);
+        let inside = Note::new(64, 2.0, 1.0, 90);
+        let result = merge_fully_overlapping_midi_notes(
+            &[left.clone(), right.clone(), inside.clone()],
+            &HashSet::from([left.id, right.id, inside.id]),
+        )
+        .unwrap();
+        assert_eq!(result.notes, vec![left.clone(), right]);
+        assert_eq!(result.remapped, HashMap::from([(inside.id, left.id)]));
+    }
+
+    #[test]
+    fn merge_validation_is_atomic_and_large_pasted_batches_do_not_retain_duplicates() {
+        let existing = Note::new(60, 0.0, 8.0, 80);
+        let mut notes = vec![existing.clone()];
+        let affected: HashSet<_> = (0..8192)
+            .map(|_| {
+                let note = Note::new(60, 1.0, 0.25, 100);
+                let id = note.id;
+                notes.push(note);
+                id
+            })
+            .collect();
+        let result = merge_fully_overlapping_midi_notes(&notes, &affected).unwrap();
+        assert_eq!(result.notes, vec![existing]);
+        assert_eq!(result.remapped.len(), 8192);
+        assert!(result.remapped.values().all(|id| *id == notes[0].id));
+        let generated: Vec<_> = (0..8192).map(|_| Note::new(64, 2.0, 0.5, 93)).collect();
+        let generated_ids = generated.iter().map(|note| note.id).collect();
+        let collapsed = merge_fully_overlapping_midi_notes(&generated, &generated_ids).unwrap();
+        assert_eq!(collapsed.notes, vec![generated[0].clone()]);
+        assert_eq!(collapsed.remapped.len(), generated.len() - 1);
+        assert!(collapsed.remapped.values().all(|id| *id == generated[0].id));
+        assert!(merge_fully_overlapping_midi_notes(&notes, &HashSet::from([u64::MAX])).is_err());
+        assert_eq!(notes.len(), 8193);
+
+        let original = notes.clone();
+        for invalid in [f64::NAN, f64::INFINITY, -0.1, MAX_BEAT + 1.0] {
+            let mut bad = notes.clone();
+            bad[0].start = invalid;
+            assert!(merge_fully_overlapping_midi_notes(&bad, &affected).is_err());
+        }
+        let mut duplicate_ids = notes.clone();
+        duplicate_ids[1].id = duplicate_ids[0].id;
+        assert!(merge_fully_overlapping_midi_notes(&duplicate_ids, &HashSet::new()).is_err());
+        let mut degenerate = notes.clone();
+        degenerate[0].start = MAX_BEAT;
+        degenerate[0].length = f64::MIN_POSITIVE;
+        assert!(merge_fully_overlapping_midi_notes(&degenerate, &HashSet::new()).is_err());
+        assert_eq!(notes, original);
+        let untouched = merge_fully_overlapping_midi_notes(&notes, &HashSet::new()).unwrap();
+        assert_eq!(untouched.notes, notes);
+        assert!(untouched.remapped.is_empty());
+    }
     #[test]
     fn quantize_strength_swing_and_source_offsets_preserve_unselected_notes_and_durations() {
         let notes = vec![

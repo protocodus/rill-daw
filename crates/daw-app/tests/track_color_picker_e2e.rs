@@ -3,7 +3,7 @@ mod common;
 
 use common::Harness;
 use daw_core::{AudioData, Clip, Note, Project};
-use eframe::egui::Color32;
+use eframe::egui::{self, Color32};
 use serde_json::{Value, json};
 
 fn track(state: &Value, id: u64) -> &Value {
@@ -193,27 +193,28 @@ fn assert_arranger_paint(state: &Value, id: u64) {
 }
 
 fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
-    let name = state["label_rects"]
+    state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|label| label["text"] == name)
-        .unwrap_or_else(|| panic!("Missing mixer channel {name}"));
-    let (x, y) = center(name);
-    state["painted_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|shape| {
-            let [left, top, right, bottom] = bounds(&shape["rect"]);
-            left < x
-                && right > x
-                && top < y
-                && bottom > y
-                && (right - left - 180.0).abs() < 0.1
-                && bottom - top > 250.0
+        .filter(|label| label["text"] == name)
+        .find_map(|label| {
+            let (x, y) = center(label);
+            state["painted_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|shape| {
+                    let [left, top, right, bottom] = bounds(&shape["rect"]);
+                    left < x
+                        && right > x
+                        && top < y
+                        && bottom > y
+                        && (right - left - 180.0).abs() < 0.1
+                        && bottom - top > 250.0
+                })
         })
-        .unwrap_or_else(|| panic!("Missing full-height mixer strip for {name:?}"))
+        .unwrap_or_else(|| panic!("Missing full-height mixer strip for {name}"))
 }
 
 fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
@@ -226,6 +227,15 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
         daw_ui::theme::LIGHT
     };
     let shapes = state["painted_rects"].as_array().unwrap();
+    let context = egui::Context::default();
+    daw_ui::theme::apply(&context);
+    // Installing the shared theme restores System appearance. Set this
+    // expectation context's explicit theme after that initialization.
+    context.set_theme(if state["effective_theme"] == "Dark" {
+        egui::Theme::Dark
+    } else {
+        egui::Theme::Light
+    });
     for channel in state["project"]["tracks"]
         .as_array()
         .unwrap()
@@ -241,11 +251,22 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
             .unwrap();
         let (x, y) = center(label);
         let color = rgb(&state, channel["id"].as_u64().unwrap());
+        let header_color = if channel["kind"] == "Bus" {
+            json!(
+                daw_ui::bus_header_fill(
+                    &context,
+                    egui::Color32::from_rgb(color[0], color[1], color[2])
+                )
+                .to_array()
+            )
+        } else {
+            json!([color[0], color[1], color[2], 255])
+        };
         let color = json!([color[0], color[1], color[2], 255]);
         assert!(
             shapes.iter().any(|shape| {
                 let [left, top, right, bottom] = bounds(&shape["rect"]);
-                shape["fill"] == color
+                shape["fill"] == header_color
                     && left < x
                     && right > x
                     && top < y
@@ -253,7 +274,7 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
                     && bottom - top >= 33.0
                     && right - left > 140.0
             }),
-            "{name}: the whole channel-name header must keep the arranger RGB color"
+            "{name}: track headers retain RGB and bus headers use the shared bus treatment"
         );
         assert!(
             shapes.iter().any(|shape| {

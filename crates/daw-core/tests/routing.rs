@@ -1,6 +1,58 @@
 use daw_core::{Clip, Effect, EffectSlot, Project, Send, TrackKind, new_id};
 
 #[test]
+fn batch_bus_choices_exclude_every_reverse_path_into_the_selection() {
+    let mut project = Project::new();
+    let audio = project.add_audio_track("Audio");
+    let selected_bus = project.add_bus("Selected");
+    let upstream = project.add_bus("Upstream");
+    let bridge = project.add_bus("Bridge");
+    let free = project.add_bus("Free");
+    project.set_output(upstream, Some(bridge)).unwrap();
+    project.add_send(bridge, selected_bus, 0.25, false).unwrap();
+    let sources = [audio, selected_bus];
+    let choices: Vec<_> = project
+        .eligible_output_buses_for(&sources)
+        .unwrap()
+        .into_iter()
+        .map(|track| track.id)
+        .collect();
+    assert_eq!(choices, [free]);
+    // Use final route validation as the oracle for every possible destination,
+    // including indirect sends, rather than just checking a constructed list.
+    for target in [selected_bus, upstream, bridge, free] {
+        let valid_for_all = sources
+            .iter()
+            .all(|source| project.clone().set_output(*source, Some(target)).is_ok());
+        assert_eq!(choices.contains(&target), valid_for_all);
+    }
+}
+
+#[test]
+fn batch_bus_choices_validate_sources_and_accept_duplicate_selected_ids() {
+    let mut project = Project::new();
+    let audio = project.add_audio_track("Audio");
+    let folder = project.add_folder("Folder");
+    let bus = project.add_bus("Bus");
+    assert!(project.eligible_output_buses_for(&[]).is_err());
+    assert!(
+        project
+            .eligible_output_buses_for(&[audio, new_id()])
+            .is_err()
+    );
+    assert!(project.eligible_output_buses_for(&[audio, folder]).is_err());
+    assert_eq!(
+        project
+            .eligible_output_buses_for(&[audio, audio])
+            .unwrap()
+            .into_iter()
+            .map(|track| track.id)
+            .collect::<Vec<_>>(),
+        [bus]
+    );
+}
+
+#[test]
 fn a_new_bus_has_unity_gain_for_transparent_routing() {
     assert_eq!(daw_core::Track::new("Bus", TrackKind::Bus).gain, 1.0);
 }
