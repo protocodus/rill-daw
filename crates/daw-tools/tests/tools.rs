@@ -131,6 +131,193 @@ fn generator_is_reproducible_and_phrase_transform_uses_stable_ids() {
     assert_eq!(changed.pitch, original.pitch + 12);
 }
 
+fn phrase_host() -> (Host, u64, u64) {
+    let mut host = Host::default();
+    let notes: Vec<_> = (0..16).map(|index| json!({
+        "pitch":60 + index % 5,"start":1.0 + f64::from(index) * 0.25,"length":0.125,"velocity":64
+    })).collect();
+    let session = host.session;
+    call(
+        &mut host,
+        "create_midi_part",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"name":"Phrase",
+            "start":0.0,"length":8.0,"notes":notes
+        }),
+    );
+    let track = host.p.tracks[0].id;
+    let clip = host.p.tracks[0].clips[0].id;
+    host.history = History::default();
+    (host, track, clip)
+}
+
+fn clone_song_host(source: &Host) -> Host {
+    Host {
+        p: source.p.clone(),
+        session: source.session,
+        history: History::default(),
+    }
+}
+
+fn transform_arguments(host: &Host, track: u64, clip: u64, operation: &str) -> Value {
+    json!({
+        "session_id":host.session.id,"expected_revision":host.session.revision,
+        "track_id":track,"clip_id":clip,"operation":operation
+    })
+}
+
+#[test]
+fn randomize_tool_defaults_match_typed_edits_and_keep_one_undoable_commit() {
+    let (mut phrase, track, clip) = phrase_host();
+    let mut typed = clone_song_host(&phrase);
+    let original = phrase.p.clone();
+    let arguments = transform_arguments(&phrase, track, clip, "randomize");
+    let session = typed.session;
+    call(&mut phrase, "transform_phrase", arguments);
+    call(
+        &mut typed,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Randomize notes",
+            "edits":[{"op":"randomize_notes","track":track,"clip":clip}]
+        }),
+    );
+    assert_eq!(phrase.p, typed.p);
+    let before = original.midi_notes(track, clip).unwrap();
+    let after = phrase.p.midi_notes(track, clip).unwrap();
+    assert!(
+        after
+            .iter()
+            .zip(before)
+            .any(|(a, b)| a.velocity != b.velocity)
+    );
+    for (a, b) in after.iter().zip(before) {
+        assert_eq!(
+            (a.id, a.pitch, a.start, a.length),
+            (b.id, b.pitch, b.start, b.length)
+        );
+        assert!((i16::from(a.velocity) - i16::from(b.velocity)).abs() <= 16);
+    }
+    assert_eq!(phrase.history.undo_labels().count(), 1);
+    assert!(phrase.history.undo(&mut phrase.p));
+    assert_eq!(phrase.p, original);
+}
+
+#[test]
+fn randomize_tool_respects_subset_noop_conflicts_and_atomic_failure() {
+    let (mut host, track, clip) = phrase_host();
+    let before = host.p.clone();
+    let revision = host.session.revision;
+    let mut arguments = transform_arguments(&host, track, clip, "randomize");
+    arguments["velocity"] = json!(0);
+    arguments["timing"] = json!(0);
+    let unchanged = call(&mut host, "transform_phrase", arguments);
+    assert_eq!(unchanged["changed"], false);
+    assert_eq!(host.p, before);
+    assert_eq!(host.session.revision, revision);
+    assert_eq!(host.history.undo_labels().count(), 0);
+    for extra in [
+        json!({"expected_revision":revision+1}),
+        json!({"session_id":host.session.id+1}),
+        json!({"velocity":128}),
+        json!({"timing":0.250001}),
+        json!({"timing":-0.01}),
+        json!({"seed":4294967296_u64}),
+    ] {
+        let mut arguments = transform_arguments(&host, track, clip, "randomize");
+        arguments
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        assert!(dispatch_song_tool(&mut host, "transform_phrase", arguments).is_err());
+        assert_eq!(host.p, before);
+        assert_eq!(host.session.revision, revision);
+        assert_eq!(host.history.undo_labels().count(), 0);
+    }
+    let session = host.session;
+    assert!(dispatch_song_tool(&mut host,"apply_edits",json!({
+        "session_id":session.id,"expected_revision":session.revision,"label":"Invalid randomize batch",
+        "edits":[{"op":"set_tempo","bpm":95},{"op":"randomize_notes","track":track,"clip":clip,"timing":0.3}]
+    })).is_err());
+    assert_eq!(host.p, before);
+    assert_eq!(host.history.undo_labels().count(), 0);
+    let selected = host.p.midi_notes(track, clip).unwrap()[3].id;
+    let mut arguments = transform_arguments(&host, track, clip, "randomize");
+    arguments["note_ids"] = json!([selected]);
+    arguments["velocity"] = json!(32);
+    arguments["timing"] = json!(0.1);
+    arguments["seed"] = json!(1234);
+    call(&mut host, "transform_phrase", arguments);
+    for note in before.midi_notes(track, clip).unwrap() {
+        let changed = host
+            .p
+            .midi_notes(track, clip)
+            .unwrap()
+            .iter()
+            .find(|n| n.id == note.id)
+            .unwrap();
+        assert_eq!(
+            (changed.id, changed.pitch, changed.length),
+            (note.id, note.pitch, note.length)
+        );
+        if note.id != selected {
+            assert_eq!(changed, note);
+        }
+    }
+    assert_eq!(host.history.undo_labels().count(), 1);
+}
+
+#[test]
+fn phrase_legato_exposes_rank_mode_and_preserves_the_default_next_onset() {
+    let mut ranked = Host::default();
+    let session = ranked.session;
+    call(
+        &mut ranked,
+        "create_midi_part",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"name":"Voices","start":0,"length":4,
+            "notes":[{"pitch":72,"start":0,"length":0.25,"velocity":90},
+            {"pitch":60,"start":0,"length":0.25,"velocity":80},
+            {"pitch":74,"start":1,"length":0.25,"velocity":90},
+            {"pitch":76,"start":2,"length":0.25,"velocity":90},
+            {"pitch":64,"start":2,"length":0.25,"velocity":80}]
+        }),
+    );
+    ranked.history = History::default();
+    let mut default = clone_song_host(&ranked);
+    let mut typed = clone_song_host(&ranked);
+    let track = ranked.p.tracks[0].id;
+    let clip = ranked.p.tracks[0].clips[0].id;
+    let mut args = transform_arguments(&ranked, track, clip, "legato");
+    args["mode"] = json!("top_to_bottom");
+    call(&mut ranked, "transform_phrase", args);
+    let args = transform_arguments(&default, track, clip, "legato");
+    call(&mut default, "transform_phrase", args);
+    let session = typed.session;
+    call(
+        &mut typed,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Ranked legato",
+            "edits":[{"op":"legato_notes","track":track,"clip":clip,"mode":"top_to_bottom"}]
+        }),
+    );
+    assert_eq!(ranked.p, typed.p);
+    let length = |host: &Host, pitch| {
+        host.p
+            .midi_notes(track, clip)
+            .unwrap()
+            .iter()
+            .find(|n| n.pitch == pitch)
+            .unwrap()
+            .length
+    };
+    assert_eq!(length(&ranked, 72), 1.0);
+    assert_eq!(length(&ranked, 60), 2.0);
+    assert_eq!(length(&default, 60), 1.0);
+    assert_eq!(ranked.history.undo_labels().count(), 1);
+}
+
 #[test]
 fn published_edit_schema_only_contains_supported_operations() {
     let schema = song_edit_schema();
@@ -223,7 +410,7 @@ fn schema_example(schema: &Value) -> Value {
 fn every_published_edit_shape_deserializes_to_the_real_command_contract() {
     let schema = song_edit_schema();
     let variants = schema["oneOf"].as_array().unwrap();
-    assert_eq!(variants.len(), 65);
+    assert_eq!(variants.len(), 66);
     for variant in variants {
         let example = schema_example(variant);
         serde_json::from_value::<SongEdit>(example.clone()).unwrap_or_else(|error| {

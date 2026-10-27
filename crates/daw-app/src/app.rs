@@ -1775,7 +1775,7 @@ impl DawApp {
             // Native menus and dropdowns process Escape during their own draw.
             // Leave the containing workspace intact until that inner popup closes.
             if !egui::Popup::is_any_open(ctx) {
-                if self.midi_editor.cancel_generate() || self.midi_editor.cancel_quantize() {
+                if self.midi_editor.cancel_generate() || self.midi_editor.cancel_note_transform() {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
@@ -1906,13 +1906,13 @@ impl DawApp {
                 .visible_note_ids(notes, self.root, self.scale);
             self.midi_editor.clear_hidden_selection();
         }
-        if !self.midi_editor.quantize_active()
+        if !self.midi_editor.note_transform_active()
             && ctx
                 .input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
         {
             self.delete_selection();
         }
-        if !self.midi_editor.quantize_active() {
+        if !self.midi_editor.note_transform_active() {
             let presses =
                 ctx.input_mut(|i| i.count_and_consume_key(egui::Modifiers::COMMAND, egui::Key::D));
             for _ in 0..presses {
@@ -2200,7 +2200,7 @@ impl DawApp {
                             ui.close();
                         }
                         let has_clip =
-                            self.selected().is_some() && !self.midi_editor.quantize_active() && !self.midi_editor.generate_active();
+                            self.selected().is_some() && !self.midi_editor.note_transform_active() && !self.midi_editor.generate_active();
                         let has_edit_selection = has_clip && !(self.view == WorkspaceView::Clip
                             && self.selected_notes.is_empty()
                             && matches!(self.selected().map(|clip| &clip.content), Some(ClipContent::Midi { .. })));
@@ -2466,7 +2466,7 @@ impl DawApp {
             return;
         }
         self.midi_editor.cancel_generate();
-        self.midi_editor.cancel_quantize();
+        self.midi_editor.cancel_note_transform();
         if self.state_sync_pending() {
             return;
         }

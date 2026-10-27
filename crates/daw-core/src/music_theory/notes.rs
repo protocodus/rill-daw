@@ -1,18 +1,18 @@
 //! Octave-aware pitch spelling, adapted from upstream notes.py.
 use anyhow::{Result, bail, ensure};
 
-pub(crate) const LETTER_PCS: [i16; 7] = [0, 2, 4, 5, 7, 9, 11];
+pub const LETTER_PCS: [i16; 7] = [0, 2, 4, 5, 7, 9, 11];
 const LETTERS: [char; 7] = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Note {
+pub struct Note {
     pub letter: usize,
     pub accidental: i16,
     pub octave: Option<i16>,
 }
 
 impl Note {
-    pub(crate) fn name(self) -> String {
+    pub fn name(self) -> String {
         let mut name = LETTERS[self.letter].to_string();
         name.push_str(
             &if self.accidental < 0 { "b" } else { "#" }
@@ -24,23 +24,23 @@ impl Note {
         name
     }
 
-    pub(crate) fn pitch_class(self) -> u8 {
+    pub fn pitch_class(self) -> u8 {
         (LETTER_PCS[self.letter] + self.accidental).rem_euclid(12) as u8
     }
 
-    pub(crate) fn midi(self) -> Option<i16> {
+    pub fn midi(self) -> Option<i16> {
         self.octave
             .map(|octave| LETTER_PCS[self.letter] + self.accidental + (octave + 1) * 12)
     }
 
-    pub(crate) fn without_octave(self) -> Self {
+    pub fn without_octave(self) -> Self {
         Self {
             octave: None,
             ..self
         }
     }
 
-    pub(crate) fn with_octave(self, octave: i16) -> Self {
+    pub fn with_octave(self, octave: i16) -> Self {
         Self {
             octave: Some(octave),
             ..self
@@ -48,7 +48,7 @@ impl Note {
     }
 }
 
-pub(crate) fn parse_note(text: &str) -> Result<Note> {
+pub fn parse_note(text: &str) -> Result<Note> {
     ensure!(text.len() <= 32, "Note name is too long");
     let text = text.trim();
     let mut chars = text.chars();
@@ -113,11 +113,11 @@ pub(crate) fn parse_note(text: &str) -> Result<Note> {
     Ok(note)
 }
 
-pub(crate) fn prefers_flats(root: Note) -> bool {
+pub fn prefers_flats(root: Note) -> bool {
     root.accidental < 0 || (root.accidental == 0 && root.pitch_class() == 5)
 }
 
-pub(crate) fn note_from_midi(midi: u8, prefer_flats: bool) -> Note {
+pub fn note_from_midi(midi: u8, prefer_flats: bool) -> Note {
     const SHARP: [(usize, i16); 12] = [
         (0, 0),
         (0, 1),
@@ -155,7 +155,7 @@ pub(crate) fn note_from_midi(midi: u8, prefer_flats: bool) -> Note {
     }
 }
 
-pub(crate) fn transpose(root: Note, semitones: i16, letter_steps: Option<i16>) -> Result<Note> {
+pub fn transpose(root: Note, semitones: i16, letter_steps: Option<i16>) -> Result<Note> {
     if let Some(letter_steps) = letter_steps {
         let index = i32::try_from(root.letter).expect("seven letters") + i32::from(letter_steps);
         let carry = index.div_euclid(7);
@@ -192,7 +192,7 @@ pub(crate) fn transpose(root: Note, semitones: i16, letter_steps: Option<i16>) -
     Ok(note_from_midi(pc as u8, flats).without_octave())
 }
 
-pub(crate) fn degree_steps(label: &str) -> Result<i16> {
+pub fn degree_steps(label: &str) -> Result<i16> {
     let digits = label.trim_start_matches(['#', 'b']);
     let degree = digits
         .parse::<i16>()

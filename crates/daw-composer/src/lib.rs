@@ -3,13 +3,13 @@
 //! This crate builds musical data only. It has no project, filesystem, provider,
 //! plug-in, or audio-device access. See `UPSTREAM.md` for provenance and scope.
 mod accompany;
-mod catalog;
-mod notes;
 mod progression;
 mod rhythm;
 
 pub use accompany::compose;
-pub use catalog::{catalog, get_chord, get_scale};
+pub use daw_core::music_theory::{
+    Catalog, ChordDefinition, NoteSet, ScaleDefinition, catalog, get_chord, get_scale,
+};
 pub use progression::progression;
 pub use rhythm::euclidean;
 
@@ -25,40 +25,6 @@ pub const MAX_STEP: f64 = 64.0;
 pub const MIN_BASS_OCTAVE: i8 = 0;
 pub const MAX_BASS_OCTAVE: i8 = 8;
 pub const MAX_DURATION: f64 = MAX_CHORDS as f64 * MAX_BEATS_PER_CHORD;
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct ScaleDefinition {
-    pub name: String,
-    pub intervals: Vec<i16>,
-    pub aliases: Vec<String>,
-    pub degrees: Vec<String>,
-    pub description: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct ChordDefinition {
-    pub name: String,
-    pub intervals: Vec<i16>,
-    pub aliases: Vec<String>,
-    pub degrees: Vec<String>,
-    pub suffix: String,
-    pub description: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Catalog {
-    pub scales: Vec<ScaleDefinition>,
-    pub chords: Vec<ChordDefinition>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct NoteSet {
-    pub name: String,
-    pub root: String,
-    pub notes: Vec<String>,
-    /// Absent for abstract pitch classes; concrete pitches use C4 = MIDI 60.
-    pub midi: Option<Vec<u8>>,
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ProgressionChord {

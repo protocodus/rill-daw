@@ -66,6 +66,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Numeric widget builders | Generic `slider`, `number`, `Number` |
 | Track color | `color_edit`, `color_strip_at` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
+| Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
@@ -176,7 +177,7 @@ painting it so narrow windows wrap the complete group without clipping controls.
 
 `mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height, and faders and meters stretch with the window. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
-**Setup → Appearance** applies and persists System, Light, or Dark. Cancel discards the draft. Changing only appearance leaves playback and native editors running. Piano-roll black-key rows remain darker than white-key rows in both modes; blue scale and chord tints preserve that distinction. Note labels select a contrasting foreground for their velocity-dependent fill.
+**Setup → Appearance** applies and persists System, Light, or Dark. Cancel discards the draft. Changing only appearance leaves playback and native editors running. Piano-roll black-key rows remain slightly darker than natural-key rows in both modes. Scale and chord guides use subtle green tints. `Palette::piano_note_fill(velocity, out_of_scale)` keeps notes blue, or red for an optional scale warning, with velocity-dependent strength. `piano_note_stroke_in_rect(selected, fill, rect)` adds a neutral contrasting selection outline without changing the fill, with thinner strokes at dense zoom levels. `piano_velocity_marker` shares these colors with the velocity lane. Note labels select a contrasting foreground for their fill.
 
 `selectable_at(ui, rect, id_salt, selected, label)` is for controls drawn inside an existing arrangement canvas. It supplies a compact native button in the given rectangle without advancing or enlarging the parent's layout. It requires a stable semantic ID such as `(track.id, "mute")` and retains native hover, focus, keyboard, and accessibility behavior. It does not own arrangement geometry.
 

@@ -105,51 +105,15 @@ pub fn piano_key(
     active: bool,
 ) {
     let colors = theme::palette(painter.ctx());
-    let base = if black {
-        colors.piano_black
-    } else {
-        colors.piano_white
-    };
-    let tint = if highlight > 1 {
-        colors.note_selected
-    } else {
-        colors.note
-    };
-    let amount = if active {
-        0.55
-    } else if highlight > 0 {
-        0.22
-    } else {
-        0.0
-    };
-    let fill = Color32::from_rgb(
-        egui::lerp(f32::from(base.r())..=f32::from(tint.r()), amount) as u8,
-        egui::lerp(f32::from(base.g())..=f32::from(tint.g()), amount) as u8,
-        egui::lerp(f32::from(base.b())..=f32::from(tint.b()), amount) as u8,
-    );
+    let fill = colors.piano_key_fill(black, highlight, active);
     painter.rect_filled(rect, 2.0, fill);
     painter.line_segment(
         [rect.left_bottom(), rect.right_bottom()],
-        Stroke::new(1.0_f32, theme::palette(painter.ctx()).bg),
+        Stroke::new(1.0_f32, colors.line),
     );
-    if highlight > 0 {
-        let color = if highlight > 1 {
-            colors.note_selected
-        } else {
-            colors.note
-        };
-        painter.rect_filled(
-            Rect::from_min_size(
-                Pos2::new(rect.right() - 6.0, rect.top() + 1.0),
-                Vec2::new(5.0, (rect.height() - 2.0).max(1.0)),
-            ),
-            1.0,
-            color,
-        );
-    }
     if !label.is_empty() && rect.height() >= 14.0 && painter.clip_rect().contains_rect(rect) {
         painter.text(
-            rect.right_center() - Vec2::new(11.0, 0.0),
+            rect.right_center() - Vec2::new(6.0, 0.0),
             Align2::RIGHT_CENTER,
             label,
             FontId::monospace(crate::tokens::FONT_CANVAS),
@@ -169,13 +133,50 @@ pub fn paint_piano_key_selection(painter: &Painter, rect: Rect) {
 }
 
 pub fn velocity_marker(painter: &Painter, bounds: Rect, normalized: f32, selected: bool) {
-    let y = bounds.bottom() - normalized.clamp(0.0, 1.0) * bounds.height();
     let colors = theme::palette(painter.ctx());
     let color = if selected {
         colors.note_selected
     } else {
         colors.note
     };
+    let stroke = if selected {
+        Stroke::new(0.5_f32, colors.text)
+    } else {
+        Stroke::NONE
+    };
+    paint_velocity_marker(painter, bounds, normalized, color, stroke);
+}
+
+/// Match the piano note's velocity shade and optional outside-scale warning.
+/// A neutral selection border leaves its musical color intact.
+pub fn piano_velocity_marker(
+    painter: &Painter,
+    bounds: Rect,
+    velocity: u8,
+    selected: bool,
+    out_of_scale: bool,
+) {
+    let colors = theme::palette(painter.ctx());
+    let fill = colors.piano_note_fill(velocity, out_of_scale);
+    let mut stroke = colors.piano_note_stroke(selected, fill);
+    stroke.width = stroke.width.min(1.0);
+    paint_velocity_marker(
+        painter,
+        bounds,
+        f32::from(velocity.min(127)) / 127.0,
+        fill,
+        stroke,
+    );
+}
+
+fn paint_velocity_marker(
+    painter: &Painter,
+    bounds: Rect,
+    normalized: f32,
+    color: Color32,
+    stroke: Stroke,
+) {
+    let y = bounds.bottom() - normalized.clamp(0.0, 1.0) * bounds.height();
     painter.line_segment(
         [
             Pos2::new(bounds.center().x, bounds.bottom()),
@@ -188,11 +189,11 @@ pub fn velocity_marker(painter: &Painter, bounds: Rect, normalized: f32, selecte
         1.0,
         color,
     );
-    if selected {
+    if stroke != Stroke::NONE {
         painter.rect_stroke(
             Rect::from_center_size(Pos2::new(bounds.center().x, y), Vec2::new(8.0, 6.0)),
             1.0,
-            Stroke::new(0.5_f32, theme::palette(painter.ctx()).text),
+            stroke,
             StrokeKind::Inside,
         );
     }

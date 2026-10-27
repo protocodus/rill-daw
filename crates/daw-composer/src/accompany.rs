@@ -2,9 +2,10 @@
 use crate::{
     ArpeggioStyle, BassStyle, DraftPart, MAX_BASS_OCTAVE, MAX_BEATS_PER_CHORD, MAX_CHORDS,
     MAX_DURATION, MAX_NOTES, MAX_PARTS, MAX_STEP, MIN_BASS_OCTAVE, MIN_BEATS_PER_CHORD, MIN_STEP,
-    PartSpec, Progression, ProgressionChord, TimedNote, notes::parse_note,
+    PartSpec, Progression, ProgressionChord, TimedNote,
 };
 use anyhow::{Result, ensure};
+use daw_core::music_theory::notes::parse_note;
 
 struct PreparedPart {
     pitches: Vec<Vec<u8>>,

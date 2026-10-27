@@ -1,4 +1,4 @@
-use daw_core::{EditBatch, EditResult, History, Project, SongSession};
+use daw_core::{Chord, EditBatch, EditResult, History, Project, Scale, SongSession};
 use daw_tools::{
     SongToolHost, ToolEffect, ToolError, dispatch_song_tool, song_tool_specs, tool_effect,
 };
@@ -33,6 +33,91 @@ impl SongToolHost for Host {
 fn args(host: &Host) -> Value {
     json!({"session_id":host.session.id,"expected_revision":host.session.revision,
         "start":0,"root":"C4","degrees":[1],"parts":[{"part":{"kind":"chords"}}]})
+}
+
+#[test]
+fn generator_schema_uses_the_piano_rolls_complete_catalogue() {
+    let schemas = song_tool_specs();
+    let generate = &schemas
+        .iter()
+        .find(|s| s.name == "generate_part")
+        .unwrap()
+        .input_schema;
+    let chords = Chord::ALL
+        .iter()
+        .map(|v| format!("{v:?}"))
+        .collect::<Vec<_>>();
+    let scales = Scale::ALL
+        .iter()
+        .map(|v| format!("{v:?}"))
+        .collect::<Vec<_>>();
+    assert_eq!(chords.len(), 37);
+    assert_eq!(scales.len(), 50);
+    assert_eq!(generate["properties"]["chord"]["enum"], json!(chords));
+    assert_eq!(generate["properties"]["scale"]["enum"], json!(scales));
+    let instrument = &schemas
+        .iter()
+        .find(|s| s.name == "create_instrument_part")
+        .unwrap()
+        .input_schema;
+    assert_eq!(instrument["properties"]["part"]["oneOf"][1], *generate);
+}
+
+#[test]
+fn every_piano_roll_harmony_matches_composer_lookup_and_legacy_generation() {
+    use std::collections::BTreeSet;
+    for (kind, id, canonical, display, expected) in Chord::ALL
+        .into_iter()
+        .map(|chord| {
+            (
+                "chord",
+                format!("{chord:?}"),
+                chord.definition().name.clone(),
+                chord.name().to_owned(),
+                chord.intervals().iter().copied().collect::<BTreeSet<_>>(),
+            )
+        })
+        .chain(Scale::ALL.into_iter().map(|scale| {
+            (
+                "scale",
+                format!("{scale:?}"),
+                scale.definition().name.clone(),
+                scale.name().to_owned(),
+                (0..12)
+                    .filter(|pitch| scale.contains(0, *pitch))
+                    .collect::<BTreeSet<_>>(),
+            )
+        }))
+    {
+        for spelling in [&id, &canonical, &display] {
+            let lookup = if kind == "chord" {
+                daw_composer::get_chord("C4", spelling)
+            } else {
+                daw_composer::get_scale("C4", spelling)
+            }
+            .unwrap();
+            let actual = lookup
+                .midi
+                .unwrap()
+                .into_iter()
+                .map(|pitch| pitch % 12)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(actual, expected, "Lookup {kind} {spelling}");
+            let mut host = Host::default();
+            let mut request = json!({"session_id":host.session.id,"expected_revision":0,"name":"Shared harmony","start":0,"length":4,"kind":"chord","root":0,"octaves":1,"start_octave":4});
+            request[kind] = json!(spelling);
+            dispatch_song_tool(&mut host, "generate_part", request).unwrap();
+            let track = &host.project.tracks[0];
+            let generated = host
+                .project
+                .midi_notes(track.id, track.clips[0].id)
+                .unwrap()
+                .iter()
+                .map(|note| note.pitch % 12)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(generated, expected, "Generation {kind} {spelling}");
+        }
+    }
 }
 
 #[test]

@@ -169,6 +169,118 @@ fn quantize_preserves_unselected_sources_and_zero_strength_is_a_noop() {
 }
 
 #[test]
+fn randomize_stretched_linked_source_matches_preview_and_is_one_undoable_edit() {
+    let mut p = Project::new();
+    let track = p.add_midi_track("Randomize");
+    let untouched = Note::new(60, 0.7, 0.3, 100);
+    let chosen = Note::new(64, 1.1, 0.4, 90);
+    let source = vec![untouched.clone(), chosen.clone()];
+    let mut clip = Clip::midi("Stretched", 0.125, 4.0, source.clone());
+    clip.source_rate = 1.3;
+    clip.offset = 0.5;
+    let id = clip.id;
+    p.track_mut(track).unwrap().clips.push(clip);
+    let ghost = p.clone_clip(track, id).unwrap();
+    let before = p.clone();
+    let settings = RandomizeSettings {
+        velocity: 24,
+        timing: 0.125,
+        seed: 34,
+    };
+    let mut audible = source.clone();
+    for note in &mut audible {
+        note.start /= 1.3;
+        note.length /= 1.3;
+    }
+    let expected = randomize_notes(
+        &audible,
+        &std::collections::HashSet::from([chosen.id]),
+        settings,
+    )
+    .unwrap();
+    let edit = batch(
+        json!([{"op":"randomize_notes","track":track,"clip":ghost,"note_ids":[chosen.id],"velocity":24,"timing":0.125,"seed":34}]),
+    );
+    assert!(edit.apply(&mut p).unwrap().changed);
+    let notes = p.midi_notes(track, id).unwrap();
+    assert_eq!(notes, p.midi_notes(track, ghost).unwrap());
+    assert_eq!(notes[0], untouched);
+    assert_eq!(notes[1].start, expected[1].start * 1.3);
+    assert_eq!(notes[1].velocity, expected[1].velocity);
+    assert_eq!(notes[1].length.to_bits(), chosen.length.to_bits());
+    assert_eq!(p.clip(track, id).unwrap().offset, 0.5);
+    assert_eq!(p.clip(track, ghost).unwrap().source_rate, 1.3);
+    assert_eq!(
+        p.clip(track, ghost).unwrap().start,
+        before.clip(track, ghost).unwrap().start
+    );
+    let mut replay = before.clone();
+    edit.apply(&mut replay).unwrap();
+    assert_eq!(replay, p);
+    let mut history = History::new();
+    history.commit_named(&before, "Randomize notes");
+    assert_eq!(history.undo_labels().count(), 1);
+    assert!(history.undo(&mut p));
+    assert_eq!(p, before);
+}
+
+#[test]
+fn randomize_defaults_noop_and_invalid_settings_are_atomic() {
+    let mut p = Project::new();
+    let track = p.add_midi_track("Humanize");
+    let original = Note::new(60, 0.7, 0.3, 100);
+    let mut clip = Clip::midi("Source", 0.0, 4.0, vec![original.clone()]);
+    clip.source_rate = 1.3;
+    let id = clip.id;
+    p.track_mut(track).unwrap().clips.push(clip);
+    let before = p.clone();
+    assert!(
+        !batch(json!([{"op":"randomize_notes","track":track,"clip":id,"velocity":0}]))
+            .apply(&mut p)
+            .unwrap()
+            .changed
+    );
+    assert_eq!(p, before);
+    for extra in [
+        json!({"velocity":128}),
+        json!({"timing":-0.1}),
+        json!({"timing":0.251}),
+        json!({"note_ids":[u64::MAX]}),
+    ] {
+        let mut value = json!({"op":"randomize_notes","track":track,"clip":id});
+        value
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        assert!(
+            batch(json!([{"op":"set_tempo","bpm":90},value]))
+                .apply(&mut p)
+                .is_err()
+        );
+        assert_eq!(p, before);
+    }
+    batch(json!([{"op":"randomize_notes","track":track,"clip":id}]))
+        .apply(&mut p)
+        .unwrap();
+    let note = &p.midi_notes(track, id).unwrap()[0];
+    assert_eq!(
+        (
+            note.id,
+            note.pitch,
+            note.start.to_bits(),
+            note.length.to_bits()
+        ),
+        (
+            original.id,
+            original.pitch,
+            original.start.to_bits(),
+            original.length.to_bits()
+        )
+    );
+    assert!((i16::from(note.velocity) - i16::from(original.velocity)).abs() <= 16);
+}
+
+#[test]
 fn bulk_mix_can_set_exact_silence_and_rejects_ambiguous_gain_atomically() {
     let mut p = Project::new();
     let t = p.add_audio_track("Audio");

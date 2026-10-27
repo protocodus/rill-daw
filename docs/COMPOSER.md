@@ -6,6 +6,21 @@ Rill's embedded assistant and MCP clients share a native composition module,
 The tools produce deterministic musical data and commit parts through Rill's
 normal song editing service. End users need no Python runtime or extra MCP server.
 
+## One catalogue with the piano roll
+
+`daw-core::music_theory` owns the shared chord and scale catalogue. The piano
+roll, its Generate dialog, the existing `generate_part` tool, and the native
+composition module all use these definitions and the same name/alias resolver.
+All 50 scales and 37 chords are available in the editor selectors; longer menus
+scroll within the available workspace.
+
+The catalogue keeps full compound intervals for spelled chord voicings. The
+piano roll derives sorted, unique pitch classes from those intervals for
+highlighting, scale filtering, multi-draw, and its octave-based generator.
+For example, C4 Add9 is voiced as C4–E4–G4–D5 in a theory lookup, while an Add9
+stack remains C4–D4–E4–G4 inside the clicked octave. Both come from the same
+definition. Existing editor choices and saved scale identifiers remain valid.
+
 ## Available tools
 
 | Tool | Result |
@@ -32,7 +47,8 @@ Configure OpenAI or Anthropic in **Window → Setup → AI**, then open **AI** o
 
 The native queries can also be chained with existing `create_midi_part`,
 `create_instrument_part`, `transform_phrase`, and mixing tools. The new module
-does not replace Rill's existing seeded chord/arpeggio/melody generator.
+and Rill's existing seeded chord/arpeggio/melody generator reuse the piano-roll
+catalogue.
 
 ## Notes and timing
 

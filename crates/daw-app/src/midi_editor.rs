@@ -4,9 +4,10 @@ use crate::{
     theme::*,
 };
 use daw_core::{
-    Chord, ClipContent, GenerateHarmony, GenerateSettings, Note, NoteStack, QuantizeSettings,
-    Scale, copy_midi_notes, legato_notes, merge_fully_overlapping_midi_notes, move_midi_notes,
-    paste_midi_notes, quantize_notes,
+    Chord, ClipContent, EditBatch, EntityRef, GenerateHarmony, GenerateSettings, LegatoMode, Note,
+    NoteStack, QuantizeSettings, RandomizeSettings, Scale, SongEdit, SongSession, copy_midi_notes,
+    merge_fully_overlapping_midi_notes, move_midi_notes, paste_midi_notes, quantize_notes,
+    randomize_source_notes,
 };
 use daw_ui::{PianoRows, TimelineBounds, TimelinePane, TimelineViewport};
 use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
@@ -45,12 +46,61 @@ enum Gesture {
     },
 }
 
-struct QuantizePreview {
+#[derive(Clone, Copy)]
+enum NoteTransform {
+    Quantize(QuantizeSettings),
+    Randomize(RandomizeSettings),
+}
+
+impl NoteTransform {
+    fn command(
+        self,
+        track: u64,
+        clip: u64,
+        selected: &HashSet<u64>,
+        session: SongSession,
+    ) -> NoteEdit {
+        let mut note_ids: Vec<_> = selected.iter().copied().collect();
+        note_ids.sort_unstable();
+        let track = EntityRef::Id(track);
+        let clip = EntityRef::Id(clip);
+        let (edit, label) = match self {
+            Self::Quantize(settings) => (
+                SongEdit::QuantizeNotes {
+                    track,
+                    clip,
+                    note_ids,
+                    grid: settings.grid,
+                    strength: settings.strength,
+                    swing: settings.swing,
+                    ends: settings.ends,
+                },
+                "Quantize notes",
+            ),
+            Self::Randomize(settings) => (
+                SongEdit::RandomizeNotes {
+                    track,
+                    clip,
+                    note_ids,
+                    velocity: settings.velocity,
+                    timing: settings.timing,
+                    seed: settings.seed,
+                },
+                "Randomize notes",
+            ),
+        };
+        NoteEdit::Command(edit, label, session, selected.clone())
+    }
+}
+
+struct NoteTransformPreview {
     source: Vec<Note>,
+    source_model: Vec<Note>,
     selected: HashSet<u64>,
-    settings: QuantizeSettings,
+    settings: NoteTransform,
     origin: f64,
     clip_window: (f64, f64, f64, f64),
+    session: SongSession,
 }
 
 pub(crate) struct MidiEditorState {
@@ -60,6 +110,7 @@ pub(crate) struct MidiEditorState {
     pub stack: NoteStack,
     highlight_scale: bool,
     highlight_chord: bool,
+    color_out_of_scale: bool,
     only_scale_keys: bool,
     hidden_selection: HashSet<u64>,
     last_length: f64,
@@ -72,8 +123,9 @@ pub(crate) struct MidiEditorState {
     last_click: Option<(Option<u64>, Pos2, f64)>,
     last_created: Option<(Vec<u64>, f64)>,
     clipboard: Vec<Note>,
-    quantize: Option<QuantizePreview>,
+    transform: Option<NoteTransformPreview>,
     quantize_settings: QuantizeSettings,
+    randomize_settings: RandomizeSettings,
     generate: Option<crate::midi_generate_ui::GenerateDialog>,
     generation_memory: HashMap<u64, crate::midi_generate_ui::GenerateMemory>,
     pending_merge_owners: HashSet<(u64, u64)>,
@@ -97,6 +149,7 @@ impl Default for MidiEditorState {
             stack: NoteStack::Chord,
             highlight_scale: true,
             highlight_chord: true,
+            color_out_of_scale: true,
             only_scale_keys: false,
             hidden_selection: HashSet::new(),
             last_length: 0.25,
@@ -109,8 +162,9 @@ impl Default for MidiEditorState {
             last_click: None,
             last_created: None,
             clipboard: Vec::new(),
-            quantize: None,
+            transform: None,
             quantize_settings: QuantizeSettings::default(),
+            randomize_settings: RandomizeSettings::default(),
             generate: None,
             generation_memory: HashMap::new(),
             pending_merge_owners: HashSet::new(),
@@ -173,11 +227,11 @@ impl MidiEditorState {
             .collect()
     }
 
-    pub(crate) fn quantize_active(&self) -> bool {
-        self.quantize.is_some()
+    pub(crate) fn note_transform_active(&self) -> bool {
+        self.transform.is_some()
     }
-    pub(crate) fn cancel_quantize(&mut self) -> bool {
-        self.quantize.take().is_some()
+    pub(crate) fn cancel_note_transform(&mut self) -> bool {
+        self.transform.take().is_some()
     }
     pub(crate) fn generate_active(&self) -> bool {
         self.generate.is_some()
@@ -225,7 +279,7 @@ impl MidiEditorState {
         self.navigation_note = None;
         self.keyboard_focus = false;
         self.hidden_selection.clear();
-        self.quantize = None;
+        self.transform = None;
     }
 }
 
@@ -240,6 +294,7 @@ enum NoteEdit {
     Glue(Vec<u64>),
     Velocity(Vec<(u64, u8)>),
     Replace(Vec<Note>, HashSet<u64>, &'static str),
+    Command(SongEdit, &'static str, SongSession, HashSet<u64>),
 }
 
 #[derive(Clone, Copy)]
@@ -320,7 +375,11 @@ impl NoteEdit {
                 *delta *= rate;
             }
             Self::Cut(_, at) => *at *= rate,
-            Self::Delete(_) | Self::Duplicate(_) | Self::Glue(_) | Self::Velocity(_) => {}
+            Self::Delete(_)
+            | Self::Duplicate(_)
+            | Self::Glue(_)
+            | Self::Velocity(_)
+            | Self::Command(..) => {}
         }
         self
     }
@@ -458,6 +517,9 @@ impl DawApp {
     }
 
     pub(crate) fn piano_roll(&mut self, ui: &mut egui::Ui) {
+        let Some(track_id) = self.selected_track else {
+            return;
+        };
         let Some(clip) = self.selected() else { return };
         let ClipContent::Midi { notes } = &clip.content else {
             return;
@@ -472,7 +534,8 @@ impl DawApp {
         let clip_name = clip.name.clone();
         // Everything below, including quantize/clipboard/velocity geometry,
         // uses one common beat scale. Convert only at the model boundary.
-        let mut source_notes = notes.clone();
+        let source_model = notes.clone();
+        let mut source_notes = source_model.clone();
         local_note_times(&mut source_notes, source_rate);
         let mut notes = source_notes.clone();
         let mut state = std::mem::take(&mut self.midi_editor);
@@ -493,16 +556,18 @@ impl DawApp {
         }
         let view_before_generate = state.viewport;
         if state.clip != Some(clip_id)
-            || state.quantize.as_ref().is_some_and(|preview| {
+            || state.transform.as_ref().is_some_and(|preview| {
                 preview.source != source_notes
                     || preview.clip_window != (clip_start, clip_offset, clip_length, source_rate)
+                    || preview.session != self.song_session
             })
         {
-            state.quantize = None;
+            state.transform = None;
         }
         let mut actions = Vec::new();
         let mut fit = false;
         let mut open_generate = false;
+        let mut open_transform = None;
         let mut reveal_note = None;
         let mut reveal_key = None;
         let supported = [
@@ -518,47 +583,76 @@ impl DawApp {
         if !supported.contains(&self.tool) {
             self.tool = Tool::Select;
         }
-        if state.quantize.is_none() && state.generate.is_none() {
+        if state.transform.is_none() && state.generate.is_none() {
             daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         }
-        daw_ui::toolbar(ui, |ui| {
-            if state.generate.is_some() {
-                ui.disable();
-            }
-            daw_ui::editor_tools(ui, &mut self.tool, &supported);
-            open_generate = ui
-                .add_enabled(state.quantize.is_none(), daw_ui::button_widget("Generate…"))
-                .on_hover_text("Create chords, arpeggios or melodies with a live preview")
-                .clicked();
-            daw_ui::action_menu(ui, "Notes", |ui| {
-                ui.add_enabled_ui(
-                    !self.selected_notes.is_empty() && state.quantize.is_none(),
+        if state.transform.is_none() {
+            daw_ui::toolbar(ui, |ui| {
+                if state.generate.is_some() {
+                    ui.disable();
+                }
+                daw_ui::editor_tools(ui, &mut self.tool, &supported);
+                open_generate = ui
+                    .add_enabled(
+                        state.transform.is_none(),
+                        daw_ui::button_widget("Generate…"),
+                    )
+                    .on_hover_text("Create chords, arpeggios or melodies with a live preview")
+                    .clicked();
+                if self.tool == Tool::Select {
+                    let transform_enabled =
+                        !self.selected_notes.is_empty() && state.transform.is_none();
+                    if ui
+                        .add_enabled(transform_enabled, daw_ui::button_widget("Randomize…"))
+                        .on_hover_text("Preview velocity and timing variation on selected notes")
+                        .clicked()
+                    {
+                        open_transform = Some(NoteTransform::Randomize(state.randomize_settings));
+                    }
+                    if ui
+                        .add_enabled(transform_enabled, daw_ui::button_widget("Quantize…"))
+                        .on_hover_text("Preview selected notes aligned to a rhythmic grid")
+                        .clicked()
+                    {
+                        open_transform = Some(NoteTransform::Quantize(state.quantize_settings));
+                    }
+                }
+                daw_ui::action_menu(ui, "Notes", |ui| {
+                    ui.add_enabled_ui(
+                    !self.selected_notes.is_empty() && state.transform.is_none(),
                     |ui| {
                         if daw_ui::button(ui, "Quantize...").clicked() {
-                            state.quantize = Some(QuantizePreview {
-                                source: source_notes.clone(),
-                                selected: self.selected_notes.clone(),
-                                settings: state.quantize_settings,
-                                origin: clip_start - clip_offset,
-                                clip_window: (clip_start, clip_offset, clip_length, source_rate),
-                            });
-                            state.gesture = None;
+                            open_transform = Some(NoteTransform::Quantize(state.quantize_settings));
+                            ui.close();
+                        }
+                        if daw_ui::button(ui, "Randomize...").clicked() {
+                            open_transform = Some(NoteTransform::Randomize(state.randomize_settings));
                             ui.close();
                         }
                         if daw_ui::button(ui, "Legato")
                             .on_hover_text("Make selected notes end when the next note starts; keep chords together")
                             .clicked()
                         {
-                            match legato_notes(&source_notes, &self.selected_notes) {
-                                Ok(edited) => actions.push(NoteEdit::Replace(
-                                    edited,
-                                    self.selected_notes.clone(),
-                                    "Legato notes",
-                                )),
-                                Err(error) => self.message(Err(error), ""),
-                            }
+                            actions.push(NoteEdit::Command(SongEdit::LegatoNotes {
+                                track: EntityRef::Id(track_id),
+                                clip: EntityRef::Id(clip_id),
+                                note_ids: self.selected_notes.iter().copied().collect(),
+                                mode: LegatoMode::NextOnset,
+                            }, "Legato notes", self.song_session, self.selected_notes.clone()));
                             ui.close();
                         }
+            if daw_ui::button(ui, "Legato top to bottom")
+                    .on_hover_text("Connect voices from the highest notes down; lower voices bridge gaps in upper parts")
+                    .clicked()
+                {
+                    actions.push(NoteEdit::Command(SongEdit::LegatoNotes {
+                        track: EntityRef::Id(track_id),
+                        clip: EntityRef::Id(clip_id),
+                        note_ids: self.selected_notes.iter().copied().collect(),
+                        mode: LegatoMode::TopToBottom,
+                    }, "Legato voices", self.song_session, self.selected_notes.clone()));
+                    ui.close();
+                }
                         for (label, semitones) in [
                             ("+1 semitone", 1),
                             ("-1 semitone", -1),
@@ -603,73 +697,78 @@ impl DawApp {
                         }
                     },
                 );
-                if ui
-                    .add_enabled(
-                        !state.clipboard.is_empty() && state.quantize.is_none(),
-                        daw_ui::button_widget("Paste notes at cursor"),
-                    )
-                    .clicked()
-                {
-                    match paste_midi_notes(
-                        &source_notes,
-                        &state.clipboard,
-                        (self.cursor - clip_start).max(0.0) + clip_offset,
-                    ) {
-                        Ok((edited, selected)) => {
-                            actions.push(NoteEdit::Replace(edited, selected, "Paste notes"))
-                        }
-                        Err(error) => self.message(Err(error), ""),
-                    }
-                    ui.close();
-                }
-                if self.selected_notes.len() > 1
-                    && ui
-                        .add_enabled(
-                            state.quantize.is_none(),
-                            daw_ui::button_widget("Glue selected"),
-                        )
-                        .clicked()
-                {
-                    actions.push(NoteEdit::Glue(
-                        self.selected_notes.iter().copied().collect(),
-                    ));
-                    ui.close();
-                }
-                if !self.selected_notes.is_empty()
-                    || matches!(self.tool, Tool::Pencil | Tool::MultiDraw)
-                {
-                    ui.separator();
-                    let mut velocity = notes
-                        .iter()
-                        .find(|n| self.selected_notes.contains(&n.id))
-                        .map_or(state.velocity, |n| n.velocity);
                     if ui
                         .add_enabled(
-                            state.quantize.is_none(),
-                            daw_ui::slider(&mut velocity, 1..=127).text("Velocity"),
+                            !state.clipboard.is_empty() && state.transform.is_none(),
+                            daw_ui::button_widget("Paste notes at cursor"),
                         )
-                        .changed()
+                        .clicked()
                     {
-                        state.velocity = velocity;
-                        actions.push(NoteEdit::Velocity(
-                            notes
-                                .iter()
-                                .filter(|n| self.selected_notes.contains(&n.id))
-                                .map(|n| (n.id, velocity))
-                                .collect(),
-                        ));
+                        match paste_midi_notes(
+                            &source_notes,
+                            &state.clipboard,
+                            (self.cursor - clip_start).max(0.0) + clip_offset,
+                        ) {
+                            Ok((edited, selected)) => {
+                                actions.push(NoteEdit::Replace(edited, selected, "Paste notes"))
+                            }
+                            Err(error) => self.message(Err(error), ""),
+                        }
+                        ui.close();
                     }
-                }
-            });
-            daw_ui::drawing_note_length(ui, &mut state.draw_length);
-            ui.separator();
-            daw_ui::toolbar_group_sized(
-                ui,
-                daw_ui::tokens::SELECT_WIDTH + 6.0 * daw_ui::tokens::SPACE_LG,
-                |ui| {
-                    let grid_scale_label =
-                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, "Grid scale");
-                    daw_ui::choice_menu(
+                    if self.selected_notes.len() > 1
+                        && ui
+                            .add_enabled(
+                                state.transform.is_none(),
+                                daw_ui::button_widget("Glue selected"),
+                            )
+                            .clicked()
+                    {
+                        actions.push(NoteEdit::Glue(
+                            self.selected_notes.iter().copied().collect(),
+                        ));
+                        ui.close();
+                    }
+                    if !self.selected_notes.is_empty()
+                        || matches!(self.tool, Tool::Pencil | Tool::MultiDraw)
+                    {
+                        ui.separator();
+                        let mut velocity = notes
+                            .iter()
+                            .find(|n| self.selected_notes.contains(&n.id))
+                            .map_or(state.velocity, |n| n.velocity);
+                        if ui
+                            .add_enabled(
+                                state.transform.is_none(),
+                                daw_ui::slider(&mut velocity, 1..=127).text("Velocity"),
+                            )
+                            .changed()
+                        {
+                            state.velocity = velocity;
+                            actions.push(NoteEdit::Velocity(
+                                notes
+                                    .iter()
+                                    .filter(|n| self.selected_notes.contains(&n.id))
+                                    .map(|n| (n.id, velocity))
+                                    .collect(),
+                            ));
+                        }
+                    }
+                });
+                daw_ui::toolbar_group_sized(ui, 166.0, |ui| {
+                    daw_ui::drawing_note_length(ui, &mut state.draw_length);
+                });
+                ui.separator();
+                daw_ui::toolbar_group_sized(
+                    ui,
+                    daw_ui::tokens::SELECT_WIDTH + 6.0 * daw_ui::tokens::SPACE_LG,
+                    |ui| {
+                        let grid_scale_label = daw_ui::text::truncated(
+                            ui,
+                            daw_ui::text::TextRole::Label,
+                            "Grid scale",
+                        );
+                        daw_ui::choice_menu(
                 ui,
                 format!("{} · {}", pitch_class(self.root), self.scale.name()),
                 |ui| {
@@ -685,27 +784,31 @@ impl DawApp {
                     .response
                     .on_hover_text("Scale and chord root");
                     daw_ui::choice_menu(ui, self.scale.name(), |ui| {
-                        for scale in Scale::ALL {
-                            if daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name())
-                                .changed()
-                            {
-                                ui.close();
+                        daw_ui::command_menu_contents(ui, |ui| {
+                            for scale in Scale::ALL {
+                                if daw_ui::selectable_value(ui, &mut self.scale, scale, scale.name())
+                                    .changed()
+                                {
+                                    ui.close();
+                                }
                             }
-                        }
+                        });
                     })
                     .response
-                    .on_hover_text("Blue scale highlights");
+                    .on_hover_text("Subtle green scale highlights");
                     daw_ui::choice_menu(ui, state.chord.name(), |ui| {
-                        for chord in Chord::ALL {
-                            if daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name())
-                                .changed()
-                            {
-                                ui.close();
+                        daw_ui::command_menu_contents(ui, |ui| {
+                            for chord in Chord::ALL {
+                                if daw_ui::selectable_value(ui, &mut state.chord, chord, chord.name())
+                                    .changed()
+                                {
+                                    ui.close();
+                                }
                             }
-                        }
+                        });
                     })
                     .response
-                    .on_hover_text("Bright blue chord highlights");
+                    .on_hover_text("Subtle green chord highlights");
                 },
             )
             .response
@@ -716,107 +819,120 @@ impl DawApp {
                 self.scale.name(),
                 state.chord.name()
             ));
-                },
-            );
-            daw_ui::view_menu(ui, "View", |ui| {
-                self.clip_navigation_controls(ui);
-                ui.separator();
-                view_action = daw_ui::timeline_selection_view_actions(
-                    ui,
-                    "midi",
-                    !self.selected_notes.is_empty(),
-                );
-                ui.separator();
-                daw_ui::checkbox(ui, &mut state.highlight_scale, "Highlight scale");
-                daw_ui::checkbox(ui, &mut state.highlight_chord, "Highlight chord");
-                daw_ui::checkbox(ui, &mut state.only_scale_keys, "Only scale keys")
-                    .on_hover_text("Hide other pitches without changing your notes");
-            });
-            fit = daw_ui::timeline_fit_button(ui).clicked();
-            let hidden_count = source_notes
-                .iter()
-                .filter(|note| state.only_scale_keys && !self.scale.contains(self.root, note.pitch))
-                .count();
-            if hidden_count > 0
-                && daw_ui::view_button(
-                    ui,
-                    format!(
-                        "{hidden_count} {} hidden · Show all",
-                        if hidden_count == 1 { "note" } else { "notes" }
-                    ),
-                )
-                .clicked()
-            {
-                state.only_scale_keys = false;
-            }
-            if self.tool == Tool::MultiDraw {
-                // Keep the active tool's options with its toolbar. At narrower
-                // widths they share the wrapped row instead of adding a third
-                // padded bar above the note canvas.
-                let stack_width = daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_MD;
-                daw_ui::toolbar_group_sized(
-                    ui,
-                    2.0 * stack_width + daw_ui::tokens::SPACE_SM,
-                    |ui| {
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            daw_ui::select("midi_stack", state.stack.name())
-                                .width(stack_width)
-                                .wrap_mode(egui::TextWrapMode::Truncate)
-                                .show_ui(ui, |ui| {
-                                    for stack in [NoteStack::Chord, NoteStack::Scale] {
-                                        daw_ui::selectable_value(
-                                            ui,
-                                            &mut state.stack,
-                                            stack,
-                                            stack.name(),
-                                        );
-                                    }
-                                })
-                                .response
-                                .on_hover_text("Multi-draw fills the clicked octave");
-                            match state.stack {
-                                NoteStack::Single => {}
-                                NoteStack::Chord => {
-                                    daw_ui::select("active_midi_chord", state.chord.name())
-                                        .width(stack_width)
-                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                        .show_ui(ui, |ui| {
-                                            for chord in Chord::ALL {
-                                                daw_ui::selectable_value(
-                                                    ui,
-                                                    &mut state.chord,
-                                                    chord,
-                                                    chord.name(),
-                                                );
-                                            }
-                                        })
-                                        .response
-                                        .on_hover_text(state.chord.name());
-                                }
-                                NoteStack::Scale => {
-                                    daw_ui::select("active_midi_scale", self.scale.name())
-                                        .width(stack_width)
-                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                        .show_ui(ui, |ui| {
-                                            for scale in Scale::ALL {
-                                                daw_ui::selectable_value(
-                                                    ui,
-                                                    &mut self.scale,
-                                                    scale,
-                                                    scale.name(),
-                                                );
-                                            }
-                                        })
-                                        .response
-                                        .on_hover_text(self.scale.name());
-                                }
-                            }
-                        });
                     },
                 );
-            }
-        });
-        daw_ui::editor_tool_hint(ui, self.tool, daw_ui::ToolHintContext::Midi);
+                daw_ui::view_menu(ui, "View", |ui| {
+                    self.clip_navigation_controls(ui);
+                    ui.separator();
+                    view_action = daw_ui::timeline_selection_view_actions(
+                        ui,
+                        "midi",
+                        !self.selected_notes.is_empty(),
+                    );
+                    ui.separator();
+                    daw_ui::checkbox(ui, &mut state.highlight_scale, "Highlight scale");
+                    daw_ui::checkbox(ui, &mut state.highlight_chord, "Highlight chord");
+                    daw_ui::checkbox(
+                        ui,
+                        &mut state.color_out_of_scale,
+                        "Color out-of-scale notes",
+                    )
+                    .on_hover_text("Show notes outside the selected grid scale in red");
+                    daw_ui::checkbox(ui, &mut state.only_scale_keys, "Only scale keys")
+                        .on_hover_text("Hide other pitches without changing your notes");
+                });
+                fit = daw_ui::timeline_fit_button(ui).clicked();
+                let hidden_count = source_notes
+                    .iter()
+                    .filter(|note| {
+                        state.only_scale_keys && !self.scale.contains(self.root, note.pitch)
+                    })
+                    .count();
+                if hidden_count > 0
+                    && daw_ui::view_button(
+                        ui,
+                        format!(
+                            "{hidden_count} {} hidden · Show all",
+                            if hidden_count == 1 { "note" } else { "notes" }
+                        ),
+                    )
+                    .clicked()
+                {
+                    state.only_scale_keys = false;
+                }
+                if self.tool == Tool::MultiDraw {
+                    // Keep the active tool's options with its toolbar. At narrower
+                    // widths they share the wrapped row instead of adding a third
+                    // padded bar above the note canvas.
+                    let stack_width = daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_MD;
+                    daw_ui::toolbar_group_sized(
+                        ui,
+                        2.0 * stack_width + daw_ui::tokens::SPACE_SM,
+                        |ui| {
+                            ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    daw_ui::select("midi_stack", state.stack.name())
+                                        .width(stack_width)
+                                        .wrap_mode(egui::TextWrapMode::Truncate)
+                                        .show_ui(ui, |ui| {
+                                            for stack in [NoteStack::Chord, NoteStack::Scale] {
+                                                daw_ui::selectable_value(
+                                                    ui,
+                                                    &mut state.stack,
+                                                    stack,
+                                                    stack.name(),
+                                                );
+                                            }
+                                        })
+                                        .response
+                                        .on_hover_text("Multi-draw fills the clicked octave");
+                                    match state.stack {
+                                        NoteStack::Single => {}
+                                        NoteStack::Chord => {
+                                            daw_ui::select("active_midi_chord", state.chord.name())
+                                                .width(stack_width)
+                                                .wrap_mode(egui::TextWrapMode::Truncate)
+                                                .show_ui(ui, |ui| {
+                                                    for chord in Chord::ALL {
+                                                        daw_ui::selectable_value(
+                                                            ui,
+                                                            &mut state.chord,
+                                                            chord,
+                                                            chord.name(),
+                                                        );
+                                                    }
+                                                })
+                                                .response
+                                                .on_hover_text(state.chord.name());
+                                        }
+                                        NoteStack::Scale => {
+                                            daw_ui::select("active_midi_scale", self.scale.name())
+                                                .width(stack_width)
+                                                .wrap_mode(egui::TextWrapMode::Truncate)
+                                                .show_ui(ui, |ui| {
+                                                    for scale in Scale::ALL {
+                                                        daw_ui::selectable_value(
+                                                            ui,
+                                                            &mut self.scale,
+                                                            scale,
+                                                            scale.name(),
+                                                        );
+                                                    }
+                                                })
+                                                .response
+                                                .on_hover_text(self.scale.name());
+                                        }
+                                    }
+                                },
+                            );
+                        },
+                    );
+                }
+            });
+            daw_ui::editor_tool_hint(ui, self.tool, daw_ui::ToolHintContext::Midi);
+        }
+
         // Preview always exposes its pitches; closing restores the original
         // scale-only view and viewport without changing that view preference.
         let mut rows = PianoRows::new(|pitch| {
@@ -849,44 +965,100 @@ impl DawApp {
             state.gesture = None;
             state.last_click = None;
             state.last_created = None;
-            state.quantize = None;
+            state.transform = None;
+        }
+        if let Some(settings) = open_transform {
+            state.transform = Some(NoteTransformPreview {
+                source: source_notes.clone(),
+                source_model: source_model.clone(),
+                selected: self.selected_notes.clone(),
+                settings,
+                origin: clip_start - clip_offset,
+                clip_window: (clip_start, clip_offset, clip_length, source_rate),
+                session: self.song_session,
+            });
+            state.gesture = None;
         }
         let mut quantize_controls = serde_json::Value::Null;
-        if let Some(preview) = &mut state.quantize {
+        let mut randomize_controls = serde_json::Value::Null;
+        if let Some(preview) = &mut state.transform {
             let mut apply = false;
             let mut cancel = false;
             daw_ui::card(ui.ctx()).show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Quantize preview");
-                    daw_ui::select("quantize_grid", format!("{} beat", preview.settings.grid)).width(90.0).show_ui(ui, |ui| {
-                        for grid in [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0] { daw_ui::selectable_value(ui, &mut preview.settings.grid, grid, format!("{grid} beat")); }
-                    });
-                    let mut strength = preview.settings.strength * 100.0;
-                    let strength_response = ui.add(daw_ui::slider(&mut strength, 0.0..=100.0).text("Strength").suffix("%"));
-                    preview.settings.strength = strength / 100.0;
-                    let mut swing = preview.settings.swing * 100.0;
-                    let swing_response = ui.add(daw_ui::slider(&mut swing, 50.0..=75.0).text("Swing").suffix("%"));
-                    preview.settings.swing = swing / 100.0;
-                    daw_ui::checkbox(ui, &mut preview.settings.ends, "Note ends");
-                    apply = daw_ui::primary_button(ui, "Apply quantize").clicked();
-                    cancel = daw_ui::button(ui, "Cancel quantize").clicked();
-                    let slider = |rect: Rect| rect_json(Rect::from_min_size(rect.min, Vec2::new(ui.spacing().slider_width, rect.height())));
-                    quantize_controls = serde_json::json!({"strength_rect":slider(strength_response.rect),"swing_rect":slider(swing_response.rect),"strength":preview.settings.strength,"swing":preview.settings.swing,"ends":preview.settings.ends,"grid":preview.settings.grid});
-                });
+                match &mut preview.settings {
+                    NoteTransform::Quantize(settings) => {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Quantize preview");
+                            daw_ui::select("quantize_grid", format!("{} beat", settings.grid)).width(90.0).show_ui(ui, |ui| {
+                                for grid in [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0] { daw_ui::selectable_value(ui, &mut settings.grid, grid, format!("{grid} beat")); }
+                            });
+                            let mut strength = settings.strength * 100.0;
+                            let strength_response = ui.add(daw_ui::slider(&mut strength, 0.0..=100.0).text("Strength").suffix("%"));
+                            settings.strength = strength / 100.0;
+                            let mut swing = settings.swing * 100.0;
+                            let swing_response = ui.add(daw_ui::slider(&mut swing, 50.0..=75.0).text("Swing").suffix("%"));
+                            settings.swing = swing / 100.0;
+                            daw_ui::checkbox(ui, &mut settings.ends, "Note ends");
+                            apply = daw_ui::primary_button(ui, "Apply quantize").clicked();
+                            cancel = daw_ui::button(ui, "Cancel quantize").clicked();
+                            let slider = |rect: Rect| rect_json(Rect::from_min_size(rect.min, Vec2::new(ui.spacing().slider_width, rect.height())));
+                            quantize_controls = serde_json::json!({"strength_rect":slider(strength_response.rect),"swing_rect":slider(swing_response.rect),"strength":settings.strength,"swing":settings.swing,"ends":settings.ends,"grid":settings.grid});
+                        });
+                        state.quantize_settings = *settings;
+                    }
+                    NoteTransform::Randomize(settings) => {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Randomize preview");
+                            let velocity = daw_ui::toolbar_group(ui, |ui| {
+                                ui.label("Velocity ±");
+                                ui.add(daw_ui::number(&mut settings.velocity).range(0..=127).speed(1.0))
+                            }).inner;
+                            let timing = daw_ui::toolbar_group(ui, |ui| {
+                                ui.label("Timing ±");
+                                ui.add(daw_ui::number(&mut settings.timing).range(0.0..=0.25).speed(0.001).max_decimals(3).suffix(" beats"))
+                            }).inner;
+                            let seed = daw_ui::toolbar_group(ui, |ui| {
+                                ui.label("Seed");
+                                ui.add(daw_ui::number(&mut settings.seed).range(0..=u32::MAX).speed(1.0))
+                            }).inner;
+                            if daw_ui::button(ui, "New variation").clicked() {
+                                settings.seed = settings.seed.wrapping_add(1);
+                            }
+                            randomize_controls = serde_json::json!({"velocity":settings.velocity,"timing":settings.timing,"seed":settings.seed,"velocity_rect":rect_json(velocity.rect),"timing_rect":rect_json(timing.rect),"seed_rect":rect_json(seed.rect)});
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            apply = daw_ui::primary_button(ui, "Apply randomize").clicked();
+                            cancel = daw_ui::button(ui, "Cancel randomize").clicked();
+                            ui.weak("Selected notes · pitch and length stay fixed");
+                        });
+                        state.randomize_settings = *settings;
+                    }
+                }
             });
-            match quantize_notes(
-                &preview.source,
-                &preview.selected,
-                preview.origin,
-                preview.settings,
-            ) {
+            let result = match preview.settings {
+                NoteTransform::Quantize(settings) => {
+                    quantize_notes(&preview.source, &preview.selected, preview.origin, settings)
+                }
+                NoteTransform::Randomize(settings) => randomize_source_notes(
+                    &preview.source_model,
+                    &preview.selected,
+                    settings,
+                    source_rate,
+                )
+                .map(|mut notes| {
+                    local_note_times(&mut notes, source_rate);
+                    notes
+                }),
+            };
+            match result {
                 Ok(edited) => {
                     notes = edited;
                     if apply {
-                        actions.push(NoteEdit::Replace(
-                            notes.clone(),
-                            preview.selected.clone(),
-                            "Quantize notes",
+                        actions.push(preview.settings.command(
+                            track_id,
+                            clip_id,
+                            &preview.selected,
+                            preview.session,
                         ));
                     }
                 }
@@ -895,16 +1067,15 @@ impl DawApp {
                     cancel = true;
                 }
             }
-            state.quantize_settings = preview.settings;
             if apply || cancel {
-                state.quantize = None;
+                state.transform = None;
                 if cancel {
                     notes = source_notes.clone();
                 }
             }
         }
         if ui.is_enabled()
-            && state.quantize.is_none()
+            && state.transform.is_none()
             && state.generate.is_none()
             && !open_generate
             && !ui.ctx().wants_keyboard_input()
@@ -1347,11 +1518,14 @@ impl DawApp {
         let down = ui.input(|i| i.pointer.primary_down());
         let released = ui.input(|i| i.pointer.primary_released());
         let owns_pointer = ui.is_enabled()
-            && state.quantize.is_none()
+            && state.transform.is_none()
             && state.generate.is_none()
             && !open_generate
             && ui.rect_contains_pointer(canvas)
             && !egui::Popup::is_any_open(ui.ctx());
+        if pressed && !owns_pointer {
+            state.last_click = None;
+        }
         if pressed
             && owns_pointer
             && let Some(pos) = pointer
@@ -1522,8 +1696,12 @@ impl DawApp {
                 ),
             );
             let selected = self.selected_notes.contains(&note.id);
+            let out_of_scale = !self.scale.contains(self.root, note.pitch);
+            let fill = palette(ui.ctx())
+                .piano_note_fill(note.velocity, state.color_out_of_scale && out_of_scale);
+            let stroke = palette(ui.ctx()).piano_note_stroke_in_rect(selected, fill, rect);
             if rect.intersects(plot) {
-                if !navigation.navigating && state.quantize.is_none() && state.generate.is_none() {
+                if !navigation.navigating && state.transform.is_none() && state.generate.is_none() {
                     daw_ui::selection_item_context_menu(
                         ui,
                         egui::Id::new(("midi_note_selection", clip_id, note.id)),
@@ -1545,15 +1723,9 @@ impl DawApp {
                         },
                     );
                 }
-                let fill = palette(ui.ctx()).note_fill(selected, note.velocity);
                 row_painter.rect_filled(rect, 3.0, fill);
                 if selected {
-                    row_painter.rect_stroke(
-                        rect,
-                        3.0,
-                        Stroke::new(1.0_f32, palette(ui.ctx()).text),
-                        StrokeKind::Inside,
-                    );
+                    row_painter.rect_stroke(rect, 3.0, stroke, StrokeKind::Inside);
                 }
                 if rect.width() > 36.0 && rect.height() >= 14.0 {
                     row_painter.with_clip_rect(rect.intersect(plot)).text(
@@ -1573,17 +1745,18 @@ impl DawApp {
                 Pos2::new(view.x_at(plot, left) + 5.0, velocity_rect.bottom()),
             );
             if marker.intersects(velocity_rect) {
-                daw_ui::velocity_marker(
+                daw_ui::piano_velocity_marker(
                     &lane_painter,
                     marker,
-                    f32::from(note.velocity) / 127.0,
+                    note.velocity,
                     selected,
+                    state.color_out_of_scale && !self.scale.contains(self.root, note.pitch),
                 );
                 if pointer.is_some_and(|p| velocity_rect.contains(p) && marker.contains(p)) {
                     velocity_hit = Some(note.clone());
                 }
             }
-            note_diagnostics.push(serde_json::json!({"id":note.id,"pitch":note.pitch,"rect":rect_json(rect),"velocity_rect":rect_json(marker),"selected":selected}));
+            note_diagnostics.push(serde_json::json!({"id":note.id,"pitch":note.pitch,"rect":rect_json(rect),"velocity_rect":rect_json(marker),"selected":selected,"velocity":note.velocity,"out_of_scale":out_of_scale,"fill_color":fill.to_array(),"stroke_color":stroke.color.to_array(),"stroke_width":stroke.width}));
         }
         if let Some((_, rect)) = &note_hit {
             ui.ctx().set_cursor_icon(
@@ -1643,7 +1816,7 @@ impl DawApp {
         }
         let keyboard_audition = ui.is_enabled()
             && state.keyboard_focus
-            && state.quantize.is_none()
+            && state.transform.is_none()
             && state.generate.is_none()
             && !ui.ctx().wants_keyboard_input()
             && !egui::Popup::is_any_open(ui.ctx())
@@ -2070,7 +2243,7 @@ impl DawApp {
             "visible_pitches":rows.pitches(),"highlight_scale":state.highlight_scale,"highlight_chord":state.highlight_chord,"only_scale_keys":state.only_scale_keys,
             "hidden_notes":notes.iter().filter(|note| rows.row(note.pitch).is_none()).count(),
             "tool":format!("{:?}",self.tool),"cursor":self.cursor,"chord":state.chord.name(),"stack":state.stack.name(),"audition":state.audition,
-            "quantize":quantize_controls,"preview_notes":if state.quantize.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),
+            "quantize":quantize_controls,"randomize":randomize_controls,"color_out_of_scale":state.color_out_of_scale,"preview_notes":if state.transform.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),
             "generate":generate_diagnostics,
             "keyboard_pitch":state.keyboard_pitch,"keyboard_focus":state.keyboard_focus,"navigation_note":state.navigation_note,
         })));
@@ -2114,7 +2287,91 @@ impl DawApp {
         }
     }
 
+    /// Preserve the editor's window and overlap rules inside the same validated
+    /// session commit as the canonical transformation, including linked sources.
+    fn apply_piano_note_command(
+        &mut self,
+        edit: SongEdit,
+        label: &str,
+        session: SongSession,
+        scope: HashSet<u64>,
+    ) -> anyhow::Result<()> {
+        self.flush_pending_edit();
+        self.tool_ready()?;
+        self.check_tool_revision(session.id, session.revision)?;
+        let (Some(track), Some(clip)) = (self.selected_track, self.selected_clip) else {
+            anyhow::bail!("Select a MIDI clip");
+        };
+        let original = self
+            .project
+            .midi_notes(track, clip)
+            .ok_or_else(|| anyhow::anyhow!("Select a MIDI clip"))?;
+        let old: HashMap<_, _> = original.iter().map(|note| (note.id, note)).collect();
+        let randomizing = matches!(&edit, SongEdit::RandomizeNotes { .. });
+        let mut candidate = self.project.clone();
+        EditBatch {
+            label: label.into(),
+            edits: vec![edit],
+        }
+        .apply(&mut candidate)?;
+        let window = candidate.clip(track, clip).unwrap();
+        let edited = candidate.midi_notes(track, clip).unwrap();
+        let same_time = |a: f64, b: f64| {
+            let tolerance = (8.0 * f64::EPSILON * a.abs().max(b.abs()).max(1.0)).min(1e-9);
+            (a - b).abs() <= tolerance
+        };
+        let length = edited
+            .iter()
+            .filter(|note| scope.contains(&note.id))
+            .filter(|note| {
+                !randomizing
+                    || old.get(&note.id).is_some_and(|old| {
+                        let end = window.source_to_local(old.start + old.length);
+                        note.start > old.start
+                            && (end <= window.length || same_time(end, window.length))
+                    })
+            })
+            .map(|note| window.source_to_local(note.start + note.length))
+            .fold(window.length, f64::max);
+        let affected = edited
+            .iter()
+            .filter(|note| {
+                old.get(&note.id).is_none_or(|old| {
+                    old.pitch != note.pitch
+                        || !same_time(old.start, note.start)
+                        || !same_time(old.length, note.length)
+                })
+            })
+            .map(|note| note.id)
+            .collect();
+        let merged = merge_fully_overlapping_midi_notes(edited, &affected)?;
+        let selected = scope
+            .iter()
+            .map(|id| merged.remapped.get(id).copied().unwrap_or(*id))
+            .collect();
+        *candidate.midi_notes_mut(track, clip).unwrap() = merged.notes;
+        candidate.clip_mut(track, clip).unwrap().length = length;
+        candidate.synchronize_linked_clip(track, clip)?;
+        if self.commit_song_candidate(candidate, label)? {
+            self.selected_notes = selected;
+            self.midi_editor.clear_hidden_selection();
+            let state = self.history.state_id();
+            let selection = self.capture_selection();
+            self.selection_history.record(
+                (state, selection.clone()),
+                (state, selection),
+                self.history.retained_state_ids(),
+            );
+        }
+        Ok(())
+    }
+
     fn apply_note_edit(&mut self, action: NoteEdit) {
+        if let NoteEdit::Command(edit, label, session, scope) = action {
+            let result = self.apply_piano_note_command(edit, label, session, scope);
+            self.message(result, "");
+            return;
+        }
         let (Some(track), Some(clip)) = (self.selected_track, self.selected_clip) else {
             return;
         };
@@ -2141,6 +2398,7 @@ impl DawApp {
                 | NoteEdit::Replace(..)
         );
         let result = match action {
+            NoteEdit::Command(..) => unreachable!("Commands use the shared session service"),
             NoteEdit::Replace(mut edited, selected, label) => {
                 // Preserve unselected source values bit-for-bit through the
                 // editor/source conversion, including arbitrary stretch ratios.

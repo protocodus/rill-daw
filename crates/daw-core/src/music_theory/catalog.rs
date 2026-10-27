@@ -1,19 +1,68 @@
-//! Upstream's fixed scale/chord vocabulary and octave-aware realization.
-use crate::notes::{Note, degree_steps, parse_note, transpose};
-use crate::{Catalog, ChordDefinition, NoteSet, ScaleDefinition};
+//! Canonical piano-roll vocabulary and octave-aware realization.
+use super::notes::{Note, degree_steps, parse_note, transpose};
+use super::{Catalog, ChordDefinition, NoteSet, ScaleDefinition};
 use anyhow::{Result, bail, ensure};
 use std::sync::OnceLock;
 
-fn stored() -> &'static Catalog {
-    static CATALOG: OnceLock<Catalog> = OnceLock::new();
+struct StoredCatalog {
+    vocabulary: Catalog,
+    scale_pitch_classes: Vec<Vec<u8>>,
+    chord_pitch_classes: Vec<Vec<u8>>,
+}
+
+fn pitch_classes(intervals: &[i16]) -> Vec<u8> {
+    let mut pitches: Vec<_> = intervals.iter().map(|n| n.rem_euclid(12) as u8).collect();
+    pitches.sort_unstable();
+    pitches.dedup();
+    pitches
+}
+
+fn stored() -> &'static StoredCatalog {
+    static CATALOG: OnceLock<StoredCatalog> = OnceLock::new();
     CATALOG.get_or_init(|| {
-        serde_json::from_str(include_str!("catalog-data.json"))
-            .expect("compiled composition catalog")
+        let vocabulary: Catalog = serde_json::from_str(include_str!("catalog-data.json"))
+            .expect("compiled composition catalog");
+        let scale_pitch_classes = vocabulary
+            .scales
+            .iter()
+            .map(|scale| pitch_classes(&scale.intervals))
+            .collect();
+        let chord_pitch_classes = vocabulary
+            .chords
+            .iter()
+            .map(|chord| pitch_classes(&chord.intervals))
+            .collect();
+        StoredCatalog {
+            vocabulary,
+            scale_pitch_classes,
+            chord_pitch_classes,
+        }
     })
 }
 
 pub fn catalog() -> Catalog {
-    stored().clone()
+    stored().vocabulary.clone()
+}
+
+/// Direct vocabulary access for the compact piano-roll scale wrapper.
+pub(crate) fn scale_definition(index: usize) -> &'static ScaleDefinition {
+    &stored().vocabulary.scales[index]
+}
+
+/// Direct vocabulary access for the compact piano-roll chord wrapper.
+pub(crate) fn chord_definition(index: usize) -> &'static ChordDefinition {
+    &stored().vocabulary.chords[index]
+}
+
+/// Folded, sorted, unique intervals cached once for allocation-free highlighting.
+pub(crate) fn scale_pitch_classes(index: usize) -> &'static [u8] {
+    &stored().scale_pitch_classes[index]
+}
+
+/// Extended chord tones are folded here, while their defining intervals retain
+/// their original octave for composition and note generation.
+pub(crate) fn chord_pitch_classes(index: usize) -> &'static [u8] {
+    &stored().chord_pitch_classes[index]
 }
 
 fn normalize_scale(text: &str) -> String {
@@ -23,10 +72,20 @@ fn normalize_scale(text: &str) -> String {
         .collect()
 }
 
-pub(crate) fn find_scale(name: &str) -> Result<&'static ScaleDefinition> {
+pub fn find_scale(name: &str) -> Result<&'static ScaleDefinition> {
     ensure!(name.len() <= 128, "Scale type name is too long");
     let normalized = normalize_scale(name);
+    // Legacy editor IDs and visible labels are aliases of this same source,
+    // rather than a second interpretation kept in GUI parsing code.
+    for scale in crate::Scale::ALL {
+        if normalize_scale(scale.name()) == normalized
+            || normalize_scale(&format!("{scale:?}")) == normalized
+        {
+            return Ok(scale.definition());
+        }
+    }
     stored()
+        .vocabulary
         .scales
         .iter()
         .find(|scale| {
@@ -49,6 +108,7 @@ fn chord_keys(chord: &ChordDefinition) -> impl Iterator<Item = &str> {
 
 fn exact_chord(text: &str) -> Option<&'static ChordDefinition> {
     stored()
+        .vocabulary
         .chords
         .iter()
         .find(|chord| chord_keys(chord).any(|key| key == text))
@@ -113,15 +173,24 @@ fn is_minor(chord: &ChordDefinition) -> bool {
     chord.suffix.starts_with('m') && !chord.suffix.starts_with("maj")
 }
 
-pub(crate) fn find_chord(name: &str) -> Result<&'static ChordDefinition> {
+pub fn find_chord(name: &str) -> Result<&'static ChordDefinition> {
     ensure!(name.len() <= 128, "Chord type name is too long");
     let text = name.trim();
+    let editor_alias = normalize_chord(text);
+    for chord in crate::Chord::ALL {
+        if normalize_chord(chord.name()) == editor_alias
+            || normalize_chord(&format!("{chord:?}")) == editor_alias
+        {
+            return Ok(chord.definition());
+        }
+    }
     if let Some(chord) = exact_chord(text) {
         return Ok(chord);
     }
     let translated = translated_suffix(text);
     let normalized = normalize_chord(&translated);
     let mut matches = stored()
+        .vocabulary
         .chords
         .iter()
         .filter(|chord| chord_keys(chord).any(|key| normalize_chord(key) == normalized));
@@ -211,6 +280,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn editor_pitch_classes_are_cached_without_losing_extended_composition_tones() {
+        let vocabulary = catalog();
+        let major = vocabulary
+            .scales
+            .iter()
+            .position(|s| s.name == "major")
+            .unwrap();
+        assert_eq!(scale_pitch_classes(major), [0, 2, 4, 5, 7, 9, 11]);
+        assert_eq!(scale_definition(major).name, "major");
+        assert!(std::ptr::eq(
+            scale_definition(major),
+            scale_definition(major)
+        ));
+
+        let ninth = vocabulary
+            .chords
+            .iter()
+            .position(|c| c.name == "major 9")
+            .unwrap();
+        assert_eq!(chord_definition(ninth).intervals, [0, 4, 7, 11, 14]);
+        assert_eq!(chord_pitch_classes(ninth), [0, 2, 4, 7, 11]);
+        assert!(std::ptr::eq(
+            chord_pitch_classes(ninth),
+            chord_pitch_classes(ninth)
+        ));
+        assert_eq!(
+            get_chord("C4", "maj9").unwrap().midi,
+            Some(vec![60, 64, 67, 71, 74])
+        );
+    }
+
+    #[test]
     fn vocabulary_is_complete_and_all_names_and_aliases_resolve() {
         let catalog = catalog();
         assert_eq!(catalog.scales.len(), 50);
@@ -271,5 +372,30 @@ mod tests {
         assert_eq!(get_chord("C4", "MAJOR_7").unwrap().name, "major 7");
         assert!(get_chord("C4", "mm7").is_err());
         assert!(get_chord("C4", "M13b5").is_err());
+    }
+
+    #[test]
+    fn editor_ids_and_labels_share_the_public_query_interpretation() {
+        assert_eq!(find_chord("Major triad").unwrap().name, "major");
+        assert_eq!(find_chord("AddNine").unwrap().name, "add 9");
+        assert_eq!(find_chord("MajorSeventh").unwrap().name, "major 7");
+        assert_eq!(find_scale("Natural minor").unwrap().name, "natural minor");
+        assert_eq!(find_scale("Pentatonic").unwrap().name, "major pentatonic");
+        assert_eq!(
+            get_chord("C4", "MajorSeventh").unwrap().midi,
+            Some(vec![60, 64, 67, 71])
+        );
+        assert_eq!(
+            get_chord("C4", "M7").unwrap().midi,
+            Some(vec![60, 64, 67, 71])
+        );
+        assert_eq!(
+            get_chord("C4", "m7").unwrap().midi,
+            Some(vec![60, 63, 67, 70])
+        );
+        assert_eq!(
+            get_scale("C4", "Pentatonic").unwrap().midi,
+            Some(vec![60, 62, 64, 67, 69, 72])
+        );
     }
 }

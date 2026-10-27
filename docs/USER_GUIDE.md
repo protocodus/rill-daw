@@ -18,7 +18,7 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Non-destructive audio gain, normalization, reverse, curve fades, range clipboard editing, and transient split preview.
 - Exclusive audio overlaps, optional spline crossfades, and audio/MIDI clip joining.
 - Transport loop toggle and on-demand start/end beat controls, saved with the project.
-- Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; quantize preview, legato, transpose, and note clipboard.
+- Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; randomize and quantize previews, voice-aware legato, transpose, and note clipboard.
 - Generate sustained chords, seven arpeggio patterns, and seeded melodies with optional counterpoint or tintinnabuli voices; preview notes in an editable whole-bar range before adding them in one undoable step.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
@@ -106,9 +106,17 @@ In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor o
 | Shift + click | Add/remove a note from selection |
 | Right-click a note | Open the selection menu to add or remove the note |
 
-The piano roll separates note actions from the **View** menu. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. The scale choice shows the current root and scale. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
+The piano roll separates note actions from the **View** menu. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. The scale choice shows the current root and scale. Natural-key rows use a neutral base and black-key rows are slightly darker; scale and chord guides add a subtle green tint. Notes are blue, with stronger shades for higher velocities. Selected notes keep their shade and gain an outline. Notes outside the grid scale are red; turn off **View → Color out-of-scale notes** to keep every note blue. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
 
 The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+
+Select notes with the mouse or **Edit → Select all notes**, then use **Randomize…** or **Quantize…** in the Select toolbar. The **Notes** menu offers these actions with every tool:
+
+- **Randomize…** previews velocity variation (initially ±16). Set **Timing ±** for up to ±0.25 beats of onset variation; zero keeps the rhythm fixed. Pitch and length stay fixed. **New variation** changes the seed; **Apply randomize** commits the preview and **Cancel randomize** discards it.
+- **Quantize…** previews alignment to the chosen beat grid, with Strength, Swing, and optional Note ends. Apply or cancel before continuing to edit.
+- **Notes → Legato top to bottom** connects the highest note at each onset to the next highest, then the second-highest, and so on. A missing lower voice bridges to its next appearance. Only selected note lengths change, and the last note in each voice retains its length. **Notes → Legato** instead connects every selected note to the next distinct onset, keeping simultaneous chords together.
+
+Each applied action is one Undo step. Randomize and Quantize leave the song unchanged until Apply; a song edit or clip change discards an obsolete preview.
 
 ## Clips and looping
 

@@ -293,11 +293,25 @@ pub enum SongEdit {
         swing: f32,
         ends: bool,
     },
+    RandomizeNotes {
+        track: EntityRef,
+        clip: EntityRef,
+        #[serde(default)]
+        note_ids: Vec<u64>,
+        #[serde(default = "default_randomize_velocity")]
+        velocity: u8,
+        #[serde(default)]
+        timing: f64,
+        #[serde(default = "default_randomize_seed")]
+        seed: u32,
+    },
     LegatoNotes {
         track: EntityRef,
         clip: EntityRef,
         #[serde(default)]
         note_ids: Vec<u64>,
+        #[serde(default)]
+        mode: LegatoMode,
     },
     SplitNote {
         track: EntityRef,
@@ -532,6 +546,14 @@ fn selected_notes(project: &Project, track: u64, clip: u64, ids: &[u64]) -> Resu
         "Selected note not found"
     );
     Ok(selected)
+}
+
+fn default_randomize_velocity() -> u8 {
+    RandomizeSettings::default().velocity
+}
+
+fn default_randomize_seed() -> u32 {
+    RandomizeSettings::default().seed
 }
 
 impl EditBatch {
@@ -969,16 +991,40 @@ fn apply_one(
                 .context("MIDI clip not found")? = notes;
             p.synchronize_linked_clip(track, clip)?;
         }
+        SongEdit::RandomizeNotes {
+            track,
+            clip,
+            note_ids,
+            velocity,
+            timing,
+            seed,
+        } => {
+            let (track, clip) = (r(track)?, r(clip)?);
+            let selected = selected_notes(p, track, clip, note_ids)?;
+            let source_rate = p.clip(track, clip).context("Clip not found")?.source_rate;
+            let source = p.midi_notes(track, clip).context("MIDI clip not found")?;
+            let settings = RandomizeSettings {
+                velocity: *velocity,
+                timing: *timing,
+                seed: *seed,
+            };
+            let notes = randomize_source_notes(source, &selected, settings, source_rate)?;
+            *p.midi_notes_mut(track, clip)
+                .context("MIDI clip not found")? = notes;
+            p.synchronize_linked_clip(track, clip)?;
+        }
         SongEdit::LegatoNotes {
             track,
             clip,
             note_ids,
+            mode,
         } => {
             let (track, clip) = (r(track)?, r(clip)?);
             let selected = selected_notes(p, track, clip, note_ids)?;
-            let notes = legato_notes(
+            let notes = legato_notes_with_mode(
                 p.midi_notes(track, clip).context("MIDI clip not found")?,
                 &selected,
+                *mode,
             )?;
             *p.midi_notes_mut(track, clip)
                 .context("MIDI clip not found")? = notes;

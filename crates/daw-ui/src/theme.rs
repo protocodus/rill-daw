@@ -51,9 +51,13 @@ pub struct Palette {
     pub note: Color32,
     pub note_selected: Color32,
     pub note_text: Color32,
-    /// Index zero: ordinary row; one: scale; two: chord. Both keys retain contrast.
+    /// Index zero: neutral row; one: scale; two: chord. Green tints stay subtle.
     pub piano_rows_black: [Color32; 3],
     pub piano_rows_white: [Color32; 3],
+    /// Soft and strong velocity colors, independent of note selection.
+    pub piano_notes: [Color32; 2],
+    /// Optional warning hue for pitches outside the selected scale.
+    pub piano_notes_outside_scale: [Color32; 2],
 }
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
@@ -75,13 +79,15 @@ pub const DARK: Palette = Palette {
     grid_bar: rgb(66, 77, 79),
     control_fill: rgb(46, 54, 56),
     control_hover: rgb(56, 66, 67),
-    piano_black: rgb(27, 33, 41),
-    piano_white: rgb(207, 215, 224),
+    piano_black: rgb(32, 37, 39),
+    piano_white: rgb(40, 45, 47),
     note: rgb(83, 156, 238),
     note_selected: rgb(146, 207, 255),
     note_text: rgb(12, 23, 35),
-    piano_rows_black: [rgb(18, 22, 28), rgb(18, 29, 42), rgb(20, 33, 48)],
-    piano_rows_white: [rgb(42, 48, 56), rgb(40, 57, 76), rgb(44, 65, 88)],
+    piano_rows_black: [rgb(32, 37, 39), rgb(31, 42, 37), rgb(32, 44, 38)],
+    piano_rows_white: [rgb(40, 45, 47), rgb(39, 50, 45), rgb(40, 52, 46)],
+    piano_notes: [rgb(51, 103, 162), rgb(104, 179, 255)],
+    piano_notes_outside_scale: [rgb(151, 75, 79), rgb(241, 125, 129)],
 };
 pub const LIGHT: Palette = Palette {
     bg: rgb(246, 247, 244),
@@ -100,13 +106,15 @@ pub const LIGHT: Palette = Palette {
     grid_bar: rgb(178, 191, 183),
     control_fill: rgb(228, 234, 228),
     control_hover: rgb(218, 227, 221),
-    piano_black: rgb(49, 59, 72),
-    piano_white: rgb(255, 255, 255),
+    piano_black: rgb(232, 235, 232),
+    piano_white: rgb(242, 245, 242),
     note: rgb(34, 105, 183),
     note_selected: rgb(18, 78, 145),
     note_text: rgb(255, 255, 255),
-    piano_rows_black: [rgb(197, 207, 220), rgb(170, 194, 221), rgb(151, 181, 215)],
-    piano_rows_white: [rgb(246, 248, 251), rgb(225, 239, 252), rgb(215, 232, 250)],
+    piano_rows_black: [rgb(232, 235, 232), rgb(224, 236, 226), rgb(221, 236, 224)],
+    piano_rows_white: [rgb(242, 245, 242), rgb(234, 246, 236), rgb(231, 246, 234)],
+    piano_notes: [rgb(155, 185, 220), rgb(34, 105, 183)],
+    piano_notes_outside_scale: [rgb(220, 170, 174), rgb(184, 65, 76)],
 };
 
 pub fn palette(ctx: &egui::Context) -> Palette {
@@ -162,6 +170,52 @@ impl Palette {
         } else {
             self.piano_rows_white[index]
         }
+    }
+
+    /// Keyboard and grid share the same quiet pitch colors. Sounding keys gain
+    /// a stronger green tint without introducing another highlight hue.
+    pub fn piano_key_fill(self, black: bool, highlight: u8, active: bool) -> Color32 {
+        let base = self.piano_row(black, highlight);
+        if active {
+            base.lerp_to_gamma(self.accent, 0.35)
+        } else {
+            base
+        }
+    }
+
+    /// Blue notes strengthen with velocity; an optional red hue marks pitches
+    /// outside the scale. Selection deliberately never changes this fill.
+    pub fn piano_note_fill(self, velocity: u8, out_of_scale: bool) -> Color32 {
+        let [soft, strong] = if out_of_scale {
+            self.piano_notes_outside_scale
+        } else {
+            self.piano_notes
+        };
+        soft.lerp_to_gamma(strong, f32::from(velocity.min(127)) / 127.0)
+    }
+
+    /// A neutral, readable outline marks selection while preserving velocity.
+    pub fn piano_note_stroke(self, selected: bool, fill: Color32) -> Stroke {
+        if selected {
+            Stroke::new(2.0_f32, contrast_text(fill))
+        } else {
+            Stroke::NONE
+        }
+    }
+
+    /// Keep the note's velocity color visible when fitting dense or short notes.
+    /// An inside selection outline leaves at least half of each dimension filled.
+    pub fn piano_note_stroke_in_rect(
+        self,
+        selected: bool,
+        fill: Color32,
+        rect: egui::Rect,
+    ) -> Stroke {
+        let mut stroke = self.piano_note_stroke(selected, fill);
+        stroke.width = stroke
+            .width
+            .min((rect.width().min(rect.height()) / 4.0).max(0.0));
+        stroke
     }
 }
 
@@ -305,4 +359,116 @@ pub fn readable_track_color(ctx: &egui::Context, rgb: [u8; 3]) -> Color32 {
         color = Color32::from_rgb(adjust(color.r()), adjust(color.g()), adjust(color.b()));
     }
     color
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn luminance(color: Color32) -> f32 {
+        let channel = |value: u8| {
+            let value = f32::from(value) / 255.0;
+            if value <= 0.04045 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
+    }
+
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let (a, b) = (luminance(a), luminance(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    #[test]
+    fn piano_rows_keep_close_neutral_bases_and_quiet_green_highlights() {
+        for colors in [DARK, LIGHT] {
+            let black = colors.piano_row(true, 0);
+            let white = colors.piano_row(false, 0);
+            for (black, white) in black.to_array()[..3].iter().zip(white.to_array()) {
+                assert!((6..=12).contains(&white.abs_diff(*black)));
+            }
+            for highlight in 0..=2 {
+                assert!(
+                    luminance(colors.piano_row(true, highlight))
+                        < luminance(colors.piano_row(false, highlight))
+                );
+                for black in [false, true] {
+                    let base = colors.piano_row(black, 0);
+                    let fill = colors.piano_row(black, highlight);
+                    assert_eq!(colors.piano_key_fill(black, highlight, false), fill);
+                    assert_ne!(colors.piano_key_fill(black, highlight, true), fill);
+                    for (base, fill) in base.to_array()[..3].iter().zip(fill.to_array()) {
+                        assert!(base.abs_diff(fill) <= 12, "highlights stay subtle");
+                    }
+                    if highlight > 0 {
+                        assert!(fill.g() > fill.r() && fill.g() > fill.b());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn piano_velocity_shades_and_warning_hue_keep_neutral_selection_readable() {
+        for colors in [DARK, LIGHT] {
+            for out_of_scale in [false, true] {
+                let soft = colors.piano_note_fill(1, out_of_scale);
+                let medium = colors.piano_note_fill(64, out_of_scale);
+                let strong = colors.piano_note_fill(127, out_of_scale);
+                assert_ne!(soft, medium);
+                assert_ne!(medium, strong);
+                assert!(
+                    (luminance(soft) - luminance(medium)) * (luminance(medium) - luminance(strong))
+                        > 0.0,
+                    "velocity shading has one brightness direction in each theme"
+                );
+                for velocity in 0..=127 {
+                    let fill = colors.piano_note_fill(velocity, out_of_scale);
+                    assert_eq!(fill.a(), 255);
+                    if out_of_scale {
+                        assert!(fill.r() > fill.b() + 40);
+                    } else {
+                        assert!(fill.b() > fill.r() + 50);
+                    }
+                    let selection = colors.piano_note_stroke(true, fill);
+                    assert_eq!(selection.width, 2.0);
+                    assert!(matches!(selection.color, Color32::BLACK | Color32::WHITE));
+                    assert!(contrast(selection.color, fill) >= 4.5);
+                    assert_eq!(colors.piano_note_stroke(false, fill), Stroke::NONE);
+                }
+                assert_eq!(
+                    colors.piano_note_fill(255, out_of_scale),
+                    colors.piano_note_fill(127, out_of_scale)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn selected_note_outlines_preserve_fill_in_dense_rows_and_short_notes() {
+        for colors in [DARK, LIGHT] {
+            for out_of_scale in [false, true] {
+                let fill = colors.piano_note_fill(96, out_of_scale);
+                for (size, expected_width) in [
+                    (egui::vec2(48.0, 18.0), 2.0),
+                    (egui::vec2(48.0, 2.0), 0.5),
+                    (egui::vec2(2.0, 18.0), 0.5),
+                ] {
+                    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, size);
+                    let stroke = colors.piano_note_stroke_in_rect(true, fill, rect);
+                    assert_eq!(stroke.width, expected_width);
+                    assert_eq!(stroke.color, colors.piano_note_stroke(true, fill).color);
+                    assert!(rect.width() - 2.0 * stroke.width >= rect.width() / 2.0);
+                    assert!(rect.height() - 2.0 * stroke.width >= rect.height() / 2.0);
+                    assert_eq!(
+                        colors.piano_note_stroke_in_rect(false, fill, rect),
+                        Stroke::NONE
+                    );
+                }
+            }
+        }
+    }
 }
