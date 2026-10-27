@@ -166,7 +166,7 @@ fn measure(samples: &[f32], sample_rate: u32, cancel: &AtomicBool) -> Result<Val
     let mut high_lowpass = [0.0; 2];
     let mut band_powers = [0.0; 3];
     let mut clipping_frames = 0_u64;
-    for (index, frame) in samples.chunks_exact(2).enumerate() {
+    for (index, frame) in samples.as_chunks::<2>().0.iter().enumerate() {
         if index.is_multiple_of(1024) {
             check_cancelled(cancel)?;
         }
