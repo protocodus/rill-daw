@@ -53,13 +53,16 @@ impl DawApp {
         self.exported_file = None;
         // Retry protects both its retained mix sources and any new source that
         // the user imported into the current document after the first attempt.
-        if let Err(error) = request.project.validate_audio_destination(&request.path)
+        if let Err(error) = request
+            .project
+            .validate_audio_destination(&request.path)
             .and_then(|_| self.project.validate_audio_destination(&request.path))
         {
             self.export_failed_notice(error);
             return;
         }
-        self.finishing.export_started(request.path.clone(), request.options.include_effect_tails);
+        self.finishing
+            .export_started(request.path.clone(), request.options.include_effect_tails);
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
         self.status = "Rendering stereo mixdown in background…".into();
