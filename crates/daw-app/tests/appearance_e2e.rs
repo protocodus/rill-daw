@@ -71,7 +71,7 @@ fn appearance_applies_cancels_persists_and_system_follows_live_os_events() {
 }
 
 #[test]
-fn piano_rows_preserve_black_white_contrast_with_blue_scale_and_chord_tints_in_both_modes() {
+fn piano_rows_preserve_subtle_key_contrast_with_green_harmony_guides_in_both_modes() {
     let mut app = Harness::new();
     let mut project = Project::new();
     let track = project.add_midi_track("Theme piano");
@@ -101,14 +101,17 @@ fn piano_rows_preserve_black_white_contrast_with_blue_scale_and_chord_tints_in_b
         let black: Vec<_> = keys.iter().filter(|key| key["black"] == true).collect();
         let white: Vec<_> = keys.iter().filter(|key| key["black"] == false).collect();
         assert!(!black.is_empty() && !white.is_empty());
+        // Harmony tints stay close to the neutral bases. Even a highlighted
+        // black key must remain darker than every natural-key row, including
+        // beyond the clip boundary; a large fixed gap would defeat that palette.
         for black in &black {
             for white in &white {
                 assert!(
-                    luma(&black["row_color"]) + 8.0 < luma(&white["row_color"]),
+                    luma(&black["row_color"]) + 1.0 < luma(&white["row_color"]),
                     "{black} must stay darker than {white}"
                 );
                 assert!(
-                    luma(&black["outside_color"]) + 6.0 < luma(&white["outside_color"]),
+                    luma(&black["outside_color"]) + 1.0 < luma(&white["outside_color"]),
                     "Pitch contrast must survive the outside-clip tint"
                 );
             }
@@ -155,9 +158,14 @@ fn piano_rows_preserve_black_white_contrast_with_blue_scale_and_chord_tints_in_b
             .filter(|key| key["scale"] == true || key["chord"] == true)
         {
             let color = &key["row_color"];
+            let [red, green, blue] = [0, 1, 2].map(|channel| color[channel].as_u64().unwrap());
             assert!(
-                color[2].as_u64().unwrap() > color[0].as_u64().unwrap() + 10,
-                "highlight is blue: {key}"
+                green > red && green > blue,
+                "Harmony guides must be green: {key}"
+            );
+            assert!(
+                green - red.min(blue) <= 24,
+                "Harmony guides must stay subtle: {key}"
             );
         }
     }
