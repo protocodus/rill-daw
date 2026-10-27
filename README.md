@@ -3,9 +3,25 @@
   <img alt="RILL" src="crates/daw-ui/assets/brand/rill-logo-light.svg" width="320">
 </picture>
 
-A native, modular audio workstation written in Rust. Arrangement editing, MIDI piano roll, isolated VST3 instruments and effects, and a routed mixer in a compact desktop interface.
+A native, modular audio workstation for **macOS, Linux, and Windows**, written in Rust. Arrangement editing, MIDI piano roll, isolated VST3 instruments and effects, and a routed mixer in a compact desktop interface.
 
 ![Rill Arrangement workspace](artifacts/rill-arrangement.png)
+
+## Download
+
+Download the latest successful `main` build for your platform. Every binary is built on a native [GitHub Actions runner](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess); these [nightly.link](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main) links follow that build and require no GitHub login.
+
+| Platform | CPU | CI-built download | Launch after extracting |
+| --- | --- | --- | --- |
+| macOS | Apple silicon (arm64) | [Download](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main/rill-aarch64-apple-darwin.zip) | Move `Rill.app` to Applications. |
+| macOS | Intel (x86-64) | [Download](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main/rill-x86_64-apple-darwin.zip) | Move `Rill.app` to Applications. |
+| Linux | x86-64 | [Download](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main/rill-x86_64-unknown-linux-gnu.zip) | Run `./rill`. |
+| Linux | arm64 | [Download](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main/rill-aarch64-unknown-linux-gnu.zip) | Run `./rill`. |
+| Windows 10/11 | x86-64 | [Download](https://nightly.link/protocodus/rill-daw/workflows/ci.yml/main/rill-x86_64-pc-windows-msvc.zip) | Run `rill.exe`. |
+
+Each download is a CI artifact ZIP containing the platform archive (`.zip` for macOS/Windows, `.tar.gz` for Linux) and its SHA-256 checksum. Extract both layers and keep the application and `daw-plugin-host` helper together. Packages include licenses and installation notes. Linux builds require glibc 2.35 or newer and the desktop libraries listed in the [distribution instructions](docs/RELEASING.md).
+
+CI runs workspace tests, headless end-to-end scenarios, and Clippy on every target, then repeats the end-to-end scenarios against the extracted release package before upload. Hardware audio, native dialogs, and third-party plug-in compatibility need separate testing. Builds are unsigned; macOS builds are not notarized. CI artifacts expire after 14 days; see the [workflow runs](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml) if a download is unavailable.
 
 ## Run
 
@@ -16,9 +32,9 @@ cargo build --release --workspace
 ./target/release/rill
 ```
 
-Or run `./scripts/run.sh`. On macOS, `./scripts/package-macos.sh` creates `dist/Rill.app`. Linux needs ALSA development headers, a desktop display, and OpenGL; see the CI workflow for build dependencies. Native macOS operation, Linux arm64 headless tests, and Linux application rendering under Xvfb have been exercised locally. Windows operation and Linux audio hardware still need verification on those platforms.
+Or run `./scripts/run.sh`. On macOS, `./scripts/package-macos.sh` creates `dist/Rill.app`. On Windows, launch `target\release\rill.exe`. Linux needs ALSA development headers, a desktop display, and OpenGL; see the [CI workflow](.github/workflows/ci.yml) for build dependencies.
 
-CI builds downloadable archives for macOS (Apple silicon and Intel), Linux (arm64 and x86-64), and Windows (x86-64), with the plug-in helper, licenses, installation notes, and SHA-256 checksums. Build the same distribution locally with `./scripts/package-release.sh` on macOS/Linux or `./scripts/package-windows.ps1` on Windows. These builds are unsigned; macOS builds are not notarized. See [distribution and release instructions](docs/RELEASING.md) for prerequisites and the test gates before publication.
+Build the same distribution locally with `./scripts/package-release.sh` on macOS/Linux or `./scripts/package-windows.ps1` on Windows. See [distribution and release instructions](docs/RELEASING.md) for prerequisites and the test gates before publication.
 
 The initial session contains an original generated audio loop. Rill includes no instruments or insert effects; MIDI tracks remain unassigned until you choose a VST3 instrument. Use **File → New** to start empty. Press **Space** to play or pause.
 
