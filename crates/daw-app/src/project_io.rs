@@ -59,7 +59,7 @@ pub(crate) enum DocumentRequest {
     New,
     Quit,
     Export(PathBuf, bool),
-    Settings(Settings),
+    Settings(Box<Settings>),
 }
 
 enum Completion {
@@ -249,7 +249,7 @@ impl DawApp {
                     DocumentRequest::Export(path, include_effect_tails) => {
                         self.export_to_with_tails(path, include_effect_tails)
                     }
-                    DocumentRequest::Settings(settings) => self.apply_settings_snapshot(settings),
+                    DocumentRequest::Settings(settings) => self.apply_settings_snapshot(*settings),
                 }
                 self.project_io.dispatching = false;
             }

@@ -40,7 +40,7 @@ enum PendingAction {
     DocumentSnapshot {
         close: bool,
     },
-    ApplySettings(crate::settings::Settings),
+    ApplySettings(Box<crate::settings::Settings>),
     Open {
         loaded: Box<LoadedProject>,
         path: PathBuf,
@@ -224,13 +224,13 @@ impl DawApp {
             self.message(Err(error), "");
             return;
         }
-        if self.defer_document_request(DocumentRequest::Settings(settings.clone())) {
+        if self.defer_document_request(DocumentRequest::Settings(Box::new(settings.clone()))) {
             return;
         }
         if let Some(PendingAction::ApplySettings(settings)) =
-            self.defer_for_editor(PendingAction::ApplySettings(settings))
+            self.defer_for_editor(PendingAction::ApplySettings(Box::new(settings)))
         {
-            self.finish_settings_apply(settings);
+            self.finish_settings_apply(*settings);
         }
     }
 
@@ -1238,7 +1238,7 @@ impl DawApp {
             PendingAction::New => self.finish_new_session(),
             PendingAction::Recovery => self.autosave_recovery(),
             PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),
-            PendingAction::ApplySettings(settings) => self.finish_settings_apply(settings),
+            PendingAction::ApplySettings(settings) => self.finish_settings_apply(*settings),
             PendingAction::Open {
                 loaded,
                 path,
