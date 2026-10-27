@@ -40,6 +40,50 @@ fn assert_range(state: &Value, start: f64, end: f64, enabled: bool) {
 }
 
 #[test]
+fn loop_indicator_clears_ruler_labels_without_shifting_the_canvas_when_toggled() {
+    let mut app = Harness::new();
+    for density in [1.0, 2.0] {
+        app.command(
+            json!({"command":"viewport","width":1100,"height":720,"pixels_per_point":density}),
+        );
+        for dark in [true, false] {
+            let off = app.command(json!({"command":"system_theme","dark":dark}));
+            app.click("Loop");
+            let on = app.command(json!({"command":"inspect","paint":true}));
+            let palette = if dark {
+                daw_ui::theme::DARK
+            } else {
+                daw_ui::theme::LIGHT
+            };
+            let fill = json!(palette.accent.gamma_multiply(0.6).to_array());
+            let canvas_top = on["timeline"]["canvas"]["min"][1].as_f64().unwrap();
+            let strip = on["painted_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|shape| {
+                    shape["fill"] == fill && shape["rect"]["max"][1].as_f64().unwrap() <= canvas_top
+                })
+                .expect("visible loop indicator below ruler labels");
+            let strip_top = strip["rect"]["min"][1].as_f64().unwrap();
+            let clock = on["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|label| label["text"] == "0:00.00")
+                .expect("visible clock label");
+            assert!(
+                clock["max"][1].as_f64().unwrap() + 8.0 <= strip_top,
+                "loop indicator crowds the clock at {density}x: {clock}, {strip}"
+            );
+            assert_eq!(off["timeline"]["canvas"], on["timeline"]["canvas"]);
+            app.click("Loop");
+        }
+    }
+    app.quit();
+}
+
+#[test]
 fn loop_range_toggle_undo_archive_reopen_and_full_song_export() {
     let mut app = Harness::new();
     let source = app.directory.path().join("loop-source.wav");

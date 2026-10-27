@@ -81,6 +81,20 @@ impl PendingState {
     }
 }
 
+// These explicit startup errors are emitted before Ready: the helper could not
+// create a native view, so it never accepted an editor gesture or owned new
+// state. Match complete diagnostic lines, never a later running-session error.
+fn native_view_unavailable(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause.to_string().lines().any(|line| {
+            matches!(
+                line,
+                "This plug-in has no native editor" | "Failed to create editor view"
+            )
+        })
+    })
+}
+
 #[derive(Default)]
 pub(crate) struct InstrumentUi {
     owner: Option<(EditorTarget, Instrument)>,
@@ -694,7 +708,11 @@ impl DawApp {
                 }
                 match &instrument {
                     Instrument::None => {
-                        daw_ui::text::note(ui, "No instrument assigned");
+                        daw_ui::text::subtitle(ui, "No instrument assigned");
+                        daw_ui::text::note(
+                            ui,
+                            "This MIDI track is silent until you choose a VST3 instrument.",
+                        );
                         choose = daw_ui::primary_button(ui, "Choose instrument").clicked();
                     }
                     Instrument::Vst3 { path, class_id } => {
@@ -965,6 +983,7 @@ impl DawApp {
 
     pub(crate) fn poll_instrument_editor(&mut self, ctx: &egui::Context) {
         let mut initialization_failed = false;
+        let mut view_unavailable = false;
         let mut editor_failed = false;
         let opening = self
             .instrument_ui
@@ -973,6 +992,7 @@ impl DawApp {
             .and_then(|rx| match rx.try_recv() {
                 Ok(result) => {
                     initialization_failed = result.is_err();
+                    view_unavailable = result.as_ref().err().is_some_and(native_view_unavailable);
                     Some(result)
                 }
                 Err(mpsc::TryRecvError::Disconnected) => Some(Err(anyhow::anyhow!(
@@ -1006,29 +1026,34 @@ impl DawApp {
                     self.instrument_ui.session = Some(session);
                 }
                 Err(error) => {
-                    self.instrument_ui.error = Some(format!("{error:#}"));
+                    self.instrument_ui.error = Some(if view_unavailable {
+                        format!(
+                            "No native editor is available. Save and export remain available.\n\n{error:#}"
+                        )
+                    } else {
+                        format!("{error:#}")
+                    });
                     self.instrument_ui.closing = false;
                 }
             }
         }
-        // A reported load failure occurred before a usable editor session existed,
-        // so no native edits need flushing. Disconnection/timeouts remain failures:
-        // their outcome is unknown and must retain the ordinary recovery safeguard.
+        // An explicitly unsupported view has no new native state to flush.
+        // Continue the action that waited for startup using the project state.
+        // Other startup failures retain their existing Quit-only exception;
+        // running-session errors and unknown outcomes keep the recovery barrier.
         if initialization_failed
             && self.instrument_ui.session.is_none()
-            && matches!(
-                self.instrument_ui
-                    .pending
-                    .as_ref()
-                    .map(|pending| &pending.action),
-                Some(PendingAction::Quit)
-            )
+            && (view_unavailable
+                || matches!(
+                    self.instrument_ui
+                        .pending
+                        .as_ref()
+                        .map(|pending| &pending.action),
+                    Some(PendingAction::Quit)
+                ))
+            && let Some(pending) = self.instrument_ui.pending.take()
         {
-            self.instrument_ui.pending = None;
-            self.autosave_recovery();
-            self.retire_engine();
-            self.close_ready = true;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.finish_editor_action(pending.action, ctx);
         }
         let metadata =
             self.instrument_ui
@@ -1191,29 +1216,7 @@ impl DawApp {
                         self.document_snapshot_failed(self.status.clone());
                     }
                 } else {
-                    match pending.action {
-                        PendingAction::Save(path) => self.finish_project_save(path),
-                        PendingAction::Export(path, include_effect_tails) => {
-                            self.start_export(path, include_effect_tails)
-                        }
-                        PendingAction::New => self.finish_new_session(),
-                        PendingAction::Recovery => self.autosave_recovery(),
-                        PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),
-                        PendingAction::ApplySettings(settings) => {
-                            self.finish_settings_apply(settings)
-                        }
-                        PendingAction::Open {
-                            loaded,
-                            path,
-                            recovery,
-                        } => self.finish_open_project(*loaded, path, recovery),
-                        PendingAction::Quit => {
-                            self.autosave_recovery();
-                            self.retire_engine();
-                            self.close_ready = true;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                    }
+                    self.finish_editor_action(pending.action, ctx);
                 }
             }
         }
@@ -1222,6 +1225,30 @@ impl DawApp {
             || self.instrument_ui.metadata_job.is_some()
         {
             ctx.request_repaint_after(Duration::from_millis(25));
+        }
+    }
+
+    fn finish_editor_action(&mut self, action: PendingAction, ctx: &egui::Context) {
+        match action {
+            PendingAction::Save(path) => self.finish_project_save(path),
+            PendingAction::Export(path, include_effect_tails) => {
+                self.start_export(path, include_effect_tails)
+            }
+            PendingAction::New => self.finish_new_session(),
+            PendingAction::Recovery => self.autosave_recovery(),
+            PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),
+            PendingAction::ApplySettings(settings) => self.finish_settings_apply(settings),
+            PendingAction::Open {
+                loaded,
+                path,
+                recovery,
+            } => self.finish_open_project(*loaded, path, recovery),
+            PendingAction::Quit => {
+                self.autosave_recovery();
+                self.retire_engine();
+                self.close_ready = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
         }
     }
 

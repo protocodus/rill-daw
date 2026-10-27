@@ -109,8 +109,13 @@ fn fast_select_all_targets_midi_notes_then_duplicates_the_complete_phrase() {
     ));
     let path = app.directory.path().join("Shortcut melody.rill");
     project.save(&path).unwrap();
-    app.command(json!({"command":"open", "path":path}));
-    app.click("Shortcut melody");
+    let opened = app.command(json!({"command":"open", "path":path}));
+    // The saved filename now also appears in the project header. Select the
+    // actual clip body, keeping this test about shortcut focus and note edits.
+    let clip = &opened["timeline"]["clips"][0]["rect"];
+    let x = (clip["min"][0].as_f64().unwrap() + clip["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (clip["min"][1].as_f64().unwrap() + clip["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
     app.click("Window");
     app.click("Clip Editor");
     let before = app.inspect();

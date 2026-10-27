@@ -189,6 +189,7 @@ impl DawApp {
                         // complete saved document so edits made during I/O stay dirty.
                         self.history.mark_saved_at(history_state);
                         self.modified = self.project != snapshot;
+                        self.remember_project_directory(&path);
                         self.project_path = Some(path);
                         self.message(
                             Ok(()),

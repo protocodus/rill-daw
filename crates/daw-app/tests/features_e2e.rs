@@ -743,6 +743,9 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
         state["project"]["tracks"][0]["instrument"]["Vst3"]["class_id"],
         "22222222222222222222222222222222"
     );
+    // Reassignment returns to the explicitly opened overview, without
+    // automatically starting the replacement's native editor.
+    app.click("Open editor");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(35);
     loop {
         let state = app.inspect();

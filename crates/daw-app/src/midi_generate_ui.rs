@@ -7,6 +7,18 @@ use daw_ui::TimelineViewport;
 use eframe::egui::{self, Rect};
 use serde_json::{Value, json};
 
+/// Session-only choices for one clip. Preview viewport and generated notes are
+/// deliberately rebuilt against the current clip when the dialog reopens.
+#[derive(Clone)]
+pub(crate) struct GenerateMemory {
+    settings: GenerateSettings,
+    preview: bool,
+    start_bar: u32,
+    length_bars: u32,
+    chord: Chord,
+    scale: Scale,
+}
+
 pub(crate) struct GenerateDialog {
     pub settings: GenerateSettings,
     pub notes: Vec<GeneratedNote>,
@@ -20,6 +32,8 @@ pub(crate) struct GenerateDialog {
     controls: Value,
     chord: Chord,
     scale: Scale,
+    added_notes: usize,
+    applied: Option<GenerateSettings>,
 }
 
 #[derive(Default)]
@@ -27,6 +41,7 @@ pub(crate) struct GenerateAction {
     pub apply: bool,
     pub cancel: bool,
     pub fit: bool,
+    pub grid_scale: bool,
 }
 
 impl GenerateDialog {
@@ -55,9 +70,62 @@ impl GenerateDialog {
             controls: Value::Null,
             chord,
             scale,
+            added_notes: 0,
+            applied: None,
         };
         dialog.refresh(beats_per_bar);
         dialog
+    }
+
+    pub fn memory(&self) -> GenerateMemory {
+        GenerateMemory {
+            settings: self.settings.clone(),
+            preview: self.preview,
+            start_bar: self.start_bar,
+            length_bars: self.length_bars,
+            chord: self.chord,
+            scale: self.scale,
+        }
+    }
+
+    pub fn restore(&mut self, memory: &GenerateMemory, meter: u8) {
+        self.settings = memory.settings.clone();
+        self.preview = memory.preview;
+        self.start_bar = memory.start_bar;
+        self.length_bars = memory.length_bars;
+        self.chord = memory.chord;
+        self.scale = memory.scale;
+        self.cached = None;
+        self.refresh(meter);
+    }
+
+    pub fn committed(&mut self, clip_window: (f64, f64, f64, f64), count: usize) {
+        self.clip_window = clip_window;
+        self.added_notes += count;
+        self.applied = Some(self.settings.clone());
+    }
+
+    fn already_added(&self) -> bool {
+        self.applied.as_ref() == Some(&self.settings)
+    }
+
+    pub fn preview_visible(&self) -> bool {
+        self.preview && !self.already_added()
+    }
+
+    fn next_start_bar(&self, meter: u8) -> Option<u32> {
+        if self.length_bars == 0 {
+            return None;
+        }
+        let start_bar = self.start_bar.checked_add(self.length_bars)?;
+        if start_bar > 1_000_000 {
+            return None;
+        }
+        let end = f64::from(start_bar - 1 + self.length_bars) * f64::from(meter);
+        let (clip_start, offset, clip_length, rate) = self.clip_window;
+        let end = end.max(clip_length);
+        (clip_start + end <= daw_core::MAX_BEAT && (offset + end) * rate <= daw_core::MAX_BEAT)
+            .then_some(start_bar)
     }
 
     fn refresh(&mut self, meter: u8) {
@@ -156,20 +224,10 @@ impl GenerateDialog {
                             }
                             self.controls["harmony"] = rect_json(response.rect);
                             ui.end_row();
-                            daw_ui::text::label(ui, "Root");
+                            let root_label = daw_ui::text::label(ui, "Root");
                             let response =
-                                daw_ui::select("generate_root", pitch_class(self.settings.root))
-                                    .show_ui(ui, |ui| {
-                                        for root in 0..12 {
-                                            daw_ui::selectable_value(
-                                                ui,
-                                                &mut self.settings.root,
-                                                root,
-                                                pitch_class(root),
-                                            );
-                                        }
-                                    })
-                                    .response;
+                                daw_ui::generation_root_selector(ui, &mut self.settings.root)
+                                    .labelled_by(root_label.id);
                             self.controls["root"] = rect_json(response.rect);
                             ui.end_row();
                             match &mut self.settings.harmony {
@@ -372,6 +430,11 @@ impl GenerateDialog {
                     self.settings.seed = self.settings.seed.wrapping_add(1);
                 }
                 self.refresh(meter);
+                if matches!(self.settings.harmony, GenerateHarmony::Scale(_)) {
+                    action.grid_scale = daw_ui::button(ui, "Use scale for grid")
+                        .on_hover_text("Use this root and scale for the editor's visual guide")
+                        .clicked();
+                }
                 ui.separator();
                 // View-only controls are grouped apart from generation actions.
                 ui.horizontal(|ui| {
@@ -382,12 +445,41 @@ impl GenerateDialog {
                 if let Some(error) = &self.error {
                     daw_ui::text::note(ui, error);
                 }
+                if self.added_notes > 0 {
+                    daw_ui::text::note(
+                        ui,
+                        format!(
+                            "Added {} notes · choose Next range to continue",
+                            self.added_notes
+                        ),
+                    );
+                }
                 ui.add_space(daw_ui::tokens::SPACE_SM);
                 ui.horizontal(|ui| {
-                    ui.add_enabled_ui(self.error.is_none() && !self.notes.is_empty(), |ui| {
-                        action.apply = daw_ui::primary_button(ui, "Add notes").clicked();
-                    });
-                    action.cancel = daw_ui::button(ui, "Cancel").clicked();
+                    ui.add_enabled_ui(
+                        self.error.is_none() && !self.notes.is_empty() && !self.already_added(),
+                        |ui| {
+                            action.apply = daw_ui::primary_button(ui, "Add notes").clicked();
+                        },
+                    );
+                    let next_start = self.next_start_bar(meter);
+                    if ui
+                        .add_enabled(next_start.is_some(), daw_ui::button_widget("Next range"))
+                        .on_hover_text("Move forward by this range's length, keeping your settings")
+                        .clicked()
+                    {
+                        self.start_bar = next_start.unwrap();
+                        self.refresh(meter);
+                    }
+                    action.cancel = daw_ui::button(
+                        ui,
+                        if self.added_notes > 0 {
+                            "Done"
+                        } else {
+                            "Cancel"
+                        },
+                    )
+                    .clicked();
                 });
             });
         action.cancel |= !open;
@@ -398,17 +490,22 @@ impl GenerateDialog {
         json!({
             "kind":self.settings.kind.name(), "start":self.settings.start, "length":self.settings.length,
             "start_bar":self.start_bar,"length_bars":self.length_bars,"seed":self.settings.seed,
+            "settings":{
+                "root":self.settings.root,
+                "harmony":match self.settings.harmony { GenerateHarmony::Chord(_) => "Chord", GenerateHarmony::Scale(_) => "Scale" },
+                "chord":self.chord.name(),"scale":self.scale.name(),
+                "octaves":self.settings.octaves,"start_octave":self.settings.start_octave,"shift":self.settings.shift,
+                "pattern":self.settings.arp.name(),"speed":self.settings.speed_multiplier,
+                "algorithm":self.settings.melody.name(),"voices":self.settings.accompaniment.name(),
+                "additional_voices":self.settings.additional_voices,"gate":self.settings.gate,
+                "density":self.settings.density,"step_size":self.settings.step_size,
+                "motif_steps":self.settings.motif_steps,"velocity":self.settings.velocity,
+            },
             "notes":self.notes.iter().map(|note| json!({"pitch":note.pitch,"start":note.start,"length":note.length,"velocity":note.velocity,"voice":note.voice})).collect::<Vec<_>>(),
-            "preview":self.preview,"preview_visible":self.preview,"range_rect":range.map(rect_json),"painted_notes":painted_notes,
-            "controls":self.controls,"error":self.error,
+            "preview":self.preview,"preview_visible":self.preview_visible(),"range_rect":range.map(rect_json),"painted_notes":painted_notes,
+            "controls":self.controls,"error":self.error,"added_notes":self.added_notes,
         })
     }
-}
-
-fn pitch_class(pitch: u8) -> &'static str {
-    [
-        "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B",
-    ][usize::from(pitch % 12)]
 }
 
 fn rect_json(rect: Rect) -> Value {

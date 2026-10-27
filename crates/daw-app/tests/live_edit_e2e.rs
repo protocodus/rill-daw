@@ -458,6 +458,7 @@ fn generation_preview_commit_and_undo_keep_running_plugins_and_continuous_pcm() 
             .all(|note| note["start"] == 8.0 && note["length"] == 4.0)
     );
     app.click("Add notes");
+    app.click("Done");
     let added = settled(&mut app);
     assert!(added["midi_editor"]["generate"].is_null());
     let notes = track(&added, synth)["clips"][0]["content"]["Midi"]["notes"]

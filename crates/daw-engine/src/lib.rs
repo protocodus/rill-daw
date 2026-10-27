@@ -23,6 +23,15 @@ pub use render::{
     export_wav, export_wav_with_options, render, render_with_options, render_with_workers,
 };
 
+/// Control-thread query using the same folder, mute, solo and bus eligibility as
+/// playback/export. It does not create a renderer, plug-in or audio device.
+pub fn audible_track_ids(
+    project: &daw_core::Project,
+) -> anyhow::Result<std::collections::HashSet<u64>> {
+    let order = project.routing_order()?;
+    Ok(render::audible_tracks(project, &order))
+}
+
 #[cfg(test)]
 mod allocation_test_support {
     use std::{

@@ -20,6 +20,8 @@ pub struct Settings {
     pub resample_quality: daw_engine::ResampleQuality,
     pub scratch_dir: PathBuf,
     pub vst_dirs: Vec<PathBuf>,
+    /// Successful project saves seed the next new project's picker too.
+    pub last_project_directory: Option<PathBuf>,
 }
 
 fn config_dir() -> PathBuf {
@@ -58,6 +60,7 @@ impl Default for Settings {
             resample_quality: daw_engine::ResampleQuality::High,
             scratch_dir: config_dir().join("Scratch"),
             vst_dirs: Vec::new(),
+            last_project_directory: None,
         }
     }
 }
@@ -209,6 +212,7 @@ mod tests {
         let loaded = Settings::load_from(&path);
         assert_eq!(loaded.sample_rate, 44_100);
         assert_eq!(loaded.buffer_frames, 256);
+        assert_eq!(loaded.last_project_directory, None);
     }
 
     #[test]

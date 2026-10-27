@@ -44,6 +44,25 @@ pub use editor::{EditorEvent, EditorSession, capture_editor, capture_editor_info
 /// Leaves headroom in the host's 4,096-event queue for panic note-offs.
 pub const MAX_MIDI_EVENTS_PER_BLOCK: usize = 2_048;
 
+/// Live playback must fail promptly; an offline bounce can wait for a scheduled
+/// worker or a plugin's higher-quality processing without mistaking it for a hang.
+/// Both modes retain a finite per-command deadline and terminate hung children.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProcessingMode {
+    #[default]
+    Realtime,
+    Offline,
+}
+
+impl ProcessingMode {
+    fn response_timeout(self) -> Duration {
+        match self {
+            Self::Realtime => Duration::from_millis(100),
+            Self::Offline => Duration::from_secs(5),
+        }
+    }
+}
+
 /// Catalogue entry. Missing metadata means the bundle has not been inspected by loading it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginInfo {
@@ -296,7 +315,26 @@ impl VstInstrument {
         sample_rate: f64,
         max_block: usize,
     ) -> Result<Self> {
-        Self::load_processor(path, class_id, sample_rate, max_block, true)
+        Self::load_class_with_mode(
+            path,
+            class_id,
+            sample_rate,
+            max_block,
+            ProcessingMode::Realtime,
+        )
+    }
+
+    /// Load for an explicit processing purpose. Offline instances advertise
+    /// VST3 `kOffline` and use a bounded five-second block/IPC deadline; ordinary
+    /// constructors retain the live 100 ms deadline.
+    pub fn load_class_with_mode(
+        path: &Path,
+        class_id: Option<&str>,
+        sample_rate: f64,
+        max_block: usize,
+        mode: ProcessingMode,
+    ) -> Result<Self> {
+        Self::load_processor(path, class_id, sample_rate, max_block, true, mode)
     }
 
     fn load_processor(
@@ -305,6 +343,7 @@ impl VstInstrument {
         sample_rate: f64,
         max_block: usize,
         require_midi: bool,
+        mode: ProcessingMode,
     ) -> Result<Self> {
         ensure!(
             sample_rate.is_finite() && (8_000.0..=768_000.0).contains(&sample_rate),
@@ -322,7 +361,7 @@ impl VstInstrument {
             .output_channels(2)
             .with_process_isolation(true)
             .helper_path(helper_path()?)
-            .response_timeout(std::time::Duration::from_millis(100))
+            .response_timeout(mode.response_timeout())
             .auto_recover_plugins(false)
             .build()?;
         let mut plugin = match class_id {
@@ -330,6 +369,11 @@ impl VstInstrument {
             None => host.load_plugin(path),
         }
         .with_context(|| format!("Loading VST3 processor {}", path.display()))?;
+        if mode == ProcessingMode::Offline {
+            plugin
+                .set_process_mode(vst3_host::plugin::ProcessMode::Offline)
+                .context("Configuring offline VST3 processing")?;
+        }
         ensure!(
             !require_midi || plugin.info().has_midi_input,
             "{} does not accept MIDI input",
@@ -581,7 +625,7 @@ impl VstInstrument {
 
     /// Enumerate parameters on a worker/control thread, with playback stopped.
     /// Large metadata replies get a separate 30-second helper budget; the active
-    /// processing instance retains its 100 ms deadline. Current values are then
+    /// processing instance retains its live/offline deadline. Current values are then
     /// read from that instance, without requiring plug-in state serialization.
     pub fn parameters(&self) -> Result<Vec<ParameterInfo>> {
         let deadline = Instant::now() + Duration::from_secs(30);
@@ -708,6 +752,23 @@ impl VstEffect {
         sample_rate: f64,
         max_block: usize,
     ) -> Result<Self> {
+        Self::load_class_with_mode(
+            path,
+            class_id,
+            sample_rate,
+            max_block,
+            ProcessingMode::Realtime,
+        )
+    }
+
+    /// Load an insert with the same explicit live/offline policy as instruments.
+    pub fn load_class_with_mode(
+        path: &Path,
+        class_id: Option<&str>,
+        sample_rate: f64,
+        max_block: usize,
+        mode: ProcessingMode,
+    ) -> Result<Self> {
         Ok(Self {
             processor: VstInstrument::load_processor(
                 path,
@@ -715,6 +776,7 @@ impl VstEffect {
                 sample_rate,
                 max_block,
                 false,
+                mode,
             )?,
         })
     }
