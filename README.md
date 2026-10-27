@@ -5,14 +5,15 @@
 
 **From the first loop to the final mix.**
 
-Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Turn audio loops and MIDI ideas into a full arrangement, shape your parts in the piano roll, and bring everything together in the mixer. Focused workspaces keep the music in view and the tools within reach.
+Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Compose with audio and MIDI, get help from an integrated AI assistant, and bring everything together in the mixer. Focused workspaces keep the music in view and the tools within reach.
 
 - **Build your song.** Layer audio and MIDI, organize tracks with colors and folders, and reshape clips with non-destructive edits and undo.
 - **Find your next phrase.** Write notes by hand or explore chords, arpeggios, and melodies with editable previews and scale highlighting.
+- **Make music with AI.** Ask the integrated assistant to write a part, reshape a phrase, or adjust the mix directly in your current song. Review its edits and undo them through normal song history.
 - **Shape your sound.** Bring your VST3 instruments and effects, then connect them with buses, sends, and automation. Plug-ins run in isolated processes.
 - **Capture and finish.** Record audio and MIDI, choose loop takes, and export a stereo WAV or MIDI. Portable `.rill` projects keep the arrangement and its source audio together.
 
-[Download](#download) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md)
+[Download](#download) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md)
 
 ## Download
 
@@ -31,6 +32,24 @@ Get a development build for your platform. These links serve the latest successf
 **Bring your own instruments:** VST3 instruments and effects are installed separately. Rill includes an original audio drum loop to try immediately.
 
 Build artifacts expire after 14 days. If a link is unavailable, visit the [successful main builds](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess) and open a run's **Artifacts** section; GitHub sign-in is required for that route. A newer build can be in progress while the links serve an earlier successful version.
+
+## Make music with AI
+
+Describe the change you want and work on it together. Rill's integrated assistant can inspect the current song, create MIDI parts, transform notes, adjust channel levels and pan, and process selected audio. Edits happen in the same project you are working on and use normal **Undo/Redo** history.
+
+Try prompts such as:
+
+- “Create a four-bar D-minor arpeggio using one of my installed VST3 instruments.”
+- “Lower the drum bus by 3 dB and pan the shaker 20% right.”
+- “Normalize the selected audio clip to −1 dBFS.”
+
+![Rill's integrated AI Assistant with an example composition prompt ready to send](artifacts/readme-ai-assistant.png)
+
+*An example prompt prepared in the Assistant panel, before sending it to a model.*
+
+Choose **OpenAI** or **Anthropic** in **Window → Setup → AI**, enter your model and your own API key, then click **Apply**. Open **AI** in the menu bar or **Window → Assistant** to start a conversation. Requests go to the provider you choose.
+
+Prefer an external AI client? Rill also exposes the live song through **MCP**. See [AI assistant setup and MCP tools](docs/AI_TOOLS.md).
 
 ## Screenshots
 
