@@ -83,9 +83,13 @@ impl EditorTool {
             Self::Select => {
                 "Drag to move; drag an edge to trim. Shift-drag copies; Shift at an edge bypasses snap."
             }
-            Self::Pencil => "Draw a note or MIDI clip.",
+            Self::Pencil => {
+                "Click to draw a note or MIDI clip. In Clip Editor, drag while drawing to choose a note's end."
+            }
             Self::Cut => "Split at the pointer.",
-            Self::Duplicate => "Create an independent copy.",
+            Self::Duplicate => {
+                "Click a clip or note to place an independent copy after it. Use Select to move the copy."
+            }
             Self::Glue => "Join clips or selected notes.",
             Self::Erase => "Delete at the pointer.",
             Self::MultiDraw => "Draw the selected chord or scale.",
@@ -93,7 +97,7 @@ impl EditorTool {
             Self::FadeOut => "Drag to shape the audio fade-out.",
             Self::Cursor => "Place the playback cursor.",
             Self::Ghost => {
-                "Create a linked copy. Source edits and the name remain shared; placement, trim and stretch stay independent."
+                "Click a clip to place a linked copy after it. Notes, audio edits and the name are shared; move or trim each copy independently."
             }
             Self::Stretch => {
                 "Drag to change duration. Audio keeps its pitch; MIDI note timing scales. Hold Shift to bypass snap."

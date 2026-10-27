@@ -289,7 +289,8 @@ fn no_complete_bar_requires_an_explicit_range_before_adding_notes() {
     number(&mut app, "start_bar", "1");
     let explicit = number(&mut app, "length_bars", "1");
     assert_draft_valid(&explicit);
-    let added = app.click("Add notes");
+    app.click("Add notes");
+    let added = app.click("Done");
     assert!(notes(&added, id).len() > notes(&before, id).len());
     assert_eq!(undo(&mut app, false)["project"], before["project"]);
     app.quit();
@@ -362,7 +363,8 @@ fn generated_chord_commits_exact_preview_to_stretched_ghost_once_and_recalls() {
         "Shift raises the lowest chord degree"
     );
     assert_eq!(preview["project"], before["project"]);
-    let committed = app.click("Add notes");
+    app.click("Add notes");
+    let committed = app.click("Done");
     assert!(committed["midi_editor"]["generate"].is_null());
     let persisted = notes(&committed, id);
     assert_eq!(&persisted[..original_notes.len()], original_notes);
@@ -464,7 +466,8 @@ fn arpeggio_direction_speed_octaves_and_seeded_variations_match_added_notes() {
     assert_eq!(next["project"], before["project"]);
     assert_eq!(next["history"], before["history"]);
     let expected = draft(&next).to_vec();
-    let committed = app.click("Add notes");
+    app.click("Add notes");
+    let committed = app.click("Done");
     for (actual, expected) in notes(&committed, id)[1..].iter().zip(&expected) {
         for field in ["pitch", "start", "length", "velocity"] {
             assert_eq!(actual[field], expected[field]);
@@ -539,7 +542,8 @@ fn melody_algorithms_default_to_editor_scale_and_offer_counterpoint_and_tintinna
             "{label} remains reachable at the minimum native window size"
         );
     }
-    let committed = app.click("Add notes");
+    app.click("Add notes");
+    let committed = app.click("Done");
     assert_eq!(notes(&committed, id).len(), expected + 1);
     assert_eq!(undo(&mut app, false)["project"], before["project"]);
     app.quit();
@@ -594,7 +598,8 @@ fn generation_preview_never_promotes_folded_notes_into_the_editing_selection() {
                 // phrase. Covered-note merging has its own running-app cases.
                 number(&mut app, "start_bar", "3");
                 number(&mut app, "length_bars", "1");
-                app.click("Add notes")
+                app.click("Add notes");
+                app.click("Done")
             } else if escape {
                 app.key("Escape")
             } else {

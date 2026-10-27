@@ -2,7 +2,9 @@
 //! Give repeated rows stable `ui.push_id(model_id, ...)` scopes.
 
 use crate::{theme, tokens};
-use egui::{Button, ComboBox, DragValue, Frame, InnerResponse, Response, Slider, Ui, WidgetText};
+use egui::{
+    Button, ComboBox, DragValue, Frame, InnerResponse, Response, Slider, Ui, Widget, WidgetText,
+};
 use std::{hash::Hash, ops::RangeInclusive};
 
 pub fn button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
@@ -564,12 +566,12 @@ pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Re
 }
 
 /// Editable numeric canvas control that preserves the parent's row geometry.
-/// Drag to adjust, or double-click to type an exact value.
+/// Drag to adjust, or click to replace the complete value.
 pub fn number_at(
     ui: &mut Ui,
     rect: egui::Rect,
     id_salt: impl Hash,
-    value: DragValue<'_>,
+    value: impl Widget,
 ) -> Response {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
@@ -603,8 +605,145 @@ pub fn slider<T: egui::emath::Numeric>(value: &mut T, range: RangeInclusive<T>) 
     Slider::new(value, range)
 }
 
-pub fn number<T: egui::emath::Numeric>(value: &mut T) -> DragValue<'_> {
-    DragValue::new(value)
+/// Shared numeric field retaining native dragging, parsing and focus behavior.
+/// Clicking enters text mode; double/triple-clicking selects the whole value,
+/// including the sign and decimal part, instead of one punctuation-delimited
+/// word. Prefixes and units remain outside the editable numeric text.
+#[must_use = "Add the numeric field to a Ui"]
+pub struct Number<'a>(DragValue<'a>);
+
+impl<'a> Number<'a> {
+    pub fn speed(mut self, speed: impl Into<f64>) -> Self {
+        self.0 = self.0.speed(speed);
+        self
+    }
+
+    pub fn range<T: egui::emath::Numeric>(mut self, range: RangeInclusive<T>) -> Self {
+        self.0 = self.0.range(range);
+        self
+    }
+
+    pub fn clamp_existing_to_range(mut self, clamp: bool) -> Self {
+        self.0 = self.0.clamp_existing_to_range(clamp);
+        self
+    }
+
+    pub fn prefix(mut self, prefix: impl ToString) -> Self {
+        self.0 = self.0.prefix(prefix);
+        self
+    }
+
+    pub fn suffix(mut self, suffix: impl ToString) -> Self {
+        self.0 = self.0.suffix(suffix);
+        self
+    }
+
+    pub fn min_decimals(mut self, decimals: usize) -> Self {
+        self.0 = self.0.min_decimals(decimals);
+        self
+    }
+
+    pub fn max_decimals(mut self, decimals: usize) -> Self {
+        self.0 = self.0.max_decimals(decimals);
+        self
+    }
+
+    pub fn max_decimals_opt(mut self, decimals: Option<usize>) -> Self {
+        self.0 = self.0.max_decimals_opt(decimals);
+        self
+    }
+
+    pub fn fixed_decimals(mut self, decimals: usize) -> Self {
+        self.0 = self.0.fixed_decimals(decimals);
+        self
+    }
+
+    pub fn custom_formatter(
+        mut self,
+        formatter: impl 'a + Fn(f64, RangeInclusive<usize>) -> String,
+    ) -> Self {
+        self.0 = self.0.custom_formatter(formatter);
+        self
+    }
+
+    pub fn custom_parser(mut self, parser: impl 'a + Fn(&str) -> Option<f64>) -> Self {
+        self.0 = self.0.custom_parser(parser);
+        self
+    }
+
+    pub fn update_while_editing(mut self, update: bool) -> Self {
+        self.0 = self.0.update_while_editing(update);
+        self
+    }
+}
+
+impl Widget for Number<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let id = ui.next_auto_id();
+        let rectangle_id = id.with("number_edit_rectangle");
+        let edit_rect = ui.data(|data| data.get_temp::<egui::Rect>(rectangle_id));
+        let numeric_multiclick = ui.is_enabled()
+            && ui.memory(|memory| memory.has_focus(id))
+            && ui.input(|input| {
+                !input.modifiers.any()
+                    && (input
+                        .pointer
+                        .button_double_clicked(egui::PointerButton::Primary)
+                        || input
+                            .pointer
+                            .button_triple_clicked(egui::PointerButton::Primary))
+                    && input.pointer.interact_pos().is_some_and(|position| {
+                        edit_rect.is_some_and(|rect| rect.contains(position))
+                    })
+            });
+        let pointer = if numeric_multiclick {
+            // TextEdit selects a word before processing keyboard events. Set
+            // the numeric selection first and suppress only this widget's
+            // multi-click pointer handling, including coalesced text input.
+            // Restore pointer state immediately below so ordinary caret clicks,
+            // dragging and other widgets retain their native behavior.
+            if let Some(text) = ui.data(|data| data.get_temp::<String>(id)) {
+                select_number_text(ui, id, &text);
+            }
+            Some(ui.input_mut(|input| std::mem::take(&mut input.pointer)))
+        } else {
+            None
+        };
+        let response = self.0.ui(ui);
+        if let Some(pointer) = pointer {
+            ui.input_mut(|input| input.pointer = pointer);
+        }
+        ui.data_mut(|data| data.insert_temp(rectangle_id, response.rect));
+        // DragValue selects everything when focus is first acquired. A rapid
+        // second click then reaches TextEdit, whose word selection can leave
+        // part of a decimal (or its sign) in place. Preserve native caret/drag
+        // editing, but make a numeric multi-click mean the complete value.
+        if !numeric_multiclick
+            && response.has_focus()
+            && ui.input(|input| !input.modifiers.any())
+            && (response.double_clicked() || response.triple_clicked())
+            && let Some(text) = ui.data(|data| data.get_temp::<String>(response.id))
+        {
+            select_number_text(ui, response.id, &text);
+            ui.ctx().request_repaint();
+        }
+        response
+    }
+}
+
+fn select_number_text(ui: &Ui, id: egui::Id, text: &str) {
+    let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+    state
+        .cursor
+        .set_char_range(Some(egui::text::CCursorRange::two(
+            egui::text::CCursor::default(),
+            egui::text::CCursor::new(text.chars().count()),
+        )));
+    state.store(ui.ctx(), id);
+}
+
+pub fn number<T: egui::emath::Numeric>(value: &mut T) -> Number<'_> {
+    Number(DragValue::new(value))
 }
 
 pub fn color_edit(ui: &mut Ui, value: &mut [u8; 3]) -> Response {

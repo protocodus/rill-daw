@@ -1,6 +1,6 @@
 [workspace]
 members = ["crates/daw-core", "crates/daw-engine", "crates/daw-plugins", "crates/daw-ui", "crates/daw-app", "crates/daw-tools", "crates/daw-mcp", "crates/daw-ai"]
-exclude = ["vendor/vst3-host"]
+exclude = ["vendor/vst3-host", "vendor/rfd"]
 resolver = "2"
 
 [workspace.package]
@@ -28,3 +28,5 @@ codegen-units = 1
 [patch.crates-io]
 # Host-provided VST parameter context-menu actions; see vendor/vst3-host/RILL-PATCH.md.
 vst3-host = { path = "vendor/vst3-host" }
+# Preserve saved-project directories in the Linux Zenity fallback.
+rfd = { path = "vendor/rfd" }

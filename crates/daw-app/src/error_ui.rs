@@ -7,6 +7,7 @@ pub(crate) struct ErrorReport {
     pub summary: String,
     pub details: String,
     pub status: String,
+    pub audio_setup: bool,
 }
 
 pub(crate) struct ErrorDetails {
@@ -17,17 +18,40 @@ pub(crate) struct ErrorDetails {
 
 impl DawApp {
     pub(crate) fn make_error_report(&self, summary: String, diagnostic: String) -> ErrorReport {
+        // Classify the original cause before appending the standard device
+        // metadata, which appears in reports for unrelated errors too.
+        let cause = diagnostic.to_lowercase();
+        let audio_setup = [
+            "audio device",
+            "audio output device",
+            "output device '",
+            "device does not support the requested sample rate",
+            "device buffer size",
+        ]
+        .iter()
+        .any(|phrase| cause.contains(phrase));
         let selected = self
             .selected_track
             .and_then(|id| self.project.track(id))
             .map(|track| format!("\nSelected channel: {} (#{})", track.name, track.id))
             .unwrap_or_default();
+        let identity = self.document_identity();
+        let document = self
+            .project_path
+            .as_ref()
+            .map(|path| format!("\nProject file: {}", path.display()))
+            .unwrap_or_default();
+        let session = if self.project.name != identity {
+            format!("\nSession title: {}", self.project.name)
+        } else {
+            String::new()
+        };
         let details = format!(
-            "{diagnostic}\n\nRILL {}\nPlatform: {} / {}\nProject: {}{selected}\nAudio: {} Hz, {} frames\nOutput device: {}",
+            "{diagnostic}\n\nRILL {}\nPlatform: {} / {}\nProject: {}{document}{session}{selected}\nAudio: {} Hz, {} frames\nOutput device: {}",
             env!("CARGO_PKG_VERSION"),
             std::env::consts::OS,
             std::env::consts::ARCH,
-            self.project.name,
+            identity,
             self.settings.sample_rate,
             self.settings.buffer_frames,
             self.settings
@@ -39,6 +63,7 @@ impl DawApp {
             summary,
             details,
             status: self.status.clone(),
+            audio_setup,
         }
     }
 
@@ -76,6 +101,10 @@ impl DawApp {
             .filter(|report| report.status == self.status)
             .cloned()
             .unwrap_or_else(|| self.make_error_report(self.status.clone(), self.status.clone()));
+        self.show_error_report_details(report);
+    }
+
+    pub(crate) fn show_error_report_details(&mut self, report: ErrorReport) {
         self.error_details = Some(ErrorDetails {
             title: "Error details".into(),
             report,

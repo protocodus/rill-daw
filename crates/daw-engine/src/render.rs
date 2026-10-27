@@ -5,7 +5,7 @@ use daw_core::{
     AudioData, AutomationLane, AutomationParameter, ClipContent, Effect, FadeCurve, Instrument,
     Project, TrackKind,
 };
-use daw_plugins::{MidiMessage, VstEffect, VstInstrument};
+use daw_plugins::{MidiMessage, ProcessingMode, VstEffect, VstInstrument};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -808,16 +808,26 @@ impl Renderer {
             None,
             RenderOptions::default(),
             None,
+            ProcessingMode::Realtime,
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn new_with_options(
         project: &Project,
         sample_rate: u32,
         looping: bool,
         options: RenderOptions,
     ) -> Result<Self> {
-        Self::new_inner(project, sample_rate, looping, None, options, None)
+        Self::new_inner(
+            project,
+            sample_rate,
+            looping,
+            None,
+            options,
+            None,
+            ProcessingMode::Realtime,
+        )
     }
 
     pub(crate) fn new_with_options_cancelled(
@@ -827,9 +837,52 @@ impl Renderer {
         options: RenderOptions,
         cancel: &AtomicBool,
     ) -> Result<Self> {
-        Self::new_inner(project, sample_rate, looping, None, options, Some(cancel))
+        Self::new_inner(
+            project,
+            sample_rate,
+            looping,
+            None,
+            options,
+            Some(cancel),
+            ProcessingMode::Realtime,
+        )
     }
 
+    /// An offline bounce has its own plugin policy, independent of transport looping.
+    pub(crate) fn new_offline_with_options(
+        project: &Project,
+        sample_rate: u32,
+        options: RenderOptions,
+    ) -> Result<Self> {
+        Self::new_inner(
+            project,
+            sample_rate,
+            false,
+            None,
+            options,
+            None,
+            ProcessingMode::Offline,
+        )
+    }
+
+    pub(crate) fn new_offline_with_options_cancelled(
+        project: &Project,
+        sample_rate: u32,
+        options: RenderOptions,
+        cancel: &AtomicBool,
+    ) -> Result<Self> {
+        Self::new_inner(
+            project,
+            sample_rate,
+            false,
+            None,
+            options,
+            Some(cancel),
+            ProcessingMode::Offline,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn new_with_workers(
         project: &Project,
         sample_rate: u32,
@@ -844,6 +897,24 @@ impl Renderer {
             Some(workers),
             RenderOptions::default(),
             None,
+            ProcessingMode::Realtime,
+        )
+    }
+
+    fn new_offline_with_workers(
+        project: &Project,
+        sample_rate: u32,
+        workers: usize,
+    ) -> Result<Self> {
+        ensure!(workers > 0, "Worker count must be positive");
+        Self::new_inner(
+            project,
+            sample_rate,
+            false,
+            Some(workers),
+            RenderOptions::default(),
+            None,
+            ProcessingMode::Offline,
         )
     }
 
@@ -854,6 +925,7 @@ impl Renderer {
         requested_workers: Option<usize>,
         options: RenderOptions,
         cancel: Option<&AtomicBool>,
+        processing_mode: ProcessingMode,
     ) -> Result<Self> {
         let check_cancelled = || {
             ensure!(
@@ -923,11 +995,12 @@ impl Renderer {
             let (processor, plugin_latency) = match &track.instrument {
                 Instrument::Vst3 { path, class_id } if enabled && track.kind == TrackKind::Midi => {
                     check_cancelled()?;
-                    let mut plugin = VstInstrument::load_class(
+                    let mut plugin = VstInstrument::load_class_with_mode(
                         Path::new(path),
                         class_id.as_deref(),
                         sample_rate as f64,
                         BLOCK,
+                        processing_mode,
                     )
                     .with_context(|| format!("Loading VST3 instrument on {}", track.name))?;
                     check_cancelled()?;
@@ -959,11 +1032,12 @@ impl Renderer {
                 }
                 inserts.push(match &slot.effect {
                     Effect::Vst3 { path, class_id } => {
-                        let mut effect = VstEffect::load_class(
+                        let mut effect = VstEffect::load_class_with_mode(
                             Path::new(path),
                             class_id.as_deref(),
                             sample_rate as f64,
                             BLOCK,
+                            processing_mode,
                         )
                         .with_context(|| {
                             format!("Loading insert {} on {}", slot.name, track.name)
@@ -1656,7 +1730,7 @@ pub fn render_with_options(
     options: RenderOptions,
 ) -> Result<Vec<f32>> {
     render_prepared(
-        Renderer::new_with_options(project, sample_rate, false, options)?,
+        Renderer::new_offline_with_options(project, sample_rate, options)?,
         length_beats,
     )
 }
@@ -1670,7 +1744,7 @@ pub fn render_with_workers(
     workers: usize,
 ) -> Result<Vec<f32>> {
     render_prepared(
-        Renderer::new_with_workers(project, sample_rate, false, workers)?,
+        Renderer::new_offline_with_workers(project, sample_rate, workers)?,
         length_beats,
     )
 }
@@ -1679,7 +1753,8 @@ pub fn render_with_workers(
 /// Processing starts at beat zero so instruments, automation and effect tails have
 /// their preceding history. Only the requested stereo samples are retained.
 /// Cancellation is checked during preparation and between processing blocks;
-/// a currently executing isolated plug-in command retains its existing timeout.
+/// a currently executing isolated plug-in command retains the bounded offline
+/// deadline rather than the shorter live-playback deadline.
 pub fn render_range_cancellable(
     project: &Project,
     sample_rate: u32,
@@ -1717,7 +1792,7 @@ pub fn render_range_cancellable(
     };
     check_cancelled()?;
     let renderer =
-        Renderer::new_with_options_cancelled(project, sample_rate, false, options, cancel)?;
+        Renderer::new_offline_with_options_cancelled(project, sample_rate, options, cancel)?;
     render_range_prepared(renderer, start as u64, end as u64, check_cancelled)
 }
 
@@ -1813,7 +1888,7 @@ pub fn export_wav_with_options(
         length_beats.is_finite() && length_beats > 0.0,
         "Render length must be positive and finite"
     );
-    let renderer = Renderer::new_with_options(project, sample_rate, false, options)?;
+    let renderer = Renderer::new_offline_with_options(project, sample_rate, options)?;
     let frames = (length_beats * 60.0 / project.tempo * sample_rate as f64).ceil();
     if frames * 8.0 >= u32::MAX as f64 - 128.0 {
         bail!("Export exceeds the WAV 4 GiB size limit");
@@ -1869,7 +1944,7 @@ pub fn export_project_wav_with_options(
 ) -> Result<()> {
     project.validate_audio_destination(path.as_ref())?;
     let options = options.into();
-    let renderer = Renderer::new_with_options(project, sample_rate, false, options.render)?;
+    let renderer = Renderer::new_offline_with_options(project, sample_rate, options.render)?;
     let frames = if options.include_effect_tails {
         renderer.end_sample
     } else {

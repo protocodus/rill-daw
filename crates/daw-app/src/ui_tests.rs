@@ -466,7 +466,7 @@ fn dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat(
     let (_dir, path) = wav_fixture();
     let mut harness = Harness::new(0.0);
     let output = harness.settle_full();
-    let label = text_position(&output, "+   Drop audio here to create a track", 0.0);
+    let label = text_position(&output, "Drop audio here · Double-click for MIDI", 0.0);
     let pos = label + Vec2::new(harness.app.zoom * 3.0 - 24.0, 5.0);
     harness.drop_wav(pos, &path);
     assert_eq!(harness.app.project.tracks.len(), 2);

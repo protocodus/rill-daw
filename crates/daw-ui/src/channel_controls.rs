@@ -22,7 +22,7 @@ pub fn channel_gain_from_db(db: f32) -> f32 {
 
 /// The same precise channel-level field in Mixer and expanded track headers.
 /// Values outside the editing range remain intact until an intentional edit.
-pub fn channel_gain_number(db: &mut f32) -> egui::DragValue<'_> {
+pub fn channel_gain_number(db: &mut f32) -> crate::Number<'_> {
     crate::number(db)
         .range(-60.0..=20.0 * 1.5_f32.log10())
         .clamp_existing_to_range(false)

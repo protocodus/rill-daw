@@ -82,6 +82,7 @@ enum Command {
     FileDialog {
         kind: TestDocumentDialog,
         path: Option<PathBuf>,
+        replace_existing: Option<bool>,
     },
     AudioTakeFiles {
         paths: Option<Vec<PathBuf>>,
@@ -200,6 +201,7 @@ enum TestDocumentDialog {
     Save,
     Open,
     Export,
+    ExportMidi,
 }
 
 #[derive(Deserialize)]
@@ -629,7 +631,7 @@ impl Harness {
         } else {
             (
                 None,
-                self.label_rect("+   Drop audio here to create a track", 0)?
+                self.label_rect("Drop audio here · Double-click for MIDI", 0)?
                     .center()
                     .y,
             )
@@ -929,16 +931,22 @@ impl Harness {
                     .fail_virtual_input()?;
                 self.settle();
             }
-            Command::FileDialog { kind, path } => {
-                use crate::document_ui::DocumentDialog;
-                self.app.next_document_dialog = Some((
-                    match kind {
+            Command::FileDialog {
+                kind,
+                path,
+                replace_existing,
+            } => {
+                use crate::document_ui::{DocumentDialog, DocumentDialogSelection};
+                self.app.next_document_dialog = Some(DocumentDialogSelection {
+                    kind: match kind {
                         TestDocumentDialog::Save => DocumentDialog::Save,
                         TestDocumentDialog::Open => DocumentDialog::Open,
                         TestDocumentDialog::Export => DocumentDialog::Export,
+                        TestDocumentDialog::ExportMidi => DocumentDialog::ExportMidi,
                     },
                     path,
-                ));
+                    replace_existing,
+                });
             }
             Command::AudioTakeFiles { paths } => {
                 self.app.audio_takes_ui.next_files = Some(paths);
@@ -1208,7 +1216,7 @@ impl Harness {
             || self.app.project_io_pending()
             || self.app.document_guard_diagnostics()["phase"]
                 .as_str()
-                .is_some_and(|phase| phase != "confirm")
+                .is_some_and(|phase| !matches!(phase, "confirm" | "export_failed"))
         {
             ensure!(Instant::now() < deadline, "Project operation timed out");
             self.frame(RawInput::default());
@@ -1385,6 +1393,7 @@ impl Harness {
             })
             .into();
         state["exported_file"] = json!(self.app.exported_file);
+        state["export_run"] = self.app.export_diagnostics();
         state["selected_clips"] = json!(self.app.arranger_selection_ids());
         state["selection_span"] = json!(self.app.arranger_phrase_span());
         state["boundary_fades_dialog"] = crate::audio_batch::diagnostics(&self.ctx);
@@ -1422,6 +1431,14 @@ impl Harness {
         state["error_details"] = self.app.error_details_diagnostics();
         state["document_guard"] = self.app.document_guard_diagnostics();
         state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());
+        state["project_title"] = json!(self.app.document_title());
+        state["file_dialog_defaults"] = json!({
+            "directory": self.app.document_dialog_directory(),
+            "save": self.app.document_dialog_filename(crate::document_ui::DocumentDialog::Save),
+            "wav": self.app.document_dialog_filename(crate::document_ui::DocumentDialog::Export),
+            "midi": self.app.document_dialog_filename(crate::document_ui::DocumentDialog::ExportMidi),
+        });
+        state["export_missing_instruments"] = json!(self.app.export_missing_instruments());
         state["clip_name_rect"] = json!(
             self.ctx
                 .data(|data| data.get_temp::<Rect>(egui::Id::new("clip_name_rect")))

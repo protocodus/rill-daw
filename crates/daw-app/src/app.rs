@@ -1,5 +1,4 @@
 use crate::{settings::Settings, theme::*};
-use anyhow::Context;
 use daw_core::*;
 use daw_engine::{AudioEngine, DeviceInfo};
 use eframe::egui::{self, RichText};
@@ -134,8 +133,9 @@ pub struct DawApp {
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
     pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
-    pub(crate) next_document_dialog: Option<(crate::document_ui::DocumentDialog, Option<PathBuf>)>,
+    pub(crate) next_document_dialog: Option<crate::document_ui::DocumentDialogSelection>,
     pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
+    pub(crate) export_run: Option<crate::export_ui::ExportRun>,
     pub(crate) finishing: crate::finishing_actions::FinishingActions,
     pub(crate) exported_file: Option<PathBuf>,
     pub(crate) export_open: bool,
@@ -266,6 +266,7 @@ impl DawApp {
             document_guard: None,
             next_document_dialog: None,
             export_job: None,
+            export_run: None,
             finishing: Default::default(),
             exported_file: None,
             export_open: false,
@@ -963,7 +964,9 @@ impl DawApp {
                 Err(error) => {
                     self.desired_playing = false;
                     self.recording_engine_failed(&error);
-                    if let Some(previous) = self.settings_rollback.take() {
+                    if let Some(mut previous) = self.settings_rollback.take() {
+                        previous.last_project_directory =
+                            self.settings.last_project_directory.clone();
                         self.settings = previous;
                         self.setup_draft = self.settings.clone();
                         let _ = self.settings.save();
@@ -1077,7 +1080,8 @@ impl DawApp {
             }
         }
     }
-    pub(crate) fn finish_settings_apply(&mut self, settings: Settings) {
+    pub(crate) fn finish_settings_apply(&mut self, mut settings: Settings) {
+        settings.last_project_directory = self.settings.last_project_directory.clone();
         self.assistant.known_parameters.clear();
         if let Err(error) = settings.save() {
             self.message(Err(error), "");
@@ -1099,7 +1103,8 @@ impl DawApp {
         }
     }
 
-    pub(crate) fn apply_appearance_settings(&mut self, settings: Settings) {
+    pub(crate) fn apply_appearance_settings(&mut self, mut settings: Settings) {
+        settings.last_project_directory = self.settings.last_project_directory.clone();
         match settings.save() {
             Ok(()) => {
                 // A device preparation already in progress may still roll back
@@ -1257,6 +1262,7 @@ impl DawApp {
             std::thread::spawn(move || drop(old_waveforms));
         }
         self.exported_file = None;
+        self.export_run = None;
         self.waveform_warning = None;
         self.project_path = None;
         self.history.clear();
@@ -1410,6 +1416,7 @@ impl DawApp {
         self.edit_group = None;
         self.project = loaded.project;
         self.exported_file = None;
+        self.export_run = None;
         self.waveform_warning = loaded.waveform_warning;
         let old_waveforms = std::mem::replace(&mut self.waveforms, loaded.waveforms);
         std::thread::spawn(move || drop(old_waveforms));
@@ -1434,46 +1441,13 @@ impl DawApp {
         .into();
         self.error = false;
     }
-    pub(crate) fn start_export(&mut self, path: PathBuf, include_effect_tails: bool) {
-        if self.export_job.is_some() {
-            self.message(Err(anyhow::anyhow!("An export is already running")), "");
-            return;
-        }
-        self.exported_file = None;
-        if let Err(error) = self.project.validate_audio_destination(&path) {
-            self.message(Err(error), "");
-            return;
-        }
-        self.finishing
-            .export_started(path.clone(), include_effect_tails);
-        let project = self.project.clone();
-        let rate = self.settings.sample_rate;
-        let options = daw_engine::ExportOptions {
-            render: daw_engine::RenderOptions {
-                resample_quality: self.settings.resample_quality,
-            },
-            include_effect_tails,
-        };
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.export_job = Some(rx);
-        self.exported_file = None;
-        self.status = "Rendering stereo mixdown in background…".into();
-        self.error = false;
-        std::thread::spawn(move || {
-            let result =
-                daw_engine::export_project_wav_with_options(&project, &path, rate, options)
-                    .with_context(|| format!("Exporting WAV to {}", path.display()))
-                    .context("WAV export failed")
-                    .map(|_| path);
-            let _ = tx.send(result);
-        });
-    }
     fn poll_export(&mut self) {
         match self.export_job.as_ref().map(|rx| rx.try_recv()) {
             Some(Ok(result)) => {
                 self.export_job = None;
                 match result {
                     Ok(path) => {
+                        self.export_run = None;
                         self.finishing.export_finished(&path);
                         // A finished render must not erase an unrelated error.
                         if !self.error
@@ -1487,17 +1461,14 @@ impl DawApp {
                     }
                     Err(e) => {
                         self.finishing.export_failed();
-                        self.message(Err(e), "");
+                        self.export_failed_notice(e);
                     }
                 }
             }
             Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
                 self.export_job = None;
                 self.finishing.export_failed();
-                self.message(
-                    Err(anyhow::anyhow!("Export worker stopped unexpectedly")),
-                    "",
-                );
+                self.export_failed_notice(anyhow::anyhow!("Export worker stopped unexpectedly"));
             }
             _ => {}
         }
@@ -1509,7 +1480,28 @@ impl DawApp {
             || self.export_job.is_some()
             || self.state_sync_pending()
             || self.project_io_pending();
-        let (kind, message) = if self.error {
+        let export_report = self.export_error_report().cloned();
+        let show_export_failure = export_report
+            .as_ref()
+            .is_some_and(|report| !self.error || report.status == self.status);
+        let progress = self.export_progress_message();
+        let busy_message = progress.unwrap_or_else(|| {
+            if self.project_io_pending() {
+                "Saving or opening project…".into()
+            } else if self.state_sync_pending() {
+                "Finishing instrument changes…".into()
+            } else if self.loading.is_some() {
+                "Preparing audio…".into()
+            } else {
+                self.status.clone()
+            }
+        });
+        let (kind, message) = if show_export_failure {
+            (
+                NoticeKind::Error,
+                export_report.as_ref().unwrap().summary.clone(),
+            )
+        } else if self.error {
             (
                 NoticeKind::Error,
                 self.last_error_report
@@ -1519,7 +1511,7 @@ impl DawApp {
                     .unwrap_or_else(|| self.status.clone()),
             )
         } else if busy {
-            (NoticeKind::Busy, self.status.clone())
+            (NoticeKind::Busy, busy_message.clone())
         } else if let Some(path) = &self.exported_file {
             let name = path
                 .file_name()
@@ -1531,13 +1523,46 @@ impl DawApp {
         } else {
             return;
         };
+        let secondary_completion = (kind == NoticeKind::Error)
+            .then(|| self.exported_file.clone())
+            .flatten();
         let mut dismiss = false;
+        let mut dismiss_result = false;
+        let mut retry_export = false;
+        let mut audio_setup = false;
+        let has_audio_recovery = kind == NoticeKind::Error
+            && self
+                .last_error_report
+                .as_ref()
+                .is_some_and(|report| report.status == self.status && report.audio_setup);
         egui::TopBottomPanel::bottom("status")
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
+                if kind == NoticeKind::Error && busy {
+                    daw_ui::notice(ui, NoticeKind::Busy, &busy_message, |_| {});
+                }
                 let response = daw_ui::notice(ui, kind, &message, |ui| {
+                    if show_export_failure {
+                        retry_export = ui.add_enabled(
+                            !busy,
+                            daw_ui::button_widget("Retry export"),
+                        )
+                        .on_hover_text("Retry the same mix, filename and export options, including the original notes and instruments.")
+                        .clicked();
+                    }
+                    if has_audio_recovery && !show_export_failure {
+                        audio_setup = daw_ui::button(ui, "Audio setup…")
+                            .on_hover_text(
+                                "Choose an output device. Offline WAV export works without a playback device.",
+                            )
+                            .clicked();
+                    }
                     if kind == NoticeKind::Error && daw_ui::button(ui, "Details").clicked() {
-                        self.show_status_error_details();
+                        if show_export_failure {
+                            self.show_error_report_details(export_report.as_ref().unwrap().clone());
+                        } else {
+                            self.show_status_error_details();
+                        }
                     }
                     if matches!(kind, NoticeKind::Error | NoticeKind::Success) {
                         dismiss = daw_ui::small_button(ui, "Dismiss").clicked();
@@ -1556,10 +1581,32 @@ impl DawApp {
                 {
                     response.response.on_hover_text(path.display().to_string());
                 }
+                if let Some(path) = &secondary_completion {
+                    let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
+                    daw_ui::notice(ui, NoticeKind::Success, &format!("Exported · {name}"), |ui| {
+                        dismiss_result = daw_ui::small_button(ui, "Dismiss result").clicked();
+                        if daw_ui::button(ui, "Copy path").clicked() {
+                            ctx.copy_text(path.to_string_lossy().into_owned());
+                        }
+                    });
+                }
             });
+        if dismiss_result {
+            self.exported_file = None;
+        }
+        if retry_export {
+            self.retry_export();
+        }
+        if audio_setup {
+            self.setup_page = SetupPage::Audio;
+            self.open_popup(PopupKind::Setup);
+        }
         if dismiss {
             if kind == NoticeKind::Error {
                 self.error = false;
+                if show_export_failure {
+                    self.export_run = None;
+                }
             } else {
                 self.exported_file = None;
             }
@@ -2108,15 +2155,7 @@ impl DawApp {
                         }
                         self.reexport_menu(ui);
                         if daw_ui::button(ui, "Export MIDI…").clicked() {
-                            if let Some(path) = daw_ui::with_native_dialog_menu(|| {
-                                rfd::FileDialog::new()
-                                    .set_file_name("session.mid")
-                                    .save_file()
-                            })
-                            {
-                                let result = self.project.export_midi(path);
-                                self.message(result, "MIDI exported");
-                            }
+                            self.export_midi_dialog();
                             ui.close();
                         }
                         ui.separator();
@@ -2386,9 +2425,10 @@ impl DawApp {
                         egui::vec2(ui.available_width().max(0.0), daw_ui::tokens::CONTROL_HEIGHT),
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui| {
-                            daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, format!(
-                                "{}{}", self.project.name, if self.modified { " •" } else { "" }
-                            ));
+                            let title = daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, self.document_title());
+                            if let Some(path) = &self.project_path {
+                                title.on_hover_text(path.display().to_string());
+                            }
                         },
                     );
                 });
@@ -2748,6 +2788,7 @@ impl DawApp {
         crate::theme::set_appearance(ctx, self.settings.appearance);
         self.frame_count += 1;
         if std::mem::take(&mut self.reset_views) {
+            self.midi_editor.clear_generation_memory();
             ctx.data_mut(|data| {
                 data.remove::<daw_ui::TimelineViewport>(egui::Id::new(
                     "arrangement_timeline_viewport",
@@ -2932,6 +2973,22 @@ impl DawApp {
                 let header = daw_ui::workspace_header(ui, &title, |ui| {
                     if workspace == WorkspaceView::Mixer && daw_ui::button(ui, "+ Bus").clicked() {
                         self.mixer_add_bus();
+                    }
+                    if workspace == WorkspaceView::Clip
+                        && self
+                            .selected_track
+                            .and_then(|id| self.project.track(id))
+                            .is_some_and(|track| {
+                                track.kind == TrackKind::Midi
+                                    && track.instrument == Instrument::None
+                            })
+                        && daw_ui::button(ui, "Choose instrument…")
+                            .on_hover_text(
+                                "These MIDI notes are silent until an instrument is assigned",
+                            )
+                            .clicked()
+                    {
+                        self.open_instrument_chooser(true);
                     }
                     if workspace == WorkspaceView::Clip
                         && self

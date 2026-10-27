@@ -20,6 +20,21 @@ impl EditorProbeFixture {
     }
 
     pub fn build_with_delays(lifecycle_delay: Duration, process_delay: Duration) -> Self {
+        Self::build_configured(lifecycle_delay, process_delay, false)
+    }
+
+    /// The first process block may be expensive; later blocks run normally. The
+    /// processor rejects audio unless the host actually advertises VST3 kOffline.
+    #[allow(dead_code)] // Shared fixture is compiled by several independent test targets.
+    pub fn build_for_offline(first_block_delay: Duration) -> Self {
+        Self::build_configured(Duration::ZERO, first_block_delay, true)
+    }
+
+    fn build_configured(
+        lifecycle_delay: Duration,
+        process_delay: Duration,
+        offline_only: bool,
+    ) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let source = directory.path().join("editor_probe_plugin.rs");
         let code = include_str!("editor_probe_plugin.rs")
@@ -36,6 +51,14 @@ impl EditorProbeFixture {
                     "const PROCESS_DELAY_MS: u64 = {};",
                     process_delay.as_millis()
                 ),
+            )
+            .replace(
+                "const FIRST_PROCESS_DELAY_ONLY: bool = false;",
+                &format!("const FIRST_PROCESS_DELAY_ONLY: bool = {offline_only};"),
+            )
+            .replace(
+                "const REQUIRE_OFFLINE: bool = false;",
+                &format!("const REQUIRE_OFFLINE: bool = {offline_only};"),
             );
         std::fs::write(&source, code).unwrap();
         let path = directory.path().join("NoEditorProbe.vst3");

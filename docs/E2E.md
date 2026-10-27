@@ -56,6 +56,13 @@ a held draw. Chords and partial overlaps remain distinct.
 
 `parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Third-party compatibility and native editor coverage remain in the opt-in installed-plugin tests.
 
+`editor_unavailable_e2e` holds native-editor startup while Save or WAV export is
+requested. An explicit unsupported-view response before the editor becomes ready
+must continue the operation using the project state, including a real audible
+VST3 export. The same error after a working editor reports parameter changes
+must still cancel saving and preserve recovery. This requires no desktop or
+installed plug-in and uses the production DSP worker.
+
 `error_details_e2e` exercises real export failures and isolated editor failures through
 the running app. It checks the complete diagnostic text, clipboard copy, retained
 caller, and safe dismissal. `render_error_e2e` runs a native VST3 whose processing
@@ -163,7 +170,7 @@ Supported commands:
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
 | `open` | `path` | Execute an already-approved open through the document pipeline, preserving the outgoing session in recovery. Use `file_dialog` and File → Open to test the unsaved-change decision. |
-| `file_dialog` | `kind` (`save`, `open`, or `export`), `path` (or `null`) | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. |
+| `file_dialog` | `kind` (`save`, `open`, `export`, or `export_midi`), `path` (or `null`), optional `replace_existing` | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. If extension normalization changes the path to an existing destination, only `replace_existing: true` accepts the additional replacement decision; false or omitted cancels. Exact recognized-extension paths retain the native picker's original confirmation. |
 | `close_window` | — | Deliver a native viewport close request and return the resulting guard or exit state. Unsaved work requires an explicit UI choice. |
 | `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an active menu or utility window over an identically named inactive workspace control. |
 | `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
@@ -203,6 +210,25 @@ actual generated source notes, including trimmed/stretched ghost instances,
 one-step undo/redo and portable project recall. Run it on its own with
 `cargo test --locked -p daw-app --test midi_generate_e2e`; it needs no display,
 audio device or installed plugin.
+
+`midi_note_entry_e2e` exercises the shared drawing-length picker, remembered
+Last note duration, drag-to-length gestures, the Clip end marker and drawing
+beyond it, including one-step Undo and trimmed/stretched ghost source timing.
+`midi_generation_memory_e2e` checks per-clip session choices after apply/cancel,
+independent visual Grid scale, restored editor view, **Next range**, and bounds.
+`novice_clip_e2e` covers editable Properties Start/Duration with move/trim and
+Undo, Add pattern from the toolbar and context menu, empty-lane guidance, and
+sparse Arrangement Fit row sizing.
+
+`novice_library_e2e` distinguishes absent VST3 inventory from filtered results,
+opens Plug-in folders and restores its caller, clears filters, and verifies
+unassigned-instrument silence guidance without changing notes or history.
+`novice_recovery_e2e` reaches Choose instrument directly from Clip Editor and
+Audio setup from a device-error notice, preserving the caller and project.
+
+```sh
+cargo test --locked -p daw-app --test midi_note_entry_e2e --test midi_generation_memory_e2e --test novice_clip_e2e --test novice_library_e2e --test novice_recovery_e2e
+```
 
 Headless runs disable automatic physical-device startup for held-note previews. `RILL_E2E_AUDIO_DEVICE=1` enables it for a deliberate native-device test. The ordinary suite observes audition intent through `audition_request`; a native Surge renderer test verifies actual sound and note release without a hardware device.
 
@@ -371,6 +397,26 @@ default release tail. Popup and destination-picker cancellation preserve the
 project and caller. Its opt-in native test uses `RILL_TEST_VST_INSTRUMENT`
 (Surge XT) to verify both choices against an actual isolated plugin tail;
 ordinary container runs require no installed plugins.
+
+`novice_documents_e2e` saves and reopens through the actual menus, checks saved
+filename/dirty identity and picker defaults, and exercises extensionless,
+uppercase and legacy project filenames. It covers missing-instrument WAV
+warnings, cancellation and explicit continuation, trimmed/empty MIDI exclusion,
+mute/solo eligibility, normal audio export and named MIDI completion with Copy
+path and MIDI reimport. Rendered WAV oracles require healthy audio to remain
+nonzero and unassigned MIDI-only output to remain silent. State exposes
+`project_title`, `file_dialog_defaults` and `export_missing_instruments` for
+observing those decisions; native picker presentation still needs desktop tests.
+
+```sh
+cargo test --locked -p daw-app --test novice_documents_e2e --test export_options_e2e --test export_feedback_e2e
+```
+
+The vendored RFD Linux Zenity regression runs separately with
+`cargo test --locked -p daw-app --test native_picker_arguments`.
+It checks directory+basename construction without changing the portal's separate
+fields; native Save as and WAV/MIDI picker checks additionally accept a
+basename-only edit beside a saved project in a directory containing spaces.
 
 `arranger_tools_e2e` exercises the common audio/MIDI toolset through real pointer and keyboard events: selected-result behavior for repeated Duplicate/Cut, Join and Ghost copy, both trim edges, Shift snap bypass, held Shift-duplicate, Stretch/Undo/return-to-origin, and stretch→trim→split composition. It verifies local ghost timing, linked/independent source edits, versioned portable recall, joined WAV duration/pitch, editor tool reset, and device-free audio continuity while stretching. `live_edit_e2e` additionally stretches MIDI and audio while retaining instrument/effect sandbox identities, sustained MIDI voices and continuous PCM, including while the pointer remains held.
 
@@ -551,6 +597,22 @@ only the replacement document's sources. Worker counters verify background work
 was submitted without requiring an artificial minimum pending duration on fast
 machines. These tests use generated WAV files and need no desktop, audio device,
 installed plug-in or network connection.
+
+
+## Returning-user feedback regressions
+
+`numeric_replacement_e2e` uses mouse multi-click, typing and a mouse commit to replace complete tempo, gain and generator-range values without Select All. Shared `numeric_entry` tests also cover a coalesced click/text frame, native dragging and deferred commit.
+
+`instrument_targets_e2e` keeps instrument assignment bound to its intended existing track, preserves intentionally empty tracks when explicitly adding a new instrument, and opens clips through Pencil double-click or their visible Edit action. `document_context_e2e` covers remembered first-save folders across New/restart, cancellation/failure/deleted-folder fallback, and consistent saved-file diagnostic identity.
+
+`generation_workflow_e2e` checks full requested bar extents with shortened notes/rests, sequential additions without closing Generate, separate Undo steps, ghost/source bounds, maximum beat limits, all twelve root choices and explicit view-only grid-scale sync.
+
+`offline_processing_e2e` runs a real native fixture that requires VST3 offline mode: a slow first block succeeds while a hung block remains bounded and preserves an existing WAV. `render_error_e2e` retains the independent live-playback timeout/isolation checks. `export_retry_e2e` drives File export and Retry through the running app, verifies retained mix/options after later edits, and checks that document switching waits for either completion or an explicit failure decision. `export_run` diagnostics expose filename, original document identity, tails choice, rate, failure and elapsed time.
+
+```sh
+cargo test --locked -p daw-app --test numeric_replacement_e2e --test instrument_targets_e2e --test document_context_e2e --test generation_workflow_e2e --test offline_processing_e2e --test export_retry_e2e --test render_error_e2e -- --test-threads=1
+cargo test --locked -p daw-ui --test numeric_entry
+```
 
 `waveform_refinement_e2e` checks the immediate raw preview, subsequent exact source
 peaks, and actual antialiased mesh/fringe geometry in Arrangement, Clip Editor,

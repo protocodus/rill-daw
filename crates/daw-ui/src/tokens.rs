@@ -32,6 +32,10 @@ pub const FONT_SUBTITLE: f32 = 16.0;
 pub const FONT_HEADING: f32 = 20.0;
 pub const FONT_CANVAS: f32 = 12.0;
 pub const TIMELINE_RULER_HEIGHT: f32 = 36.0;
+pub const TIMELINE_LOOP_STRIP_HEIGHT: f32 = 5.0;
+/// Keep loop feedback below both ruler label rows, with a clear gap.
+pub const TIMELINE_LOOP_RULER_HEIGHT: f32 =
+    TIMELINE_RULER_HEIGHT + SPACE_SM + TIMELINE_LOOP_STRIP_HEIGHT;
 pub const FONT_TRACK: f32 = 14.0;
 pub const SWITCH_WIDTH: f32 = 36.0;
 pub const SWITCH_HEIGHT: f32 = 20.0;

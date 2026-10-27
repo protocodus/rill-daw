@@ -389,7 +389,8 @@ fn generated_chord_merges_its_covered_tone_without_rewriting_existing_velocity()
             3
         );
         assert_eq!(draft["project"], before["project"]);
-        let committed = app.click("Add notes");
+        app.click("Add notes");
+        let committed = app.click("Done");
         assert_eq!(notes(&committed, clip).len(), 5);
         assert!(
             notes(&committed, clip)

@@ -427,6 +427,8 @@ fn card_clicks_select_while_double_click_creates_or_assigns_the_chosen_instrumen
             .find(|track| track["id"] == destination)
             .unwrap()["clips"]
     );
-    assert_eq!(assigned["popups"]["instrument"], true);
+    assert_eq!(assigned["popups"]["instrument"], false);
+    assert_eq!(assigned["popups"]["library"], false);
+    assert_eq!(assigned["view"], "Arrangement");
     app.quit();
 }

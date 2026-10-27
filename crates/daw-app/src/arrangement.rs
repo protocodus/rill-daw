@@ -11,7 +11,6 @@ use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, 
 const HEADER: f32 = 248.0;
 const ROW: f32 = 96.0;
 const COMPACT_ROW: f32 = 72.0;
-const LOOP_STRIP: f32 = 12.0;
 
 enum Edit {
     Select(u64, u64, bool, bool),
@@ -161,6 +160,7 @@ impl DawApp {
         daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
         let mut fit = false;
         let mut nudge = 0;
+        let mut add_pattern = false;
         let amplitude_id = egui::Id::new("arrangement_waveform_amplitude");
         let mut waveform_amplitude = ui.ctx().data_mut(|data| {
             data.get_temp::<daw_ui::WaveformAmplitudeScale>(amplitude_id)
@@ -175,6 +175,9 @@ impl DawApp {
                 }
             });
             nudge = daw_ui::nudge_menu(ui, self.selected().is_some());
+            add_pattern = daw_ui::button(ui, "Add pattern")
+                .on_hover_text("Add a four-beat MIDI pattern at the cursor; use the selected MIDI track or create one")
+                .clicked();
             daw_ui::view_menu(ui, "View", |ui| {
                 view_action = daw_ui::timeline_selection_view_actions(
                     ui,
@@ -268,9 +271,7 @@ impl DawApp {
             ui.available_rect_before_wrap().min
                 + Vec2::new(
                     header_width,
-                    daw_ui::tokens::TIMELINE_RULER_HEIGHT
-                        + LOOP_STRIP
-                        + ui.spacing().item_spacing.y,
+                    daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT + ui.spacing().item_spacing.y,
                 ),
             ui.available_rect_before_wrap().max - Vec2::new(12.0 + right_inset, 0.0),
         );
@@ -375,9 +376,27 @@ impl DawApp {
                 ((canvas.height() - 24.0 - folder_footers).max(1.0) / row_units.max(1.0)).max(0.01);
             viewport.row_offset = 0.0;
         }
+        if fit || navigation.fit {
+            // Fit keeps sparse projects at an ordinary track scale; explicit
+            // selection fitting and manual dimensions retain their own sizing.
+            viewport.row_height = viewport.row_height.min(ROW);
+            bounds.end_row = (row_units + folder_footers / viewport.row_height).max(1.0);
+        }
         self.zoom = viewport.pixels_per_beat;
         let content_width = (ui.available_width() - 12.0).max(header_width + 1.0);
+        let pattern_start = self.snapped(self.cursor).max(0.0);
         let mut edits = Vec::new();
+        if add_pattern {
+            let track = self
+                .selected_track
+                .filter(|id| {
+                    self.project
+                        .track(*id)
+                        .is_some_and(|track| track.kind == TrackKind::Midi)
+                })
+                .unwrap_or(0);
+            edits.push(Edit::New(track, pattern_start));
+        }
         let mut new_cursor = None;
         let mut popup = None;
         let mut channel_target = None;
@@ -410,10 +429,7 @@ impl DawApp {
             .map(|(index, track)| (track.id, index + 1))
             .collect();
         let (ruler, ruler_response) = ui.allocate_exact_size(
-            Vec2::new(
-                content_width,
-                daw_ui::tokens::TIMELINE_RULER_HEIGHT + LOOP_STRIP,
-            ),
+            Vec2::new(content_width, daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT),
             Sense::click(),
         );
         let p = ui.painter_at(ruler);
@@ -505,11 +521,11 @@ impl DawApp {
             let rr = Rect::from_min_max(
                 Pos2::new(
                     origin + self.project.loop_start as f32 * self.zoom,
-                    loop_lane.top() + 2.0,
+                    ruler.bottom() - daw_ui::tokens::TIMELINE_LOOP_STRIP_HEIGHT,
                 ),
                 Pos2::new(
                     origin + self.project.loop_end as f32 * self.zoom,
-                    loop_lane.bottom() - 2.0,
+                    loop_lane.bottom(),
                 ),
             )
             .intersect(loop_lane);
@@ -762,6 +778,12 @@ impl DawApp {
                         }
                     }
                     row_response.context_menu(|ui| {
+                        if track.kind == TrackKind::Midi
+                            && daw_ui::button(ui, "Add pattern").clicked()
+                        {
+                            edits.push(Edit::New(track.id, pattern_start));
+                            ui.close();
+                        }
                         if track.kind == TrackKind::Folder && daw_ui::button(ui, "Add subfolder").clicked() {
                             edits.push(Edit::Folder(Some(track.id)));
                             ui.close();
@@ -862,6 +884,15 @@ impl DawApp {
                             track.id,
                             self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0),
                         ));
+                    }
+                    if track.kind == TrackKind::Midi && track.clips.is_empty() && row_height >= 32.0 {
+                        p.text(
+                            Pos2::new(grid_left + 24.0, row.center().y),
+                            Align2::LEFT_CENTER,
+                            "Double-click to add a pattern",
+                            FontId::proportional(daw_ui::tokens::FONT_CANVAS),
+                            palette(ui.ctx()).muted,
+                        );
                     }
                     let mut clips: Vec<_> = track.clips.iter().filter(|clip| !clip.is_take_source()).collect();
                     if track.kind == TrackKind::Audio {
@@ -1032,9 +1063,9 @@ impl DawApp {
                         clicked_clip |= response.clicked();
                         let double = response.clicked() && response.interact_pointer_pos().is_some_and(|position| {
                             self.arranger_selection.click_tracker.register(clip.id, position, ui.input(|input| input.time),
-                                !press_shift && self.tool == daw_ui::EditorTool::Select)
+                                !press_shift && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Pencil))
                         });
-                        if double && self.tool == daw_ui::EditorTool::Select {
+                        if double {
                             self.selected_track = Some(track.id);
                             self.selected_clip = Some(clip.id);
                             open_editor = true;
@@ -1106,6 +1137,17 @@ impl DawApp {
                             }
                         }
                         response.context_menu(|ui| {
+                            if daw_ui::button(ui, if matches!(clip.content, ClipContent::Midi { .. }) {
+                                "Edit notes"
+                            } else {
+                                "Edit audio"
+                            }).clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                self.selected_notes.clear();
+                                open_editor = true;
+                                ui.close();
+                            }
                             let member = self.arranger_selection.ids.contains(&clip.id);
                             if daw_ui::selection_membership_action(ui, member) {
                                 edits.push(Edit::Select(track.id, clip.id, true, false));
@@ -1234,7 +1276,7 @@ impl DawApp {
                 p.text(
                     Pos2::new(grid_left + 24.0, empty.top() + 34.0),
                     Align2::LEFT_CENTER,
-                    "+   Drop audio here to create a track",
+                    "Drop audio here · Double-click for MIDI",
                     FontId::proportional(12.0),
                     palette(ui.ctx()).muted,
                 );
@@ -1697,6 +1739,7 @@ impl DawApp {
                     self.selected_clip = Some(clip.id);
                     self.selected_track = Some(id);
                     self.project.track_mut(id).unwrap().clips.push(clip);
+                    self.edit_label = Some("Add pattern".into());
                     if new_track {
                         self.open_instrument_chooser(true);
                     }

@@ -61,6 +61,25 @@ impl Harness {
         Self::launch_configured(None, directory, Some(&config), None, false)
     }
 
+    /// Keep ALSA confined to a null PCM while requesting a disconnected output.
+    #[cfg(target_os = "linux")]
+    pub fn with_missing_output() -> Self {
+        let directory = tempfile::tempdir().expect("create isolated audio failure directory");
+        let config = directory.path().join("alsa-null.conf");
+        std::fs::write(
+            &config,
+            "pcm.!default { type null hint { show on description \"Rill null output\" } }\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(directory.path().join("config")).unwrap();
+        std::fs::write(
+            directory.path().join("config/settings.json"),
+            r#"{"device_name":"Disconnected Rill E2E output"}"#,
+        )
+        .unwrap();
+        Self::launch_configured(None, directory, Some(&config), None, false)
+    }
+
     fn launch(vst_path: Option<&std::path::Path>) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
         Self::launch_in(vst_path, directory)

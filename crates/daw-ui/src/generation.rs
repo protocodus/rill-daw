@@ -8,6 +8,27 @@ pub struct GenerationBarRangeResponse {
     pub length: Response,
 }
 
+/// All twelve pitch classes stay visible without scrolling a long menu.
+pub fn generation_root_selector(ui: &mut Ui, root: &mut u8) -> Response {
+    const NAMES: [&str; 12] = [
+        "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B",
+    ];
+    crate::select("generation_root", NAMES[usize::from(*root % 12)])
+        .show_ui(ui, |ui| {
+            egui::Grid::new("generation_pitch_classes")
+                .num_columns(3)
+                .show(ui, |ui| {
+                    for (pitch, name) in NAMES.into_iter().enumerate() {
+                        crate::selectable_value(ui, root, pitch as u8, name);
+                        if pitch % 3 == 2 {
+                            ui.end_row();
+                        }
+                    }
+                });
+        })
+        .response
+}
+
 impl GenerationBarRangeResponse {
     pub fn changed(&self) -> bool {
         self.start.changed() || self.length.changed()

@@ -54,9 +54,9 @@ fn prepare(
     isolated.tracks.push(source);
     let mut renderer = match cancel {
         Some(cancel) => {
-            Renderer::new_with_options_cancelled(&isolated, sample_rate, false, options, cancel)?
+            Renderer::new_offline_with_options_cancelled(&isolated, sample_rate, options, cancel)?
         }
-        None => Renderer::new_with_options(&isolated, sample_rate, false, options)?,
+        None => Renderer::new_offline_with_options(&isolated, sample_rate, options)?,
     };
     renderer.seek(selection.start)?;
     Ok((renderer, frames as usize))

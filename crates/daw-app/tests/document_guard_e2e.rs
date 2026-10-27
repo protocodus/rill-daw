@@ -76,7 +76,11 @@ fn new_confirmation_is_bounded_blocks_background_edits_and_cancel_restores_conte
             let mut project = Project::new();
             project.name =
                 "夜のシンセ 🎹 Long project name with a meaningful description ".repeat(12);
-            let seed = app.directory.path().join("long-name.json");
+            // The workspace identifies saved documents by their filename. Keep
+            // this filename long too, so the title-boundary check stays useful.
+            let saved_title =
+                "夜のシンセ 🎹 Long saved project name with a meaningful description ".repeat(2);
+            let seed = app.directory.path().join(format!("{saved_title}.json"));
             project.save(&seed).unwrap();
             let loaded = app.command(json!({"command":"open", "path":seed}));
             let title = loaded["label_rects"]

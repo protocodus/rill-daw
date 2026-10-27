@@ -14,7 +14,9 @@ use std::{
 pub(crate) enum LibraryTarget {
     #[default]
     Browse,
-    Instrument,
+    Instrument {
+        track: Option<u64>,
+    },
     Insert(u64),
     Send(u64),
 }
@@ -143,8 +145,10 @@ impl DawApp {
         });
         self.open_popup(PopupKind::Library);
         self.plugin_filter.clear();
-        self.library_target = LibraryTarget::Instrument;
         self.plugin_assign_target = if assign { target } else { None };
+        self.library_target = LibraryTarget::Instrument {
+            track: self.plugin_assign_target,
+        };
     }
 
     pub(crate) fn open_effect_library(&mut self, track: u64, send: bool) {
@@ -179,9 +183,22 @@ impl DawApp {
             state.developer.clear();
             state.grid_filter = None;
         }
-        let assign = self.plugin_assign_target.is_some();
+        // The chooser owns its assignment destination. A native preview or
+        // later selection change must never turn Assign into Add, or send it
+        // to a different MIDI track.
+        let assignment_target = match self.library_target {
+            LibraryTarget::Instrument { track } => track,
+            _ => self.plugin_assign_target,
+        };
+        let assign = assignment_target.is_some();
+        let assignment_target = assignment_target.filter(|id| {
+            self.project
+                .track(*id)
+                .is_some_and(|track| track.kind == TrackKind::Midi)
+        });
         let source = match self.library_target {
             LibraryTarget::Insert(track) | LibraryTarget::Send(track) => Some(track),
+            LibraryTarget::Instrument { track: Some(track) } => Some(track),
             _ => self.selected_track,
         }
         .filter(|id| {
@@ -308,6 +325,9 @@ impl DawApp {
                 }).inner;
                 ui.add_space(8.0);
                 let filter = self.plugin_filter.to_lowercase();
+                // A filtered-out device needs a different next step from an
+                // inventory with no instruments/effects of the requested type.
+                let has_kind = self.vst_catalog.iter().any(|entry| state.kind.accepts(entry));
                 let matches: Vec<_> = self
                     .vst_catalog
                     .iter()
@@ -335,7 +355,10 @@ impl DawApp {
                     DeviceKind::Effect if matches!(self.library_target, LibraryTarget::Send(_)) => DeviceAction::Send,
                     DeviceKind::Effect => DeviceAction::Insert,
                 };
-                let enabled = state.kind == DeviceKind::Instrument || source.is_some();
+                let enabled = match state.kind {
+                    DeviceKind::Instrument => !assign || assignment_target.is_some(),
+                    DeviceKind::Effect => source.is_some(),
+                };
                 let layout = daw_ui::device_grid_layout(ui.available_width());
                 let reflowed = state.grid_columns != layout.columns;
                 state.grid_columns = layout.columns;
@@ -413,7 +436,49 @@ impl DawApp {
                 });
                 if matches.is_empty() && self.vst_scan.is_none() {
                     let mut empty = ui.new_child(egui::UiBuilder::new().max_rect(grid.rect));
-                    empty.centered_and_justified(|ui| { daw_ui::text::note(ui, "No matching devices"); });
+                    empty.vertical_centered(|ui| {
+                        ui.add_space(daw_ui::tokens::SPACE_XL);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(ui.available_width().min(540.0), 0.0),
+                            egui::Layout::top_down(egui::Align::Center),
+                            |ui| {
+                                if has_kind {
+                                    daw_ui::text::subtitle(ui, if state.kind == DeviceKind::Instrument {
+                                        "No matching instruments"
+                                    } else {
+                                        "No matching effects"
+                                    });
+                                    daw_ui::text::note(ui, "Try another search or clear the filters.");
+                                } else {
+                                    daw_ui::text::subtitle(ui, if state.kind == DeviceKind::Instrument {
+                                        "No VST3 instruments found"
+                                    } else {
+                                        "No VST3 effects found"
+                                    });
+                                    if state.kind == DeviceKind::Instrument {
+                                        daw_ui::text::note(ui, "MIDI notes stay silent until a VST3 instrument is assigned.");
+                                    }
+                                    daw_ui::text::note(ui, if state.kind == DeviceKind::Instrument {
+                                        "Install a VST3 instrument, then Scan. Use Plug-in folders if it is installed elsewhere."
+                                    } else {
+                                        "Install a VST3 effect, then Scan. Use Plug-in folders if it is installed elsewhere."
+                                    });
+                                    if daw_ui::button(ui, "Plug-in folders").clicked() {
+                                        folders = true;
+                                    }
+                                }
+                                if (!self.plugin_filter.is_empty() || !state.developer.is_empty())
+                                    && daw_ui::button(ui, "Clear filters").clicked()
+                                {
+                                    self.plugin_filter.clear();
+                                    state.developer.clear();
+                                    state.selected = None;
+                                    state.grid_filter = None;
+                                    self.plugin_search_focus = true;
+                                }
+                            },
+                        );
+                    });
                 }
                 let mut cards: Vec<_> = grid.cards.into_iter().map(|(_, card)| card).collect();
                 for card in &mut cards {
@@ -468,7 +533,16 @@ impl DawApp {
                             daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
                         });
                     });
-                    if state.kind == DeviceKind::Effect {
+                    if state.kind == DeviceKind::Instrument {
+                        let context = if assign {
+                            assignment_target.and_then(|id| self.project.track(id))
+                                .map(|track| format!("Assign to {}", track.name))
+                                .unwrap_or_default()
+                        } else {
+                            "Create a new MIDI track".to_owned()
+                        };
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, context);
+                    } else {
                         let context = source.and_then(|id| self.project.track(id)).map(|track| {
                             if primary == DeviceAction::Send { format!("Send from {}", track.name) } else { track.name.clone() }
                         }).unwrap_or_else(|| "Select a channel to add effects".to_owned());
@@ -538,14 +612,11 @@ impl DawApp {
             return;
         }
         let replace = action == DeviceAction::Assign;
-        let target = self
-            .plugin_assign_target
-            .or(self.selected_track)
-            .filter(|id| {
-                self.project
-                    .track(*id)
-                    .is_some_and(|track| track.kind == TrackKind::Midi)
-            });
+        let target = source.filter(|id| {
+            self.project
+                .track(*id)
+                .is_some_and(|track| track.kind == TrackKind::Midi)
+        });
         if replace && target.is_none() {
             return;
         }
@@ -582,8 +653,16 @@ impl DawApp {
             }
             self.selected_notes.clear();
             self.changed();
-            self.replace_popup(PopupKind::Instrument);
-            self.instrument_autolaunch = Some(track);
+            if replace {
+                // Assigning a sound completes the chooser. Restore the caller
+                // so note entry can continue without dismissing an overview or
+                // an automatically launched native editor first.
+                self.instrument_autolaunch = None;
+                self.close_popup();
+            } else {
+                self.replace_popup(PopupKind::Instrument);
+                self.instrument_autolaunch = Some(track);
+            }
         }
         self.message(
             result,

@@ -2,13 +2,22 @@
 //! Low-level requests remain available to controlled automation and completions.
 use crate::app::DawApp;
 use eframe::egui;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DocumentDialog {
     Save,
     Open,
     Export,
+    ExportMidi,
+}
+
+/// A headless picker result still passes through the production destination
+/// checks. Missing replacement decisions are cancellations, never approval.
+pub(crate) struct DocumentDialogSelection {
+    pub kind: DocumentDialog,
+    pub path: Option<PathBuf>,
+    pub replace_existing: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -21,6 +30,7 @@ pub(crate) enum DocumentTransition {
 #[derive(Clone)]
 enum Stage {
     Waiting,
+    ExportFailed,
     Checking,
     Confirm,
     PreparingSave(PathBuf),
@@ -38,39 +48,148 @@ pub(crate) struct DocumentGuard {
 }
 
 impl DawApp {
+    /// The document's disk identity stays distinct from its musical project name.
+    pub(crate) fn document_identity(&self) -> String {
+        self.project_path
+            .as_ref()
+            .and_then(|path| path.file_stem())
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.project.name.clone())
+    }
+
+    pub(crate) fn document_title(&self) -> String {
+        format!(
+            "{}{}",
+            self.document_identity(),
+            if self.modified { " •" } else { "" }
+        )
+    }
+
+    pub(crate) fn document_dialog_filename(&self, kind: DocumentDialog) -> Option<String> {
+        if kind == DocumentDialog::Open {
+            return None;
+        }
+        if kind == DocumentDialog::Save
+            && let Some(name) = self.project_path.as_ref().and_then(|path| path.file_name())
+        {
+            return Some(name.to_string_lossy().into_owned());
+        }
+        let stem = self
+            .project_path
+            .as_ref()
+            .and_then(|path| path.file_stem())
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| {
+                let name = self.project.name.replace(['/', '\\'], "-");
+                if name.trim().is_empty() {
+                    "Untitled".into()
+                } else {
+                    name
+                }
+            });
+        let extension = match kind {
+            DocumentDialog::Save => "rill",
+            DocumentDialog::Export => "wav",
+            DocumentDialog::ExportMidi => "mid",
+            DocumentDialog::Open => unreachable!(),
+        };
+        Some(format!("{stem}.{extension}"))
+    }
+
+    pub(crate) fn document_dialog_directory(&self) -> Option<&Path> {
+        self.project_path
+            .as_ref()
+            .and_then(|path| path.parent())
+            .map(|directory| {
+                if directory.as_os_str().is_empty() {
+                    Path::new(".")
+                } else {
+                    directory
+                }
+            })
+            .filter(|directory| directory.is_dir())
+            .or_else(|| {
+                self.settings
+                    .last_project_directory
+                    .as_deref()
+                    .filter(|directory| directory.is_dir())
+            })
+    }
+
+    pub(crate) fn remember_project_directory(&mut self, path: &Path) {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let Some(directory) = parent.canonicalize().ok().filter(|path| path.is_dir()) else {
+            return;
+        };
+        self.setup_draft.last_project_directory = Some(directory.clone());
+        if self.settings.last_project_directory.as_ref() != Some(&directory) {
+            self.settings.last_project_directory = Some(directory);
+            // A preference-write failure must not turn a completed project
+            // save into a failed document operation. The session still keeps it.
+            let _ = self.settings.save();
+        }
+    }
+
     pub(crate) fn pick_document_path(&mut self, kind: DocumentDialog) -> Option<PathBuf> {
-        if self
+        let injected = self
             .next_document_dialog
             .as_ref()
-            .is_some_and(|(next, _)| *next == kind)
-        {
-            return self.next_document_dialog.take().and_then(|(_, path)| path);
-        }
-        let dialog = if kind == DocumentDialog::Export {
-            rfd::FileDialog::new().add_filter("Wave audio", &["wav"])
+            .is_some_and(|selection| selection.kind == kind);
+        let (chosen, replacement_decision) = if injected {
+            let selection = self.next_document_dialog.take().unwrap();
+            (
+                selection.path?,
+                Some(selection.replace_existing.unwrap_or(false)),
+            )
         } else {
-            rfd::FileDialog::new()
-                .add_filter("Rill project", &["rill"])
-                .add_filter("Legacy Rill session", &["json"])
+            let dialog = match kind {
+                DocumentDialog::Export => rfd::FileDialog::new().add_filter("Wave audio", &["wav"]),
+                DocumentDialog::ExportMidi => {
+                    rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
+                }
+                _ => rfd::FileDialog::new()
+                    .add_filter("Rill project", &["rill"])
+                    .add_filter("Legacy Rill session", &["json"]),
+            };
+            let dialog = if let Some(parent) = self.document_dialog_directory() {
+                dialog.set_directory(parent)
+            } else {
+                dialog
+            };
+            let dialog = if let Some(filename) = self.document_dialog_filename(kind) {
+                dialog.set_file_name(filename)
+            } else {
+                dialog
+            };
+            let chosen = daw_ui::with_native_dialog_menu(|| match kind {
+                DocumentDialog::Open => dialog.pick_file(),
+                _ => dialog.save_file(),
+            })?;
+            (chosen, None)
         };
-        let dialog = if let Some(parent) = self.project_path.as_ref().and_then(|path| path.parent())
+        if kind != DocumentDialog::Open
+            && let Err(error) = self
+                .project
+                .validate_audio_destination(&chosen)
+                .and_then(|_| {
+                    self.project
+                        .validate_audio_destination(&normalize_document_path(chosen.clone(), kind))
+                })
         {
-            dialog.set_directory(parent)
-        } else {
-            dialog
-        };
-        daw_ui::with_native_dialog_menu(|| match kind {
-            DocumentDialog::Open => dialog.pick_file(),
-            DocumentDialog::Export => dialog.set_file_name("mixdown.wav").save_file(),
-            DocumentDialog::Save => {
-                let filename = self
-                    .project_path
-                    .as_ref()
-                    .and_then(|path| path.file_name())
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| format!("{}.rill", self.project.name));
-                dialog.set_file_name(filename).save_file()
+            // Selecting active source media remains an error even when a file
+            // suffix would redirect the write. Check the final name as well,
+            // before offering to replace any existing entry at that path.
+            self.message(Err(error), "");
+            if let Some(guard) = self.document_guard.as_mut() {
+                guard.error = Some(self.status.clone());
             }
+            return None;
+        }
+        normalize_and_confirm_document_path(chosen, kind, |destination| {
+            replacement_decision.unwrap_or_else(|| confirm_normalized_replacement(destination))
         })
     }
 
@@ -234,6 +353,27 @@ impl DawApp {
         }
     }
 
+    /// A document switch must not hide a WAV failure that it was waiting for.
+    pub(crate) fn document_export_failed(&mut self, error: String) {
+        if self.document_guard.as_ref().is_some_and(|guard| {
+            matches!(guard.stage, Stage::Waiting) && guard.tool_discard.is_some()
+        }) {
+            // Application tools cannot answer a GUI-only Continue/Cancel
+            // decision. Abort their transition and retain the already captured
+            // export report, including its full cause chain, for the caller.
+            self.document_guard = None;
+            self.status = error;
+            self.error = true;
+            return;
+        }
+        if let Some(guard) = self.document_guard.as_mut()
+            && matches!(guard.stage, Stage::Waiting)
+        {
+            guard.stage = Stage::ExportFailed;
+            guard.error = Some(error);
+        }
+    }
+
     pub(crate) fn document_save_finished(&mut self, succeeded: bool) {
         let Some(guard) = self
             .document_guard
@@ -279,6 +419,7 @@ impl DawApp {
             },
             "phase": match guard.stage {
                 Stage::Waiting => "waiting",
+                Stage::ExportFailed => "export_failed",
                 Stage::Checking | Stage::PreparingSave(_) | Stage::PreparingTransition => "checking",
                 Stage::Confirm => "confirm",
                 Stage::Saving => "saving",
@@ -305,6 +446,7 @@ impl DawApp {
             return;
         };
         let confirmation = matches!(guard.stage, Stage::Confirm);
+        let export_failed = matches!(guard.stage, Stage::ExportFailed);
         let cancelable = !matches!(guard.stage, Stage::Executing);
         let progress = match guard.stage {
             Stage::Waiting => "Finishing the current operation…",
@@ -319,42 +461,54 @@ impl DawApp {
             DocumentTransition::Quit => "quitting Rill",
         };
         let error = guard.error.clone();
+        let export_progress = self.export_progress_message();
+        let identity = self.document_identity();
         let mut save = false;
         let mut discard = false;
+        let mut continue_after_export = false;
         let mut cancel = false;
         let response = daw_ui::modal(
             ctx,
             egui::Id::new("unsaved_document"),
             if confirmation {
                 "Save changes?"
+            } else if export_failed {
+                "WAV export failed"
             } else {
                 "Please wait"
             },
             |ui| {
-                daw_ui::text::bounded_block(
-                    ui,
-                    daw_ui::text::TextRole::Subtitle,
-                    &self.project.name,
-                    2,
-                );
+                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Subtitle, &identity, 2);
                 ui.add_space(daw_ui::tokens::SPACE_SM);
                 if confirmation {
                     daw_ui::text::body(ui, format!("Save your changes before {action}?"));
+                } else if export_failed {
+                    daw_ui::text::body(
+                        ui,
+                        "Cancel to return and retry, or continue without this export.",
+                    );
                 } else {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        daw_ui::text::body(ui, progress);
+                        daw_ui::text::body(ui, export_progress.as_deref().unwrap_or(progress));
                     });
+                    if export_progress.is_some() {
+                        daw_ui::text::body(ui, "The export will finish before switching sessions.");
+                    }
                 }
                 if let Some(error) = &error {
                     ui.add_space(daw_ui::tokens::SPACE_MD);
                     daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Body, error, 4);
                     if daw_ui::button(ui, "Details").clicked() {
-                        self.show_error_details(
-                            "Project error",
-                            error.lines().next().unwrap_or(error),
-                            error,
-                        );
+                        if export_failed {
+                            self.show_status_error_details();
+                        } else {
+                            self.show_error_details(
+                                "Project error",
+                                error.lines().next().unwrap_or(error),
+                                error,
+                            );
+                        }
                     }
                 }
                 ui.add_space(daw_ui::tokens::SPACE_XL);
@@ -364,6 +518,9 @@ impl DawApp {
                         if confirmation {
                             save = daw_ui::primary_button(ui, "Save").clicked();
                             discard = daw_ui::button(ui, "Don't save").clicked();
+                        }
+                        if export_failed {
+                            continue_after_export = daw_ui::button(ui, "Continue").clicked();
                         }
                         if cancelable {
                             cancel = daw_ui::button(ui, "Cancel").clicked();
@@ -377,6 +534,11 @@ impl DawApp {
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         if cancelable && (cancel || (response.is_top_modal && escape)) {
             self.document_guard = None;
+        } else if continue_after_export {
+            let guard = self.document_guard.as_mut().unwrap();
+            guard.error = None;
+            guard.stage = Stage::Checking;
+            self.request_document_snapshot(false);
         } else if discard {
             self.finish_document_transition(ctx);
         } else if save {
@@ -404,10 +566,184 @@ impl DawApp {
     }
 }
 
+/// Keep explicit legacy saves, and make extensionless native saves portable.
+/// Appending preserves dots in names without producing `Song.RILL.rill`.
+fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
+    let (extension, accepted): (&str, &[&str]) = match kind {
+        DocumentDialog::Open => return path,
+        DocumentDialog::Save => ("rill", &["rill", "json"]),
+        DocumentDialog::Export => ("wav", &["wav"]),
+        DocumentDialog::ExportMidi => ("mid", &["mid", "midi"]),
+    };
+    if !path.extension().is_some_and(|actual| {
+        accepted
+            .iter()
+            .any(|expected| actual.eq_ignore_ascii_case(expected))
+    }) {
+        let mut filename = path.file_name().unwrap_or_default().to_os_string();
+        filename.push(format!(".{extension}"));
+        path.set_file_name(filename);
+    }
+    path
+}
+
+/// A native picker only confirms replacement of the exact name it returned.
+/// Appending an extension can target a different existing entry, so protect
+/// that destination before starting any save, export, or editor-state barrier.
+fn normalize_and_confirm_document_path(
+    chosen: PathBuf,
+    kind: DocumentDialog,
+    confirm_replacement: impl FnOnce(&Path) -> bool,
+) -> Option<PathBuf> {
+    let destination = normalize_document_path(chosen.clone(), kind);
+    let entry_exists = match std::fs::symlink_metadata(&destination) {
+        Ok(_) => true,
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+    };
+    if destination != chosen && entry_exists && !confirm_replacement(&destination) {
+        return None;
+    }
+    Some(destination)
+}
+
+fn confirm_normalized_replacement(destination: &Path) -> bool {
+    let result = daw_ui::with_native_dialog_menu(|| {
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Warning)
+            .set_title("Replace existing file?")
+            .set_description(format!(
+                "The filename will be saved as:\n{}\n\nAn entry already exists at this path. Replace it?",
+                destination.display()
+            ))
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                "Replace".into(),
+                "Cancel".into(),
+            ))
+            .show()
+    });
+    // Older Windows common controls display standard OK/Cancel for custom
+    // labels; both APIs still require an explicit affirmative button.
+    result == rfd::MessageDialogResult::Ok
+        || result == rfd::MessageDialogResult::Custom("Replace".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use daw_core::Project;
+
+    #[test]
+    fn normalized_destination_confirmation_receives_the_actual_changed_path_only() {
+        let directory = tempfile::tempdir().unwrap();
+        for (kind, extension) in [
+            (DocumentDialog::Save, "rill"),
+            (DocumentDialog::Export, "wav"),
+            (DocumentDialog::ExportMidi, "mid"),
+        ] {
+            let chosen = directory.path().join(format!("Song.{extension}.other"));
+            let normalized = directory
+                .path()
+                .join(format!("Song.{extension}.other.{extension}"));
+            std::fs::write(&normalized, b"preserve me").unwrap();
+            let mut asked = false;
+            let cancelled = normalize_and_confirm_document_path(chosen.clone(), kind, |path| {
+                assert_eq!(path, normalized);
+                asked = true;
+                false
+            });
+            assert!(asked);
+            assert!(cancelled.is_none());
+            assert_eq!(std::fs::read(&normalized).unwrap(), b"preserve me");
+            let accepted = normalize_and_confirm_document_path(chosen, kind, |path| {
+                assert_eq!(path, normalized);
+                true
+            });
+            assert_eq!(accepted, Some(normalized.clone()));
+
+            // The picker already confirmed an existing exact filename, while
+            // an absent normalized filename has nothing to replace.
+            assert_eq!(
+                normalize_and_confirm_document_path(normalized.clone(), kind, |_| panic!(
+                    "second overwrite prompt"
+                )),
+                Some(normalized)
+            );
+            let absent = directory.path().join(format!("New {extension}"));
+            assert!(
+                normalize_and_confirm_document_path(absent, kind, |_| panic!("new file prompt"))
+                    .is_some()
+            );
+        }
+        let existing = directory.path().join("Existing without extension");
+        std::fs::write(&existing, b"open me").unwrap();
+        assert_eq!(
+            normalize_and_confirm_document_path(
+                existing.clone(),
+                DocumentDialog::Open,
+                |_| panic!("open replacement prompt")
+            ),
+            Some(existing)
+        );
+    }
+
+    #[test]
+    fn normalized_directory_entries_require_replacement_confirmation() {
+        let directory = tempfile::tempdir().unwrap();
+        let chosen = directory.path().join("Directory");
+        let normalized = chosen.with_extension("rill");
+        std::fs::create_dir(&normalized).unwrap();
+        let mut asked = false;
+        assert!(
+            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, |path| {
+                assert_eq!(path, normalized);
+                asked = true;
+                false
+            })
+            .is_none()
+        );
+        assert!(asked);
+        assert!(normalized.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlinks_are_existing_destinations_for_normalization_confirmation() {
+        let directory = tempfile::tempdir().unwrap();
+        let chosen = directory.path().join("Linked song");
+        let normalized = chosen.with_extension("rill");
+        let target = directory.path().join("Missing target");
+        std::os::unix::fs::symlink(&target, &normalized).unwrap();
+        assert!(!normalized.exists());
+        let mut asked = false;
+        assert!(
+            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, |path| {
+                assert_eq!(path, normalized);
+                asked = true;
+                false
+            })
+            .is_none()
+        );
+        assert!(asked);
+        assert_eq!(std::fs::read_link(&normalized).unwrap(), target);
+    }
+
+    #[test]
+    fn picker_uses_existing_current_parent_then_remembered_folder_and_accepts_relative_files() {
+        let ctx = egui::Context::default();
+        let mut app = DawApp::with_context(&ctx, Project::new(), None);
+        let directory = tempfile::tempdir().unwrap();
+        let current = directory.path().join("current");
+        let remembered = directory.path().join("remembered");
+        std::fs::create_dir(&current).unwrap();
+        std::fs::create_dir(&remembered).unwrap();
+        app.settings.last_project_directory = Some(remembered.clone());
+        app.project_path = Some(current.join("song.rill"));
+        assert_eq!(app.document_dialog_directory(), Some(current.as_path()));
+        std::fs::remove_dir(&current).unwrap();
+        assert_eq!(app.document_dialog_directory(), Some(remembered.as_path()));
+        app.project_path = Some(PathBuf::from("relative-song.rill"));
+        assert_eq!(app.document_dialog_directory(), Some(Path::new(".")));
+    }
 
     #[test]
     fn final_native_snapshot_can_cancel_a_previously_clean_transition() {

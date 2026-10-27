@@ -11,6 +11,8 @@ const CLASS_ID: TUID = [0x11; 16];
 const GAIN: u32 = 7;
 const LIFECYCLE_DELAY_MS: u64 = 0;
 const PROCESS_DELAY_MS: u64 = 0;
+const FIRST_PROCESS_DELAY_ONLY: bool = false;
+const REQUIRE_OFFLINE: bool = false;
 
 fn lifecycle_delay() {
     std::thread::sleep(std::time::Duration::from_millis(LIFECYCLE_DELAY_MS));
@@ -75,6 +77,7 @@ impl IPluginFactoryTrait for Factory {
         let plugin = ComWrapper::new(Instrument {
             gain: AtomicU64::new(0.5_f64.to_bits()),
             playing: AtomicBool::new(false),
+            processed: AtomicBool::new(false),
         })
         .to_com_ptr::<IComponent>()
         .unwrap();
@@ -106,6 +109,7 @@ impl IPluginFactory2Trait for Factory {
 struct Instrument {
     gain: AtomicU64,
     playing: AtomicBool,
+    processed: AtomicBool,
 }
 impl Class for Instrument {
     type Interfaces = (IComponent, IAudioProcessor, IEditController);
@@ -249,8 +253,13 @@ impl IAudioProcessorTrait for Instrument {
         kResultOk
     }
     unsafe fn process(&self, data: *mut ProcessData) -> tresult {
-        std::thread::sleep(std::time::Duration::from_millis(PROCESS_DELAY_MS));
+        if !FIRST_PROCESS_DELAY_ONLY || !self.processed.swap(true, Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(PROCESS_DELAY_MS));
+        }
         let data = &mut *data;
+        if REQUIRE_OFFLINE && data.processMode != ProcessModes_::kOffline as i32 {
+            return kResultFalse;
+        }
         let events = ComRef::from_raw(data.inputEvents);
         let mut playing = self.playing.load(Relaxed);
         for frame in 0..data.numSamples {
