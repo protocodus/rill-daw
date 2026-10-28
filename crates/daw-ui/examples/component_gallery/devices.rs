@@ -41,6 +41,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         producer: "Gallery fixture",
                         preview: None,
                         selected: state.selected == index,
+                        favorite: false,
                         icon,
                     },
                     width,
