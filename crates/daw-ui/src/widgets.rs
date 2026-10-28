@@ -467,6 +467,81 @@ pub fn selectable(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> 
     )
 }
 
+/// A full-width navigation row with a trailing item count, such as a library
+/// collection or producer. Selection and filtering stay with the caller.
+pub fn count_item(ui: &mut Ui, selected: bool, label: &str, count: usize) -> Response {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(
+            ui.available_width(),
+            tokens::COMPACT_HEIGHT + tokens::SPACE_SM,
+        ),
+        egui::Sense::click(),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            selected,
+            format!("{label}, {count}"),
+        )
+    });
+    if ui.is_rect_visible(rect) {
+        let colors = theme::palette(ui.ctx());
+        let painter = ui.painter_at(rect);
+        if selected || response.hovered() {
+            painter.rect_filled(
+                rect,
+                tokens::RADIUS,
+                if selected {
+                    colors.track_selected
+                } else {
+                    colors.control_hover
+                },
+            );
+        }
+        if response.has_focus() {
+            painter.rect_stroke(
+                rect,
+                tokens::RADIUS,
+                egui::Stroke::new(1.5_f32, colors.accent),
+                egui::StrokeKind::Inside,
+            );
+        }
+        let inner = rect.shrink2(egui::vec2(tokens::SPACE_SM, 0.0));
+        let count = painter.layout_no_wrap(
+            count.to_string(),
+            crate::text::TextRole::Note.font(),
+            colors.muted,
+        );
+        painter.galley(
+            egui::pos2(
+                inner.right() - count.size().x,
+                inner.center().y - count.size().y * 0.5,
+            ),
+            count.clone(),
+            colors.muted,
+        );
+        crate::text::paint_row(
+            &painter,
+            inner.with_max_x(inner.right() - count.size().x - tokens::SPACE_SM),
+            crate::text::TextRole::Body,
+            label,
+        );
+    }
+    response.on_hover_text(label)
+}
+
+/// An active filter shown as a compact chip; clicking it removes the filter.
+pub fn filter_chip(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
+    ui.add(
+        crate::IconButton::with_icon(crate::Icon::Close, label)
+            .small()
+            .selected(true)
+            .min_size(egui::vec2(0.0, tokens::COMPACT_HEIGHT)),
+    )
+    .on_hover_text("Remove filter")
+}
+
 pub fn selectable_value<T: PartialEq>(
     ui: &mut Ui,
     current: &mut T,

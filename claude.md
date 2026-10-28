@@ -39,7 +39,7 @@ adapters, the AI UI, and MCP handlers must not mutate `Project` directly. Existi
 GUI mutation paths remain migration work until they use the shared boundary;
 do not claim complete parity merely because the first registry exists.
 
-The implemented foundation currently exposes 32 current-song tools, four
+The implemented foundation currently exposes 33 current-song tools, four
 additional application-profile tools, and 66 typed core edits.
 It includes bulk composition/mixing, an atomic notes-plus-instrument workflow,
 selection, parameter discovery, analysis-backed clip processing, transport,

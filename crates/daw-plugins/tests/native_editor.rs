@@ -28,8 +28,7 @@ fn exercise(variable: &str, parameter_name: &str) {
         name: "Native test".into(),
         path,
         vendor: String::new(),
-        category: String::new(),
-        class_id: None,
+        ..PluginInfo::default()
     };
     let directory = tempfile::tempdir().unwrap();
     let catalog = PluginCatalog::new(directory.path());

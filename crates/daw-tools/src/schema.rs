@@ -607,8 +607,19 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "list_plugins",
-            "Search already scanned and trusted local VST3 instruments/effects; use returned catalog plugin_id for assignment.",
-            object(json!({"query":{"type":"string","maxLength":256}}), &[]),
+            "Search already scanned and trusted local VST3 instruments/effects, with the user's favorites and categories; use returned catalog plugin_id for assignment. refresh rescans plug-in folders in the background, for example after an install; call again until scanning is false.",
+            object(
+                json!({"query":{"type":"string","maxLength":256},"refresh":boolean()}),
+                &[],
+            ),
+        ),
+        (
+            "organize_plugin",
+            "Organize the user's plug-in library: mark a catalog plug-in as a favorite and/or replace its categories. An empty categories list restores the plug-in's own VST3 categories. The song is not changed.",
+            object(
+                json!({"plugin_id":string(),"favorite":boolean(),"categories":array(json!({"type":"string","minLength":1,"maxLength":64}),32)}),
+                &["plugin_id"],
+            ),
         ),
         (
             "assign_plugin",

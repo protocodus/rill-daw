@@ -41,7 +41,7 @@ impl Fixture {
     }
 
     fn app(&self, cache_previews: bool) -> Harness {
-        let app = Harness::with_vst_path(self.0.path());
+        let mut app = Harness::with_vst_path(self.0.path());
         if cache_previews {
             let cache =
                 daw_plugins::catalog::PluginCatalog::new(app.directory.path().join("cache"));
@@ -58,6 +58,8 @@ impl Fixture {
                     })
                     .unwrap();
             }
+            common::refresh_library(&mut app);
+            app.key("Escape");
         }
         app
     }

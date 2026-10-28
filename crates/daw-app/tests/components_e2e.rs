@@ -329,8 +329,8 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             );
             assert_eq!(
                 label_count(&before, &name(0)),
-                2,
-                "First device is shown on its card and in the selection footer"
+                3,
+                "First device is shown on its card, in the detail pane and in the selection footer"
             );
 
             let catalog = &before["library"]["catalog"];
@@ -338,12 +338,21 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
                 (catalog["min"][0].as_f64().unwrap() + catalog["max"][0].as_f64().unwrap()) * 0.5;
             let y =
                 (catalog["min"][1].as_f64().unwrap() + catalog["max"][1].as_f64().unwrap()) * 0.5;
-            let scrolled = app.command(json!({"command":"scroll","x":x,"y":y,"delta":-10000.0}));
+            let mut scrolled =
+                app.command(json!({"command":"scroll","x":x,"y":y,"delta":-10000.0}));
+            // Wheel scrolling animates; wait until the catalog stops moving.
+            loop {
+                let next = app.inspect();
+                if next["library"]["scroll_offset"] == scrolled["library"]["scroll_offset"] {
+                    break;
+                }
+                scrolled = next;
+            }
             assert!(scrolled["library"]["scroll_offset"].as_f64().unwrap() > 0.0);
             assert_eq!(
                 label_count(&scrolled, &name(0)),
-                1,
-                "Selected device context stays while its card scrolls away"
+                2,
+                "Selected device details and footer stay while its card scrolls away"
             );
             assert!(
                 visible(&scrolled, &name(79)),
@@ -367,7 +376,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             let selected = app.click(&name(79));
             assert_eq!(
                 label_count(&selected, &name(79)),
-                2,
+                3,
                 "Click must select the last device"
             );
             accessible(&selected, &["Add instrument track", "More"]);
@@ -380,14 +389,14 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             }
             let mut keyboard = app.inspect();
             for _ in 0..20 {
-                if label_count(&keyboard, &keyboard_name) == 2 {
+                if label_count(&keyboard, &keyboard_name) == 3 {
                     break;
                 }
                 keyboard = app.inspect();
             }
             assert_eq!(
                 label_count(&keyboard, &keyboard_name),
-                2,
+                3,
                 "Arrow selection must scroll into view"
             );
             accessible(&keyboard, &["Catalog item", "Add instrument track", "More"]);
@@ -395,7 +404,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             app.click("Catalog item");
             app.command(json!({"command":"key","key":"A","cmd":true}));
             let filtered = app.command(json!({"command":"text","text":"Catalog item 013"}));
-            assert_eq!(label_count(&filtered, &name(13)), 2);
+            assert_eq!(label_count(&filtered, &name(13)), 3);
             assert!(!visible(&filtered, &name(79)));
             accessible(
                 &filtered,

@@ -50,7 +50,7 @@ execution must derive from the canonical registry rather than separate lists.
 | `daw-ai` | Background `AgentRun`, provider adapters, bounded tool loop, encrypted credential envelope; sends `ToolCall` events to the app rather than owning a project |
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
 
-The current registry contains **36 tools**, of which **32 are current-song
+The current registry contains **37 tools**, of which **33 are current-song
 tools**, with **66 typed `SongEdit` variants**
 available through `apply_edits`. Its high-level operations avoid one call per
 note, control, or input assignment. This is substantial current-song coverage,
@@ -64,7 +64,7 @@ discovery remains authoritative as the catalog expands.
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
 | Musical edits | `apply_edits`, `create_midi_part`, `generate_part`, `transform_phrase`, `set_mix`, `join_clips`: atomic typed batches, complete patterns, seeded generation, phrase transforms, multi-channel settings, and MIDI/audio consolidation |
-| Instruments | `list_plugins`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs, assign instruments/inserts, create notes plus instrument in one commit, and inspect actual parameter metadata |
+| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites and categories (optionally rescanning plug-in folders), organize the library, assign instruments/inserts, create notes plus instrument in one commit, and inspect actual parameter metadata |
 | Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, or strip silence with one checked background operation |
 | Transport | `transport`: inspect, play, pause, stop, or seek the active song |
 | Recording | `get_recording`, `configure_recording`, `start_recording`, `stop_recording`, `retry_recording_input`: inspect phase, bulk-configure inputs/arming/monitoring/placement/timing, capture, finalize, and recover inputs through the existing recording lifecycle |

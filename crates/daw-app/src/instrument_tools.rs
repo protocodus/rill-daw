@@ -169,11 +169,13 @@ mod tests {
                 vendor: "Rill tests".into(),
                 category: "Instrument|Synth".into(),
                 class_id: Some("11111111111111111111111111111111".into()),
+                ..PluginInfo::default()
             },
             fingerprint: "trusted".into(),
             thumbnail: None,
             thumbnail_size: None,
             status: ThumbnailStatus::Missing,
+            added_unix_ms: 0,
         });
         app
     }

@@ -315,14 +315,16 @@ impl ToolHost for DawApp {
                 struct Args {
                     #[serde(default)]
                     query: String,
+                    #[serde(default)]
+                    refresh: bool,
                 }
                 let args: Args = parse_arguments(arguments)?;
                 if args.query.len() > 256 {
                     return Err(ToolError::new("invalid_arguments", "Search is too long"));
                 }
                 let query = args.query.to_lowercase();
-                if self.vst_catalog.is_empty() && self.vst_scan.is_none() {
-                    self.scan_plugins();
+                if (args.refresh || self.vst_catalog.is_empty()) && !self.plugin_sync.scanning() {
+                    self.refresh_plugins();
                 }
                 let plugins: Vec<_> = self
                     .vst_catalog
@@ -336,10 +338,59 @@ impl ToolHost for DawApp {
                     .map(|entry| {
                         json!({"id":catalog_id(entry),"name":entry.plugin.name,
                     "vendor":entry.plugin.vendor,"category":entry.plugin.category,
-                    "is_instrument":entry.plugin.is_instrument()})
+                    "is_instrument":entry.plugin.is_instrument(),
+                    "favorite":self.plugin_favorite(&entry.plugin),
+                    "categories":self.plugin_categories(&entry.plugin)})
                     })
                     .collect();
-                Ok(json!({"plugins":plugins,"scanning":self.vst_scan.is_some()}))
+                Ok(json!({"plugins":plugins,"scanning":self.plugin_sync.scanning()}))
+            }
+            "organize_plugin" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    plugin_id: String,
+                    favorite: Option<bool>,
+                    categories: Option<Vec<String>>,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                if args.categories.as_ref().is_some_and(|categories| {
+                    categories.len() > 32
+                        || categories.iter().any(|category| {
+                            category.trim().is_empty()
+                                || category.len() > 64
+                                || category.contains(',')
+                        })
+                }) {
+                    return Err(ToolError::new(
+                        "invalid_arguments",
+                        "Use up to 32 non-empty categories of at most 64 characters, without commas",
+                    ));
+                }
+                let plugin = self
+                    .vst_catalog
+                    .iter()
+                    .find(|entry| catalog_id(entry) == args.plugin_id)
+                    .ok_or_else(|| {
+                        ToolError::new("not_found", "Choose a plug-in ID returned by list_plugins")
+                    })?
+                    .plugin
+                    .clone();
+                if let Some(favorite) = args.favorite {
+                    self.edit_plugin_library(crate::library::LibraryEdit::Favorite(
+                        plugin.clone(),
+                        favorite,
+                    ));
+                }
+                if let Some(categories) = args.categories {
+                    self.edit_plugin_library(crate::library::LibraryEdit::Categories(
+                        plugin.clone(),
+                        categories.join(","),
+                    ));
+                }
+                Ok(json!({"plugin_id":args.plugin_id,
+                    "favorite":self.plugin_favorite(&plugin),
+                    "categories":self.plugin_categories(&plugin)}))
             }
             "assign_plugin" => {
                 #[derive(Deserialize)]

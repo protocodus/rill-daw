@@ -1,6 +1,7 @@
 use daw_engine::DeviceSettings;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -149,24 +150,11 @@ impl Settings {
                 .open(&probe)?,
         );
         fs::remove_file(probe)?;
-        fs::create_dir_all(directory)?;
-        let bytes = serde_json::to_vec_pretty(self)?;
-        let temp = temporary_path(directory, "settings");
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)?;
-        let result = (|| -> anyhow::Result<()> {
-            file.write_all(&bytes)?;
-            file.sync_all()?;
-            drop(file);
-            fs::rename(&temp, directory.join("settings.json"))?;
-            Ok(())
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(&temp);
-        }
-        result
+        write_atomically(
+            directory,
+            "settings.json",
+            &serde_json::to_vec_pretty(self)?,
+        )
     }
     pub fn audio(&self) -> DeviceSettings {
         DeviceSettings {
@@ -176,6 +164,61 @@ impl Settings {
             resample_quality: self.resample_quality,
         }
     }
+}
+
+/// How the user organizes the plug-in library. Keys come from
+/// [`PluginLibrary::key`], so they survive plug-in updates and cache resets.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PluginLibrary {
+    pub favorites: BTreeSet<String>,
+    /// User categories replacing the plug-in's own VST3 subcategories.
+    pub categories: BTreeMap<String, Vec<String>>,
+}
+
+impl PluginLibrary {
+    pub fn key(plugin: &daw_plugins::PluginInfo) -> String {
+        format!(
+            "{}#{}",
+            plugin.path.display(),
+            plugin.class_id.as_deref().unwrap_or_default()
+        )
+    }
+
+    pub fn load() -> Self {
+        fs::read(config_dir().join("plugin-library.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        write_atomically(
+            &config_dir(),
+            "plugin-library.json",
+            &serde_json::to_vec_pretty(self)?,
+        )
+    }
+}
+
+fn write_atomically(directory: &Path, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
+    fs::create_dir_all(directory)?;
+    let temp = temporary_path(directory, name);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
+    let result = (|| -> anyhow::Result<()> {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temp, directory.join(name))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
 }
 
 fn temporary_path(directory: &Path, prefix: &str) -> PathBuf {

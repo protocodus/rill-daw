@@ -145,6 +145,7 @@ fn main() -> anyhow::Result<()> {
         options,
         Box::new(move |cc| {
             let mut app = app::DawApp::new(cc, project, screenshot);
+            app.refresh_plugins();
             if mcp {
                 app.assistant.start_mcp_stdio(mcp_profile);
             }

@@ -68,16 +68,16 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
     app.click("Search instruments");
     app.command(json!({"command":"text","text":"Other"}));
     common::wait_visible(&mut app, "Other Keys");
-    app.click("All developers");
+    app.click("All categories");
     let enter = app.key("Enter");
     assert!(
         enter["project"]["tracks"].as_array().unwrap().is_empty(),
-        "Enter in a developer popup must not instantiate a device"
+        "Enter in a category popup must not instantiate a device"
     );
     app.key("Escape");
     menu(&mut app, "Window", "Library");
-    app.click("All developers");
-    front(&mut app, "AAA Rill developer");
+    // The sidebar row precedes the card's producer text.
+    app.click("AAA Rill developer");
     let state = app.inspect();
     assert!(
         visible(&state, "Other Keys"),
@@ -94,18 +94,24 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
         visible(&state, "Other Keys"),
         "Category metadata is searchable"
     );
-    assert!(!visible(&state, "VST3 · Instrument · Piano"));
-    let details = app.click("More");
-    assert!(visible(&details, "VST3 · Instrument · Piano"));
-    app.key("Escape");
+    let entry = state["plugin_catalog"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["name"] == "Other Keys")
+        .unwrap();
+    assert_eq!(entry["categories"], json!(["Piano"]));
+    assert!(
+        visible(&state, "CATEGORIES") && visible(&state, "Instrument"),
+        "The detail pane shows the kind and categories"
+    );
     let created = app.click("Add instrument track");
     assert_eq!(created["project"]["tracks"].as_array().unwrap().len(), 1);
     assert_eq!(created["project"]["tracks"][0]["name"], "Other Keys");
     assert_eq!(created["project"]["tracks"][0]["kind"], "Midi");
     assert_eq!(created["popups"]["instrument"], true);
     menu(&mut app, "Window", "Library");
-    app.click("AAA Rill developer");
-    front(&mut app, "All developers");
+    app.click("All developers");
     app.click("Piano");
     app.command(json!({"command":"key","key":"A","cmd":true}));
     app.command(json!({"command":"text","text":"Rill Fixture"}));
@@ -270,6 +276,7 @@ fn library_reuses_cached_native_preview_records_for_instruments_and_effects() {
             })
             .unwrap();
     }
+    common::refresh_library(&mut app);
     common::fixture_library(&mut app);
     let state = app.inspect();
     let ready: Vec<_> = state["plugin_catalog"]
@@ -311,7 +318,7 @@ fn send_browser_has_one_contextual_action_and_library_management_is_on_demand() 
     app.command(json!({"command":"text","text":"Rill Fixture FX"}));
     common::wait_library_device(&mut app, "Rill Fixture FX");
     let state = app.inspect();
-    assert!(visible(&state, "Scan"));
+    assert!(visible(&state, "Refresh"));
     assert!(!visible(&state, "Add to effect chain"));
     assert!(!visible(&state, "Capture preview"));
     let added = app.click("Create send track");
