@@ -2,8 +2,10 @@
 mod common;
 
 use common::Harness;
+#[cfg(target_os = "linux")]
 use daw_core::AudioData;
 use serde_json::{Value, json};
+#[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
 
 fn visible(state: &Value, label: &str) -> bool {
