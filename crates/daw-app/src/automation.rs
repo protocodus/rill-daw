@@ -321,12 +321,15 @@ impl Harness {
         app.virtual_audio = std::env::var_os("RILL_E2E_VIRTUAL_AUDIO").is_some();
         app.audio_device_enabled =
             app.virtual_audio || std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
-        app.automatic_plugin_previews = false;
+        // Native editor capture stays opt-in for tests, which supply an
+        // isolated helper through DAW_PLUGIN_HOST.
+        app.automatic_plugin_previews = std::env::var_os("RILL_E2E_PLUGIN_PREVIEWS").is_some();
         app.settings = Settings {
             scratch_dir,
             ..app.settings.clone()
         };
         app.setup_draft = app.settings.clone();
+        app.refresh_plugins();
         let mut harness = Self {
             ctx,
             app,
@@ -1300,7 +1303,12 @@ impl Harness {
             "plugin_catalog": self.app.vst_catalog.iter().map(|entry| json!({
                 "name": entry.plugin.name, "class_id": entry.plugin.class_id,
                 "thumbnail": entry.thumbnail, "status": format!("{:?}", entry.status),
+                "added_unix_ms": entry.added_unix_ms, "version": entry.plugin.version,
+                "architectures": entry.plugin.architectures,
+                "favorite": self.app.plugin_favorite(&entry.plugin),
+                "categories": self.app.plugin_categories(&entry.plugin),
             })).collect::<Vec<_>>(),
+            "plugin_scanning": self.app.plugin_sync.scanning(),
             "instrument_parameter_rect": self.ctx.data(|data| data.get_temp::<Rect>(egui::Id::new("instrument_parameter_rect"))).map(|rect| json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]})),
             "selected_track": self.app.selected_track,
             "selected_clip": self.app.selected_clip,

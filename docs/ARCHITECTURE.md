@@ -82,7 +82,7 @@ The app's `session_service` validates and commits candidates, records normal
 undo history, reconciles selection/native editors, increments song revision,
 and enters the established engine update path.
 
-`daw-tools` defines one catalog of 36 tool schemas, including 32 current-song
+`daw-tools` defines one catalog of 37 tool schemas, including 33 current-song
 tools and four application tools. Its high-level operations
 include generated phrases, notes-plus-instrument creation, bulk channel edits,
 selection, source-backed audio processing, MIDI/audio joining, and five recording tools. Pure song
@@ -221,7 +221,7 @@ Device reconfiguration retires the previous stream and plugin graph, waits for a
 
 Projects persist each instrument's optional VST3 class ID, opaque state (at most 64 MiB), and normalized parameter overrides. Preparation loads state before applying overrides. Replacing an instrument clears its state, overrides, and automation targets. Legacy projects with path-only VST3 references remain readable; removed built-in instrument/effect variants are rejected rather than silently substituted. Effects use the same state and parameter-override model, addressed by stable insert slot IDs across reorder. Replacing an effect clears obsolete state/overrides/automation. Automatic editor snapshots are debounced and deduplicated; consolidation into a state blob does not add a redundant Undo step.
 
-`PluginCatalog` stores validated PNG captures and metadata under the platform's Rill cache directory (`RILL_CACHE_DIR` overrides it). SHA-256 fingerprints cover the canonical bundle path, selected class, metadata, and bundle file sizes/modification times. Capture writes a temporary image, validates dimensions and pixels, then atomically publishes the image and record. Failed captures are recorded and do not retry on every frame. macOS captures the editor view; Windows captures the helper-owned window; Linux uses XRes ownership and XComposite offscreen pixels. No synthetic image stands in for an unavailable native editor.
+`PluginCatalog` stores validated PNG captures and metadata under the platform's Rill cache directory (`RILL_CACHE_DIR` overrides it). SHA-256 fingerprints cover the canonical bundle path, selected class, metadata, and bundle file sizes/modification times. Capture writes a temporary image, validates dimensions and pixels, then atomically publishes the image and record. Failed captures are recorded and do not retry on every frame. `plugin-index-v1.json` in the same directory persists the last scanned catalog, first-indexed times and preview status; thumbnails are referenced by fingerprint, never by a stored path. `daw_plugins::sync::CatalogSync` owns one background worker: it publishes the index first, rescans the configured folders, writes the index, and then captures missing previews of verified instruments/effects one at a time, with explicit captures ahead of the queue. The UI only reads its snapshots, status and errors; it starts a sync at launch, on **Refresh** and after plug-in folder changes. macOS captures the editor view; Windows captures the helper-owned window; Linux uses XRes ownership and XComposite offscreen pixels. No synthetic image stands in for an unavailable native editor.
 
 MIDI CC/pitch-bend/MPE, sidechain routing, live latency renegotiation, and a standalone preset browser are not implemented.
 

@@ -1,12 +1,14 @@
-//! Cached device previews in a responsive, virtualized grid. Device identities,
-//! image loading and insertion actions belong to the caller.
+//! Cached device previews in a responsive, virtualized grid or list. Device
+//! identities, image loading and insertion actions belong to the caller.
 use crate::{Icon, text::TextRole, theme, tokens};
 use egui::{Id, Rect, Response, Ui};
 use std::hash::Hash;
 
 pub const DEVICE_CARD_HEIGHT: f32 = 208.0;
 pub const DEVICE_CARD_MIN_WIDTH: f32 = 196.0;
+pub const DEVICE_ROW_HEIGHT: f32 = 56.0;
 const PREVIEW_HEIGHT: f32 = 118.0;
+const ROW_PREVIEW_WIDTH: f32 = 80.0;
 const SCROLLBAR_GUTTER: f32 = 16.0;
 
 pub struct DeviceCard<'a> {
@@ -16,6 +18,8 @@ pub struct DeviceCard<'a> {
     pub producer: &'a str,
     pub preview: Option<&'a egui::TextureHandle>,
     pub selected: bool,
+    /// Marked with a star badge; toggling it is the caller's action.
+    pub favorite: bool,
     pub icon: Icon,
 }
 
@@ -115,31 +119,8 @@ fn click_tracker(ctx: &egui::Context) -> ClickTracker {
     tracker
 }
 
-/// One quiet, whole-card input target. Preview arrival never moves its labels,
-/// changes the target bounds, or alters the caller's selection.
-pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCardResponse {
-    let width = if width.is_finite() {
-        width.max(0.0)
-    } else {
-        0.0
-    };
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(width, DEVICE_CARD_HEIGHT), egui::Sense::hover());
-    let response = ui.interact(rect, card.id, egui::Sense::click());
-    lock_card_arrows(&response);
-    let producer = if card.producer.trim().is_empty() {
-        "Unknown developer"
-    } else {
-        card.producer
-    };
-    response.widget_info(|| {
-        egui::WidgetInfo::selected(
-            egui::WidgetType::SelectableLabel,
-            ui.is_enabled(),
-            card.selected,
-            format!("{} · {producer}", card.name),
-        )
-    });
+/// Two consecutive clicks on the same stable identity, or keyboard activation.
+fn activation(ui: &Ui, response: &Response, id: Id) -> bool {
     let mut tracker = click_tracker(ui.ctx());
     let pointer_click = ui.input(|input| input.pointer.primary_clicked());
     let mut activated = response.clicked() && !pointer_click;
@@ -154,73 +135,146 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
                 options.input_options.max_click_dist,
             )
         });
-        activated = tracker.last.is_some_and(|(id, sequence, time, point)| {
-            id == card.id
+        activated = tracker.last.is_some_and(|(last, sequence, time, point)| {
+            last == id
                 && sequence.wrapping_add(1) == tracker.sequence
                 && now > time
                 && now - time < delay
                 && point.distance(position) <= distance
         });
-        tracker.last = Some((card.id, tracker.sequence, now, position));
+        tracker.last = Some((id, tracker.sequence, now, position));
         ui.ctx()
             .data_mut(|data| data.insert_temp(Id::new("device_card_clicks"), tracker));
     }
+    activated
+}
+
+fn producer<'a>(card: &DeviceCard<'a>) -> &'a str {
+    if card.producer.trim().is_empty() {
+        "Unknown developer"
+    } else {
+        card.producer
+    }
+}
+
+/// Allocate one whole-item target with selected-item accessibility.
+fn device_target(ui: &mut Ui, card: &DeviceCard<'_>, size: egui::Vec2) -> Response {
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let response = ui.interact(rect, card.id, egui::Sense::click());
+    lock_card_arrows(&response);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            card.selected,
+            format!(
+                "{} · {}{}",
+                card.name,
+                producer(card),
+                if card.favorite { " · Favorite" } else { "" }
+            ),
+        )
+    });
+    response
+}
+
+fn paint_item_frame(
+    painter: &egui::Painter,
+    rect: Rect,
+    card: &DeviceCard<'_>,
+    response: &Response,
+) {
+    let colors = theme::palette(painter.ctx());
+    painter.rect_filled(
+        rect,
+        tokens::SURFACE_RADIUS,
+        if card.selected {
+            colors.track_selected
+        } else if response.hovered() {
+            colors.control_hover
+        } else {
+            colors.raised
+        },
+    );
+    let emphasized = card.selected || response.has_focus();
+    painter.rect_stroke(
+        rect,
+        tokens::SURFACE_RADIUS,
+        egui::Stroke::new(
+            if emphasized { 1.5_f32 } else { 1.0_f32 },
+            if emphasized {
+                colors.accent
+            } else {
+                colors.line
+            },
+        ),
+        egui::StrokeKind::Inside,
+    );
+}
+
+/// Paint a cached preview fitted inside `rect`, or the device icon placeholder.
+fn paint_preview(painter: &egui::Painter, rect: Rect, card: &DeviceCard<'_>) {
+    let colors = theme::palette(painter.ctx());
+    painter.rect_filled(rect, tokens::RADIUS, colors.bg);
+    if let Some(texture) = card.preview {
+        let original = texture.size_vec2();
+        let image_space = rect.shrink(tokens::SPACE_XS);
+        if original.x > 0.0 && original.y > 0.0 && image_space.is_positive() {
+            let scale = (image_space.width() / original.x).min(image_space.height() / original.y);
+            painter.image(
+                texture.id(),
+                Rect::from_center_size(image_space.center(), original * scale),
+                Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+    } else {
+        crate::paint_ambient(painter, rect);
+        card.icon.paint(
+            painter,
+            Rect::from_center_size(
+                rect.center(),
+                egui::Vec2::splat((rect.height() * 0.3).min(34.0)),
+            ),
+            colors.muted,
+        );
+    }
+}
+
+/// A quiet favorite marker; it adds no hit target to the device item.
+fn paint_favorite_badge(painter: &egui::Painter, corner: egui::Pos2, size: f32) {
+    let colors = theme::palette(painter.ctx());
+    let badge = Rect::from_min_size(corner - egui::vec2(size, 0.0), egui::Vec2::splat(size));
+    painter.rect_filled(badge, tokens::RADIUS, colors.panel);
+    Icon::StarFilled.paint(painter, badge.shrink(size * 0.18), colors.accent);
+}
+
+/// One quiet, whole-card input target. Preview arrival never moves its labels,
+/// changes the target bounds, or alters the caller's selection.
+pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCardResponse {
+    let width = if width.is_finite() {
+        width.max(0.0)
+    } else {
+        0.0
+    };
+    let response = device_target(ui, card, egui::vec2(width, DEVICE_CARD_HEIGHT));
+    let producer = producer(card);
+    let activated = activation(ui, &response, card.id);
+    let rect = response.rect;
     let inset = rect.shrink2(egui::vec2(
         tokens::SPACE_MD.min(width * 0.5),
         tokens::SPACE_MD,
     ));
     let preview_rect = Rect::from_min_size(inset.min, egui::vec2(inset.width(), PREVIEW_HEIGHT));
     if ui.is_rect_visible(rect) {
-        let colors = theme::palette(ui.ctx());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(
-            rect,
-            tokens::SURFACE_RADIUS,
-            if card.selected {
-                colors.track_selected
-            } else if response.hovered() {
-                colors.control_hover
-            } else {
-                colors.raised
-            },
-        );
-        painter.rect_stroke(
-            rect,
-            tokens::SURFACE_RADIUS,
-            egui::Stroke::new(
-                if card.selected || response.has_focus() {
-                    1.5_f32
-                } else {
-                    1.0_f32
-                },
-                if card.selected || response.has_focus() {
-                    colors.accent
-                } else {
-                    colors.line
-                },
-            ),
-            egui::StrokeKind::Inside,
-        );
-        painter.rect_filled(preview_rect, tokens::RADIUS, colors.bg);
-        if let Some(texture) = card.preview {
-            let original = texture.size_vec2();
-            let image_space = preview_rect.shrink(tokens::SPACE_XS);
-            if original.x > 0.0 && original.y > 0.0 && image_space.is_positive() {
-                let scale =
-                    (image_space.width() / original.x).min(image_space.height() / original.y);
-                painter.image(
-                    texture.id(),
-                    Rect::from_center_size(image_space.center(), original * scale),
-                    Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                    egui::Color32::WHITE,
-                );
-            }
-        } else {
-            crate::paint_ambient(&painter, preview_rect);
-            card.icon.paint(
+        paint_item_frame(&painter, rect, card, &response);
+        paint_preview(&painter, preview_rect, card);
+        if card.favorite {
+            paint_favorite_badge(
                 &painter,
-                Rect::from_center_size(preview_rect.center(), egui::Vec2::splat(34.0)),
-                colors.muted,
+                preview_rect.right_top() + egui::vec2(-tokens::SPACE_XS, tokens::SPACE_XS),
+                22.0,
             );
         }
         crate::text::paint_bounded_block(
@@ -253,6 +307,137 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
     }
 }
 
+/// The compact list counterpart of [`device_card`]: a small preview, the name
+/// and producer, and an optional trailing detail such as a category.
+pub fn device_row(
+    ui: &mut Ui,
+    card: &DeviceCard<'_>,
+    detail: &str,
+    width: f32,
+) -> DeviceCardResponse {
+    let width = if width.is_finite() {
+        width.max(0.0)
+    } else {
+        0.0
+    };
+    let response = device_target(ui, card, egui::vec2(width, DEVICE_ROW_HEIGHT));
+    let producer = producer(card);
+    let activated = activation(ui, &response, card.id);
+    let rect = response.rect;
+    let inset = rect.shrink(tokens::SPACE_SM);
+    let preview_rect = Rect::from_min_size(
+        inset.min,
+        egui::vec2(ROW_PREVIEW_WIDTH.min(inset.width() * 0.3), inset.height()),
+    );
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter_at(rect);
+        paint_item_frame(&painter, rect, card, &response);
+        paint_preview(&painter, preview_rect, card);
+        let star = 18.0;
+        let detail_width = if detail.is_empty() {
+            0.0
+        } else {
+            (inset.width() * 0.3).min(220.0)
+        };
+        let trailing = inset.right() - star - tokens::SPACE_SM;
+        let text = Rect::from_min_max(
+            egui::pos2(preview_rect.right() + tokens::SPACE_MD, inset.top()),
+            egui::pos2(trailing - detail_width - tokens::SPACE_SM, inset.bottom()),
+        );
+        let half = text.height() * 0.5;
+        crate::text::paint_row(
+            &painter,
+            text.with_max_y(text.top() + half),
+            TextRole::Label,
+            card.name,
+        );
+        crate::text::paint_row(
+            &painter,
+            text.with_min_y(text.top() + half),
+            TextRole::Note,
+            producer,
+        );
+        if detail_width > 0.0 {
+            crate::text::paint_row(
+                &painter,
+                Rect::from_min_max(
+                    egui::pos2(trailing - detail_width, inset.top()),
+                    egui::pos2(trailing, inset.bottom()),
+                ),
+                TextRole::Note,
+                detail,
+            );
+        }
+        if card.favorite {
+            paint_favorite_badge(
+                &painter,
+                egui::pos2(inset.right(), inset.center().y - star * 0.5),
+                star,
+            );
+        }
+    }
+    DeviceCardResponse {
+        response: response.on_hover_text(format!("{}\n{producer}", card.name)),
+        activated,
+        preview_rect,
+    }
+}
+
+/// A large preview for a selected device, fitted without changing the
+/// allocated size when the image arrives later.
+pub fn device_preview(
+    ui: &mut Ui,
+    preview: Option<&egui::TextureHandle>,
+    icon: Icon,
+    size: egui::Vec2,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(size.max(egui::Vec2::ZERO), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        paint_preview(
+            &ui.painter_at(rect),
+            rect,
+            &DeviceCard {
+                id: response.id,
+                name: "",
+                producer: "",
+                preview,
+                selected: false,
+                favorite: false,
+                icon,
+            },
+        );
+    }
+    response
+}
+
+/// Toggle a device's favorite mark. The caller stores the choice.
+pub fn favorite_toggle(ui: &mut Ui, favorite: &mut bool) -> Response {
+    let mut response = ui.add(
+        crate::IconButton::with_icon(
+            if *favorite {
+                Icon::StarFilled
+            } else {
+                Icon::Star
+            },
+            "Favorite",
+        )
+        .selected(*favorite),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            ui.is_enabled(),
+            *favorite,
+            "Favorite",
+        )
+    });
+    if response.clicked() {
+        *favorite = !*favorite;
+        response.mark_changed();
+    }
+    response
+}
+
 /// Fixed-height, responsive card rows with bounded rendering and image-loading
 /// work. `scroll_to` reveals a keyboard selection even when its row is virtualized.
 pub fn device_grid<R>(
@@ -261,14 +446,74 @@ pub fn device_grid<R>(
     count: usize,
     height: f32,
     scroll_to: Option<usize>,
+    render: impl FnMut(&mut Ui, usize, f32) -> R,
+) -> DeviceGridResponse<R> {
+    virtual_items(
+        ui,
+        id_salt,
+        count,
+        height,
+        scroll_to,
+        DEVICE_CARD_HEIGHT,
+        device_grid_layout,
+        render,
+    )
+}
+
+/// The single-column layout used by [`device_list`].
+pub fn device_list_layout(width: f32) -> DeviceGridLayout {
+    let width = if width.is_finite() {
+        (width - SCROLLBAR_GUTTER).max(0.0)
+    } else {
+        0.0
+    };
+    DeviceGridLayout {
+        columns: 1,
+        card_width: width,
+        row_height: DEVICE_ROW_HEIGHT + tokens::SPACE_XS,
+    }
+}
+
+/// Virtualized [`device_row`] items with the same scrolling contract as
+/// [`device_grid`]; render each row with the supplied width.
+pub fn device_list<R>(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    count: usize,
+    height: f32,
+    scroll_to: Option<usize>,
+    render: impl FnMut(&mut Ui, usize, f32) -> R,
+) -> DeviceGridResponse<R> {
+    virtual_items(
+        ui,
+        id_salt,
+        count,
+        height,
+        scroll_to,
+        DEVICE_ROW_HEIGHT,
+        device_list_layout,
+        render,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn virtual_items<R>(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    count: usize,
+    height: f32,
+    scroll_to: Option<usize>,
+    item_height: f32,
+    layout: fn(f32) -> DeviceGridLayout,
     mut render: impl FnMut(&mut Ui, usize, f32) -> R,
 ) -> DeviceGridResponse<R> {
     ui.push_id(id_salt, |ui| {
+        let layout = layout(ui.available_width());
         // Keep a stable gutter independently of scrollbar appearance/animation.
         ui.spacing_mut().scroll.floating = true;
         ui.spacing_mut().scroll.floating_allocated_width = 0.0;
-        ui.spacing_mut().item_spacing = egui::Vec2::splat(tokens::SPACE_MD);
-        let layout = device_grid_layout(ui.available_width());
+        ui.spacing_mut().item_spacing =
+            egui::vec2(tokens::SPACE_MD, layout.row_height - item_height);
         let height = if height.is_finite() {
             height.max(0.0).min(ui.available_height().max(0.0))
         } else {
@@ -286,11 +531,11 @@ pub fn device_grid<R>(
         if let Some(index) = scroll_to.filter(|index| *index < count) {
             scroll = scroll.vertical_scroll_offset(
                 ((index / layout.columns) as f32 * layout.row_height
-                    - (height - DEVICE_CARD_HEIGHT).max(0.0) * 0.5)
+                    - (height - item_height).max(0.0) * 0.5)
                     .max(0.0),
             );
         }
-        let result = scroll.show_rows(ui, DEVICE_CARD_HEIGHT, rows, |ui, visible| {
+        let result = scroll.show_rows(ui, item_height, rows, |ui, visible| {
             let mut cards = Vec::with_capacity(visible.len() * layout.columns);
             for row in visible {
                 ui.horizontal(|ui| {
@@ -356,6 +601,7 @@ mod tests {
                                 producer: "音楽 Producer",
                                 preview: None,
                                 selected: index == 0,
+                                favorite: false,
                                 icon: Icon::Instrument,
                             },
                             width,
@@ -457,6 +703,7 @@ mod tests {
                                 producer: "Producer",
                                 preview: None,
                                 selected: index == target,
+                                favorite: false,
                                 icon: Icon::Instrument,
                             },
                             width,
@@ -496,6 +743,7 @@ mod tests {
                             producer,
                             preview,
                             selected: true,
+                            favorite: true,
                             icon: Icon::Instrument,
                         },
                         220.0,
@@ -549,6 +797,7 @@ mod tests {
                                 producer: "Producer",
                                 preview: None,
                                 selected: false,
+                                favorite: false,
                                 icon: Icon::Instrument,
                             },
                             width,
@@ -600,5 +849,152 @@ mod tests {
             "a filter click breaks card sequence"
         );
         assert_eq!(click(2, 0.60), vec![1]);
+    }
+
+    fn click_at(pos: egui::Pos2, pressed: bool) -> Vec<egui::Event> {
+        vec![
+            egui::Event::PointerMoved(pos),
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]
+    }
+
+    #[test]
+    fn list_rows_virtualize_keep_text_inside_and_double_click_activates() {
+        let ctx = egui::Context::default();
+        theme::apply(&ctx);
+        let texture = ctx.load_texture(
+            "row_fixture",
+            egui::ColorImage::filled([160, 90], egui::Color32::RED),
+            egui::TextureOptions::LINEAR,
+        );
+        let name = "Row Synth Ω — a long name that must stay within its row";
+        let frame = |time: f64, events, scroll_to| {
+            let mut rows = Vec::new();
+            let mut grid_rect = Rect::NOTHING;
+            let output = ctx.run(input(640.0, time, events), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let grid =
+                        device_list(ui, "rows", 5_000, 300.0, scroll_to, |ui, index, width| {
+                            let row = device_row(
+                                ui,
+                                &DeviceCard {
+                                    id: Id::new(("row", index)),
+                                    name,
+                                    producer: "",
+                                    preview: (index % 2 == 0).then_some(&texture),
+                                    selected: index == 1,
+                                    favorite: index == 1,
+                                    icon: Icon::Effect,
+                                },
+                                "Delay · Reverb",
+                                width,
+                            );
+                            (row.response.rect, row.preview_rect, row.activated)
+                        });
+                    grid_rect = grid.rect;
+                    assert_eq!(grid.layout.columns, 1);
+                    rows = grid.cards;
+                });
+            });
+            (rows, grid_rect, output)
+        };
+        let (rows, grid_rect, output) = frame(0.0, vec![], None);
+        assert!(rows.len() < 12, "only visible rows are built");
+        for (_, (rect, preview, _)) in &rows {
+            assert_eq!(rect.height(), DEVICE_ROW_HEIGHT);
+            assert!(rect.contains_rect(*preview));
+            assert!(rect.right() <= grid_rect.right() - SCROLLBAR_GUTTER + 0.01);
+        }
+        assert_eq!(
+            rows[0].1.1.size(),
+            rows[1].1.1.size(),
+            "a missing preview keeps the row geometry"
+        );
+        let texts: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some((text.galley.job.text.clone(), shape.clip_rect)),
+                _ => None,
+            })
+            .collect();
+        for expected in [name, "Unknown developer", "Delay · Reverb"] {
+            assert!(
+                texts.iter().any(|(text, clip)| text == expected
+                    && rows.iter().any(|(_, (rect, ..))| rect.contains_rect(*clip))),
+                "{expected} is painted within a row"
+            );
+        }
+        assert!(
+            output
+                .shapes
+                .iter()
+                .any(|shape| matches!(shape.shape, egui::Shape::Mesh(_))),
+            "the favorite badge is a filled star"
+        );
+        let target = rows[2].1.0.center();
+        let mut activated = Vec::new();
+        for (time, pressed) in [(0.2, true), (0.21, false), (0.3, true), (0.31, false)] {
+            let (rows, ..) = frame(time, click_at(target, pressed), None);
+            activated.extend(
+                rows.iter()
+                    .filter(|(_, (.., activated))| *activated)
+                    .map(|(index, _)| *index),
+            );
+        }
+        assert_eq!(activated, vec![2]);
+        let (scrolled, ..) = frame(0.4, vec![], Some(4_999));
+        assert!(scrolled.iter().any(|(index, _)| *index == 4_999));
+    }
+
+    #[test]
+    fn favorite_toggle_count_items_and_filter_chips_report_their_actions() {
+        let ctx = egui::Context::default();
+        theme::apply(&ctx);
+        let mut favorite = false;
+        let mut clicked_item = false;
+        let mut removed = false;
+        let mut frame = |time: f64, events: Vec<egui::Event>| {
+            let mut targets = Vec::new();
+            let output = ctx.run(input(400.0, time, events), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    targets.push(favorite_toggle(ui, &mut favorite).rect.center());
+                    let item = crate::count_item(ui, true, "Favorites", 1_234);
+                    clicked_item |= item.clicked();
+                    targets.push(item.rect.center());
+                    let chip = crate::filter_chip(ui, "Acme Audio");
+                    removed |= chip.clicked();
+                    targets.push(chip.rect.center());
+                });
+            });
+            (targets, output)
+        };
+        let (targets, output) = frame(0.0, vec![]);
+        let texts: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.job.text.clone()),
+                _ => None,
+            })
+            .collect();
+        for expected in ["Favorite", "Favorites", "1234", "Acme Audio"] {
+            assert!(
+                texts.iter().any(|text| text == expected),
+                "{expected}: {texts:?}"
+            );
+        }
+        for (step, target) in targets.into_iter().enumerate() {
+            let time = 0.1 * (step + 1) as f64;
+            frame(time, click_at(target, true));
+            frame(time + 0.01, click_at(target, false));
+        }
+        assert!(favorite, "the toggle stores the new favorite state");
+        assert!(clicked_item && removed);
     }
 }

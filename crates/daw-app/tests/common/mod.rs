@@ -13,7 +13,9 @@ use tempfile::TempDir;
 
 pub struct Harness {
     pub directory: TempDir,
+    vst_path: Option<std::path::PathBuf>,
     plugin_host: Option<std::path::PathBuf>,
+    plugin_previews: bool,
     virtual_audio: bool,
     child: Child,
     input: ChildStdin,
@@ -33,7 +35,14 @@ impl Harness {
     /// process-global environment or the production helper executable.
     pub fn with_plugin_host(path: &std::path::Path, host: &std::path::Path) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
-        Self::launch_configured(Some(path), directory, None, Some(host), false)
+        Self::launch_configured(Some(path), directory, None, Some(host), false, false)
+    }
+
+    /// Like `with_plugin_host`, with the desktop's automatic background
+    /// capture of missing previews. Only supply a test editor worker here.
+    pub fn with_plugin_previews(path: &std::path::Path, host: &std::path::Path) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated E2E directory");
+        Self::launch_configured(Some(path), directory, None, Some(host), true, false)
     }
 
     /// A deterministic device-free sink sharing the production render worker,
@@ -44,7 +53,7 @@ impl Harness {
         host: Option<&std::path::Path>,
     ) -> Self {
         let directory = tempfile::tempdir().expect("create isolated virtual-audio directory");
-        Self::launch_configured(vst_path, directory, None, host, true)
+        Self::launch_configured(vst_path, directory, None, host, false, true)
     }
 
     /// A real CPAL/ALSA stream that discards all samples. The child sees only
@@ -58,7 +67,7 @@ impl Harness {
             "pcm.!default { type null hint { show on description \"Rill null output\" } }\n",
         )
         .expect("write isolated ALSA configuration");
-        Self::launch_configured(None, directory, Some(&config), None, false)
+        Self::launch_configured(None, directory, Some(&config), None, false, false)
     }
 
     /// Keep ALSA confined to a null PCM while requesting a disconnected output.
@@ -77,7 +86,7 @@ impl Harness {
             r#"{"device_name":"Disconnected Rill E2E output"}"#,
         )
         .unwrap();
-        Self::launch_configured(None, directory, Some(&config), None, false)
+        Self::launch_configured(None, directory, Some(&config), None, false, false)
     }
 
     fn launch(vst_path: Option<&std::path::Path>) -> Self {
@@ -86,7 +95,7 @@ impl Harness {
     }
 
     fn launch_in(vst_path: Option<&std::path::Path>, directory: TempDir) -> Self {
-        Self::launch_configured(vst_path, directory, None, None, false)
+        Self::launch_configured(vst_path, directory, None, None, false, false)
     }
 
     fn launch_configured(
@@ -94,6 +103,7 @@ impl Harness {
         directory: TempDir,
         null_audio: Option<&std::path::Path>,
         plugin_host: Option<&std::path::Path>,
+        plugin_previews: bool,
         virtual_audio: bool,
     ) -> Self {
         let binary = std::env::var_os("RILL_E2E_BINARY")
@@ -106,6 +116,7 @@ impl Harness {
             .env("RILL_CACHE_DIR", directory.path().join("cache"))
             .env_remove("RILL_E2E_VIRTUAL_AUDIO")
             .env_remove("RILL_E2E_AUDIO_DEVICE")
+            .env_remove("RILL_E2E_PLUGIN_PREVIEWS")
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
             .stdin(Stdio::piped())
@@ -113,6 +124,9 @@ impl Harness {
             .stderr(Stdio::inherit());
         if virtual_audio {
             command.env("RILL_E2E_VIRTUAL_AUDIO", "1");
+        }
+        if plugin_previews {
+            command.env("RILL_E2E_PLUGIN_PREVIEWS", "1");
         }
         if let Some(path) = vst_path {
             command.env("VST3_PATH", path);
@@ -145,7 +159,9 @@ impl Harness {
         });
         let harness = Self {
             directory,
+            vst_path: vst_path.map(std::path::Path::to_owned),
             plugin_host: plugin_host.map(std::path::Path::to_owned),
+            plugin_previews,
             virtual_audio,
             child,
             input,
@@ -170,10 +186,18 @@ impl Harness {
         assert_eq!(result["ok"], true, "{result}");
         assert_eq!(result["event"], "exiting");
         let directory = std::mem::replace(&mut self.directory, tempfile::tempdir().unwrap());
+        let vst_path = self.vst_path.clone();
         let plugin_host = self.plugin_host.clone();
-        let virtual_audio = self.virtual_audio;
+        let (plugin_previews, virtual_audio) = (self.plugin_previews, self.virtual_audio);
         self.wait_exit();
-        Self::launch_configured(None, directory, None, plugin_host.as_deref(), virtual_audio)
+        Self::launch_configured(
+            vst_path.as_deref(),
+            directory,
+            None,
+            plugin_host.as_deref(),
+            plugin_previews,
+            virtual_audio,
+        )
     }
 
     fn response(&self) -> Value {
@@ -308,4 +332,30 @@ pub fn wait_library_device(app: &mut Harness, name: &str) {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+pub fn wait_until(app: &mut Harness, condition: impl Fn(&Value) -> bool) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(35);
+    loop {
+        let state = app.inspect();
+        if condition(&state) {
+            return state;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Condition not reached: {}",
+            state["library"]
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Rescan with the library's Refresh button and wait for the catalog, e.g.
+/// after a test seeds the preview cache. The library stays open.
+pub fn refresh_library(app: &mut Harness) -> Value {
+    wait_until(app, |state| state["plugin_scanning"] == false);
+    app.click("Window");
+    app.click("Library");
+    app.click("Refresh");
+    wait_until(app, |state| state["plugin_scanning"] == false)
 }

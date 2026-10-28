@@ -38,6 +38,7 @@ mod editor_platform;
 #[path = "editor_platform_windows.rs"]
 mod editor_platform;
 pub mod helper;
+pub mod sync;
 pub use catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
 pub use editor::{EditorEvent, EditorSession, capture_editor, capture_editor_info, launch_editor};
 
@@ -64,7 +65,7 @@ impl ProcessingMode {
 }
 
 /// Catalogue entry. Missing metadata means the bundle has not been inspected by loading it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginInfo {
     pub name: String,
     pub path: PathBuf,
@@ -72,6 +73,12 @@ pub struct PluginInfo {
     pub category: String,
     /// Present when a bundle's metadata identifies a particular processor class.
     pub class_id: Option<String>,
+    /// Declared class version; empty without bundle metadata.
+    #[serde(default)]
+    pub version: String,
+    /// Binary folders inside the bundle, such as `x86_64-linux` or `MacOS`.
+    #[serde(default)]
+    pub architectures: Vec<String>,
 }
 
 impl PluginInfo {
@@ -205,6 +212,7 @@ fn is_bundle(path: &Path) -> bool {
 }
 
 fn bundle_info(path: &Path) -> Vec<PluginInfo> {
+    let architectures = bundle_architectures(path);
     if let Ok(Some(module)) = vst3_host::discovery::read_module_info(path) {
         let classes: Vec<_> = module
             .classes
@@ -220,6 +228,12 @@ fn bundle_info(path: &Path) -> Vec<PluginInfo> {
                 },
                 category: class.sub_categories.join("|"),
                 class_id: Some(class.class_id),
+                version: if class.version.is_empty() {
+                    module.version.clone()
+                } else {
+                    class.version
+                },
+                architectures: architectures.clone(),
             })
             .collect();
         if !classes.is_empty() {
@@ -233,10 +247,25 @@ fn bundle_info(path: &Path) -> Vec<PluginInfo> {
             .to_string_lossy()
             .into_owned(),
         path: path.to_owned(),
-        vendor: String::new(),
-        category: String::new(),
-        class_id: None,
+        architectures,
+        ..PluginInfo::default()
     }]
+}
+
+/// VST3 bundles keep one binary folder per platform under `Contents`. Listing
+/// them reads directory names only; no binary is opened.
+fn bundle_architectures(path: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(path.join("Contents")) else {
+        return Vec::new();
+    };
+    let mut found: Vec<_> = entries
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name == "MacOS" || name.ends_with("-linux") || name.ends_with("-win"))
+        .collect();
+    found.sort();
+    found
 }
 
 /// MIDI channel 1 note event at a sample offset within the next block.
@@ -400,6 +429,8 @@ impl VstInstrument {
             vendor: raw.vendor.clone(),
             category: raw.category.clone(),
             class_id: Some(raw.uid.clone()),
+            version: raw.version.clone(),
+            ..PluginInfo::default()
         };
         plugin
             .start_processing()

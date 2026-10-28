@@ -20,18 +20,6 @@ fn window(app: &mut Harness, label: &str) -> Value {
     app.click(label)
 }
 
-fn latest(app: &mut Harness, label: &str) -> Value {
-    let state = app.inspect();
-    let count = state["visible_labels"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|value| *value == label)
-        .count();
-    assert!(count > 0, "Missing {label}: {}", state["visible_labels"]);
-    app.command(json!({"command":"click", "label":label, "occurrence":count-1}))
-}
-
 fn wait(app: &mut Harness, condition: impl Fn(&Value) -> bool) -> Value {
     let deadline = Instant::now() + Duration::from_secs(35);
     loop {
@@ -94,7 +82,7 @@ fn empty_and_effect_only_libraries_offer_plugin_setup_and_restore_the_assignment
         app.click("Track");
         app.click("Add MIDI track");
         let baseline = wait(&mut app, |state| {
-            visible(state, "No VST3 instruments found") && visible(state, "Scan")
+            visible(state, "No VST3 instruments found") && visible(state, "Refresh")
         });
         assert_eq!(baseline["popups"]["library"], true);
         assert_eq!(baseline["library"]["total"], 0);
@@ -105,7 +93,7 @@ fn empty_and_effect_only_libraries_offer_plugin_setup_and_restore_the_assignment
         ));
         assert!(visible(
             &baseline,
-            "Install a VST3 instrument, then Scan. Use Plug-in folders if it is installed elsewhere."
+            "Install a VST3 instrument, then Refresh. Use Plug-in folders if it is installed elsewhere."
         ));
         assert!(!visible(&baseline, "No matching instruments"));
         assert!(!visible(&baseline, "Clear filters"));
@@ -139,9 +127,9 @@ fn empty_and_effect_only_libraries_offer_plugin_setup_and_restore_the_assignment
         assert!(visible(&cancelled, "Assign instrument"));
         preserved(&cancelled, &baseline);
 
-        app.click("Scan");
+        app.click("Refresh");
         let scanned = wait(&mut app, |state| {
-            visible(state, "No VST3 instruments found") && visible(state, "Scan")
+            visible(state, "No VST3 instruments found") && visible(state, "Refresh")
         });
         preserved(&scanned, &baseline);
         let caller = app.key("Escape");
@@ -166,7 +154,8 @@ fn unmatched_searches_clear_both_search_and_developer_without_assigning_a_stale_
     let baseline = window(&mut app, "Library");
     common::wait_library_device(&mut app, "Novice Keys");
     app.click("All developers");
-    latest(&mut app, "Other novice developer");
+    // The sidebar row precedes the card's producer text.
+    app.click("Other novice developer");
     assert_eq!(app.inspect()["library"]["total"], 1);
     app.click("Search instruments");
     app.command(json!({"command":"text", "text":"no such instrument 987654"}));
