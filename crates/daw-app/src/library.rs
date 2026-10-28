@@ -4,6 +4,7 @@
 use crate::app::{DawApp, PopupKind, SetupPage};
 use crate::library_preview::PreviewCache;
 use crate::settings::PluginLibrary;
+use anyhow::Context as _;
 use daw_core::{Clip, Effect, EffectSlot, Instrument, TrackKind};
 use daw_plugins::{
     PluginInfo,
@@ -109,12 +110,20 @@ struct LibraryUi {
     list: bool,
     selected: Option<String>,
     search_id: Option<egui::Id>,
-    /// The selected device's categories while being edited: (fingerprint, text).
-    category_draft: Option<(String, String)>,
+    category_draft: Option<CategoryDraft>,
     attempted: HashSet<String>,
     previews: PreviewCache,
     grid_filter: Option<GridFilter>,
     grid_columns: usize,
+}
+
+/// The selected device's categories field. `saved` is what it was filled
+/// from, so changes made elsewhere replace an unedited draft.
+#[derive(Clone)]
+struct CategoryDraft {
+    fingerprint: String,
+    saved: String,
+    text: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -150,6 +159,18 @@ impl DeviceKind {
 
 fn device_id(fingerprint: &str) -> egui::Id {
     egui::Id::new(("library_device", fingerprint))
+}
+
+const KEY_TARGETS: &str = "library_key_targets";
+
+/// Enter and arrows choose devices only from the search field, the selected
+/// device, or with nothing focused; other fields and buttons keep their keys.
+pub(crate) fn library_owns_keys(ctx: &egui::Context) -> bool {
+    let targets = ctx
+        .data(|data| data.get_temp::<[Option<egui::Id>; 2]>(egui::Id::new(KEY_TARGETS)))
+        .unwrap_or_default();
+    ctx.memory(|memory| memory.focused())
+        .is_none_or(|focused| targets.contains(&Some(focused)))
 }
 
 /// VST3 subcategories without the instrument/effect markers, e.g. `Fx|Delay`
@@ -221,8 +242,10 @@ impl DawApp {
             .unwrap_or_else(|| automatic_categories(plugin))
     }
 
-    /// Shared by the library view and the `organize_plugin` tool.
-    pub(crate) fn edit_plugin_library(&mut self, edit: LibraryEdit) {
+    /// Shared by the library view and the `organize_plugin` tool. A change
+    /// that cannot be saved is undone, so the session never shows it alone.
+    pub(crate) fn edit_plugin_library(&mut self, edit: LibraryEdit) -> anyhow::Result<()> {
+        let previous = self.plugin_library.clone();
         match edit {
             LibraryEdit::Favorite(plugin, favorite) => {
                 let key = PluginLibrary::key(&plugin);
@@ -244,9 +267,14 @@ impl DawApp {
                 }
             }
         }
-        if let Err(error) = self.plugin_library.save() {
-            self.message(Err(error.context("Saving the plug-in library")), "");
+        let saved = self
+            .plugin_library
+            .save()
+            .context("Saving the plug-in library");
+        if saved.is_err() {
+            self.plugin_library = previous;
         }
+        saved
     }
 
     /// Adopt the latest catalog snapshot and report sync problems. Discovery
@@ -382,14 +410,7 @@ impl DawApp {
         let search_focused = state
             .search_id
             .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
-        // Another focused field or button keeps its own Enter and arrow keys.
-        let device_keys = ctx.memory(|memory| memory.focused()).is_none_or(|focused| {
-            Some(focused) == state.search_id
-                || state
-                    .selected
-                    .as_deref()
-                    .is_some_and(|selected| focused == device_id(selected))
-        });
+        let device_keys = library_owns_keys(ctx);
         let pressed_enter = ctx
             .data_mut(|data| data.remove_temp::<bool>(egui::Id::new("instrument_chooser_enter")))
             .unwrap_or(false)
@@ -791,8 +812,16 @@ impl DawApp {
                             return;
                         };
                         let entry = item.entry;
-                        if state.category_draft.as_ref().is_none_or(|(fingerprint, _)| *fingerprint != entry.fingerprint) {
-                            state.category_draft = Some((entry.fingerprint.clone(), item.categories.join(", ")));
+                        let saved = item.categories.join(", ");
+                        if state.category_draft.as_ref().is_none_or(|draft| {
+                            draft.fingerprint != entry.fingerprint
+                                || (draft.text == draft.saved && draft.saved != saved)
+                        }) {
+                            state.category_draft = Some(CategoryDraft {
+                                fingerprint: entry.fingerprint.clone(),
+                                text: saved.clone(),
+                                saved,
+                            });
                         }
                         egui::ScrollArea::vertical().id_salt("library_details").auto_shrink([false, false]).show(ui, |ui| {
                             let width = ui.available_width();
@@ -813,7 +842,7 @@ impl DawApp {
                             });
                             ui.add_space(SPACE_SM);
                             daw_ui::theme::label(ui, "CATEGORIES");
-                            if let Some((_, draft)) = &mut state.category_draft {
+                            if let Some(CategoryDraft { text: draft, .. }) = &mut state.category_draft {
                                 let (save, field) = daw_ui::action_row(
                                     ui,
                                     |ui| daw_ui::button(ui, "Save").clicked(),
@@ -969,8 +998,10 @@ impl DawApp {
         if let Some(plugin) = retry {
             self.plugin_sync.capture(plugin);
         }
-        if let Some(edit) = edit {
-            self.edit_plugin_library(edit);
+        if let Some(edit) = edit
+            && let Err(error) = self.edit_plugin_library(edit)
+        {
+            self.message(Err(error), "");
         }
         if let Some(path) = copy {
             ctx.copy_text(path);
@@ -978,7 +1009,11 @@ impl DawApp {
         if let Some((plugin, action)) = action {
             self.add_library_device(plugin, action, source);
         }
-        ctx.data_mut(|data| data.insert_temp(key, state));
+        let targets = [state.search_id, state.selected.as_deref().map(device_id)];
+        ctx.data_mut(|data| {
+            data.insert_temp(egui::Id::new(KEY_TARGETS), targets);
+            data.insert_temp(key, state);
+        });
     }
 
     fn add_library_device(

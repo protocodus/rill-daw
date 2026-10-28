@@ -247,9 +247,11 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     assert_eq!(chip["library"]["total"], 2);
 
     // Categories are the user's own once saved, and drive the category filter.
+    // Enter belongs to the focused field: it saves rather than adding a device.
     app.click("Compressor, Vintage");
     app.command(json!({"command":"text", "text":"Vintage, Keys, vintage"}));
-    let saved = app.click("Save");
+    let saved = app.key("Enter");
+    assert_eq!(saved["popups"]["library"], true);
     assert_eq!(
         entry(&saved, "Rill Fixture B")["categories"],
         json!(["Vintage", "Keys"])
@@ -315,7 +317,12 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     assert_eq!(plugin["favorite"], true, "{listed}");
     assert_eq!(plugin["categories"], json!(["Vintage", "Keys"]));
 
-    // Tools organize the same library and can request a rescan.
+    // Tools organize the same library and can request a rescan. The selected
+    // device's unedited categories field follows their changes.
+    common::fixture_library(&mut app);
+    let library = app.inspect();
+    pointer(&mut app, card(&library, "Rill Fixture A"), "click");
+    assert!(visible(&app.inspect(), "Compressor, Vintage"));
     let tool = |app: &mut Harness, name: &str, arguments: Value| {
         app.command(json!({"command":"song_tool", "name":name, "arguments":arguments}))
             ["tool_result"]
@@ -341,15 +348,32 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
         json!({"plugin_id":id, "categories":["a,b"]}),
     );
     assert_eq!(rejected["ok"], false, "{rejected}");
-    let state = wait_until(&mut app, |state| state["plugin_scanning"] == false);
+    let state = wait_until(&mut app, |state| {
+        state["plugin_scanning"] == false && visible(state, "Bright")
+    });
     assert_eq!(entry(&state, "Rill Fixture A")["favorite"], true);
     assert_eq!(
         entry(&state, "Rill Fixture A")["categories"],
         json!(["Bright"])
     );
 
+    // An organization that cannot be saved is reported and not applied.
+    let library_file = app.directory.path().join("config/plugin-library.json");
+    std::fs::remove_file(&library_file).unwrap();
+    std::fs::create_dir_all(library_file.join("blocked")).unwrap();
+    let failed = tool(
+        &mut app,
+        "organize_plugin",
+        json!({"plugin_id":id, "favorite":false}),
+    );
+    assert_eq!(failed["ok"], false, "{failed}");
+    assert_eq!(failed["error"]["code"], "settings_failed");
+    let state = app.click("Favorite");
+    assert_eq!(state["error"], true);
+    assert_eq!(entry(&state, "Rill Fixture A")["favorite"], true);
+    std::fs::remove_dir_all(&library_file).unwrap();
+
     // Saving an empty field restores the plug-in's own categories.
-    common::fixture_library(&mut app);
     let library = app.inspect();
     pointer(&mut app, card(&library, "Rill Fixture B"), "click");
     app.click("Vintage, Keys");

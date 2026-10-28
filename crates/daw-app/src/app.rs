@@ -1867,6 +1867,7 @@ impl DawApp {
         }
         if self.library_open
             && !egui::Popup::is_any_open(ctx)
+            && crate::library::library_owns_keys(ctx)
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
         {
             ctx.data_mut(|data| data.insert_temp(egui::Id::new("instrument_chooser_enter"), true));

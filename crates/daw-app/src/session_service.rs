@@ -376,17 +376,24 @@ impl ToolHost for DawApp {
                     })?
                     .plugin
                     .clone();
+                let saved = |result: anyhow::Result<()>| {
+                    result.map_err(|error| ToolError::new("settings_failed", format!("{error:#}")))
+                };
                 if let Some(favorite) = args.favorite {
-                    self.edit_plugin_library(crate::library::LibraryEdit::Favorite(
-                        plugin.clone(),
-                        favorite,
-                    ));
+                    saved(
+                        self.edit_plugin_library(crate::library::LibraryEdit::Favorite(
+                            plugin.clone(),
+                            favorite,
+                        )),
+                    )?;
                 }
                 if let Some(categories) = args.categories {
-                    self.edit_plugin_library(crate::library::LibraryEdit::Categories(
-                        plugin.clone(),
-                        categories.join(","),
-                    ));
+                    saved(
+                        self.edit_plugin_library(crate::library::LibraryEdit::Categories(
+                            plugin.clone(),
+                            categories.join(","),
+                        )),
+                    )?;
                 }
                 Ok(json!({"plugin_id":args.plugin_id,
                     "favorite":self.plugin_favorite(&plugin),
