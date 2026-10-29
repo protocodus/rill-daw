@@ -77,7 +77,7 @@ pub fn clip_surface(
         rect,
         tokens::RADIUS,
         Stroke::new(
-            if selected { 1.8 } else { 0.8 },
+            if selected { 1.8_f32 } else { 0.8_f32 },
             color.gamma_multiply(if selected { 1.0 } else { 0.65 }),
         ),
         StrokeKind::Inside,

@@ -21,7 +21,7 @@ pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResp
     ui.painter().hline(
         row.response.rect.x_range(),
         row.response.rect.bottom(),
-        egui::Stroke::new(1.0, colors.line),
+        egui::Stroke::new(1.0_f32, colors.line),
     );
     row
 }

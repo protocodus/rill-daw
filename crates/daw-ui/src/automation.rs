@@ -62,7 +62,7 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
     ui.painter().rect_stroke(
         rect,
         tokens::RADIUS,
-        egui::Stroke::new(1.5, color),
+        egui::Stroke::new(1.5_f32, color),
         egui::StrokeKind::Inside,
     );
     // Slider endpoints and their scale must stay unobstructed, including the

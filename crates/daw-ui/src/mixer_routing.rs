@@ -16,7 +16,7 @@ pub fn mixer_master_title(ui: &mut Ui, width: f32) -> Response {
     ui.painter().rect_stroke(
         rect,
         tokens::RADIUS,
-        egui::Stroke::new(1.0, colors.line),
+        egui::Stroke::new(1.0_f32, colors.line),
         egui::StrokeKind::Inside,
     );
     crate::text::paint_row(

@@ -226,7 +226,7 @@ fn paint_preview(
         ui.painter().rect_stroke(
             indicator,
             tokens::RADIUS,
-            egui::Stroke::new(2.0, colors.accent),
+            egui::Stroke::new(2.0_f32, colors.accent),
             egui::StrokeKind::Inside,
         );
     } else {

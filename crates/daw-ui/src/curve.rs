@@ -220,7 +220,7 @@ pub fn paint_curve_override(painter: &egui::Painter, plot: Rect, value: f32) {
     painter.hline(
         plot.x_range(),
         y,
-        Stroke::new(2.0, colors.automation_override),
+        Stroke::new(2.0_f32, colors.automation_override),
     );
 }
 
@@ -530,7 +530,7 @@ fn curve_editor_inner(
                 position + Vec2::new(-radius, 0.0),
             ],
             colors.bg,
-            Stroke::new(1.5, colors.automation),
+            Stroke::new(1.5_f32, colors.automation),
         ));
         handle_response
             .on_hover_text("Segment slope · drag to bend · right-click for Log, Linear or Exp");

@@ -163,7 +163,7 @@ pub fn paint_mixer_fader_scale(ui: &Ui, fader: Rect) {
                 Pos2::new(fader.left() - 6.0, y),
                 Pos2::new(fader.left() - 1.0, y),
             ],
-            egui::Stroke::new(1.0, color),
+            egui::Stroke::new(1.0_f32, color),
         );
         ui.painter().text(
             Pos2::new(fader.left() - 10.0, y),

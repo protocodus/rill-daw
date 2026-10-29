@@ -153,7 +153,7 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
                     tick.center + offset(sign * inner),
                     tick.center + offset(sign * reach),
                 ],
-                Stroke::new(1.0, color),
+                Stroke::new(1.0_f32, color),
             );
         }
     }
@@ -170,7 +170,7 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
     ui.painter().line_segment(
         [geometry.handle - offset, geometry.handle + offset],
         Stroke::new(
-            1.5,
+            1.5_f32,
             if ui.is_enabled() {
                 colors.text
             } else {
