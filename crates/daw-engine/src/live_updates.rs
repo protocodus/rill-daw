@@ -17,6 +17,7 @@ type PreparationGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<(
 
 struct Request {
     sequence: u64,
+    automation_sequence: u64,
     revision: u64,
     project: Project,
 }
@@ -41,6 +42,7 @@ pub(super) struct LiveMailbox {
     shutdown: AtomicBool,
     preparation_cancel: AtomicBool,
     sequence: AtomicU64,
+    automation_sequence: AtomicU64,
     pub requested_revision: AtomicU64,
     pub applied_revision: AtomicU64,
     pub refining_audio: AtomicBool,
@@ -49,6 +51,10 @@ pub(super) struct LiveMailbox {
 }
 
 impl LiveMailbox {
+    pub fn next_automation_sequence(&self) -> u64 {
+        self.automation_sequence.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
     /// Never waits for preparation or reclamation. The plan holds all retired
     /// allocations after application, so their destruction stays off playback.
     pub fn apply_pending(&self, renderer: &mut Renderer) -> bool {
@@ -173,6 +179,7 @@ impl LiveUpdates {
             .store(revision, Ordering::Release);
         *slot = Some(Request {
             sequence,
+            automation_sequence: self.mailbox.next_automation_sequence(),
             revision,
             project,
         });
@@ -322,7 +329,8 @@ fn prepare_loop(mut preparer: LiveEditPreparer, shared: Arc<LiveMailbox>) {
                 break;
             }
             match result {
-                Ok(plan) => {
+                Ok(mut plan) => {
+                    plan.set_automation_sequence(request.automation_sequence);
                     let refining = plan.needs_refinement();
                     let next = Ready {
                         sequence: request.sequence,

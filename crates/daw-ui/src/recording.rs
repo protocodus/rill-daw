@@ -48,8 +48,7 @@ pub fn recording_timing_controls(
         );
         ui.end_row();
         let label = text::label(ui, "Click level");
-        ui.add(crate::slider(gain, 0.0..=1.0).show_value(false))
-            .labelled_by(label.id);
+        ui.add(crate::slider(gain, 0.0..=1.0)).labelled_by(label.id);
         ui.end_row();
     });
     before != (*precount, *click, *gain)

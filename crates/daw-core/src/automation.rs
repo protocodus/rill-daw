@@ -135,6 +135,9 @@ pub enum Interpolation {
     #[default]
     Linear,
     Smooth,
+    /// Per-segment cubic Bézier interpolation. Each point's `curve` controls
+    /// the segment leaving it: negative is logarithmic, positive exponential.
+    Spline,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -142,6 +145,11 @@ pub struct AutomationPoint {
     pub id: u64,
     pub beat: f64,
     pub value: f32,
+    /// Shape of the outgoing spline segment, from logarithmic (-1) through
+    /// linear (0) to exponential (1). The final point retains its shape for a
+    /// later extension, but endpoint holding never uses it.
+    #[serde(default)]
+    pub curve: f32,
 }
 
 impl AutomationPoint {
@@ -150,6 +158,7 @@ impl AutomationPoint {
             id: new_id(),
             beat,
             value,
+            curve: 0.0,
         }
     }
 }
@@ -159,9 +168,22 @@ pub struct AutomationLane {
     pub target: AutomationTarget,
     pub points: Vec<AutomationPoint>,
     pub interpolation: Interpolation,
+    /// A deliberate manual value while retaining the entire editable curve.
+    /// Unlike lane bypass, an override is the same for native and VST targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_value: Option<f32>,
 }
 
 impl AutomationLane {
+    /// The value used for rendering and control readouts. An explicit override
+    /// holds at all times until resumed; the underlying curve remains untouched.
+    pub fn effective_value_at(&self, beat: f64) -> Option<f32> {
+        if beat.is_nan() {
+            return None;
+        }
+        self.override_value.or_else(|| self.value_at(beat))
+    }
+
     /// Empty lanes do not override the manual parameter. Otherwise endpoints
     /// hold indefinitely. Evaluation uses binary search and never allocates.
     pub fn value_at(&self, beat: f64) -> Option<f32> {
@@ -186,6 +208,21 @@ impl AutomationLane {
         let linear = f64::from(a.value) + t * (f64::from(b.value) - f64::from(a.value));
         if self.interpolation == Interpolation::Linear {
             return Some(linear as f32);
+        }
+        if self.interpolation == Interpolation::Spline {
+            // A cubic Bézier with linear x coordinates. Its y control points
+            // move continuously from the straight line toward (0, 0) for an
+            // exponential rise, or (1, 1) for a logarithmic rise. This convex
+            // combination is monotone and cannot overshoot either endpoint.
+            let amount = f64::from(a.curve).abs();
+            let shaped = if a.curve >= 0.0 {
+                t * t * t
+            } else {
+                1.0 - (1.0 - t).powi(3)
+            };
+            let progress = t + amount * (shaped - t);
+            let value = f64::from(a.value) + progress * (f64::from(b.value) - f64::from(a.value));
+            return Some((value as f32).clamp(a.value.min(b.value), a.value.max(b.value)));
         }
         let start_slope = self.slope(index - 1);
         let end_slope = self.slope(index);
@@ -232,10 +269,14 @@ impl AutomationLane {
     }
 
     pub fn validate(&self) -> Result<()> {
+        if let Some(value) = self.override_value {
+            validate_value(value)?;
+        }
         let mut ids = HashSet::new();
         let mut previous = None;
         for point in &self.points {
             validate_position(point.beat, point.value)?;
+            validate_curve(point.curve)?;
             ensure!(
                 point.id > 0 && point.id < u64::MAX && ids.insert(point.id),
                 "Duplicate or invalid automation point ID"
@@ -246,6 +287,29 @@ impl AutomationLane {
             );
             previous = Some(point.beat);
         }
+        Ok(())
+    }
+
+    /// Change the segment leaving this point and activate spline interpolation.
+    /// Point identity, timing, value, and the other segment shapes are preserved.
+    pub fn set_point_curve(&mut self, id: u64, curve: f32) -> Result<()> {
+        validate_curve(curve)?;
+        let point = self
+            .points
+            .iter_mut()
+            .find(|point| point.id == id)
+            .context("Automation point not found")?;
+        point.curve = curve;
+        self.interpolation = Interpolation::Spline;
+        Ok(())
+    }
+
+    /// Hold a normalized manual value, or resume the untouched automation curve.
+    pub fn set_override(&mut self, value: Option<f32>) -> Result<()> {
+        if let Some(value) = value {
+            validate_value(value)?;
+        }
+        self.override_value = value;
         Ok(())
     }
 
@@ -321,9 +385,21 @@ fn validate_position(beat: f64, value: f32) -> Result<()> {
         beat.is_finite() && (0.0..=MAX_BEAT).contains(&beat),
         "Automation beat is outside the supported timeline"
     );
+    validate_value(value)
+}
+
+fn validate_value(value: f32) -> Result<()> {
     ensure!(
         value.is_finite() && (0.0..=1.0).contains(&value),
         "Automation value must be normalized between 0 and 1"
+    );
+    Ok(())
+}
+
+fn validate_curve(curve: f32) -> Result<()> {
+    ensure!(
+        curve.is_finite() && (-1.0..=1.0).contains(&curve),
+        "Automation curve must be between -1 and 1"
     );
     Ok(())
 }
@@ -389,7 +465,8 @@ impl Project {
                 AutomationPoint::new(0.0, value),
                 AutomationPoint::new(4.0, value),
             ],
-            interpolation: Interpolation::Linear,
+            interpolation: Interpolation::Spline,
+            override_value: None,
         });
         Ok(self.insert_new_track(track))
     }
@@ -406,6 +483,31 @@ impl Project {
             .filter(|track| track.kind == TrackKind::Automation)?
             .automation
             .as_mut()
+    }
+
+    /// Find the automation identity even when it is bypassed or overridden, so
+    /// control indicators and resume actions always refer to the existing lane.
+    pub fn automation_for_target(
+        &self,
+        target: AutomationTarget,
+    ) -> Option<(u64, &AutomationLane)> {
+        self.tracks.iter().find_map(|track| {
+            let lane = track.automation.as_ref()?;
+            (track.kind == TrackKind::Automation && lane.target == target)
+                .then_some((track.id, lane))
+        })
+    }
+
+    pub fn set_automation_point_curve(&mut self, track: u64, point: u64, curve: f32) -> Result<()> {
+        self.automation_lane_mut(track)
+            .context("Automation track not found")?
+            .set_point_curve(point, curve)
+    }
+
+    pub fn set_automation_override(&mut self, track: u64, value: Option<f32>) -> Result<()> {
+        self.automation_lane_mut(track)
+            .context("Automation track not found")?
+            .set_override(value)
     }
 
     pub fn upsert_automation_point(&mut self, track: u64, beat: f64, value: f32) -> Result<u64> {

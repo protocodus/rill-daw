@@ -144,6 +144,11 @@ pub enum SongEdit {
         track: EntityRef,
         index: usize,
     },
+    MoveTrack {
+        track: EntityRef,
+        target: EntityRef,
+        placement: TrackPlacement,
+    },
     RenameTrack {
         track: EntityRef,
         name: String,
@@ -427,6 +432,15 @@ pub enum SongEdit {
         track: EntityRef,
         interpolation: Interpolation,
     },
+    SetAutomationPointCurve {
+        track: EntityRef,
+        point: u64,
+        curve: f32,
+    },
+    SetAutomationOverride {
+        track: EntityRef,
+        value: Option<f32>,
+    },
     UpsertAutomationPoints {
         track: EntityRef,
         points: Vec<(f64, f32)>,
@@ -671,6 +685,13 @@ fn apply_one(
                 .context("Track not found")?;
             let moved = p.tracks.remove(from);
             p.tracks.insert(*index, moved);
+        }
+        SongEdit::MoveTrack {
+            track,
+            target,
+            placement,
+        } => {
+            p.reorder_track(r(track)?, r(target)?, *placement)?;
         }
         SongEdit::RenameTrack { track, name } => {
             text(name)?;
@@ -1245,6 +1266,16 @@ fn apply_one(
                 let id = p.upsert_automation_point(track, *beat, *value)?;
                 record(result, refs, "point", id, &None)?;
             }
+        }
+        SongEdit::SetAutomationPointCurve {
+            track,
+            point,
+            curve,
+        } => {
+            p.set_automation_point_curve(r(track)?, *point, *curve)?;
+        }
+        SongEdit::SetAutomationOverride { track, value } => {
+            p.set_automation_override(r(track)?, *value)?;
         }
         SongEdit::MoveAutomationPoint {
             track,

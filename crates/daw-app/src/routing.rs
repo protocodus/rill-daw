@@ -37,21 +37,48 @@ impl DawApp {
                 if self.channel_navigation(ui, ChannelDestination::Effects) {
                     return;
                 }
-                widgets::scroll_body(ui, "effects_body", |ui| {
-                    let mut remove = None;
-                    let mut move_up = None;
-                    let mut move_down = None;
-                    let mut dragged = None;
-                    let mut changed = false;
-                    let track = self.project.track_mut(track_id).unwrap();
-                    let count = track.inserts.len();
-                    for (index, slot) in track.inserts.iter_mut().enumerate() {
-                        ui.push_id(slot.id, |ui| {
-                            let row = widgets::card(ui.ctx()).show(ui, |ui| {
-                                let enabled = &mut slot.enabled;
-                                widgets::action_row(
+                let inserts = &self.project.track(track_id).unwrap().inserts;
+                widgets::effect_chain_header(
+                    ui,
+                    inserts.len(),
+                    inserts.iter().filter(|slot| slot.enabled).count(),
+                );
+                ui.add_space(widgets::tokens::SPACE_SM);
+                widgets::popup_scroll_body(
+                    ui,
+                    "effects_body",
+                    widgets::tokens::CONTROL_HEIGHT + widgets::tokens::SPACE_SM,
+                    |ui| {
+                        let mut remove = None;
+                        let mut move_up = None;
+                        let mut move_down = None;
+                        let mut dragged = None;
+                        let mut changed = false;
+                        let track = self.project.track_mut(track_id).unwrap();
+                        let count = track.inserts.len();
+                        for (index, slot) in track.inserts.iter_mut().enumerate() {
+                            ui.push_id(slot.id, |ui| {
+                                let row = widgets::effect_slot(
                                     ui,
+                                    (track_id, slot.id),
+                                    index,
+                                    &slot.name,
+                                    &mut slot.enabled,
                                     |ui| {
+                                        if widgets::small_button(ui, "Open editor")
+                                            .on_hover_text("Open native effect editor")
+                                            .clicked()
+                                        {
+                                            edit_effect = Some(slot.id);
+                                        }
+                                        if widgets::small_button(ui, "Automate…")
+                                            .on_hover_text(
+                                                "Search this effect's automation parameters",
+                                            )
+                                            .clicked()
+                                        {
+                                            automate_effect = Some(slot.id);
+                                        }
                                         widgets::action_menu(ui, "More", |ui| {
                                             if ui
                                                 .add_enabled(
@@ -81,65 +108,49 @@ impl DawApp {
                                         })
                                         .response
                                         .on_hover_text("Insert actions");
-                                        if widgets::small_button(ui, "Open editor")
-                                            .on_hover_text("Open native effect editor")
-                                            .clicked()
-                                        {
-                                            edit_effect = Some(slot.id);
-                                        }
-                                        if widgets::small_button(ui, "Automate…")
-                                            .on_hover_text(
-                                                "Search this effect's automation parameters",
-                                            )
-                                            .clicked()
-                                        {
-                                            automate_effect = Some(slot.id);
-                                        }
-                                    },
-                                    |ui| {
-                                        widgets::reorder_handle(ui, (track_id, slot.id));
-                                        let Effect::Vst3 { path, .. } = &slot.effect;
-                                        changed |= widgets::switch(
-                                            ui,
-                                            enabled,
-                                            format!("{:02}  {}", index + 1, slot.name),
-                                        )
-                                        .on_hover_text(path)
-                                        .changed();
                                     },
                                 );
+                                let Effect::Vst3 { path, .. } = &slot.effect;
+                                changed |= row.inner.0.on_hover_text(path).changed();
+                                if let Some(payload) =
+                                    widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
+                                    && payload.0 == track_id
+                                    && payload.1 != slot.id
+                                {
+                                    dragged = Some((payload.1, index));
+                                }
                             });
-                            if let Some(payload) =
-                                widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
-                                && payload.0 == track_id
-                                && payload.1 != slot.id
-                            {
-                                dragged = Some((payload.1, index));
-                            }
-                        });
-                    }
-                    if let Some(index) = remove {
-                        track.inserts.remove(index);
-                        changed = true;
-                    } else if let Some(index) = move_up {
-                        track.inserts.swap(index, index - 1);
-                        changed = true;
-                    } else if let Some(index) = move_down {
-                        track.inserts.swap(index, index + 1);
-                        changed = true;
-                    }
-                    if let Some((id, destination)) = dragged
-                        && let Some(source) = track.inserts.iter().position(|slot| slot.id == id)
-                    {
-                        let slot = track.inserts.remove(source);
-                        track.inserts.insert(destination, slot);
-                        changed = true;
-                    }
-                    add_effect = widgets::button(ui, "+ Insert").clicked();
-                    if changed {
-                        self.changed();
-                    }
-                });
+                        }
+                        if let Some(index) = remove {
+                            track.inserts.remove(index);
+                            changed = true;
+                        } else if let Some(index) = move_up {
+                            track.inserts.swap(index, index - 1);
+                            changed = true;
+                        } else if let Some(index) = move_down {
+                            track.inserts.swap(index, index + 1);
+                            changed = true;
+                        }
+                        if let Some((id, destination)) = dragged
+                            && let Some(source) =
+                                track.inserts.iter().position(|slot| slot.id == id)
+                        {
+                            let slot = track.inserts.remove(source);
+                            track.inserts.insert(destination, slot);
+                            changed = true;
+                        }
+                        if track.inserts.is_empty() {
+                            widgets::empty_effect_chain(ui);
+                        }
+                        if changed {
+                            self.changed();
+                        }
+                    },
+                );
+                ui.add_space(widgets::tokens::SPACE_SM);
+                add_effect = widgets::primary_button(ui, "+ Insert")
+                    .on_hover_text("Add an effect to the end of this chain")
+                    .clicked();
             });
         if !open {
             self.effects_open = false;
@@ -172,6 +183,22 @@ impl DawApp {
             return;
         }
         let track_name = track.name.clone();
+        let automation: std::collections::HashMap<_, _> = track
+            .sends
+            .iter()
+            .filter_map(|send| {
+                let target = AutomationTarget {
+                    track: track_id,
+                    parameter: AutomationParameter::SendGain {
+                        bus: send.target_bus,
+                    },
+                };
+                self.automation_control_state(target)
+                    .map(|state| (send.target_bus, state))
+            })
+            .collect();
+        let mut automation_navigation = None;
+        let mut automation_overrides = Vec::new();
         let mut create_send = false;
         let mut create_bus_send = false;
         let eligible: std::collections::HashSet<_> = self
@@ -229,13 +256,43 @@ impl DawApp {
                                     },
                                 );
                                 ui.horizontal_wrapped(|ui| {
-                                    changed |= ui
-                                        .add(
-                                            widgets::slider(&mut send.gain, 0.0..=1.5)
-                                                .clamping(egui::SliderClamping::Edits)
-                                                .text("Level"),
-                                        )
-                                        .changed();
+                                    let parameter = AutomationParameter::SendGain {
+                                        bus: send.target_bus,
+                                    };
+                                    let state = automation.get(&send.target_bus).copied();
+                                    let mut gain = state
+                                        .filter(|(_, status, _)| {
+                                            *status != daw_ui::AutomationState::Bypassed
+                                        })
+                                        .map(|(_, _, value)| parameter.denormalize(value))
+                                        .unwrap_or(send.gain);
+                                    let response = ui.add(
+                                        widgets::slider(&mut gain, parameter.range())
+                                            .clamping(egui::SliderClamping::Edits)
+                                            .text("Level"),
+                                    );
+                                    if let Some(action) = daw_ui::automatable_parameter_context(
+                                        ui,
+                                        &response,
+                                        daw_ui::AutomationControl::Send {
+                                            track: track_id,
+                                            bus: send.target_bus,
+                                        },
+                                        state.map(|(lane, status, _)| (lane, status)),
+                                    ) {
+                                        automation_navigation = Some(action);
+                                    }
+                                    if response.changed() {
+                                        send.gain = gain;
+                                        changed = true;
+                                        automation_overrides.push((
+                                            AutomationTarget {
+                                                track: track_id,
+                                                parameter,
+                                            },
+                                            parameter.normalize(gain),
+                                        ));
+                                    }
                                     changed |=
                                         widgets::radio_value(ui, &mut send.pre_fader, true, "Pre")
                                             .on_hover_text(
@@ -250,6 +307,32 @@ impl DawApp {
                                     )
                                     .on_hover_text("Send after inserts, track gain, and pan")
                                     .changed();
+                                    {
+                                        daw_ui::action_menu(
+                                            ui,
+                                            state
+                                                .map(|(_, status, _)| status.rich_label(ui.ctx()))
+                                                .unwrap_or_else(|| {
+                                                    egui::RichText::new("Automation")
+                                                }),
+                                            |ui| {
+                                                if let Some(action) =
+                                                    daw_ui::automatable_menu_contents(
+                                                        ui,
+                                                        daw_ui::AutomationControl::Send {
+                                                            track: track_id,
+                                                            bus: send.target_bus,
+                                                        },
+                                                        state.map(|(lane, status, _)| {
+                                                            (lane, status)
+                                                        }),
+                                                    )
+                                                {
+                                                    automation_navigation = Some(action);
+                                                }
+                                            },
+                                        );
+                                    }
                                 });
                             });
                         });
@@ -285,6 +368,9 @@ impl DawApp {
                     .response
                     .on_hover_text("Send to a bus; set its effect to 100% wet for a shared return");
                     if changed {
+                        for (target, value) in automation_overrides.drain(..) {
+                            self.override_automated_parameter(target, value);
+                        }
                         self.changed();
                     }
                     if let Some(bus) = add_bus {
@@ -330,6 +416,7 @@ impl DawApp {
         if !open {
             self.routing_open = false;
         }
+        self.apply_automation_navigation(automation_navigation);
         if create_send {
             self.open_effect_library(track_id, true);
         }

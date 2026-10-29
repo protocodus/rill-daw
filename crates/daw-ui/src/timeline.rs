@@ -137,16 +137,66 @@ pub fn editor_tools_with_labels(
     supported: &[EditorTool],
     label: impl Fn(EditorTool) -> &'static str,
 ) {
-    for candidate in supported {
-        crate::tool_value(ui, tool, *candidate, label(*candidate)).on_hover_text(format!(
-            "{} tool · {}\n{}",
-            label(*candidate),
-            candidate.key().name(),
-            candidate.hint(),
-        ));
-    }
-    if !supported.is_empty() {
-        ui.separator();
+    // Consistent families across Arrangement, MIDI, audio and automation. Keep
+    // every tool visible and give wrapping a useful boundary on small displays.
+    const GROUPS: &[&[EditorTool]] = &[
+        &[
+            EditorTool::Select,
+            EditorTool::Pencil,
+            EditorTool::MultiDraw,
+            EditorTool::Cursor,
+        ],
+        &[EditorTool::Cut, EditorTool::Glue, EditorTool::Erase],
+        &[EditorTool::Duplicate, EditorTool::Ghost],
+        &[
+            EditorTool::Stretch,
+            EditorTool::Slip,
+            EditorTool::FadeIn,
+            EditorTool::FadeOut,
+        ],
+    ];
+    for group in GROUPS {
+        let tools = || {
+            group
+                .iter()
+                .copied()
+                .filter(|candidate| supported.contains(candidate))
+        };
+        let count = tools().count();
+        if count == 0 {
+            continue;
+        }
+        let width = tools()
+            .map(|candidate| {
+                let text = label(candidate);
+                let text_width = ui
+                    .painter()
+                    .layout_no_wrap(
+                        text.into(),
+                        egui::TextStyle::Button.resolve(ui.style()),
+                        ui.visuals().text_color(),
+                    )
+                    .size()
+                    .x;
+                let icon_width = if crate::Icon::for_label(text).is_some() {
+                    18.0 + crate::tokens::SPACE_XS
+                } else {
+                    0.0
+                };
+                (text_width + icon_width + 2.0 * ui.spacing().button_padding.x).ceil()
+            })
+            .sum::<f32>()
+            + (count - 1) as f32 * crate::tokens::SPACE_XS;
+        crate::tool_group(ui, width, |ui| {
+            for candidate in tools() {
+                crate::tool_value(ui, tool, candidate, label(candidate)).on_hover_text(format!(
+                    "{} tool · {}\n{}",
+                    label(candidate),
+                    candidate.key().name(),
+                    candidate.hint(),
+                ));
+            }
+        });
     }
 }
 

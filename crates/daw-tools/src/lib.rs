@@ -377,7 +377,7 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
             value["inserts"] = json!(track.inserts.iter().take(MAX_QUERY_ITEMS).map(|slot|json!({"id":slot.id,"name":bounded_text(&slot.name),"name_truncated":slot.name.len()>1024,"enabled":slot.enabled,"parameter_count":slot.parameters.len()})).collect::<Vec<_>>());
             // No opaque plugin state, VST paths, or source paths leave this API.
             if let Some(lane) = &track.automation {
-                value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"total_points":lane.points.len(),"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>()});
+                value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"override_value":lane.override_value,"total_points":lane.points.len(),"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>()});
             }
             Ok(value)
         }

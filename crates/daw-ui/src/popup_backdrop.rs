@@ -14,6 +14,7 @@ pub(crate) fn is_popup_backdrop_layer(layer: LayerId) -> bool {
 /// popup layers keep their order above the dimming. This adds no hit targets,
 /// focus, animation, or background processing. Tooltips do not dim the screen.
 pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
+    crate::backdrop_blur::begin_blur_frame(ctx);
     let native_popup = egui::Popup::is_any_open(ctx);
     if !utility_open && !native_popup {
         return;
@@ -38,7 +39,9 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
             ctx.set_sublayer(layer, popup);
         }
     }
-    ctx.layer_painter(layer).rect_filled(
+    let painter = ctx.layer_painter(layer);
+    crate::backdrop_blur::paint_utility_blur(ctx, &painter, native_popup);
+    painter.rect_filled(
         ctx.content_rect(),
         0.0,
         crate::theme::palette(ctx).popup_scrim,

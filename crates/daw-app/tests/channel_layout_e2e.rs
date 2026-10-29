@@ -167,9 +167,12 @@ fn long_insert_chain_scrolls_to_actions_and_shrinks_after_removal() {
         .find(|row| row["text"] == "Effects of Compact effects")
         .unwrap();
     let action = labels.iter().find(|row| row["text"] == "+ Insert").unwrap();
+    let empty_height = action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap();
+    // Include the shared signal-chain header and empty-state card introduced by
+    // the redesigned effect view, while still rejecting a retained tall canvas.
     assert!(
-        action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap() < 240.0,
-        "an empty chain should hug its context links and remaining controls"
+        empty_height < 280.0,
+        "an empty chain should hug its context links and remaining controls: {empty_height}"
     );
     app.click("Edit");
     let restored = app.click("Undo");

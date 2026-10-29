@@ -96,14 +96,14 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 .iter()
                 .map(|channel| channel["track"].as_u64().unwrap())
                 .collect::<Vec<_>>(),
-            [source, lead, bus_a, bus_b, remote]
+            [source, bus_a, bus_b, remote, lead]
         );
         assert_eq!(
             visual
                 .iter()
                 .map(|channel| channel["channel"].as_u64().unwrap())
                 .collect::<Vec<_>>(),
-            [1, 5, 2, 3, 4]
+            [1, 2, 3, 4, 5]
         );
         assert_eq!(
             state["mixer"]["groups"]
@@ -112,7 +112,7 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 .iter()
                 .map(|group| group["label"].as_str().unwrap())
                 .collect::<Vec<_>>(),
-            ["Tracks", "Buses", "Master"]
+            ["Tracks", "Buses", "Tracks", "Master"]
         );
         assert!(
             state["mixer"]["groups"]
@@ -215,12 +215,12 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         }
         assert_eq!(state["project"], before["project"]);
         assert_eq!(state["history"], before["history"]);
-        assert!(visible(&state, "Target · 1 send"));
+        assert!(visible(&state, "Send · Room"));
         app.click("Effects");
         assert_eq!(app.inspect()["popups"]["effects"], true);
         app.key("Escape");
-        // At narrow widths, an offscreen Master remains named and the line
-        // ends at the visible viewport, outside all channel controls.
+        // At narrow widths, an offscreen Master keeps its true geometry: the
+        // connected line clips at the viewport and does not invent an endpoint.
         app.command(json!({"command":"viewport","width":800,"height":600}));
         app.command(json!({"command":"scroll","x":100,"y":400,"delta":-10000}));
         for _ in 0..10 {
@@ -239,14 +239,14 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         assert_eq!(routes.len(), 1);
         assert!(routes[0]["target"].is_null());
         assert_eq!(routes[0]["target_clipped"], true);
+        assert!(routes[0]["to"][0].as_f64().unwrap() > 800.0);
         assert!(
-            small["visible_labels"]
+            small["painted_meshes"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|label| label
-                    .as_str()
-                    .is_some_and(|label| label.contains("target offscreen")))
+                .all(|mesh| { mesh["vertices"] != 3 || mesh["rect"] != routes[0]["head"] }),
+            "An offscreen destination must not acquire a false on-screen arrowhead"
         );
         assert_eq!(small["project"], before["project"]);
         assert_eq!(small["history"], before["history"]);

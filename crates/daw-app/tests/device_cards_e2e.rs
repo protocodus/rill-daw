@@ -256,6 +256,25 @@ fn cards_paint_cached_previews_name_and_producer_and_reflow_at_both_densities() 
         let compact = app.command(json!({"command":"inspect", "paint":true}));
         assert_layout(&compact, 800.0, 600.0);
         assert!(compact["library"]["columns"].as_u64().unwrap() <= wide_columns);
+        let compact_card = cards(&compact)
+            .iter()
+            .find(|card| card["texture_id"] == preview["texture_id"])
+            .unwrap();
+        assert!(
+            Bounds::from(&compact_card["rect"]).height() < Bounds::from(&preview["rect"]).height()
+        );
+        let image = compact["painted_images"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|image| image["texture_id"] == compact_card["texture_id"])
+            .expect("Compact cards retain their cached preview");
+        let image_bounds = Bounds::from(&image["rect"]);
+        assert!(Bounds::from(&compact_card["preview_rect"]).contains(image_bounds));
+        assert!(
+            (image_bounds.width() / image_bounds.height() - 1.6).abs() < 0.01,
+            "Compact preview preserves the source aspect ratio"
+        );
         assert_eq!(
             compact["project"], expanded["project"],
             "Browsing/resizing must not edit the project"

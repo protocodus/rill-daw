@@ -6,8 +6,17 @@ use std::hash::Hash;
 
 pub const DEVICE_CARD_HEIGHT: f32 = 208.0;
 pub const DEVICE_CARD_MIN_WIDTH: f32 = 196.0;
+const MIN_CARD_HEIGHT: f32 = 144.0;
 const PREVIEW_HEIGHT: f32 = 118.0;
 const SCROLLBAR_GUTTER: f32 = 16.0;
+
+fn card_height(available: f32) -> f32 {
+    if available.is_finite() {
+        available.floor().clamp(MIN_CARD_HEIGHT, DEVICE_CARD_HEIGHT)
+    } else {
+        DEVICE_CARD_HEIGHT
+    }
+}
 
 pub struct DeviceCard<'a> {
     /// Stable identity independent of filtering, sorting and grid position.
@@ -116,15 +125,16 @@ fn click_tracker(ctx: &egui::Context) -> ClickTracker {
 }
 
 /// One quiet, whole-card input target. Preview arrival never moves its labels,
-/// changes the target bounds, or alters the caller's selection.
+/// changes the target bounds, or alters the caller's selection. Short parent
+/// rows reduce the preview area while keeping both name rows and producer text.
 pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCardResponse {
     let width = if width.is_finite() {
         width.max(0.0)
     } else {
         0.0
     };
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(width, DEVICE_CARD_HEIGHT), egui::Sense::hover());
+    let height = card_height(ui.available_height());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
     let response = ui.interact(rect, card.id, egui::Sense::click());
     lock_card_arrows(&response);
     let producer = if card.producer.trim().is_empty() {
@@ -169,7 +179,8 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
         tokens::SPACE_MD.min(width * 0.5),
         tokens::SPACE_MD,
     ));
-    let preview_rect = Rect::from_min_size(inset.min, egui::vec2(inset.width(), PREVIEW_HEIGHT));
+    let preview_height = PREVIEW_HEIGHT - (DEVICE_CARD_HEIGHT - height);
+    let preview_rect = Rect::from_min_size(inset.min, egui::vec2(inset.width(), preview_height));
     if ui.is_rect_visible(rect) {
         let colors = theme::palette(ui.ctx());
         let painter = ui.painter_at(rect);
@@ -253,8 +264,9 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
     }
 }
 
-/// Fixed-height, responsive card rows with bounded rendering and image-loading
-/// work. `scroll_to` reveals a keyboard selection even when its row is virtualized.
+/// Equal-height, responsive card rows with bounded rendering and image-loading
+/// work. Short viewports reduce previews so a complete row remains usable.
+/// `scroll_to` reveals a keyboard selection even when its row is virtualized.
 pub fn device_grid<R>(
     ui: &mut Ui,
     id_salt: impl Hash,
@@ -268,12 +280,14 @@ pub fn device_grid<R>(
         ui.spacing_mut().scroll.floating = true;
         ui.spacing_mut().scroll.floating_allocated_width = 0.0;
         ui.spacing_mut().item_spacing = egui::Vec2::splat(tokens::SPACE_MD);
-        let layout = device_grid_layout(ui.available_width());
+        let mut layout = device_grid_layout(ui.available_width());
         let height = if height.is_finite() {
             height.max(0.0).min(ui.available_height().max(0.0))
         } else {
             0.0
         };
+        let card_height = card_height(height);
+        layout.row_height = card_height + tokens::SPACE_MD;
         let rows = count.div_ceil(layout.columns);
         // Track unrelated clicks too, including search/filter clicks when the
         // grid is empty. Two cards cannot share a double-click sequence.
@@ -286,14 +300,15 @@ pub fn device_grid<R>(
         if let Some(index) = scroll_to.filter(|index| *index < count) {
             scroll = scroll.vertical_scroll_offset(
                 ((index / layout.columns) as f32 * layout.row_height
-                    - (height - DEVICE_CARD_HEIGHT).max(0.0) * 0.5)
+                    - (height - card_height).max(0.0) * 0.5)
                     .max(0.0),
             );
         }
-        let result = scroll.show_rows(ui, DEVICE_CARD_HEIGHT, rows, |ui, visible| {
+        let result = scroll.show_rows(ui, card_height, rows, |ui, visible| {
             let mut cards = Vec::with_capacity(visible.len() * layout.columns);
             for row in visible {
                 ui.horizontal(|ui| {
+                    ui.set_max_height(card_height);
                     for column in 0..layout.columns {
                         let index = row * layout.columns + column;
                         if index >= count {
@@ -407,7 +422,7 @@ mod tests {
 
     #[test]
     fn keyboard_scroll_reveals_the_entire_selected_card_in_short_viewports() {
-        for height in [260.0, 400.0] {
+        for height in [144.0, 183.5, 260.0, 400.0] {
             let ctx = egui::Context::default();
             theme::apply(&ctx);
             render_grid(&ctx, 940.0, 10_000, height, None);

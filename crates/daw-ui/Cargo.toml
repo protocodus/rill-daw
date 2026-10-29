@@ -5,8 +5,12 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+glow-backdrop = ["dep:egui_glow"]
+
 [dependencies]
 egui = "=0.33.3"
+egui_glow = { version = "=0.33.3", optional = true, default-features = false }
 serde.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
 

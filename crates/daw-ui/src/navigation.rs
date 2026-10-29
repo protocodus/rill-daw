@@ -1,6 +1,11 @@
 //! Context-preserving navigation shared by utility windows.
 use egui::{Context, Rect, Ui};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
+};
+
+static BACKDROP_ID: AtomicU64 = AtomicU64::new(1);
 
 /// A related destination. Application identifiers and navigation stay with the caller.
 pub struct ViewLink<T> {
@@ -41,6 +46,7 @@ pub fn view_links<T: Copy + PartialEq>(
 /// active view. Arc sharing keeps nested navigation snapshots inexpensive.
 #[derive(Clone)]
 pub struct ViewBackdrop {
+    source_id: u64,
     shapes: Arc<Vec<egui::epaint::ClippedShape>>,
     // Keep preview textures alive even if their originating library view closes.
     _textures: Arc<Vec<egui::TextureHandle>>,
@@ -57,6 +63,7 @@ struct BackdropPaint {
 impl Default for ViewBackdrop {
     fn default() -> Self {
         Self {
+            source_id: 0,
             shapes: Arc::default(),
             _textures: Arc::default(),
             paint_cache: Arc::default(),
@@ -165,6 +172,7 @@ impl ViewBackdrop {
             })
             .collect();
         Self {
+            source_id: BACKDROP_ID.fetch_add(1, Ordering::Relaxed),
             shapes: Arc::new(shapes),
             _textures: Arc::new(retained),
             paint_cache: Arc::default(),
@@ -177,6 +185,7 @@ impl ViewBackdrop {
     }
 
     pub fn paint(&self, ui: &Ui) {
+        crate::backdrop_blur::retain_blur_source(ui.ctx(), self.bounds, self.source_id);
         let clip = ui.clip_rect().intersect(ui.max_rect());
         let density = ui.ctx().pixels_per_point();
         let font_size = ui

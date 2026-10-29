@@ -238,7 +238,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                     );
                     plugin.lock().unwrap().set_parameter(id, value)?;
                     snapshots.edited(Instant::now());
-                    emit(output, &EditorEvent::ParameterChanged { id, value })?;
+                    emit(output, &EditorEvent::ParameterApplied { id, value })?;
                 }
                 Ok(EditorCommand::SaveState { request_id }) => save_state(
                     &plugin,

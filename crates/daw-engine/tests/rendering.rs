@@ -379,6 +379,7 @@ fn automate(
 ) -> u64 {
     let mut track = Track::new("Automation", TrackKind::Automation);
     track.automation = Some(AutomationLane {
+        override_value: None,
         target: AutomationTarget {
             track: target,
             parameter,
@@ -450,7 +451,7 @@ fn step_and_smooth_automation_render_the_requested_curve() {
             Interpolation::Step => assert!(output[..4_000].iter().all(|value| *value == 0.0)),
             // PCHIP between (0,0), (.5,1), (1,1): its midpoint is .6875.
             Interpolation::Smooth => assert!((output[2_000] - 0.25 * 0.6875).abs() < 1e-6),
-            Interpolation::Linear => unreachable!(),
+            Interpolation::Linear | Interpolation::Spline => unreachable!(),
         }
     }
 }

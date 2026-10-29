@@ -82,7 +82,7 @@ impl DawApp {
     pub(crate) fn poll_plugin_previews(&mut self, ctx: &egui::Context) {
         let key = egui::Id::new("plugin_library_state");
         let mut state = ctx
-            .data_mut(|data| data.get_temp::<LibraryUi>(key))
+            .data_mut(|data| data.remove_temp::<LibraryUi>(key))
             .unwrap_or_default();
         if !self.library_open {
             state.activate_when_ready = false;
@@ -167,7 +167,7 @@ impl DawApp {
         }
         let key = egui::Id::new("plugin_library_state");
         let mut state = ctx
-            .data_mut(|data| data.get_temp::<LibraryUi>(key))
+            .data_mut(|data| data.remove_temp::<LibraryUi>(key))
             .unwrap_or_default();
         if state.target != self.library_target {
             state.target = self.library_target;
@@ -288,15 +288,6 @@ impl DawApp {
                     if search.changed() {
                         state.selected = None;
                     }
-                    let mut developers: Vec<_> = self
-                        .vst_catalog
-                        .iter()
-                        .filter(|entry| state.kind.accepts(entry))
-                        .map(|entry| entry.plugin.vendor.clone())
-                        .filter(|vendor| !vendor.is_empty())
-                        .collect();
-                    developers.sort_unstable();
-                    developers.dedup();
                     daw_ui::select(
                         "library_developer",
                         if state.developer.is_empty() {
@@ -306,6 +297,17 @@ impl DawApp {
                         },
                     )
                     .show_ui(ui, |ui| {
+                        // The inventory can contain thousands of devices. Build
+                        // developer choices only while their menu is open.
+                        let mut developers: Vec<_> = self
+                            .vst_catalog
+                            .iter()
+                            .filter(|entry| state.kind.accepts(entry))
+                            .map(|entry| entry.plugin.vendor.as_str())
+                            .filter(|vendor| !vendor.is_empty())
+                            .collect();
+                        developers.sort_unstable();
+                        developers.dedup();
                         daw_ui::selectable_value(
                             ui,
                             &mut state.developer,
@@ -316,7 +318,7 @@ impl DawApp {
                             daw_ui::selectable_value(
                                 ui,
                                 &mut state.developer,
-                                developer.clone(),
+                                developer.to_owned(),
                                 developer,
                             );
                         }
@@ -335,12 +337,12 @@ impl DawApp {
                         state.kind.accepts(entry)
                             && (state.developer.is_empty()
                                 || entry.plugin.vendor == state.developer)
-                            && format!(
+                            && (filter.is_empty() || format!(
                                 "{} {} {}",
                                 entry.plugin.name, entry.plugin.vendor, entry.plugin.category
                             )
                             .to_lowercase()
-                            .contains(&filter)
+                            .contains(&filter))
                     })
                     .collect();
                 let signature = (state.kind, self.plugin_filter.clone(), state.developer.clone());
@@ -555,7 +557,7 @@ impl DawApp {
                     "footer": {"min": [footer.min.x, footer.min.y], "max": [footer.max.x, footer.max.y]},
                     "scroll_offset": grid.scroll_offset,
                     "selected": state.selected, "columns": grid.layout.columns,
-                    "card_size": [grid.layout.card_width, daw_ui::DEVICE_CARD_HEIGHT],
+                    "card_size": [grid.layout.card_width, grid.layout.row_height - daw_ui::tokens::SPACE_MD],
                     "total": matches.len(), "cards": cards,
                 })));
             });

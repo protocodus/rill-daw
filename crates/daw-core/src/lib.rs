@@ -25,6 +25,7 @@ mod recording;
 mod routing;
 mod spectrogram;
 mod track_colors;
+mod track_order;
 mod waveform;
 
 pub use audio::AudioData;
@@ -46,4 +47,5 @@ pub use model::*;
 pub use music_theory::{Catalog, ChordDefinition, NoteSet, ScaleDefinition};
 pub use recording::*;
 pub use spectrogram::*;
+pub use track_order::*;
 pub use waveform::*;

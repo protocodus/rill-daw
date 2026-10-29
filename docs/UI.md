@@ -13,9 +13,9 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Spacing | `SPACE_XS` 4, `SPACE_SM` 8, `SPACE_MD` 12, `SPACE_LG` 16, `SPACE_XL` 24 |
 | Controls | `CONTROL_HEIGHT` 34, `COMPACT_HEIGHT` 24, `SELECT_WIDTH` 160 |
 | Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
-| Typography | Caption 13, note 14, button/body 15, subtitle 16, title 20; canvas 12, track title 14 |
+| Typography | Caption 13, note 14, button/body 15, subtitle 16, title 20; canvas 12, track title 14, dense scale 10 |
 
-Sizes are logical screen points and follow egui's display scaling. Surfaces use soft slate in Dark and warm mist in Light, with a muted sage accent and a restrained luminance hierarchy. Action buttons have a quiet fill; inputs retain visible boundaries. Accent color identifies active choices and keyboard focus. Cards and controls stay flat; utility windows use a clearer border and a soft shadow to distinguish them from the workspace. Sections use spacing rather than nested outlines. Body and button text remain 15 points, with 34-point action targets. Avoid introducing a second app-specific palette or copied spacing scale.
+Sizes are logical screen points and follow egui's display scaling. Surfaces use neutral graphite in Dark and cool porcelain in Light, with a muted sage accent and a restrained luminance hierarchy. Action buttons have a quiet fill; inputs retain visible boundaries. Accent color identifies active choices and keyboard focus. Cards and controls stay flat; utility windows use a clearer border and a soft shadow to distinguish them from the workspace. Sections use spacing rather than nested outlines. Body and button text remain 15 points, with 34-point action targets. Avoid introducing a second app-specific palette or copied spacing scale.
 
 Choose controls by what they change:
 
@@ -49,6 +49,9 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
 | Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
+| Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
+| Mixer identity, inserts and routing | `mixer_master_title`, `mixer_effects_button`, `mixer_insert_summary`, `mixer_bus_input_summary`, `paint_mixer_fader_scale`, `mixer_output_button`, `mixer_sends_button`, `MixerSend` |
+| Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
@@ -62,13 +65,15 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
 | Ghost clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
+| Arrangement clip surfaces and previews | `clip_surface`, `ClipSurfaceLayout`, `clip_note_preview` |
 | Dropdown choices | `select`, `select_labeled` |
-| Numeric widget builders | Generic `slider`, `number`, `Number` |
+| Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Track color | `color_edit`, `color_strip_at` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
+| Automation state and segment shape | `AutomationState`, `AutomationControl`, `automation_badge`, `paint_automation_control`, `automatable_parameter_context`, `automatable_menu_contents`, `automation_parameter_context`, `automation_channel_menu`, `curve_timeline_editor_with_segments`, `CurveSegment`, `curve_segment_controls`, `curve_toolbar`, `curve_endpoint_summary`, `paint_curve_override` |
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
 | Non-modal operation feedback | `notice`, `NoticeKind` |
 | On-demand error diagnostics | `error_details`, `ErrorDetailsResponse`, `text::selectable_block` |
@@ -82,6 +87,22 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Compact section label | `theme::label` |
 
 Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
+
+`slider` retains native dragging, keyboard focus and exact numeric entry, with
+minimum/maximum captions and a center line on its handle. Scale positions use
+the handle's actual travel, so a tick and the handle center identify the same
+value. Short rails show halves; at 100 points of travel they add fifths, and at
+200 points they show tenths. The midpoint remains visible at every density.
+Ticks are paint-only and never quantize values beyond the caller's configured
+precision. Secondary and middle clicks do not change parameters.
+
+Use `.compact()` for canvas-owned rows, `.endpoint_labels(...)` for units such
+as L/R, and `.current_label(...)` for a concise readout inside the caption row.
+The whole rail and caption remain clickable. `.show_value(false)` is for
+controls with a current caption or separate exact-value field. Only suppress
+the built-in endpoints with `.scale_labels(false)` when providing a calibrated
+external scale, as Mixer does for dB faders. `slider_scale_geometry` exposes the
+same native rail and handle positions for such scales and diagnostics.
 
 `assistant(ui, prompt, options)` provides a bounded, selectable conversation,
 captured-context label, optional progress, multiline **AI prompt**, and fixed
@@ -167,6 +188,11 @@ permits and wraps as a complete group otherwise. Use it for fixed-width choice
 groups such as MIDI multi-draw's two selectors; keep `toolbar_trailing` for
 existing right-aligned controls.
 
+`editor_tools` uses shared `tool_group` surfaces to keep selection/drawing,
+cut/join/erase, copy, and timing tools together. Groups wrap as whole units with
+every applicable tool still visible. Toolbars have a quiet panel fill and bottom
+divider; active tools retain their underline and keyboard semantics.
+
 Use distinct control roles consistently. Direct actions use filled buttons. `action_menu` keeps that filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
 
 The main bar groups workspace views, transport commands, musical position/tempo,
@@ -205,6 +231,21 @@ headings use disclosure controls, folder icons, depth guides and spacing; Tracks
 and row context menus offer Add subfolder and Move to folder. Nesting choices
 exclude a folder's descendants, with validation in the existing model.
 
+Drag a track's title or visible grip to reorder it, including folders, buses and
+automation lanes. Header halves show Before/After insertion lines; folder headers
+have an explicit middle **Into folder** zone. A folder carries its entire subtree,
+and After points to the end of that subtree. Before/After makes the source a
+sibling of its destination; Into folder appends it as a child. Invalid descendant
+targets are rejected. Hover cues identify the destination and folder, and edge
+dragging scrolls long sessions. Escape or releasing outside a target cancels.
+Only a valid drop commits one Undo step; previews leave the document unchanged.
+
+Arrangement and Mixer share the project's complete hierarchy order. Collapsed
+folders keep their children in that order while hiding their arranger rows.
+Reordering preserves track/clip IDs, selection, routing, insert state and
+automation. Changes in order alone preserve playback and loaded plug-ins;
+moving into another folder retains the usual folder mute/solo behavior.
+
 Each folder also encloses its header and descendant lanes in its own colored
 border. Nested containers add a small inset and separate closing edges, with
 matching left padding for child headers. Every track retains the same beat-grid
@@ -240,23 +281,53 @@ range is −60 dB (silence) through the channel maximum; quieter stored positive
 gains remain intact until edited. Master peak is a readout rather than a gain
 field.
 
-Mixer follows signal order from top to bottom: source/channel settings, Effects,
-volume and pan, Mute/Solo, then **Target**. Target shows the main destination and
-auxiliary send count. Selecting or hovering a channel previews its output and
+Mixer follows signal order from top to bottom: source/channel settings, Effects
+and insert summary, volume and pan, Mute/Solo, then **Target** and auxiliary sends.
+The output control carries the destination's color. A separate send action names
+a single destination or shows the send count; hover lists every destination,
+pre/post position and level. **Add send…** opens Routing for an empty send list.
+Selecting or hovering a channel previews its output and
 pre/post sends in separate routing lanes below the controls; clipped destinations
 remain named. **+ Bus** creates a bus, and Routing can add several sends or create
 a bus and send together. Output and send choices exclude feedback and duplicate
 sends; the model validates routing changes too.
 
-Mixer separates Tracks, Buses and Master with group headings and spacing. Bus
-headers share a routing icon, BUS badge and quiet tint with the arranger. Visual
-grouping does not reorder the project or renumber its channels. Narrow source
+Mixer separates contiguous Tracks and Buses with group headings and spacing,
+followed by Master. Drag a channel name to place it before or after another
+channel, including across track/bus boundaries. Bus headers share a routing icon,
+BUS badge and quiet tint with the arranger. Grouping follows the saved order;
+channel numbers match the arranger. Master remains the terminal output readout.
+Narrow source
 rows use `compact_action_menu`, which retains the normal action target height
 while removing the optional leading icon and reducing horizontal padding.
+
+Channel strips reserve four points of canvas between their bordered surfaces;
+their allocated width and control alignment remain unchanged. Selection uses a
+clear border, while track colors stay strongest in names and top markers. Bus
+input counts expose their named output/send sources on hover. Effects show an
+insert-count badge and bounded first-name summary; the full ordered chain and
+bypass states appear on hover. Fader marks show unity, −6, −12 and silence using
+the native fader's existing gain law. Master has a neutral identity header and
+aligned meters. These readouts add no timers or animated paint.
+
+Effect slots use the shared `effect_slot` card: bounded identity and enable switch,
+Active/Bypassed status, then a separate wrapping action row. The chain overview
+shows processing order; **+ Insert** stays outside the scrolling body. Utilities
+derive their top limit from the actual transport height, including wrapped rows.
+Library card previews shrink in short windows while names, producer labels and
+the original image aspect ratio remain intact.
 
 Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut, R Duplicate, T Glue, Z Erase, U Multi-draw, I Fade in, O Fade out, P Cursor. Each editor exposes only its applicable subset. The arranger retains fixed track headers and a fixed ruler while the musical canvas pans; its native vertical scrollbar remains available.
 
 `clip_title` paints an elided clip name and optional chain icon inside a timeline rectangle, returning the icon/text bounds for diagnostics. It adds no hit target. `clip_label` shows the same link identity in editor headers and Properties. Names remain ordinary Unicode text in the project; the link indicator is a vector icon, not a name prefix. Properties separates Clip, Track, and Channel pages, opening Clip for a valid selected clip and Track otherwise. **Start** and **Duration** are editable through the ordinary move/trim paths with Undo; Start uses one-based beats, and duration and the read-only source offset remain distances in beats. Only audio clips expose **Clip gain**; MIDI clips have no gain or pan. Track holds naming, color, hierarchy, and display options. Channel holds mixer gain, pan, mute, solo, and latency for audio, MIDI, and bus channels. Folders and automation tracks have no Channel page. Every ghost group member displays the shared name and exposes **Make independent**.
+
+`clip_surface` gives audio and MIDI clips the same opaque, track-tinted body and
+quiet title band, keeping the beat grid behind musical content. Its returned title
+and content rectangles remain separate even on compact tracks. `clip_note_preview`
+fits thumbnail notes within that content area using the clip's visible pitch range;
+very high and low notes remain distinct and never cover the name. These helpers
+only paint; selection, dragging, trimming and ghost identity retain the clip's
+existing interaction target.
 
 `DrawNoteLength` supplies **Last note**, 1/16, 1/8, 1/4, 1/2 and one-bar drawing choices through `drawing_note_length`. Last note begins at 1/16 and remembers the last drawn or selected duration; the application converts audible beats to source time. `paint_clip_end_label` marks the visible **Clip end** without adding hit targets. Drawing beyond it extends the MIDI occurrence in the same Undo step as the note.
 
@@ -312,6 +383,47 @@ cargo clippy -p daw-ui --all-targets -- -D warnings
 `curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.
 
 `curve_timeline_editor` adds the shared musical ruler and caller-owned `TimelineViewport`. Automation uses the same middle/Alt-drag pan, Ctrl-wheel/Ctrl-right-drag zoom, plus/minus shortcuts, and Fit/F as the other editors. `TimelinePane::horizontal_only` keeps the complete parameter range visible; `keyboard_focus` allows canvas shortcuts without stealing text input. Fit spans every point, with a full bar for a single-point lane. Visible Beat input is one-based. Navigating cannot create, move, or delete points, and New/Open resets the automation viewport and selection.
+
+Automation defaults to **Spline**. `curve_timeline_editor_with_segments` adds a
+diamond between each sufficiently separated pair of points; drag it vertically
+to bend only that segment. Select its starting point or diamond to use **Log**,
+**Linear**, **Exp**, and the continuous **Slope** control. The shared component
+returns an outgoing-point ID and shape intent; the core owns bounded cubic Bézier
+evaluation. Step, Linear and Smooth remain available for existing projects.
+Curve painting submits one bounded polyline rather than a shape per sample.
+The compact toolbar uses an interpolation picker and keeps the point and slope
+controls visible at 800 × 600. `curve_endpoint_summary` identifies the held
+values; `paint_curve_override` retains the muted curve beneath its manual line.
+
+Curves cover the complete musical timeline: the first value applies before the
+first point (including stopped controls and playback startup), and the final
+value holds indefinitely after the last. Curves do not extend song duration.
+Native gain, pan and send values are evaluated per sample; VST values retain the
+existing block-rate scheduling.
+
+An automated control displays its effective playhead value without changing the
+stored manual value. A real manual edit enters **Overridden**, with a coral-red
+marker and explicit text; the saved curve remains visible and editable. The
+Automation editor, native control context menus, channel status menus, and
+plug-in parameter details offer **Resume automation**. Resume follows the curve
+at the current playhead. **Override automation** explicitly holds the current
+value, and its numeric field adjusts that held value. Overrides persist with the
+project and participate in Undo/Redo. Lane/folder bypass instead uses the stored
+manual value and is labelled **Bypassed**. Changing a curve or override on an
+existing enabled lane uses the live edit path, preserving loaded plug-ins.
+Automation has a reserved orange identity (`Palette::automation`) across curves,
+nodes, handles, parameter-browser markers, control outlines and status menus,
+independent of track colors. Manual takeover uses `automation_override` coral
+red; bypassed status remains gray. State wording supplements color in both
+themes, and the original curve stays muted beneath an override's held line.
+Tool mix edits use the same takeover behavior when a stored value changes.
+Explicit override or resume commands take precedence within an atomic batch.
+Channel volume, pan and send controls offer **Create automation** directly in
+their context menus before a lane exists, then **Edit automation** and **Resume
+automation** as appropriate. Properties, Routing and Mixer channel menus expose
+the same operations. Creation targets the control's owner, independently of the
+current selection, and starts at its current value. Send sliders cover their
+supported 0–16 gain range and retain precise numeric entry.
 
 Automation's **Add parameter** opens a chooser with the shared parameter browser for VST instruments and effects. Back, Escape and its close button restore the original curve, selected point and zoom. Choosing a parameter that already has a lane offers **Edit automation** instead of failing on duplicate creation; switching lanes does not add undo history. Creating a new lane consumes the chooser and preserves the outer workspace return path. Parameter metadata reads restore the selected instance's saved state and overrides in its sandbox, so a new lane starts from that instance's value rather than a plugin default. Switching between instances invalidates the selection and metadata.
 

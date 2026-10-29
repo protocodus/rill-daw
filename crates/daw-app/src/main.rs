@@ -9,6 +9,7 @@ mod audio_silence;
 mod audio_takes_ui;
 mod automation;
 mod automation_editor;
+mod automation_state;
 mod clip_navigation;
 mod crossfade_ui;
 mod document_ui;
@@ -37,6 +38,7 @@ mod settings;
 mod spectrogram;
 mod theme;
 mod tool_jobs;
+mod track_order;
 #[cfg(test)]
 mod ui_tests;
 

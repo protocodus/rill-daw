@@ -6,15 +6,41 @@ use std::hash::Hash;
 
 /// A compact action row which wraps as complete controls when space is limited.
 pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
-    egui::Frame::new()
+    let colors = theme::palette(ui.ctx());
+    let row = egui::Frame::new()
+        .fill(colors.panel)
         .inner_margin(egui::Margin::symmetric(
             tokens::SPACE_MD as i8,
             tokens::SPACE_SM as i8,
         ))
         .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
             ui.horizontal_wrapped(contents).inner
-        })
+        });
+    ui.painter().hline(
+        row.response.rect.x_range(),
+        row.response.rect.bottom(),
+        egui::Stroke::new(1.0, colors.line),
+    );
+    row
+}
+
+/// A compact visual family of tools. The measured width lets a wrapping toolbar
+/// move the entire family together; the background never owns input or focus.
+pub fn tool_group<R>(
+    ui: &mut Ui,
+    width: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let colors = theme::palette(ui.ctx());
+    let background = ui.painter().add(egui::Shape::Noop);
+    let group = toolbar_group_sized_with_spacing(ui, width, tokens::SPACE_XS, contents);
+    ui.painter().set(
+        background,
+        egui::Shape::rect_filled(group.response.rect, tokens::RADIUS, colors.bg),
+    );
+    group
 }
 
 /// Keep related controls together inside a wrapping toolbar.
@@ -308,14 +334,24 @@ pub fn mixer_strip<R>(
         };
         let fill = color.map_or(base, |color| {
             let amount = match (ui.ctx().theme(), selected) {
-                (egui::Theme::Dark, false) => 0.14,
-                (egui::Theme::Dark, true) => 0.22,
-                (egui::Theme::Light, false) => 0.10,
-                (egui::Theme::Light, true) => 0.18,
+                (egui::Theme::Dark, false) => 0.08,
+                (egui::Theme::Dark, true) => 0.14,
+                (egui::Theme::Light, false) => 0.06,
+                (egui::Theme::Light, true) => 0.12,
             };
             base.lerp_to_gamma(color, amount)
         });
-        let frame = egui::Frame::new().fill(fill).inner_margin(tokens::SPACE_MD);
+        // A real canvas gutter keeps adjacent strips separate even when they
+        // share a track color. Preserve the total width and control alignment.
+        let gutter = tokens::SPACE_XS * 0.5;
+        let frame = egui::Frame::new()
+            .fill(fill)
+            .corner_radius(tokens::RADIUS)
+            .outer_margin(egui::Margin::symmetric(gutter as i8, 0))
+            .inner_margin(egui::Margin::symmetric(
+                (tokens::SPACE_MD - gutter) as i8,
+                tokens::SPACE_MD as i8,
+            ));
         let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.set_width((size.x - 2.0 * tokens::SPACE_MD).max(0.0));
@@ -329,14 +365,27 @@ pub fn mixer_strip<R>(
         } else {
             frame.show(ui, content)
         };
-        let rect = result.response.rect;
-        ui.painter().line_segment(
-            [rect.right_top(), rect.right_bottom()],
-            egui::Stroke::new(1.0_f32, colors.line),
+        let rect = result.response.rect.shrink2(egui::vec2(gutter, 0.0));
+        if selected {
+            crate::paint_selection_glow(
+                ui.painter(),
+                rect,
+                tokens::RADIUS,
+                color.unwrap_or(colors.accent),
+            );
+        }
+        ui.painter().rect_stroke(
+            rect,
+            tokens::RADIUS,
+            egui::Stroke::new(1.0_f32, if selected { colors.accent } else { colors.line }),
+            egui::StrokeKind::Inside,
         );
         if let Some(color) = color {
             ui.painter().rect_filled(
-                egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), 2.0)),
+                egui::Rect::from_min_size(
+                    rect.min + egui::vec2(tokens::RADIUS as f32, 0.0),
+                    egui::vec2(rect.width() - 2.0 * tokens::RADIUS as f32, 3.0),
+                ),
                 0.0,
                 color,
             );

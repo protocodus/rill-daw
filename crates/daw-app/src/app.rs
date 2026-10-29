@@ -109,6 +109,7 @@ pub(crate) enum ClipCommand {
 }
 
 pub struct DawApp {
+    render_context: egui::Context,
     pub(crate) assistant: crate::assistant::Assistant,
     pub(crate) tool_joins: crate::join_tools::JoinTools,
     pub(crate) song_session: daw_core::SongSession,
@@ -224,6 +225,9 @@ impl DawApp {
         project: Project,
         screenshot: Option<PathBuf>,
     ) -> Self {
+        if let Some(gl) = &cc.gl {
+            daw_ui::enable_backdrop_blur(&cc.egui_ctx, gl);
+        }
         Self::with_context(&cc.egui_ctx, project, screenshot)
     }
     pub fn with_context(
@@ -241,6 +245,7 @@ impl DawApp {
             .and_then(|t| t.clips.iter().find(|clip| !clip.is_take_source()))
             .map(|c| c.id);
         let mut app = Self {
+            render_context: ctx.clone(),
             assistant: Default::default(),
             tool_joins: Default::default(),
             song_session: Default::default(),
@@ -795,6 +800,7 @@ impl DawApp {
             return;
         }
         self.project.prune_automation();
+        self.capture_manual_automation_overrides();
         self.modified = true;
         self.edit_dirty = true;
         self.playback_preview_dirty = true;
@@ -3141,52 +3147,67 @@ impl DawApp {
 
 /// Cosmetic edits never rebuild the audio graph or restart plug-in processes.
 pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
+    // Track order belongs to the workspace. Compare stable channel identities
+    // so rearranging headers cannot restart a running graph or its plug-ins.
+    let tracks: std::collections::HashMap<_, _> =
+        b.tracks.iter().map(|track| (track.id, track)).collect();
     a.tempo == b.tempo
         && a.beats_per_bar == b.beats_per_bar
         && a.loop_enabled == b.loop_enabled
         && a.loop_start == b.loop_start
         && a.loop_end == b.loop_end
         && a.tracks.len() == b.tracks.len()
-        && a.tracks.iter().zip(&b.tracks).all(|(a, b)| {
-            a.id == b.id
-                && a.kind == b.kind
-                && a.gain == b.gain
-                && a.pan == b.pan
-                && a.mute == b.mute
-                && a.solo == b.solo
-                && a.instrument == b.instrument
-                && a.instrument_state == b.instrument_state
-                && a.instrument_parameters == b.instrument_parameters
-                && a.latency_samples == b.latency_samples
-                && a.automation == b.automation
-                && a.inserts == b.inserts
-                && a.sends == b.sends
-                && a.output_bus == b.output_bus
-                && a.parent_folder == b.parent_folder
-                && a.clips.len() == b.clips.len()
-                && a.clips.iter().zip(&b.clips).all(|(a, b)| {
-                    a.start == b.start
-                        && a.length == b.length
-                        && a.offset == b.offset
-                        && a.source_rate == b.source_rate
-                        && a.audio_take == b.audio_take
-                        && match (&a.content, &b.content) {
-                            (ClipContent::Midi { notes: a }, ClipContent::Midi { notes: b }) => {
-                                a.len() == b.len()
-                                    && a.iter().zip(b).all(|(a, b)| {
-                                        a.pitch == b.pitch
-                                            && a.start == b.start
-                                            && a.length == b.length
-                                            && a.velocity == b.velocity
-                                    })
+        && tracks.len() == b.tracks.len()
+        && a.tracks.iter().all(|a| {
+            tracks.get(&a.id).is_some_and(|b| {
+                a.kind == b.kind
+                    && a.gain == b.gain
+                    && a.pan == b.pan
+                    && a.mute == b.mute
+                    && a.solo == b.solo
+                    && a.instrument == b.instrument
+                    && a.instrument_state == b.instrument_state
+                    && a.instrument_parameters == b.instrument_parameters
+                    && a.latency_samples == b.latency_samples
+                    && a.automation == b.automation
+                    && a.inserts == b.inserts
+                    && a.sends == b.sends
+                    && a.output_bus == b.output_bus
+                    && a.parent_folder == b.parent_folder
+                    && a.clips.len() == b.clips.len()
+                    && a.clips.iter().zip(&b.clips).all(|(a, b)| {
+                        a.start == b.start
+                            && a.length == b.length
+                            && a.offset == b.offset
+                            && a.source_rate == b.source_rate
+                            && a.audio_take == b.audio_take
+                            && match (&a.content, &b.content) {
+                                (
+                                    ClipContent::Midi { notes: a },
+                                    ClipContent::Midi { notes: b },
+                                ) => {
+                                    a.len() == b.len()
+                                        && a.iter().zip(b).all(|(a, b)| {
+                                            a.pitch == b.pitch
+                                                && a.start == b.start
+                                                && a.length == b.length
+                                                && a.velocity == b.velocity
+                                        })
+                                }
+                                (a, b) => a == b,
                             }
-                            (a, b) => a == b,
-                        }
-                })
+                    })
+            })
         })
 }
 
 impl eframe::App for DawApp {
+    fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
+        if let Some(gl) = gl {
+            daw_ui::destroy_backdrop_blur(&self.render_context, gl);
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.ui_frame(ctx);
     }

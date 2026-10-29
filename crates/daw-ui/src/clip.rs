@@ -1,7 +1,123 @@
 //! Clip identity presentation shared by timeline canvases and property views.
 //! The application decides which instances are linked and owns all editing.
 use crate::{Icon, text, tokens};
-use egui::{Color32, FontId, Painter, Rect, Response, Sense, Ui, Vec2};
+use egui::{
+    Color32, CornerRadius, FontId, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
+    Vec2,
+};
+
+/// Separate clip identity from its musical preview at every track height.
+#[derive(Clone, Copy, Debug)]
+pub struct ClipSurfaceLayout {
+    pub title: Rect,
+    pub content: Rect,
+    pub title_color: Color32,
+}
+
+/// An opaque clip surface with a quiet track-colored title band and a soft
+/// selection halo. The opaque
+/// body keeps the beat grid from competing with waveforms and MIDI thumbnails.
+/// This is paint only: the caller retains the clip's complete interaction target.
+pub fn clip_surface(
+    painter: &Painter,
+    rect: Rect,
+    color: Color32,
+    selected: bool,
+) -> ClipSurfaceLayout {
+    let colors = crate::theme::palette(painter.ctx());
+    let header_bottom = (rect.top() + tokens::FONT_CANVAS + tokens::SPACE_SM).min(rect.bottom());
+    let inset_x = tokens::SPACE_XS.min(rect.width().max(0.0) * 0.5);
+    let content_top = (header_bottom + tokens::SPACE_XS * 0.5).min(rect.bottom());
+    let content_bottom = (rect.bottom() - tokens::SPACE_XS).max(content_top);
+    let header_fill = colors
+        .panel
+        .lerp_to_gamma(color, if selected { 0.42 } else { 0.28 });
+    let layout = ClipSurfaceLayout {
+        title: Rect::from_min_max(
+            Pos2::new(
+                (rect.left() + tokens::SPACE_SM).min(rect.right()),
+                rect.top(),
+            ),
+            Pos2::new(
+                (rect.right() - inset_x).max((rect.left() + tokens::SPACE_SM).min(rect.right())),
+                header_bottom,
+            ),
+        ),
+        content: Rect::from_min_max(
+            Pos2::new(rect.left() + inset_x, content_top),
+            Pos2::new(rect.right() - inset_x, content_bottom),
+        ),
+        title_color: crate::theme::contrast_text(header_fill),
+    };
+    if !rect.is_positive() || !rect.is_finite() {
+        return layout;
+    }
+    if selected {
+        crate::paint_selection_glow(painter, rect, tokens::RADIUS, color);
+    }
+    let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+    painter.rect_filled(
+        rect,
+        tokens::RADIUS,
+        colors
+            .bg
+            .lerp_to_gamma(color, if selected { 0.22 } else { 0.12 }),
+    );
+    painter.rect_filled(
+        Rect::from_min_max(rect.min, Pos2::new(rect.right(), header_bottom)),
+        CornerRadius {
+            nw: tokens::RADIUS,
+            ne: tokens::RADIUS,
+            sw: 0,
+            se: 0,
+        },
+        header_fill,
+    );
+    painter.rect_stroke(
+        rect,
+        tokens::RADIUS,
+        Stroke::new(
+            if selected { 1.8 } else { 0.8 },
+            color.gamma_multiply(if selected { 1.0 } else { 0.65 }),
+        ),
+        StrokeKind::Inside,
+    );
+    layout
+}
+
+/// Paint one MIDI thumbnail note inside a clip's dedicated preview region.
+/// The caller maps source timing into canvas coordinates and supplies a common
+/// pitch range for the clip. Notes can never cover its title or adjacent clips.
+pub fn clip_note_preview(
+    painter: &Painter,
+    content: Rect,
+    time: std::ops::Range<f32>,
+    pitch: u8,
+    pitches: std::ops::RangeInclusive<u8>,
+    color: Color32,
+) -> Option<Rect> {
+    if !content.is_positive() || !content.is_finite() || time.end <= time.start {
+        return None;
+    }
+    let height = 2.5_f32.min(content.height());
+    let low = f32::from(*pitches.start());
+    let high = f32::from(*pitches.end());
+    let span = (high - low).max(12.0);
+    let pitch_y = (0.5 + (f32::from(pitch) - (low + high) * 0.5) / span).clamp(0.0, 1.0);
+    let y = content.bottom() - height - pitch_y * (content.height() - height);
+    let rect = Rect::from_min_size(
+        Pos2::new(time.start, y),
+        Vec2::new((time.end - time.start - 1.0).max(2.0), height),
+    )
+    .intersect(content);
+    if !rect.is_positive() || !rect.intersects(painter.clip_rect()) {
+        return None;
+    }
+    painter
+        .with_clip_rect(content.intersect(painter.clip_rect()))
+        .rect_filled(rect, 1.0, color.gamma_multiply(0.85));
+    Some(rect)
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClipTitleLayout {

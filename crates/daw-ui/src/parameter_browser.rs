@@ -2,7 +2,10 @@
 //! Parameter identities and values remain with the caller; browsing never edits them.
 use crate::{Icon, IconButton, text::TextRole, theme, tokens};
 use egui::{Key, Modifiers, Rect, Response, Ui};
-use std::hash::Hash;
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::Arc,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ParameterItem<'a> {
@@ -36,6 +39,60 @@ pub struct ParameterBrowserResponse<R> {
 }
 
 const ROW_HEIGHT: f32 = 64.0;
+
+#[derive(Clone)]
+struct SearchCache {
+    signature: u64,
+    indices: Arc<[usize]>,
+}
+
+/// Keep the expensive Unicode normalization and ranking out of unchanged
+/// frames. Hash the borrowed metadata relevant to this filter so in-place
+/// changes invalidate the result without retaining another copy of the catalog.
+/// Unfiltered results depend only on length. Values, identities, and selection
+/// remain live in the caller's items rather than being copied into the cache.
+fn cached_matches(
+    ctx: &egui::Context,
+    id: egui::Id,
+    items: &[ParameterItem<'_>],
+    state: &ParameterBrowserState,
+) -> Arc<[usize]> {
+    let mut signature = DefaultHasher::new();
+    state.query.hash(&mut signature);
+    std::mem::discriminant(&state.scope).hash(&mut signature);
+    items.len().hash(&mut signature);
+    let has_query = !state.query.trim().is_empty();
+    if has_query || state.scope != ParameterScope::All {
+        for item in items {
+            if has_query {
+                item.name.hash(&mut signature);
+                item.unit.hash(&mut signature);
+            }
+            match state.scope {
+                ParameterScope::All => {}
+                ParameterScope::Automated => item.automated.hash(&mut signature),
+                ParameterScope::LastTouched => item.last_touched.hash(&mut signature),
+            }
+        }
+    }
+    let signature = signature.finish();
+    if let Some(cached) = ctx.data(|data| data.get_temp::<SearchCache>(id))
+        && cached.signature == signature
+    {
+        return cached.indices;
+    }
+    let indices: Arc<[usize]> = matches(items, state).into();
+    ctx.data_mut(|data| {
+        data.insert_temp(
+            id,
+            SearchCache {
+                signature,
+                indices: Arc::clone(&indices),
+            },
+        );
+    });
+    indices
+}
 
 fn matches(items: &[ParameterItem<'_>], state: &ParameterBrowserState) -> Vec<usize> {
     let query = state.query.trim().to_lowercase();
@@ -117,7 +174,9 @@ fn parameter_row(ui: &mut Ui, item: &ParameterItem<'_>, selected: bool) -> Respo
     .paint(
         &painter,
         icon,
-        if selected || item.automated || item.last_touched {
+        if item.automated {
+            colors.automation
+        } else if selected || item.last_touched {
             colors.accent
         } else {
             colors.muted
@@ -169,7 +228,11 @@ fn parameter_row(ui: &mut Ui, item: &ParameterItem<'_>, selected: bool) -> Respo
             egui::vec2(rail.width() * value as f32, rail.height()),
         ),
         1.0,
-        colors.accent,
+        if item.automated {
+            colors.automation
+        } else {
+            colors.accent
+        },
     );
     if response.has_focus() {
         painter.rect_stroke(
@@ -285,7 +348,12 @@ pub fn parameter_browser<R>(
             search.request_focus();
             state.focus_search = true;
         }
-        let matches = matches(items, state);
+        let matches = cached_matches(
+            ui.ctx(),
+            ui.make_persistent_id("parameter_search_results"),
+            items,
+            state,
+        );
         let query_changed = state.query != previous_query || state.scope != previous_scope;
         let click_key = ui.make_persistent_id("parameter_row_click");
         let mut last_click = ui.data_mut(|data| data.get_temp::<(u32, f64, egui::Pos2)>(click_key));
@@ -436,4 +504,93 @@ pub fn parameter_browser<R>(
         }
     })
     .inner
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unchanged_large_search_reuses_results_while_parameter_values_remain_live() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("large_search");
+        let names: Vec<_> = (0..10_000)
+            .map(|index| format!("Cutoff {index:05} · 音"))
+            .collect();
+        let mut items: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(id, name)| ParameterItem {
+                id: id as u32,
+                name,
+                unit: "Hz",
+                value: 0.5,
+                automated: false,
+                last_touched: false,
+            })
+            .collect();
+        let mut state = ParameterBrowserState {
+            query: "CUTOFF Hz".into(),
+            ..Default::default()
+        };
+        let first = cached_matches(&ctx, id, &items, &state);
+        assert_eq!(first.len(), items.len());
+        for frame in 0..60 {
+            items[frame].value = frame as f64 / 60.0;
+            items[frame].automated = true;
+            items[frame].last_touched = true;
+            state.selected = Some(frame as u32);
+            let next = cached_matches(&ctx, id, &items, &state);
+            assert!(Arc::ptr_eq(&first, &next));
+        }
+    }
+
+    #[test]
+    fn cached_search_tracks_metadata_order_and_dynamic_scope_changes() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("changing_search");
+        let mut items = [
+            ParameterItem {
+                id: 1,
+                name: "Cutoff",
+                unit: "Hz",
+                value: 0.5,
+                automated: true,
+                last_touched: false,
+            },
+            ParameterItem {
+                id: 2,
+                name: "Filter cutoff",
+                unit: "Hz",
+                value: 0.5,
+                automated: false,
+                last_touched: true,
+            },
+        ];
+        let mut state = ParameterBrowserState {
+            query: "cutoff".into(),
+            ..Default::default()
+        };
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[0, 1]);
+        items.swap(0, 1);
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[1, 0]);
+        items[1].name = "Resonance";
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[0]);
+        state.query = "kHz".into();
+        assert!(cached_matches(&ctx, id, &items, &state).is_empty());
+        items[0].unit = "kHz";
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[0]);
+        state.query.clear();
+        state.scope = ParameterScope::Automated;
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[1]);
+        items[0].automated = true;
+        items[1].automated = false;
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[0]);
+        state.scope = ParameterScope::LastTouched;
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[0]);
+        items[0].last_touched = false;
+        items[1].last_touched = true;
+        assert_eq!(&*cached_matches(&ctx, id, &items, &state), &[1]);
+        assert!(cached_matches(&ctx, id, &[], &state).is_empty());
+    }
 }

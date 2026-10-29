@@ -49,6 +49,39 @@ fn complete_part_is_one_call_and_one_undoable_operation() {
 }
 
 #[test]
+fn relative_track_move_tools_preserve_folder_contents_and_share_one_undo() {
+    let mut host = Host::default();
+    let folder = host.p.add_folder("Group");
+    let source = host.p.add_midi_track("Part");
+    let bus = host.p.add_bus("Room");
+    host.p.set_parent_folder(source, Some(folder)).unwrap();
+    let before = host.p.clone();
+    let session = host.session;
+    call(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Move group",
+            "edits":[{"op":"move_track","track":folder,"target":bus,"placement":"after"}]
+        }),
+    );
+    assert_eq!(host.p.ordered_track_ids(), vec![bus, folder, source]);
+    assert_eq!(host.p.track(source), before.track(source));
+    assert_eq!(host.history.undo_labels().count(), 1);
+    let session = host.session;
+    let changed = host.p.clone();
+    let rejected = dispatch_song_tool(&mut host, "apply_edits", json!({
+        "session_id":session.id,"expected_revision":session.revision,"label":"Invalid folder cycle",
+        "edits":[{"op":"move_track","track":folder,"target":source,"placement":"after"}]
+    })).unwrap_err();
+    assert_eq!(rejected.code, "edit_failed");
+    assert_eq!(host.p, changed);
+    assert_eq!(host.session, session);
+    assert!(host.history.undo(&mut host.p));
+    assert_eq!(host.p, before);
+}
+
+#[test]
 fn stale_session_and_revision_reject_mutation() {
     let mut h = Host::default();
     let id = h.session.id;
@@ -410,11 +443,85 @@ fn schema_example(schema: &Value) -> Value {
 fn every_published_edit_shape_deserializes_to_the_real_command_contract() {
     let schema = song_edit_schema();
     let variants = schema["oneOf"].as_array().unwrap();
-    assert_eq!(variants.len(), 66);
+    assert_eq!(variants.len(), 69);
     for variant in variants {
         let example = schema_example(variant);
         serde_json::from_value::<SongEdit>(example.clone()).unwrap_or_else(|error| {
             panic!("Published command schema disagrees with serde: {example}: {error}")
         });
     }
+}
+
+#[test]
+fn automation_spline_and_override_commands_match_the_shared_model_and_queries() {
+    let mut host = Host::default();
+    let source = host.p.add_audio_track("Source");
+    let lane = host
+        .p
+        .add_automation_track(
+            "Volume",
+            AutomationTarget {
+                track: source,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    let point = host.p.automation_lane(lane).unwrap().points[0].id;
+    let before = host.p.clone();
+    let session = host.session;
+    call(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Shape automation",
+            "edits":[
+                {"op":"set_automation_interpolation","track":lane,"interpolation":"Spline"},
+                {"op":"set_automation_point_curve","track":lane,"point":point,"curve":0.75},
+                {"op":"set_automation_override","track":lane,"value":0.25}
+            ]
+        }),
+    );
+    assert_eq!(host.history.undo_labels().count(), 1);
+    let queried = call(&mut host, "get_track", json!({"track_id":lane}));
+    assert_eq!(queried["automation"]["interpolation"], "Spline");
+    assert_eq!(queried["automation"]["points"][0]["curve"], 0.75);
+    assert_eq!(queried["automation"]["override_value"], 0.25);
+    assert_eq!(
+        host.p
+            .automation_lane(lane)
+            .unwrap()
+            .effective_value_at(1e9),
+        Some(0.25)
+    );
+    let changed = host.p.clone();
+    let session = host.session;
+    let invalid = dispatch_song_tool(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Invalid override",
+            "edits":[{"op":"set_automation_override","track":lane,"value":1.1}]
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(invalid.code, "edit_failed");
+    assert_eq!(host.p, changed);
+    call(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Resume automation",
+            "edits":[{"op":"set_automation_override","track":lane,"value":null}]
+        }),
+    );
+    let resumed = host.p.automation_lane(lane).unwrap();
+    assert_eq!(resumed.override_value, None);
+    assert_eq!(
+        resumed.points,
+        changed.automation_lane(lane).unwrap().points
+    );
+    assert!(host.history.undo(&mut host.p));
+    assert_eq!(host.p, changed);
+    assert!(host.history.undo(&mut host.p));
+    assert_eq!(host.p, before);
 }

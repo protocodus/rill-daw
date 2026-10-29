@@ -10,6 +10,14 @@ pub const COMPACT_HEIGHT: f32 = 24.0;
 pub const SELECT_WIDTH: f32 = 160.0;
 pub const RADIUS: u8 = 5;
 pub const SURFACE_RADIUS: u8 = 8;
+/// Soft selection halo, bounded independently of display scale or object size.
+pub const SELECTION_GLOW_EXTENT: f32 = 6.0;
+/// Inactive scenes use at most two 512 × 512 RGBA8 GPU targets.
+pub const BACKDROP_BLUR_MAX_SIDE: u32 = 512;
+pub const BACKDROP_BLUR_DOWNSAMPLE: f32 = 4.0;
+pub const MIXER_ROUTE_WIDTH: f32 = 3.0;
+pub const MIXER_ROUTE_HEAD: f32 = 9.0;
+pub const MIXER_ROUTE_LANE_HEIGHT: f32 = 40.0;
 pub const BUTTON_PADDING_X: f32 = 12.0;
 pub const BUTTON_PADDING_Y: f32 = 6.0;
 pub const POPUP_MARGIN: f32 = SPACE_XL;
@@ -31,6 +39,8 @@ pub const FONT_BODY: f32 = 15.0;
 pub const FONT_SUBTITLE: f32 = 16.0;
 pub const FONT_HEADING: f32 = 20.0;
 pub const FONT_CANVAS: f32 = 12.0;
+/// Bounded parameter-scale captions in dense canvas controls.
+pub const FONT_SCALE: f32 = 10.0;
 pub const TIMELINE_RULER_HEIGHT: f32 = 36.0;
 pub const TIMELINE_LOOP_STRIP_HEIGHT: f32 = 5.0;
 /// Keep loop feedback below both ruler label rows, with a clear gap.
