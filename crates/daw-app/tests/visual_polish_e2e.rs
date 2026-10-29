@@ -147,7 +147,7 @@ fn selected_clips_and_channels_gain_a_bounded_halo_without_editing_content() {
     }
 }
 
-fn channel<'a>(state: &'a Value, id: u64) -> &'a Value {
+fn channel(state: &Value, id: u64) -> &Value {
     state["mixer"]["channels"]
         .as_array()
         .unwrap()

@@ -94,9 +94,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 }
             }
             Some(CurveEdit::Delete { id }) => state.points.retain(|point| point.id != id),
-            // This basic point editor has no segment handles; the spline
-            // timeline variant additionally emits per-segment slope changes.
-            Some(CurveEdit::SetCurve { .. }) | None => {}
+            None => {}
         }
         state.points.sort_by(|a, b| a.x.total_cmp(&b.x));
         daw_ui::text::note(left, "Click to add · drag to move · Delete to remove");

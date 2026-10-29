@@ -80,7 +80,9 @@ jobs:
         run: bash scripts/test-e2e.sh
       - name: Native application startup, rendering, and shutdown
         if: runner.os == 'Linux'
-        run: xvfb-run -a -s "-screen 0 1600x1200x24" cargo test --locked -p daw-app --test e2e native_window_renders_and_exits_after_screenshot -- --ignored --nocapture
+        run: |
+          xvfb-run -a -s "-screen 0 1600x1200x24" cargo test --locked -p daw-app --test e2e native_window_renders_and_exits_after_screenshot -- --ignored --nocapture
+          xvfb-run -a -s "-screen 0 1600x1200x24" cargo test --locked -p daw-app --test visual_polish_e2e native_utility_blurs_background_detail_in_both_themes -- --ignored --nocapture
       - name: Strict Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Package macOS and Linux
