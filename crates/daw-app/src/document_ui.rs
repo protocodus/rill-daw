@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 pub(crate) enum DocumentDialog {
     Save,
     Open,
+    Import,
     Export,
     ExportMidi,
 }
@@ -66,7 +67,7 @@ impl DawApp {
     }
 
     pub(crate) fn document_dialog_filename(&self, kind: DocumentDialog) -> Option<String> {
-        if kind == DocumentDialog::Open {
+        if matches!(kind, DocumentDialog::Open | DocumentDialog::Import) {
             return None;
         }
         if kind == DocumentDialog::Save
@@ -91,7 +92,7 @@ impl DawApp {
             DocumentDialog::Save => "rill",
             DocumentDialog::Export => "wav",
             DocumentDialog::ExportMidi => "mid",
-            DocumentDialog::Open => unreachable!(),
+            DocumentDialog::Open | DocumentDialog::Import => unreachable!(),
         };
         Some(format!("{stem}.{extension}"))
     }
@@ -146,6 +147,9 @@ impl DawApp {
             )
         } else {
             let dialog = match kind {
+                DocumentDialog::Import => {
+                    rfd::FileDialog::new().add_filter("Audio / MIDI", &["wav", "mid", "midi"])
+                }
                 DocumentDialog::Export => rfd::FileDialog::new().add_filter("Wave audio", &["wav"]),
                 DocumentDialog::ExportMidi => {
                     rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
@@ -165,12 +169,12 @@ impl DawApp {
                 dialog
             };
             let chosen = daw_ui::with_native_dialog_menu(|| match kind {
-                DocumentDialog::Open => dialog.pick_file(),
+                DocumentDialog::Open | DocumentDialog::Import => dialog.pick_file(),
                 _ => dialog.save_file(),
             })?;
             (chosen, None)
         };
-        if kind != DocumentDialog::Open
+        if !matches!(kind, DocumentDialog::Open | DocumentDialog::Import)
             && let Err(error) = self
                 .project
                 .validate_audio_destination(&chosen)
@@ -570,7 +574,7 @@ impl DawApp {
 /// Appending preserves dots in names without producing `Song.RILL.rill`.
 fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
     let (extension, accepted): (&str, &[&str]) = match kind {
-        DocumentDialog::Open => return path,
+        DocumentDialog::Open | DocumentDialog::Import => return path,
         DocumentDialog::Save => ("rill", &["rill", "json"]),
         DocumentDialog::Export => ("wav", &["wav"]),
         DocumentDialog::ExportMidi => ("mid", &["mid", "midi"]),

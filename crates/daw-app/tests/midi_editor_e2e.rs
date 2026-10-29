@@ -532,10 +532,12 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     assert!(visible(&multi, "Chord stack"));
     assert!(visible(&multi, "Major triad"), "{}", multi["label_rects"]);
     assert!(visible(&multi, "C · Natural minor"));
+    let plot = &multi["midi_editor"]["plot"];
+    let top = plot["min"][1].as_f64().unwrap();
+    let bottom = plot["max"][1].as_f64().unwrap();
     assert!(
-        multi["midi_editor"]["plot"]["min"][1].as_f64().unwrap() < 330.0,
-        "Context controls wrap without crowding out the editor: {}",
-        multi["midi_editor"]["plot"]
+        bottom - top >= 300.0 && top >= 0.0 && bottom <= multi["viewport"][1].as_f64().unwrap(),
+        "Context controls must leave a useful, visible piano-roll canvas: {plot}"
     );
     let select = app.key("Q");
     assert!(!visible(&select, "Chord stack"));

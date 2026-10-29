@@ -139,7 +139,10 @@ fn stopping_a_local_analysis_job_keeps_notes_and_ignores_its_late_result() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|message| message["role"] == "Tool" && message["text"] == "audio analyze")
+            .any(|message| {
+                message["role"] == "Tool"
+                    && message["text"] == daw_ai::tool_activity("audio_analyze")
+            })
         {
             assert_eq!(state["assistant"]["busy"], true);
             break;

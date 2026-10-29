@@ -425,6 +425,9 @@ impl DawApp {
         let mut selection_rows = Vec::new();
         let mut clicked_clip = false;
         let mut clicked_background = false;
+        let mut empty_action = None;
+        let mut empty_action_rects = Vec::new();
+        let mut empty_canvas = Rect::NOTHING;
         let mut track_diagnostics = Vec::new();
         let mut row_resize_diagnostics = Vec::new();
         let mut resized_rows = None;
@@ -1359,14 +1362,33 @@ impl DawApp {
                 let empty_height = ui.available_height().max(95.0);
                 let (empty, response) =
                     ui.allocate_exact_size(Vec2::new(content_width, empty_height), Sense::click());
+                empty_canvas = empty.intersect(ui.clip_rect()).intersect(Rect::from_min_max(
+                    Pos2::new(grid_left, empty.top()), Pos2::new(canvas.right(), empty.bottom()),
+                ));
                 let p = ui.painter_at(empty);
-                p.text(
-                    Pos2::new(grid_left + 24.0, empty.top() + 34.0),
-                    Align2::LEFT_CENTER,
-                    "Drop audio here · Double-click for MIDI",
-                    FontId::proportional(12.0),
-                    palette(ui.ctx()).muted,
-                );
+                if self.project.tracks.is_empty() {
+                    let area = Rect::from_min_max(
+                        Pos2::new(grid_left + daw_ui::tokens::SPACE_LG, empty.top() + daw_ui::tokens::SPACE_XL),
+                        Pos2::new(canvas.right() - daw_ui::tokens::SPACE_LG, empty.bottom()),
+                    );
+                    let response = ui.scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
+                        daw_ui::empty_workspace(ui, "Start a song", "Choose a sound, import a recording, or compose with AI.", &[
+                            daw_ui::EmptyWorkspaceAction { id: "instrument", label: "Choose instrument…", description: "Browse installed instruments. Choosing a sound creates its MIDI track.", primary: true },
+                            daw_ui::EmptyWorkspaceAction { id: "import", label: "Import audio or MIDI…", description: "Bring a WAV recording or MIDI file into the song. You can also drop files onto the arranger.", primary: false },
+                            daw_ui::EmptyWorkspaceAction { id: "ai", label: "Compose with AI", description: "Explore editable starting points in the song assistant. Nothing runs until you choose Send.", primary: false },
+                        ])
+                    }).inner;
+                    empty_action = response.action;
+                    empty_action_rects.extend(response.actions.iter().map(|(_, response)| response.interact_rect));
+                } else {
+                    p.text(
+                        Pos2::new(grid_left + 24.0, empty.top() + 34.0),
+                        Align2::LEFT_CENTER,
+                        "Drop audio here · Double-click for MIDI",
+                        FontId::proportional(12.0),
+                        palette(ui.ctx()).muted,
+                    );
+                }
                 if let Some(pos) = ui.ctx().input(|i| i.pointer.hover_pos())
                     && empty.contains(pos)
                     && pos.x >= grid_left && pos.x <= canvas.right()
@@ -1418,6 +1440,7 @@ impl DawApp {
             && pointer.0
             && let Some(origin) = pointer.3
             && selection_canvas.contains(origin)
+            && !empty_action_rects.iter().any(|rect| rect.contains(origin))
             && ui.ctx().layer_id_at(origin) == Some(ui.layer_id())
             && !egui::Popup::is_any_open(ui.ctx())
             && matches!(
@@ -1581,6 +1604,7 @@ impl DawApp {
                 "channels": channel_controls, "track_colors": track_colors, "recording_controls": recording_controls,
             });
             diagnostics["header_width"] = serde_json::json!(header_width);
+            diagnostics["empty_canvas"] = rect_json(empty_canvas);
             diagnostics["header_resize"] = rect_json(header_gutter);
             diagnostics["row_resize"] = serde_json::json!(row_resize_diagnostics);
             diagnostics["tracks"] = serde_json::json!(track_diagnostics);
@@ -1883,6 +1907,12 @@ impl DawApp {
                 self.arranger_selection.background_click_tracker.clear();
             }
         }
+        match empty_action.as_deref() {
+            Some("instrument") => self.open_instrument_chooser(false),
+            Some("import") => self.import_dialog(),
+            Some("ai") => self.open_assistant_examples(),
+            _ => {}
+        }
     }
     pub(crate) fn apply_automation_navigation(
         &mut self,
@@ -2018,7 +2048,7 @@ impl DawApp {
         daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
             .default_width(540.0)
-            .min_height(420.0)
+            .min_height(daw_ui::popup_body_size(ctx).y.min(420.0))
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
@@ -2026,28 +2056,29 @@ impl DawApp {
                     daw_ui::text::note(ui, "Select a track or clip");
                     return;
                 };
-                ui.horizontal(|ui| {
-                    if has_clip {
-                        daw_ui::selectable_value(ui, &mut self.inspector_page, InspectorPage::Clip, "Clip");
-                    }
-                    daw_ui::selectable_value(ui, &mut self.inspector_page, InspectorPage::Track, "Track");
-                    if has_channel {
-                        daw_ui::selectable_value(ui, &mut self.inspector_page, InspectorPage::Channel, "Channel");
-                    }
-                });
-                ui.separator();
                 let ai_scope = match self.inspector_page {
                     InspectorPage::Clip => self.selected_clip_ai_scope(),
                     InspectorPage::Channel => Some(daw_tools::ToolScope::Channel { track_id: id }),
                     InspectorPage::Track => None,
                 };
-                if let Some(scope) = ai_scope {
-                    if daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
-                        self.open_context_assistant(scope);
-                        navigated = true;
-                        return;
+                let mut page = self.inspector_page;
+                let open_ai = daw_ui::action_row(ui, |ui| {
+                    ai_scope.is_some_and(|scope| daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked())
+                }, |ui| {
+                    if has_clip {
+                        daw_ui::selectable_value(ui, &mut page, InspectorPage::Clip, "Clip");
                     }
-                    ui.add_space(daw_ui::tokens::SPACE_SM);
+                    daw_ui::selectable_value(ui, &mut page, InspectorPage::Track, "Track");
+                    if has_channel {
+                        daw_ui::selectable_value(ui, &mut page, InspectorPage::Channel, "Channel");
+                    }
+                }).inner.0;
+                self.inspector_page = page;
+                ui.separator();
+                if open_ai && let Some(scope) = ai_scope {
+                    self.open_context_assistant(scope);
+                    navigated = true;
+                    return;
                 }
                 if self.inspector_page == InspectorPage::Channel {
                     if self.channel_navigation(ui, ChannelDestination::Channel) {

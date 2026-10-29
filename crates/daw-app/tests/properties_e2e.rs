@@ -394,3 +394,67 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     assert_eq!(undo(&mut app, false)["project"], opened["project"]);
     app.quit();
 }
+
+#[test]
+fn compact_properties_keep_scoped_ai_and_clip_controls_reachable() {
+    let mut app = Harness::new();
+    let (first, _) = fixture(&mut app);
+    for (width, height, dark, density) in [
+        (800, 600, false, 1.0),
+        (800, 600, true, 2.0),
+        (1100, 720, false, 2.0),
+        (1100, 720, true, 1.0),
+    ] {
+        app.command(
+            json!({"command":"viewport","width":width,"height":height,"pixels_per_point":density}),
+        );
+        app.command(json!({"command":"system_theme","dark":dark}));
+        let before = selected_clip(&mut app, first);
+        for name in ["Clip", "Track", "Channel", "AI for this context"] {
+            let control = rect(&before, name);
+            assert!(
+                control["max"][1].as_f64().unwrap() - control["min"][1].as_f64().unwrap() >= 18.0,
+                "Clipped {name}: {control}"
+            );
+            assert!(control["min"][0].as_f64().unwrap() >= 0.0);
+            assert!(control["max"][0].as_f64().unwrap() <= f64::from(width));
+            assert!(control["max"][1].as_f64().unwrap() <= f64::from(height));
+        }
+        let local = app.click("AI for this context");
+        assert_eq!(local["assistant"]["scope"]["kind"], "audio_clip");
+        assert_eq!(local["assistant"]["scope"]["clip_id"], first);
+        assert_eq!(local["project"], before["project"]);
+        assert_eq!(local["history"], before["history"]);
+        app.key("Escape");
+        let state = app.inspect();
+        let window = &state["window_rects"][0];
+        let x = center(window).0;
+        let y = window["max"][1].as_f64().unwrap() - 40.0;
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-10000.0}));
+        for _ in 0..12 {
+            app.inspect();
+        }
+        let bottom = app.inspect();
+        for name in ["Fade in", "Fade out"] {
+            let control = rect(&bottom, name);
+            assert!(
+                control["max"][1].as_f64().unwrap() - control["min"][1].as_f64().unwrap() >= 13.0,
+                "Clipped {name}: {control}"
+            );
+            assert!(control["max"][1].as_f64().unwrap() <= f64::from(height));
+        }
+        front(&mut app, "Channel");
+        let local = app.click("AI for this context");
+        assert_eq!(local["assistant"]["scope"]["kind"], "channel");
+        assert_eq!(
+            local["assistant"]["scope"]["track_id"],
+            before["selected_track"]
+        );
+        assert_eq!(local["project"], before["project"]);
+        assert_eq!(local["history"], before["history"]);
+        app.key("Escape");
+        let track = front(&mut app, "Track");
+        assert!(!visible(&track, "AI for this context"));
+    }
+    app.quit();
+}

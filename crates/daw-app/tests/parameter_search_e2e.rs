@@ -663,6 +663,15 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
             < 1e-4
     );
     assert_eq!(lanes(&recalled)[0]["automation"]["points"], points);
+    let edited_after_recall = common::edit_plugin_parameter_value(&mut app, &recalled, "34.5678");
+    let recalled_override = lanes(&edited_after_recall)[0]["automation"]["override_value"]
+        .as_f64()
+        .unwrap();
+    assert!((recalled_override - 0.345678).abs() < 1e-6);
+    assert_eq!(
+        lanes(&edited_after_recall)[0]["automation"]["points"],
+        points
+    );
     app.quit();
 }
 

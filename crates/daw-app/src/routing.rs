@@ -226,6 +226,11 @@ impl DawApp {
             .id(egui::Id::new("routing"))
             .open(&mut open)
             .default_width(620.0)
+            .default_height(440.0)
+            // Keep a useful send viewport below navigation and contextual AI.
+            // Otherwise a remembered compact size can collapse the scrolling
+            // body to its heading when the appearance or display scale changes.
+            .min_height(widgets::popup_body_size(ctx).y.min(360.0))
             .vscroll(false)
             .show(ctx, |ui| {
                 if self.channel_navigation(ui, ChannelDestination::Routing) {

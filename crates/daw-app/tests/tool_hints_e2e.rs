@@ -1,4 +1,4 @@
-//! Every editing mode explains its gestures without hovering or changing music.
+//! Compact tool summaries disclose full gesture help without changing music.
 mod common;
 
 use common::Harness;
@@ -80,6 +80,8 @@ fn unchanged(state: &Value, before: &Value) {
         "modified",
         "selected_track",
         "selected_clip",
+        "selected_notes",
+        "song_session",
     ] {
         assert_eq!(state[field], before[field], "Tool hint changed {field}");
     }
@@ -90,7 +92,8 @@ fn persistent_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, be
     // the text. Repeated ordinary frames must retain the guidance.
     let state = app.command(json!({"command":"pointer", "phase":"move", "x":2.0, "y":2.0}));
     let title = format!("{label} · {key}");
-    let panel = hint(&state, &title, fragment);
+    let summary = hint(&state, &title, "");
+    let panel = hint(&state, "", fragment);
     let rect = |value: &Value| {
         [
             value["min"][0].as_f64().unwrap(),
@@ -107,7 +110,8 @@ fn persistent_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, be
         .find(|value| value["text"] == label)
         .unwrap();
     assert!(
-        top >= rect(tool)[3],
+        summary["min"][1].as_f64().unwrap() >= rect(tool)[3]
+            && top >= summary["max"][1].as_f64().unwrap(),
         "Hint must appear below the tool toolbar"
     );
     assert!(
@@ -117,12 +121,13 @@ fn persistent_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, be
     assert!(bottom <= state["viewport"][1].as_f64().unwrap());
     unchanged(&state, before);
     let later = app.inspect();
-    assert_eq!(hint(&later, &title, fragment)["text"], panel["text"]);
+    assert_eq!(hint(&later, "", fragment)["text"], panel["text"]);
     unchanged(&later, before);
 }
 
 fn tools(app: &mut Harness, choices: &[(&str, &str, &str)]) {
     let before = app.inspect();
+    app.click("Tool help");
     for (label, key, fragment) in choices {
         app.click(label);
         persistent_hint(app, label, key, fragment, &before);
@@ -133,7 +138,7 @@ fn tools(app: &mut Harness, choices: &[(&str, &str, &str)]) {
 }
 
 #[test]
-fn all_supported_tools_show_persistent_contextual_hints_by_pointer_and_keyboard() {
+fn tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard() {
     for (width, dark, density) in [(800, false, 1.0), (1200, true, 2.0)] {
         let mut app = fixture(width, dark, density);
         tools(
@@ -164,7 +169,7 @@ fn all_supported_tools_show_persistent_contextual_hints_by_pointer_and_keyboard(
                 ("Glue", "T", "join them with the selection"),
                 ("Erase", "Z", "drag across notes to erase"),
                 ("Multi-draw", "U", "chosen chord or scale"),
-                ("Cursor", "P", "Place the playback cursor"),
+                ("Cursor", "P", "Place the playback cursor."),
             ],
         );
         app.click("Arranger");
@@ -186,9 +191,10 @@ fn all_supported_tools_show_persistent_contextual_hints_by_pointer_and_keyboard(
         app.click("Arranger");
         app.click("Hint automation");
         let before = window(&mut app, "Automation");
+        app.click("Tool help");
         app.command(json!({"command":"pointer","phase":"move","x":2.0,"y":2.0}));
         let state = app.inspect();
-        let guidance = hint(&state, "Edit points", "Click to add");
+        let guidance = hint(&state, "", "Click to add; drag points");
         assert!(
             guidance["text"]
                 .as_str()
@@ -199,9 +205,42 @@ fn all_supported_tools_show_persistent_contextual_hints_by_pointer_and_keyboard(
         unchanged(&state, &before);
         // Interpolation is a parameter choice, not a separate pointer tool.
         assert_eq!(
-            hint(&app.inspect(), "Edit points", "drag points to move")["text"],
+            hint(&app.inspect(), "", "drag points to move")["text"],
             guidance["text"]
         );
+        app.quit();
+    }
+}
+
+#[test]
+fn compact_help_preserves_canvas_space_and_toggles_with_the_mouse() {
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = fixture(800, dark, density);
+        app.command(
+            json!({"command":"viewport", "width":800, "height":600, "pixels_per_point":density}),
+        );
+        let before = app.inspect();
+        let summary = hint(&before, "Select · Q", "Select clips");
+        assert!(summary["max"][1].as_f64().unwrap() - summary["min"][1].as_f64().unwrap() < 24.0);
+        assert!(
+            !before["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label
+                    .as_str()
+                    .is_some_and(|value| value.contains("Ctrl/Cmd+arrows nudge")))
+        );
+        let expanded = app.click("Tool help");
+        hint(&expanded, "", "Ctrl/Cmd+arrows nudge");
+        assert!(
+            expanded["timeline"]["ruler"]["min"][1].as_f64().unwrap()
+                > before["timeline"]["ruler"]["min"][1].as_f64().unwrap()
+        );
+        unchanged(&expanded, &before);
+        let collapsed = app.click("Tool help");
+        assert_eq!(collapsed["timeline"]["ruler"], before["timeline"]["ruler"]);
+        unchanged(&collapsed, &before);
         app.quit();
     }
 }

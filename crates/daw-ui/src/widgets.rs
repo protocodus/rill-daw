@@ -986,7 +986,9 @@ fn popup_bounds(ctx: &egui::Context) -> egui::Rect {
     )
 }
 
-fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
+/// Maximum utility content size after reserving transport, title, and frame.
+/// Clamp explicit minimum heights to this size so compact displays stay usable.
+pub fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
     // egui adds the frame, a padded native title row, and its separator outside
     // the body. Reserve all of them so content cannot hide the close button or
     // grow beyond the viewport when an asynchronous view adds more rows.

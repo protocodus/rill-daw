@@ -107,9 +107,13 @@ bypass/reordering with Undo, and calibrated fader interaction. `studio_windows_e
 opens and closes on-demand utilities in both appearances and at narrow/wide
 sizes, preserving the song while keeping the wrapped transport accessible.
 `control_roles_e2e` also checks whole-family tool wrapping and mouse selection.
+`routing_layout_e2e` follows Properties into Routing through live appearance,
+display-density and viewport changes. It keeps automated sends visible beneath
+the contextual AI action, scrolls a long send list to its output selector, and
+checks mouse edits and Undo at 800×600 and 1100×850.
 
 ```sh
-cargo test --locked -p daw-app --test mixer_readability_e2e --test effect_chain_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test mixer_readability_e2e --test effect_chain_layout_e2e --test routing_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
 ```
 
 `clip_surface_e2e` verifies opaque audio/MIDI clip bodies, separate title and
@@ -312,7 +316,7 @@ Supported commands:
 | `system_theme` | `dark` (boolean) | Deliver operating-system appearance input to egui; `effective_theme` and `theme_colors` report the active theme. |
 | `save` | `path` | Save the project through the same native state-flush path as File → Save. |
 | `open` | `path` | Execute an already-approved open through the document pipeline, preserving the outgoing session in recovery. Use `file_dialog` and File → Open to test the unsaved-change decision. |
-| `file_dialog` | `kind` (`save`, `open`, `export`, or `export_midi`), `path` (or `null`), optional `replace_existing` | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. If extension normalization changes the path to an existing destination, only `replace_existing: true` accepts the additional replacement decision; false or omitted cancels. Exact recognized-extension paths retain the native picker's original confirmation. |
+| `file_dialog` | `kind` (`save`, `open`, `import`, `export`, or `export_midi`), `path` (or `null`), optional `replace_existing` | Supply the next matching native file picker's result; `null` cancels. It does not open or save anything until the actual UI requests that picker. If extension normalization changes the path to an existing destination, only `replace_existing: true` accepts the additional replacement decision; false or omitted cancels. Exact recognized-extension paths retain the native picker's original confirmation. |
 | `close_window` | — | Deliver a native viewport close request and return the resulting guard or exit state. Unsaved work requires an explicit UI choice. |
 | `click` | `label`, optional `occurrence` | Click the center of a visible text label using normal pointer press/release events. Occurrences start at zero; the default/zero occurrence prefers an active menu or utility window over an identically named inactive workspace control. |
 | `pointer` | `x`, `y`, `phase` (`click`, `double_click`, `drag`, `down`, `move`, `up`), drag `to_x`, `to_y`; optional `button` (`primary`, `middle`, `secondary`) and `shift`, `ctrl`, `alt`, `cmd` | Send real pointer events to canvas coordinates; `automation_plot_rect` in state locates the curve plot. |
@@ -460,9 +464,10 @@ embedded WAVs, followed by identical export from a fresh process. Set
 retain the project, mix and intermediate checkpoints.
 
 `tool_hints_e2e` switches every supported arranger, MIDI and audio tool using
-pointer and keyboard input. Its persistent panels and automation interaction
-guide must remain readable in narrow windows without changing selection or
-history. `waveform_scale_e2e` checks Default/Fit against actual painted meshes,
+pointer and keyboard input. A compact summary stays visible by default; the
+mouse-accessible **Tool help** disclosure reveals complete gesture and shortcut
+instructions. Both states, including automation guidance, must stay readable in
+narrow windows without changing selection or history. `waveform_scale_e2e` checks Default/Fit against actual painted meshes,
 stereo balance, fractional trims, faded and very quiet audio, unchanged exports
 and source bytes, and warm caching with hundreds of short visible clips.
 
@@ -810,3 +815,21 @@ phrase repeat with rests and partial final windows, bounded allocations,
 re-export after successful and failed attempts, remembered tail options, and
 reset on Open. `time_signature_e2e` chooses 3/4 entirely through the UI, verifies
 Undo/Redo and portable recall, and disables the choice during live capture.
+
+## Empty workspaces and first actions
+
+`empty_workspace_e2e` exercises the empty arranger's starting actions through the
+running application. It checks layout at 800×600 and at 2× display scaling in
+both appearances, opens and dismisses the instrument chooser without creating
+tracks, and opens global AI examples without sending or replacing an existing
+draft. Native picker results are supplied with `file_dialog` and `kind: "import"`;
+Cancel, WAV import, MIDI import and mouse-driven Undo still run through the
+production import flow. Imports retain source files and create exactly one
+musical edit. The suite also protects direct file dropping and double-click
+pattern creation in the blank canvas, and verifies that deleting the channel
+being edited returns to the empty arranger without an extra history entry for
+the navigation.
+
+```sh
+cargo test --locked -p daw-app --test empty_workspace_e2e --test novice_clip_e2e -- --test-threads=1
+```

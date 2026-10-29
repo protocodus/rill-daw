@@ -192,6 +192,14 @@ impl DawApp {
         self.open_context_assistant(ToolScope::Song);
     }
 
+    pub(crate) fn open_assistant_examples(&mut self) {
+        self.open_global_assistant();
+        if !self.assistant.busy() {
+            self.assistant.ui.page = daw_ui::AssistantPage::Examples;
+            self.assistant.ui.category = "Compose".into();
+        }
+    }
+
     pub(crate) fn open_context_assistant(&mut self, scope: ToolScope) {
         let instrument = self.assistant_instrument_identity(&scope);
         if self.assistant.scope != scope || self.assistant.scope_instrument != instrument {

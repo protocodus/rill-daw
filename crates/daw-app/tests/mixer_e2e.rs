@@ -42,16 +42,17 @@ fn rename_selected_track(app: &mut Harness, current: &str, name: &str) {
     app.key("Escape");
 }
 
-fn drag(app: &mut Harness, label: &str, distance: f64) -> Value {
+fn drag(app: &mut Harness, track: &Value, control: &str, distance: f64) -> Value {
     let state = app.inspect();
-    let rect = state["label_rects"]
+    let channel = state["timeline"]["channels"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|rect| rect["text"] == label)
-        .unwrap_or_else(|| panic!("Missing {label}: {state}"));
-    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
-    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+        .find(|channel| channel["track"] == *track)
+        .expect("visible channel");
+    let handle = &channel[format!("{control}_scale")]["handle_center"];
+    let x = handle[0].as_f64().unwrap();
+    let y = handle[1].as_f64().unwrap();
     app.command(json!({"command":"pointer","x":x,"y":y,"phase":"drag","to_x":x+distance,"to_y":y}))
 }
 
@@ -101,14 +102,14 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
 
     let original_gain = state["project"]["tracks"][0]["gain"].as_f64().unwrap();
-    let db_label = format!("{:.1} dB", 20.0 * original_gain.log10());
-    let state = drag(&mut app, &db_label, -30.0);
+    let source_track = state["project"]["tracks"][0]["id"].clone();
+    let state = drag(&mut app, &source_track, "gain", -6.0);
     let gain = state["project"]["tracks"][0]["gain"].as_f64().unwrap();
     assert!(
         gain < original_gain * 0.9 && gain > 0.0,
         "Volume drag must change the channel: {state}"
     );
-    let state = drag(&mut app, "Pan 0", 50.0);
+    let state = drag(&mut app, &source_track, "pan", 50.0);
     let pan = state["project"]["tracks"][0]["pan"].as_f64().unwrap();
     assert!(pan > 0.2 && pan <= 1.0);
     let state = menu(&mut app, "Edit", "Undo");
@@ -129,7 +130,16 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     let state = menu(&mut app, "Window", "Mixer");
     assert!(visible(&state, "Ch 1 > New bus"));
     assert!(visible(&state, "Ch 2 > Master"));
-    assert!(visible(&state, &format!("{:.1} dB", 20.0 * gain.log10())));
+    let expected_db = 20.0 * gain.log10();
+    assert!(
+        state["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|label| label.as_str()?.strip_suffix(" dB")?.parse::<f64>().ok())
+            .any(|value| (value - expected_db).abs() < 1e-4),
+        "Mixer must display the actual channel gain in dB"
+    );
     let saved = app.directory.path().join("mix.daw.json");
     app.command(json!({"command":"save","path":saved}));
     let project = Project::load(&saved).unwrap();
@@ -270,7 +280,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     assert!(visible(&scrolled, "Channel volume"));
     assert!(visible(
         &scrolled,
-        "Right-click to create automation for this control"
+        "Right-click for exact value and automation"
     ));
     let routing = app.click("Ch 1 > Master");
     assert_eq!(

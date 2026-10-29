@@ -168,10 +168,10 @@ fn long_insert_chain_scrolls_to_actions_and_shrinks_after_removal() {
         .unwrap();
     let action = labels.iter().find(|row| row["text"] == "+ Insert").unwrap();
     let empty_height = action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap();
-    // Include the shared signal-chain header and empty-state card introduced by
-    // the redesigned effect view, while still rejecting a retained tall canvas.
+    // Include the shared signal-chain header, empty-state card, and contextual
+    // AI row, while still rejecting a retained tall canvas from the long chain.
     assert!(
-        empty_height < 280.0,
+        empty_height < 280.0 + f64::from(daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_SM),
         "an empty chain should hug its context links and remaining controls: {empty_height}"
     );
     app.click("Edit");

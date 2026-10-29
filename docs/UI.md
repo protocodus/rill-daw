@@ -39,16 +39,17 @@ Text, precise numbers, continuous sliders, choices, and boolean settings share t
 
 ### Navigation and menus
 
-Workspace headers, grouped toolbars, related-view links, a properties popup, and an open choice menu.
+Workspace headers, grouped toolbars, concise tool help, empty-workspace actions,
+related-view links, a properties popup, and an open choice menu.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/navigation-dark.png">
-  <img alt="Workspace navigation, a grouped toolbar, related-view links, a properties popup, and an open choice menu." src="assets/ui-gallery/navigation-light.png" width="1120">
+  <img alt="Workspace navigation, grouped controls, compact tool help, empty-workspace actions, a properties popup, and an open choice menu." src="assets/ui-gallery/navigation-light.png" width="1120">
 </picture>
 
 [Light preview](assets/ui-gallery/navigation-light.png) · [Dark preview](assets/ui-gallery/navigation-dark.png)
 
-[`workspace_header`, `toolbar`](../crates/daw-ui/src/layout.rs) · [`view_links`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs)
+[`workspace_header`, `toolbar`](../crates/daw-ui/src/layout.rs) · [`view_links`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
 
 ### Musical canvas primitives
 
@@ -145,6 +146,17 @@ variants. The API reference and interaction rules continue below.
 
 Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as softly blurred, dimmed context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
+`empty_workspace(ui, title, description, actions)` offers the next step when a
+workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
+`label`, hover `description`, and optional `primary` emphasis. The first primary
+action appears above the secondary choices; those share a row when space allows
+and stack on narrow canvases. The component uses at most 560 logical points,
+limits heading and description height, and displays at most four actions.
+`EmptyWorkspaceResponse` returns the chosen action ID, its occupied rectangle,
+and the real button responses. The caller decides where to place it and routes
+commands through the normal navigation or edit service. It does not intercept
+the surrounding canvas or change focus, selection, or song state while drawing.
+
 ## Theme and tokens
 
 Call `daw_ui::theme::apply(ctx)` when creating the application. It configures both native egui palettes. `theme::set_appearance(ctx, Appearance)` selects System, Light, or Dark; System is the default and follows operating-system changes. Read `theme::palette(ctx)` for the current canvas colors. Logical dimensions and typography come from `daw_ui::tokens`:
@@ -189,6 +201,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Toolbar command, choice, and presentation menus | `action_menu`, `choice_menu`, `view_menu` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
 | Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
+| Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
 | Mixer identity, inserts and routing | `mixer_master_title`, `mixer_effects_button`, `mixer_insert_summary`, `mixer_bus_input_summary`, `paint_mixer_fader_scale`, `mixer_output_button`, `mixer_sends_button`, `MixerSend` |
@@ -366,7 +379,7 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 
 Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. The native close control remains visible. It supplies a common frame, spacing, and initial width, with fixed sizing and no collapse triangle. Callers may override width, `.resizable(true)`, or `.fixed_pos(...)`; the default pivot is the center. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
 
-When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable.
+When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable. `popup_body_size(ctx)` supplies the available utility content bounds when a view needs an explicit minimum height. Routing uses this bound to keep a useful send viewport below its navigation and AI actions as display density changes; long send lists and output choices scroll together.
 
 `workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
 
@@ -742,12 +755,14 @@ last successful destination and tail setting through the normal export path.
 
 Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips; multi-clip arranger selection is not yet implemented.
 
-`editor_tool_hint` shows the active tool's name, shortcut and contextual gesture
-in a quiet wrapping panel directly below the toolbar. Arrangement, MIDI and audio
-use `ToolHintContext` for their own object and selection semantics. Keep it visible
-without hovering, and update it for pointer and keyboard tool changes. The panel
-is read-only and does not claim focus. Automation uses `interaction_hint` for its
-fixed add/move/delete point interactions.
+`editor_tool_hint` keeps the active tool's name, shortcut and a concise gesture
+summary on one quiet line below the toolbar. **Tool help** expands the complete
+instructions and shortcuts with a mouse click; click it again to reclaim canvas
+space. Arrangement, MIDI and audio use `ToolHintContext` for their own semantics
+and retain separate disclosure preferences when changing tools. The summary does
+not claim focus or consume editing shortcuts; only the help button is a normal
+keyboard focus target. Automation uses `interaction_hint` for its fixed point
+interactions. Opening help never changes selection, song state or undo history.
 
 Arranger **View → Waveform amplitude** uses the shared
 `WaveformAmplitudeScale` choice: **Default** retains the ordinary level scale,

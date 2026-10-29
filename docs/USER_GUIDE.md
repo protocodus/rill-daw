@@ -8,6 +8,12 @@ A reference for composing, recording, editing, mixing, and saving in Rill.
 
 The initial session contains an original generated audio loop. Rill includes no instruments or insert effects; MIDI tracks remain unassigned until you choose a VST3 instrument. Use **File → New** to start empty. Press **Space** to play or pause.
 
+An empty song offers three starting points: **Choose instrument…** opens your
+installed sounds, **Import audio or MIDI…** brings in a recording or sequence,
+and **Compose with AI** opens editable composition examples. Browsing sounds or
+examples leaves the song untouched. **Add pattern** and dropping WAV files onto
+the arranger remain available; the starting actions disappear once a track exists.
+
 ## Included
 
 - Audio and MIDI tracks; VST3 instruments and effects hosted in isolated processes.
@@ -111,6 +117,11 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups with a softly blurred, inactive background; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
 
 Editing tools stay in a single shared strip. Audio **Clip** and **Process** menus reveal trimming, copy/paste, normalization, reversal, and transient analysis; fade settings appear with the selected fade tool. MIDI **Notes** and **Pitch** menus hold note transformations and scale/chord settings. Secondary controls appear when needed, leaving the waveform or notes in focus.
+
+The line below each editor's tools shows the active tool and its main gesture.
+Choose **Tool help** to expand all gestures and shortcuts, and choose it again
+to give that space back to the canvas. Each editor remembers its help setting
+for the current app session.
 
 In the piano roll, **Generate…** opens Chord, Arpeggio and Melody modes. Start bar and Length initially cover the completely visible bars; edit either field to change the highlighted range. Choices and range are remembered per clip for the app session, including after Cancel; **Next range** advances by the current length while retaining settings. Violet notes preview the result alongside existing notes. **New variation** rerolls random patterns, **Fit preview** reveals their full extent, and **Add notes** commits the exact preview and keeps the generator open. Use **Next range** to continue, then **Done** to close it. Before adding notes, **Cancel** discards only the preview; closing the generator after an addition keeps the committed notes. Parameter controls scroll independently so the range and confirmation buttons remain reachable.
 

@@ -364,10 +364,20 @@ pub fn refresh_library(app: &mut Harness) -> Value {
 /// select-all or Enter shortcut. The shared Number selects the complete value.
 pub fn edit_plugin_parameter_value(app: &mut Harness, state: &Value, percent: &str) -> Value {
     let rect = &state["native_editor"]["parameter_control"]["number"];
-    let x = (rect["min"][0].as_f64().expect("plug-in numeric field")
-        + rect["max"][0].as_f64().unwrap())
-        * 0.5;
-    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    let min_x = rect["min"][0].as_f64().expect("plug-in numeric field");
+    let min_y = rect["min"][1].as_f64().unwrap();
+    let max_x = rect["max"][0].as_f64().unwrap();
+    let max_y = rect["max"][1].as_f64().unwrap();
+    let clip = &state["native_editor"]["parameter_control"]["clip"];
+    assert!(
+        min_x >= clip["min"][0].as_f64().unwrap()
+            && min_y >= clip["min"][1].as_f64().unwrap()
+            && max_x <= clip["max"][0].as_f64().unwrap()
+            && max_y <= clip["max"][1].as_f64().unwrap(),
+        "Exact parameter entry must be fully visible: {rect}, clipped to {clip}"
+    );
+    let x = (min_x + max_x) * 0.5;
+    let y = (min_y + max_y) * 0.5;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":percent}));
     app.click("Normalized value")

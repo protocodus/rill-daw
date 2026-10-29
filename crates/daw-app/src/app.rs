@@ -1235,13 +1235,15 @@ impl DawApp {
             self.message(Err(e), "");
         }
     }
-    fn import_dialog(&mut self) {
-        if let Some(path) = daw_ui::with_native_dialog_menu(|| {
-            rfd::FileDialog::new()
-                .add_filter("Audio / MIDI", &["wav", "mid", "midi"])
-                .pick_file()
-        }) {
-            if path.extension().is_some_and(|e| e == "mid" || e == "midi") {
+    pub(crate) fn import_dialog(&mut self) {
+        if let Some(path) = self.pick_document_path(crate::document_ui::DocumentDialog::Import) {
+            if path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("mid") || extension.eq_ignore_ascii_case("midi")
+                })
+            {
                 self.begin_edit();
                 let result = self.project.import_midi(&path, self.cursor).map(|_| ());
                 if result.is_ok() {

@@ -95,6 +95,11 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         });
         controls::view_button(ui, "Fit");
     });
+    controls::editor_tool_hint(
+        ui,
+        controls::EditorTool::Select,
+        controls::ToolHintContext::Midi,
+    );
     ui.add_space(20.0);
     if !state.capture {
         ui.horizontal(|ui| {
@@ -102,7 +107,35 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             controls::checkbox(ui, &mut state.popup_open, "Show utility window");
         });
     }
-    ui.add_space(310.0);
+    ui.add_space(118.0);
+    // Keep the empty-workspace example clear of the simultaneously open menu
+    // and utility used to demonstrate native popup behavior.
+    let empty_rect = egui::Rect::from_min_size(
+        egui::pos2(ui.min_rect().left() + 300.0, ui.cursor().top()),
+        egui::vec2(320.0, 180.0),
+    );
+    ui.scope_builder(egui::UiBuilder::new().max_rect(empty_rect), |ui| {
+        controls::empty_workspace(
+            ui,
+            "Start a song",
+            "Choose a sound or import a recording.",
+            &[
+                controls::EmptyWorkspaceAction {
+                    id: "instrument",
+                    label: "Choose instrument…",
+                    description: "Browse installed instruments before creating a track.",
+                    primary: true,
+                },
+                controls::EmptyWorkspaceAction {
+                    id: "audio",
+                    label: "Import audio…",
+                    description: "Choose a recording to add to the arrangement.",
+                    primary: false,
+                },
+            ],
+        );
+    });
+    ui.add_space(16.0);
     text::note(
         ui,
         "Menus keep native popup behavior; utilities retain caller-owned state.",

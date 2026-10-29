@@ -104,6 +104,7 @@ pub(crate) struct InstrumentUi {
     parameters: Vec<ParameterInfo>,
     browser: daw_ui::ParameterBrowserState,
     parameter_control: Option<daw_ui::KnobGeometry>,
+    parameter_control_clip: Option<egui::Rect>,
     last_touched: Option<u32>,
     browse_target: Option<EditorTarget>,
     parameters_open: bool,
@@ -317,6 +318,7 @@ impl DawApp {
             "selected_steps": selected.map(|parameter| parameter.steps),
             "parameter_control": self.instrument_ui.parameter_control.as_ref().map(|geometry| serde_json::json!({
                 "dial":rect(geometry.dial),"number":rect(geometry.number),
+                "clip":self.instrument_ui.parameter_control_clip.map(rect),
                 "center":[geometry.center.x,geometry.center.y],
                 "minimum":[geometry.minimum.x,geometry.minimum.y],
                 "maximum":[geometry.maximum.x,geometry.maximum.y],
@@ -612,6 +614,7 @@ impl DawApp {
             .collect();
         let metadata = &self.instrument_ui.parameters;
         let mut control_geometry = None;
+        let mut control_clip = None;
         let browser = daw_ui::parameter_browser(
             ui,
             "plugin_parameter_browser",
@@ -628,30 +631,40 @@ impl DawApp {
                     .iter()
                     .find(|item| item.id == parameter.id)
                     .map_or(0, |item| item.steps.max(0));
-                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, parameter.name, 3);
-                if !parameter.unit.is_empty() {
-                    daw_ui::text::note(ui, format!("Plug-in unit · {}", parameter.unit))
-                        .on_hover_text("This control shows normalized percentages. Use the plug-in editor for physical units.");
-                }
-                if steps > 0 {
-                    daw_ui::text::note(ui, format!("{} discrete values", i64::from(steps) + 1));
-                }
-                ui.add_space(daw_ui::tokens::SPACE_MD);
-                if daw_ui::primary_button(
+                daw_ui::action_row(
                     ui,
-                    if parameter.automated {
-                        "Edit automation"
-                    } else {
-                        "Automate parameter"
+                    |ui| {
+                        if daw_ui::primary_button(
+                            ui,
+                            if parameter.automated {
+                                "Edit automation"
+                            } else {
+                                "Automate parameter"
+                            },
+                        )
+                        .clicked()
+                        {
+                            actions.automate = Some((parameter.id, parameter.value));
+                        }
                     },
-                )
-                .clicked()
-                {
-                    actions.automate = Some((parameter.id, parameter.value));
-                }
-                ui.add_space(daw_ui::tokens::SPACE_MD);
-                if let Some(&(lane, state, _)) = automation_states.get(&parameter.id) {
-                    ui.horizontal_wrapped(|ui| {
+                    |ui| {
+                        daw_ui::text::bounded_block(
+                            ui,
+                            daw_ui::text::TextRole::Title,
+                            parameter.name,
+                            3,
+                        );
+                    },
+                );
+                ui.horizontal_wrapped(|ui| {
+                    if !parameter.unit.is_empty() {
+                        daw_ui::text::note(ui, format!("Plug-in unit · {}", parameter.unit))
+                            .on_hover_text("This control shows normalized percentages. Use the plug-in editor for physical units.");
+                    }
+                    if steps > 0 {
+                        daw_ui::text::note(ui, format!("{} discrete values", i64::from(steps) + 1));
+                    }
+                    if let Some(&(lane, state, _)) = automation_states.get(&parameter.id) {
                         daw_ui::automation_badge(ui, state);
                         match state {
                             daw_ui::AutomationState::Read => {
@@ -674,9 +687,9 @@ impl DawApp {
                             }
                             daw_ui::AutomationState::Bypassed => {}
                         }
-                    });
-                    ui.add_space(daw_ui::tokens::SPACE_SM);
-                }
+                    }
+                });
+                ui.add_space(daw_ui::tokens::SPACE_SM);
                 // This host metadata exposes normalized values, not the VST
                 // controller's physical-unit conversion. Keep percentages
                 // explicit instead of presenting, for example, 0.5 as Hz.
@@ -713,6 +726,7 @@ impl DawApp {
                     });
                 daw_ui::hover_text(response.clone(), "Right-click for exact value entry");
                 control_geometry = daw_ui::knob_geometry(ui.ctx(), response.id);
+                control_clip = Some(ui.clip_rect());
                 ui.ctx().data_mut(|data| {
                     data.insert_temp(
                         egui::Id::new("instrument_parameter_rect"),
@@ -737,6 +751,7 @@ impl DawApp {
             },
         );
         self.instrument_ui.parameter_control = control_geometry;
+        self.instrument_ui.parameter_control_clip = control_clip;
         if let Some(id) = browser.activated
             && let Some(parameter) = items.iter().find(|p| p.id == id)
         {
@@ -820,29 +835,38 @@ impl DawApp {
             .default_height(if parameter_page { 520.0 } else { 0.0 })
             .vscroll(false)
             .show(ctx, |ui| {
-                if self.channel_navigation(
-                    ui,
-                    if target.effect.is_some() {
-                        ChannelDestination::PluginEditor
-                    } else {
-                        ChannelDestination::Instrument
+                let scope = match target.effect {
+                    Some(effect_id) => daw_tools::ToolScope::Effect {
+                        track_id,
+                        effect_id,
                     },
-                ) {
+                    None => daw_tools::ToolScope::Instrument { track_id },
+                };
+                let scope_label = scope.label(&self.project);
+                let (open_ai, navigating) = daw_ui::action_row(
+                    ui,
+                    |ui| {
+                        !matches!(instrument, Instrument::None)
+                            && daw_ui::contextual_ai_button(ui, &scope_label).clicked()
+                    },
+                    |ui| {
+                        self.channel_navigation(
+                            ui,
+                            if target.effect.is_some() {
+                                ChannelDestination::PluginEditor
+                            } else {
+                                ChannelDestination::Instrument
+                            },
+                        )
+                    },
+                )
+                .inner;
+                if navigating {
                     return;
                 }
-                if !matches!(instrument, Instrument::None) {
-                    let scope = match target.effect {
-                        Some(effect_id) => daw_tools::ToolScope::Effect {
-                            track_id,
-                            effect_id,
-                        },
-                        None => daw_tools::ToolScope::Instrument { track_id },
-                    };
-                    if daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
-                        self.open_context_assistant(scope);
-                        return;
-                    }
-                    ui.add_space(daw_ui::tokens::SPACE_SM);
+                if open_ai {
+                    self.open_context_assistant(scope);
+                    return;
                 }
                 match &instrument {
                     Instrument::None => {

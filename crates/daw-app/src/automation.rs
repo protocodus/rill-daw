@@ -200,6 +200,7 @@ enum Command {
 enum TestDocumentDialog {
     Save,
     Open,
+    Import,
     Export,
     ExportMidi,
 }
@@ -652,12 +653,19 @@ impl Harness {
                 self.label_rect(&track.name, occurrence)?.center().y,
             )
         } else {
-            (
-                None,
-                self.label_rect("Drop audio here · Double-click for MIDI", 0)?
-                    .center()
-                    .y,
-            )
+            let timeline = self
+                .ctx
+                .data(|data| data.get_temp::<Value>(egui::Id::new("timeline_diagnostics")))
+                .context("Arrangement geometry is unavailable")?;
+            let area = &timeline["empty_canvas"];
+            let top = area["min"][1]
+                .as_f64()
+                .context("Empty canvas is unavailable")? as f32;
+            let bottom = area["max"][1]
+                .as_f64()
+                .context("Empty canvas is unavailable")? as f32;
+            ensure!(bottom > top, "Empty arrangement space is not visible");
+            (None, (top + bottom) * 0.5)
         };
         // Locate the requested beat using the arrangement's own hit testing. This
         // avoids duplicating its header, scroll, zoom, and snap geometry here.
@@ -968,6 +976,7 @@ impl Harness {
                     kind: match kind {
                         TestDocumentDialog::Save => DocumentDialog::Save,
                         TestDocumentDialog::Open => DocumentDialog::Open,
+                        TestDocumentDialog::Import => DocumentDialog::Import,
                         TestDocumentDialog::Export => DocumentDialog::Export,
                         TestDocumentDialog::ExportMidi => DocumentDialog::ExportMidi,
                     },
