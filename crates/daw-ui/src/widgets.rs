@@ -2,9 +2,7 @@
 //! Give repeated rows stable `ui.push_id(model_id, ...)` scopes.
 
 use crate::{theme, tokens};
-use egui::{
-    Button, ComboBox, DragValue, Frame, InnerResponse, Response, Slider, Ui, Widget, WidgetText,
-};
+use egui::{Button, ComboBox, DragValue, Frame, InnerResponse, Response, Ui, Widget, WidgetText};
 use std::{hash::Hash, ops::RangeInclusive};
 
 pub fn button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
@@ -181,7 +179,7 @@ pub(crate) fn semantic_menu<R>(
     if egui::containers::menu::is_in_menu(ui) && role == MenuRole::Action {
         return menu_button(ui, label, contents);
     }
-    let (response, inner) = semantic_picker(ui, label, role, false, contents);
+    let (response, inner) = semantic_picker(ui, label, role, false, None, contents);
     InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
@@ -193,7 +191,25 @@ pub(crate) fn semantic_compact_action_menu<R>(
     if egui::containers::menu::is_in_menu(ui) {
         return menu_button(ui, label, contents);
     }
-    let (response, inner) = semantic_picker(ui, label, MenuRole::Action, true, contents);
+    let (response, inner) = semantic_picker(ui, label, MenuRole::Action, true, None, contents);
+    InnerResponse::new(inner.map(|inner| inner.inner), response)
+}
+
+/// Text-first automation state in a fixed-width channel source row. Full
+/// control height and menu semantics remain native; only horizontal space is compact.
+pub(crate) fn semantic_narrow_action_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    let (response, inner) = semantic_picker(
+        ui,
+        label,
+        MenuRole::Action,
+        true,
+        Some(tokens::SPACE_XS),
+        contents,
+    );
     InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
@@ -202,6 +218,7 @@ fn semantic_picker<R>(
     label: impl Into<WidgetText>,
     role: MenuRole,
     compact: bool,
+    horizontal_padding: Option<f32>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
     use egui::containers::menu::{MenuConfig, MenuState, SubMenu};
@@ -227,13 +244,16 @@ fn semantic_picker<R>(
     let previous_style = ui.style().clone();
     let colors = theme::palette(ui.ctx());
     ui.spacing_mut().button_padding = egui::vec2(
-        if compact {
+        horizontal_padding.unwrap_or(if compact {
             tokens::SPACE_SM
         } else {
             tokens::BUTTON_PADDING_X
-        },
+        }),
         tokens::BUTTON_PADDING_Y,
     );
+    if horizontal_padding.is_some() {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+    }
     let visuals = &mut ui.visuals_mut().widgets;
     match role {
         MenuRole::Action => {
@@ -345,7 +365,7 @@ pub fn picker_button<R>(
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
-    semantic_picker(ui, label, MenuRole::Choice, false, contents)
+    semantic_picker(ui, label, MenuRole::Choice, false, None, contents)
 }
 
 /// Application command bar; menus use the same native focus and popup behavior
@@ -676,8 +696,11 @@ pub fn select_labeled(
         .width(tokens::SELECT_WIDTH)
 }
 
-pub fn slider<T: egui::emath::Numeric>(value: &mut T, range: RangeInclusive<T>) -> Slider<'_> {
-    Slider::new(value, range)
+pub fn slider<T: egui::emath::Numeric>(
+    value: &mut T,
+    range: RangeInclusive<T>,
+) -> crate::Slider<'_> {
+    crate::Slider::new(value, range)
 }
 
 /// Shared numeric field retaining native dragging, parsing and focus behavior.
@@ -953,8 +976,12 @@ pub fn inset(ctx: &egui::Context) -> Frame {
 
 fn popup_bounds(ctx: &egui::Context) -> egui::Rect {
     let viewport = ctx.content_rect();
+    // The transport wraps on narrow displays. Follow its reserved panel area
+    // so every utility leaves the actual playback controls available.
+    let top =
+        (ctx.available_rect().top() + tokens::SPACE_SM).max(viewport.top() + tokens::POPUP_TOP);
     egui::Rect::from_min_max(
-        viewport.min + egui::vec2(tokens::POPUP_MARGIN, tokens::POPUP_TOP),
+        egui::pos2(viewport.left() + tokens::POPUP_MARGIN, top),
         viewport.max - egui::Vec2::splat(tokens::POPUP_MARGIN),
     )
 }

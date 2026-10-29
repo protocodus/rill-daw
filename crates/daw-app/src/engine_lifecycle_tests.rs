@@ -3,6 +3,39 @@ use super::*;
 use std::sync::{atomic::Ordering, mpsc};
 
 #[test]
+fn workspace_track_order_is_audio_equivalent_but_owned_audio_changes_are_not() {
+    let mut original = Project::new();
+    let source = original.add_audio_track("Source");
+    let bus = original.add_bus("Bus");
+    let folder = original.add_folder("Folder");
+    original.set_output(source, Some(bus)).unwrap();
+    let automation = original
+        .add_automation_track(
+            "Volume",
+            daw_core::AutomationTarget {
+                track: source,
+                parameter: daw_core::AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    let mut reordered = original.clone();
+    reordered.tracks.reverse();
+    assert!(audio_equivalent(&original, &reordered));
+    reordered.track_mut(source).unwrap().name = "Renamed source".into();
+    assert!(audio_equivalent(&original, &reordered));
+
+    let mut changed = reordered.clone();
+    changed.track_mut(bus).unwrap().gain = 0.25;
+    assert!(!audio_equivalent(&original, &changed));
+    changed = reordered.clone();
+    changed.automation_lane_mut(automation).unwrap().points[0].value = 0.25;
+    assert!(!audio_equivalent(&original, &changed));
+    changed = reordered;
+    changed.set_parent_folder(source, Some(folder)).unwrap();
+    assert!(!audio_equivalent(&original, &changed));
+}
+
+#[test]
 fn transport_stop_retains_pending_initialization_until_it_has_retired() {
     let ctx = egui::Context::default();
     let mut app = DawApp::with_context(&ctx, Project::new(), None);

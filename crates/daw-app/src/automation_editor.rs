@@ -453,25 +453,66 @@ impl DawApp {
         daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
         let mut interpolation = lane.interpolation;
         let mut enabled = !track.mute;
+        let automation_state = self
+            .automation_control_state(lane.target)
+            .map(|(_, state, _)| state)
+            .unwrap_or(daw_ui::AutomationState::Bypassed);
         let mut add_parameter = false;
         let mut fit = !state.fitted;
-        daw_ui::toolbar(ui, |ui| {
-            for (value, name) in [
+        let mut override_edit = None;
+        let compact = ui.available_width() < 900.0;
+        daw_ui::curve_toolbar(ui, compact, |ui| {
+            let modes = [
                 (Interpolation::Step, "Step"),
                 (Interpolation::Linear, "Linear"),
                 (Interpolation::Smooth, "Smooth"),
-            ] {
-                daw_ui::selectable_value(ui, &mut interpolation, value, name);
+                (Interpolation::Spline, "Spline"),
+            ];
+            if compact {
+                daw_ui::select("automation_interpolation", format!("{interpolation:?}"))
+                    .width(100.0)
+                    .show_ui(ui, |ui| {
+                        for (value, name) in modes {
+                            if daw_ui::selectable_value(ui, &mut interpolation, value, name)
+                                .clicked()
+                            {
+                                ui.close();
+                            }
+                        }
+                    });
+            } else {
+                for (value, name) in modes {
+                    daw_ui::selectable_value(ui, &mut interpolation, value, name);
+                }
             }
             ui.separator();
             daw_ui::checkbox(ui, &mut enabled, "Enabled");
             fit |= daw_ui::timeline_fit_button(ui).clicked();
             add_parameter = daw_ui::button(ui, "Add parameter").clicked();
+            daw_ui::automation_badge(ui, automation_state);
+            if lane.override_value.is_some() {
+                if daw_ui::button(ui, "Resume automation")
+                    .on_hover_text("Return this parameter to the curve at the current playhead")
+                    .clicked()
+                {
+                    override_edit = Some(None);
+                }
+            } else if ui
+                .add_enabled(
+                    automation_state != daw_ui::AutomationState::Bypassed
+                        && !lane.points.is_empty(),
+                    daw_ui::button_widget("Override automation"),
+                )
+                .on_hover_text("Hold the current curve value manually until Resume automation")
+                .clicked()
+            {
+                override_edit = Some(Some(lane.value_at(self.cursor).unwrap_or(0.5)));
+            }
         });
         daw_ui::interaction_hint(
             ui,
             "Edit points",
-            "Click empty space to add a point; drag to move. Arrows select; Shift+arrows extend. Right-click a point to add or remove it from the selection; Delete removes the selection.",
+            "Click to add; drag points to move and diamonds to bend. Right-click for options.",
         );
         if add_parameter {
             state.creating = true;
@@ -495,15 +536,27 @@ impl DawApp {
                 value: p.value,
             })
             .collect();
-        let response = daw_ui::curve_timeline_editor(
+        let segments: Vec<_> = lane
+            .points
+            .iter()
+            .take(lane.points.len().saturating_sub(1))
+            .map(|point| daw_ui::CurveSegment {
+                start: point.id,
+                curve: point.curve,
+            })
+            .collect();
+        let response = daw_ui::curve_timeline_editor_with_segments(
             ui,
             egui::Id::new(("automation_curve", id)),
             &points,
+            &segments,
+            lane.override_value
+                .filter(|_| automation_state == daw_ui::AutomationState::Overridden),
             &mut state.point,
             &mut state.viewport,
             CurveTimeline {
                 snap: self.snap,
-                height: (ui.available_height() - 66.0).max(160.0),
+                height: (ui.available_height() - 116.0).max(120.0),
                 tempo: self.project.tempo,
                 beats_per_bar: self.project.beats_per_bar,
                 fit,
@@ -523,7 +576,24 @@ impl DawApp {
         let mut delete_selection = response.delete_selection;
         let mut point_beat_rect = None;
         let mut displayed_beat = None;
+        let mut segment_edit = response.segment_edit;
+        let mut slope_rect = None;
         daw_ui::toolbar(ui, |ui| {
+            if let Some(value) = lane.override_value {
+                let mut manual = lane.target.parameter.denormalize(value);
+                if ui
+                    .add(
+                        daw_ui::number(&mut manual)
+                            .range(lane.target.parameter.range())
+                            .speed(0.01)
+                            .prefix("Override "),
+                    )
+                    .on_hover_text("Manual parameter value; Resume automation returns to the curve")
+                    .changed()
+                {
+                    override_edit = Some(Some(lane.target.parameter.normalize(manual)));
+                }
+            }
             if let Some(point) = state
                 .point
                 .and_then(|selected| lane.points.iter().find(|p| p.id == selected))
@@ -591,6 +661,31 @@ impl DawApp {
                 ui.label("Click the curve to add a point");
             }
         });
+        daw_ui::toolbar(ui, |ui| {
+            if let Some(index) = state
+                .point
+                .and_then(|selected| lane.points.iter().position(|point| point.id == selected))
+                && index + 1 < lane.points.len()
+            {
+                let point = &lane.points[index];
+                let mut curve = point.curve;
+                let controls = daw_ui::curve_segment_controls(ui, &mut curve);
+                slope_rect = Some(controls.rect);
+                if controls.changed() {
+                    segment_edit = Some((point.id, curve));
+                }
+            } else {
+                daw_ui::text::note(
+                    ui,
+                    "Select a point or diamond to shape its following segment",
+                );
+            }
+            if let Some(first) = lane.points.first()
+                && let Some(last) = lane.points.last()
+            {
+                daw_ui::curve_endpoint_summary(ui, first.value, last.value);
+            }
+        });
         let rect = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
         ui.ctx().data_mut(|data| {
             data.insert_temp(egui::Id::new("automation_editor_diagnostics"), serde_json::json!({
@@ -600,8 +695,38 @@ impl DawApp {
             "point_beat_rect":point_beat_rect.map(rect), "point_beat":displayed_beat,
             "navigating":response.navigation.navigating,
             "selected_point":state.point,"selected_points":response.selection,
+            "interpolation":format!("{:?}",lane.interpolation),"override_value":lane.override_value,
+            "slope_controls":slope_rect.map(rect),
+            "segments":response.segment_handles.iter().map(|handle| serde_json::json!({
+                "start":handle.start,"end":handle.end,"rect":rect(handle.rect),"curve":handle.curve,
+            })).collect::<Vec<_>>(),
         }))
         });
+        if let Some(value) = override_edit {
+            self.begin_edit();
+            let result = self.project.set_automation_override(id, value);
+            if result.is_ok() {
+                self.edit_label = Some(
+                    if value.is_some() {
+                        "Override automation"
+                    } else {
+                        "Resume automation"
+                    }
+                    .into(),
+                );
+                self.changed();
+            }
+            self.message(result, "");
+        }
+        if let Some((point, curve)) = segment_edit {
+            self.begin_edit();
+            let result = self.project.set_automation_point_curve(id, point, curve);
+            if result.is_ok() {
+                self.edit_label = Some("Automation slope".into());
+                self.changed();
+            }
+            self.message(result, "");
+        }
         if let Some(edit) = edit {
             self.begin_edit();
             let result = match edit {

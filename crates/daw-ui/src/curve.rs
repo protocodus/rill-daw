@@ -11,6 +11,22 @@ pub struct CurvePoint {
     pub value: f32,
 }
 
+/// Shape of the segment leaving one breakpoint. The owner evaluates the curve;
+/// this normalized bias only drives the shared editing affordance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CurveSegment {
+    pub start: u64,
+    pub curve: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CurveSegmentHandle {
+    pub start: u64,
+    pub end: u64,
+    pub rect: Rect,
+    pub curve: f32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CurveEdit {
     Add { x: f64, value: f32 },
@@ -34,6 +50,8 @@ pub struct CurveResponse {
     pub viewport: Option<TimelineViewport>,
     pub selection: Vec<u64>,
     pub delete_selection: bool,
+    pub segment_edit: Option<(u64, f32)>,
+    pub segment_handles: Vec<CurveSegmentHandle>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -58,7 +76,7 @@ pub fn paint_curve(
     evaluate: impl Fn(f64) -> f32,
 ) {
     let samples = (rect.width().ceil() as usize).clamp(2, 2048);
-    let mut previous = None;
+    let mut path = Vec::with_capacity(samples + 1);
     for sample in 0..=samples {
         let fraction = sample as f64 / samples as f64;
         let value = evaluate(start + fraction * (end - start)).clamp(0.0, 1.0);
@@ -66,11 +84,9 @@ pub fn paint_curve(
             rect.left() + fraction as f32 * rect.width(),
             rect.bottom() - value * rect.height(),
         );
-        if let Some(previous) = previous {
-            painter.line_segment([previous, position], Stroke::new(1.8_f32, color));
-        }
-        previous = Some(position);
+        path.push(position);
     }
+    painter.add(egui::Shape::line(path, Stroke::new(1.8_f32, color)));
 }
 
 pub fn curve_editor(
@@ -81,7 +97,7 @@ pub fn curve_editor(
     view: CurveView,
     evaluate: impl Fn(f64) -> f32,
 ) -> CurveResponse {
-    curve_editor_inner(ui, id, points, selected, view, None, evaluate)
+    curve_editor_inner(ui, id, points, &[], None, selected, view, None, evaluate)
 }
 
 /// Musical-time curve editor using the same pan, zoom, Fit, and ruler as other
@@ -99,6 +115,8 @@ pub fn curve_timeline_editor(
         ui,
         id,
         points,
+        &[],
+        None,
         selected,
         CurveView {
             start: 0.0,
@@ -111,10 +129,115 @@ pub fn curve_timeline_editor(
     )
 }
 
+/// Timeline editor with independently adjustable spline segments. Diamond
+/// handles select their outgoing breakpoint and bend the segment vertically;
+/// native context menus expose the same Log, Linear and Exp choices by mouse.
+#[allow(clippy::too_many_arguments)]
+pub fn curve_timeline_editor_with_segments(
+    ui: &mut Ui,
+    id: Id,
+    points: &[CurvePoint],
+    segments: &[CurveSegment],
+    override_value: Option<f32>,
+    selected: &mut Option<u64>,
+    viewport: &mut TimelineViewport,
+    timeline: CurveTimeline,
+    evaluate: impl Fn(f64) -> f32,
+) -> CurveResponse {
+    curve_editor_inner(
+        ui,
+        id,
+        points,
+        segments,
+        override_value,
+        selected,
+        CurveView {
+            start: 0.0,
+            end: 8.0,
+            snap: timeline.snap,
+            height: timeline.height,
+        },
+        Some((viewport, timeline)),
+        evaluate,
+    )
+}
+
+/// Responsive editor actions using the shared toolbar's styling and layout.
+pub fn curve_toolbar<R>(
+    ui: &mut Ui,
+    compact: bool,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<R> {
+    ui.scope(|ui| {
+        if compact {
+            // Preserve native hit heights while fitting the editor's complete
+            // primary action row above its canvas on compact workspaces.
+            ui.spacing_mut().button_padding.x = crate::tokens::SPACE_SM;
+        }
+        crate::toolbar(ui, contents).inner
+    })
+}
+
+/// The same segment adjustment is available without dragging a small canvas
+/// handle. A zero slope is linear; negative and positive values bend toward
+/// logarithmic and exponential shapes respectively.
+pub fn curve_segment_controls(ui: &mut Ui, curve: &mut f32) -> Response {
+    let mut changed = false;
+    let row = ui.horizontal(|ui| {
+        crate::text::label(ui, "Segment");
+        for (label, value) in [("Log", -1.0_f32), ("Linear", 0.0), ("Exp", 1.0)] {
+            if crate::selectable_value(ui, curve, value, label)
+                .on_hover_text("Shape the segment after the selected point")
+                .clicked()
+            {
+                changed = true;
+            }
+        }
+        ui.spacing_mut().slider_width = 150.0;
+        changed |= ui
+            .add(
+                crate::slider(curve, -1.0..=1.0)
+                    .text("Slope")
+                    .step_by(0.01)
+                    .fixed_decimals(2),
+            )
+            .on_hover_text("−1 Log · 0 Linear · +1 Exp; affects only this pair of points")
+            .changed();
+    });
+    let mut response = row.response;
+    if changed {
+        response.mark_changed();
+    }
+    response
+}
+
+/// Read-only manual value over the retained curve, using the same override hue
+/// as the automation override badge. It creates no pointer target.
+pub fn paint_curve_override(painter: &egui::Painter, plot: Rect, value: f32) {
+    let colors = theme::palette(painter.ctx());
+    let y = plot.bottom() - value.clamp(0.0, 1.0) * plot.height();
+    let painter = painter.with_clip_rect(plot);
+    painter.hline(
+        plot.x_range(),
+        y,
+        Stroke::new(2.0_f32, colors.automation_override),
+    );
+}
+
+/// Endpoints apply on both sides of the editable points. The concise caption
+/// stays outside the canvas, so even a tightly fitted view explains the holds.
+pub fn curve_endpoint_summary(ui: &mut Ui, first: f32, last: f32) -> Response {
+    crate::text::note(ui, format!("← {:.0}%  ·  {:.0}% →", first * 100.0, last * 100.0))
+        .on_hover_text("The first value is held before the first point, including before playback starts. The last value is held indefinitely after the last point.")
+}
+
+#[allow(clippy::too_many_arguments)]
 fn curve_editor_inner(
     ui: &mut Ui,
     id: Id,
     points: &[CurvePoint],
+    segments: &[CurveSegment],
+    override_value: Option<f32>,
     selected: &mut Option<u64>,
     view: CurveView,
     timeline: Option<(&mut TimelineViewport, CurveTimeline)>,
@@ -291,9 +414,16 @@ fn curve_editor_inner(
         plot,
         start,
         end,
-        theme::palette(ui.ctx()).accent,
-        evaluate,
+        if override_value.is_some() {
+            theme::palette(ui.ctx()).muted
+        } else {
+            theme::palette(ui.ctx()).automation
+        },
+        &evaluate,
     );
+    if let Some(value) = override_value {
+        paint_curve_override(&painter, plot, value);
+    }
     let to_screen = |point: CurvePoint| {
         Pos2::new(
             plot.left() + ((point.x - start) / (end - start)) as f32 * plot.width(),
@@ -310,6 +440,107 @@ fn curve_editor_inner(
     };
     let mut edit = None;
     let mut point_hit = false;
+    let mut segment_edit = None;
+    let mut segment_handles = Vec::new();
+    // Pair iteration stays linear even for large lanes. Callers supply segment
+    // entries in point order; absent/legacy entries simply omit their handles.
+    let mut segment_index = 0;
+    for pair in points.windows(2) {
+        let [a, b] = [pair[0], pair[1]];
+        let Some(segment) = segments.get(segment_index) else {
+            break;
+        };
+        if segment.start != a.id {
+            continue;
+        }
+        segment_index += 1;
+        let midpoint = a.x + (b.x - a.x) * 0.5;
+        if midpoint < start || midpoint > end {
+            continue;
+        }
+        let a_screen = to_screen(a);
+        let b_screen = to_screen(b);
+        // Dense breakpoints still have precise footer controls; do not put a
+        // second hit target on top of either endpoint.
+        if (b_screen.x - a_screen.x).abs() < 40.0 {
+            continue;
+        }
+        let position = to_screen(CurvePoint {
+            id: a.id,
+            x: midpoint,
+            value: evaluate(midpoint),
+        });
+        let handle = Rect::from_center_size(position, Vec2::splat(18.0));
+        let handle_response =
+            ui.interact(handle, id.with(("segment", a.id)), Sense::click_and_drag());
+        handle_response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Slider, ui.is_enabled(), "Segment slope")
+        });
+        point_hit |=
+            handle_response.hovered() || handle_response.dragged() || handle_response.clicked();
+        if editing && (handle_response.clicked() || handle_response.drag_started()) {
+            selection.clear();
+            selection.insert(a.id);
+            *selected = Some(a.id);
+            response.request_focus();
+        }
+        if editing && handle_response.drag_started() {
+            let difference = b.value - a.value;
+            let travel = if difference.abs() > 0.001 {
+                0.375 * difference.signum() * difference.abs().max(0.05) * plot.height()
+            } else {
+                120.0
+            };
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(id.with("segment_drag"), (segment.curve, travel))
+            });
+        }
+        if editing && handle_response.dragged() {
+            let (origin, travel) = ui
+                .ctx()
+                .data(|data| data.get_temp::<(f32, f32)>(id.with("segment_drag")))
+                .unwrap_or((segment.curve, 120.0));
+            let delta = handle_response.total_drag_delta().unwrap_or_default();
+            segment_edit = Some((a.id, (origin + delta.y / travel).clamp(-1.0, 1.0)));
+        }
+        if !navigation.navigating {
+            handle_response.context_menu(|ui| {
+                for (label, curve) in [("Log", -1.0), ("Linear", 0.0), ("Exp", 1.0)] {
+                    if crate::button(ui, label).clicked() {
+                        selection.clear();
+                        selection.insert(a.id);
+                        *selected = Some(a.id);
+                        segment_edit = Some((a.id, curve));
+                        ui.close();
+                    }
+                }
+            });
+        }
+        let colors = theme::palette(ui.ctx());
+        let radius = if *selected == Some(a.id) || handle_response.hovered() {
+            5.0
+        } else {
+            4.0
+        };
+        painter.add(egui::Shape::convex_polygon(
+            vec![
+                position + Vec2::new(0.0, -radius),
+                position + Vec2::new(radius, 0.0),
+                position + Vec2::new(0.0, radius),
+                position + Vec2::new(-radius, 0.0),
+            ],
+            colors.bg,
+            Stroke::new(1.5_f32, colors.automation),
+        ));
+        handle_response
+            .on_hover_text("Segment slope · drag to bend · right-click for Log, Linear or Exp");
+        segment_handles.push(CurveSegmentHandle {
+            start: a.id,
+            end: b.id,
+            rect: handle,
+            curve: segment.curve,
+        });
+    }
     for &point in points {
         if point.x < start || point.x > end {
             continue;
@@ -383,7 +614,7 @@ fn curve_editor_inner(
             } else {
                 4.0
             },
-            theme::palette(ui.ctx()).accent,
+            theme::palette(ui.ctx()).automation,
         );
         if selection.contains(&point.id) {
             painter.circle_stroke(
@@ -419,7 +650,7 @@ fn curve_editor_inner(
         edit = Some(CurveEdit::Delete { id });
         delete_selection = true;
     }
-    if edit.is_some() {
+    if edit.is_some() || segment_edit.is_some() {
         response.mark_changed();
     }
     ui.ctx()
@@ -434,5 +665,7 @@ fn curve_editor_inner(
         viewport,
         selection,
         delete_selection,
+        segment_edit,
+        segment_handles,
     }
 }

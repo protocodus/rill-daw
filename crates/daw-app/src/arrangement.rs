@@ -6,7 +6,7 @@ use crate::{
     theme::*,
 };
 use daw_core::*;
-use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
+use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, Vec2};
 
 const HEADER: f32 = 248.0;
 const ROW: f32 = 96.0;
@@ -398,6 +398,19 @@ impl DawApp {
             edits.push(Edit::New(track, pattern_start));
         }
         let mut new_cursor = None;
+        let mut automation_navigation = None;
+        let mut track_reorder = None;
+        let mut track_reorder_preview = None;
+        let automation: std::collections::HashMap<_, _> = self
+            .project
+            .tracks
+            .iter()
+            .filter_map(|track| track.automation.as_ref())
+            .filter_map(|lane| {
+                self.automation_control_state(lane.target)
+                    .map(|state| (lane.target, state))
+            })
+            .collect();
         let mut popup = None;
         let mut channel_target = None;
         let mut channel_controls = Vec::new();
@@ -415,7 +428,7 @@ impl DawApp {
         let mut track_diagnostics = Vec::new();
         let mut row_resize_diagnostics = Vec::new();
         let mut resized_rows = None;
-        let channels: std::collections::HashMap<_, _> = self
+        let channel_ids: std::collections::HashSet<_> = self
             .project
             .tracks
             .iter()
@@ -425,8 +438,15 @@ impl DawApp {
                     TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
                 )
             })
+            .map(|track| track.id)
+            .collect();
+        let channels: std::collections::HashMap<_, _> = self
+            .project
+            .ordered_track_ids()
+            .into_iter()
+            .filter(|id| channel_ids.contains(id))
             .enumerate()
-            .map(|(index, track)| (track.id, index + 1))
+            .map(|(index, id)| (id, index + 1))
             .collect();
         let (ruler, ruler_response) = ui.allocate_exact_size(
             Vec2::new(content_width, daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT),
@@ -541,6 +561,24 @@ impl DawApp {
         {
             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
         }
+        // Folder "After" means after its complete subtree, even when the
+        // pointer stays over the folder header. Keep that boundary independent
+        // of clipping and of whether its descendants have been painted yet.
+        let mut row_tops = Vec::with_capacity(visible_tracks.len());
+        let mut folder_after_spans = vec![None; visible_tracks.len()];
+        let mut row_top = 0.0;
+        for (row_index, (index, _)) in visible_tracks.iter().enumerate() {
+            row_tops.push(row_top);
+            let track = &self.project.tracks[*index];
+            let compact = track.collapsed && track.kind != TrackKind::Folder;
+            let bottom =
+                row_top + viewport.row_height * if compact { COMPACT_ROW / ROW } else { 1.0 };
+            for (order, start) in folder_closures[row_index].iter().enumerate() {
+                folder_after_spans[*start] =
+                    Some(bottom + (order + 1) as f32 * folder_footer - row_tops[*start]);
+            }
+            row_top = bottom + folder_closures[row_index].len() as f32 * folder_footer;
+        }
         let scroll = egui::ScrollArea::vertical().id_salt("arrangement_scroll")
             .scroll_source(egui::scroll_area::ScrollSource::SCROLL_BAR)
             .vertical_scroll_offset(viewport.row_offset * viewport.row_height)
@@ -550,7 +588,7 @@ impl DawApp {
                     let track = &self.project.tracks[index];
                     let compact = track.collapsed && track.kind != TrackKind::Folder;
                     let row_height = viewport.row_height * if compact { COMPACT_ROW / ROW } else { 1.0 };
-                    let (row, row_response) = ui
+                    let (row, mut row_response) = ui
                         .allocate_exact_size(Vec2::new(content_width, row_height), Sense::click());
                     folder_rows[row_index].rect = row;
                     if matches!(track.kind, TrackKind::Audio | TrackKind::Midi) {
@@ -610,8 +648,13 @@ impl DawApp {
                     if let Some(badge) = bus_badge {
                         daw_ui::paint_bus_badge(&header_painter, badge, color(track.color));
                     }
+                    let grip_right = bus_badge.map_or(header.right() - 8.0, |badge| badge.left() - 4.0);
+                    let reorder_grip = Rect::from_min_size(
+                        Pos2::new(grip_right - 18.0, header.top() + 4.0), Vec2::new(18.0, 20.0));
+                    daw_ui::track_reorder_grip_at(ui, reorder_grip,
+                        ui.id().with((track.id, "reorder_track")), track.id);
                     let name_rect = daw_ui::track_hierarchy(ui,
-                        Rect::from_min_max(row.min + Vec2::new(14.0 + left_padding, 0.0), Pos2::new(bus_badge.map_or(header.right() - 8.0, |badge| badge.left() - 4.0), row.bottom() - 6.0)),
+                        Rect::from_min_max(row.min + Vec2::new(14.0 + left_padding, 0.0), Pos2::new(reorder_grip.left() - 4.0, row.bottom() - 6.0)),
                         depth, &track.name, match track.kind {
                             TrackKind::Folder => daw_ui::Icon::Folder,
                             TrackKind::Audio => daw_ui::Icon::Waveform,
@@ -619,10 +662,17 @@ impl DawApp {
                             TrackKind::Bus => daw_ui::Icon::Routing,
                             TrackKind::Automation => daw_ui::Icon::Automation,
                         }, track.collapsed, color(track.color));
+                    let name_response = ui.interact(name_rect,
+                        ui.id().with((track.id, "reorder_name")), Sense::click_and_drag());
+                    let name_response = daw_ui::track_reorder_source(ui, &name_response, track.id);
+                    // Keep the row's existing selection, folder disclosure,
+                    // double-click and context actions when its name is clicked.
+                    row_response = row_response.union(name_response);
                     track_diagnostics.push(serde_json::json!({"track":track.id,"depth":depth,
                         "folder":track.kind == TrackKind::Folder,"bus":track.kind == TrackKind::Bus,
                         "bus_badge":bus_badge.map(rect_json),"header_fill":header_fill.to_array(),
-                        "left_padding":left_padding,"header":rect_json(header),"name":rect_json(name_rect)}));
+                        "left_padding":left_padding,"header":rect_json(header),"name":rect_json(name_rect),
+                        "reorder_grip":rect_json(reorder_grip),"reorder_target":rect_json(header)}));
                     row_response.clone().on_hover_text(if depth == 0 { track.name.clone() }
                         else { format!("{}\nFolder depth {depth}", track.name) });
                     if row_height >= 44.0 {
@@ -685,6 +735,14 @@ impl DawApp {
                                 instrument_target = Some(track.id);
                             }
                         }
+                    } else if let Some((lane_id, state, _)) = track.automation.as_ref().and_then(|lane| automation.get(&lane.target)).copied() {
+                        let response = daw_ui::picker_at(ui,
+                            Rect::from_min_size(row.min + Vec2::new(14.0 + left_padding, 25.0),
+                                Vec2::new(header_width - 22.0 - left_padding, 22.0)),
+                            (track.id, "automation_state"),
+                            state.rich_label(ui.ctx()).size(daw_ui::tokens::FONT_CAPTION),
+                            |ui| { if let Some(action) = daw_ui::automation_menu_contents(ui, lane_id, state) { automation_navigation = Some(action); } }).0;
+                        daw_ui::paint_automation_control(ui, &response, state);
                     } else {
                         header_painter.text(
                             row.min + Vec2::new(14.0 + left_padding, 36.0),
@@ -718,14 +776,26 @@ impl DawApp {
                                 row.min + Vec2::new(78.0 + left_padding, 44.0),
                                 Vec2::new(header_width - 86.0 - left_padding, if compact_controls { 24.0 } else { 44.0 }),
                             );
-                            let mut gain = track.gain;
-                            let mut pan = track.pan;
+                            let gain_automation = automation.get(&AutomationTarget { track: track.id, parameter: AutomationParameter::TrackGain }).copied();
+                            let pan_automation = automation.get(&AutomationTarget { track: track.id, parameter: AutomationParameter::TrackPan }).copied();
+                            let mut gain = gain_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                                .map(|(_, _, value)| AutomationParameter::TrackGain.denormalize(value)).unwrap_or(track.gain);
+                            let mut pan = pan_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                                .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value)).unwrap_or(track.pan);
                             let peaks = self.engine.as_ref()
                                 .map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
                             let controls = daw_ui::channel_controls_at(
                                 ui, controls_rect, (track.id, "channel_controls"),
                                 &mut gain, &mut pan, peaks, compact_controls,
                             );
+                            for (response, control, state) in [
+                                (&controls.gain, daw_ui::AutomationControl::Gain { track: track.id }, gain_automation),
+                                (&controls.pan, daw_ui::AutomationControl::Pan { track: track.id }, pan_automation),
+                            ] {
+                                if let Some(action) = daw_ui::automatable_parameter_context(ui, response, control, state.map(|(lane, state, _)| (lane, state))) {
+                                    automation_navigation = Some(action);
+                                }
+                            }
                             if controls.gain.changed() {
                                 edits.push(Edit::Gain(track.id, gain));
                             }
@@ -736,6 +806,18 @@ impl DawApp {
                                 "track": track.id,
                                 "gain": {"min": [controls.gain_slider.min.x, controls.gain_slider.min.y], "max": [controls.gain_slider.max.x, controls.gain_slider.max.y]},
                                 "pan": {"min": [controls.pan_slider.min.x, controls.pan_slider.min.y], "max": [controls.pan_slider.max.x, controls.pan_slider.max.y]},
+                                "gain_scale": controls.gain_scale.as_ref().map(|scale| serde_json::json!({
+                                    "min_position": [scale.minimum.x, scale.minimum.y], "max_position": [scale.maximum.x, scale.maximum.y],
+                                    "handle_center": [scale.handle.x, scale.handle.y], "divisions": scale.divisions,
+                                    "rail": {"min": [scale.rail.min.x, scale.rail.min.y], "max": [scale.rail.max.x, scale.rail.max.y]},
+                                    "ticks": scale.ticks.iter().map(|tick| serde_json::json!({"fraction":tick.fraction,"center":[tick.center.x,tick.center.y],"major":tick.major})).collect::<Vec<_>>()
+                                })),
+                                "pan_scale": controls.pan_scale.as_ref().map(|scale| serde_json::json!({
+                                    "min_position": [scale.minimum.x, scale.minimum.y], "max_position": [scale.maximum.x, scale.maximum.y],
+                                    "handle_center": [scale.handle.x, scale.handle.y], "divisions": scale.divisions,
+                                    "rail": {"min": [scale.rail.min.x, scale.rail.min.y], "max": [scale.rail.max.x, scale.rail.max.y]},
+                                    "ticks": scale.ticks.iter().map(|tick| serde_json::json!({"fraction":tick.fraction,"center":[tick.center.x,tick.center.y],"major":tick.major})).collect::<Vec<_>>()
+                                })),
                                 "meter": {"min": [controls.meter.rect.min.x, controls.meter.rect.min.y], "max": [controls.meter.rect.max.x, controls.meter.rect.max.y]},
                                 "peaks": peaks,
                                 "compact": compact_controls,
@@ -846,14 +928,18 @@ impl DawApp {
                             );
                             let start = ((left - origin) / self.zoom) as f64;
                             let end = ((right - origin) / self.zoom) as f64;
+                            let curve_color = palette(ui.ctx()).automation;
                             daw_ui::paint_curve(
                                 &p,
                                 curve_rect,
                                 start,
                                 end,
-                                color(track_color),
+                                if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { curve_color },
                                 |beat| lane.value_at(beat).unwrap_or(0.5),
                             );
+                            if let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
+                                daw_ui::paint_curve(&p, curve_rect, start, end, palette(ui.ctx()).automation_override, |_| *value);
+                            }
                             for point in &lane.points {
                                 let x = origin + point.beat as f32 * self.zoom;
                                 if x >= left && x <= right {
@@ -863,7 +949,7 @@ impl DawApp {
                                             curve_rect.bottom() - point.value * curve_rect.height(),
                                         ),
                                         3.0,
-                                        color(track_color),
+                                        curve_color,
                                     );
                                 }
                             }
@@ -911,44 +997,26 @@ impl DawApp {
                         let p = p.with_clip_rect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
                         let col = color(track_color);
                         let is_selected = self.arranger_selection.ids.contains(&clip.id);
-                        if track.kind == TrackKind::Audio {
-                            p.rect_filled(rect, 4.0, palette(ui.ctx()).bg);
-                        }
-                        p.rect_filled(
-                            rect,
-                            4.0,
-                            col.gamma_multiply(if is_selected { 0.32 } else { 0.18 }),
-                        );
-                        p.rect_filled(
-                            Rect::from_min_max(
-                                rect.min,
-                                Pos2::new(rect.right(), rect.top() + 20.0),
-                            ),
-                            4.0,
-                            col.gamma_multiply(0.35),
-                        );
-                        p.rect_stroke(
-                            rect,
-                            4.0,
-                            Stroke::new(
-                                if is_selected { 1.8_f32 } else { 0.8_f32 },
-                                col.gamma_multiply(if is_selected { 1.0 } else { 0.65 }),
-                            ),
-                            StrokeKind::Inside,
-                        );
+                        let surface = daw_ui::clip_surface(&p, rect, col, is_selected);
                         let cp = p.with_clip_rect(rect.shrink(3.0).intersect(Rect::from_min_max(
                             Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom()))));
-                        let title = daw_ui::clip_title(&cp,
-                            Rect::from_min_max(rect.min + Vec2::new(8.0, 0.0),
-                                Pos2::new(rect.right() - 3.0, rect.top() + rect.height().min(20.0))),
-                            FontId::proportional(daw_ui::tokens::FONT_CANVAS), palette(ui.ctx()).text, &clip.name, clip.link_group.is_some());
+                        let title = daw_ui::clip_title(&p, surface.title,
+                            FontId::proportional(daw_ui::tokens::FONT_CANVAS), surface.title_color, &clip.name, clip.link_group.is_some());
                         folder_rows[row_index].color = color(track_color);
                     let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
                         let visible_clip = rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
-                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"linked":clip.link_group.is_some(),"link_icon":title.icon.map(rect_json)}));
+                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"linked":clip.link_group.is_some(),"link_icon":title.icon.map(rect_json)}));
                         if !compact && row_height >= 44.0 {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
+                                    let pitches = notes.iter().filter(|note| {
+                                        clip.source_to_local(note.start + note.length) > 0.0
+                                            && clip.source_to_local(note.start) < clip.length
+                                    }).fold(None, |range, note| {
+                                        Some(range.map_or((note.pitch, note.pitch), |(low, high): (u8, u8)| {
+                                            (low.min(note.pitch), high.max(note.pitch))
+                                        }))
+                                    }).unwrap_or((60, 72));
                                     for n in notes {
                                         let start = clip.source_to_local(n.start).max(0.0);
                                         let stop =
@@ -956,22 +1024,15 @@ impl DawApp {
                                         if stop <= start {
                                             continue;
                                         }
-                                        let x = rect.left() + start as f32 * self.zoom;
-                                        let y = rect.bottom()
-                                            - 7.0
-                                            - (n.pitch as f32 - 36.0).clamp(0.0, 60.0) / 60.0
-                                                * 32.0;
-                                        cp.rect_filled(
-                                            Rect::from_min_size(
-                                                Pos2::new(x, y),
-                                                Vec2::new(
-                                                    ((stop - start) as f32 * self.zoom - 1.0)
-                                                        .max(2.0),
-                                                    2.5,
-                                                ),
-                                            ),
-                                            1.0,
-                                            col.gamma_multiply(0.8),
+                                        let left = rect.left() + start as f32 * self.zoom;
+                                        let right = rect.left() + stop as f32 * self.zoom;
+                                        if right <= cp.clip_rect().left() || left >= cp.clip_rect().right() {
+                                            continue;
+                                        }
+                                        daw_ui::clip_note_preview(
+                                            &cp, surface.content,
+                                            left..right,
+                                            n.pitch, pitches.0..=pitches.1, col,
                                         );
                                     }
                                 }
@@ -979,10 +1040,7 @@ impl DawApp {
                                     if let Some(audio) = self.waveforms.get(path) {
                                         crate::audio_editor::paint_audio_clip(
                                             &cp,
-                                            Rect::from_min_max(
-                                                Pos2::new(rect.left(), rect.top() + 23.0),
-                                                rect.max,
-                                            ),
+                                            Rect::from_min_max(Pos2::new(rect.left(), surface.content.top()), Pos2::new(rect.right(), surface.content.bottom())),
                                             audio,
                                             clip,
                                             self.project.tempo,
@@ -1268,6 +1326,22 @@ impl DawApp {
                         resized_rows = Some(height);
                     }
                     row_resize_diagnostics.push(serde_json::json!({"track":track.id,"rect":rect_json(resize_rect)}));
+                    if !navigation.navigating {
+                        let target = daw_ui::track_reorder_target_with_after_edge(ui, header, track.id,
+                            daw_ui::TrackReorderAxis::Vertical, track.kind == TrackKind::Folder,
+                            folder_after_spans[row_index].map(|span| row.top() + span),
+                            |intent| crate::track_order::track_drop_allowed(&self.project, intent));
+                        if let Some(preview) = target.preview {
+                            let placement = match preview.intent.placement {
+                                daw_ui::TrackDropPlacement::Before => "Before",
+                                daw_ui::TrackDropPlacement::After => "After",
+                                daw_ui::TrackDropPlacement::IntoFolder => "Into",
+                            };
+                            daw_ui::track_reorder_preview_label(ui, &preview, &format!("{placement} {}", track.name));
+                            track_reorder_preview = Some(preview);
+                        }
+                        if let Some(intent) = target.dropped { track_reorder = Some(intent); }
+                    }
                 }
                 let empty_height = ui.available_height().max(95.0);
                 let (empty, response) =
@@ -1441,6 +1515,17 @@ impl DawApp {
             folder_step,
         );
         viewport.row_offset = scroll.state.offset.y / viewport.row_height;
+        let reorder_scroll = daw_ui::track_reorder_scroll_delta(
+            ui,
+            scroll.inner_rect,
+            daw_ui::TrackReorderAxis::Vertical,
+        );
+        if reorder_scroll.y != 0.0 {
+            let maximum =
+                (bounds.end_row - scroll.inner_rect.height() / viewport.row_height).max(0.0);
+            viewport.row_offset =
+                (viewport.row_offset - reorder_scroll.y / viewport.row_height).clamp(0.0, maximum);
+        }
         if let Some(height) = resized_rows {
             viewport.row_height = height;
         }
@@ -1486,6 +1571,10 @@ impl DawApp {
             diagnostics["header_resize"] = rect_json(header_gutter);
             diagnostics["row_resize"] = serde_json::json!(row_resize_diagnostics);
             diagnostics["tracks"] = serde_json::json!(track_diagnostics);
+            diagnostics["reorder_preview"] = serde_json::json!(track_reorder_preview.map(|preview| {
+                serde_json::json!({"source":preview.intent.source,"target":preview.intent.target,
+                    "placement":format!("{:?}",preview.intent.placement),"indicator":rect_json(preview.indicator)})
+            }));
             diagnostics["ruler"] = rect_json(label_ruler);
             diagnostics["loop_lane"] = rect_json(loop_lane);
             diagnostics["loop_indicator"] = serde_json::json!(loop_indicator.map(rect_json));
@@ -1656,12 +1745,26 @@ impl DawApp {
                     if let Some(track) = self.project.track_mut(id) {
                         track.gain = gain;
                     }
+                    self.override_automated_parameter(
+                        AutomationTarget {
+                            track: id,
+                            parameter: AutomationParameter::TrackGain,
+                        },
+                        AutomationParameter::TrackGain.normalize(gain),
+                    );
                     Ok(())
                 }
                 Edit::Pan(id, pan) => {
                     if let Some(track) = self.project.track_mut(id) {
                         track.pan = pan;
                     }
+                    self.override_automated_parameter(
+                        AutomationTarget {
+                            track: id,
+                            parameter: AutomationParameter::TrackPan,
+                        },
+                        AutomationParameter::TrackPan.normalize(pan),
+                    );
                     Ok(())
                 }
                 Edit::Color(id, color) => {
@@ -1752,6 +1855,10 @@ impl DawApp {
                 self.message(result, "");
             }
         }
+        self.apply_automation_navigation(automation_navigation);
+        if let Some(intent) = track_reorder {
+            self.apply_track_reorder(intent);
+        }
         if ui.input(|input| input.pointer.primary_released()) {
             self.arranger_selection.drag = None;
             self.arranger_selection.audio_drag = None;
@@ -1764,6 +1871,75 @@ impl DawApp {
             }
         }
     }
+    pub(crate) fn apply_automation_navigation(
+        &mut self,
+        action: Option<daw_ui::AutomationNavigation>,
+    ) {
+        match action {
+            Some(daw_ui::AutomationNavigation::Create(control)) => {
+                let (track, parameter) = match control {
+                    daw_ui::AutomationControl::Gain { track } => {
+                        (track, AutomationParameter::TrackGain)
+                    }
+                    daw_ui::AutomationControl::Pan { track } => {
+                        (track, AutomationParameter::TrackPan)
+                    }
+                    daw_ui::AutomationControl::Send { track, bus } => {
+                        (track, AutomationParameter::SendGain { bus })
+                    }
+                };
+                let target = AutomationTarget { track, parameter };
+                let existing = self
+                    .project
+                    .automation_for_target(target)
+                    .map(|(lane, _)| lane);
+                let result = if let Some(lane) = existing {
+                    Ok(lane)
+                } else {
+                    let source = self
+                        .project
+                        .track(track)
+                        .map(|track| track.name.as_str())
+                        .unwrap_or("Channel");
+                    let parameter_name = if let AutomationParameter::SendGain { bus } = parameter {
+                        format!(
+                            "Send · {}",
+                            self.project
+                                .track(bus)
+                                .map(|bus| bus.name.as_str())
+                                .unwrap_or("Bus")
+                        )
+                    } else {
+                        parameter.name().to_owned()
+                    };
+                    let name = format!("{parameter_name} · {source}");
+                    self.flush_pending_edit();
+                    self.begin_edit();
+                    self.project.add_automation_track(name, target)
+                };
+                match result {
+                    Ok(lane) => {
+                        self.open_popup(PopupKind::Automation);
+                        self.selected_track = Some(lane);
+                        self.selected_clip = None;
+                        if existing.is_none() {
+                            self.edit_label = Some("Create automation".into());
+                            self.changed();
+                        }
+                    }
+                    Err(error) => self.message(Err(error), ""),
+                }
+            }
+            Some(daw_ui::AutomationNavigation::Edit(lane)) => {
+                self.open_popup(PopupKind::Automation);
+                self.selected_track = Some(lane);
+                self.selected_clip = None;
+            }
+            Some(daw_ui::AutomationNavigation::Resume(lane)) => self.resume_automation(lane),
+            None => {}
+        }
+    }
+
     pub fn inspector(&mut self, ctx: &egui::Context) {
         let mut open = self.inspector_open;
         if !open {
@@ -1808,6 +1984,7 @@ impl DawApp {
         }
         .unwrap_or_else(|| "Properties".into());
         let mut navigated = false;
+        let mut automation_navigation = None;
         daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
             .default_width(540.0)
@@ -1835,7 +2012,7 @@ impl DawApp {
                         return;
                     }
                     daw_ui::scroll_body(ui, "channel_properties_body", |ui| {
-                        self.channel_properties(ui, id);
+                        automation_navigation = self.channel_properties(ui, id);
                     });
                     return;
                 }
@@ -2030,44 +2207,134 @@ impl DawApp {
         if !navigated {
             self.inspector_open = open;
         }
+        self.apply_automation_navigation(automation_navigation);
     }
 
-    fn channel_properties(&mut self, ui: &mut egui::Ui, id: u64) {
+    fn channel_properties(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: u64,
+    ) -> Option<daw_ui::AutomationNavigation> {
         let mut changed = false;
+        let mut navigation = None;
+        let gain_target = AutomationTarget {
+            track: id,
+            parameter: AutomationParameter::TrackGain,
+        };
+        let pan_target = AutomationTarget {
+            track: id,
+            parameter: AutomationParameter::TrackPan,
+        };
+        let gain_automation = self.automation_control_state(gain_target);
+        let pan_automation = self.automation_control_state(pan_target);
+        let mut overrides = Vec::new();
         if let Some(track) = self.project.track_mut(id) {
             daw_ui::form_grid(ui, "channel_properties", |ui| {
                 let label = daw_ui::text::label(ui, "Gain");
                 ui.horizontal(|ui| {
-                    changed |= ui
+                    let mut gain = gain_automation
+                        .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                        .map(|(_, _, value)| AutomationParameter::TrackGain.denormalize(value))
+                        .unwrap_or(track.gain);
+                    let response = ui
                         .add(
-                            daw_ui::slider(&mut track.gain, 0.0..=1.5)
+                            daw_ui::slider(&mut gain, 0.0..=1.5)
                                 .clamping(egui::SliderClamping::Edits)
                                 .show_value(false),
                         )
                         .labelled_by(label.id)
-                        .on_hover_text("Mixer channel gain")
-                        .changed();
+                        .on_hover_text("Mixer channel gain");
+                    if let Some(action) = daw_ui::automatable_parameter_context(
+                        ui,
+                        &response,
+                        daw_ui::AutomationControl::Gain { track: id },
+                        gain_automation.map(|(lane, state, _)| (lane, state)),
+                    ) {
+                        navigation = Some(action);
+                    }
+                    if response.changed() {
+                        track.gain = gain;
+                        changed = true;
+                        overrides
+                            .push((gain_target, AutomationParameter::TrackGain.normalize(gain)));
+                    }
                     daw_ui::text::body(
                         ui,
-                        if track.gain <= 0.0 {
+                        if gain <= 0.0 {
                             "−∞ dB".to_string()
                         } else {
-                            format!("{:.1} dB", 20.0 * track.gain.log10())
+                            format!("{:.1} dB", 20.0 * gain.log10())
                         },
                     );
                 });
                 ui.end_row();
+                {
+                    daw_ui::text::label(ui, "Gain automation");
+                    let state = gain_automation.map(|(lane, state, _)| (lane, state));
+                    daw_ui::action_menu(
+                        ui,
+                        state
+                            .map(|(_, state)| state.rich_label(ui.ctx()))
+                            .unwrap_or_else(|| egui::RichText::new("Automation")),
+                        |ui| {
+                            if let Some(action) = daw_ui::automatable_menu_contents(
+                                ui,
+                                daw_ui::AutomationControl::Gain { track: id },
+                                state,
+                            ) {
+                                navigation = Some(action);
+                            }
+                        },
+                    );
+                    ui.end_row();
+                }
                 let label = daw_ui::text::label(ui, "Pan");
-                changed |= ui
+                let mut pan = pan_automation
+                    .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                    .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value))
+                    .unwrap_or(track.pan);
+                let response = ui
                     .add(
-                        daw_ui::slider(&mut track.pan, -1.0..=1.0)
+                        daw_ui::slider(&mut pan, -1.0..=1.0)
                             .clamping(egui::SliderClamping::Edits)
                             .fixed_decimals(2),
                     )
                     .labelled_by(label.id)
-                    .on_hover_text("Mixer channel pan · Left −1 · Center 0 · Right 1")
-                    .changed();
+                    .on_hover_text("Mixer channel pan · Left −1 · Center 0 · Right 1");
+                if let Some(action) = daw_ui::automatable_parameter_context(
+                    ui,
+                    &response,
+                    daw_ui::AutomationControl::Pan { track: id },
+                    pan_automation.map(|(lane, state, _)| (lane, state)),
+                ) {
+                    navigation = Some(action);
+                }
+                if response.changed() {
+                    track.pan = pan;
+                    changed = true;
+                    overrides.push((pan_target, AutomationParameter::TrackPan.normalize(pan)));
+                }
                 ui.end_row();
+                {
+                    daw_ui::text::label(ui, "Pan automation");
+                    let state = pan_automation.map(|(lane, state, _)| (lane, state));
+                    daw_ui::action_menu(
+                        ui,
+                        state
+                            .map(|(_, state)| state.rich_label(ui.ctx()))
+                            .unwrap_or_else(|| egui::RichText::new("Automation")),
+                        |ui| {
+                            if let Some(action) = daw_ui::automatable_menu_contents(
+                                ui,
+                                daw_ui::AutomationControl::Pan { track: id },
+                                state,
+                            ) {
+                                navigation = Some(action);
+                            }
+                        },
+                    );
+                    ui.end_row();
+                }
                 daw_ui::text::label(ui, "Playback");
                 ui.horizontal(|ui| {
                     changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
@@ -2087,8 +2354,12 @@ impl DawApp {
                 ui.end_row();
             });
         }
+        for (target, value) in overrides {
+            self.override_automated_parameter(target, value);
+        }
         if changed {
             self.changed();
         }
+        navigation
     }
 }

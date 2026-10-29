@@ -83,6 +83,9 @@ impl LiveEditContext {
 /// every plan issued to this renderer. The UI gets a separate compatibility handle.
 pub(crate) struct LiveEditPreparer {
     context: Arc<LiveEditContext>,
+    /// The compiled graph keeps its topology and buffers when workspace rows
+    /// move. Every later plan must retain this exact processor order.
+    track_order: Vec<u64>,
     previous: Arc<Project>,
     content: HashMap<u64, CompiledContent>,
     maximum_notes: HashMap<u64, usize>,
@@ -94,6 +97,11 @@ struct TrackEdit {
     name: String,
     gain: f32,
     pan: f32,
+    gain_lane: Option<AutomationLane>,
+    pan_lane: Option<AutomationLane>,
+    send_gains: Vec<AutomatedValue>,
+    instrument_automation: Vec<PluginAutomation>,
+    insert_automation: Vec<(u64, Vec<PluginAutomation>)>,
     content: CompiledContent,
     midi: Vec<MidiMessage>,
     chase: Vec<Event>,
@@ -108,9 +116,14 @@ pub(crate) struct PreparedLiveEdit {
     context: Arc<LiveEditContext>,
     tracks: Vec<TrackEdit>,
     end_sample: u64,
+    automation_sequence: u64,
 }
 
 impl PreparedLiveEdit {
+    pub(crate) fn set_automation_sequence(&mut self, sequence: u64) {
+        self.automation_sequence = sequence;
+    }
+
     pub(crate) fn needs_refinement(&self) -> bool {
         self.tracks
             .iter()
@@ -131,6 +144,11 @@ impl LiveEditCompatibility {
 
     fn check(&self, project: &Project, compare_parameters: bool) -> bool {
         let baseline = &self.context.baseline;
+        let tracks: HashMap<_, _> = project
+            .tracks
+            .iter()
+            .map(|track| (track.id, track))
+            .collect();
         let parameters = self
             .context
             .parameters
@@ -142,30 +160,39 @@ impl LiveEditCompatibility {
             && baseline.loop_start == project.loop_start
             && baseline.loop_end == project.loop_end
             && baseline.tracks.len() == project.tracks.len()
-            && baseline.tracks.iter().zip(&project.tracks).all(|(a, b)| {
-                a.id == b.id
-                    && a.kind == b.kind
-                    && a.mute == b.mute
-                    && a.solo == b.solo
-                    && a.instrument == b.instrument
-                    && a.instrument_state == b.instrument_state
-                    && (!compare_parameters
-                        || parameters.get(&(a.id, None)) == Some(&b.instrument_parameters))
-                    && a.latency_samples == b.latency_samples
-                    && a.automation == b.automation
-                    && a.sends == b.sends
-                    && a.output_bus == b.output_bus
-                    && a.parent_folder == b.parent_folder
-                    && a.inserts.len() == b.inserts.len()
-                    && a.inserts.iter().zip(&b.inserts).all(|(a_slot, b_slot)| {
-                        a_slot.id == b_slot.id
-                            && a_slot.enabled == b_slot.enabled
-                            && a_slot.effect == b_slot.effect
-                            && a_slot.state == b_slot.state
-                            && (!compare_parameters
-                                || parameters.get(&(a.id, Some(a_slot.id)))
-                                    == Some(&b_slot.parameters))
-                    })
+            && tracks.len() == project.tracks.len()
+            && baseline.tracks.iter().all(|a| {
+                tracks.get(&a.id).is_some_and(|b| {
+                    a.kind == b.kind
+                        && (a.mute == b.mute || a.kind == daw_core::TrackKind::Automation)
+                        && a.solo == b.solo
+                        && a.instrument == b.instrument
+                        && a.instrument_state == b.instrument_state
+                        && (!compare_parameters
+                            || parameters.get(&(a.id, None)) == Some(&b.instrument_parameters))
+                        && a.latency_samples == b.latency_samples
+                        && automation_edit_compatible(baseline, project, a, b)
+                        && a.sends.len() == b.sends.len()
+                        && a.sends.iter().zip(&b.sends).all(|(old, new)| {
+                            old.target_bus == new.target_bus
+                            && old.pre_fader == new.pre_fader
+                            // A silent, unautomated send is omitted from the
+                            // graph. Preserve graph/PDC membership until rebuild.
+                            && send_active(baseline, a.id, old) == send_active(project, b.id, new)
+                        })
+                        && a.output_bus == b.output_bus
+                        && a.parent_folder == b.parent_folder
+                        && a.inserts.len() == b.inserts.len()
+                        && a.inserts.iter().zip(&b.inserts).all(|(a_slot, b_slot)| {
+                            a_slot.id == b_slot.id
+                                && a_slot.enabled == b_slot.enabled
+                                && a_slot.effect == b_slot.effect
+                                && a_slot.state == b_slot.state
+                                && (!compare_parameters
+                                    || parameters.get(&(a.id, Some(a_slot.id)))
+                                        == Some(&b_slot.parameters))
+                        })
+                })
             })
     }
 
@@ -244,17 +271,26 @@ impl LiveEditPreparer {
         let mut used_sources = HashSet::new();
         let mut next_content = HashMap::new();
         let mut tracks = Vec::with_capacity(self.content.len());
-        let order = project.routing_order()?;
-        let audible = audible_tracks(project, &order);
-        for id in order {
+        let audible = audible_tracks(project, &self.track_order);
+        let project_tracks: HashMap<_, _> = project
+            .tracks
+            .iter()
+            .map(|track| (track.id, track))
+            .collect();
+        let previous_tracks: HashMap<_, _> = self
+            .previous
+            .tracks
+            .iter()
+            .map(|track| (track.id, track))
+            .collect();
+        for &id in &self.track_order {
             ensure!(
                 !cancel.load(Ordering::Acquire),
                 "Audio edit preparation cancelled"
             );
-            let track = project.track(id).context("Edited track is missing")?;
-            let content = if self
-                .previous
-                .track(id)
+            let track = *project_tracks.get(&id).context("Edited track is missing")?;
+            let content = if previous_tracks
+                .get(&id)
                 .is_some_and(|old| old.clips == track.clips)
                 && (preview
                     || !self
@@ -316,6 +352,32 @@ impl LiveEditPreparer {
                 name: track.name.clone(),
                 gain: track.gain,
                 pan: track.pan,
+                gain_lane: active_automation_lane(project, id, AutomationParameter::TrackGain)
+                    .cloned(),
+                pan_lane: active_automation_lane(project, id, AutomationParameter::TrackPan)
+                    .cloned(),
+                send_gains: track
+                    .sends
+                    .iter()
+                    .filter(|send| audible.contains(&id) && send_active(project, id, send))
+                    .map(|send| {
+                        AutomatedValue::new(
+                            project,
+                            id,
+                            AutomationParameter::SendGain {
+                                bus: send.target_bus,
+                            },
+                            send.gain,
+                        )
+                    })
+                    .collect(),
+                instrument_automation: plugin_automation(project, id, None),
+                insert_automation: track
+                    .inserts
+                    .iter()
+                    .filter(|slot| audible.contains(&id) && slot.enabled)
+                    .map(|slot| (slot.id, plugin_automation(project, id, Some(slot.id))))
+                    .collect(),
                 content: content.clone(),
                 midi: Vec::with_capacity(midi_capacity),
                 chase: Vec::with_capacity(2 * *maximum),
@@ -343,6 +405,7 @@ impl LiveEditPreparer {
             tracks,
             end_sample: (project.end_beat() * samples_per_beat).round() as u64
                 + self.context.tail_samples,
+            automation_sequence: 0,
         })
     }
 }
@@ -376,6 +439,7 @@ impl Renderer {
         }
         LiveEditPreparer {
             context: Arc::clone(&self.live_edit_context),
+            track_order: self.tracks.iter().flatten().map(|track| track.id).collect(),
             previous: Arc::clone(&self.live_edit_context.baseline),
             content,
             maximum_notes,
@@ -393,7 +457,14 @@ impl Renderer {
                     .tracks
                     .iter()
                     .zip(&self.tracks)
-                    .all(|(next, old)| old.as_ref().is_some_and(|old| old.id == next.id)),
+                    .all(|(next, old)| old.as_ref().is_some_and(|old| {
+                        old.id == next.id
+                            && old.routes.len() == next.send_gains.len() + usize::from(old.enabled)
+                            && old.inserts.len() == next.insert_automation.len()
+                            && old.inserts.iter().zip(&next.insert_automation).all(|(old, (id, _))| {
+                                matches!(old, Insert::Vst { id: old_id, .. } if old_id == id)
+                            })
+                    })),
             "Prepared edit belongs to a different audio graph"
         );
         let mut content_changed = false;
@@ -402,6 +473,23 @@ impl Renderer {
             std::mem::swap(&mut track.name, &mut next.name);
             track.gain.set_manual(next.gain, self.sample_rate);
             track.pan.set_manual(next.pan, self.sample_rate);
+            std::mem::swap(&mut track.gain.lane, &mut next.gain_lane);
+            std::mem::swap(&mut track.pan.lane, &mut next.pan_lane);
+            for (route, gain) in track.routes.iter_mut().skip(1).zip(&mut next.send_gains) {
+                route.gain.set_manual(gain.manual, self.sample_rate);
+                std::mem::swap(&mut route.gain.lane, &mut gain.lane);
+            }
+            swap_plugin_automation(
+                &mut track.instrument_automation,
+                &mut next.instrument_automation,
+                edit.automation_sequence,
+            );
+            for (insert, (_, next_parameters)) in
+                track.inserts.iter_mut().zip(&mut next.insert_automation)
+            {
+                let Insert::Vst { parameters, .. } = insert;
+                swap_plugin_automation(parameters, next_parameters, edit.automation_sequence);
+            }
             if Arc::ptr_eq(&next.content.events, &track.events)
                 && Arc::ptr_eq(&next.content.audio, &track.audio)
             {
@@ -550,6 +638,60 @@ impl Renderer {
         self.end_sample = self.timeline_end_sample.max(self.release_end_sample);
         Ok(())
     }
+}
+
+fn automation_edit_compatible(before: &Project, after: &Project, a: &Track, b: &Track) -> bool {
+    match (&a.automation, &b.automation) {
+        (None, None) => true,
+        (Some(old), Some(new)) if old.target == new.target => {
+            if matches!(
+                old.target.parameter,
+                AutomationParameter::VstParameter { .. }
+            ) {
+                // Dropping VST automation must restore its opaque preset/manual
+                // parameter state. Keep that transition on the rebuild path;
+                // curve and override changes retain the same loaded instance.
+                let enabled = |project: &Project, track: &Track, lane: &AutomationLane| {
+                    lane_enabled(project, track)
+                        && (!lane.points.is_empty() || lane.override_value.is_some())
+                };
+                enabled(before, a, old) == enabled(after, b, new)
+            } else {
+                true
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Prepared lane buffers replace the old ones without allocating or destroying
+/// them on the render worker. Keep the last submitted values when identities
+/// are unchanged, avoiding redundant plug-in IPC during unrelated live edits.
+fn swap_plugin_automation(
+    current: &mut Vec<PluginAutomation>,
+    next: &mut Vec<PluginAutomation>,
+    sequence: u64,
+) {
+    for (index, new) in next.iter_mut().enumerate() {
+        new.action_sequence = sequence;
+        // Preparation sorts parameter identities, making the render-worker swap
+        // linear even when automation rows have moved. Keep a fallback for a
+        // future preparer that changes their order.
+        if let Some(old) = current
+            .get(index)
+            .filter(|old| old.id == new.id)
+            .or_else(|| current.iter().find(|old| old.id == new.id))
+        {
+            new.previous = old.previous;
+            if old.action_sequence > sequence {
+                // An immediate override made after this project snapshot must
+                // survive both its prepared preview and its final refinement.
+                new.lane.override_value = old.lane.override_value;
+                new.action_sequence = old.action_sequence;
+            }
+        }
+    }
+    std::mem::swap(current, next);
 }
 
 /// Bounded lookup used only for the 5 ms edit bridge, never a whole asset render.

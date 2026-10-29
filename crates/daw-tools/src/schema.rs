@@ -106,6 +106,11 @@ pub fn song_edit_schema() -> Value {
         ["track", "index"]
     );
     add!(
+        "move_track",
+        json!({"track":reference(),"target":reference(),"placement":choices(&["before","after","into_folder"])}),
+        ["track", "target", "placement"]
+    );
+    add!(
         "set_audio_input",
         json!({"track":reference(),"input":{"oneOf":[object(json!({"Mono":object(json!({"channel":integer()}),&["channel"])}),&["Mono"]),object(json!({"Stereo":object(json!({"left":integer(),"right":integer()}),&["left","right"])}),&["Stereo"])]}}),
         ["track", "input"]
@@ -344,8 +349,22 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_automation_interpolation",
-        json!({"track":reference(),"interpolation":choices(&["Step","Linear","Smooth"])}),
+        json!({"track":reference(),"interpolation":choices(&["Step","Linear","Smooth","Spline"])}),
         ["track", "interpolation"]
+    );
+    add!(
+        "set_automation_point_curve",
+        json!({"track":reference(),"point":id(),"curve":{"type":"number","minimum":-1,"maximum":1,"description":"Outgoing cubic spline segment shape: -1 logarithmic, 0 linear, +1 exponential. Intermediate values smoothly blend the shape. Activates Spline interpolation; endpoint holds remain unchanged."}}),
+        ["track", "point", "curve"]
+    );
+    let mut override_value = nullable(normalized.clone());
+    override_value["description"] = json!(
+        "Hold this normalized value across the entire song without changing curve points; null resumes automation. The value uses the target normalization documented in add_automation."
+    );
+    add!(
+        "set_automation_override",
+        json!({"track":reference(),"value":override_value}),
+        ["track", "value"]
     );
     let mut automation_points = array(pair.clone(), 4096);
     automation_points["description"] = json!(

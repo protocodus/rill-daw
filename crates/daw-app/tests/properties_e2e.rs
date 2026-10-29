@@ -340,6 +340,13 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     let mut project: Project = serde_json::from_value(app.inspect()["project"].clone()).unwrap();
     project.tracks[0].gain = 2.0;
     project.tracks[0].latency_samples = 220_000;
+    // Inspect the stored manual gain. Active lanes now correctly show their
+    // sounding value; bypass the fixture's lane for this range-preservation test.
+    for track in &mut project.tracks {
+        if track.automation.is_some() {
+            track.mute = true;
+        }
+    }
     for clip in &mut project.tracks[0].clips {
         if let ClipContent::Audio { gain, .. } = &mut clip.content {
             *gain = 100.0;

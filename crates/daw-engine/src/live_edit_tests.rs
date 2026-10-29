@@ -118,6 +118,146 @@ fn live_mixer_edit_preserves_parallel_graph_delay_buffers_and_position_without_a
 }
 
 #[test]
+fn reordered_tracks_keep_compiled_graph_order_and_later_edits_target_stable_ids() {
+    let (mut project, _directory, source) = audio_project();
+    let mut copy = project.track(source).unwrap().clips[0].clone();
+    copy.id = daw_core::new_id();
+    let other = project.add_audio_track("Other source");
+    project.track_mut(other).unwrap().clips.push(copy);
+    project.track_mut(source).unwrap().gain = 0.5;
+    project.track_mut(other).unwrap().gain = 0.75;
+    let bus = project.add_bus("Shared destination");
+    project.set_output(source, Some(bus)).unwrap();
+    project.set_output(other, Some(bus)).unwrap();
+    let mut renderer = Renderer::new_with_workers(&project, 8_000, true, 2).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    let graph_order: Vec<_> = renderer
+        .tracks
+        .iter()
+        .flatten()
+        .map(|track| track.id)
+        .collect();
+    let identities: Vec<_> = renderer
+        .tracks
+        .iter()
+        .flatten()
+        .map(|track| {
+            (
+                track.as_ref() as *const RenderTrack,
+                Arc::clone(&track.audio),
+                track.routes[0].delay.frames.as_ptr(),
+            )
+        })
+        .collect();
+    render_block(&mut renderer);
+    let position = (renderer.source_sample, renderer.logical_sample);
+    let workers = renderer.workers.as_ref().unwrap() as *const WorkerPool;
+
+    project.tracks.reverse();
+    assert_ne!(project.routing_order().unwrap(), graph_order);
+    assert!(prepare.compatible(&project));
+    let mut order_only = prepare.prepare(&project).unwrap();
+    assert_eq!(
+        crate::allocation_test_support::count_allocations(|| {
+            renderer.apply_live_edit(&mut order_only).unwrap()
+        }),
+        0
+    );
+    assert_eq!((renderer.source_sample, renderer.logical_sample), position);
+    assert_eq!(
+        renderer.workers.as_ref().unwrap() as *const WorkerPool,
+        workers
+    );
+    for (track, (identity, audio, delay)) in renderer.tracks.iter().flatten().zip(&identities) {
+        assert_eq!(track.as_ref() as *const RenderTrack, *identity);
+        assert!(Arc::ptr_eq(&track.audio, audio));
+        assert_eq!(track.routes[0].delay.frames.as_ptr(), *delay);
+    }
+    for frame in render_block(&mut renderer) {
+        assert_eq!(frame, [0.625, 0.3125]);
+    }
+
+    // The next plan must still follow the compiled graph, even though its
+    // project snapshot has a different (valid) source-before-bus sort order.
+    project.track_mut(source).unwrap().gain = 0.25;
+    project.track_mut(other).unwrap().pan = -0.5;
+    let mut next = prepare.prepare(&project).unwrap();
+    assert_eq!(
+        crate::allocation_test_support::count_allocations(|| {
+            renderer.apply_live_edit(&mut next).unwrap()
+        }),
+        0
+    );
+    render_block(&mut renderer); // let the ordinary 5 ms gain ramp settle
+    for frame in render_block(&mut renderer) {
+        assert_eq!(frame, [0.5, 0.15625]);
+    }
+    assert_eq!(
+        renderer
+            .tracks
+            .iter()
+            .flatten()
+            .map(|track| track.id)
+            .collect::<Vec<_>>(),
+        graph_order
+    );
+    assert_eq!(
+        renderer.workers.as_ref().unwrap() as *const WorkerPool,
+        workers
+    );
+
+    let folder = project.add_folder("New folder");
+    project.set_parent_folder(source, Some(folder)).unwrap();
+    assert!(
+        !prepare.compatible(&project),
+        "Real hierarchy changes still need graph preparation"
+    );
+}
+
+#[test]
+fn automation_row_order_does_not_change_compiled_plugin_parameter_order() {
+    let mut project = Project::new();
+    let track = project.add_midi_track("Instrument");
+    project
+        .set_instrument(
+            track,
+            daw_core::Instrument::Vst3 {
+                path: "ordering-fixture.vst3".into(),
+                class_id: None,
+            },
+        )
+        .unwrap();
+    for id in [9, 2, 7] {
+        project
+            .add_automation_track_with_value(
+                format!("Parameter {id}"),
+                daw_core::AutomationTarget {
+                    track,
+                    parameter: AutomationParameter::VstParameter { effect: None, id },
+                },
+                0.5,
+            )
+            .unwrap();
+    }
+    let compiled = |project: &Project| {
+        plugin_automation(project, track, None)
+            .into_iter()
+            .map(|parameter| (parameter.id, parameter.lane))
+            .collect::<Vec<_>>()
+    };
+    let original = compiled(&project);
+    assert_eq!(
+        original
+            .iter()
+            .map(|parameter| parameter.0)
+            .collect::<Vec<_>>(),
+        vec![2, 7, 9]
+    );
+    project.tracks.reverse();
+    assert_eq!(compiled(&project), original);
+}
+
+#[test]
 fn live_notes_keep_sustain_across_length_and_split_edits_and_reconcile_pending_changes() {
     let mut project = Project::new();
     project.tempo = 120.0;

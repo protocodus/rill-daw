@@ -16,7 +16,7 @@ serde_json.workspace = true
 daw-core.workspace = true
 daw-engine.workspace = true
 daw-plugins.workspace = true
-daw-ui.workspace = true
+daw-ui = { workspace = true, features = ["glow-backdrop"] }
 daw-tools.workspace = true
 daw-mcp.workspace = true
 daw-ai.workspace = true

@@ -32,6 +32,10 @@ use live_edit::LiveEditContext;
 mod live_edit_tests;
 
 #[cfg(test)]
+#[path = "automation_render_tests.rs"]
+mod automation_render_tests;
+
+#[cfg(test)]
 #[path = "stretch_render_tests.rs"]
 mod stretch_render_tests;
 
@@ -245,14 +249,7 @@ fn lane_enabled(project: &Project, track: &daw_core::Track) -> bool {
 
 impl AutomatedValue {
     fn new(project: &Project, track: u64, parameter: AutomationParameter, manual: f32) -> Self {
-        let lane = project.tracks.iter().find_map(|candidate| {
-            let lane = candidate.automation.as_ref()?;
-            (lane.target.track == track
-                && lane.target.parameter == parameter
-                && !lane.points.is_empty()
-                && lane_enabled(project, candidate))
-            .then(|| lane.clone())
-        });
+        let lane = active_automation_lane(project, track, parameter).cloned();
         Self {
             manual,
             lane,
@@ -277,7 +274,7 @@ impl AutomatedValue {
         self.lane
             .as_ref()
             .and_then(|lane| {
-                lane.value_at(beat)
+                lane.effective_value_at(beat)
                     .map(|value| lane.target.parameter.denormalize(value))
             })
             .unwrap_or(self.smooth_value)
@@ -288,21 +285,49 @@ impl AutomatedValue {
         self.lane
             .as_ref()
             .and_then(|lane| {
-                lane.value_at(beat)
+                lane.effective_value_at(beat)
                     .map(|value| lane.target.parameter.denormalize(value))
             })
             .unwrap_or(self.manual)
     }
 }
 
+fn active_automation_lane(
+    project: &Project,
+    track: u64,
+    parameter: AutomationParameter,
+) -> Option<&AutomationLane> {
+    project.tracks.iter().find_map(|candidate| {
+        let lane = candidate.automation.as_ref()?;
+        (lane.target.track == track
+            && lane.target.parameter == parameter
+            && (!lane.points.is_empty() || lane.override_value.is_some())
+            && lane_enabled(project, candidate))
+        .then_some(lane)
+    })
+}
+
+fn send_active(project: &Project, track: u64, send: &daw_core::Send) -> bool {
+    send.gain > 0.0
+        || active_automation_lane(
+            project,
+            track,
+            AutomationParameter::SendGain {
+                bus: send.target_bus,
+            },
+        )
+        .is_some()
+}
+
 struct PluginAutomation {
     id: u32,
     lane: AutomationLane,
     previous: Option<f32>,
+    action_sequence: u64,
 }
 
 fn plugin_automation(project: &Project, track: u64, effect: Option<u64>) -> Vec<PluginAutomation> {
-    project
+    let mut parameters: Vec<_> = project
         .tracks
         .iter()
         .filter(|candidate| lane_enabled(project, candidate))
@@ -312,15 +337,22 @@ fn plugin_automation(project: &Project, track: u64, effect: Option<u64>) -> Vec<
             else {
                 return None;
             };
-            (lane.target.track == track && target == effect && !lane.points.is_empty()).then(|| {
-                PluginAutomation {
-                    id,
-                    lane: lane.clone(),
-                    previous: None,
-                }
+            (lane.target.track == track
+                && target == effect
+                && (!lane.points.is_empty() || lane.override_value.is_some()))
+            .then(|| PluginAutomation {
+                id,
+                lane: lane.clone(),
+                previous: None,
+                action_sequence: 0,
             })
         })
-        .collect()
+        .collect();
+    // Automation rows are workspace order, not parameter processing order.
+    // Canonical identities keep live swaps linear and reload/export behavior
+    // independent of dragging those rows. Sorting stays off the render thread.
+    parameters.sort_unstable_by_key(|parameter| parameter.id);
+    parameters
 }
 
 fn apply_plugin_automation(
@@ -329,11 +361,40 @@ fn apply_plugin_automation(
     mut set: impl FnMut(u32, f64) -> Result<()>,
 ) -> Result<()> {
     for parameter in parameters {
-        if let Some(value) = parameter.lane.value_at(beat)
+        if let Some(value) = parameter.lane.effective_value_at(beat)
             && parameter.previous != Some(value)
         {
             set(parameter.id, f64::from(value))?;
             parameter.previous = Some(value);
+        }
+    }
+    Ok(())
+}
+
+fn apply_plugin_parameter_change(
+    parameters: &mut [PluginAutomation],
+    id: u32,
+    value: f64,
+    override_sequence: Option<u64>,
+    mut set: impl FnMut(u32, f64) -> Result<()>,
+) -> Result<()> {
+    if let Some(sequence) = override_sequence
+        && parameters
+            .iter()
+            .any(|parameter| parameter.id == id && parameter.action_sequence > sequence)
+    {
+        // A newer project already resumed or changed this lane while this
+        // immediate gesture waited for the render worker.
+        return Ok(());
+    }
+    set(id, value)?;
+    for parameter in parameters.iter_mut().filter(|parameter| parameter.id == id) {
+        if let Some(sequence) = override_sequence {
+            parameter.lane.override_value = Some(value as f32);
+            parameter.previous = Some(value as f32);
+            parameter.action_sequence = sequence;
+        } else {
+            parameter.previous = None;
         }
     }
     Ok(())
@@ -1268,6 +1329,28 @@ impl Renderer {
         parameter_id: u32,
         value: f64,
     ) -> Result<()> {
+        self.set_plugin_parameter_mode(track_id, effect_id, parameter_id, value, None)
+    }
+
+    pub(crate) fn set_plugin_parameter_override(
+        &mut self,
+        track_id: u64,
+        effect_id: Option<u64>,
+        parameter_id: u32,
+        value: f64,
+        sequence: u64,
+    ) -> Result<()> {
+        self.set_plugin_parameter_mode(track_id, effect_id, parameter_id, value, Some(sequence))
+    }
+
+    fn set_plugin_parameter_mode(
+        &mut self,
+        track_id: u64,
+        effect_id: Option<u64>,
+        parameter_id: u32,
+        value: f64,
+        override_sequence: Option<u64>,
+    ) -> Result<()> {
         ensure!(
             value.is_finite() && (0.0..=1.0).contains(&value),
             "Invalid normalized parameter value"
@@ -1278,7 +1361,7 @@ impl Renderer {
             .flatten()
             .find(|track| track.id == track_id)
             .context("Track is not in the render graph")?;
-        let parameters = if let Some(effect_id) = effect_id {
+        if let Some(effect_id) = effect_id {
             let Insert::Vst {
                 effect, parameters, ..
             } = track
@@ -1286,28 +1369,37 @@ impl Renderer {
                 .iter_mut()
                 .find(|insert| matches!(insert, Insert::Vst { id, .. } if *id == effect_id))
                 .context("Insert is not active in the render graph")?;
-            effect.set_parameter(parameter_id, value).with_context(|| {
-                format!(
-                    "Setting parameter {parameter_id} of effect \"{}\" ({}) on channel \"{}\" (ID {})",
-                    effect.info().name, effect.info().path.display(), track.name, track.id
-                )
-            })?;
-            parameters
+            apply_plugin_parameter_change(
+                parameters,
+                parameter_id,
+                value,
+                override_sequence,
+                |id, value| {
+                    effect.set_parameter(id, value).with_context(|| {
+                        format!(
+                            "Setting parameter {parameter_id} of effect \"{}\" ({}) on channel \"{}\" (ID {})",
+                            effect.info().name, effect.info().path.display(), track.name, track.id
+                        )
+                    })
+                },
+            )?;
         } else if let Processor::Vst(plugin) = &mut track.processor {
-            plugin.set_parameter(parameter_id, value).with_context(|| {
-                format!(
-                    "Setting parameter {parameter_id} of instrument \"{}\" ({}) on channel \"{}\" (ID {})",
-                    plugin.info().name, plugin.info().path.display(), track.name, track.id
-                )
-            })?;
-            &mut track.instrument_automation
+            apply_plugin_parameter_change(
+                &mut track.instrument_automation,
+                parameter_id,
+                value,
+                override_sequence,
+                |id, value| {
+                    plugin.set_parameter(id, value).with_context(|| {
+                        format!(
+                            "Setting parameter {parameter_id} of instrument \"{}\" ({}) on channel \"{}\" (ID {})",
+                            plugin.info().name, plugin.info().path.display(), track.name, track.id
+                        )
+                    })
+                },
+            )?;
         } else {
             bail!("Track has no assigned VST instrument")
-        };
-        for automation in parameters {
-            if automation.id == parameter_id {
-                automation.previous = None;
-            }
         }
         Ok(())
     }

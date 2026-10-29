@@ -275,6 +275,10 @@ struct Harness {
     window_labels: Vec<(String, Rect)>,
     inspect_paint: bool,
     painted_rects: Vec<Value>,
+    painted_lines: Vec<Value>,
+    painted_paths: Vec<Value>,
+    painted_circles: Vec<Value>,
+    painted_text: Vec<Value>,
     painted_images: Vec<Value>,
     painted_meshes: Vec<Value>,
     audio_output: Option<Vec<[f32; 2]>>,
@@ -342,6 +346,10 @@ impl Harness {
             window_labels: Vec::new(),
             inspect_paint: false,
             painted_rects: Vec::new(),
+            painted_lines: Vec::new(),
+            painted_paths: Vec::new(),
+            painted_circles: Vec::new(),
+            painted_text: Vec::new(),
             painted_images: Vec::new(),
             painted_meshes: Vec::new(),
             audio_output: None,
@@ -426,12 +434,24 @@ impl Harness {
         });
         self.labels.clear();
         self.painted_rects.clear();
+        self.painted_lines.clear();
+        self.painted_paths.clear();
+        self.painted_circles.clear();
+        self.painted_text.clear();
         self.painted_images.clear();
         self.painted_meshes.clear();
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
             if self.inspect_paint {
                 collect_painted_rects(&clipped.shape, clipped.clip_rect, &mut self.painted_rects);
+                collect_painted_lines(&clipped.shape, clipped.clip_rect, &mut self.painted_lines);
+                collect_painted_details(
+                    &clipped.shape,
+                    clipped.clip_rect,
+                    &mut self.painted_paths,
+                    &mut self.painted_circles,
+                    &mut self.painted_text,
+                );
                 collect_painted_images(&clipped.shape, clipped.clip_rect, &mut self.painted_images);
                 collect_painted_meshes(&clipped.shape, clipped.clip_rect, &mut self.painted_meshes);
             }
@@ -698,6 +718,10 @@ impl Harness {
         self.audio_output = None;
         self.inspect_paint = false;
         self.painted_rects.clear();
+        self.painted_lines.clear();
+        self.painted_paths.clear();
+        self.painted_circles.clear();
+        self.painted_text.clear();
         self.painted_images.clear();
         match command {
             Command::SongTool { name, arguments } => {
@@ -1421,11 +1445,21 @@ impl Harness {
         });
         if self.inspect_paint {
             state["painted_rects"] = json!(self.painted_rects);
+            state["painted_lines"] = json!(self.painted_lines);
+            state["painted_paths"] = json!(self.painted_paths);
+            state["painted_circles"] = json!(self.painted_circles);
+            state["painted_text"] = json!(self.painted_text);
             state["painted_images"] = json!(self.painted_images);
             state["painted_meshes"] = json!(self.painted_meshes);
         }
         state["inspector_page"] = json!(format!("{:?}", self.app.inspector_page));
         state["popup_context"] = self.app.popup_context_diagnostics();
+        state["backdrop_blur"] = json!(daw_ui::backdrop_blur_info(&self.ctx).iter().map(|blur| json!({
+            "rect": {"min": [blur.bounds.min.x, blur.bounds.min.y], "max": [blur.bounds.max.x, blur.bounds.max.y]},
+            "target_size": blur.target_size,
+            "cached_source": blur.cached_source,
+            "gpu_available": blur.gpu_available,
+        })).collect::<Vec<_>>());
         state["popups"]["export"] = json!(self.app.export_open);
         state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
         state["clipboard_text"] = json!(self.clipboard_text);
@@ -1467,6 +1501,102 @@ impl Harness {
             Value::Null
         };
         state
+    }
+}
+
+/// Raw line geometry is collected only for explicit paint inspection. This lets
+/// running-app tests compare scale marks with the rendered handle, independently
+/// of the widget's layout diagnostics.
+fn collect_painted_lines(shape: &egui::Shape, clip: Rect, output: &mut Vec<Value>) {
+    match shape {
+        egui::Shape::LineSegment { points, stroke }
+            if stroke.width > 0.0
+                && stroke.color.a() > 0
+                && Rect::from_two_pos(points[0], points[1])
+                    .expand(stroke.width * 0.5)
+                    .intersects(clip) =>
+        {
+            output.push(json!({
+                "points": [[points[0].x, points[0].y], [points[1].x, points[1].y]],
+                "stroke": stroke.color.to_array(), "stroke_width": stroke.width,
+                "clip": {"min":[clip.min.x,clip.min.y], "max":[clip.max.x,clip.max.y]},
+            }));
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_lines(shape, clip, output);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Observe the actual canvas and text paint only for explicit inspections.
+/// Shapes retain their geometry so tests can distinguish a control or curve
+/// from an unrelated use of the same theme color elsewhere on screen.
+fn collect_painted_details(
+    shape: &egui::Shape,
+    clip: Rect,
+    paths: &mut Vec<Value>,
+    circles: &mut Vec<Value>,
+    text: &mut Vec<Value>,
+) {
+    let rect_json =
+        |rect: Rect| json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
+    match shape {
+        egui::Shape::Path(path) if path.visual_bounding_rect().intersects(clip) => {
+            let stroke = match &path.stroke.color {
+                egui::epaint::ColorMode::Solid(color) => Some(color.to_array()),
+                egui::epaint::ColorMode::UV(_) => None,
+            };
+            paths.push(json!({
+                "points":path.points.iter().map(|point| [point.x,point.y]).collect::<Vec<_>>(),
+                "closed":path.closed,"fill":path.fill.to_array(),"stroke":stroke,
+                "stroke_width":path.stroke.width,"clip":rect_json(clip),
+            }));
+        }
+        egui::Shape::Circle(circle) if circle.visual_bounding_rect().intersects(clip) => {
+            circles.push(json!({
+                "center":[circle.center.x,circle.center.y],"radius":circle.radius,
+                "fill":circle.fill.to_array(),"stroke":circle.stroke.color.to_array(),
+                "stroke_width":circle.stroke.width,"clip":rect_json(clip),
+            }));
+        }
+        egui::Shape::Text(shape) => {
+            let rect = shape
+                .galley
+                .rect
+                .translate(shape.pos.to_vec2())
+                .intersect(clip);
+            if rect.is_positive() {
+                let mut colors = Vec::new();
+                for section in &shape.galley.job.sections {
+                    let color = shape
+                        .override_text_color
+                        .unwrap_or_else(|| {
+                            if section.format.color == egui::Color32::PLACEHOLDER {
+                                shape.fallback_color
+                            } else {
+                                section.format.color
+                            }
+                        })
+                        .gamma_multiply(shape.opacity_factor)
+                        .to_array();
+                    if !colors.contains(&color) {
+                        colors.push(color);
+                    }
+                }
+                text.push(
+                    json!({"text":shape.galley.job.text,"rect":rect_json(rect),"colors":colors}),
+                );
+            }
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_painted_details(shape, clip, paths, circles, text);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1525,6 +1655,13 @@ fn collect_painted_meshes(shape: &egui::Shape, clip: Rect, output: &mut Vec<Valu
                     "transparent_vertices": mesh.vertices.iter().filter(|vertex| vertex.color.a() == 0).count(),
                     "max_alpha": mesh.vertices.iter().map(|vertex| vertex.color.a()).max().unwrap_or(0),
                     "valid": mesh.is_valid(),
+                    // Small UI meshes expose actual submitted geometry for
+                    // gradient/edge regressions; keep opt-in diagnostics bounded
+                    // for large imported or tessellated content.
+                    "vertex_data": mesh.vertices.iter().take(512).map(|vertex| json!({
+                        "position": [vertex.pos.x, vertex.pos.y],
+                        "color": vertex.color.to_array(),
+                    })).collect::<Vec<_>>(),
                 }));
             }
         }

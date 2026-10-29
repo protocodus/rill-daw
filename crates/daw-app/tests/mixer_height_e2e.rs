@@ -51,8 +51,12 @@ fn mixer_strips(state: &Value) -> Vec<Bounds> {
         .as_array()
         .unwrap()
         .iter()
+        .filter(|shape| shape["fill"][3].as_u64().unwrap_or(0) > 0)
         .map(|shape| Bounds::from(&shape["rect"]))
-        .filter(|rect| (rect.width() - 180.0).abs() < 0.1 && rect.height() > 250.0)
+        .filter(|rect| {
+            (rect.width() - (180.0 - f64::from(daw_ui::tokens::SPACE_XS))).abs() < 0.1
+                && rect.height() > 250.0
+        })
         .collect();
     strips.sort_by(|a, b| a.left.total_cmp(&b.left));
     assert_eq!(strips.len(), 4, "three channels plus Master: {strips:?}");
@@ -110,12 +114,20 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         assert!((rail.top - all_rails[0].top).abs() < 1.0);
         assert!((rail.bottom - all_rails[0].bottom).abs() < 1.0);
     }
-    for label in ["Pan", "Mute", "Solo", "Channel"] {
+    for (label, minimum_height) in [
+        ("Pan C", 12.0),
+        ("Mute", 17.0),
+        ("Solo", 17.0),
+        ("Channel", 17.0),
+    ] {
         let controls = labels(state, label);
         assert_eq!(controls.len(), 3, "all {label} controls must be visible");
         for control in &controls {
             assert!(control.bottom <= height, "{label}: {control:?}");
-            assert!(control.height() >= 17.0, "{label} must not be clipped");
+            assert!(
+                control.height() >= minimum_height,
+                "{label} must not be clipped"
+            );
             assert!((control.top - controls[0].top).abs() < 1.0);
         }
     }

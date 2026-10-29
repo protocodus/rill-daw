@@ -76,7 +76,7 @@ fn exercise(variable: &str, parameter_name: &str) {
     );
     next(
         &mut session,
-        |e| matches!(e,EditorEvent::ParameterChanged {id:changed,value:actual} if *changed == id && (*actual - value).abs() < 1e-5),
+        |e| matches!(e,EditorEvent::ParameterApplied {id:changed,value:actual} if *changed == id && (*actual - value).abs() < 1e-5),
     );
     let new = next(
         &mut session,
@@ -106,7 +106,7 @@ fn exercise(variable: &str, parameter_name: &str) {
     session.set_parameter(id, automatic_value).unwrap();
     next(
         &mut session,
-        |e| matches!(e,EditorEvent::ParameterChanged {id:changed,value:actual} if *changed == id && (*actual - automatic_value).abs() < 1e-5),
+        |e| matches!(e,EditorEvent::ParameterApplied {id:changed,value:actual} if *changed == id && (*actual - automatic_value).abs() < 1e-5),
     );
     let EditorEvent::StateSaved {
         state: automatic, ..

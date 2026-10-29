@@ -14,6 +14,7 @@ fn curve(interpolation: Interpolation, points: &[(f64, f32)]) -> AutomationLane 
             .map(|&(beat, value)| AutomationPoint::new(beat, value))
             .collect(),
         interpolation,
+        override_value: None,
     }
 }
 
@@ -38,6 +39,7 @@ fn step_linear_and_smooth_hold_endpoints_and_handle_empty_lanes() {
         Interpolation::Step,
         Interpolation::Linear,
         Interpolation::Smooth,
+        Interpolation::Spline,
     ] {
         let mut lane = curve(interpolation, &[(1.0, 0.2), (3.0, 0.8)]);
         assert_eq!(lane.value_at(-100.0), Some(0.2));
@@ -74,6 +76,203 @@ fn smooth_has_a_continuous_bounded_peak_and_differs_from_linear() {
     for step in 0..=2000 {
         assert!((0.0..=1.0).contains(&lane.value_at(step as f64 / 1000.0).unwrap()));
     }
+}
+
+#[test]
+fn spline_segments_move_continuously_between_logarithmic_linear_and_exponential() {
+    let mut lane = curve(
+        Interpolation::Spline,
+        &[(2.0, 0.0), (6.0, 1.0), (10.0, 0.0)],
+    );
+    let first = lane.points[0].id;
+    let second = lane.points[1].id;
+    for (shape, midpoint) in [
+        (-1.0, 0.875),
+        (-0.5, 0.6875),
+        (0.0, 0.5),
+        (0.5, 0.3125),
+        (1.0, 0.125),
+    ] {
+        lane.set_point_curve(first, shape).unwrap();
+        assert!((lane.value_at(4.0).unwrap() - midpoint).abs() < 1e-6);
+        assert!(
+            (lane.value_at(8.0).unwrap() - 0.5).abs() < 1e-6,
+            "Changing one segment must not change its neighbor"
+        );
+        assert_eq!(lane.value_at(2.0), Some(0.0));
+        assert_eq!(lane.value_at(6.0), Some(1.0));
+        let mut previous = 0.0;
+        for sample in 0..=1024 {
+            let value = lane.value_at(2.0 + 4.0 * sample as f64 / 1024.0).unwrap();
+            assert!(
+                (previous..=1.0).contains(&value),
+                "Spline must remain monotone and bounded"
+            );
+            previous = value;
+        }
+    }
+    lane.set_point_curve(second, -1.0).unwrap();
+    assert!((lane.value_at(8.0).unwrap() - 0.125).abs() < 1e-6);
+    let mut previous = 1.0;
+    for sample in 0..=1024 {
+        let value = lane.value_at(6.0 + 4.0 * sample as f64 / 1024.0).unwrap();
+        assert!(
+            (0.0..=previous).contains(&value),
+            "Falling spline must stay monotone too"
+        );
+        previous = value;
+    }
+    // Holding is independent of the displayed song extent and segment shape.
+    assert_eq!(lane.value_at(f64::NEG_INFINITY), Some(0.0));
+    assert_eq!(lane.value_at(-1000.0), Some(0.0));
+    assert_eq!(lane.value_at(1e100), Some(0.0));
+    assert_eq!(lane.value_at(f64::INFINITY), Some(0.0));
+}
+
+#[test]
+fn spline_shapes_follow_point_identity_and_survive_value_replacement() {
+    let mut lane = curve(Interpolation::Linear, &[(0.0, 0.2), (2.0, 0.8), (4.0, 0.6)]);
+    let id = lane.points[1].id;
+    lane.set_point_curve(id, 0.7).unwrap();
+    assert_eq!(lane.interpolation, Interpolation::Spline);
+    lane.upsert_point(2.0, 0.9).unwrap();
+    assert_eq!(lane.points[1].curve, 0.7);
+    lane.move_point(id, 5.0, 0.1).unwrap();
+    assert_eq!((lane.points[2].id, lane.points[2].curve), (id, 0.7));
+    // A final point's saved shape has no effect on the indefinite hold.
+    assert_eq!(lane.value_at(f64::INFINITY), Some(0.1));
+    lane.upsert_point(7.0, 0.9).unwrap();
+    assert!(lane.value_at(6.0).unwrap() < 0.5);
+    let before = lane.clone();
+    for invalid in [f32::NAN, f32::INFINITY, -1.01, 1.01] {
+        assert!(lane.set_point_curve(id, invalid).is_err());
+        assert_eq!(lane, before);
+    }
+    assert!(lane.set_point_curve(u64::MAX, 0.0).is_err());
+    assert_eq!(lane, before);
+}
+
+#[test]
+fn overrides_hold_everywhere_without_changing_curves_and_resume_exactly() {
+    let mut lane = curve(Interpolation::Spline, &[(4.0, 0.2), (8.0, 0.8)]);
+    lane.set_point_curve(lane.points[0].id, 0.5).unwrap();
+    let original = lane.clone();
+    let beats = [
+        f64::NEG_INFINITY,
+        -10.0,
+        0.0,
+        4.0,
+        6.0,
+        8.0,
+        1e100,
+        f64::INFINITY,
+    ];
+    for value in [0.0, 0.33, 1.0] {
+        lane.set_override(Some(value)).unwrap();
+        for beat in beats {
+            assert_eq!(lane.effective_value_at(beat), Some(value));
+            assert_eq!(lane.value_at(beat), original.value_at(beat));
+        }
+        assert_eq!(lane.effective_value_at(f64::NAN), None);
+        assert_eq!(lane.points, original.points);
+    }
+    let before = lane.clone();
+    for value in [f32::NAN, f32::NEG_INFINITY, -0.01, 1.01] {
+        assert!(lane.set_override(Some(value)).is_err());
+        assert_eq!(lane, before);
+    }
+    lane.set_override(None).unwrap();
+    assert_eq!(lane, original);
+    for beat in beats {
+        assert_eq!(lane.effective_value_at(beat), original.value_at(beat));
+    }
+}
+
+#[test]
+fn legacy_automation_defaults_new_fields_without_changing_its_sound() {
+    for interpolation in [
+        Interpolation::Step,
+        Interpolation::Linear,
+        Interpolation::Smooth,
+    ] {
+        let original = curve(interpolation, &[(1.0, 0.1), (3.0, 0.9), (5.0, 0.2)]);
+        let mut json = serde_json::to_value(&original).unwrap();
+        json.as_object_mut().unwrap().remove("override_value");
+        for point in json["points"].as_array_mut().unwrap() {
+            point.as_object_mut().unwrap().remove("curve");
+        }
+        let loaded: AutomationLane = serde_json::from_value(json).unwrap();
+        loaded.validate().unwrap();
+        assert_eq!(loaded, original);
+        for step in 0..=100 {
+            let beat = step as f64 * 0.1;
+            assert_eq!(loaded.effective_value_at(beat), original.value_at(beat));
+        }
+    }
+}
+
+#[test]
+fn spline_override_semantic_edits_roundtrip_undo_and_reject_invalid_batches() {
+    use daw_core::{EditBatch, SongEdit};
+    let (mut project, source, lane_id) = fixture();
+    let target = AutomationTarget {
+        track: source,
+        parameter: Parameter::TrackGain,
+    };
+    assert_eq!(project.automation_for_target(target).unwrap().0, lane_id);
+    assert_eq!(
+        project.automation_lane(lane_id).unwrap().interpolation,
+        Interpolation::Spline
+    );
+    let point = project.automation_lane(lane_id).unwrap().points[0].id;
+    let original = project.clone();
+    let edits = EditBatch {
+        label: "Shape and override automation".into(),
+        edits: vec![
+            SongEdit::SetAutomationPointCurve {
+                track: lane_id.into(),
+                point,
+                curve: -0.8,
+            },
+            SongEdit::SetAutomationOverride {
+                track: lane_id.into(),
+                value: Some(0.3),
+            },
+        ],
+    };
+    edits.apply(&mut project).unwrap();
+    let mut history = History::new();
+    history.commit_named(&original, "Shape and override automation");
+    let changed = project.clone();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("spline-override.rill");
+    project.save(&path).unwrap();
+    assert_eq!(Project::load(&path).unwrap(), project);
+    assert!(history.undo(&mut project));
+    assert_eq!(project, original);
+    assert!(history.redo(&mut project));
+    assert_eq!(project, changed);
+    let invalid = EditBatch {
+        label: "Reject invalid curve".into(),
+        edits: vec![
+            SongEdit::SetAutomationOverride {
+                track: lane_id.into(),
+                value: None,
+            },
+            SongEdit::SetAutomationPointCurve {
+                track: lane_id.into(),
+                point,
+                curve: 2.0,
+            },
+        ],
+    };
+    assert!(invalid.apply(&mut project).is_err());
+    assert_eq!(project, changed);
+    project.automation_lane_mut(lane_id).unwrap().points[0].curve = f32::NAN;
+    assert!(project.validate().is_err());
+    project = changed.clone();
+    project.automation_lane_mut(lane_id).unwrap().override_value = Some(f32::INFINITY);
+    assert!(project.validate().is_err());
 }
 
 #[test]

@@ -391,3 +391,153 @@ fn opaque_native_preset_is_captured_before_lane_undo_and_recalled() {
     );
     app.quit();
 }
+
+#[test]
+fn native_parameter_gestures_override_owned_automation_and_preserve_it_after_snapshot() {
+    let fixture = Fixture::new();
+    let (mut app, track, other, _) = fixture.app();
+    let opened = open_instrument(&mut app);
+    let pid = opened["native_editor"]["pid"].clone();
+    fixture.action(&mut app, "automate 0\n");
+    let created = wait(&mut app, |state| lanes(state).len() == 1);
+    let curve = lanes(&created)[0]["automation"]["points"].clone();
+    assert_lane(lanes(&created)[0], track, None, 0.4);
+    menu(&mut app, "Arrangement");
+    assert_eq!(app.click("Other phrase")["selected_track"], other);
+    fixture.action(&mut app, "change 0 0.77\n");
+    let changed = wait(&mut app, |state| {
+        lanes(state)[0]["automation"]["override_value"]
+            .as_f64()
+            .is_some_and(|value| (value - 0.77).abs() < 1e-6)
+    });
+    assert_eq!(lanes(&changed)[0]["automation"]["points"], curve);
+    assert_eq!(changed["native_editor"]["pid"], pid);
+    assert_eq!(
+        changed["selected_track"], other,
+        "Native ownership must not follow selection"
+    );
+
+    menu(&mut app, "Arrangement");
+    app.click("Neon phrase");
+    menu(&mut app, "Instrument");
+    let browser = app.click("Automate…");
+    assert_eq!(browser["native_editor"]["automation_state"], "Overridden");
+    assert!(
+        browser["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Resume automation")
+    );
+    let saved = app.directory.path().join("native-override.rill");
+    let snapshot = app.command(json!({"command":"save", "path":saved}));
+    assert_eq!(
+        snapshot["project"]["tracks"][0]["instrument_state"],
+        json!([77])
+    );
+    assert_eq!(
+        snapshot["project"]["tracks"][0]["instrument_parameters"],
+        json!([])
+    );
+    assert!(
+        (lanes(&snapshot)[0]["automation"]["override_value"]
+            .as_f64()
+            .unwrap()
+            - 0.77)
+            .abs()
+            < 1e-6
+    );
+    let resumed = app.click("Resume automation");
+    assert!(lanes(&resumed)[0]["automation"]["override_value"].is_null());
+    assert_eq!(resumed["native_editor"]["automation_state"], "Automated");
+    assert_eq!(resumed["native_editor"]["pid"], pid);
+    assert!((resumed["native_editor"]["selected_value"].as_f64().unwrap() - 0.4).abs() < 1e-6);
+    assert_eq!(lanes(&resumed)[0]["automation"]["points"], curve);
+    let mut app = app.restart();
+    let recalled = app.command(json!({"command":"open", "path":saved}));
+    assert!(
+        (lanes(&recalled)[0]["automation"]["override_value"]
+            .as_f64()
+            .unwrap()
+            - 0.77)
+            .abs()
+            < 1e-6
+    );
+    assert_eq!(lanes(&recalled)[0]["automation"]["points"], curve);
+    app.quit();
+}
+
+#[test]
+fn delayed_browser_parameter_acknowledgement_does_not_retake_resumed_automation() {
+    let fixture = Fixture::new();
+    let (mut app, track, _, _) = fixture.app();
+    let opened = open_instrument(&mut app);
+    let pid = opened["native_editor"]["pid"].as_u64().unwrap();
+    fixture.action(&mut app, "automate 0\n");
+    let created = wait(&mut app, |state| lanes(state).len() == 1);
+    assert_lane(lanes(&created)[0], track, None, 0.4);
+    assert!(lanes(&created)[0]["automation"]["override_value"].is_null());
+    menu(&mut app, "Arrangement");
+    app.click("Neon phrase");
+    menu(&mut app, "Instrument");
+    app.click("Automate…");
+
+    // A delayed native worker still acknowledges the browser's already-owned
+    // edit. Keep that reply pending until after the visible Resume action.
+    let prefix = fixture.worker.path().join(format!("editor-{pid}"));
+    let hold = prefix.with_extension("hold-acks");
+    std::fs::write(&hold, []).unwrap();
+    let overridden = app.click("Override automation");
+    assert_eq!(
+        overridden["native_editor"]["automation_state"],
+        "Overridden"
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !std::fs::read_to_string(prefix.with_extension("log"))
+        .unwrap()
+        .contains("\"command\":\"set_parameter\"")
+    {
+        assert!(Instant::now() < deadline, "native setter was not received");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let resumed = app.click("Resume automation");
+    assert!(lanes(&resumed)[0]["automation"]["override_value"].is_null());
+    let undo_steps = resumed["history"]["undo"].as_array().unwrap().len();
+    std::fs::remove_file(hold).unwrap();
+
+    // The actor emits this real gesture after draining its acknowledgements,
+    // proving the app consumed the late reply before assertions are sampled.
+    fixture.action(&mut app, "change 7 0.61\n");
+    let acknowledged = wait(&mut app, |state| {
+        state["native_editor"]["last_touched"] == 7
+    });
+    assert!(lanes(&acknowledged)[0]["automation"]["override_value"].is_null());
+    assert_eq!(
+        acknowledged["native_editor"]["automation_state"],
+        "Automated"
+    );
+    assert_eq!(acknowledged["native_editor"]["pid"], pid);
+    assert_eq!(
+        acknowledged["history"]["undo"].as_array().unwrap().len(),
+        undo_steps + 1,
+        "Only the genuine Resonance gesture may add an Undo entry"
+    );
+    assert!(
+        (acknowledged["native_editor"]["selected_value"]
+            .as_f64()
+            .unwrap()
+            - 0.4)
+            .abs()
+            < 1e-6
+    );
+
+    fixture.action(&mut app, "change 0 0.77\n");
+    let manual = wait(&mut app, |state| {
+        lanes(state)[0]["automation"]["override_value"]
+            .as_f64()
+            .is_some_and(|value| (value - 0.77).abs() < 1e-6)
+    });
+    assert_eq!(manual["native_editor"]["automation_state"], "Overridden");
+    assert_lane(lanes(&manual)[0], track, None, 0.4);
+    app.quit();
+}

@@ -188,18 +188,18 @@ fn all_supported_tools_show_persistent_contextual_hints_by_pointer_and_keyboard(
         let before = window(&mut app, "Automation");
         app.command(json!({"command":"pointer","phase":"move","x":2.0,"y":2.0}));
         let state = app.inspect();
-        let guidance = hint(&state, "Edit points", "Click empty space to add a point");
+        let guidance = hint(&state, "Edit points", "Click to add");
         assert!(
             guidance["text"]
                 .as_str()
                 .unwrap()
-                .contains("Delete removes the selection")
+                .contains("diamonds to bend. Right-click for options")
         );
         assert!(guidance["max"][0].as_f64().unwrap() <= f64::from(width));
         unchanged(&state, &before);
         // Interpolation is a parameter choice, not a separate pointer tool.
         assert_eq!(
-            hint(&app.inspect(), "Edit points", "drag to move")["text"],
+            hint(&app.inspect(), "Edit points", "drag points to move")["text"],
             guidance["text"]
         );
         app.quit();

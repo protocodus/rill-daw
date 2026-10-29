@@ -306,6 +306,7 @@ struct ParameterChange {
     effect: Option<u64>,
     parameter: u32,
     value: f64,
+    override_sequence: Option<u64>,
 }
 
 fn collect_parameter_changes(
@@ -576,12 +577,16 @@ impl AudioEngine {
                         if worker_controls.shutdown.load(Ordering::Acquire) {
                             break;
                         }
-                        if let Err(error) = renderer.set_plugin_parameter(
-                            change.track,
-                            change.effect,
-                            change.parameter,
-                            change.value,
-                        ) {
+                        let result = if let Some(sequence) = change.override_sequence {
+                            renderer.set_plugin_parameter_override(
+                                change.track, change.effect, change.parameter, change.value, sequence,
+                            )
+                        } else {
+                            renderer.set_plugin_parameter(
+                                change.track, change.effect, change.parameter, change.value,
+                            )
+                        };
+                        if let Err(error) = result {
                             worker_controls.set_render_error(format!(
                                 "Plugin parameter update failed\n\nUpdating plugin parameter {} on channel ID {}: {error:#}",
                                 change.parameter, change.track
@@ -945,6 +950,31 @@ impl AudioEngine {
         parameter: u32,
         value: f64,
     ) -> Result<()> {
+        self.queue_plugin_parameter(track, effect, parameter, value, false)
+    }
+
+    /// Manual takeover of an automated plug-in parameter. The render worker
+    /// marks its compiled lane immediately so the next audio block cannot
+    /// reassert the curve while the application's saved lane update prepares.
+    /// The caller also stores the override in its project and publishes it.
+    pub fn set_plugin_parameter_override(
+        &self,
+        track: u64,
+        effect: Option<u64>,
+        parameter: u32,
+        value: f64,
+    ) -> Result<()> {
+        self.queue_plugin_parameter(track, effect, parameter, value, true)
+    }
+
+    fn queue_plugin_parameter(
+        &self,
+        track: u64,
+        effect: Option<u64>,
+        parameter: u32,
+        value: f64,
+        override_automation: bool,
+    ) -> Result<()> {
         ensure!(
             value.is_finite() && (0.0..=1.0).contains(&value),
             "Parameter value must be normalized to 0..=1"
@@ -955,6 +985,11 @@ impl AudioEngine {
                 effect,
                 parameter,
                 value,
+                override_sequence: override_automation.then(|| {
+                    self.live_updates
+                        .as_ref()
+                        .map_or(0, |updates| updates.mailbox.next_automation_sequence())
+                }),
             })
             .map_err(|error| anyhow::anyhow!("Plug-in parameter queue unavailable: {error}"))?;
         if let Some(updates) = &self.live_updates {
@@ -1379,7 +1414,9 @@ mod tests {
         engine.set_plugin_parameter(1, Some(10), 7, 0.2).unwrap();
         engine.set_plugin_parameter(1, Some(11), 7, 0.3).unwrap();
         engine.set_plugin_parameter(2, Some(12), 7, 0.4).unwrap();
-        engine.set_plugin_parameter(1, Some(10), 7, 0.9).unwrap();
+        engine
+            .set_plugin_parameter_override(1, Some(10), 7, 0.9)
+            .unwrap();
         assert!(
             engine
                 .set_plugin_parameter(1, Some(10), 7, f64::NAN)
@@ -1394,25 +1431,29 @@ mod tests {
                     track: 1,
                     effect: None,
                     parameter: 7,
-                    value: 0.1
+                    value: 0.1,
+                    override_sequence: None
                 },
                 ParameterChange {
                     track: 1,
                     effect: Some(10),
                     parameter: 7,
-                    value: 0.9
+                    value: 0.9,
+                    override_sequence: Some(0)
                 },
                 ParameterChange {
                     track: 1,
                     effect: Some(11),
                     parameter: 7,
-                    value: 0.3
+                    value: 0.3,
+                    override_sequence: None
                 },
                 ParameterChange {
                     track: 2,
                     effect: Some(12),
                     parameter: 7,
-                    value: 0.4
+                    value: 0.4,
+                    override_sequence: None
                 },
             ]
         );

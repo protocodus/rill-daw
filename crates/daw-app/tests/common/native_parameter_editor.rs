@@ -23,6 +23,8 @@ fn editor_main() {
     let prefix = format!("editor-{}", std::process::id());
     let actions = executable.with_file_name(format!("{prefix}.actions"));
     let handled = executable.with_file_name(format!("{prefix}.handled"));
+    let hold_acknowledgements = executable.with_file_name(format!("{prefix}.hold-acks"));
+    let mut acknowledgements = Vec::new();
     let mut log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -48,7 +50,9 @@ fn editor_main() {
                     ready = true;
                 } else if command.contains("\"command\":\"set_parameter\"") {
                     let id = number(&command, "id").unwrap() as u32;
-                    values.insert(id, number(&command, "value").unwrap());
+                    let value = number(&command, "value").unwrap();
+                    values.insert(id, value);
+                    acknowledgements.push((id, value));
                 } else if command.contains("\"command\":\"save_state\"")
                     || command.contains("\"command\":\"close\"")
                 {
@@ -71,6 +75,16 @@ fn editor_main() {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        if !hold_acknowledgements.exists() {
+            for (id, value) in acknowledgements.drain(..) {
+                writeln!(
+                    output,
+                    r#"{{"event":"parameter_applied","id":{id},"value":{value}}}"#
+                )
+                .unwrap();
+            }
+            output.flush().unwrap();
         }
         if ready && let Ok(batch) = std::fs::read_to_string(&actions) {
             std::fs::remove_file(&actions).unwrap();

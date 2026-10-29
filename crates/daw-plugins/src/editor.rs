@@ -49,7 +49,14 @@ pub enum EditorEvent {
     Ready {
         parameters: Vec<ParameterInfo>,
     },
+    /// A deliberate native-editor gesture, distinct from a host setter reply.
     ParameterChanged {
+        id: u32,
+        value: f64,
+    },
+    /// Acknowledges a host-requested value. The caller already owns that edit;
+    /// a delayed reply must not become a new automation takeover or Undo entry.
+    ParameterApplied {
         id: u32,
         value: f64,
     },
@@ -366,6 +373,8 @@ impl EditorSession {
         Ok(())
     }
 
+    /// Queue a host edit. Its reply is `ParameterApplied`; only native user
+    /// gestures produce `ParameterChanged` and can initiate a new takeover.
     pub fn set_parameter(&self, id: u32, value: f64) -> Result<()> {
         ensure!(
             value.is_finite() && (0.0..=1.0).contains(&value),

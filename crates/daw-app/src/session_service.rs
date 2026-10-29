@@ -45,7 +45,21 @@ impl DawApp {
         candidate: Project,
         label: &str,
     ) -> Result<bool, ToolError> {
+        self.commit_song_candidate_with_automation_intent(candidate, label, &[])
+    }
+
+    fn commit_song_candidate_with_automation_intent(
+        &mut self,
+        mut candidate: Project,
+        label: &str,
+        explicit_lanes: &[u64],
+    ) -> Result<bool, ToolError> {
         candidate.validate().map_err(failure)?;
+        crate::automation_state::capture_manual_parameter_changes(
+            &self.project,
+            &mut candidate,
+            explicit_lanes,
+        );
         if candidate == self.project {
             return Ok(false);
         }
@@ -147,7 +161,30 @@ impl SongToolHost for DawApp {
                 self.waveforms.get(path).map(AudioData::duration_seconds)
             })
             .map_err(failure)?;
-        self.commit_song_candidate(candidate, &batch.label)?;
+        // An explicit override/resume is authoritative for its lane within
+        // this atomic batch, regardless of operation order or unchanged value.
+        let explicit_lanes: Vec<_> = batch
+            .edits
+            .iter()
+            .filter_map(|edit| {
+                let SongEdit::SetAutomationOverride { track, .. } = edit else {
+                    return None;
+                };
+                match track {
+                    EntityRef::Id(id) => Some(*id),
+                    EntityRef::Key(key) => result
+                        .created
+                        .iter()
+                        .find(|entity| entity.key.as_ref() == Some(key))
+                        .map(|entity| entity.id),
+                }
+            })
+            .collect();
+        self.commit_song_candidate_with_automation_intent(
+            candidate,
+            &batch.label,
+            &explicit_lanes,
+        )?;
         Ok(result)
     }
 }

@@ -18,6 +18,15 @@ Normalized parameter overrides are restored after opaque state. Effect slot IDs
 remain stable across saves, allowing routing/editor and automation references to
 identify the same instance.
 
+Automation points store an outgoing `curve` value from −1 (Log) through 0
+(Linear) to +1 (Exp). The `Spline` interpolation mode uses that value for a
+bounded cubic Bézier segment. Missing `curve` fields read as zero; existing
+Step, Linear and Smooth modes preserve their behavior. A lane's optional
+normalized `override_value` holds a manual value without changing its points;
+omission or null resumes the curve. Both shapes and override values are
+validated before applying edits. The first and last point values extend beyond
+their times; automation points do not determine the song's duration.
+
 Version 2 adds the per-instance `source_rate` field (source beats per arrangement beat, default `1.0`, range `0.25`–`4.0`). The source window is `[offset, offset + length * source_rate)`. Stretch changes the visible duration and rate while preserving that window; source notes/audio and ghost membership stay unchanged. Version-1 files load with unity rate.
 
 Version 3 adds audio `processing`: `algorithm` (`Signalsmith` or `Bungee`) and `transpose_semitones` (−24 to +24, fractional values supported). Missing processing defaults to Signalsmith and zero transposition. Pitch and algorithm are shared source edits for ghosts; stretch rate remains local.

@@ -745,6 +745,14 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
     );
     // Reassignment returns to the explicitly opened overview, without
     // automatically starting the replacement's native editor.
+    // The original fixture's startup may still be retiring on a slower host;
+    // wait for the replacement overview instead of clicking during that handoff.
+    common::wait_visible(&mut app, "Open editor");
+    let ready = app.inspect();
+    for flag in ["open", "opening", "closing"] {
+        assert_eq!(ready["native_editor"][flag], false, "{ready}");
+    }
+    assert!(ready["native_editor"]["error"].is_null(), "{ready}");
     app.click("Open editor");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(35);
     loop {
@@ -790,6 +798,7 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
     assert_eq!(state["project"]["tracks"][1]["clips"][0]["length"], 4.0);
     // This metadata-only fixture cannot open a native editor. Let that expected
     // initialization result arrive before separately testing ordinary shutdown.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(35);
     while app.inspect()["native_editor"]["opening"] == true {
         assert!(std::time::Instant::now() < deadline);
         std::thread::sleep(std::time::Duration::from_millis(10));

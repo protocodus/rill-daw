@@ -303,7 +303,7 @@ impl DawApp {
         }
         let key = egui::Id::new("plugin_library_state");
         let mut state = ctx
-            .data_mut(|data| data.get_temp::<LibraryUi>(key))
+            .data_mut(|data| data.remove_temp::<LibraryUi>(key))
             .unwrap_or_default();
         for fingerprint in self.plugin_sync.take_captured() {
             state.previews.invalidate(&fingerprint);
@@ -357,7 +357,7 @@ impl DawApp {
         }
         let key = egui::Id::new("plugin_library_state");
         let mut state = ctx
-            .data_mut(|data| data.get_temp::<LibraryUi>(key))
+            .data_mut(|data| data.remove_temp::<LibraryUi>(key))
             .unwrap_or_default();
         if state.target != self.library_target {
             state.target = self.library_target;
@@ -569,7 +569,7 @@ impl DawApp {
                                 || item.entry.plugin.vendor == state.developer)
                             && (state.category.is_empty()
                                 || item.categories.contains(&state.category))
-                            && format!(
+                            && (filter.is_empty() || format!(
                                 "{} {} {} {}",
                                 item.entry.plugin.name,
                                 item.entry.plugin.vendor,
@@ -577,7 +577,7 @@ impl DawApp {
                                 item.categories.join(" ")
                             )
                             .to_lowercase()
-                            .contains(&filter)
+                            .contains(&filter))
                     })
                     .collect();
                 let name = |item: &Item| item.entry.plugin.name.to_lowercase();
@@ -974,7 +974,7 @@ impl DawApp {
                     "sidebar": sidebar_rect.map(rect), "details": details_rect.map(rect),
                     "scroll_offset": grid.scroll_offset,
                     "selected": state.selected, "columns": grid.layout.columns,
-                    "card_size": [grid.layout.card_width, if state.list { daw_ui::DEVICE_ROW_HEIGHT } else { daw_ui::DEVICE_CARD_HEIGHT }],
+                    "card_size": [grid.layout.card_width, grid.layout.row_height - if state.list { daw_ui::tokens::SPACE_XS } else { daw_ui::tokens::SPACE_MD }],
                     "view": if state.list { "list" } else { "grid" },
                     "collection": state.collection.label(), "developer": state.developer,
                     "category": state.category, "sort": state.sort.label(),

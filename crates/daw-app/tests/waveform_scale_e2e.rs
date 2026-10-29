@@ -227,15 +227,15 @@ fn fit_fills_each_clip_independently_preserves_stereo_and_changes_only_presentat
             );
             let (top, bottom) = envelope_bounds(&fitted, *id);
             let rect = &preview["rect"];
-            // The arranger clips three points inside the bottom border. Its
-            // channel mapping still uses the complete waveform rectangle.
-            let clip_rect = &fitted["timeline"]["clips"]
+            // Channel mapping uses the shared surface's preview region, which
+            // reserves title and border space independently of track height.
+            let content_rect = &fitted["timeline"]["clips"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .find(|clip| clip["id"] == *id)
-                .unwrap()["rect"];
-            let height = clip_rect["max"][1].as_f64().unwrap() - rect[1].as_f64().unwrap();
+                .unwrap()["content_rect"];
+            let height = content_rect["max"][1].as_f64().unwrap() - rect[1].as_f64().unwrap();
             assert!(
                 (top - rect[1].as_f64().unwrap()).abs() < 2.0,
                 "Quiet left channel must fill its half"

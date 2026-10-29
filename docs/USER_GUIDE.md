@@ -22,7 +22,7 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Generate sustained chords, seven arpeggio patterns, and seeded melodies with optional counterpoint or tintinnabuli voices; preview notes in an editable whole-bar range before adding them in one undoable step.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
 - Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
-- Nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
+- Drag-and-drop track/channel ordering, nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
 - System-following light/dark themes, bundled Inter typography with Unicode fallbacks, shared text components, and vector toolbar icons.
 - Audio input recording with mono/stereo selection, dry monitoring, loop passes retained as separate takes, and independent overdub layers.
 - MIDI note recording with channel selection, plugin monitoring, loop overdubs, optional pre-count and an output-only metronome.
@@ -31,7 +31,7 @@ The initial session contains an original generated audio loop. Rill includes no 
 - Source slip, sample/millisecond/grid nudging, zero-crossing snap, track-local ripple deletion, and previewed Strip silence.
 - Progressive audio waveforms: immediate coarse previews refine into transient-preserving, anti-aliased envelopes, with subtle spectral backdrops. Shared background analysis and cached geometry keep redraws light.
 - Named undo/redo history with grouped gestures, saved checkpoints, and bounded memory.
-- One automation track per parameter, with draggable points, step/linear/smooth spline interpolation, undo/redo, and playback/export integration.
+- One automation track per parameter, with adjustable spline segments, clear manual overrides, undo/redo, and playback/export integration.
 - Input/output-device, sample-rate, and buffer-size setup; writable scratch directory and custom VST3 scan directories.
 - Portable `.rill` ZIP projects with a JSON manifest and source WAV assets, automatic plugin-state recall, scratch recovery, MIDI import/export, and background stereo WAV mixdown.
 - An integrated OpenAI/Anthropic assistant and shared MCP tools for current-song composition, instrument assignment, mixing, audio processing/analysis, and recording.
@@ -80,7 +80,7 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Assistant** | Prompt the integrated agent to inspect and edit the current song. |
 | **Setup** | Configure Audio, Storage, Plug-ins, Appearance, and AI on separate pages. |
 
-Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups on a quiet canvas; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
+Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups with a softly blurred, inactive background; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
 
 Editing tools stay in a single shared strip. Audio **Clip** and **Process** menus reveal trimming, copy/paste, normalization, reversal, and transient analysis; fade settings appear with the selected fade tool. MIDI **Notes** and **Pitch** menus hold note transformations and scale/chord settings. Secondary controls appear when needed, leaving the waveform or notes in focus.
 
@@ -138,6 +138,15 @@ The transport's **Loop** toggle repeats the range shown beside it. **Range** ope
 
 ## Effects, sends, and folders
 
+Selected clips and mixer channels have a subtle glow in their track color. Hover or select a mixer channel to trace its output and sends: continuous U-shaped arrows blend from that channel’s color to each destination’s color.
+
+Drag an Arrangement track's name or grip to reorder it. The insertion line shows
+Before or After; drop in the middle of a folder header to move inside it. Folders
+move with all their contents. Drag Mixer channel names the same way, including
+buses, and both workspaces follow the new order. Dropping before or after a track
+places it in that track's folder. Hold near a pane edge to scroll during a drag;
+Escape cancels. Each completed move supports Undo/Redo and saves with the song.
+
 Select a track and choose **Window → Effects**, or use **Channel → Effects** in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
 
 1. Choose **Track → Add bus**, then rename it in **Window → Properties**.
@@ -148,9 +157,15 @@ To group channels for shared processing, choose their output bus in **Window →
 
 ## Automation
 
+Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Sliders display their range endpoints and current value; the line through the handle's center marks the exact position. Tick spacing adapts to the available space, showing halves, fifths, or tenths. Pan uses L/R endpoints and C for center. Mixer volume shows dB endpoints and a separate editable dB readout.
+
 Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
 
-Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. Choose **Step**, **Linear**, or **Smooth** interpolation; Smooth uses a bounded cubic spline without overshoot. The first and last values hold beyond the curve endpoints. Disable or mute a lane to return to the channel's manual value. Curves save with the project and support undo/redo.
+Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. New lanes use **Spline**: drag the diamond between two points to bend that segment, or select it and choose **Log**, **Linear**, **Exp**, or adjust **Slope**. Each segment keeps its own shape without overshooting its endpoint values. Step, Linear and Smooth modes remain available.
+
+Automation covers the entire song. The first point's value applies before that point and when playback starts; the last value is held indefinitely after the last point. Controls show the value at the playhead even while stopped. Orange curves and control markers identify automation consistently across the app. Automation itself does not extend the song's duration.
+
+Adjust an automated control to override its curve. **Overridden** and coral-red markers identify the manual value, while the original curve stays intact. Choose **Resume automation** in the lane editor, the control's right-click menu, the channel status menu, or plug-in parameter details to follow the curve again at the current playhead. The lane editor also offers **Override automation** and an exact override value. Overrides save with the project and support Undo/Redo. Disable or mute a lane to use the channel's stored manual value instead; this is shown as **Bypassed**.
 
 For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Effects provide the same native editor, searchable parameter list, and last-touched automation workflow from their insert chain; parameters are also available in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
 

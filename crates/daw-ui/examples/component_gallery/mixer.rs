@@ -1,4 +1,4 @@
-use daw_ui::{self as ui, text, theme, tokens};
+use daw_ui::{self as ui, text, tokens};
 use egui::{Color32, Id, Sense, Ui, vec2};
 
 pub struct State {
@@ -37,6 +37,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             text::subtitle(ui, "Mixer channels");
             text::note(ui, "mixer_strip · mixer_channel_button · stereo_meter");
             ui.add_space(tokens::SPACE_SM);
+            let mut endpoints = Vec::new();
             ui.horizontal_top(|ui| {
                 for (index, (name, kind, color, peaks)) in [
                     (
@@ -61,7 +62,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 .into_iter()
                 .enumerate()
                 {
-                    ui::mixer_strip(
+                    let strip = ui::mixer_strip(
                         ui,
                         ("gallery_channel", index),
                         vec2(160.0, 382.0),
@@ -97,12 +98,19 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                             ui::view_button(ui, if index == 2 { "Master" } else { "Music bus" });
                         },
                     );
+                    endpoints.push(ui::MixerRouteEndpoint {
+                        position: strip.response.rect.center_bottom(),
+                        color,
+                    });
                 }
             });
-            let start = ui.min_rect().left() + tokens::SPACE_LG;
-            let end = ui.min_rect().right() - tokens::SPACE_LG;
-            let accent = theme::palette(ui.ctx()).accent;
-            ui::mixer_route_lane(ui, start, end, "Output · Warm keys → Music bus", accent);
+            ui::mixer_route_lane(
+                ui,
+                endpoints[1],
+                endpoints[2],
+                "Output → Music bus",
+                ui.clip_rect(),
+            );
         });
         ui.add_space(tokens::SPACE_LG);
         ui.vertical(|ui| {

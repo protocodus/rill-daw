@@ -117,6 +117,7 @@ struct ParameterActions {
     refresh: bool,
     update: Option<(u32, f64)>,
     automate: Option<(u32, f64)>,
+    resume: Option<u64>,
 }
 
 impl DawApp {
@@ -284,6 +285,22 @@ impl DawApp {
     }
 
     pub(crate) fn instrument_diagnostics(&self) -> serde_json::Value {
+        let selected = self.instrument_ui.browser.selected.and_then(|id| {
+            self.instrument_ui
+                .parameters
+                .iter()
+                .find(|parameter| parameter.id == id)
+        });
+        let automation = selected.and_then(|parameter| {
+            let target = self.instrument_ui.owner.as_ref()?.0;
+            self.automation_control_state(AutomationTarget {
+                track: target.track,
+                parameter: AutomationParameter::VstParameter {
+                    effect: target.effect,
+                    id: parameter.id,
+                },
+            })
+        });
         serde_json::json!({
             "open": self.instrument_ui.session.is_some(),
             "opening": self.instrument_ui.opening.is_some(),
@@ -297,7 +314,10 @@ impl DawApp {
             "track": self.instrument_ui.owner.as_ref().map(|(target, _)| target.track),
             "effect": self.instrument_ui.owner.as_ref().and_then(|(target, _)| target.effect),
             "pid": self.instrument_ui.session.as_ref().map(EditorSession::process_id),
-            "selected_value": self.instrument_ui.browser.selected.and_then(|id| self.instrument_ui.parameters.iter().find(|parameter| parameter.id == id)).map(|parameter| parameter.value),
+            "selected_value": selected.map(|parameter| automation
+                .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                .map_or(parameter.value, |(_, _, value)| f64::from(value))),
+            "automation_state": automation.map(|(_, state, _)| state.label()),
         })
     }
 
@@ -538,21 +558,26 @@ impl DawApp {
                 daw_ui::text::note(ui, "Loading parameters…");
             });
         }
-        let automated: std::collections::HashSet<_> = self
+        let editing_enabled = self.parameter_editing_enabled();
+        // The parameter catalogue may contain thousands of entries. Walk the
+        // automation lanes once and index only this device's lanes, rather than
+        // searching every project track for each visible or hidden parameter.
+        let automation_states: std::collections::HashMap<_, _> = self
             .project
             .tracks
             .iter()
-            .filter_map(|track| track.automation.as_ref())
-            .filter_map(|lane| match lane.target.parameter {
-                AutomationParameter::VstParameter { effect, id }
-                    if lane.target.track == target.track && effect == target.effect =>
-                {
-                    Some(id)
+            .filter_map(|track| {
+                let lane = track.automation.as_ref()?;
+                match lane.target.parameter {
+                    AutomationParameter::VstParameter { effect, id }
+                        if lane.target.track == target.track && effect == target.effect =>
+                    {
+                        Some((id, self.automation_lane_control_state(track.id, lane)))
+                    }
+                    _ => None,
                 }
-                _ => None,
             })
             .collect();
-        let editing_enabled = self.parameter_editing_enabled();
         let items: Vec<_> = self
             .instrument_ui
             .parameters
@@ -562,8 +587,11 @@ impl DawApp {
                 id: p.id,
                 name: p.name.as_str(),
                 unit: p.unit.as_str(),
-                value: p.value,
-                automated: automated.contains(&p.id),
+                value: automation_states
+                    .get(&p.id)
+                    .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                    .map_or(p.value, |(_, _, value)| f64::from(*value)),
+                automated: automation_states.contains_key(&p.id),
                 last_touched: self.instrument_ui.last_touched == Some(p.id),
             })
             .collect();
@@ -597,12 +625,42 @@ impl DawApp {
                     actions.automate = Some((parameter.id, parameter.value));
                 }
                 ui.add_space(daw_ui::tokens::SPACE_MD);
+                if let Some(&(lane, state, _)) = automation_states.get(&parameter.id) {
+                    ui.horizontal_wrapped(|ui| {
+                        daw_ui::automation_badge(ui, state);
+                        match state {
+                            daw_ui::AutomationState::Read => {
+                                if ui.add_enabled(editing_enabled,
+                                    daw_ui::button_widget("Override automation"))
+                                    .on_hover_text("Hold this parameter at its current value until automation resumes")
+                                    .clicked()
+                                {
+                                    actions.update = Some((parameter.id, parameter.value));
+                                }
+                            }
+                            daw_ui::AutomationState::Overridden => {
+                                if ui.add_enabled(editing_enabled,
+                                    daw_ui::button_widget("Resume automation"))
+                                    .on_hover_text("Return to the existing curve at the playback position")
+                                    .clicked()
+                                {
+                                    actions.resume = Some(lane);
+                                }
+                            }
+                            daw_ui::AutomationState::Bypassed => {}
+                        }
+                    });
+                    ui.add_space(daw_ui::tokens::SPACE_SM);
+                }
                 let mut value = parameter.value;
                 ui.spacing_mut().slider_width = (ui.available_width() - 90.0).max(70.0);
                 let response = ui.add_enabled(
                     editing_enabled,
                     daw_ui::slider(&mut value, 0.0..=1.0).text("Value"),
                 );
+                if let Some((_, state, _)) = automation_states.get(&parameter.id) {
+                    daw_ui::paint_automation_control(ui, &response, *state);
+                }
                 ui.ctx().data_mut(|data| {
                     data.insert_temp(egui::Id::new("instrument_parameter_rect"), response.rect)
                 });
@@ -681,6 +739,7 @@ impl DawApp {
         let mut fetch = false;
         let mut update = None;
         let mut automate = None;
+        let mut resume = None;
         if self.instrument_ui.browse_target.take() == Some(target) {
             self.instrument_ui.parameters_open = true;
             self.instrument_ui.browser.focus_search = true;
@@ -783,6 +842,7 @@ impl DawApp {
                             fetch |= actions.refresh;
                             update = actions.update;
                             automate = actions.automate;
+                            resume = actions.resume;
                         }
                         if !self.instrument_ui.parameters_open {
                             if let Some(parameter) =
@@ -904,6 +964,9 @@ impl DawApp {
         }
         if let Some((id, value)) = automate {
             self.automate_plugin_parameter(target, id, value);
+        }
+        if let Some(lane) = resume {
+            self.resume_automation(lane);
         }
         if choose {
             self.open_instrument_chooser(true);
@@ -1183,7 +1246,12 @@ impl DawApp {
                     closed = true;
                     break;
                 }
-                EditorEvent::Captured { .. } | EditorEvent::Heartbeat => {}
+                // Host setters were already recorded when the browser gesture
+                // happened. A late acknowledgement must not undo a later Resume
+                // or replace metadata from a newer gesture.
+                EditorEvent::ParameterApplied { .. }
+                | EditorEvent::Captured { .. }
+                | EditorEvent::Heartbeat => {}
             }
         }
         if valid {
@@ -1305,6 +1373,7 @@ impl DawApp {
         }
         self.flush_pending_edit();
         let before = self.project.clone();
+        let mut automation_changed = false;
         for &(id, value) in updates {
             if !value.is_finite() || !(0.0..=1.0).contains(&value) {
                 continue;
@@ -1324,11 +1393,27 @@ impl DawApp {
                 parameter.value = value;
             }
             self.instrument_ui.last_touched = Some(id);
-            if let Some(engine) = &self.engine
-                && let Err(error) =
+            let automation_target = AutomationTarget {
+                track: target.track,
+                parameter: AutomationParameter::VstParameter {
+                    effect: target.effect,
+                    id,
+                },
+            };
+            automation_changed |=
+                self.override_automated_parameter(automation_target, value as f32);
+            if let Some(engine) = &self.engine {
+                let overridden = self
+                    .automation_control_state(automation_target)
+                    .is_some_and(|(_, state, _)| state == daw_ui::AutomationState::Overridden);
+                let result = if overridden {
+                    engine.set_plugin_parameter_override(target.track, target.effect, id, value)
+                } else {
                     engine.set_plugin_parameter(target.track, target.effect, id, value)
-            {
-                self.instrument_ui.error = Some(error.to_string());
+                };
+                if let Err(error) = result {
+                    self.instrument_ui.error = Some(error.to_string());
+                }
             }
         }
         if self.project != before {
@@ -1348,6 +1433,12 @@ impl DawApp {
             self.song_session.bump();
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
+            if automation_changed {
+                // Native editor gestures use grouped history rather than
+                // changed(); publish their lane takeover through the same live
+                // project path so automation cannot reclaim the value.
+                self.update_playback();
+            }
         }
     }
 }

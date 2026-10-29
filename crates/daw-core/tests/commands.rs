@@ -357,3 +357,41 @@ fn trusted_source_durations_override_forged_slip_bounds_and_follow_tempo_edits()
     );
     assert_eq!(p, before);
 }
+
+#[test]
+fn relative_track_commands_use_batch_references_and_reject_cycles_atomically() {
+    let mut project = Project::new();
+    let result = batch(json!([
+        {"op":"add_track","kind":"folder","name":"Group","key":"folder"},
+        {"op":"add_track","kind":"midi","name":"Part","key":"part"},
+        {"op":"add_track","kind":"bus","name":"Room","key":"bus"},
+        {"op":"move_track","track":"part","target":"folder","placement":"into_folder"},
+        {"op":"move_track","track":"bus","target":"folder","placement":"before"}
+    ]))
+    .apply(&mut project)
+    .unwrap();
+    let (folder, part, bus) = (
+        result.created[0].id,
+        result.created[1].id,
+        result.created[2].id,
+    );
+    assert_eq!(project.ordered_track_ids(), vec![bus, folder, part]);
+    assert_eq!(project.track(part).unwrap().parent_folder, Some(folder));
+    let before = project.clone();
+    assert!(
+        batch(json!([
+            {"op":"rename_track","track":bus,"name":"Changed"},
+            {"op":"move_track","track":folder,"target":part,"placement":"before"}
+        ]))
+        .apply(&mut project)
+        .is_err()
+    );
+    assert_eq!(project, before);
+    let no_op = batch(json!([
+        {"op":"move_track","track":part,"target":folder,"placement":"into_folder"}
+    ]))
+    .apply(&mut project)
+    .unwrap();
+    assert!(!no_op.changed);
+    assert_eq!(project, before);
+}

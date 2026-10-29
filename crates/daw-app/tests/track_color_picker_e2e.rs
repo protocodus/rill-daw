@@ -210,7 +210,9 @@ fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
                         && right > x
                         && top < y
                         && bottom > y
-                        && (right - left - 180.0).abs() < 0.1
+                        && (right - left - (180.0 - f64::from(daw_ui::tokens::SPACE_XS))).abs()
+                            < 0.1
+                        && shape["fill"][3].as_u64().unwrap_or(0) > 0
                         && bottom - top > 250.0
                 })
         })
@@ -284,7 +286,7 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
                     && right > x
                     && top < y
                     && y - top < 65.0
-                    && (bottom - top - 2.0).abs() < 0.1
+                    && (bottom - top - 3.0).abs() < 0.1
                     && right - left > 140.0
             }),
             "{name}: the channel marker must keep the arranger RGB color"

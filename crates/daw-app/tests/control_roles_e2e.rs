@@ -119,6 +119,48 @@ fn unchanged(state: &Value, original: &Value) {
 }
 
 #[test]
+fn tool_families_wrap_together_and_every_mode_remains_mouse_accessible() {
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = fixture(800, 760, density, dark);
+        let original = app.inspect();
+        for width in [800, 1100, 1600] {
+            app.command(json!({"command":"viewport", "width":width, "height":760,
+                "pixels_per_point":density}));
+            let state = paint(&mut app);
+            for family in [
+                &["Select", "Pencil", "Multi-draw", "Cursor"][..],
+                &["Cut", "Glue", "Erase"][..],
+            ] {
+                let first = bounds(label(&state, family[0]));
+                for text in family {
+                    let rect = bounds(label(&state, text));
+                    assert!(
+                        (rect[1] - first[1]).abs() < 1.0,
+                        "Tool family split across rows at {width}: {family:?}"
+                    );
+                    assert!(rect[0] >= 0.0 && rect[2] <= f64::from(width));
+                }
+            }
+            for (text, expected) in [
+                ("Select", "Select"),
+                ("Pencil", "Pencil"),
+                ("Multi-draw", "MultiDraw"),
+                ("Cursor", "Cursor"),
+                ("Cut", "Cut"),
+                ("Glue", "Glue"),
+                ("Erase", "Erase"),
+                ("Duplicate", "Duplicate"),
+            ] {
+                let state = app.click(text);
+                mode(&state, expected);
+                unchanged(&state, &original);
+            }
+        }
+        app.quit();
+    }
+}
+
+#[test]
 fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_roles() {
     for (width, height, density) in [(1100, 720, 1.0), (1440, 1000, 2.0)] {
         for dark in [false, true] {

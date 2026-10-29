@@ -22,6 +22,8 @@ pub(crate) fn modal_with_title_rows<R>(
     title_rows: Option<usize>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> ModalResponse<R> {
+    let painter = ctx.layer_painter(egui::Modal::default_area(id).layer());
+    crate::backdrop_blur::paint_modal_blur(ctx, &painter);
     let width = (ctx.content_rect().width() - 4.0 * tokens::POPUP_MARGIN).clamp(180.0, 460.0);
     egui::Modal::new(id)
         .backdrop_color(crate::theme::palette(ctx).popup_scrim)

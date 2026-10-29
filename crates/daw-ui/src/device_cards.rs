@@ -6,10 +6,19 @@ use std::hash::Hash;
 
 pub const DEVICE_CARD_HEIGHT: f32 = 208.0;
 pub const DEVICE_CARD_MIN_WIDTH: f32 = 196.0;
+const MIN_CARD_HEIGHT: f32 = 144.0;
 pub const DEVICE_ROW_HEIGHT: f32 = 56.0;
 const PREVIEW_HEIGHT: f32 = 118.0;
 const ROW_PREVIEW_WIDTH: f32 = 80.0;
 const SCROLLBAR_GUTTER: f32 = 16.0;
+
+fn card_height(available: f32) -> f32 {
+    if available.is_finite() {
+        available.floor().clamp(MIN_CARD_HEIGHT, DEVICE_CARD_HEIGHT)
+    } else {
+        DEVICE_CARD_HEIGHT
+    }
+}
 
 pub struct DeviceCard<'a> {
     /// Stable identity independent of filtering, sorting and grid position.
@@ -250,14 +259,16 @@ fn paint_favorite_badge(painter: &egui::Painter, corner: egui::Pos2, size: f32) 
 }
 
 /// One quiet, whole-card input target. Preview arrival never moves its labels,
-/// changes the target bounds, or alters the caller's selection.
+/// changes the target bounds, or alters the caller's selection. Short parent
+/// rows reduce the preview area while keeping both name rows and producer text.
 pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCardResponse {
     let width = if width.is_finite() {
         width.max(0.0)
     } else {
         0.0
     };
-    let response = device_target(ui, card, egui::vec2(width, DEVICE_CARD_HEIGHT));
+    let height = card_height(ui.available_height());
+    let response = device_target(ui, card, egui::vec2(width, height));
     let producer = producer(card);
     let activated = activation(ui, &response, card.id);
     let rect = response.rect;
@@ -265,7 +276,8 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
         tokens::SPACE_MD.min(width * 0.5),
         tokens::SPACE_MD,
     ));
-    let preview_rect = Rect::from_min_size(inset.min, egui::vec2(inset.width(), PREVIEW_HEIGHT));
+    let preview_height = PREVIEW_HEIGHT - (DEVICE_CARD_HEIGHT - height);
+    let preview_rect = Rect::from_min_size(inset.min, egui::vec2(inset.width(), preview_height));
     if ui.is_rect_visible(rect) {
         let painter = ui.painter_at(rect);
         paint_item_frame(&painter, rect, card, &response);
@@ -438,8 +450,9 @@ pub fn favorite_toggle(ui: &mut Ui, favorite: &mut bool) -> Response {
     response
 }
 
-/// Fixed-height, responsive card rows with bounded rendering and image-loading
-/// work. `scroll_to` reveals a keyboard selection even when its row is virtualized.
+/// Equal-height, responsive card rows with bounded rendering and image-loading
+/// work. Short viewports reduce previews so a complete row remains usable.
+/// `scroll_to` reveals a keyboard selection even when its row is virtualized.
 pub fn device_grid<R>(
     ui: &mut Ui,
     id_salt: impl Hash,
@@ -448,14 +461,24 @@ pub fn device_grid<R>(
     scroll_to: Option<usize>,
     render: impl FnMut(&mut Ui, usize, f32) -> R,
 ) -> DeviceGridResponse<R> {
+    let bounded_height = if height.is_finite() {
+        height.max(0.0).min(ui.available_height().max(0.0))
+    } else {
+        0.0
+    };
+    let card_height = card_height(bounded_height);
     virtual_items(
         ui,
         id_salt,
         count,
-        height,
+        bounded_height,
         scroll_to,
-        DEVICE_CARD_HEIGHT,
-        device_grid_layout,
+        card_height,
+        |width| {
+            let mut layout = device_grid_layout(width);
+            layout.row_height = card_height + tokens::SPACE_MD;
+            layout
+        },
         render,
     )
 }
@@ -504,7 +527,7 @@ fn virtual_items<R>(
     height: f32,
     scroll_to: Option<usize>,
     item_height: f32,
-    layout: fn(f32) -> DeviceGridLayout,
+    layout: impl Fn(f32) -> DeviceGridLayout,
     mut render: impl FnMut(&mut Ui, usize, f32) -> R,
 ) -> DeviceGridResponse<R> {
     ui.push_id(id_salt, |ui| {
@@ -539,6 +562,7 @@ fn virtual_items<R>(
             let mut cards = Vec::with_capacity(visible.len() * layout.columns);
             for row in visible {
                 ui.horizontal(|ui| {
+                    ui.set_max_height(item_height);
                     for column in 0..layout.columns {
                         let index = row * layout.columns + column;
                         if index >= count {
@@ -653,7 +677,7 @@ mod tests {
 
     #[test]
     fn keyboard_scroll_reveals_the_entire_selected_card_in_short_viewports() {
-        for height in [260.0, 400.0] {
+        for height in [144.0, 183.5, 260.0, 400.0] {
             let ctx = egui::Context::default();
             theme::apply(&ctx);
             render_grid(&ctx, 940.0, 10_000, height, None);

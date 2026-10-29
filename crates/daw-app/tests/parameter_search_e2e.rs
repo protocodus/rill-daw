@@ -421,3 +421,104 @@ fn parameter_metadata_error_stays_in_the_browser_without_creating_a_lane() {
     assert!(visible(&app.inspect(), "Open editor"));
     app.quit();
 }
+
+#[test]
+fn parameter_controls_show_automation_and_manual_override_with_resume_undo_and_recall() {
+    use daw_core::{AutomationParameter, AutomationPoint, AutomationTarget};
+    let fixture = Fixture::new();
+    for (effect_index, dark) in [(None, false), (Some(0), true)] {
+        let (mut app, track, effects) = fixture.app();
+        let effect = effect_index.map(|index| effects[index]);
+        let path = app.directory.path().join("parameters.rill");
+        let mut project = Project::load(&path).unwrap();
+        let lane = project
+            .add_automation_track_with_value(
+                "Cutoff movement",
+                AutomationTarget {
+                    track,
+                    parameter: AutomationParameter::VstParameter { effect, id: 7 },
+                },
+                0.2,
+            )
+            .unwrap();
+        project.automation_lane_mut(lane).unwrap().points = vec![
+            AutomationPoint::new(8.0, 0.2),
+            AutomationPoint::new(12.0, 0.8),
+        ];
+        project.save(&path).unwrap();
+        app.command(json!({"command":"open", "path":path}));
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.command(json!({"command":"viewport", "width":1100, "height":760,
+            "pixels_per_point":if dark {2.0} else {1.0}}));
+        app.click("Neon phrase");
+        if let Some(index) = effect_index {
+            menu(&mut app, "Effects");
+            app.command(json!({"command":"click", "label":"Automate…", "occurrence":index}));
+        } else {
+            menu(&mut app, "Instrument");
+            app.click("Automate…");
+        }
+        ready(&mut app);
+        let initial = query(&mut app, "Filter Cutoff");
+        let curve = lanes(&initial)[0]["automation"]["points"].clone();
+        assert_eq!(initial["native_editor"]["automation_state"], "Automated");
+        assert!(
+            (initial["native_editor"]["selected_value"].as_f64().unwrap() - 0.2).abs() < 1e-6,
+            "Control must show the held first value even before its first node"
+        );
+        assert!(visible(&initial, "Override automation"));
+
+        let control = &initial["instrument_parameter_rect"];
+        let x = control["min"][0].as_f64().unwrap() + 95.0;
+        let y = (control["min"][1].as_f64().unwrap() + control["max"][1].as_f64().unwrap()) * 0.5;
+        let changed = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+        let held = lanes(&changed)[0]["automation"]["override_value"]
+            .as_f64()
+            .unwrap();
+        assert!((held - 0.2).abs() > 0.01);
+        assert_eq!(changed["native_editor"]["automation_state"], "Overridden");
+        assert!(visible(&changed, "Overridden") && visible(&changed, "Resume automation"));
+        assert_eq!(lanes(&changed)[0]["automation"]["points"], curve);
+
+        let saved = app.directory.path().join("overridden-parameters.rill");
+        app.command(json!({"command":"save", "path":saved}));
+        let resumed = app.click("Resume automation");
+        assert!(lanes(&resumed)[0]["automation"]["override_value"].is_null());
+        assert_eq!(resumed["native_editor"]["automation_state"], "Automated");
+        assert!((resumed["native_editor"]["selected_value"].as_f64().unwrap() - 0.2).abs() < 1e-6);
+        assert_eq!(lanes(&resumed)[0]["automation"]["points"], curve);
+        let undone = app.command(json!({"command":"key", "key":"Z", "cmd":true}));
+        assert!(
+            (lanes(&undone)[0]["automation"]["override_value"]
+                .as_f64()
+                .unwrap()
+                - held)
+                .abs()
+                < 1e-6
+        );
+        let redone = app.command(json!({"command":"key", "key":"Z", "cmd":true, "shift":true}));
+        assert!(lanes(&redone)[0]["automation"]["override_value"].is_null());
+
+        let explicit = app.click("Override automation");
+        assert!(
+            (lanes(&explicit)[0]["automation"]["override_value"]
+                .as_f64()
+                .unwrap()
+                - 0.2)
+                .abs()
+                < 1e-6
+        );
+        let mut app = app.restart();
+        let recalled = app.command(json!({"command":"open", "path":saved}));
+        assert!(
+            (lanes(&recalled)[0]["automation"]["override_value"]
+                .as_f64()
+                .unwrap()
+                - held)
+                .abs()
+                < 1e-6
+        );
+        assert_eq!(lanes(&recalled)[0]["automation"]["points"], curve);
+        app.quit();
+    }
+}

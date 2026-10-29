@@ -1,5 +1,75 @@
 # Application E2E tests
 
+`visual_polish_e2e` selects clips and channels through real mouse actions and
+checks bounded halo meshes, continuous routing attachment, source/destination
+color gradients, and inactive-background blur layering without song edits.
+It exercises both appearances and includes a native pixel test that distinguishes
+blur from dimming by measuring normalized image detail.
+
+```sh
+cargo test --locked -p daw-app --test visual_polish_e2e --test mixer_flow_e2e -- --test-threads=1
+xvfb-run -a -s '-screen 0 1600x1200x24' cargo test --locked -p daw-app --test visual_polish_e2e native -- --ignored --test-threads=1
+```
+
+`track_reorder_e2e` drives real title/grip drags in Arrangement and Mixer, including
+all track kinds, nested/collapsed folders, explicit placement previews, invalid
+targets, cancellation, edge scrolling, synchronized channel numbers, Undo/Redo
+and portable recall. `track_reorder_playback_e2e` verifies continuous audio and
+stable engine/plug-in identities through channel moves and subsequent live edits.
+
+```sh
+cargo test --locked -p daw-app --test track_reorder_e2e --test track_reorder_playback_e2e -- --test-threads=1
+```
+
+`automation_color_e2e` checks actual orange curves, nodes, handles and owned
+controls across Arrangement, the automation editor, Mixer, Properties and Routing.
+It distinguishes coral-red manual overrides from muted retained curves, verifies
+contrast in both themes, and ensures view/theme changes preserve the project and
+history. Opt-in paint diagnostics include paths, circles and text colors.
+
+`slider_scale_e2e` compares actual painted ticks and handle center lines with
+mouse edits at range endpoints and fractional positions. It checks adaptive
+scales, endpoint/current captions, compact headers, both themes and display
+densities. `slider_automation_e2e` creates gain, pan and send lanes directly from
+controls, checks exact ownership, Undo/Redo, override and Resume. The optional
+`inspect` paint output includes `painted_lines` for these visual checks.
+
+```sh
+cargo test --locked -p daw-app --test slider_scale_e2e --test slider_automation_e2e -- --test-threads=1
+```
+
+`automation_curves_e2e` drives per-segment spline presets and diamond handles,
+manual takeover, Resume, Undo/Redo and portable recall. It compares rendered
+audio before the first point, inside shaped segments and after the last point,
+and checks live override/resume without replacing the audio engine.
+`automation_indicators_e2e` covers native pan/send controls and arranger status
+menus. Parameter-search and native-parameter-automation tests cover browser and
+native plug-in gestures, exact instance ownership, override recall and resume,
+including a delayed native setter acknowledgement arriving after Resume.
+`automation_tools_e2e` verifies that tool-driven mix changes enter override,
+preserve curves and Undo/Redo, and respect explicit Resume in an atomic batch.
+These tests require no audio device, display or installed plug-in.
+
+```sh
+cargo test --locked -p daw-app --test automation_curves_e2e --test automation_indicators_e2e --test automation_tools_e2e --test automation_e2e --test parameter_search_e2e --test native_parameter_automation_e2e -- --test-threads=1
+```
+
+`mixer_readability_e2e` checks channel separation, destination color markers,
+bus input counts, insert summaries and mouse access to output/send routing.
+`effect_chain_layout_e2e` covers bounded effect names, status, pinned insertion,
+bypass/reordering with Undo, and calibrated fader interaction. `studio_windows_e2e`
+opens and closes on-demand utilities in both appearances and at narrow/wide
+sizes, preserving the song while keeping the wrapped transport accessible.
+`control_roles_e2e` also checks whole-family tool wrapping and mouse selection.
+
+```sh
+cargo test --locked -p daw-app --test mixer_readability_e2e --test effect_chain_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
+```
+
+`clip_surface_e2e` verifies opaque audio/MIDI clip bodies, separate title and
+preview geometry, extreme-pitch thumbnail visibility, compact rows and mouse
+selection through the running app in both appearances and display densities.
+
 `composer_e2e` exercises the native composition module through the running
 assistant and MCP boundary. A deterministic provider fixture creates chord,
 arpeggio, and bass clips in one history entry; pointer-driven Undo/Redo checks
