@@ -366,8 +366,8 @@ impl DawApp {
                                 let mut gain = displayed_gain;
                                 let response = ui.add_sized(Vec2::new(30.0, fader_height),
                                     daw_ui::slider(&mut gain, 0.0..=1.5)
-                                        .clamping(egui::SliderClamping::Edits).vertical().show_value(false).scale_labels(false))
-                                    .on_hover_text("Channel volume");
+                                        .clamping(egui::SliderClamping::Edits).vertical().show_value(false).scale_labels(false));
+                                let response = daw_ui::hover_text(response, "Channel volume");
                                 let scale = daw_ui::slider_scale_geometry(ui.ctx(), response.id);
                                 daw_ui::paint_mixer_fader_scale(ui, scale.as_ref().map_or(response.rect, |scale| scale.rail));
                                 if let Some(action) = daw_ui::automatable_parameter_context(ui, &response,

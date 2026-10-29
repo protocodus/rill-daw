@@ -198,7 +198,12 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|row| row["text"].as_str().unwrap().ends_with(" dB"))
+        // Calibrated fader endpoints carry a separate fixed +3.5 dB caption
+        // below each channel's editable level readout.
+        .filter(|row| {
+            let text = row["text"].as_str().unwrap();
+            text.ends_with(" dB") && text != "+3.5 dB"
+        })
         .collect();
     assert_eq!(levels.len(), 4, "three channel gains and the master peak");
     assert!(
@@ -258,11 +263,22 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
             .filter(|row| row["text"] == "Target")
             .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
     );
+    // The pointer stayed over the fader while scrolling settled. Its stacked
+    // value/volume/automation hints cover the output target in this compact
+    // layout. Move and press immediately; read-only hints must let that first
+    // click reach the target underneath instead of consuming the press.
+    assert!(visible(&scrolled, "Channel volume"));
+    assert!(visible(
+        &scrolled,
+        "Right-click to create automation for this control"
+    ));
     let routing = app.click("Ch 1 > Master");
     assert_eq!(
         routing["popups"]["routing"], true,
         "the output target remains usable at the end of the signal chain"
     );
+    assert_eq!(routing["project"], scrolled["project"]);
+    assert_eq!(routing["history"], scrolled["history"]);
     app.quit();
 }
 

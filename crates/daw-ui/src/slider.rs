@@ -602,14 +602,17 @@ impl<'a> Slider<'a> {
         }
         ui.ctx()
             .data_mut(|data| data.insert_temp(response.id.with("slider_scale_geometry"), geometry));
-        response.on_hover_text(format!(
-            "{}{}{} · {} to {}\nThe handle's center line marks the value",
-            self.prefix,
-            actual,
-            self.suffix,
-            self.caption(*self.range.start()),
-            self.caption(*self.range.end())
-        ))
+        crate::hover_text(
+            response,
+            format!(
+                "{}{}{} · {} to {}\nThe handle's center line marks the value",
+                self.prefix,
+                actual,
+                self.suffix,
+                self.caption(*self.range.start()),
+                self.caption(*self.range.end())
+            ),
+        )
     }
 }
 

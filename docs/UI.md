@@ -228,6 +228,12 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
 
+`hover_text(response, text)` adds a delayed, read-only tooltip using the shared
+native popup styling. Repeated hints for one response stack without intercepting
+pointer input: even a mouse move and press in the same frame reaches the control
+beneath a disappearing hint. Sliders and automation hints use this helper. Keep
+native `on_hover_ui` for tooltips that intentionally contain interactive content.
+
 Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
 
 `slider` retains native dragging, keyboard focus and exact numeric entry, with

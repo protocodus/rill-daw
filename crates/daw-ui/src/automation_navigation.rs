@@ -57,9 +57,10 @@ pub fn automatable_parameter_context(
     if let Some((lane, state)) = automation {
         return automation_parameter_context(ui, response, lane, state);
     }
-    response
-        .clone()
-        .on_hover_text("Right-click to create automation for this control");
+    crate::hover_text(
+        response.clone(),
+        "Right-click to create automation for this control",
+    );
     let mut action = None;
     response.context_menu(|ui| action = automatable_menu_contents(ui, control, None));
     action
@@ -100,10 +101,13 @@ pub fn automation_parameter_context(
     state: AutomationState,
 ) -> Option<AutomationNavigation> {
     crate::paint_automation_control(ui, response, state);
-    response.clone().on_hover_text(format!(
-        "{} · Adjust to override · Right-click to edit or resume automation",
-        automation_state_label(state)
-    ));
+    crate::hover_text(
+        response.clone(),
+        format!(
+            "{} · Adjust to override · Right-click to edit or resume automation",
+            automation_state_label(state)
+        ),
+    );
     let mut action = None;
     response.context_menu(|ui| action = automation_menu_contents(ui, lane, state));
     action
