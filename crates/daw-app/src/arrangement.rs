@@ -788,18 +788,31 @@ impl DawApp {
                                 ui, controls_rect, (track.id, "channel_controls"),
                                 &mut gain, &mut pan, peaks, compact_controls,
                             );
-                            for (response, control, state) in [
-                                (&controls.gain, daw_ui::AutomationControl::Gain { track: track.id }, gain_automation),
-                                (&controls.pan, daw_ui::AutomationControl::Pan { track: track.id }, pan_automation),
+                            let mut exact_gain = false;
+                            let mut exact_pan = false;
+                            for (response, control, state, current, range, unit) in [
+                                (&controls.gain, daw_ui::AutomationControl::Gain { track: track.id }, gain_automation,
+                                    f64::from(daw_ui::channel_gain_to_db(gain)), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB"),
+                                (&controls.pan, daw_ui::AutomationControl::Pan { track: track.id }, pan_automation,
+                                    f64::from(pan) * 100.0, -100.0..=100.0, "%"),
                             ] {
-                                if let Some(action) = daw_ui::automatable_parameter_context(ui, response, control, state.map(|(lane, state, _)| (lane, state))) {
+                                let (action, value) = daw_ui::automatable_parameter_value_context(ui, response, control,
+                                    state.map(|(lane, state, _)| (lane, state)), current, range, unit);
+                                if let Some(action) = action {
                                     automation_navigation = Some(action);
                                 }
+                                if let Some(value) = value {
+                                    match control {
+                                        daw_ui::AutomationControl::Gain { .. } => { gain = daw_ui::channel_gain_from_db(value as f32); exact_gain = true; }
+                                        daw_ui::AutomationControl::Pan { .. } => { pan = (value / 100.0) as f32; exact_pan = true; }
+                                        daw_ui::AutomationControl::Send { .. } => {}
+                                    }
+                                }
                             }
-                            if controls.gain.changed() {
+                            if controls.gain.changed() || exact_gain {
                                 edits.push(Edit::Gain(track.id, gain));
                             }
-                            if controls.pan.changed() {
+                            if controls.pan.changed() || exact_pan {
                                 edits.push(Edit::Pan(track.id, pan));
                             }
                             channel_controls.push(serde_json::json!({
@@ -1936,6 +1949,23 @@ impl DawApp {
                 self.selected_clip = None;
             }
             Some(daw_ui::AutomationNavigation::Resume(lane)) => self.resume_automation(lane),
+            Some(daw_ui::AutomationNavigation::Override(lane)) => {
+                if let Some(value) = self
+                    .project
+                    .automation_lane(lane)
+                    .and_then(|lane| lane.effective_value_at(self.cursor))
+                {
+                    self.begin_edit();
+                    if self
+                        .project
+                        .set_automation_override(lane, Some(value))
+                        .is_ok()
+                    {
+                        self.edit_label = Some("Override automation".into());
+                        self.changed();
+                    }
+                }
+            }
             None => {}
         }
     }
@@ -2006,6 +2036,19 @@ impl DawApp {
                     }
                 });
                 ui.separator();
+                let ai_scope = match self.inspector_page {
+                    InspectorPage::Clip => self.selected_clip_ai_scope(),
+                    InspectorPage::Channel => Some(daw_tools::ToolScope::Channel { track_id: id }),
+                    InspectorPage::Track => None,
+                };
+                if let Some(scope) = ai_scope {
+                    if daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
+                        self.open_context_assistant(scope);
+                        navigated = true;
+                        return;
+                    }
+                    ui.add_space(daw_ui::tokens::SPACE_SM);
+                }
                 if self.inspector_page == InspectorPage::Channel {
                     if self.channel_navigation(ui, ChannelDestination::Channel) {
                         navigated = true;
@@ -2240,32 +2283,38 @@ impl DawApp {
                         .add(
                             daw_ui::slider(&mut gain, 0.0..=1.5)
                                 .clamping(egui::SliderClamping::Edits)
+                                .endpoint_labels("−∞ dB", "+3.5 dB")
                                 .show_value(false),
                         )
                         .labelled_by(label.id)
                         .on_hover_text("Mixer channel gain");
-                    if let Some(action) = daw_ui::automatable_parameter_context(
+                    let mut db = daw_ui::channel_gain_to_db(gain);
+                    let numeric = ui.add(daw_ui::channel_gain_number(&mut db));
+                    if numeric.changed() {
+                        gain = daw_ui::channel_gain_from_db(db);
+                    }
+                    let response = response.union(numeric);
+                    let (action, exact) = daw_ui::automatable_parameter_value_context(
                         ui,
                         &response,
                         daw_ui::AutomationControl::Gain { track: id },
                         gain_automation.map(|(lane, state, _)| (lane, state)),
-                    ) {
+                        f64::from(db),
+                        -60.0..=f64::from(20.0 * 1.5_f32.log10()),
+                        "dB",
+                    );
+                    if let Some(action) = action {
                         navigation = Some(action);
                     }
-                    if response.changed() {
+                    if let Some(value) = exact {
+                        gain = daw_ui::channel_gain_from_db(value as f32);
+                    }
+                    if response.changed() || exact.is_some() {
                         track.gain = gain;
                         changed = true;
                         overrides
                             .push((gain_target, AutomationParameter::TrackGain.normalize(gain)));
                     }
-                    daw_ui::text::body(
-                        ui,
-                        if gain <= 0.0 {
-                            "−∞ dB".to_string()
-                        } else {
-                            format!("{:.1} dB", 20.0 * gain.log10())
-                        },
-                    );
                 });
                 ui.end_row();
                 {
@@ -2293,23 +2342,37 @@ impl DawApp {
                     .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                     .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value))
                     .unwrap_or(track.pan);
+                let mut pan_percent = pan * 100.0;
                 let response = ui
                     .add(
-                        daw_ui::slider(&mut pan, -1.0..=1.0)
+                        daw_ui::slider(&mut pan_percent, -100.0..=100.0)
                             .clamping(egui::SliderClamping::Edits)
-                            .fixed_decimals(2),
+                            .endpoint_labels("100% L", "100% R")
+                            .suffix("%")
+                            .min_decimals(1)
+                            .max_decimals(6),
                     )
                     .labelled_by(label.id)
-                    .on_hover_text("Mixer channel pan · Left −1 · Center 0 · Right 1");
-                if let Some(action) = daw_ui::automatable_parameter_context(
+                    .on_hover_text("Mixer channel pan · −100% left · 0% center · 100% right");
+                if response.changed() {
+                    pan = pan_percent / 100.0;
+                }
+                let (action, exact) = daw_ui::automatable_parameter_value_context(
                     ui,
                     &response,
                     daw_ui::AutomationControl::Pan { track: id },
                     pan_automation.map(|(lane, state, _)| (lane, state)),
-                ) {
+                    f64::from(pan) * 100.0,
+                    -100.0..=100.0,
+                    "%",
+                );
+                if let Some(action) = action {
                     navigation = Some(action);
                 }
-                if response.changed() {
+                if let Some(value) = exact {
+                    pan = (value / 100.0) as f32;
+                }
+                if response.changed() || exact.is_some() {
                     track.pan = pan;
                     changed = true;
                     overrides.push((pan_target, AutomationParameter::TrackPan.normalize(pan)));

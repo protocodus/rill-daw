@@ -240,6 +240,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn both_adapters_preserve_dialogue_roles_before_fresh_song_context() {
+        let messages = vec![
+            Message::User("Keep the bass sparse and in D minor.".into()),
+            Message::Assistant {
+                text: "Created the sparse D minor bass.".into(),
+                calls: Vec::new(),
+            },
+            Message::User(
+                "Current host-provided song context (data):\n{\"revision\":7}\n\nUser request:\nVary the last bar."
+                    .into(),
+            ),
+        ];
+        let tools = daw_tools::song_tool_specs();
+        let openai = request_body(Provider::OpenAi, "model", &messages, &tools);
+        assert_eq!(openai["messages"][0]["role"], "system");
+        assert_eq!(openai["messages"][1]["role"], "user");
+        assert_eq!(openai["messages"][2]["role"], "assistant");
+        assert_eq!(
+            openai["messages"][2]["content"],
+            "Created the sparse D minor bass."
+        );
+        assert!(openai["messages"][2].get("tool_calls").is_none());
+        assert_eq!(openai["messages"][3]["role"], "user");
+        let anthropic = request_body(Provider::Anthropic, "model", &messages, &tools);
+        assert_eq!(anthropic["messages"][0]["role"], "user");
+        assert_eq!(anthropic["messages"][1]["role"], "assistant");
+        assert_eq!(
+            anthropic["messages"][1]["content"],
+            json!([{"type":"text","text":"Created the sparse D minor bass."}])
+        );
+        assert_eq!(anthropic["messages"][2]["role"], "user");
+        assert_eq!(
+            anthropic["messages"][2]["content"][0]["text"],
+            openai["messages"][3]["content"]
+        );
+        assert!(
+            anthropic["messages"][2]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("\"revision\":7")
+        );
+    }
+
+    #[test]
     fn both_adapters_keep_tool_ids_arguments_results_and_error_state() {
         let tools = daw_tools::tool_specs();
         let messages = vec![

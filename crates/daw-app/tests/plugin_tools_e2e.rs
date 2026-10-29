@@ -195,7 +195,7 @@ fn instrument_controls_and_automation_require_discovery_and_refresh_after_gui_un
     );
     assert_eq!(first["tool_result"]["ok"], true, "{}", first["tool_result"]);
     let metadata = &first["tool_result"]["result"];
-    assert_eq!(metadata["total_parameters"], 207);
+    assert_eq!(metadata["total_parameters"], 208);
     assert_eq!(metadata["next_offset"], 1);
     assert_eq!(metadata["parameters"][0]["id"], 7);
     assert_eq!(metadata["parameters"][0]["normalized_value"], 0.62);

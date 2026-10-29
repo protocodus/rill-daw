@@ -2370,7 +2370,7 @@ impl DawApp {
                     self.track_menu(ui);
                     daw_ui::menu_button(ui, "Window", |ui| {
                         if daw_ui::button(ui, "Assistant").clicked() {
-                            self.open_popup(PopupKind::Assistant);
+                            self.open_global_assistant();
                             ui.close();
                         }
                         if daw_ui::button(ui, "Arrangement").clicked() {
@@ -2440,7 +2440,7 @@ impl DawApp {
                             ui.close();
                         }
                     });
-                    if daw_ui::button(ui,"AI").on_hover_text("Assistant").clicked() {self.open_popup(PopupKind::Assistant);}
+                    if daw_ui::button(ui,"AI").on_hover_text("Assistant · current song").clicked() {self.open_global_assistant();}
                     if self.assistant.busy() && daw_ui::small_button(ui,"Stop AI").clicked() {self.assistant.stop();}
                     ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width().max(0.0), daw_ui::tokens::CONTROL_HEIGHT),
@@ -2972,6 +2972,23 @@ impl DawApp {
                     "Mixer".into()
                 };
                 let header = daw_ui::workspace_header(ui, &title, |ui| {
+                    let ai_scope = if workspace == WorkspaceView::Clip {
+                        self.selected_clip_ai_scope()
+                    } else {
+                        self.selected_track
+                            .filter(|id| {
+                                self.project.track(*id).is_some_and(|track| {
+                                    !matches!(track.kind, TrackKind::Folder | TrackKind::Automation)
+                                })
+                            })
+                            .map(|track_id| daw_tools::ToolScope::Channel { track_id })
+                    };
+                    if let Some(scope) = ai_scope
+                        && daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked()
+                    {
+                        self.open_context_assistant(scope);
+                        return;
+                    }
                     if workspace == WorkspaceView::Mixer && daw_ui::button(ui, "+ Bus").clicked() {
                         self.mixer_add_bus();
                     }

@@ -154,16 +154,11 @@ fn native_instrument_metadata_parameter_edit_export_and_recall_never_construct_a
     app.click("Automate…");
     let parameters = wait_parameters(&mut app);
     assert_eq!(parameters["native_editor"]["selected_value"], 0.5);
-    let rect = &parameters["instrument_parameter_rect"];
-    let left = rect["min"][0].as_f64().unwrap();
-    let right = rect["max"][0].as_f64().unwrap();
-    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
-    let edited = app.command(json!({"command":"pointer", "phase":"click",
-        "x":left + (right - left) * 0.2, "y":y}));
+    let edited = common::edit_plugin_parameter_value(&mut app, &parameters, "20");
     let value = edited["native_editor"]["selected_value"].as_f64().unwrap();
     assert!(
         (0.05..0.45).contains(&value),
-        "Slider did not attenuate Level: {value}"
+        "Knob numeric entry did not attenuate Level: {value}"
     );
     assert_eq!(edited["native_editor"]["last_touched"], 7);
     let changed_path = app.directory.path().join("changed.wav");

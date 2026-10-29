@@ -153,7 +153,7 @@ fn main() -> anyhow::Result<()> {
             }
             app.project_path = project_path;
             match view.as_deref() {
-                Some("assistant") => app.open_popup(app::PopupKind::Assistant),
+                Some("assistant") => app.open_global_assistant(),
                 Some("setup") => {
                     app.open_popup(app::PopupKind::Setup);
                 }

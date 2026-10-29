@@ -87,7 +87,7 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
         // must not write that automated value into its stored manual setting.
         assert_eq!(properties["project"]["tracks"][0]["pan"], 0.0);
         label(&properties, "Pan automation");
-        let panned = enter_number(&mut app, label(&properties, "0.50"), "0.25");
+        let panned = enter_number(&mut app, label(&properties, "50.0%"), "25");
         assert!((lane(&panned, pan)["override_value"].as_f64().unwrap() - 0.625).abs() < 1e-6);
         label(&panned, "Overridden");
         let mixer = app.click("Mixer");
@@ -106,7 +106,7 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
         app.click("Source");
         let resumed = menu(&mut app, "Overridden", "Resume automation");
         assert!(lane(&resumed, pan)["override_value"].is_null());
-        label(&resumed, "0.50");
+        label(&resumed, "50.0%");
         assert_eq!(resumed["project"]["tracks"][0]["pan"], 0.25);
         assert_eq!(
             lane(&resumed, pan)["points"],
@@ -131,6 +131,7 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
             .filter(|rect| {
                 rect["text"]
                     .as_str()
+                    .and_then(|text| text.strip_suffix('×'))
                     .and_then(|text| text.parse::<f64>().ok())
                     .is_some()
                     && (center(rect).1 - level_y).abs() < 4.0

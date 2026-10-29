@@ -567,6 +567,7 @@ impl DawApp {
         let mut actions = Vec::new();
         let mut fit = false;
         let mut open_generate = false;
+        let mut open_ai = false;
         let mut open_transform = None;
         let mut reveal_note = None;
         let mut reveal_key = None;
@@ -1443,6 +1444,7 @@ impl DawApp {
         }
         if let Some(draft) = &mut state.generate {
             let action = draft.show(ui.ctx(), &clip_name, self.project.beats_per_bar);
+            open_ai = action.ai;
             if action.fit && !draft.notes.is_empty() {
                 state.viewport.fit_bounds(
                     plot,
@@ -2284,6 +2286,9 @@ impl DawApp {
                 .hidden_selection
                 .extend(self.selected_notes.difference(&visible).copied());
             self.selected_notes.retain(|id| visible.contains(id));
+        }
+        if open_ai {
+            self.open_context_assistant(daw_tools::ToolScope::MidiClip { track_id, clip_id });
         }
     }
 

@@ -6,6 +6,8 @@ use serde_json::{Value, json};
 use std::{error::Error, fmt};
 
 mod composer;
+mod scope;
+pub use scope::{ToolContext, ToolScope};
 
 pub const MAX_ARGUMENT_BYTES: usize = 1024 * 1024;
 pub const MAX_QUERY_ITEMS: usize = 256;

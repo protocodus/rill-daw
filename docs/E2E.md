@@ -1,5 +1,38 @@
 # Application E2E tests
 
+`assistant_scope_e2e` opens AI from the piano roll, composition dialog, audio
+editor, Mixer, Routing, automation lane, instrument, effect and effect-chain
+headers. Scripted provider calls exercise real note, audio, parameter, chain,
+mix and automation edits, including atomic rejection of foreign targets and
+linked-clip propagation. It browses the context-filtered Tools page, checks the
+visible and outbound prompt scope, and verifies that global AI clears local
+conversation history and can edit the whole song. Selection changes keep the
+captured scope. A gated isolated parameter worker checks that switching songs or
+deleting the target prevents pending contextual work from editing the song.
+Replacing an instrument on the same channel requires reopening its AI context
+and clears the previous processor's conversation before editing its parameters.
+Narrow composition dialogs are exercised in both appearances. These tests need
+no provider credentials, network, display, audio device or installed plug-in.
+
+```sh
+cargo test --locked -p daw-app --test assistant_scope_e2e -- --test-threads=1
+```
+
+`assistant_guidance_e2e` browses musical examples and prompting tips through the
+running Assistant, checks editable insertion without automatic submission, and
+keeps the composer and actions accessible at 800×600 in both appearances. A
+deterministic provider fixture turns an edited example into eight bars of chords,
+arpeggio and bass, then refines the mix through a follow-up and mouse-driven
+Undo. It also covers conversation continuity despite many tool activities,
+failed-prompt recovery, New chat without losing a draft or editing the song,
+selected musical context, nested AI settings, and clearing stale conversation
+scope when changing documents. These scenarios need no provider credentials,
+network, display, audio device or installed instrument.
+
+```sh
+cargo test --locked -p daw-app --test assistant_guidance_e2e --test assistant_e2e --test assistant_settings_e2e --test composer_e2e -- --test-threads=1
+```
+
 `visual_polish_e2e` selects clips and channels through real mouse actions and
 checks bounded halo meshes, continuous routing attachment, source/destination
 color gradients, and inactive-background blur layering without song edits.
@@ -36,6 +69,19 @@ controls, checks exact ownership, Undo/Redo, override and Resume. The optional
 
 ```sh
 cargo test --locked -p daw-app --test slider_scale_e2e --test slider_automation_e2e -- --test-threads=1
+```
+
+`practical_controls_e2e` opens exact-value menus on Mixer pan, compact header
+gain/pan and Routing sends using the mouse. It checks visible ranges and current
+values, selected numeric drafts, explicit Apply/Cancel, invalid and out-of-range
+input, fractional precision, one-step Undo and saved recall. Automated controls
+retain their curves through typed and explicit overrides, and Resume returns to
+the held curve value. Actual painted handle markers distinguish orange automated,
+coral overridden and gray bypassed controls. The Channel properties dB readout is edited directly.
+These scenarios require no display, audio device or plug-in.
+
+```sh
+cargo test --locked -p daw-app --test practical_controls_e2e --test mixer_gain_entry_e2e --test slider_scale_e2e --test slider_automation_e2e -- --test-threads=1
 ```
 
 `automation_curves_e2e` drives per-segment spline presets and diamond handles,

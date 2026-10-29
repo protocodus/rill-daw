@@ -450,7 +450,25 @@ impl DawApp {
         let Some(lane) = track.automation.clone() else {
             return;
         };
-        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
+        let track_name = track.name.clone();
+        let scope = daw_tools::ToolScope::Automation {
+            track_id: lane.target.track,
+            lane_id: id,
+        };
+        let mut open_ai = false;
+        daw_ui::action_row(
+            ui,
+            |ui| {
+                open_ai = daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked();
+            },
+            |ui| {
+                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track_name);
+            },
+        );
+        if open_ai {
+            self.open_context_assistant(scope);
+            return;
+        }
         let mut interpolation = lane.interpolation;
         let mut enabled = !track.mute;
         let automation_state = self

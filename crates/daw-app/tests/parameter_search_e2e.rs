@@ -171,6 +171,13 @@ fn double_click(app: &mut Harness, label: &str) -> Value {
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}))
 }
 
+fn drag_parameter_knob(app: &mut Harness, state: &Value, delta_y: f64) -> Value {
+    let center = &state["native_editor"]["parameter_control"]["center"];
+    let x = center[0].as_f64().expect("parameter knob center");
+    let y = center[1].as_f64().unwrap();
+    app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,"to_x":x,"to_y":y+delta_y}))
+}
+
 #[test]
 fn instrument_search_handles_empty_results_keyboard_activation_reuse_and_recall() {
     let fixture = Fixture::new();
@@ -297,10 +304,7 @@ fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_t
             .abs()
             < 1e-6
     );
-    let rect = &selected["instrument_parameter_rect"];
-    let x = rect["min"][0].as_f64().unwrap() + 32.0;
-    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
-    let touched = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    let touched = drag_parameter_knob(&mut app, &selected, -30.0);
     assert_eq!(touched["native_editor"]["last_touched"], 7);
     let expected = touched["native_editor"]["selected_value"].as_f64().unwrap();
     let cleared = query(&mut app, "");
@@ -468,10 +472,7 @@ fn parameter_controls_show_automation_and_manual_override_with_resume_undo_and_r
         );
         assert!(visible(&initial, "Override automation"));
 
-        let control = &initial["instrument_parameter_rect"];
-        let x = control["min"][0].as_f64().unwrap() + 95.0;
-        let y = (control["min"][1].as_f64().unwrap() + control["max"][1].as_f64().unwrap()) * 0.5;
-        let changed = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+        let changed = drag_parameter_knob(&mut app, &initial, -30.0);
         let held = lanes(&changed)[0]["automation"]["override_value"]
             .as_f64()
             .unwrap();
@@ -521,4 +522,178 @@ fn parameter_controls_show_automation_and_manual_override_with_resume_undo_and_r
         assert_eq!(lanes(&recalled)[0]["automation"]["points"], curve);
         app.quit();
     }
+}
+
+#[test]
+fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_shortcuts() {
+    let fixture = Fixture::new();
+    let (mut app, track, _) = fixture.app();
+    app.command(json!({"command":"viewport","width":1100,"height":850}));
+    menu(&mut app, "Instrument");
+    app.click("Automate…");
+    ready(&mut app);
+    let initial = query(&mut app, "Filter Cutoff");
+    assert!(visible(&initial, "Normalized value"));
+    assert!(visible(&initial, "Plug-in unit · Hz"));
+    assert!(visible(&initial, "0 %") && visible(&initial, "100 %"));
+    assert_eq!(
+        initial["native_editor"]["parameter_control"]["range"],
+        json!([0.0, 100.0])
+    );
+    let before_history = initial["history"]["undo"].as_array().unwrap().len();
+    let changed = common::edit_plugin_parameter_value(&mut app, &initial, "61.2345");
+    let value = changed["native_editor"]["selected_value"].as_f64().unwrap();
+    assert!((value - 0.612345).abs() < 1e-8, "{value}");
+    assert_eq!(changed["native_editor"]["last_touched"], 7);
+    assert_eq!(
+        changed["history"]["undo"].as_array().unwrap().len(),
+        before_history + 1
+    );
+    assert!(
+        visible(&changed, "61.2345 %"),
+        "{}",
+        changed["visible_labels"]
+    );
+
+    // The context editor preserves more digits than the compact readout and
+    // does not edit the song until its visible Apply action is clicked.
+    let center = &changed["native_editor"]["parameter_control"]["center"];
+    let editing = app.command(
+        json!({"command":"pointer","phase":"click","button":"secondary",
+        "x":center[0],"y":center[1]}),
+    );
+    assert!(visible(&editing, "Range: 0 to 100 %"));
+    assert!(visible(&editing, "Apply value"));
+    let current_percent = changed["native_editor"]["selected_value"].as_f64().unwrap() * 100.0;
+    let current_text = daw_ui::exact_value_text(current_percent);
+    let input = editing["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|label| label["text"] == current_text)
+        .unwrap_or_else(|| {
+            panic!(
+                "Exact-value draft {current_text:?} must be visible: {}",
+                editing["visible_labels"]
+            )
+        });
+    let x = (input["min"][0].as_f64().unwrap() + input["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (input["min"][1].as_f64().unwrap() + input["max"][1].as_f64().unwrap()) * 0.5;
+    let focused = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert!(
+        visible(&focused, "Apply value"),
+        "Clicking the input must keep its editor open"
+    );
+    // An invalid numeric draft must stay editable rather than dismissing the menu.
+    let invalid = app.command(json!({"command":"text","text":"NaN"}));
+    assert!(
+        visible(&invalid, "Enter a finite number."),
+        "{}",
+        invalid["visible_labels"]
+    );
+    let rejected = app.click("Apply value");
+    assert!(visible(&rejected, "Cancel") && visible(&rejected, "Apply value"));
+    assert_eq!(rejected["project"], changed["project"]);
+    assert_eq!(rejected["history"], changed["history"]);
+    let cancelled = app.click("Cancel");
+    assert!(!visible(&cancelled, "Apply value"));
+    assert_eq!(cancelled["project"], changed["project"]);
+    assert_eq!(cancelled["history"], changed["history"]);
+    let reopened = app.command(
+        json!({"command":"pointer","phase":"click","button":"secondary",
+        "x":center[0],"y":center[1]}),
+    );
+    assert!(
+        visible(&reopened, &current_text),
+        "Reopening discards the cancelled draft"
+    );
+    let drafted = app.command(json!({"command":"text","text":"61.23456789"}));
+    assert_eq!(drafted["project"], changed["project"]);
+    assert_eq!(drafted["history"], changed["history"]);
+    let precise = app.click("Apply value");
+    let value = precise["native_editor"]["selected_value"].as_f64().unwrap();
+    assert!((value - 0.6123456789).abs() < 1e-12, "{value}");
+
+    let created = app.click("Automate parameter");
+    assert_lane(lanes(&created)[0], track, None, 7, value);
+    let points = lanes(&created)[0]["automation"]["points"].clone();
+    app.key("Escape");
+    let automated = app.inspect();
+    assert_eq!(automated["native_editor"]["automation_state"], "Automated");
+    let overridden = common::edit_plugin_parameter_value(&mut app, &automated, "23.4567");
+    assert_eq!(
+        overridden["native_editor"]["automation_state"],
+        "Overridden"
+    );
+    assert!(visible(&overridden, "Overridden"));
+    let override_value = lanes(&overridden)[0]["automation"]["override_value"]
+        .as_f64()
+        .unwrap();
+    assert!((override_value - 0.234567).abs() < 1e-6);
+    assert_eq!(lanes(&overridden)[0]["automation"]["points"], points);
+    let path = app.directory.path().join("precise-knob.rill");
+    app.command(json!({"command":"save","path":path}));
+    let resumed = app.click("Resume automation");
+    assert!(lanes(&resumed)[0]["automation"]["override_value"].is_null());
+    assert!((resumed["native_editor"]["selected_value"].as_f64().unwrap() - value).abs() < 1e-6);
+    assert_eq!(lanes(&resumed)[0]["automation"]["points"], points);
+
+    let mut app = app.restart();
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert!(
+        (lanes(&reopened)[0]["automation"]["override_value"]
+            .as_f64()
+            .unwrap()
+            - override_value)
+            .abs()
+            < 1e-8
+    );
+    app.click("Neon phrase");
+    menu(&mut app, "Instrument");
+    app.click("Automate…");
+    ready(&mut app);
+    let recalled = query(&mut app, "Filter Cutoff");
+    assert_eq!(recalled["native_editor"]["automation_state"], "Overridden");
+    assert!(
+        (recalled["native_editor"]["parameter_control"]["value"]
+            .as_f64()
+            .unwrap()
+            - 23.4567)
+            .abs()
+            < 1e-4
+    );
+    assert_eq!(lanes(&recalled)[0]["automation"]["points"], points);
+    app.quit();
+}
+
+#[test]
+fn stepped_knob_quantizes_edits_only_and_read_only_parameters_cannot_be_edited() {
+    let fixture = Fixture::new();
+    let (mut app, _, _) = fixture.app();
+    menu(&mut app, "Instrument");
+    app.click("Automate…");
+    ready(&mut app);
+    let initial = query(&mut app, "Oscillator Mode");
+    assert_eq!(initial["native_editor"]["selected_steps"], 4);
+    assert!((initial["native_editor"]["selected_value"].as_f64().unwrap() - 0.37).abs() < 1e-8);
+    assert!(visible(&initial, "5 discrete values"));
+    for _ in 0..3 {
+        let painted = app.inspect();
+        assert_eq!(painted["project"], initial["project"]);
+        assert_eq!(painted["history"], initial["history"]);
+        assert_eq!(painted["native_editor"]["parameter_control"]["value"], 37.0);
+    }
+    let changed = common::edit_plugin_parameter_value(&mut app, &initial, "38");
+    assert_eq!(changed["native_editor"]["selected_value"], 0.5);
+    assert_eq!(changed["native_editor"]["parameter_control"]["value"], 50.0);
+    assert!(visible(&changed, "50.00 %"));
+    let history = changed["history"].clone();
+    let project = changed["project"].clone();
+    let read_only = query(&mut app, "Output Meter");
+    assert!(read_only["native_editor"]["selected"].is_null());
+    assert!(read_only["native_editor"]["parameter_control"].is_null());
+    assert!(!visible(&read_only, "Normalized value"));
+    assert_eq!(read_only["project"], project);
+    assert_eq!(read_only["history"], history);
+    app.quit();
 }

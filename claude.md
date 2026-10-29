@@ -32,7 +32,8 @@ does not satisfy them. Follow [AGENTS.md](AGENTS.md) as well.
    they do not edit songs. The internal executor may be in process; MCP is an
    interchangeable transport, not a reason to duplicate the tool surface.
 6. **Assistant UI.** Present prompts, musical scope, progress, cancellation,
-   results, and undo in the DAW. Keep provider logic and mutations out of widgets.
+   results, and undo in the DAW. Display the pinned authority and browse only its applicable tools.
+   Keep provider logic and mutations out of widgets.
 
 The dependency direction is UI/agent/MCP → tools → session → core. Provider
 adapters, the AI UI, and MCP handlers must not mutate `Project` directly. Existing
@@ -75,7 +76,9 @@ application tools expose explicit document/media I/O and redacted Setup access
 through the opt-in `--mcp-application` profile; ordinary `--mcp` and the built-in
 assistant retain the current-song profile. The built-in
 assistant is a restricted client of that catalog: it may inspect, edit, and
-audition **only the current song**. It may not create/open/replace a document,
+audition **only the current song**, with contextual editor entry points restricted further
+to their pinned clip, instrument, effect, chain, channel, routing or automation
+lane. It may not create/open/replace a document,
 load/save projects, export to arbitrary files, change application settings, read
 credentials, or execute arbitrary code.
 
@@ -90,6 +93,29 @@ Selection reads and explicit musical ranges should support the same scope a
 person can choose. Pure zoom, scroll, window placement, theme, and visual aids
 need no musical tool when their only effect is presentation. Do not broaden that
 exception to editing, audition, transport, recording, or parameter controls.
+
+## Contextual assistant authority
+
+Global AI in the menu bar opens current-song authority. An editor's **AI for
+this context** pins stable IDs and states them in the visible Scope line and
+outgoing prompt/context. Selection changes never retarget a local run. Each tool
+has canonical applicable-context metadata; discovery, provider schemas and the
+browsable Tools page use the same filtered catalog.
+
+Validate both arguments and the final candidate project. Candidate validation
+must run after linked-source updates and automatic automation-override capture,
+before history, project or engine publication. Reject the entire candidate if
+any change leaves the scope. Background jobs retain the originating scope and
+session/revision through completion. A deleted target fails closed. Do not apply
+an open assistant window's scope to independent MCP calls or ordinary GUI edits.
+
+Local catalogs omit global transport, recording, history, selection retargeting,
+track creation and cross-clip structural operations. Audio clip scope supports
+in-place edits and normalization, not splitting, stripping, joining or take
+rearrangement. Existing-instrument scope does not authorize replacement. MIDI
+linked-source edits that affect another clip require making the local clip
+independent first and rereading its fresh note IDs. Local Undo is available
+through the ordinary Edit menu, not an unrestricted assistant history tool.
 
 ## Provider credentials and listening
 

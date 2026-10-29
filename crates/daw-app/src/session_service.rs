@@ -12,8 +12,7 @@ fn failure(error: impl std::fmt::Display) -> ToolError {
 
 impl DawApp {
     pub(crate) fn invalidate_assistant_session(&mut self) {
-        self.assistant.stop();
-        self.assistant.messages.clear();
+        self.assistant.reset_song();
         self.assistant.known_parameters.clear();
         self.assistant.cancel_all_tools();
         self.tool_joins.cancel();
@@ -60,6 +59,9 @@ impl DawApp {
             &mut candidate,
             explicit_lanes,
         );
+        if let Some(scope) = &self.assistant.executing_scope {
+            scope.validate_candidate(&self.project, &candidate)?;
+        }
         if candidate == self.project {
             return Ok(false);
         }
@@ -191,6 +193,16 @@ impl SongToolHost for DawApp {
 
 impl ToolHost for DawApp {
     fn call_tool(&mut self, name: &str, arguments: Value) -> Result<Value, ToolError> {
+        if let Some(scope) = self.assistant.executing_scope {
+            scope.validate_call(&self.project, name, &arguments)?;
+            if !scope.is_global() && matches!(name, "get_song_context" | "get_track") {
+                self.tool_ready()?;
+                let mut context = scope.read_context(&self.project, name, &arguments)?;
+                context["session_id"] = json!(self.song_session.id);
+                context["revision"] = json!(self.song_session.revision);
+                return Ok(context);
+            }
+        }
         // Flush before the registry checks optimistic revisions. Otherwise a
         // pending native gesture could commit between the check and mutation.
         if let Some(result) = self.recording_tool(name, arguments.clone()) {

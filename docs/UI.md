@@ -202,13 +202,14 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Native pane middle-drag navigation | `scroll_area`, `scroll_area_is_panning` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
-| Assistant transcript and prompt | `assistant`, `AssistantOptions`, `AssistantMessage`, `AssistantResponse` |
+| Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button` |
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
 | Ghost clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Arrangement clip surfaces and previews | `clip_surface`, `ClipSurfaceLayout`, `clip_note_preview` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
+| Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
@@ -247,12 +248,49 @@ precision. Secondary and middle clicks do not change parameters.
 Use `.compact()` for canvas-owned rows, `.endpoint_labels(...)` for units such
 as L/R, and `.current_label(...)` for a concise readout inside the caption row.
 The whole rail and caption remain clickable. `.show_value(false)` is for
-controls with a current caption or separate exact-value field. Only suppress
+controls with a current caption and a separate field or exact-value context editor. Only suppress
 the built-in endpoints with `.scale_labels(false)` when providing a calibrated
 external scale, as Mixer does for dB faders. `slider_scale_geometry` exposes the
 same native rail and handle positions for such scales and diagnostics.
 
-`assistant(ui, prompt, options)` provides a bounded, selectable conversation,
+`value_entry(ui, id, current, range, unit)` provides a deliberate exact editor
+inside a parameter menu. It displays the current value and range, selects the
+initial text, and returns a changed value only on **Apply value**. Invalid or
+non-finite text keeps the editor open; **Cancel**, Escape, and outside dismissal
+leave the value untouched. Use `automatable_parameter_value_context` for channel
+controls so exact entry and Create/Edit/Override/Resume automation share one
+menu. Such menus close only on outside clicks or explicit actions, allowing
+normal text selection and correction. `value_entry_rect` exposes the active
+field for app interaction diagnostics.
+
+Endpoint formatting retains small ranges instead of rounding both ends to zero.
+Stored values outside an editing range are preserved, visibly marked as outside
+the range, and reported exactly in the tooltip and context editor. A slider's
+automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
+and a muted dash for Bypassed, without covering the center index or captions.
+
+`knob` / `Knob::new` provides a calibrated 270-degree rotary control with
+minimum/maximum captions, a visible value index and an always-present shared
+numeric editor. Dragging is relative: up or right increases, down or left
+decreases, and pressing a different part of the dial never jumps the value.
+Shift makes a drag ten times finer; the numeric field provides the same precision
+without a modifier. Click the number to type and click elsewhere to commit.
+`step_by` quantizes intentional edits, while `.clamping(SliderClamping::Edits)`
+(the default) preserves existing values when rendering. Values outside the
+editing range remain readable and show **Outside range**. The arc uses halves,
+fifths or tenths according to diameter, always retaining its midpoint.
+
+Use `.text`, `.suffix`, `.endpoint_labels`, and decimal builders to state the
+parameter's actual units. `.automation(Some(state))` colors the arc and displays
+**Automated**, **Overridden**, or **Bypassed**. A caller that already displays the
+same state beside its automation actions can use `.show_automation_label(false)`
+to avoid duplicate wording while keeping the colored arc. `knob_geometry` exposes the actual
+dial, numeric input, arc endpoints and value index for host diagnostics. The
+component caches its arc directions and paints bounded geometry without timers.
+Native plug-in values are normalized; a 0–100% knob must be labelled as such
+unless the host supplies an actual physical-unit conversion.
+
+`assistant(ui, prompt, state, options)` provides a bounded, selectable conversation,
 captured-context label, optional progress, multiline **AI prompt**, and fixed
 **Send**, **Stop**, and **Undo** controls. Enter adds a newline; Ctrl/Cmd+Enter
 submits only while the prompt owns focus. The application owns execution,
@@ -427,10 +465,13 @@ release frame. It retains native wheel and scrollbar behavior. This helper does
 not reserve Alt-click or block arbitrary descendant actions; musical canvases
 continue to use `TimelinePane` for their full navigation model.
 
-Mixer and expanded track headers reuse `channel_gain_number` for precise volume
+Mixer, Channel Properties, and expanded track headers reuse `channel_gain_number` for precise volume
 entry. Double-click the dB value to type, or drag in 0.1 dB steps. The editing
 range is −60 dB (silence) through the channel maximum; quieter stored positive
-gains remain intact until edited. Master peak is a readout rather than a gain
+gains remain intact until edited. Readouts retain up to six decimal places as
+needed. Compact headers and Mixer pan expose exact entry through their context
+menus; pan entry uses −100..100 percent consistently, with zero at center.
+Master peak is a readout rather than a gain
 field.
 
 Mixer follows signal order from top to bottom: source/channel settings, Effects
@@ -857,3 +898,47 @@ Both MIDI and audio track headers reuse `record_arm_at`. Its direct child UI pre
 `recording_timing_controls` is a shared component composed from the form, choice, toggle and slider components. **Pre-count** is a choice among **No pre-count**, **1 bar** and **2 bars**, disabled during capture. **Click** is a distinct toggle, also available on the transport, with the shared `Metronome` icon. **Click level** remains adjustable during playback. The count shows remaining beats while preserving the intended cursor position. Narrow transport layouts keep loop-range details in the existing Range popup/tooltip.
 
 MIDI audition pauses during pre-count so the prepared timeline can start exactly at the cue; dry audio monitoring remains available. Pre-count starts only from stopped transport; recording over running backing audio starts immediately. Click and level can change without replacing plugin processes. Recorded audio and exported WAVs exclude the click. MIDI/audio publication, error recovery, Save/Open/New/Quit and Undo use the common recording lifecycle.
+
+### Assistant workspace
+
+`assistant(ui, prompt, state, options)` keeps Conversation, Examples, Tools, and Tips in
+one bounded body above a fixed prompt and Send/Stop/Undo row. Hosts supply
+provider readiness, a pinned scope, current musical context, example categories,
+available tools, and tips; the
+component does not depend on a provider, project, or tool registry. Tool transcript
+rows are labeled **Activity**, since starting a tool is not proof that an edit
+succeeded. Context and long status rows retain their full bounded text on hover.
+
+`AssistantOptions::scope` appears persistently as **Scope · …**, separate from
+the changing musical selection. Global scope is explicitly labeled as the entire
+song. Editor toolbars reuse `contextual_ai_button(ui, scope)`, labeled **AI for
+this context**, with the target on hover. The host captures the target identity
+when opening the assistant, states that boundary in the provider prompt, and
+enforces it for every tool call.
+
+The **Tools** page searches only the host-supplied `AssistantTool` catalog. Each
+entry supplies a stable machine `name`, readable `title`, concise `description`,
+available `contexts`, and an editable suggested `prompt`. Selecting a title shows
+its details; **Use tool** appends its complete prompt to the draft, focuses the
+composer, and returns to Conversation without sending. **Clear** resets the
+search. The host filters this catalog to the pinned scope; hiding a tool is not
+an authorization check. Tool selection and search live in `AssistantState`.
+
+An example title inserts its complete prompt at the end of the current draft,
+separated by a blank line, focuses the composer, and returns to Conversation. It
+never sends or overwrites a draft. An example that cannot fit the 16,384-character
+limit is disabled. Browsing examples and tips remains available before setup.
+**AI settings** requests host navigation; **More → Edit last prompt** requests
+recovery into an empty draft, and **More → New chat** requests conversation reset
+while preserving the song and unsent draft. Settings and conversation actions
+are disabled during a run; cancellation remains available through **Stop**.
+
+The host owns `AssistantState`, conversation reset/reuse, and all execution.
+`AssistantResponse::inserted_example` and `inserted_tool` identify draft insertions without
+turning it into a tool call. Transcripts lay out at most 64 recent messages,
+message bodies are capped at 8,192 characters, and guidance catalogs are bounded
+to 64 items. Tool catalogs are bounded to 128 items, searches to 256 characters,
+and selected tool descriptions to 4,096 characters. Browsing pages and short
+popups use a one-line composer that scrolls the complete draft; Conversation
+uses a taller composer when space allows. Scope, browsing actions, and the
+Send/Stop/Undo row remain reachable at compact window sizes.

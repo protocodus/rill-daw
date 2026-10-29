@@ -117,13 +117,13 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
             );
             let undone = app.command(json!({"command":"key", "key":"Z", "cmd":true}));
             assert_eq!(undone["project"], original);
-            let pan_value = rect(&undone, "0.00");
+            let pan_value = rect(&undone, "0.0%");
             let x = (pan_value["min"][0].as_f64().unwrap() + pan_value["max"][0].as_f64().unwrap())
                 / 2.0;
             let y = center_y(pan_value);
             app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}));
             app.command(json!({"command":"key", "key":"A", "cmd":true}));
-            app.command(json!({"command":"text", "text":"0.45"}));
+            app.command(json!({"command":"text", "text":"45"}));
             let panned = app.key("Enter");
             assert!((panned["project"]["tracks"][0]["pan"].as_f64().unwrap() - 0.45).abs() < 1e-6);
             assert_eq!(

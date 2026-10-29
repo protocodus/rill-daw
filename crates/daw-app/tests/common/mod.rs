@@ -359,3 +359,16 @@ pub fn refresh_library(app: &mut Harness) -> Value {
     app.click("Refresh");
     wait_until(app, |state| state["plugin_scanning"] == false)
 }
+
+/// Edit the real plug-in knob's visible number, with mouse focus/commit and no
+/// select-all or Enter shortcut. The shared Number selects the complete value.
+pub fn edit_plugin_parameter_value(app: &mut Harness, state: &Value, percent: &str) -> Value {
+    let rect = &state["native_editor"]["parameter_control"]["number"];
+    let x = (rect["min"][0].as_f64().expect("plug-in numeric field")
+        + rect["max"][0].as_f64().unwrap())
+        * 0.5;
+    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
+    app.command(json!({"command":"text","text":percent}));
+    app.click("Normalized value")
+}

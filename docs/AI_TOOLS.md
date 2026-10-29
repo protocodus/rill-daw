@@ -45,7 +45,7 @@ execution must derive from the canonical registry rather than separate lists.
 | --- | --- |
 | `daw-core::commands` | `SongEdit`, `EditBatch`, and atomic `EditBatch::apply`; `SongSession` identity/revision; no filesystem paths or opaque plugin state in commands |
 | `daw-app::session_service` | The active application's command/commit bridge, normal history and engine synchronization, session fencing, and host-specific tools |
-| `daw-tools` | `ToolSpec`, `ToolProfile`, full/current-song/application catalogs, `ToolHost::tool_specs`/`call_tool`, `SongToolHost`, and canonical `dispatch_song_tool` |
+| `daw-tools` | `ToolSpec`, `ToolProfile`, `ToolScope`, full/current-song/application and context-filtered catalogs, `ToolHost::tool_specs`/`call_tool`, `SongToolHost`, and canonical `dispatch_song_tool` |
 | `daw-mcp` | `McpServer::handle_request` and stdio `serve`, delegating tool calls to `ToolHost` |
 | `daw-ai` | Background `AgentRun`, provider adapters, bounded tool loop, encrypted credential envelope; sends `ToolCall` events to the app rather than owning a project |
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
@@ -83,6 +83,29 @@ Configure the provider, model, and user API key in **Window → Setup → AI**, 
 choose **Apply**. Open the menu bar’s **AI** button or **Window → Assistant** to
 use the embedded panel. **Send** or Ctrl/Cmd+Enter starts a prompt, and **Stop**
 cancels further execution; the menu bar also offers **Stop AI** during a run.
+The assistant's **AI settings** button opens the provider page directly.
+**Examples** offers editable musical briefs in Compose, Develop, Mix, and Learn,
+filtered for the current scope; **Tips** gives scope, iteration, instrument, and
+provider guidance. **Tools** searches the same permitted catalog supplied to the
+model. Select a tool to inspect its description and applicable contexts; **Use
+tool** adds a scoped draft without executing it.
+Selecting an example appends to the draft and never executes a tool. The draft
+and Send/Stop controls remain available while browsing. Undo is enabled only in
+global AI; use **Edit → Undo** to reverse local edits through normal song history. See
+[AI examples and workflows](AI_EXAMPLES.md), and the static
+[guidance catalog](../crates/daw-ai/src/guidance.rs) used by the application.
+
+Recent user and assistant messages are retained separately from activity rows,
+bounded, and passed as typed conversation turns before the fresh song context.
+A long tool run therefore cannot evict the musical brief merely by producing
+many activity labels. Activity rows describe attempted work; only confirmed tool
+results justify a completed-edit claim. **More → Edit last prompt** restores the
+last sent request to an empty draft for review, without automatically retrying
+or repeating already committed edits. **More → New chat** clears conversation
+context while retaining the song and unsent draft. Switching songs clears both
+conversation and draft, and cancels outstanding work through the existing
+session boundary.
+
 Launch `rill --mcp` to expose the running
 app's current song over newline-delimited MCP stdio. Keep protocol output on
 stdout and diagnostics on stderr; this is the same live session, not a second
@@ -90,8 +113,8 @@ project editor.
 
 Launch `rill --mcp-application` only when intentionally giving an external MCP
 client the additional project I/O and configuration tools. This broader profile
-is separate from the embedded assistant, which always receives the current-song
-catalog. `document_action` supports New, Open, Save/Save as, media Import, WAV
+is separate from the embedded assistant, which receives the current-song
+catalog or a narrower editor-specific subset. `document_action` supports New, Open, Save/Save as, media Import, WAV
 Export, and recovery with explicit paths instead of file-picker interaction.
 Replacing unsaved work requires `discard_unsaved:true`; native-editor snapshots
 are still acknowledged, and newly revealed changes cause rejection rather than
@@ -108,6 +131,48 @@ each onset, bridging missing lower voices. `note_ids` restricts either operation
 omitting them transforms every note in the source. `operation:"quantize"` uses
 `grid`, `strength`, `swing`, and `ends`. All commit through the same atomic
 session boundary as their GUI actions, with normal history and revision fences.
+
+## Contextual AI
+
+The menu-bar **AI** button and **Window → Assistant** always open global AI for
+the current song. **AI for this context** in an editor opens AI pinned to that
+editor's stable object IDs. The persistent **Scope** line identifies the target;
+the host also states the authority and IDs in the outgoing prompt and context.
+Changing the song selection does not retarget a local conversation. Opening AI
+for a different scope stops the old run and starts a fresh conversation; a
+missing target fails closed instead of falling back to global authority.
+
+| Context | Permitted local work |
+| --- | --- |
+| Piano roll / MIDI clip / clip composition | Read the pinned clip, query music theory, transform notes and edit in-place clip properties. |
+| Audio clip | Read and analyze the pinned region; edit its in-place properties, gain and fades; normalize it using local analysis. |
+| Instrument | Discover and edit parameters of the opened instrument instance and its matching automation. |
+| Effect | Discover and edit the pinned insert's parameters, bypass and matching automation. |
+| Effect chain | Add, remove, reorder and adjust inserts on the pinned channel and their matching automation. |
+| Channel | Adjust its mix controls and matching automation. |
+| Routing | Adjust the pinned channel's output and sends. |
+| Automation lane | Edit its points, interpolation, slopes and override; retain its target. |
+
+Every tool declares its applicable contexts. Canonical metadata filters the
+browser and provider schemas, including the allowed `apply_edits` operations.
+The executor checks tool arguments and the final candidate project before
+committing. This second check runs after linked-source synchronization and
+manual automation-override capture, so indirect changes outside the scope are
+rejected atomically without adding an undo entry. Background jobs retain their
+original scope and session/revision checks through publication. MCP requests do
+not inherit the scope of whichever assistant window happens to be open.
+
+Local catalogs exclude global selection changes, transport, recording, history,
+track creation, and cross-clip structural operations. In particular, local audio
+processing supports normalization; transient splitting, silence stripping,
+joining and take rearrangement remain global operations. Local instrument AI
+works with the assigned instance rather than replacing it. Editing a linked MIDI
+source that would change another clip is rejected; make the target clip
+independent first, then read its newly assigned note IDs before editing.
+
+These restrictions are execution boundaries, not merely advice to the model.
+Prompts that need other objects should be sent from global AI or from the editor
+for the intended object. Normal mouse editing and **Edit → Undo** remain available.
 
 ## Native composition module
 
@@ -153,8 +218,9 @@ in the hardware audio callback.
 tools for project I/O and Setup. `ToolProfile::CurrentSong` exposes only the
 song tools and is the default. MCP discovery uses the host's selected catalog
 and rejects calls outside it; hidden names cannot be invoked directly. The
-embedded agent always receives `song_tool_specs`, even when the native process
-also serves an explicitly requested application-profile MCP connection.
+embedded agent receives `ToolScope::tool_specs`: the whole current-song catalog
+for global AI, or a narrower contextual catalog. An explicitly requested
+application-profile MCP connection does not broaden assistant authority.
 
 The **embedded assistant profile** can inspect, edit, and audition the current
 song. It cannot load/save/open/replace projects, export to arbitrary paths,

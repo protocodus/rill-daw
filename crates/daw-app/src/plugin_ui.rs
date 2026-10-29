@@ -103,6 +103,7 @@ pub(crate) struct InstrumentUi {
     metadata_job: Option<mpsc::Receiver<anyhow::Result<Vec<ParameterInfo>>>>,
     parameters: Vec<ParameterInfo>,
     browser: daw_ui::ParameterBrowserState,
+    parameter_control: Option<daw_ui::KnobGeometry>,
     last_touched: Option<u32>,
     browse_target: Option<EditorTarget>,
     parameters_open: bool,
@@ -285,6 +286,11 @@ impl DawApp {
     }
 
     pub(crate) fn instrument_diagnostics(&self) -> serde_json::Value {
+        let rect = |rect: egui::Rect| {
+            serde_json::json!({
+                "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]
+            })
+        };
         let selected = self.instrument_ui.browser.selected.and_then(|id| {
             self.instrument_ui
                 .parameters
@@ -308,6 +314,15 @@ impl DawApp {
             "parameter_count": self.instrument_ui.parameters.len(),
             "parameters_open": self.instrument_ui.parameters_open,
             "selected": self.instrument_ui.browser.selected,
+            "selected_steps": selected.map(|parameter| parameter.steps),
+            "parameter_control": self.instrument_ui.parameter_control.as_ref().map(|geometry| serde_json::json!({
+                "dial":rect(geometry.dial),"number":rect(geometry.number),
+                "center":[geometry.center.x,geometry.center.y],
+                "minimum":[geometry.minimum.x,geometry.minimum.y],
+                "maximum":[geometry.maximum.x,geometry.maximum.y],
+                "index":[geometry.index.x,geometry.index.y],
+                "range":geometry.range,"value":geometry.value,"divisions":geometry.divisions,
+            })),
             "parameter_query": self.instrument_ui.browser.query,
             "last_touched": self.instrument_ui.last_touched,
             "error": self.instrument_ui.error,
@@ -595,6 +610,8 @@ impl DawApp {
                 last_touched: self.instrument_ui.last_touched == Some(p.id),
             })
             .collect();
+        let metadata = &self.instrument_ui.parameters;
+        let mut control_geometry = None;
         let browser = daw_ui::parameter_browser(
             ui,
             "plugin_parameter_browser",
@@ -607,9 +624,17 @@ impl DawApp {
                     daw_ui::text::note(ui, "Search by name or unit.");
                     return;
                 };
+                let steps = metadata
+                    .iter()
+                    .find(|item| item.id == parameter.id)
+                    .map_or(0, |item| item.steps.max(0));
                 daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, parameter.name, 3);
                 if !parameter.unit.is_empty() {
-                    daw_ui::text::note(ui, format!("Unit · {}", parameter.unit));
+                    daw_ui::text::note(ui, format!("Plug-in unit · {}", parameter.unit))
+                        .on_hover_text("This control shows normalized percentages. Use the plug-in editor for physical units.");
+                }
+                if steps > 0 {
+                    daw_ui::text::note(ui, format!("{} discrete values", i64::from(steps) + 1));
                 }
                 ui.add_space(daw_ui::tokens::SPACE_MD);
                 if daw_ui::primary_button(
@@ -652,19 +677,57 @@ impl DawApp {
                     });
                     ui.add_space(daw_ui::tokens::SPACE_SM);
                 }
-                let mut value = parameter.value;
-                ui.spacing_mut().slider_width = (ui.available_width() - 90.0).max(70.0);
-                let response = ui.add_enabled(
-                    editing_enabled,
-                    daw_ui::slider(&mut value, 0.0..=1.0).text("Value"),
-                );
-                if let Some((_, state, _)) = automation_states.get(&parameter.id) {
-                    daw_ui::paint_automation_control(ui, &response, *state);
+                // This host metadata exposes normalized values, not the VST
+                // controller's physical-unit conversion. Keep percentages
+                // explicit instead of presenting, for example, 0.5 as Hz.
+                let mut percent = parameter.value * 100.0;
+                let mut knob = daw_ui::knob(&mut percent, 0.0..=100.0)
+                    .text("Normalized value")
+                    .diameter(96.0)
+                    .suffix(" %")
+                    .min_decimals(2)
+                    .max_decimals(6)
+                    .show_automation_label(false)
+                    .automation(
+                        automation_states
+                            .get(&parameter.id)
+                            .map(|(_, state, _)| *state),
+                    );
+                if steps > 0 {
+                    knob = knob.step_by(100.0 / f64::from(steps));
                 }
+                let response = ui.add_enabled(editing_enabled, knob);
+                let mut entered = None;
+                egui::Popup::context_menu(&response)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                    .show(|ui| {
+                        ui.add_enabled_ui(editing_enabled, |ui| {
+                            entered = daw_ui::value_entry(
+                                ui,
+                                (target.track, target.effect, parameter.id),
+                                percent,
+                                0.0..=100.0,
+                                "%",
+                            );
+                        });
+                    });
+                daw_ui::hover_text(response.clone(), "Right-click for exact value entry");
+                control_geometry = daw_ui::knob_geometry(ui.ctx(), response.id);
                 ui.ctx().data_mut(|data| {
-                    data.insert_temp(egui::Id::new("instrument_parameter_rect"), response.rect)
+                    data.insert_temp(
+                        egui::Id::new("instrument_parameter_rect"),
+                        control_geometry
+                            .as_ref()
+                            .map_or(response.rect, |geometry| geometry.dial),
+                    )
                 });
-                if response.changed() {
+                if response.changed() || entered.is_some() {
+                    let value = (entered.unwrap_or(percent) / 100.0).clamp(0.0, 1.0);
+                    let value = if steps > 0 {
+                        (value * f64::from(steps)).round() / f64::from(steps)
+                    } else {
+                        value
+                    };
                     actions.update = Some((parameter.id, value));
                 }
                 if parameter.last_touched {
@@ -673,6 +736,7 @@ impl DawApp {
                 daw_ui::text::note(ui, "Enter or double-click to automate");
             },
         );
+        self.instrument_ui.parameter_control = control_geometry;
         if let Some(id) = browser.activated
             && let Some(parameter) = items.iter().find(|p| p.id == id)
         {
@@ -765,6 +829,20 @@ impl DawApp {
                     },
                 ) {
                     return;
+                }
+                if !matches!(instrument, Instrument::None) {
+                    let scope = match target.effect {
+                        Some(effect_id) => daw_tools::ToolScope::Effect {
+                            track_id,
+                            effect_id,
+                        },
+                        None => daw_tools::ToolScope::Instrument { track_id },
+                    };
+                    if daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
+                        self.open_context_assistant(scope);
+                        return;
+                    }
+                    ui.add_space(daw_ui::tokens::SPACE_SM);
                 }
                 match &instrument {
                     Instrument::None => {

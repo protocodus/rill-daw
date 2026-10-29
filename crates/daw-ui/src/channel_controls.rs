@@ -25,18 +25,18 @@ pub fn channel_gain_label(gain: f32) -> String {
     if gain <= 0.0 {
         "−∞ dB".to_owned()
     } else {
-        format!("{:.0} dB", channel_gain_to_db(gain))
+        format!("{:.2} dB", channel_gain_to_db(gain))
     }
 }
 
 pub fn channel_pan_label(pan: f32) -> String {
     let percent = pan * 100.0;
-    if percent.abs() < 0.5 {
+    if percent == 0.0 {
         "C".to_owned()
-    } else if percent < 0.0 {
-        format!("L{:.0}", percent.abs())
     } else {
-        format!("R{percent:.0}")
+        let amount = format!("{:.3}", percent.abs());
+        let amount = amount.trim_end_matches('0').trim_end_matches('.');
+        format!("{}{amount}", if percent < 0.0 { "L" } else { "R" })
     }
 }
 
@@ -47,7 +47,8 @@ pub fn channel_gain_number(db: &mut f32) -> crate::Number<'_> {
         .range(-60.0..=20.0 * 1.5_f32.log10())
         .clamp_existing_to_range(false)
         .speed(0.1)
-        .fixed_decimals(1)
+        .min_decimals(1)
+        .max_decimals(6)
         .suffix(" dB")
 }
 
@@ -143,9 +144,10 @@ pub fn channel_controls_at(
     if ui.is_enabled() && gain_response.changed() {
         *gain = channel_gain_from_db(db);
     }
-    gain_response = gain_response.on_hover_text(format!(
-        "Channel volume · {db:.1} dB\nDrag the slider or double-click the number to type"
-    ));
+    gain_response = crate::hover_text(
+        gain_response,
+        format!("Channel volume · {db} dB\nRight-click for exact value entry and automation"),
+    );
     let mut pan_value = *pan * 100.0;
     let pan_caption = channel_pan_label(*pan);
     let mut pan_slider = crate::slider(&mut pan_value, -100.0..=100.0)
@@ -167,16 +169,20 @@ pub fn channel_controls_at(
                 .range(-100.0..=100.0)
                 .clamp_existing_to_range(false)
                 .speed(1.0)
-                .fixed_decimals(0)
+                .min_decimals(0)
+                .max_decimals(4)
                 .prefix("Pan "),
         ));
     }
     if ui.is_enabled() && pan_response.changed() {
         *pan = pan_value / 100.0;
     }
-    pan_response = pan_response.on_hover_text(format!(
-        "Channel pan · {pan_value:.0}\n−100 left · 0 center · 100 right"
-    ));
+    pan_response = crate::hover_text(
+        pan_response,
+        format!(
+            "Channel pan · {pan_value}%\n−100 left · 0 center · 100 right\nRight-click for exact value entry and automation"
+        ),
+    );
     let meter_rect =
         Rect::from_min_max(egui::pos2(rect.right() - meter_width, rect.top()), rect.max);
     let mut child = ui.new_child(

@@ -6,6 +6,21 @@ use daw_core::*;
 use eframe::egui::{self, Vec2};
 
 impl DawApp {
+    pub(crate) fn selected_clip_ai_scope(&self) -> Option<daw_tools::ToolScope> {
+        let track_id = self.selected_track?;
+        let clip = self.selected()?;
+        Some(match clip.content {
+            ClipContent::Midi { .. } => daw_tools::ToolScope::MidiClip {
+                track_id,
+                clip_id: clip.id,
+            },
+            ClipContent::Audio { .. } => daw_tools::ToolScope::AudioClip {
+                track_id,
+                clip_id: clip.id,
+            },
+        })
+    }
+
     pub fn editor(&mut self, ui: &mut egui::Ui) {
         self.audio_clip_selection_navigation(ui);
         let Some(clip) = self.selected() else {
@@ -352,11 +367,14 @@ impl DawApp {
                             let gain = ui.add_sized(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                                 daw_ui::channel_gain_number(&mut db))
                                 .on_hover_text("Channel volume · drag or double-click to type");
-                            if let Some(action) = daw_ui::automatable_parameter_context(ui, &gain,
-                                daw_ui::AutomationControl::Gain { track: track.id }, gain_automation.map(|(lane, state, _)| (lane, state))) {
+                            let (action, exact) = daw_ui::automatable_parameter_value_context(ui, &gain,
+                                daw_ui::AutomationControl::Gain { track: track.id }, gain_automation.map(|(lane, state, _)| (lane, state)),
+                                f64::from(db), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB");
+                            if let Some(action) = action {
                                 automation_navigation = Some(action);
                             }
-                            if gain.changed() && !panning {
+                            if let Some(value) = exact { db = value as f32; }
+                            if (gain.changed() || exact.is_some()) && !panning {
                                 track.gain = daw_ui::channel_gain_from_db(db); changed = true;
                                 automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(track.gain)));
                             }
@@ -370,11 +388,14 @@ impl DawApp {
                                 let response = daw_ui::hover_text(response, "Channel volume");
                                 let scale = daw_ui::slider_scale_geometry(ui.ctx(), response.id);
                                 daw_ui::paint_mixer_fader_scale(ui, scale.as_ref().map_or(response.rect, |scale| scale.rail));
-                                if let Some(action) = daw_ui::automatable_parameter_context(ui, &response,
-                                    daw_ui::AutomationControl::Gain { track: track.id }, gain_automation.map(|(lane, state, _)| (lane, state))) {
+                                let (action, exact) = daw_ui::automatable_parameter_value_context(ui, &response,
+                                    daw_ui::AutomationControl::Gain { track: track.id }, gain_automation.map(|(lane, state, _)| (lane, state)),
+                                    f64::from(daw_ui::channel_gain_to_db(gain)), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB");
+                                if let Some(action) = action {
                                     automation_navigation = Some(action);
                                 }
-                                if response.changed() && !panning { track.gain = gain; changed = true;
+                                if let Some(value) = exact { gain = daw_ui::channel_gain_from_db(value as f32); }
+                                if (response.changed() || exact.is_some()) && !panning { track.gain = gain; changed = true;
                                     automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(gain))); }
                                 let peaks = self.engine.as_ref().map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
                                 daw_ui::stereo_meter(ui, peaks, Vec2::new(14.0, fader_height))
@@ -391,11 +412,14 @@ impl DawApp {
                             .clamping(egui::SliderClamping::Edits).show_value(false)
                             .endpoint_labels("L", "R").current_label(pan_label))
                             .on_hover_text("Stereo balance");
-                        if let Some(action) = daw_ui::automatable_parameter_context(ui, &pan_response,
-                            daw_ui::AutomationControl::Pan { track: track.id }, pan_automation.map(|(lane, state, _)| (lane, state))) {
+                        let (action, exact) = daw_ui::automatable_parameter_value_context(ui, &pan_response,
+                            daw_ui::AutomationControl::Pan { track: track.id }, pan_automation.map(|(lane, state, _)| (lane, state)),
+                            f64::from(pan) * 100.0, -100.0..=100.0, "%");
+                        if let Some(action) = action {
                             automation_navigation = Some(action);
                         }
-                        if pan_response.changed() && !panning { track.pan = pan; changed = true;
+                        if let Some(value) = exact { pan = (value / 100.0) as f32; }
+                        if (pan_response.changed() || exact.is_some()) && !panning { track.pan = pan; changed = true;
                             automation_overrides.push((pan_target, AutomationParameter::TrackPan.normalize(pan))); }
                         let mute_solo = ui.horizontal(|ui| {
                             changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();

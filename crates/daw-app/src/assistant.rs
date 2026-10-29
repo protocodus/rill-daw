@@ -1,8 +1,8 @@
 //! Integrated assistant and MCP bridge. All tool execution enters the same
 //! control-thread dispatcher; providers and stdio never borrow the live song.
-use crate::app::DawApp;
+use crate::app::{DawApp, PopupKind, SetupPage};
 use daw_ai::{AgentEvent, AgentRun, ScriptedTurn};
-use daw_tools::{SongToolHost, ToolError, ToolHost};
+use daw_tools::{SongToolHost, ToolError, ToolHost, ToolScope};
 use eframe::egui;
 use serde_json::{Value, json};
 use std::sync::{
@@ -28,6 +28,7 @@ struct PendingTool {
     owner_cancel: Arc<AtomicBool>,
     process: Option<String>,
     metadata_target: Option<(u64, Option<u64>)>,
+    scope: Option<ToolScope>,
 }
 
 #[derive(Default)]
@@ -36,6 +37,19 @@ pub(crate) struct Assistant {
     pub prompt: String,
     pub messages: Vec<daw_ui::AssistantMessage>,
     pub status: String,
+    ui: daw_ui::AssistantState,
+    conversation: Vec<daw_ai::ConversationMessage>,
+    last_prompt: String,
+    request_prompt: String,
+    scope: ToolScope,
+    run_scope: ToolScope,
+    scope_instrument: Option<daw_core::Instrument>,
+    run_instrument: Option<daw_core::Instrument>,
+    tools: Vec<daw_tools::ToolSpec>,
+    last_tool_error: Option<Value>,
+    /// Set only while an assistant call is executing on the control thread.
+    /// An open contextual window never restricts ordinary UI or MCP commands.
+    pub(crate) executing_scope: Option<ToolScope>,
     key_draft: String,
     pub(crate) known_parameters:
         std::collections::HashMap<(u64, Option<u64>), std::collections::HashMap<u32, bool>>,
@@ -55,6 +69,60 @@ impl Drop for Assistant {
 }
 
 impl Assistant {
+    /// Activity rows have their own bound and must not evict the musical brief.
+    fn remember(&mut self, message: daw_ai::ConversationMessage) {
+        use daw_ai::ConversationMessage;
+        let message = match message {
+            ConversationMessage::User(text) => ConversationMessage::User(
+                text.chars()
+                    .take(daw_ai::MAX_CONVERSATION_MESSAGE_CHARS)
+                    .collect(),
+            ),
+            ConversationMessage::Assistant(text) => ConversationMessage::Assistant(
+                text.chars()
+                    .take(daw_ai::MAX_CONVERSATION_MESSAGE_CHARS)
+                    .collect(),
+            ),
+        };
+        if match &message {
+            ConversationMessage::User(text) | ConversationMessage::Assistant(text) => {
+                text.trim().is_empty()
+            }
+        } {
+            return;
+        }
+        self.conversation.push(message);
+        let excess = self
+            .conversation
+            .len()
+            .saturating_sub(daw_ai::MAX_CONVERSATION_MESSAGES);
+        self.conversation.drain(..excess);
+    }
+
+    /// Starting a fresh conversation leaves an unsent draft available to edit.
+    pub(crate) fn new_chat(&mut self) {
+        self.messages.clear();
+        self.conversation.clear();
+        self.last_prompt.clear();
+        self.request_prompt.clear();
+        self.last_tool_error = None;
+        self.status.clear();
+        self.ui = Default::default();
+    }
+
+    pub(crate) fn reset_song(&mut self) {
+        self.stop();
+        self.new_chat();
+        self.prompt.clear();
+        self.next_script = None;
+        self.scope = ToolScope::Song;
+        self.run_scope = ToolScope::Song;
+        self.scope_instrument = None;
+        self.run_instrument = None;
+        self.tools.clear();
+        self.executing_scope = None;
+    }
+
     pub fn busy(&self) -> bool {
         self.run.is_some()
     }
@@ -120,12 +188,56 @@ impl Assistant {
 }
 
 impl DawApp {
+    pub(crate) fn open_global_assistant(&mut self) {
+        self.open_context_assistant(ToolScope::Song);
+    }
+
+    pub(crate) fn open_context_assistant(&mut self, scope: ToolScope) {
+        let instrument = self.assistant_instrument_identity(&scope);
+        if self.assistant.scope != scope || self.assistant.scope_instrument != instrument {
+            self.assistant.stop();
+            self.assistant.new_chat();
+            self.assistant.prompt.clear();
+            self.assistant.scope = scope;
+            self.assistant.scope_instrument = instrument;
+        }
+        self.assistant.tools = self.assistant.scope.tool_specs(&self.project);
+        if let Err(error) = self.assistant.scope.validate_target(&self.project) {
+            self.assistant.status = error.message;
+        }
+        self.open_popup(PopupKind::Assistant);
+    }
+
+    fn assistant_instrument_identity(&self, scope: &ToolScope) -> Option<daw_core::Instrument> {
+        match scope {
+            ToolScope::Instrument { track_id } => self
+                .project
+                .track(*track_id)
+                .map(|track| track.instrument.clone()),
+            _ => None,
+        }
+    }
+
     pub(crate) fn assistant_diagnostics(&self, ctx: &egui::Context) -> Value {
         let rect = |id: &str| {
             ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new(id)))
                 .map(|r| json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))
         };
         json!({"busy":self.assistant.busy(),"prompt":self.assistant.prompt,
+            "context":self.assistant_context(),
+            "scope":self.assistant.scope,
+            "scope_label":self.assistant.scope.label(&self.project),
+            "tools":self.assistant.tools.iter().map(|tool| &tool.name).collect::<Vec<_>>(),
+            "request_prompt":self.assistant.request_prompt,
+            "last_tool_error":self.assistant.last_tool_error,
+            "provider":self.settings.ai.provider.name(),
+            "configured":self.settings.ai.api_key.is_some(),
+            "page":format!("{:?}",self.assistant.ui.page),"category":self.assistant.ui.category,
+            "last_prompt":self.assistant.last_prompt,
+            "conversation":self.assistant.conversation.iter().map(|message| match message {
+                daw_ai::ConversationMessage::User(text) => json!({"role":"User","text":text}),
+                daw_ai::ConversationMessage::Assistant(text) => json!({"role":"Assistant","text":text}),
+            }).collect::<Vec<_>>(),
             "status":self.assistant.status,"messages":self.assistant.messages.iter().map(|m|
                 json!({"role":format!("{:?}",m.role),"text":m.text})).collect::<Vec<_>>(),
             "prompt_rect":rect("assistant_prompt_rect"),"key_rect":rect("ai_key_rect"),
@@ -140,22 +252,48 @@ impl DawApp {
             self.assistant.status = error.message;
             return;
         }
-        let context = match self.call_tool("get_song_context", json!({})) {
-            Ok(song) => json!({"song":song,
+        let scope = self.assistant.scope;
+        if self.assistant.scope_instrument != self.assistant_instrument_identity(&scope) {
+            self.assistant.status =
+                "The instrument changed. Open AI from the instrument again.".into();
+            return;
+        }
+        if let Err(error) = scope.validate_target(&self.project) {
+            self.assistant.status = error.message;
+            return;
+        }
+        let context = if scope.is_global() {
+            match self.call_tool("get_song_context", json!({})) {
+                Ok(song) => json!({"song":song,
                 "selection":{"track_id":self.selected_track,"clip_id":self.selected_clip,"note_ids":self.selected_notes,"cursor_beat":self.cursor,"clips":self.arranger_selection_ids(),"range":self.arranger_phrase_span()},
-                "tracks":self.call_tool("list_tracks",json!({"limit":100})).ok(),
-                "previous_messages":self.assistant.messages.iter().rev().take(8).collect::<Vec<_>>().into_iter().rev().map(|m|json!({"role":format!("{:?}",m.role),"text":m.text.chars().take(2000).collect::<String>()})).collect::<Vec<_>>()}),
-            Err(error) => {
-                self.assistant.status = error.message;
-                return;
+                "tracks":self.call_tool("list_tracks",json!({"limit":100})).ok()}),
+                Err(error) => {
+                    self.assistant.status = error.message;
+                    return;
+                }
             }
+        } else {
+            let mut context = scope.context(&self.project);
+            context["session_id"] = json!(self.song_session.id);
+            context["revision"] = json!(self.song_session.revision);
+            if matches!(scope, ToolScope::MidiClip { track_id, clip_id }
+                if self.selected_track == Some(track_id) && self.selected_clip == Some(clip_id))
+            {
+                context["selected_note_ids"] = json!(self.selected_notes);
+            }
+            context
         };
         let prompt = self.assistant.prompt.trim().to_owned();
+        self.assistant.tools = scope.tool_specs(&self.project);
         let request = daw_ai::AgentRequest {
             prompt: prompt.clone(),
-            context,
-            tools: daw_tools::song_tool_specs(),
+            context: json!({"scope":scope,"scope_label":scope.label(&self.project),
+                "authority":if scope.is_global() { "current song only" } else { "only this pinned context; all other objects must remain unchanged" },
+                "context":context}),
+            conversation: self.assistant.conversation.clone(),
+            tools: self.assistant.tools.clone(),
         };
+        let request_prompt = daw_ai::request_message(&request);
         let result = if let Some(script) = self.assistant.next_script.take() {
             daw_ai::spawn_scripted(request, script)
         } else {
@@ -179,7 +317,14 @@ impl DawApp {
         match result {
             Ok(run) => {
                 self.assistant.run_session = self.song_session.id;
+                self.assistant.run_scope = scope;
+                self.assistant.run_instrument = self.assistant.scope_instrument.clone();
+                self.assistant.request_prompt = request_prompt;
+                self.assistant.last_tool_error = None;
                 self.assistant.run = Some(run);
+                self.assistant.last_prompt.clone_from(&prompt);
+                self.assistant
+                    .remember(daw_ai::ConversationMessage::User(prompt.clone()));
                 self.assistant.messages.push(daw_ui::AssistantMessage {
                     role: daw_ui::AssistantRole::User,
                     text: prompt,
@@ -237,6 +382,17 @@ impl DawApp {
         reply: Sender<Result<Value, ToolError>>,
         cancel: Arc<AtomicBool>,
     ) {
+        self.dispatch_scoped_tool(name, arguments, reply, cancel, None);
+    }
+
+    fn dispatch_scoped_tool(
+        &mut self,
+        name: String,
+        arguments: Value,
+        reply: Sender<Result<Value, ToolError>>,
+        cancel: Arc<AtomicBool>,
+        scope: Option<ToolScope>,
+    ) {
         if serde_json::to_vec(&arguments)
             .map_or(true, |bytes| bytes.len() > daw_tools::MAX_ARGUMENT_BYTES)
         {
@@ -248,6 +404,13 @@ impl DawApp {
         }
         if cancel.load(Ordering::Acquire) {
             let _ = reply.send(Err(ToolError::new("cancelled", "Tool cancelled")));
+            return;
+        }
+        if let Some(scope) = &scope
+            && let Err(error) = scope.validate_call(&self.project, &name, &arguments)
+        {
+            self.record_assistant_tool_error(&error);
+            let _ = reply.send(Err(error));
             return;
         }
         if !daw_tools::song_tool_specs()
@@ -350,11 +513,27 @@ impl DawApp {
                 owner_cancel,
                 process,
                 metadata_target,
+                scope,
             });
         } else {
+            self.assistant.executing_scope = scope;
             let result = self.call_tool(&name, arguments);
+            self.assistant.executing_scope = None;
+            if scope.is_some()
+                && let Err(error) = &result
+            {
+                self.record_assistant_tool_error(error);
+            }
             let _ = reply.send(result);
         }
+    }
+
+    fn record_assistant_tool_error(&mut self, error: &ToolError) {
+        self.assistant.last_tool_error = Some(json!({"code":error.code,"message":error.message}));
+        self.assistant.messages.push(daw_ui::AssistantMessage {
+            role: daw_ui::AssistantRole::Tool,
+            text: format!("Not applied: {}", error.message),
+        });
     }
 
     pub(crate) fn poll_assistant(&mut self, ctx: &egui::Context) {
@@ -398,6 +577,12 @@ impl DawApp {
                 };
             if let Some(mut result) = result {
                 let job = self.assistant.pending.swap_remove(index);
+                if result.is_ok()
+                    && let Some(scope) = &job.scope
+                    && let Err(error) = scope.validate_target(&self.project)
+                {
+                    result = Err(error);
+                }
                 if let Ok(value) = &result {
                     if let Some(target) = job.metadata_target {
                         let known = self.assistant.known_parameters.entry(target).or_default();
@@ -415,6 +600,7 @@ impl DawApp {
                     }
                     if let Some(operation) = &job.process {
                         let edit = value["suggested_edits"][operation].clone();
+                        self.assistant.executing_scope = job.scope;
                         result = if edit.is_null() {
                             if operation == "strip_silence" {
                                 Err(ToolError::new(
@@ -432,6 +618,7 @@ impl DawApp {
                                 .and_then(|edit|self.apply_edits(daw_core::EditBatch{label:format!("Audio: {}",operation.replace('_'," ")),edits:vec![edit]}))
                                 .map(|commit|json!({"changed":commit.changed,"created":commit.created,"operation":operation,"session_id":self.song_session.id,"revision":self.song_session.revision}))
                         };
+                        self.assistant.executing_scope = None;
                     }
                 }
                 if let Ok(value) = &mut result {
@@ -439,6 +626,12 @@ impl DawApp {
                     value["revision"] = json!(self.song_session.revision);
                 }
                 job.cancel.store(true, Ordering::Release);
+                if job.scope.is_some()
+                    && !job.owner_cancel.load(Ordering::Acquire)
+                    && let Err(error) = &result
+                {
+                    self.record_assistant_tool_error(error);
+                }
                 let _ = job.reply.send(result);
             } else {
                 index += 1;
@@ -471,12 +664,29 @@ impl DawApp {
                         continue;
                     }
                     let cancel = run.cancellation_token();
+                    if self.assistant.run_instrument
+                        != self.assistant_instrument_identity(&self.assistant.run_scope)
+                    {
+                        let error = ToolError::new(
+                            "scope_violation",
+                            "The instrument changed. Open AI from the instrument again.",
+                        );
+                        self.record_assistant_tool_error(&error);
+                        let _ = reply.send(Err(error.to_string()));
+                        continue;
+                    }
                     self.assistant.messages.push(daw_ui::AssistantMessage {
                         role: daw_ui::AssistantRole::Tool,
-                        text: name.replace('_', " "),
+                        text: daw_ai::tool_activity(&name).into(),
                     });
                     let (host_reply, receiver) = mpsc::channel();
-                    self.dispatch_tool(name, arguments, host_reply, cancel);
+                    self.dispatch_scoped_tool(
+                        name,
+                        arguments,
+                        host_reply,
+                        cancel,
+                        Some(self.assistant.run_scope),
+                    );
                     std::thread::spawn(move || {
                         let result = receiver.recv().unwrap_or_else(|_| {
                             Err(ToolError::new("unavailable", "Tool dispatcher closed"))
@@ -485,6 +695,8 @@ impl DawApp {
                     });
                 }
                 AgentEvent::Finished(text) => {
+                    self.assistant
+                        .remember(daw_ai::ConversationMessage::Assistant(text.clone()));
                     self.assistant.messages.push(daw_ui::AssistantMessage {
                         role: daw_ui::AssistantRole::Assistant,
                         text,
@@ -511,19 +723,126 @@ impl DawApp {
         }
     }
 
+    /// Describe exactly the current musical scope captured on the next Send.
+    fn assistant_context(&self) -> String {
+        let name = |value: &str| value.chars().take(80).collect::<String>();
+        if !self.assistant.scope.is_global() {
+            return format!(
+                "{} BPM · {}/4 · Context stays fixed when selection changes",
+                self.project.tempo, self.project.beats_per_bar,
+            );
+        }
+        let mut parts = vec![format!(
+            "{} · {} BPM · {}/4",
+            name(&self.project.name),
+            self.project.tempo,
+            self.project.beats_per_bar
+        )];
+        if let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) {
+            parts.push(format!("Track: {}", name(&track.name)));
+            if let Some(clip) = self
+                .selected_clip
+                .and_then(|id| self.project.clip(track.id, id))
+            {
+                parts.push(format!("Clip: {}", name(&clip.name)));
+            }
+        } else {
+            parts.push("Current song".into());
+        }
+        if !self.selected_notes.is_empty() {
+            parts.push(format!("{} selected notes", self.selected_notes.len()));
+        }
+        // Selection membership is maintained by the editor; do not walk every
+        // clip in the song just to paint this count on each frame.
+        if self
+            .selected_clip
+            .is_some_and(|id| self.arranger_selection.ids.contains(&id))
+            && self.arranger_selection.ids.len() > 1
+        {
+            parts.push(format!(
+                "{} selected clips",
+                self.arranger_selection.ids.len()
+            ));
+        }
+        if let Some((start, end)) = self.arranger_phrase_span() {
+            parts.push(format!("Range: beats {start:.2}–{end:.2}"));
+        }
+        parts.push(format!("Cursor: beat {:.2}", self.cursor));
+        parts.join(" · ")
+    }
+
     pub(crate) fn assistant_popup(&mut self, ctx: &egui::Context) {
         if !self.assistant.open {
             return;
         }
-        let context = self
-            .selected_track
-            .and_then(|id| self.project.track(id))
-            .map(|t| t.name.clone())
-            .unwrap_or_else(|| "Current song".into());
+        let context = self.assistant_context();
+        let scope_label = self.assistant.scope.label(&self.project);
+        let unavailable = self
+            .assistant
+            .scope
+            .validate_target(&self.project)
+            .err()
+            .map(|error| error.message)
+            .or_else(|| {
+                (self.assistant.scope_instrument
+                    != self.assistant_instrument_identity(&self.assistant.scope))
+                .then(|| "The instrument changed. Open AI from the instrument again.".to_owned())
+            });
+        let examples: Vec<_> = daw_ai::scoped_prompt_examples(self.assistant.scope.context_key())
+            .iter()
+            .map(|example| daw_ui::AssistantExample {
+                id: example.id,
+                category: example.category.label(),
+                title: example.title,
+                description: example.description,
+                prompt: example.prompt,
+            })
+            .collect();
+        // Cache schemas on opening / starting a run. Painting only formats the
+        // small published catalog; it never regenerates edit schemas or notes.
+        let tool_details: Vec<_> = self.assistant.tools.iter().map(|tool| {
+            let title = tool.name.replace('_', " ");
+            let mut letters = title.chars();
+            let title = letters.next().map_or_else(String::new, |first| {
+                first.to_uppercase().collect::<String>() + letters.as_str()
+            });
+            let contexts = tool.contexts().iter().map(|context| context.label()).collect::<Vec<_>>().join(" · ");
+            let prompt = if tool.effect() == daw_tools::ToolEffect::Read {
+                format!("Use {} to inspect this context and explain the results. Do not change anything.", tool.name)
+            } else {
+                format!("Help me use {} within this scope. Explain the available changes and ask which settings I want before editing.", tool.name)
+            };
+            (title, contexts, prompt)
+        }).collect();
+        let tools: Vec<_> = self
+            .assistant
+            .tools
+            .iter()
+            .zip(&tool_details)
+            .map(|(tool, (title, contexts, prompt))| daw_ui::AssistantTool {
+                name: &tool.name,
+                title,
+                description: &tool.description,
+                contexts,
+                prompt,
+            })
+            .collect();
+        let tips: Vec<_> = daw_ai::ASSISTANT_TIPS
+            .iter()
+            .map(|tip| daw_ui::AssistantTip {
+                title: tip.title,
+                body: tip.body,
+            })
+            .collect();
         let mut open = true;
         let mut action = None;
-        let can_submit = !self.recording_busy();
-        let can_undo = self.history.can_undo();
+        let can_submit = !self.recording_busy()
+            && unavailable.is_none()
+            && (self.settings.ai.api_key.is_some() || self.assistant.next_script.is_some());
+        // Undo is song-wide history; a contextual assistant must not undo an
+        // unrelated edit merely because it is the most recent history item.
+        let can_undo = self.assistant.scope.is_global() && self.history.can_undo();
+        let can_reuse = self.assistant.prompt.is_empty() && !self.assistant.last_prompt.is_empty();
         daw_ui::popup("Assistant", ctx)
             .open(&mut open)
             .default_width(620.0)
@@ -533,13 +852,21 @@ impl DawApp {
                 let response = daw_ui::assistant(
                     ui,
                     &mut self.assistant.prompt,
+                    &mut self.assistant.ui,
                     daw_ui::AssistantOptions {
                         messages: &self.assistant.messages,
-                        status: Some(&self.assistant.status),
+                        status: Some(unavailable.as_deref().unwrap_or(&self.assistant.status)),
                         busy: self.assistant.run.is_some(),
                         can_submit,
                         can_undo,
                         context: &context,
+                        scope: &scope_label,
+                        provider: self.settings.ai.provider.name(),
+                        configured: self.settings.ai.api_key.is_some(),
+                        can_reuse,
+                        examples: &examples,
+                        tips: &tips,
+                        tools: &tools,
                     },
                 );
                 ctx.data_mut(|data| {
@@ -548,18 +875,39 @@ impl DawApp {
                         response.prompt.interact_rect,
                     )
                 });
-                action = Some((response.send, response.stop, response.undo));
+                action = Some(response);
             });
         self.assistant.open = open;
-        if let Some((send, stop, undo)) = action {
-            if stop {
+        if let Some(response) = action {
+            if response.stop {
                 self.assistant.stop();
             }
-            if undo {
+            if response.undo && self.assistant.scope.is_global() {
                 self.undo_redo(false);
             }
-            if send {
+            if response.send {
                 self.start_assistant();
+            }
+            if response.new_chat && !self.assistant.busy() {
+                self.assistant.new_chat();
+            }
+            if response.reuse_last && !self.assistant.busy() && self.assistant.prompt.is_empty() {
+                self.assistant
+                    .prompt
+                    .clone_from(&self.assistant.last_prompt);
+                response.prompt.request_focus();
+                if let Some(mut state) = egui::TextEdit::load_state(ctx, response.prompt.id) {
+                    state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::one(
+                            egui::text::CCursor::new(self.assistant.prompt.chars().count()),
+                        )));
+                    state.store(ctx, response.prompt.id);
+                }
+            }
+            if response.settings && !self.assistant.busy() {
+                self.open_popup(PopupKind::Setup);
+                self.setup_page = SetupPage::Ai;
             }
         }
     }

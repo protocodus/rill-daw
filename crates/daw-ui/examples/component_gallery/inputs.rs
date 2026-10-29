@@ -8,6 +8,7 @@ pub struct State {
     gain: f64,
     duration: f64,
     pan: f64,
+    rotary: f64,
     enabled: bool,
     monitor: bool,
     mode: u8,
@@ -23,6 +24,7 @@ impl Default for State {
             gain: -6.5,
             duration: 1.25,
             pan: 0.2,
+            rotary: 42.375,
             enabled: true,
             monitor: false,
             mode: 0,
@@ -66,19 +68,26 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             text::note(ui, "The masked key above is sample data.");
         });
         left.add_space(20.0);
-        text::subtitle(left, "Paths and trailing actions");
+        text::subtitle(left, "Paths and rotary values");
         controls::card(left.ctx()).show(left, |ui| {
-            controls::path_row(
-                ui,
-                std::path::Path::new("Music / Rill / Glass Current / Recordings"),
-                |ui| {
-                    controls::small_button(ui, "Choose…");
-                },
-            );
-            text::note(
-                ui,
-                "Long paths truncate while their actions remain reachable.",
-            );
+            ui.horizontal_top(|ui| {
+                ui.allocate_ui_with_layout(egui::vec2(300.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    controls::path_row(
+                        ui,
+                        std::path::Path::new("Music / Rill / Glass Current / Recordings"),
+                        |ui| { controls::small_button(ui, "Choose…"); },
+                    );
+                    text::note(ui, "Long paths truncate while their actions remain reachable.");
+                    ui.add_space(controls::tokens::SPACE_MD);
+                    text::body(ui, "Drag the dial or click its number to type.");
+                    text::note(ui, "The arc and written state identify automation. Shift makes a drag finer.");
+                });
+                ui.add(controls::knob(&mut state.rotary, 0.0..=100.0)
+                    .text("Normalized")
+                    .suffix(" %")
+                    .diameter(72.0)
+                    .automation(Some(controls::AutomationState::Read)));
+            });
         });
         let right = &mut columns[1];
         text::subtitle(right, "Choices and settings");

@@ -4,11 +4,13 @@ use egui::Ui;
 pub struct State {
     prompt: String,
     messages: Vec<AssistantMessage>,
+    assistant: daw_ui::AssistantState,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
+            assistant: daw_ui::AssistantState::default(),
             prompt: "Lower the pads by 2 dB and keep the melody unchanged.".into(),
             messages: vec![
                 AssistantMessage {
@@ -69,9 +71,11 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         daw_ui::text::subtitle(right, "Assistant");
         daw_ui::text::note(right, "assistant · sample conversation and prompt");
         right.add_space(daw_ui::tokens::SPACE_MD);
+        let can_reuse = state.prompt.is_empty();
         let response = daw_ui::assistant(
             right,
             &mut state.prompt,
+            &mut state.assistant,
             AssistantOptions {
                 messages: &state.messages,
                 status: Some("Sample conversation"),
@@ -79,8 +83,63 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 can_submit: true,
                 can_undo: true,
                 context: "Selected track · Glass arpeggio",
+                scope: "Global · Entire song",
+                provider: "Example provider",
+                configured: true,
+                can_reuse,
+                tools: &[
+                    daw_ui::AssistantTool {
+                        name: "add_notes",
+                        title: "Add notes",
+                        description: "Write a musical phrase into a MIDI clip.",
+                        contexts: "Global, Piano roll, MIDI clip",
+                        prompt: "Add a four-bar arpeggio to the selected MIDI clip. Preserve its existing notes.",
+                    },
+                    daw_ui::AssistantTool {
+                        name: "set_parameter",
+                        title: "Adjust a parameter",
+                        description: "Adjust a track, instrument, or effect control.",
+                        contexts: "Global, Instrument, Effect, Effect chain",
+                        prompt: "Inspect the available parameters and suggest one adjustment before editing.",
+                    },
+                ],
+                examples: &[
+                    daw_ui::AssistantExample {
+                        id: "progression",
+                        category: "Compose",
+                        title: "A four-bar progression",
+                        description: "Start with harmony, a bass line, and an arpeggio.",
+                        prompt: "Create four bars in D minor with chords, bass, and an arpeggio. Keep the existing tracks unchanged.",
+                    },
+                    daw_ui::AssistantExample {
+                        id: "variation",
+                        category: "Develop",
+                        title: "A gentler variation",
+                        description: "Develop the selected phrase while preserving the original.",
+                        prompt: "Duplicate the selected phrase and make a quieter variation with fewer notes. Keep its key and length.",
+                    },
+                ],
+                tips: &[
+                    daw_ui::AssistantTip {
+                        title: "Give a musical brief",
+                        body: "Include style, key, length, and the part you want to develop.",
+                    },
+                    daw_ui::AssistantTip {
+                        title: "Listen, then refine",
+                        body: "Audition the result and describe one change at a time. Undo reverses normal song edits.",
+                    },
+                ],
             },
         );
+        if response.new_chat {
+            state.messages.clear();
+            state.assistant = daw_ui::AssistantState::default();
+        }
+        if response.reuse_last
+            && let Some(message) = state.messages.iter().rev().find(|m| m.role == AssistantRole::User)
+        {
+            state.prompt.clone_from(&message.text);
+        }
         if response.send {
             state.prompt.clear();
         }

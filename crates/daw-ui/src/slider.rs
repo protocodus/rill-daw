@@ -178,6 +178,33 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
             },
         ),
     );
+    // A pinned handle must not imply an out-of-range stored value equals the
+    // endpoint. Show a directional overflow mark without changing that value.
+    if geometry.value.is_finite() && geometry.range[0] != geometry.range[1] {
+        let fraction =
+            (geometry.value - geometry.range[0]) / (geometry.range[1] - geometry.range[0]);
+        if !(0.0..=1.0).contains(&fraction) {
+            let direction = (geometry.maximum - geometry.minimum).normalized()
+                * if fraction < 0.0 { -1.0 } else { 1.0 };
+            let along = if vertical {
+                geometry.handle_half_extent.y
+            } else {
+                geometry.handle_half_extent.x
+            };
+            let radius = (along * 0.45).min(3.0);
+            let center = geometry.handle + direction * (along - radius);
+            let cross = egui::vec2(-direction.y, direction.x) * radius;
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![
+                    center + direction * radius,
+                    center - direction * radius + cross,
+                    center - direction * radius - cross,
+                ],
+                colors.orange,
+                Stroke::NONE,
+            ));
+        }
+    }
 }
 
 /// Shared slider builder. Rail interaction is egui's native Slider; its exact
@@ -315,14 +342,37 @@ impl<'a> Slider<'a> {
     }
 
     fn caption(&self, value: f64) -> String {
+        let detail = value
+            .abs()
+            .min((*self.range.end() - *self.range.start()).abs());
+        let adaptive = if detail > 0.0 && detail < 0.01 {
+            (-detail.log10()).ceil() as usize + 1
+        } else {
+            2
+        };
         let decimals = if self.integral {
             0
         } else {
-            self.max_decimals.unwrap_or(2).min(3)
+            self.max_decimals
+                .unwrap_or(adaptive)
+                .max(self.min_decimals)
+                .min(12)
         };
-        let mut number = format!("{value:.decimals$}");
-        if self.min_decimals == 0 && number.contains('.') {
-            while number.ends_with('0') {
+        let mut number = if (value != 0.0 && value.abs() < 1e-9) || value.abs() >= 1e9 {
+            crate::exact_value_text(value)
+        } else if self.range.start() != self.range.end()
+            && format!("{:.decimals$}", self.range.start())
+                == format!("{:.decimals$}", self.range.end())
+        {
+            // Even an explicitly coarse edit precision must not make distinct
+            // endpoints look identical.
+            crate::exact_value_text(value)
+        } else {
+            format!("{value:.decimals$}")
+        };
+        if number.contains('.') && !number.contains('e') {
+            let minimum_length = number.find('.').unwrap() + 1 + self.min_decimals;
+            while number.ends_with('0') && number.len() > minimum_length {
                 number.pop();
             }
             if number.ends_with('.') {
@@ -347,12 +397,22 @@ impl<'a> Slider<'a> {
         } else {
             crate::tokens::FONT_CANVAS
         };
-        let labels = self.endpoint_labels.clone().unwrap_or_else(|| {
+        let mut labels = self.endpoint_labels.clone().unwrap_or_else(|| {
             [
                 self.caption(*self.range.start()),
                 self.caption(*self.range.end()),
             ]
         });
+        let displayed = (self.value)(None);
+        let start = *self.range.start();
+        let end = *self.range.end();
+        if displayed < start.min(end) {
+            let index = usize::from(start > end);
+            labels[index] = format!("< {}", labels[index]);
+        } else if displayed > start.max(end) {
+            let index = usize::from(start < end);
+            labels[index] = format!("> {}", labels[index]);
+        }
         let vertical = orientation == SliderOrientation::Vertical;
         let caption_height = if self.compact { 12.0 } else { 14.0 };
         let minimum_width = labels
@@ -605,12 +665,19 @@ impl<'a> Slider<'a> {
         crate::hover_text(
             response,
             format!(
-                "{}{}{} · {} to {}\nThe handle's center line marks the value",
+                "{}{}{} · {} to {}\n{}",
                 self.prefix,
                 actual,
                 self.suffix,
                 self.caption(*self.range.start()),
-                self.caption(*self.range.end())
+                self.caption(*self.range.end()),
+                if actual < self.range.start().min(*self.range.end()) {
+                    "Below the displayed range · the stored value is preserved"
+                } else if actual > self.range.start().max(*self.range.end()) {
+                    "Above the displayed range · the stored value is preserved"
+                } else {
+                    "The handle's center line marks the value"
+                }
             ),
         )
     }

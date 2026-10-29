@@ -41,12 +41,40 @@ See the [audio editor coverage and shortcuts](AUDIO_EDITOR.md) for common workfl
 ## AI assistant and MCP
 
 Choose **Window → Setup → AI**, select OpenAI or Anthropic, enter your model and
-API key, and apply. Open **AI** in the menu bar or **Window → Assistant** to ask
-for edits, such as “Transpose the selected phrase up an octave” or “Normalize
-this audio clip to −1 dBFS.” The assistant edits the current song through the
-same undoable tools used by MCP; it cannot open or save projects. Keys are
-encrypted in `settings.json` with the built-in application key, which protects
-against casual inspection.
+API key, and apply. The assistant's **AI settings** button opens that page
+directly. Open **AI** in the menu bar or **Window → Assistant**, then choose
+**Examples** for editable starting points under **Compose**, **Develop**,
+**Mix**, and **Learn**. Choosing an example adds it to your draft; it does not
+run it or replace text you have already written. Review the prompt and choose
+**Send**, or use Ctrl/Cmd+Enter while the prompt is focused. **Tips** explains
+how to specify scope, musical constraints, instruments, and follow-up requests.
+
+The menu-bar **AI** button and **Window → Assistant** open global AI for the
+current song. For a local edit, open the piano roll, audio clip, instrument,
+effect, effect chain, channel, routing or automation editor and choose **AI for
+this context**. The **Scope** line names the pinned target, and that boundary is
+also included in the AI prompt. Selecting something else does not retarget the
+conversation. Local AI cannot edit another clip or channel, even indirectly
+through a linked source; make a linked clip independent before changing its notes.
+
+**Tools** lists only tools available in the displayed scope. Search, select a
+tool to inspect it, and choose **Use tool** to append an editable prompt without
+sending it. Local examples also match the opened object: “Humanize this phrase”
+in the piano roll or “Normalize this clip” for audio. Global AI handles requests
+that create tracks or span multiple objects. The host validates local tool calls
+and resulting edits before committing them through the same undoable service
+used by MCP. The assistant cannot open or save projects. Keys are encrypted in `settings.json` with the built-in application key, which protects
+against casual inspection. Provider charges and usage limits apply.
+
+After a result, audition it with the transport and ask for a specific refinement.
+**Undo** in global AI reverses the latest song edit; use **Edit → Undo** for
+local results. A request that makes several edits can require several undo
+steps. **Stop** cancels further assistant work but keeps edits already committed. **More → Edit last prompt** restores the last sent
+prompt when the draft is empty, without sending it. **More → New chat** clears
+the conversation while preserving the song and any unsent draft. Opening a
+different AI scope stops the old run and starts a fresh conversation. Changing
+songs also clears the draft so old requests do not carry over.
+See [AI examples and composing workflows](AI_EXAMPLES.md) for a practical start.
 
 Launch `rill --mcp` to expose the running native app's current song over MCP
 stdio. `rill --mcp-application` explicitly adds project I/O and global Setup
@@ -77,7 +105,7 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Automation** | Create parameter tracks and edit curves for channel, send, insert, and VST3 controls. |
 | **Properties** | Edit names, levels, audio fades, colors, folder membership, and compact/collapsed state; inspect clip timing. |
 | **Library** | Search, scan, and assign instruments. |
-| **Assistant** | Prompt the integrated agent to inspect and edit the current song. |
+| **Assistant** | Open global AI for the current song; editor AI buttons target only their opened context. |
 | **Setup** | Configure Audio, Storage, Plug-ins, Appearance, and AI on separate pages. |
 
 Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups with a softly blurred, inactive background; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
@@ -157,7 +185,28 @@ To group channels for shared processing, choose their output bus in **Window →
 
 ## Automation
 
+Right-click a channel fader, pan slider, or send level to enter an exact value.
+The menu shows the current value and allowed range; choose **Apply value** to
+commit or **Cancel** to keep the original. This also works in compact track
+headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left through
+0% center to 100% right, and send levels use a linear multiplier. Properties also
+has a directly editable volume readout. Fractional values remain visible instead
+of being rounded to whole pan positions or whole dB.
+
 Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Sliders display their range endpoints and current value; the line through the handle's center marks the exact position. Tick spacing adapts to the available space, showing halves, fifths, or tenths. Pan uses L/R endpoints and C for center. Mixer volume shows dB endpoints and a separate editable dB readout.
+
+An orange **A** identifies a control following automation, a coral **!** identifies
+a manual override, and a muted dash identifies bypassed automation. **Override
+automation** holds the current value without deleting the curve; **Resume
+automation** returns to the saved curve at the current playhead. Applying a new
+value to an automated control creates the same visible override as dragging it.
+
+The plug-in parameter browser uses a knob with a visible range, position index,
+and editable number. Drag vertically or horizontally to adjust it; Shift makes
+dragging finer. Right-click the knob for exact entry with **Apply value** and
+**Cancel**. Its value is explicitly a normalized percentage, because plug-in
+unit names alone do not provide a physical-unit conversion. Stepped parameters
+use their declared steps when edited, and automation state remains visible.
 
 Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
 

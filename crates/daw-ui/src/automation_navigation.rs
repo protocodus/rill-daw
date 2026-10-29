@@ -1,6 +1,7 @@
 //! Shared mouse access to automated controls and their retained curves.
 use crate::AutomationState;
 use egui::{Response, Ui};
+use std::ops::RangeInclusive;
 
 pub fn automation_channel_menu<R>(
     ui: &mut Ui,
@@ -19,6 +20,7 @@ pub fn automation_channel_menu<R>(
 pub enum AutomationNavigation {
     Create(AutomationControl),
     Edit(u64),
+    Override(u64),
     Resume(u64),
 }
 
@@ -66,6 +68,40 @@ pub fn automatable_parameter_context(
     action
 }
 
+/// The exact numeric editor and automation actions share one context menu.
+/// Draft edits never call the model; the caller applies the returned value once.
+pub fn automatable_parameter_value_context(
+    ui: &Ui,
+    response: &Response,
+    control: AutomationControl,
+    automation: Option<(u64, AutomationState)>,
+    current: f64,
+    range: RangeInclusive<f64>,
+    unit: &str,
+) -> (Option<AutomationNavigation>, Option<f64>) {
+    if let Some((_, state)) = automation {
+        crate::paint_automation_control(ui, response, state);
+        crate::hover_text(response.clone(), state.hint());
+    }
+    crate::hover_text(
+        response.clone(),
+        "Right-click for exact value and automation",
+    );
+    let mut action = None;
+    let mut value = None;
+    egui::Popup::context_menu(response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            value = crate::value_entry(ui, response.id, current, range, unit);
+            ui.separator();
+            action = automatable_menu_contents(ui, control, automation);
+            if action.is_some() {
+                crate::value_entry::clear_value_entry(ui, response.id);
+            }
+        });
+    (action, value)
+}
+
 pub fn automation_state_label(state: AutomationState) -> &'static str {
     match state {
         AutomationState::Read => "Automated",
@@ -83,6 +119,10 @@ pub fn automation_menu_contents(
     let mut action = None;
     if crate::button(ui, "Edit automation").clicked() {
         action = Some(AutomationNavigation::Edit(lane));
+        ui.close();
+    }
+    if state == AutomationState::Read && crate::button(ui, "Override automation").clicked() {
+        action = Some(AutomationNavigation::Override(lane));
         ui.close();
     }
     if state == AutomationState::Overridden && crate::button(ui, "Resume automation").clicked() {

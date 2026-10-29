@@ -7,13 +7,25 @@ use serde_json::{Value, json};
 
 const RATE: usize = 48_000;
 
-fn rect<'a>(state: &'a Value, text: &str) -> &'a Value {
+fn gain_rect(state: &Value, gain: f64) -> &Value {
+    let expected_db = 20.0 * gain.log10();
     state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|rect| rect["text"] == text)
-        .unwrap_or_else(|| panic!("Missing {text}: {}", state["visible_labels"]))
+        .find(|rect| {
+            rect["text"]
+                .as_str()
+                .and_then(|text| text.strip_suffix(" dB"))
+                .and_then(|text| text.parse::<f64>().ok())
+                .is_some_and(|db| (db - expected_db).abs() < 1e-5)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "Missing precise {expected_db} dB readout: {}",
+                state["visible_labels"]
+            )
+        })
 }
 
 fn center(rect: &Value) -> (f64, f64) {
@@ -23,9 +35,9 @@ fn center(rect: &Value) -> (f64, f64) {
     )
 }
 
-fn type_gain(app: &mut Harness, displayed: &str, db: &str) -> Value {
+fn type_gain(app: &mut Harness, current_gain: f64, db: &str) -> Value {
     let state = app.inspect();
-    let (x, y) = center(rect(&state, displayed));
+    let (x, y) = center(gain_rect(&state, current_gain));
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));
     app.command(json!({"command":"text","text":db}));
@@ -91,7 +103,7 @@ fn precise_gain_entry_undo_recall_and_export_use_the_same_channel_value() {
         let original = app.click("Mixer");
         assert_level(&exported(&mut app, "before.wav"), 0.75);
 
-        let edited = type_gain(&mut app, "-2.5 dB", "-6.3");
+        let edited = type_gain(&mut app, 0.75, "-6.3");
         let expected = 10.0_f64.powf(-6.3 / 20.0);
         near(
             edited["project"]["tracks"][0]["gain"].as_f64().unwrap(),
@@ -155,7 +167,7 @@ fn viewing_extreme_values_and_middle_dragging_readout_or_fader_do_not_edit() {
     }
 
     let state = app.command(json!({"command":"inspect","paint":true}));
-    let readout = rect(&state, "6.0 dB").clone();
+    let readout = gain_rect(&state, 2.0).clone();
     let fader = state["painted_rects"]
         .as_array()
         .unwrap()
@@ -182,7 +194,7 @@ fn viewing_extreme_values_and_middle_dragging_readout_or_fader_do_not_edit() {
         ));
         unchanged(&app.inspect());
     }
-    let edited = type_gain(&mut app, "6.0 dB", "-60");
+    let edited = type_gain(&mut app, 2.0, "-60");
     assert_eq!(edited["project"]["tracks"][0]["gain"], 0.0);
     assert_eq!(undo(&mut app, false)["project"], original["project"]);
     app.quit();

@@ -37,6 +37,12 @@ impl DawApp {
                 if self.channel_navigation(ui, ChannelDestination::Effects) {
                     return;
                 }
+                let scope = daw_tools::ToolScope::EffectChain { track_id };
+                if widgets::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
+                    self.open_context_assistant(scope);
+                    return;
+                }
+                ui.add_space(widgets::tokens::SPACE_SM);
                 let inserts = &self.project.track(track_id).unwrap().inserts;
                 widgets::effect_chain_header(
                     ui,
@@ -225,6 +231,12 @@ impl DawApp {
                 if self.channel_navigation(ui, ChannelDestination::Routing) {
                     return;
                 }
+                let scope = daw_tools::ToolScope::Routing { track_id };
+                if widgets::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
+                    self.open_context_assistant(scope);
+                    return;
+                }
+                ui.add_space(widgets::tokens::SPACE_SM);
                 widgets::scroll_body(ui, "routing_body", |ui| {
                     label(ui, "SENDS");
                     let mut remove = None;
@@ -269,20 +281,31 @@ impl DawApp {
                                     let response = ui.add(
                                         widgets::slider(&mut gain, parameter.range())
                                             .clamping(egui::SliderClamping::Edits)
+                                            .min_decimals(2)
+                                            .max_decimals(6)
+                                            .suffix("×")
                                             .text("Level"),
                                     );
-                                    if let Some(action) = daw_ui::automatable_parameter_context(
-                                        ui,
-                                        &response,
-                                        daw_ui::AutomationControl::Send {
-                                            track: track_id,
-                                            bus: send.target_bus,
-                                        },
-                                        state.map(|(lane, status, _)| (lane, status)),
-                                    ) {
+                                    let (action, exact) =
+                                        daw_ui::automatable_parameter_value_context(
+                                            ui,
+                                            &response,
+                                            daw_ui::AutomationControl::Send {
+                                                track: track_id,
+                                                bus: send.target_bus,
+                                            },
+                                            state.map(|(lane, status, _)| (lane, status)),
+                                            f64::from(gain),
+                                            0.0..=16.0,
+                                            "×",
+                                        );
+                                    if let Some(action) = action {
                                         automation_navigation = Some(action);
                                     }
-                                    if response.changed() {
+                                    if let Some(value) = exact {
+                                        gain = value as f32;
+                                    }
+                                    if response.changed() || exact.is_some() {
                                         send.gain = gain;
                                         changed = true;
                                         automation_overrides.push((

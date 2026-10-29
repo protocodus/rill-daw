@@ -441,14 +441,13 @@ fn song_query_during_a_manual_fader_drag_does_not_split_its_undo_step() {
         "create_midi_part",
         part_arguments(&initial, "Live fader"),
     );
-    let gain = before["project"]["tracks"][0]["gain"].as_f64().unwrap();
-    let label = format!("{:.1} dB", 20.0 * gain.log10());
-    let rect = before["label_rects"]
+    let track = &before["project"]["tracks"][0]["id"];
+    let rect = &before["timeline"]["channels"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|rect| rect["text"] == label)
-        .unwrap_or_else(|| panic!("Missing fader {label}: {}", before["visible_labels"]));
+        .find(|channel| channel["track"] == *track)
+        .expect("visible channel")["gain"];
     let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"down","x":x,"y":y}));

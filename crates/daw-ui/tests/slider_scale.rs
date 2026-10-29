@@ -4,6 +4,136 @@ use egui::{
     vec2,
 };
 
+#[test]
+fn tiny_ranges_keep_distinct_readable_endpoints_without_changing_values() {
+    for (minimum, maximum, value, captions) in [
+        (0.0001, 0.0009, 0.0005, ["0.0001", "0.0009"]),
+        (1e-20, 9e-20, 5e-20, ["1e-20", "9e-20"]),
+    ] {
+        let ctx = Context::default();
+        daw_ui::theme::apply(&ctx);
+        let mut current = value;
+        let (_, output) = number_frame(&ctx, &mut current, minimum..=maximum, false, vec![]);
+        assert_eq!(current, value);
+        let labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        for caption in captions {
+            assert!(
+                labels.iter().any(|text| text == caption),
+                "missing {caption}: {labels:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn endpoint_precision_trims_only_unnecessary_zeros() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let mut value = 0.5123456_f64;
+    let output = ctx.run(RawInput::default(), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add(
+                daw_ui::slider(&mut value, 0.0..=16.0)
+                    .clamping(egui::SliderClamping::Edits)
+                    .min_decimals(2)
+                    .max_decimals(6)
+                    .suffix("×"),
+            );
+        });
+    });
+    let labels: Vec<_> = output
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+    assert!(labels.iter().any(|text| text == "0.00×"), "{labels:?}");
+    assert!(labels.iter().any(|text| text == "16.00×"), "{labels:?}");
+    assert_eq!(
+        value, 0.5123456,
+        "caption formatting must not round the parameter"
+    );
+}
+
+#[test]
+fn out_of_range_values_have_visible_direction_markers_and_remain_unchanged() {
+    for vertical in [false, true] {
+        for (stored, caption) in [(-2.0, "< -1"), (2.0, "> 1")] {
+            let ctx = Context::default();
+            daw_ui::theme::apply(&ctx);
+            let mut value = stored;
+            let (_, geometry, output) =
+                frame(&ctx, &mut value, 200.0, vertical, false, true, vec![]);
+            assert_eq!(value, stored);
+            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Text(text) if text.galley.text() == caption)));
+            let orange = daw_ui::theme::palette(&ctx).orange;
+            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Path(path) if path.closed && path.points.len() == 3 && path.fill == orange
+                    && path.points.iter().all(|point| geometry.rail.contains(*point)))));
+        }
+    }
+}
+
+#[test]
+fn slider_automation_glyphs_are_distinct_without_covering_handle_index_or_captions() {
+    for vertical in [false, true] {
+        for (state, expected) in [
+            (daw_ui::AutomationState::Read, "A"),
+            (daw_ui::AutomationState::Overridden, "!"),
+            (daw_ui::AutomationState::Bypassed, "–"),
+        ] {
+            for value in [-1.0_f32, 0.0, 1.0] {
+                let ctx = Context::default();
+                daw_ui::theme::apply(&ctx);
+                let mut value = value;
+                let mut geometry = None;
+                let output = ctx.run(RawInput::default(), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.spacing_mut().slider_width = 150.0;
+                        let mut slider = daw_ui::slider(&mut value, -1.0..=1.0).show_value(false);
+                        if vertical {
+                            slider = slider.vertical();
+                        }
+                        let response = ui.add(slider);
+                        geometry = daw_ui::slider_scale_geometry(ctx, response.id);
+                        daw_ui::paint_automation_control(ui, &response, state);
+                    });
+                });
+                let geometry = geometry.unwrap();
+                let marker = output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) if text.galley.text() == expected => {
+                            Some(text.galley.rect.translate(text.pos.to_vec2()))
+                        }
+                        _ => None,
+                    })
+                    .expect("automation must be identifiable without color");
+                assert!(
+                    geometry.rail.expand(0.1).contains_rect(marker),
+                    "{marker:?} {:?}",
+                    geometry.rail
+                );
+                assert!(
+                    !marker.contains(geometry.handle),
+                    "glyph must leave the index visible"
+                );
+            }
+        }
+    }
+}
+
 fn frame(
     ctx: &Context,
     value: &mut f32,

@@ -144,9 +144,8 @@ fn native_effect_edit_autosnapshot_automation_archive_recall_and_crash_recovery(
     app.command(json!({"command":"click","label":"Output Gain","occurrence":1}));
     let state = app.inspect();
     let parameter = state["native_editor"]["selected"].clone();
-    let rect = &state["instrument_parameter_rect"];
-    // Slider rail starts on the left; choose a strongly attenuated value.
-    app.command(json!({"command":"pointer","phase":"click","x":rect["min"][0].as_f64().unwrap()+15.0,"y":(rect["min"][1].as_f64().unwrap()+rect["max"][1].as_f64().unwrap())*0.5}));
+    // Use the exact normalized value rather than guessing a rail position.
+    common::edit_plugin_parameter_value(&mut app, &state, "5");
     common::wait_visible(&mut app, "Automate last touched · Output Gain");
     let value = app.inspect()["native_editor"]["selected_value"]
         .as_f64()

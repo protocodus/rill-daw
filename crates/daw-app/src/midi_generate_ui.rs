@@ -42,6 +42,7 @@ pub(crate) struct GenerateAction {
     pub cancel: bool,
     pub fit: bool,
     pub grid_scale: bool,
+    pub ai: bool,
 }
 
 impl GenerateDialog {
@@ -180,6 +181,11 @@ impl GenerateDialog {
             .movable(true)
             .open(&mut open)
             .show(ctx, |ui| {
+                let ai =
+                    daw_ui::contextual_ai_button(ui, &format!("Clip composition · {clip_name}"));
+                self.controls["ai"] = rect_json(ai.rect);
+                action.ai = ai.clicked();
+                ui.add_space(daw_ui::tokens::SPACE_SM);
                 ui.horizontal(|ui| {
                     for kind in GenerateKind::ALL {
                         daw_ui::selectable_value(ui, &mut self.settings.kind, kind, kind.name());
@@ -196,6 +202,8 @@ impl GenerateDialog {
                 let form_height = (ctx.content_rect().height()
                     - daw_ui::tokens::POPUP_TOP
                     - daw_ui::tokens::POPUP_MARGIN
+                    - daw_ui::tokens::CONTROL_HEIGHT
+                    - daw_ui::tokens::SPACE_SM
                     - 440.0)
                     .max(100.0);
                 let form = egui::ScrollArea::vertical()

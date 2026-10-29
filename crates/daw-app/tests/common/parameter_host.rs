@@ -90,27 +90,31 @@ fn main() {
             r#"{"Success":{"message":""}}"#.to_owned()
         } else if line.contains("\"GetParameter\"") {
             let id = number(&line, "id").unwrap() as u32;
-            let value = values
-                .get(&id)
-                .copied()
-                .unwrap_or(if effect { 0.25 } else { 0.5 });
+            let value = values.get(&id).copied().unwrap_or(if id == 44 {
+                0.37
+            } else if effect {
+                0.25
+            } else {
+                0.5
+            });
             format!(r#"{{"ParameterValue":{{"value":{value}}}}}"#)
         } else if line == "\"GetAllParameters\"" {
             let mut definitions = vec![
-                (7, "Filter Cutoff".to_owned(), "Hz", false),
-                (8, "Filter Resonance".to_owned(), "%", false),
-                (9, "Envelope Attack".to_owned(), "ms", false),
-                (10, "Envelope Release".to_owned(), "ms", false),
-                (42, "Delay Feedback".to_owned(), "%", false),
-                (43, "Output Meter".to_owned(), "dB", true),
+                (7, "Filter Cutoff".to_owned(), "Hz", false, 0),
+                (8, "Filter Resonance".to_owned(), "%", false, 0),
+                (9, "Envelope Attack".to_owned(), "ms", false, 0),
+                (10, "Envelope Release".to_owned(), "ms", false, 0),
+                (42, "Delay Feedback".to_owned(), "%", false, 0),
+                (43, "Output Meter".to_owned(), "dB", true, 0),
+                (44, "Oscillator Mode".to_owned(), "", false, 4),
             ];
             for index in 0..200 {
-                definitions.push((1000 + index, format!("Macro {index:03}"), "%", false));
+                definitions.push((1000 + index, format!("Macro {index:03}"), "%", false, 0));
             }
-            definitions.push((9000, "Ω Motion Depth 🎛".to_owned(), "%", false));
-            let parameters = definitions.into_iter().map(|(id, name, unit, read_only)| {
-                let value = values.get(&id).copied().unwrap_or(if effect {0.25} else {0.5});
-                format!(r#"{{"id":{id},"name":"{name}","value":{value},"min":0,"max":1,"default":0.5,"unit":"{unit}","step_count":0,"can_automate":{},"is_read_only":{read_only},"is_bypass":false,"flags":0}}"#, !read_only)
+            definitions.push((9000, "Ω Motion Depth 🎛".to_owned(), "%", false, 0));
+            let parameters = definitions.into_iter().map(|(id, name, unit, read_only, steps)| {
+                let value = values.get(&id).copied().unwrap_or(if id == 44 {0.37} else if effect {0.25} else {0.5});
+                format!(r#"{{"id":{id},"name":"{name}","value":{value},"min":0,"max":1,"default":0.5,"unit":"{unit}","step_count":{steps},"can_automate":{},"is_read_only":{read_only},"is_bypass":false,"flags":0}}"#, !read_only)
             }).collect::<Vec<_>>().join(",");
             format!(r#"{{"Parameters":{{"params":[{parameters}]}}}}"#)
         } else if line == "\"SaveState\"" {
