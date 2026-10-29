@@ -118,9 +118,14 @@ fn selected_clips_and_channels_gain_a_bounded_halo_without_editing_content() {
         }
 
         app.click("Mixer");
-        for (name, selected) in [("Amber bus", bus), ("Indigo synth", source)] {
-            app.click(name);
-            app.key("Escape");
+        for selected in [bus, source] {
+            let state = app.inspect();
+            let [left, top, right, bottom] = bounds(&channel(&state, selected)["name"]);
+            app.command(
+                json!({"command":"pointer","phase":"click","button":"secondary",
+                "x":(left+right)*0.5,"y":(top+bottom)*0.5}),
+            );
+            app.click("Select channel");
             let state = painted(&mut app);
             assert_eq!(state["selected_track"], selected);
             unchanged(&state, &baseline);

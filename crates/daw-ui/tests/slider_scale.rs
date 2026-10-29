@@ -423,7 +423,6 @@ fn exact_number_entry_rounds_once_before_updating_the_model() {
             !settled.changed(),
             "rounding must not generate a second model edit on next paint"
         );
-        drop(render);
         if integral {
             assert_eq!(integer, 65);
         } else {

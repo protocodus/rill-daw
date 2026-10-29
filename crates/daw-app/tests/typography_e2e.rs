@@ -91,8 +91,16 @@ fn long_device_name_wraps_on_card_and_actions_stay_accessible_in_small_window() 
         .collect();
     assert_eq!(
         name_rows.len(),
-        2,
-        "card and selection footer must retain full source name"
+        3,
+        "card, detail pane and selection footer must retain full source name"
+    );
+    let details = &state["library"]["details"];
+    assert!(
+        name_rows.iter().any(|row| {
+            row["min"][0].as_f64() >= details["min"][0].as_f64()
+                && row["max"][0].as_f64().unwrap() <= details["max"][0].as_f64().unwrap() + 1.0
+        }),
+        "the detail title wraps within its pane: {details}"
     );
     assert!(
         name_rows

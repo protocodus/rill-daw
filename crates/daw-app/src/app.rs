@@ -206,8 +206,12 @@ pub struct DawApp {
     pub drop_target: Option<(Option<u64>, f64)>,
     pub vst_paths: Vec<PathBuf>,
     pub vst_catalog: Vec<daw_plugins::catalog::CatalogEntry>,
-    pub vst_scan:
-        Option<std::sync::mpsc::Receiver<anyhow::Result<Vec<daw_plugins::catalog::CatalogEntry>>>>,
+    /// Scans, indexes and captures previews in the background; the catalog
+    /// above is its latest snapshot.
+    pub(crate) plugin_sync: daw_plugins::sync::CatalogSync,
+    pub(crate) plugin_catalog_revision: u64,
+    pub(crate) plugin_scan_reported: bool,
+    pub(crate) plugin_library: crate::settings::PluginLibrary,
     pub plugin_filter: String,
     pub plugin_search_focus: bool,
     pub plugin_assign_target: Option<u64>,
@@ -341,7 +345,17 @@ impl DawApp {
             drop_target: None,
             vst_paths: Vec::new(),
             vst_catalog: Vec::new(),
-            vst_scan: None,
+            plugin_sync: daw_plugins::sync::CatalogSync::new(
+                daw_plugins::PluginCatalog::default(),
+                daw_plugins::capture_editor_info,
+                {
+                    let ctx = ctx.clone();
+                    move || ctx.request_repaint()
+                },
+            ),
+            plugin_catalog_revision: 0,
+            plugin_scan_reported: true,
+            plugin_library: crate::settings::PluginLibrary::load(),
             plugin_filter: String::new(),
             plugin_search_focus: false,
             plugin_assign_target: None,
@@ -490,8 +504,8 @@ impl DawApp {
             PopupKind::Instrument => self.instrument_open = true,
             PopupKind::Effects => {
                 self.effects_open = true;
-                if self.vst_paths.is_empty() && self.vst_scan.is_none() {
-                    self.scan_plugins();
+                if self.vst_paths.is_empty() && !self.plugin_sync.scanning() {
+                    self.refresh_plugins();
                 }
             }
             PopupKind::Routing => self.routing_open = true,
@@ -689,8 +703,8 @@ impl DawApp {
                 self.plugin_search_focus = true;
                 self.plugin_assign_target = None;
                 self.library_target = crate::library::LibraryTarget::Browse;
-                if self.vst_paths.is_empty() && self.vst_scan.is_none() {
-                    self.scan_plugins();
+                if self.vst_paths.is_empty() && !self.plugin_sync.scanning() {
+                    self.refresh_plugins();
                 }
             }
             PopupKind::Setup => {
@@ -700,8 +714,8 @@ impl DawApp {
             }
             PopupKind::Instrument => {
                 self.effect_editor_target = None;
-                if self.vst_paths.is_empty() && self.vst_scan.is_none() {
-                    self.scan_plugins();
+                if self.vst_paths.is_empty() && !self.plugin_sync.scanning() {
+                    self.refresh_plugins();
                 }
             }
             PopupKind::Join => self.prepare_join(),
@@ -1102,7 +1116,7 @@ impl DawApp {
         }
         self.revision = self.revision.wrapping_add(1);
         self.rebuild();
-        self.scan_plugins();
+        self.refresh_plugins();
         self.setup_open = false;
         if !restart {
             self.message(Ok(()), "Setup saved");
@@ -1859,6 +1873,7 @@ impl DawApp {
         }
         if self.library_open
             && !egui::Popup::is_any_open(ctx)
+            && crate::library::library_owns_keys(ctx)
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
         {
             ctx.data_mut(|data| data.insert_temp(egui::Id::new("instrument_chooser_enter"), true));
@@ -2643,14 +2658,14 @@ impl DawApp {
     fn browser(&mut self, ctx: &egui::Context) {
         self.plugin_library(ctx);
     }
-    pub(crate) fn scan_plugins(&mut self) {
+    /// Rescan plug-in folders and update the persisted index in the
+    /// background, then capture missing previews when automatic capture is on.
+    /// The library shows the previous index until the scan finishes.
+    pub(crate) fn refresh_plugins(&mut self) {
         let mut dirs = daw_plugins::default_locations();
         dirs.extend(self.settings.vst_dirs.clone());
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.vst_scan = Some(rx);
-        std::thread::spawn(move || {
-            let _ = tx.send(daw_plugins::catalog::PluginCatalog::default().scan(&dirs));
-        });
+        self.plugin_scan_reported = false;
+        self.plugin_sync.sync(dirs, self.automatic_plugin_previews);
     }
     fn setup(&mut self, ctx: &egui::Context) {
         if !self.setup_open {
@@ -2876,28 +2891,8 @@ impl DawApp {
         if let Some(error) = render_error {
             self.message(Err(anyhow::anyhow!(error)), "");
         }
-        if let Some(rx) = &self.vst_scan
-            && let Ok(result) = rx.try_recv()
-        {
-            match result {
-                Ok(entries) => {
-                    if !self.error {
-                        self.status = format!("Found {} VST3 plug-ins", entries.len());
-                    }
-                    self.vst_paths = entries
-                        .iter()
-                        .map(|entry| entry.plugin.path.clone())
-                        .collect();
-                    self.vst_paths.sort();
-                    self.vst_paths.dedup();
-                    self.vst_catalog = entries;
-                }
-                Err(e) => self.message(Err(e), ""),
-            }
-            self.vst_scan = None;
-        }
         self.poll_audio_take_import(ctx);
-        self.poll_plugin_previews(ctx);
+        self.poll_plugin_catalog(ctx);
         self.poll_document_guard(ctx);
         self.poll_assistant(ctx);
         if self.error_details.is_some() {
@@ -3108,7 +3103,7 @@ impl DawApp {
     fn capture_screenshot(&mut self, ctx: &egui::Context) {
         if let Some(path) = &self.screenshot {
             if self.frame_count >= 8
-                && self.vst_scan.is_none()
+                && !self.plugin_sync.scanning()
                 && !self.screenshot_requested
                 && (!crate::spectrogram::has_pending_analysis(ctx) || self.frame_count >= 180)
             {

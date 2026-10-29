@@ -15,6 +15,8 @@ use std::{
 };
 
 const CACHE_VERSION: u32 = 1;
+const INDEX_VERSION: u32 = 1;
+const MAX_INDEX_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_PNG_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_PIXELS: u64 = 16 * 1024 * 1024;
 
@@ -32,6 +34,9 @@ pub struct CatalogEntry {
     pub thumbnail: Option<PathBuf>,
     pub thumbnail_size: Option<[u32; 2]>,
     pub status: ThumbnailStatus,
+    /// When a catalog sync first indexed this plug-in; 0 until it has.
+    #[serde(default)]
+    pub added_unix_ms: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -84,6 +89,13 @@ struct Record {
     updated_unix_ms: u128,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Index {
+    version: u32,
+    synced_unix_ms: u64,
+    entries: Vec<CatalogEntry>,
+}
+
 impl PluginCatalog {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
@@ -110,6 +122,7 @@ impl PluginCatalog {
             thumbnail: None,
             thumbnail_size: None,
             status: ThumbnailStatus::Missing,
+            added_unix_ms: 0,
         };
         let record_path = self.path(&entry.fingerprint, "json");
         let record = fs::metadata(&record_path)
@@ -198,6 +211,54 @@ impl PluginCatalog {
             &serde_json::to_vec_pretty(&record)?,
         )?;
         self.lookup(plugin)
+    }
+
+    /// The last synchronized catalog and its scan time, shown before a new
+    /// scan finishes. Previews are only referenced by their fingerprinted cache
+    /// path; the index can never point the library at another file.
+    pub fn load_index(&self) -> Option<(Vec<CatalogEntry>, u64)> {
+        let path = self.index_path();
+        let bytes = fs::metadata(&path)
+            .ok()
+            .filter(|metadata| metadata.len() <= MAX_INDEX_BYTES)
+            .and_then(|_| fs::read(path).ok())?;
+        let index = serde_json::from_slice::<Index>(&bytes)
+            .ok()
+            .filter(|index| index.version == INDEX_VERSION)?;
+        let entries = index
+            .entries
+            .into_iter()
+            .filter(|entry| {
+                entry.fingerprint.len() == 64
+                    && entry
+                        .fingerprint
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit())
+            })
+            .map(|mut entry| {
+                entry.thumbnail = (entry.status == ThumbnailStatus::Ready)
+                    .then(|| self.path(&entry.fingerprint, "png"));
+                entry
+            })
+            .collect();
+        Some((entries, index.synced_unix_ms))
+    }
+
+    pub fn save_index(&self, entries: &[CatalogEntry], synced_unix_ms: u64) -> Result<()> {
+        fs::create_dir_all(&self.root)
+            .with_context(|| format!("Creating plug-in cache {}", self.root.display()))?;
+        atomic_write(
+            &self.index_path(),
+            &serde_json::to_vec(&Index {
+                version: INDEX_VERSION,
+                synced_unix_ms,
+                entries: entries.to_vec(),
+            })?,
+        )
+    }
+
+    fn index_path(&self) -> PathBuf {
+        self.root.join("plugin-index-v1.json")
     }
 
     fn directory(&self) -> PathBuf {
@@ -392,6 +453,7 @@ mod tests {
             vendor: "Vendor".into(),
             category: "Instrument|Synth".into(),
             class_id: Some("ABC".into()),
+            ..PluginInfo::default()
         }
     }
 

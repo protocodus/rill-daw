@@ -64,6 +64,8 @@ pub enum Icon {
     View,
     ChevronDown,
     ChevronRight,
+    Star,
+    StarFilled,
 }
 
 impl Icon {
@@ -139,6 +141,8 @@ impl Icon {
             "Back" => Self::Back,
             "More" => Self::More,
             "View" => Self::View,
+            "Favorite" | "Favorites" | "Add to favorites" => Self::Star,
+            "Remove from favorites" => Self::StarFilled,
             "Add point" | "Add parameter" | "New" => Self::Add,
             _ => return None,
         })
@@ -186,6 +190,31 @@ impl Icon {
                 circle(12., 12., 3.5);
             }
             Self::ChevronDown => line(&[(5., 9.), (12., 16.), (19., 9.)]),
+            Self::Star | Self::StarFilled => {
+                let points: Vec<_> = (0..10)
+                    .map(|index| {
+                        let radius = if index % 2 == 0 { 10.0 } else { 4.2 };
+                        let angle = std::f32::consts::PI * (index as f32 / 5.0 - 0.5);
+                        point(12. + radius * angle.cos(), 12.8 + radius * angle.sin())
+                    })
+                    .collect();
+                if self == Self::StarFilled {
+                    // A star is not convex, but every edge is visible from its
+                    // center, so a triangle fan fills it exactly.
+                    let mut mesh = egui::Mesh::default();
+                    mesh.colored_vertex(point(12., 12.8), color);
+                    for vertex in &points {
+                        mesh.colored_vertex(*vertex, color);
+                    }
+                    for index in 0..10u32 {
+                        mesh.add_triangle(0, index + 1, (index + 1) % 10 + 1);
+                    }
+                    painter.add(mesh);
+                }
+                let mut outline = points;
+                outline.push(outline[0]);
+                painter.add(Shape::line(outline, stroke));
+            }
             Self::ChevronRight => line(&[(9., 5.), (16., 12.), (9., 19.)]),
             Self::Warning => {
                 line(&[(12., 3.), (22., 21.), (2., 21.), (12., 3.)]);

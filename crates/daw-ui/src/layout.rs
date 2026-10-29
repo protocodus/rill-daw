@@ -204,6 +204,57 @@ pub fn bounded_columns<R>(
     })
 }
 
+/// A flexible center pane between optional fixed-width side panes, such as a
+/// library's navigation and detail panes. A side width of zero hides that
+/// pane. Each pane owns its scrolling within the shared bounded height.
+pub fn bounded_panes<R>(
+    ui: &mut Ui,
+    id: impl Hash,
+    height: f32,
+    [left, right]: [f32; 2],
+    mut contents: impl FnMut(usize, &mut Ui) -> R,
+) -> InnerResponse<[Option<R>; 3]> {
+    ui.push_id(id, |ui| {
+        let height = if height.is_finite() {
+            height.max(0.0).min(ui.available_height().max(0.0))
+        } else {
+            0.0
+        };
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width().max(0.0), height),
+            egui::Sense::hover(),
+        );
+        let gap = tokens::SPACE_LG;
+        let left = left.max(0.0);
+        let right = right.max(0.0);
+        let center_left = rect.left() + if left > 0.0 { left + gap } else { 0.0 };
+        let center_right = rect.right() - if right > 0.0 { right + gap } else { 0.0 };
+        let panes = [
+            (left > 0.0).then(|| egui::Rect::from_min_size(rect.min, egui::vec2(left, height))),
+            Some(egui::Rect::from_x_y_ranges(
+                center_left..=center_right.max(center_left),
+                rect.y_range(),
+            )),
+            (right > 0.0).then(|| {
+                egui::Rect::from_x_y_ranges(rect.right() - right..=rect.right(), rect.y_range())
+            }),
+        ];
+        std::array::from_fn(|index| {
+            panes[index].map(|pane| {
+                let mut child = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(index)
+                        .max_rect(pane)
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
+                child.set_clip_rect(ui.clip_rect().intersect(pane));
+                child.set_width(pane.width());
+                contents(index, &mut child)
+            })
+        })
+    })
+}
+
 pub struct WorkspaceHeaderResponse<R> {
     pub back: Response,
     pub title: Response,

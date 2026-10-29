@@ -2,7 +2,148 @@
 
 `daw-ui` is Rill's shared component library. It depends on `egui` 0.33.3 without depending on the application, audio engine, or native window runtime. The app uses it for controls, surfaces, popup windows, and design tokens. New reusable components belong here before they are used in an application view.
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as dimmed, inactive context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+## Component gallery
+
+These previews render the actual `daw-ui` components with Rill's theme and fonts.
+They use fixed example values for waveforms, meters, device metadata, and the
+assistant transcript. Each preview follows your page's light or dark theme;
+the links below it open either version at full size.
+
+[Actions and control roles](#actions-and-control-roles) · [Inputs and forms](#inputs-and-forms) · [Navigation and menus](#navigation-and-menus) · [Musical canvas primitives](#musical-canvas-primitives) · [Mixer and recording](#mixer-and-recording) · [Curves and crossfades](#curves-and-crossfades) · [Devices and parameters](#devices-and-parameters) · [Feedback and assistant](#feedback-and-assistant)
+
+### Actions and control roles
+
+Filled commands, selected tools, outlined view controls, icons, and disabled states.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/actions-dark.png">
+  <img alt="Filled action buttons, an active editing tool, outlined view controls, vector icons, and disabled controls." src="assets/ui-gallery/actions-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/actions-light.png) · [Dark preview](assets/ui-gallery/actions-dark.png)
+
+[`button`, `primary_button`, `tool_value`, `view_button`](../crates/daw-ui/src/widgets.rs) · [`IconButton`](../crates/daw-ui/src/icons.rs)
+
+### Inputs and forms
+
+Text, precise numbers, continuous sliders, choices, and boolean settings share the same spacing and focus treatment.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/inputs-dark.png">
+  <img alt="Text and masked inputs, numeric fields, sliders, dropdown choices, switches, and aligned form labels." src="assets/ui-gallery/inputs-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/inputs-light.png) · [Dark preview](assets/ui-gallery/inputs-dark.png)
+
+[`text_field`, `number`, `slider`, `select`, `checkbox`](../crates/daw-ui/src/widgets.rs) · [`secret_field`](../crates/daw-ui/src/assistant.rs) · [`form_grid`, `path_row`](../crates/daw-ui/src/form.rs)
+
+### Navigation and menus
+
+Workspace headers, grouped toolbars, related-view links, a properties popup, and an open choice menu.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/navigation-dark.png">
+  <img alt="Workspace navigation, a grouped toolbar, related-view links, a properties popup, and an open choice menu." src="assets/ui-gallery/navigation-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/navigation-light.png) · [Dark preview](assets/ui-gallery/navigation-dark.png)
+
+[`workspace_header`, `toolbar`](../crates/daw-ui/src/layout.rs) · [`view_links`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs)
+
+### Musical canvas primitives
+
+Musical time, piano-key states, velocities, waveforms, and clip regions use the shared canvas palette.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/timeline-dark.png">
+  <img alt="A musical ruler, piano-key states, velocity markers, and an audio waveform." src="assets/ui-gallery/timeline-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/timeline-light.png) · [Dark preview](assets/ui-gallery/timeline-dark.png)
+
+[`paint_timeline_ruler`](../crates/daw-ui/src/timeline.rs) · [`piano_key`, `velocity_marker`](../crates/daw-ui/src/piano.rs) · [`paint_audio_waveform`](../crates/daw-ui/src/waveform.rs)
+
+### Mixer and recording
+
+Channel strips, meters, gain/pan controls, and recording controls with fixed demonstration levels.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/mixer-dark.png">
+  <img alt="Mixer strips with stereo meters, gain and pan controls, recording buttons, and input metering." src="assets/ui-gallery/mixer-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/mixer-light.png) · [Dark preview](assets/ui-gallery/mixer-dark.png)
+
+[`mixer_strip`, `stereo_meter`](../crates/daw-ui/src/layout.rs) · [`channel_controls_at`](../crates/daw-ui/src/channel_controls.rs) · [`record_button`, `input_meter`](../crates/daw-ui/src/recording.rs)
+
+### Curves and crossfades
+
+Breakpoint editing and complementary crossfade curves keep their data and evaluation callbacks with the caller.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/curves-dark.png">
+  <img alt="An editable breakpoint curve and the shared crossfade editor with complementary fade curves." src="assets/ui-gallery/curves-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/curves-light.png) · [Dark preview](assets/ui-gallery/curves-dark.png)
+
+[`curve_editor`](../crates/daw-ui/src/curve.rs) · [`crossfade_editor`](../crates/daw-ui/src/crossfade.rs)
+
+### Devices and parameters
+
+Selectable device cards and a searchable parameter browser with example catalogue data.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/devices-dark.png">
+  <img alt="Device cards with selected states and a parameter browser showing example values and automation indicators." src="assets/ui-gallery/devices-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/devices-light.png) · [Dark preview](assets/ui-gallery/devices-dark.png)
+
+[`device_card`](../crates/daw-ui/src/device_cards.rs) · [`parameter_browser`](../crates/daw-ui/src/parameter_browser.rs)
+
+### Feedback and assistant
+
+Progress and result notices sit alongside the bounded assistant transcript and prompt composer.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/feedback-dark.png">
+  <img alt="Progress, success, warning, and error notices alongside the Assistant component with a sample conversation." src="assets/ui-gallery/feedback-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/feedback-light.png) · [Dark preview](assets/ui-gallery/feedback-dark.png)
+
+[`notice`](../crates/daw-ui/src/notice.rs) · [`assistant`](../crates/daw-ui/src/assistant.rs)
+
+### Regenerate the previews
+
+Run the interactive component example to explore the same widgets locally:
+
+```sh
+cargo run --locked -p daw-ui --example component_gallery
+```
+
+Capture every gallery page in both themes:
+
+```sh
+cargo run --locked -p daw-ui --example component_gallery -- --capture docs/assets/ui-gallery
+```
+
+Capturing requires a desktop display. On Linux, a private Xvfb display can render
+the previews with software OpenGL:
+
+```sh
+LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a cargo run --locked -p daw-ui --example component_gallery -- --capture docs/assets/ui-gallery
+```
+
+The example renders through a development-only `eframe` host; the shared library
+retains its runtime independence from application state, audio, and windowing.
+After changing a component or its theme, regenerate the previews and inspect both
+variants. The API reference and interaction rules continue below.
+
+## Workspace conventions
+
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as softly blurred, dimmed context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 ## Theme and tokens
 
@@ -47,7 +188,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Toolbar command, choice, and presentation menus | `action_menu`, `choice_menu`, `view_menu` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
-| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `scroll_body` |
+| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
 | Mixer identity, inserts and routing | `mixer_master_title`, `mixer_effects_button`, `mixer_insert_summary`, `mixer_bus_input_summary`, `paint_mixer_fader_scale`, `mixer_output_button`, `mixer_sends_button`, `MixerSend` |
@@ -78,10 +219,11 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Non-modal operation feedback | `notice`, `NoticeKind` |
 | On-demand error diagnostics | `error_details`, `ErrorDetailsResponse`, `text::selectable_block` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
-| Plug-in library cards and previews | `device_card`, `device_grid`, `device_grid_layout`, `image_preview` |
+| Plug-in library cards, rows and previews | `device_card`, `device_grid`, `device_grid_layout`, `device_row`, `device_list`, `device_list_layout`, `device_preview`, `favorite_toggle`, `image_preview` |
+| Library navigation and active filters | `count_item`, `filter_chip`, `Icon::Star`, `Icon::StarFilled` |
 | Bounded context titles | `text::bounded_block` |
 | Inactive clip regions | `paint_clip_tail` |
-| Surfaces | `panel`, `card`, `inset`, `soft_surface`, `paint_ambient` |
+| Surfaces | `panel`, `card`, `inset`, `soft_surface`, `paint_ambient`, `paint_selection_glow` |
 | Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
@@ -117,13 +259,15 @@ keeping actions visible even for a long draft. `secret_field` masks a credential
 using ordinary shared input spacing; callers still protect its backing value and
 must never include it in diagnostic or conversation text.
 
-`paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases remain flat. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
+`paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases retain flat fills; selected clips and channels add a soft track-colored outline glow. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
+
+`paint_selection_glow` adds a six-point track-colored halo using one fixed mesh (128 vertices, 576 indices). It respects the parent clip and culls hidden items. Clip and mixer selection use this shared treatment without altering layout, input, or playback.
 
 `view_links` presents a wrapping row of related destinations with the active one marked. The caller supplies destinations and handles the returned selection. `ViewBackdrop` retains the caller's paint for a utility background without creating widgets, hit targets, or keyboard focus; cached context cannot edit the project or duplicate active accessibility controls. Nested utilities keep their parent context and restore the prior selection and inspector page when dismissed.
 
 For a modal opened above a menu or another modal, `ViewBackdrop::capture_dialog_context` also retains foreground content. Call it before drawing the new dialog. It omits existing shared popup and modal scrims so the new modal dims the complete retained caller once; replay still creates no controls or accessibility targets.
 
-Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one theme-aware dim layer below the active window or native menu/picker, including submenus. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the same palette color through its native input-blocking backdrop. Confirmation dialogs retain the previous view. Dimming adds one solid rectangle, no blur passes, animation, hit targets, or additional repaint requests.
+Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one theme-aware dim layer below the active window or native menu/picker, including submenus. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the same palette color through its native input-blocking backdrop. Confirmation dialogs retain the previous view. The native app enables shared `glow-backdrop` rendering: two low-resolution Gaussian passes soften the inactive context before the dim rectangle. Each of two GPU targets is capped at 512 × 512 pixels (2 MiB combined). Frozen utility backgrounds reuse the blurred result; menus refresh only during existing redraws. There is no CPU pixel readback, animation, extra hit target, or repaint request. Unsupported graphics contexts retain dimming. Call `enable_backdrop_blur` after renderer creation and `destroy_backdrop_blur` while its context is current at shutdown.
 
 `scroll_body` inside a window with `.vscroll(false)` lets short utility content fit naturally while long chains remain bounded and scrollable. Use a stable height for tabbed forms and reserve footer space before sizing inner lists.
 
@@ -141,7 +285,7 @@ Underlying editor shortcuts and file drops are blocked; playback continues.
 
 `error_details(ctx, title, summary, details)` shows a diagnostic snapshot in the shared modal above the current workspace. Contextual titles stay within one row with their full text on hover; put operation, device/path and cause information in `details`. The summary is bounded, while the complete selectable diagnostic text wraps inside a scrollable inset. **Copy details** copies every supplied line, including offscreen content; **Close**, Escape or the backdrop dismisses. The footer stays outside the scrolling area. The application owns opening, snapshot lifetime and raw keyboard/drop gating, as for other modals.
 
-Long names and paths must stay within their window. `action_row` reserves trailing controls before flexible content; `path_row` adds path truncation and a full-path tooltip. `form_grid` aligns label/control columns; associate a separate label with its control using `.labelled_by(label_response.id)`. `bounded_columns` gives each library pane a fixed viewport so catalog and preview scrolling leave search and primary actions visible. `text::bounded_block` wraps within a row limit and exposes the full source on hover. Task names belong in native window titles; long track and device names belong in bounded content headings. `clip_choice` includes visible instance metadata to distinguish ghost copies with shared names.
+Long names and paths must stay within their window. `action_row` reserves trailing controls before flexible content; `path_row` adds path truncation and a full-path tooltip. `form_grid` aligns label/control columns; associate a separate label with its control using `.labelled_by(label_response.id)`. `bounded_columns` gives each library pane a fixed viewport so catalog and preview scrolling leave search and primary actions visible. `bounded_panes` places a flexible center pane between optional fixed-width side panes; a zero width hides a side, so a narrow window can drop a detail pane while keeping the catalog usable. `text::bounded_block` wraps within a row limit and exposes the full source on hover. Task names belong in native window titles; long track and device names belong in bounded content headings. `clip_choice` includes visible instance metadata to distinguish ghost copies with shared names.
 
 Use native response composition rather than adding a second event system:
 
@@ -202,6 +346,8 @@ their playback and project semantics. Reserve each group's measured width before
 painting it so narrow windows wrap the complete group without clipping controls.
 
 `mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height, and faders and meters stretch with the window. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
+
+`device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections and producers. `filter_chip` shows an active filter and removes it when clicked; pair it with a **Clear filters** action.
 
 **Setup → Appearance** applies and persists System, Light, or Dark. Cancel discards the draft. Changing only appearance leaves playback and native editors running. Piano-roll black-key rows remain slightly darker than natural-key rows in both modes. Scale and chord guides use subtle green tints. `Palette::piano_note_fill(velocity, out_of_scale)` keeps notes blue, or red for an optional scale warning, with velocity-dependent strength. `piano_note_stroke_in_rect(selected, fill, rect)` adds a neutral contrasting selection outline without changing the fill, with thinner strokes at dense zoom levels. `piano_velocity_marker` shares these colors with the velocity lane. Note labels select a contrasting foreground for their fill.
 
@@ -287,8 +433,7 @@ The output control carries the destination's color. A separate send action names
 a single destination or shows the send count; hover lists every destination,
 pre/post position and level. **Add send…** opens Routing for an empty send list.
 Selecting or hovering a channel previews its output and
-pre/post sends in separate routing lanes below the controls; clipped destinations
-remain named. **+ Bus** creates a bus, and Routing can add several sends or create
+pre/post sends in separate routing lanes below the controls. `mixer_route_lane` connects actual `MixerRouteEndpoint` positions with a continuous three-point-wide U-shaped ribbon, including the arrowhead touching the destination. Vertex colors blend smoothly from source to destination along the path; Master uses the theme accent. Each route uses eleven vertices, with no textures or repaint requests. Offscreen endpoints retain their true coordinates and remain named. **+ Bus** creates a bus, and Routing can add several sends or create
 a bus and send together. Output and send choices exclude feedback and duplicate
 sends; the model validates routing changes too.
 
