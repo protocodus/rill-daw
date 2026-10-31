@@ -417,7 +417,7 @@ pub fn paint_timeline_cursor(painter: &egui::Painter, ruler: Rect, canvas: Rect,
     painter.add(egui::Shape::convex_polygon(
         head,
         colors.cursor,
-        egui::Stroke::new(1.0, colors.cursor_outline),
+        egui::Stroke::new(1.0_f32, colors.cursor_outline),
     ));
 }
 

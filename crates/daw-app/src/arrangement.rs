@@ -784,8 +784,9 @@ impl DawApp {
                                     }
                                 }
                                 TrackKind::Bus => {
-                                    if daw_ui::track_header_link_at(ui, rect, (track.id, "channel"),
-                                        daw_ui::Icon::Effect, "Channel", "Effects & sends").clicked() {
+                                    let response = daw_ui::track_header_link_at(ui, rect, (track.id, "channel"),
+                                        daw_ui::Icon::Effect, "Channel", "Effects & sends");
+                                    if response.clicked() {
                                         channel_target = Some(track.id);
                                     }
                                 }

@@ -115,7 +115,7 @@ fn material_emphasis_is_bounded_and_keeps_the_callers_clip() {
                 rect,
                 5,
                 theme::palette(ctx).control_fill,
-                Stroke::new(1.0, theme::palette(ctx).line),
+                Stroke::new(1.0_f32, theme::palette(ctx).line),
                 material,
             ));
         });
@@ -186,7 +186,7 @@ fn unavailable_materials_skip_texture_allocation() {
             rect,
             5,
             Color32::TRANSPARENT,
-            Stroke::new(1.0, Color32::GRAY),
+            Stroke::new(1.0_f32, Color32::GRAY),
             ComponentMaterial::default(),
         );
         let Shape::Vec(shapes) = outline else {
