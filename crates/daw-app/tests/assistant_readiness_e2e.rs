@@ -172,8 +172,12 @@ fn failed_requests_offer_editable_recovery_and_keep_any_committed_music() {
         assert_eq!(ready["assistant"]["configured"], false);
         assert_eq!(ready["assistant"]["submit_state"], "Ready");
         app.click("Send");
-        app.command(json!({"command":"wait_assistant","timeout_ms":10000}));
+        let completed = app.command(json!({"command":"wait_assistant","timeout_ms":10000}));
+        // Worker completion and the automatic scroll-to-error animation have
+        // separate lifetimes. Wait for the actual detail to enter the viewport.
+        common::wait_visible(&mut app, "Assistant fixture ran out of responses");
         let failed = app.inspect();
+        unchanged(&failed, &completed);
         assert_eq!(failed["assistant"]["busy"], false);
         assert_eq!(failed["assistant"]["page"], "Conversation");
         assert_eq!(
