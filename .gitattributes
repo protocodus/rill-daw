@@ -1,3 +1,7 @@
 # Preserve pinned third-party source bytes, including upstream whitespace.
 crates/daw-engine/vendor/signalsmith/** -text whitespace=-blank-at-eol linguist-vendored
 crates/daw-engine/vendor/bungee/** -text whitespace=-blank-at-eol linguist-vendored
+
+# Preserve frozen study records and raw validation output byte-for-byte.
+artifacts/usability-*/** -text -whitespace linguist-generated=true
+artifacts/mixer-*/** -text -whitespace linguist-generated=true
