@@ -94,6 +94,50 @@ fn toolbar_wraps_complete_native_controls_without_eating_the_canvas() {
 }
 
 #[test]
+fn trailing_toolbar_group_uses_current_row_and_wraps_only_when_needed() {
+    for (width, wraps) in [(800.0, false), (420.0, true)] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        let _ = ctx.run(input(vec![], egui::vec2(width, 600.0)), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let row = controls::toolbar(ui, |ui| {
+                    let leading = ui.add_sized(
+                        egui::vec2(280.0, 34.0),
+                        controls::button_widget("Editing tools"),
+                    );
+                    let trailing = controls::toolbar_trailing(ui, 180.0, |ui| {
+                        let fit = controls::view_button(ui, "Fit");
+                        let choice = controls::select("snap", "Snap 1/16")
+                            .width(100.0)
+                            .show_ui(ui, |_| {})
+                            .response;
+                        (fit, choice)
+                    });
+                    (leading, trailing)
+                });
+                let (leading, trailing) = row.inner;
+                let (fit, choice) = trailing.inner;
+                assert!((fit.rect.center().y - choice.rect.center().y).abs() < 0.1);
+                assert!(
+                    (fit.rect.right() - row.response.rect.right() + controls::tokens::SPACE_MD)
+                        .abs()
+                        < 0.1,
+                    "Trailing controls remain right aligned after wrapping"
+                );
+                if wraps {
+                    assert!(fit.rect.top() >= leading.rect.bottom());
+                } else {
+                    assert!(
+                        (fit.rect.center().y - leading.rect.center().y).abs() < 0.1,
+                        "Available current-row space must be used before wrapping"
+                    );
+                }
+            });
+        });
+    }
+}
+
+#[test]
 fn sized_toolbar_choices_use_remaining_row_space_and_wrap_as_one_group() {
     for (width, should_wrap) in [(800.0, false), (560.0, true)] {
         let ctx = Context::default();

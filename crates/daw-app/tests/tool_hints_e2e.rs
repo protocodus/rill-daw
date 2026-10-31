@@ -129,6 +129,12 @@ fn tools(app: &mut Harness, choices: &[(&str, &str, &str)]) {
     let before = app.inspect();
     app.click("Tool help");
     for (label, key, fragment) in choices {
+        if before["view"] == "Arrangement"
+            && !matches!(*label, "Select" | "Pencil" | "Cursor" | "Cut")
+        {
+            app.click("Select");
+            app.click("More tools");
+        }
         app.click(label);
         persistent_hint(app, label, key, fragment, &before);
         app.key(if *key == "Q" { "P" } else { "Q" });

@@ -21,6 +21,7 @@ enum Edit {
     GroupMove(f64),
     Bounds(u64, u64, std::sync::Arc<Clip>, f64, f64, bool),
     Command(u64, u64, ClipCommand),
+    LoopRange(f64, f64),
     New(u64, f64),
     Mute(u64),
     Solo(u64),
@@ -124,6 +125,8 @@ impl DawApp {
     pub fn arrangement(&mut self, ui: &mut egui::Ui) {
         self.drop_target = None;
         self.sync_arranger_selection();
+        let selected_loop_range = self.loop_selection_range();
+        let can_change_loop = !self.recording_busy();
         let viewport_id = egui::Id::new("arrangement_timeline_viewport");
         let mut viewport = ui
             .ctx()
@@ -166,14 +169,20 @@ impl DawApp {
             data.get_temp::<daw_ui::WaveformAmplitudeScale>(amplitude_id)
                 .unwrap_or_default()
         });
+        let compact_toolbar = ui.available_width() < 1200.0;
         daw_ui::toolbar(ui, |ui| {
-            daw_ui::editor_tools_with_labels(ui, &mut self.tool, &supported, |tool| {
-                if tool == daw_ui::EditorTool::Glue {
-                    "Join"
-                } else {
-                    tool.label()
-                }
-            });
+            daw_ui::compact_editor_tools(
+                ui,
+                &mut self.tool,
+                &supported,
+                &[
+                    daw_ui::EditorTool::Select,
+                    daw_ui::EditorTool::Pencil,
+                    daw_ui::EditorTool::Cursor,
+                    daw_ui::EditorTool::Cut,
+                ],
+                daw_ui::ToolHintContext::Arrangement,
+            );
             nudge = daw_ui::nudge_menu(ui, self.selected().is_some());
             add_pattern = daw_ui::button(ui, "Add pattern")
                 .on_hover_text("Add a four-beat MIDI pattern at the cursor; use the selected MIDI track or create one")
@@ -204,6 +213,11 @@ impl DawApp {
                         format!("Snap 1/{}", (4.0 / self.snap) as u32)
                     },
                 )
+                .width(if compact_toolbar {
+                    120.0
+                } else {
+                    daw_ui::tokens::SELECT_WIDTH
+                })
                 .show_ui(ui, |ui| {
                     for (name, value) in [
                         ("Off", 0.0),
@@ -1235,6 +1249,24 @@ impl DawApp {
                                 self.selected_notes.clear();
                                 ui.close();
                             }
+                            if ui.add_enabled(can_change_loop, daw_ui::button_widget(
+                                if member { "Loop selection" } else { "Loop clip" },
+                            ))
+                                .on_hover_text(if member {
+                                    "Repeat the selected clips or time range, including rests"
+                                } else {
+                                    "Repeat this clip without changing the current selection"
+                                })
+                                .on_disabled_hover_text("Finish recording before changing the loop range")
+                                .clicked()
+                            {
+                                let range = if member { selected_loop_range }
+                                    else { Some((clip.start, clip.end())) };
+                                if let Some((start, end)) = range {
+                                    edits.push(Edit::LoopRange(start, end));
+                                }
+                                ui.close();
+                            }
                             if daw_ui::button(ui, "Rename").clicked() {
                                 edits.push(Edit::Rename(track.id, clip.id));
                                 ui.close();
@@ -1674,6 +1706,7 @@ impl DawApp {
                     | Edit::GroupStart(..)
                     | Edit::GroupMove(..)
                     | Edit::TransferGroup(..)
+                    | Edit::LoopRange(..)
             ) {
                 self.begin_edit();
             }
@@ -1717,6 +1750,10 @@ impl DawApp {
                         }
                         _ => self.apply_clip_command(t, c, command),
                     }
+                    continue;
+                }
+                Edit::LoopRange(start, end) => {
+                    self.loop_range(start, end);
                     continue;
                 }
                 Edit::Bounds(t, c, original, start, length, stretch) => {

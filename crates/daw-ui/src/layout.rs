@@ -87,10 +87,15 @@ pub fn toolbar_trailing<R>(
     minimum_width: f32,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<R> {
-    let width = ui
-        .available_width()
-        .max(minimum_width)
-        .min(ui.max_rect().width());
+    // In a wrapping layout available_width includes subsequent rows. Asking
+    // for that width always pushes trailing controls onto a fresh row, even
+    // when there is enough room beside the leading tools.
+    let remaining = ui.available_size_before_wrap().x;
+    let width = if remaining >= minimum_width {
+        remaining
+    } else {
+        ui.max_rect().width()
+    };
     ui.allocate_ui_with_layout(
         egui::vec2(width, tokens::CONTROL_HEIGHT),
         egui::Layout::right_to_left(egui::Align::Center),

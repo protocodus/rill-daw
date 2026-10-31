@@ -40,7 +40,7 @@ pub fn channel_pan_label(pan: f32) -> String {
     }
 }
 
-/// The same precise channel-level field in Mixer and expanded track headers.
+/// The precise channel-level field used in Mixer and channel properties.
 /// Values outside the editing range remain intact until an intentional edit.
 pub fn channel_gain_number(db: &mut f32) -> crate::Number<'_> {
     crate::number(db)
@@ -75,10 +75,35 @@ fn slider_at(ui: &mut Ui, rect: Rect, id: impl Hash, slider: impl egui::Widget) 
     child.add(slider)
 }
 
+/// A bounded caption opens the shared precise-value editor. Its draft never
+/// writes back on dismissal; the caller receives only an explicit Apply/Enter.
+fn value_readout_at(
+    ui: &mut Ui,
+    rect: Rect,
+    id_salt: impl Hash,
+    label: String,
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f64>,
+    unit: &str,
+) -> Response {
+    let id = ui.make_persistent_id(id_salt);
+    let mut response = crate::button_at(ui, rect, id, label);
+    let popup = egui::Popup::menu(&response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| crate::value_entry(ui, id, f64::from(*value), range, unit));
+    if let Some(value_edit) = popup.and_then(|popup| popup.inner)
+        && *value != value_edit as f32
+    {
+        *value = value_edit as f32;
+        response.mark_changed();
+    }
+    response
+}
+
 /// Draw real channel gain/pan sliders and a stereo peak meter without advancing
 /// the parent canvas. Values belong to the mixer channel, never its clips.
 /// Compact headers retain both sliders with endpoint and current-value captions.
-/// Normal headers also include the same editable numeric readouts as the mixer.
+/// Normal headers add concise readouts that open the shared exact-value editor.
 /// The caller supplies actual channel peaks; no signal or decay is fabricated.
 pub fn channel_controls_at(
     ui: &mut Ui,
@@ -94,7 +119,7 @@ pub fn channel_controls_at(
     let gap = 4.0;
     let control_right = rect.right() - meter_width - gap;
     let row_height = (rect.height() - gap) * 0.5;
-    let value_width = 66.0;
+    let value_width = 76.0;
     let slider_left = rect.left();
     let slider_right = control_right - value_width - gap;
     let (gain_rect, pan_rect) = if compact {
@@ -134,12 +159,21 @@ pub fn channel_controls_at(
     let mut gain_response = slider_at(ui, gain_rect, id.with("gain_slider"), gain_slider);
     let gain_scale = crate::slider_scale_geometry(ui.ctx(), gain_response.id);
     if !compact {
-        gain_response = gain_response.union(crate::number_at(
+        let readout = value_readout_at(
             ui,
             gain_value_rect,
             id.with("gain_value"),
-            channel_gain_number(&mut db),
-        ));
+            if *gain <= 0.0 {
+                "−∞ dB".to_owned()
+            } else {
+                format!("{db:.1} dB")
+            },
+            &mut db,
+            -60.0..=f64::from(20.0 * 1.5_f32.log10()),
+            "dB",
+        )
+        .on_hover_text("Click to enter exact volume");
+        gain_response = gain_response.union(readout);
     }
     if ui.is_enabled() && gain_response.changed() {
         *gain = channel_gain_from_db(db);
@@ -161,18 +195,17 @@ pub fn channel_controls_at(
     let mut pan_response = slider_at(ui, pan_rect, id.with("pan_slider"), pan_slider);
     let pan_scale = crate::slider_scale_geometry(ui.ctx(), pan_response.id);
     if !compact {
-        pan_response = pan_response.union(crate::number_at(
+        let readout = value_readout_at(
             ui,
             pan_value_rect,
             id.with("pan_value"),
-            crate::number(&mut pan_value)
-                .range(-100.0..=100.0)
-                .clamp_existing_to_range(false)
-                .speed(1.0)
-                .min_decimals(0)
-                .max_decimals(4)
-                .prefix("Pan "),
-        ));
+            format!("Pan {pan_value:.0}"),
+            &mut pan_value,
+            -100.0..=100.0,
+            "%",
+        )
+        .on_hover_text("Click to enter exact pan");
+        pan_response = pan_response.union(readout);
     }
     if ui.is_enabled() && pan_response.changed() {
         *pan = pan_value / 100.0;

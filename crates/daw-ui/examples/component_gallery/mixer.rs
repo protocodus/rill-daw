@@ -95,6 +95,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                                 ui::checkbox(ui, &mut state.muted[index], "Mute");
                                 ui::checkbox(ui, &mut state.solo[index], "Solo");
                             });
+                            ui.add_space(tokens::SPACE_SM);
                             ui::view_button(ui, if index == 2 { "Master" } else { "Music bus" });
                         },
                     );

@@ -2090,6 +2090,29 @@ impl DawApp {
                         }
                         let range = daw_ui::picker_button(ui, "Range", |ui| {
                             if recording_busy { ui.disable(); }
+                            let selection = self.loop_selection_range();
+                            let clip_editor = self.view == WorkspaceView::Clip;
+                            if ui.add_enabled(selection.is_some(), daw_ui::button_widget(
+                                if clip_editor { "Loop clip" } else { "Loop selection" },
+                            ))
+                                .on_hover_text(if clip_editor {
+                                    "Repeat the entire open clip"
+                                } else {
+                                    "Repeat the selected clips or time range, including rests"
+                                })
+                                .on_disabled_hover_text(if recording_busy {
+                                    "Finish recording before changing the loop range"
+                                } else {
+                                    "Select clips or drag a time range with the Cursor tool"
+                                })
+                                .clicked()
+                            {
+                                if let Some((start, end)) = selection {
+                                    self.loop_range(start, end);
+                                }
+                                ui.close();
+                            }
+                            ui.separator();
                             // Display musical beat numbers from one; the project and
                             // renderer retain their existing zero-based timeline.
                             let mut start = self.project.loop_start + 1.0;

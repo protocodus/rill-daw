@@ -11,15 +11,10 @@ const PHRASE_FRAMES: usize = SAMPLE_RATE as usize * 4;
 const SONG_FRAMES: usize = SAMPLE_RATE as usize * 16;
 
 fn menu(app: &mut Harness, name: &str, action: &str) -> Value {
-    let state = app.click(name);
-    let occurrence = state["visible_labels"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|label| *label == action)
-        .count()
-        - 1;
-    app.command(json!({"command":"click", "label":action, "occurrence":occurrence}))
+    app.click(name);
+    // The shared driver prefers the foreground menu and scrolls its commands
+    // into view. Hidden arranger tools are no longer duplicate visible labels.
+    app.click(action)
 }
 
 fn center(rect: &Value) -> (f64, f64) {
