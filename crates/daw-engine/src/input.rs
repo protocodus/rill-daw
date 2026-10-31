@@ -674,12 +674,17 @@ impl InputShared {
             ),
             4 => Some("Audio input stream failed or disconnected"),
             5 => Some("Audio input produced non-finite samples"),
-            6 => Some("Audio output stream failed or disconnected"),
+            6 => Some(
+                "Audio output stream failed or disconnected\n\nCheck the output device in Audio setup, then choose Retry playback or press Play to reconnect.",
+            ),
             7 => Some(
                 "Audio output ran out of playback samples; recording stopped to preserve overdub alignment",
             ),
             8 => Some(
                 "The audio device changed during recording; capture stopped to preserve overdub alignment",
+            ),
+            9 => Some(
+                "Audio output dropout interrupted recording\n\nCapture stopped to preserve timing and retain the recorded prefix. Choose Retry playback or press Play to reconnect before recording again.",
             ),
             _ => None,
         }
@@ -1179,6 +1184,7 @@ impl AudioEngine {
         }
     }
     pub fn start_recording(&mut self, config: RecordingConfig) -> Result<()> {
+        self.ensure_output_ready()?;
         self.input.poll();
         let shared = &self.controls.input;
         ensure!(
@@ -1256,6 +1262,11 @@ impl AudioEngine {
             }
         };
         self.input.recording = Some(RecordingJob { receiver, worker });
+        if let Err(error) = self.ensure_output_ready() {
+            // A device fault can race preparation after the entry check.
+            self.controls.input.request_stop();
+            return Err(error);
+        }
         Ok(())
     }
     pub fn request_stop_recording(&self) {
@@ -1412,6 +1423,14 @@ impl AudioEngine {
                 "Virtual output disconnected",
             ),
         );
+        Ok(())
+    }
+    pub fn xrun_virtual_output(&self) -> Result<()> {
+        ensure!(
+            self.input.virtual_input,
+            "Virtual output dropout requires a virtual audio engine"
+        );
+        super::output_stream_failed(&self.controls, &cpal::Error::new(cpal::ErrorKind::Xrun));
         Ok(())
     }
     pub fn fail_virtual_input(&self) -> Result<()> {

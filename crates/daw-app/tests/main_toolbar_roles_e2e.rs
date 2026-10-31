@@ -89,7 +89,7 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
     let before = app.inspect();
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         app.command(json!({"command":"system_theme", "dark":dark}));
-        for width in [800, 1100, 1480, 1600] {
+        for width in [800, 1100, 1280, 1440, 1480, 1600] {
             app.command(json!({"command":"viewport", "width":width,
                 "height":900, "pixels_per_point":density}));
             app.command(json!({"command":"pointer", "phase":"move", "x":780.0, "y":880.0}));
@@ -104,7 +104,9 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
             same_row(&state, &["Start", "Play", "Stop", "Record"]);
             same_row(&state, &["001 . 01 . 00", "120.0 BPM", "4/4"]);
             same_row(&state, &["Click", "Loop", "Range"]);
-            if width >= 1100 {
+            // Visible tempo steps add two full mouse targets. Below 1280 the
+            // complete guide group may wrap; common laptop widths keep one row.
+            if width >= 1280 {
                 same_row(
                     &state,
                     &["Arranger", "Start", "120.0 BPM", "Click", "Range"],

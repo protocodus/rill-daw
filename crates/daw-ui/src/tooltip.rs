@@ -1,5 +1,7 @@
 //! Read-only tooltips that never intercept a click on the workspace below.
-use egui::{Frame, LayerId, Order, PopupAnchor, Rect, RectAlign, Response, WidgetText};
+use egui::{
+    Context, Frame, Id, LayerId, Order, PopupAnchor, Pos2, Rect, RectAlign, Response, WidgetText,
+};
 
 /// Add a native-styled, delayed text hint without creating a pointer-blocking
 /// overlay. Repeated hints for one response stack in call order. Use native
@@ -28,21 +30,48 @@ pub fn hover_text(response: Response, text: impl Into<WidgetText>) -> Response {
                 0,
             )
         });
+    let rect = paint_read_only_text(
+        ctx,
+        response.id.with(("read_only_tooltip", count)),
+        bounds,
+        text.into(),
+    );
+    ctx.data_mut(|data| {
+        data.insert_temp(stack_id, (pass, bounds.union(rect), count + 1));
+    });
+    response
+}
+
+/// Immediate, noninteractive feedback for an active pointer gesture. Call only
+/// while the gesture is held; no hover delay, persistent state, or input target
+/// is created. The returned bounds and painting stay within the viewport.
+pub fn pointer_text(ctx: &Context, id: Id, pointer: Pos2, text: impl Into<WidgetText>) -> Rect {
+    let anchor = Rect::from_center_size(
+        pointer,
+        egui::vec2(crate::tokens::SPACE_XL, crate::tokens::SPACE_XL),
+    );
+    paint_read_only_text(ctx, id, anchor, text.into())
+}
+
+fn paint_read_only_text(ctx: &Context, id: Id, bounds: Rect, text: WidgetText) -> Rect {
     let style = ctx.style();
-    let galley = text.into().into_galley_impl(
+    let frame = Frame::popup(&style);
+    let screen = ctx.content_rect();
+    let galley = text.into_galley_impl(
         ctx,
         &style,
         egui::text::TextWrapping {
-            max_width: style.spacing.tooltip_width,
+            max_width: style
+                .spacing
+                .tooltip_width
+                .min((screen.width() - frame.total_margin().sum().x).max(1.0)),
             ..Default::default()
         },
         egui::TextStyle::Body.into(),
         egui::Align::Min,
     );
-    let frame = Frame::popup(&style);
     let size = galley.size() + frame.total_margin().sum();
     let gap = crate::tokens::SPACE_XS;
-    let screen = ctx.content_rect();
     let align = RectAlign::find_best_align(
         std::iter::once(RectAlign::BOTTOM_START)
             .chain(RectAlign::BOTTOM_START.symmetries())
@@ -66,16 +95,10 @@ pub fn hover_text(response: Response, text: impl Into<WidgetText>) -> Response {
     );
     rect = rect.translate(shift);
     let content = rect - frame.total_margin();
-    let layer = LayerId::new(
-        Order::Tooltip,
-        response.id.with(("read_only_tooltip", count)),
-    );
+    let layer = LayerId::new(Order::Tooltip, id);
     ctx.move_to_top(layer);
     let painter = ctx.layer_painter(layer).with_clip_rect(screen);
     painter.add(frame.paint(content));
     painter.galley(content.min, galley, style.visuals.text_color());
-    ctx.data_mut(|data| {
-        data.insert_temp(stack_id, (pass, bounds.union(rect), count + 1));
-    });
-    response
+    rect.intersect(screen)
 }

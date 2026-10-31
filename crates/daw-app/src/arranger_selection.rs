@@ -15,6 +15,9 @@ pub(crate) struct ArrangerSelection {
     pub(crate) drag: Option<GroupDrag>,
     pub(crate) reveal: Option<(u64, u64)>,
     pub(crate) press_shift: Option<(u64, bool)>,
+    /// A Select-tool press can collapse a group only after an unmodified click
+    /// release; retaining the group while held keeps group dragging possible.
+    pub(crate) plain_click_candidate: Option<u64>,
     pub(crate) click_tracker: daw_ui::ItemClickTracker,
     pub(crate) background_click_tracker: daw_ui::ItemClickTracker,
     clipboard: Option<ClipClipboard>,
@@ -193,13 +196,19 @@ impl DawApp {
         self.arranger_selection.drag = None;
         self.arranger_selection.audio_drag = None;
         self.arranger_selection.press_shift = None;
+        self.arranger_selection.plain_click_candidate = None;
         self.arranger_selection.reveal = None;
         self.arranger_selection.click_tracker.clear();
         self.arranger_selection.background_click_tracker.clear();
         self.drag = None;
     }
 
-    /// A click retains a selected group for dragging; Shift-click toggles membership.
+    pub(crate) fn arranger_select_only_clip(&mut self, track: u64, clip: u64) {
+        self.arranger_select_clips([(track, clip)], None);
+    }
+
+    /// Drag starts and command-tool clicks retain a selected group; Shift-click
+    /// toggles membership. Plain Select-tool releases use select-only instead.
     pub(crate) fn arranger_click_clip(
         &mut self,
         track: u64,

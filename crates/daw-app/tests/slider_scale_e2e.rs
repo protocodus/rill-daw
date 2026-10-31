@@ -85,29 +85,6 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
     );
 }
 
-fn caption_below(state: &Value, scale: Scale, text: &str) {
-    assert!(
-        state["label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|label| {
-                if label["text"] != text {
-                    return false;
-                }
-                let min = Point::from(&label["min"]);
-                let max = Point::from(&label["max"]);
-                let center = min.between(max, 0.5);
-                min.x >= scale.min.x - 10.0
-                    && max.x <= scale.max.x + 10.0
-                    && center.y > scale.min.y
-                    && center.y < scale.min.y + 24.0
-            }),
-        "Caption {text:?} must be visible under {scale:?}: {}",
-        state["visible_labels"]
-    );
-}
-
 fn caption_left_at(state: &Value, point: Point, text: &str) {
     assert!(
         state["label_rects"]
@@ -251,7 +228,7 @@ fn fixture(app: &mut Harness) -> u64 {
 }
 
 #[test]
-fn mixer_ranges_ticks_and_handle_indices_match_mouse_edits_at_multiple_sizes() {
+fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let id = fixture(&mut app);
@@ -260,39 +237,14 @@ fn mixer_ranges_ticks_and_handle_indices_match_mouse_edits_at_multiple_sizes() {
             json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
         );
         app.click("Mixer");
-        let initial = painted(&mut app);
-        let pan = Scale::from(&mixer_channel(&initial, id)["pan_scale"]);
-        caption_below(&initial, pan, "L");
-        caption_below(&initial, pan, "R");
-        caption_below(&initial, pan, "Pan C");
-        assert_paint_alignment(&initial, pan, 0.5, &[0.0, 0.5, 1.0]);
-        for fraction in [0.0, 0.5, 1.0] {
-            let pan = Scale::from(&mixer_channel(&painted(&mut app), id)["pan_scale"]);
-            let edited = click_fraction(&mut app, pan, fraction);
-            near(
-                track(&edited, id)["pan"].as_f64().unwrap(),
-                fraction * 2.0 - 1.0,
-                1e-5,
-            );
-            let after = painted(&mut app);
-            let pan = Scale::from(&mixer_channel(&after, id)["pan_scale"]);
-            assert_paint_alignment(&after, pan, fraction, &[0.0, 0.5, 1.0]);
-            caption_below(
-                &after,
-                pan,
-                if fraction == 0.0 {
-                    "Pan L100"
-                } else if fraction == 1.0 {
-                    "Pan R100"
-                } else {
-                    "Pan C"
-                },
-            );
-        }
+        // Mixer Pan is a rotary control; mixer_pan_knob_e2e checks its
+        // calibrated arc, painted index, captions and relative mouse edits.
         let mut lengths = Vec::new();
+        // At 600 px the larger shared control rows hold the fader at its
+        // usable minimum. Give the tall case room beyond those fixed rows.
         for (height, fractions) in [
             (600, vec![0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0]),
-            (1100, (0..=10).map(|i| f64::from(i) / 10.0).collect()),
+            (1300, (0..=10).map(|i| f64::from(i) / 10.0).collect()),
         ] {
             app.command(json!({"command":"viewport", "width":1100, "height":height}));
             let state = painted(&mut app);

@@ -96,19 +96,29 @@ fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep
     );
     let mixer = menu(&mut app, "Window", "Mixer");
     assert_eq!(mixer["project"], panned["project"]);
-    let expected_db = 20.0 * gain.log10();
+    let expected_db = daw_ui::channel_gain_to_db(gain as f32);
+    let caption = format!("{expected_db:.1} dB");
     assert!(
         mixer["visible_labels"]
             .as_array()
             .unwrap()
             .iter()
-            .filter_map(Value::as_str)
-            .filter_map(|label| label.strip_suffix(" dB"))
-            .filter_map(|value| value.parse::<f64>().ok())
-            .any(|db| (db - expected_db).abs() < 0.0001),
-        "The precise mixer field must reflect the edited header gain: {}",
+            .any(|label| label == &caption),
+        "The idle mixer caption must reflect the edited header gain: {}",
         mixer["visible_labels"]
     );
+    let focused = app.click(&caption);
+    assert!(
+        focused["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == &expected_db.to_string()),
+        "Focused entry must retain the complete edited header gain: {}",
+        focused["visible_labels"]
+    );
+    assert_eq!(focused["project"], mixer["project"]);
+    assert_eq!(focused["history"], mixer["history"]);
     menu(&mut app, "Window", "Arrangement");
     app.click("Audio");
     menu(&mut app, "Window", "Properties");

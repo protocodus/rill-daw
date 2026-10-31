@@ -374,13 +374,7 @@ fn manual_gain_override_is_visible_saved_and_resumable_without_changing_curve_po
         // stored manual value (0.9), even before the first point is reached.
         assert!(visible(&original, "Automated"));
         assert!(
-            original["visible_labels"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter_map(Value::as_str)
-                .filter_map(|label| label.strip_suffix(" dB")?.parse::<f64>().ok())
-                .any(|db| (db - 20.0 * 0.3_f64.log10()).abs() < 0.0001),
+            visible(&original, "-10.5 dB"),
             "{}",
             original["visible_labels"]
         );

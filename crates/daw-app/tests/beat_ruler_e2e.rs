@@ -154,15 +154,36 @@ fn selection(state: &Value, editor: Editor) -> Value {
     ])
 }
 
-fn ruler_label<'a>(state: &'a Value, text: &str, plot: [f64; 4]) -> Option<&'a Value> {
+fn ruler_label<'a>(
+    state: &'a Value,
+    editor: Editor,
+    text: &str,
+    plot: [f64; 4],
+) -> Option<&'a Value> {
+    // The arranger has a separate labelled loop lane between ruler and canvas.
+    // Use its actual ruler bounds rather than assuming a fixed canvas offset.
+    let (top, bottom) = match editor {
+        Editor::Arrangement => (
+            state["timeline"]["ruler"]["min"][1].as_f64().unwrap(),
+            state["timeline"]["ruler"]["max"][1].as_f64().unwrap(),
+        ),
+        Editor::Midi | Editor::Audio => (
+            plot[1] - f64::from(daw_ui::tokens::TIMELINE_RULER_HEIGHT),
+            plot[1],
+        ),
+        Editor::Automation => (
+            plot[1] - 12.0 - f64::from(daw_ui::tokens::TIMELINE_RULER_HEIGHT),
+            plot[1] - 12.0,
+        ),
+    };
     state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
         .find(|label| {
             label["text"] == text
-                && label["min"][1].as_f64().unwrap() >= plot[1] - 64.0
-                && label["max"][1].as_f64().unwrap() <= plot[1]
+                && label["min"][1].as_f64().unwrap() >= top
+                && label["max"][1].as_f64().unwrap() <= bottom
         })
 }
 
@@ -185,7 +206,7 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
             assert!((start - 0.125).abs() < 0.0001, "{editor:?}: {start}");
             assert!(start + (rect[2] - rect[0]) / pixels < 1.0);
             for text in ["1.1.2", "0:00.15"] {
-                let label = ruler_label(&close, text, rect).unwrap_or_else(|| {
+                let label = ruler_label(&close, editor, text, rect).unwrap_or_else(|| {
                     panic!("{editor:?} lacks {text}: {}", close["visible_labels"])
                 });
                 let expected =
@@ -197,7 +218,7 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
             }
             if matches!(editor, Editor::Midi) {
                 let note = &close["midi_editor"]["notes"][0]["rect"];
-                let label = ruler_label(&close, "1.1.2", rect).unwrap();
+                let label = ruler_label(&close, editor, "1.1.2", rect).unwrap();
                 assert!(
                     (label["min"][0].as_f64().unwrap()
                         - f64::from(daw_ui::tokens::SPACE_XS)
@@ -215,8 +236,8 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
                 assert_eq!(selection(state, editor), selected, "{editor:?}");
             }
             let (_, _, rect) = view(&wide, editor);
-            assert!(ruler_label(&wide, "1.1.2", rect).is_none());
-            assert!(ruler_label(&wide, "1", rect).is_some());
+            assert!(ruler_label(&wide, editor, "1.1.2", rect).is_none());
+            assert!(ruler_label(&wide, editor, "1", rect).is_some());
             app.quit();
         }
     }
@@ -247,12 +268,13 @@ fn elapsed_clock_labels_omit_empty_hours_but_keep_real_hour_and_second_values() 
         for (seconds, expected) in [(15.0, "0:15"), (165.0, "2:45"), (18_955.0, "5:15:55")] {
             let state = navigate(&mut app, Editor::Arrangement, 160.0, seconds);
             let (_, _, rect) = view(&state, Editor::Arrangement);
-            let label = ruler_label(&state, expected, rect).unwrap_or_else(|| {
-                panic!(
-                    "Missing elapsed time {expected}: {}",
-                    state["visible_labels"]
-                )
-            });
+            let label =
+                ruler_label(&state, Editor::Arrangement, expected, rect).unwrap_or_else(|| {
+                    panic!(
+                        "Missing elapsed time {expected}: {}",
+                        state["visible_labels"]
+                    )
+                });
             assert!(label["max"][0].as_f64().unwrap() <= rect[2]);
             for field in ["project", "history", "modified"] {
                 assert_eq!(

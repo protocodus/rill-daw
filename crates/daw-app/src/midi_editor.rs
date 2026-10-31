@@ -896,10 +896,15 @@ impl DawApp {
                     );
                 }
                 let view_controls_id = ui.make_persistent_id("midi_view_controls");
-                daw_ui::toolbar_trailing(ui, 270.0, |ui| {
+                daw_ui::toolbar_trailing(ui, 440.0, |ui| {
                     ui.scope_builder(egui::UiBuilder::new().id(view_controls_id), |ui| {
                         daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Midi);
-                        fit = daw_ui::timeline_fit_button(ui).clicked();
+                        let zoom_action =
+                            daw_ui::timeline_zoom_controls(ui, !self.selected_notes.is_empty());
+                        if zoom_action != daw_ui::TimelineViewAction::None {
+                            view_action = zoom_action;
+                            fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
+                        }
                         daw_ui::quiet_view_menu(ui, "View", |ui| {
                             self.clip_navigation_controls(ui);
                             ui.separator();
@@ -920,6 +925,7 @@ impl DawApp {
                             daw_ui::checkbox(ui, &mut state.only_scale_keys, "Only scale keys")
                                 .on_hover_text("Hide other pitches without changing your notes");
                         });
+                        daw_ui::editor_tool_caption(ui, self.tool, daw_ui::ToolHintContext::Midi);
                     });
                 });
             });
@@ -1352,6 +1358,7 @@ impl DawApp {
         } else if view_action == daw_ui::TimelineViewAction::Previous {
             daw_ui::restore_previous_timeline_view(ui.ctx(), "midi", &mut state.viewport);
         }
+        view_action.apply_zoom(&mut state.viewport, plot);
         let fit_key = !ui.ctx().wants_keyboard_input()
             && !egui::Popup::is_any_open(ui.ctx())
             && ui.input(|input| input.key_pressed(egui::Key::F));
@@ -1498,7 +1505,9 @@ impl DawApp {
                 "midi",
                 previous_view,
                 state.viewport,
-                fit || fit_key || view_action == daw_ui::TimelineViewAction::FitSelection,
+                fit || fit_key
+                    || view_action == daw_ui::TimelineViewAction::FitSelection
+                    || view_action.is_zoom(),
             );
         }
         let view = state.viewport;
@@ -1598,7 +1607,17 @@ impl DawApp {
             let active = down
                 && !navigation.navigating
                 && pointer.is_some_and(|p| keys.contains(p) && key.contains(p));
-            let label = if state.only_scale_keys || pitch % 12 == 0 || pitch % 12 == self.root {
+            let reveal_pitch = owns_pointer
+                && pointer.is_some_and(|pos| {
+                    keys.contains(pos) || plot.contains(pos) && row.contains(pos)
+                });
+            let label = if state.only_scale_keys
+                || pitch % 12 == 0
+                || pitch % 12 == self.root
+                || reveal_pitch
+                || active
+                || state.keyboard_focus && state.keyboard_pitch == Some(pitch)
+            {
                 daw_core::note_name(pitch)
             } else {
                 String::new()
@@ -1976,7 +1995,12 @@ impl DawApp {
                 }
                 state.gesture = None;
             }
-            if down && let Some(gesture) = state.gesture.clone() {
+            // A slow frame can receive the final movement together with the
+            // release. Apply that endpoint before clearing the active gesture
+            // and committing its edits/overlap merge below.
+            if (down || released)
+                && let Some(gesture) = state.gesture.clone()
+            {
                 match gesture {
                     Gesture::Notes {
                         originals,

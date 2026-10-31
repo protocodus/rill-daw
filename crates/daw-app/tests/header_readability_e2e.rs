@@ -105,8 +105,15 @@ fn header_captions_stay_bounded_and_exact_popup_dismissal_preserves_precision() 
                 app.command(json!({"command":"text", "text":"-24.12345"}));
                 // Outside dismissal cancels a draft, including for stored
                 // gain values outside the ordinary editing range.
-                app.command(json!({"command":"pointer", "phase":"click", "x":180, "y":880}));
-                unchanged(&app.inspect(), &original);
+                // Row heights can move a channel beneath fixed coordinates.
+                // Dismiss in the live timeline canvas, away from track actions.
+                let canvas = &state["timeline"]["canvas"];
+                let dismissed = app.command(json!({"command":"pointer", "phase":"click",
+                    "x":canvas["max"][0].as_f64().unwrap()-12.0,
+                    "y":canvas["max"][1].as_f64().unwrap()-12.0}));
+                unchanged(&dismissed, &original);
+                assert_eq!(dismissed["view"], "Arrangement");
+                assert_eq!(dismissed["popups"]["properties"], false);
                 click_label(&mut app, pan_label, false);
                 unchanged(&app.click("Apply value"), &original);
                 click_label(&mut app, pan_label, false);

@@ -158,6 +158,35 @@ pub fn clip_title(
     layout
 }
 
+/// Reveal a clip's complete name and occurrence timing without adding another
+/// canvas target or changing its title geometry. Shared names remain distinct
+/// by track and position; ghost source-sharing remains explicit.
+pub fn clip_occurrence_hover(
+    response: Response,
+    title: &str,
+    track: &str,
+    range: std::ops::Range<f64>,
+    tempo: f64,
+    beats_per_bar: u8,
+    linked: bool,
+) -> Response {
+    let seconds_per_beat = 60.0 / tempo;
+    crate::hover_text(
+        response,
+        format!(
+            "{title}\n{track} · {}\n{}–{}{}",
+            crate::duration::musical_position(range.start, beats_per_bar),
+            crate::duration::format_seconds(range.start * seconds_per_beat),
+            crate::duration::format_seconds(range.end * seconds_per_beat),
+            if linked {
+                "\nGhost clip · Edits and name are shared. Position and trim are independent."
+            } else {
+                ""
+            },
+        ),
+    )
+}
+
 /// A read-only clip name for Properties or other bounded rows. The chain is
 /// vector geometry; the native text label retains the complete accessible name.
 /// Linked names explain their shared identity on hover instead of permanent text.

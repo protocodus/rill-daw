@@ -287,7 +287,14 @@ impl MidiShared {
         self.reset.fetch_add(1, Ordering::AcqRel);
     }
     pub(super) fn output_failed(&self) {
-        self.fail(5);
+        if self.capture_requested() {
+            self.fail(5);
+        } else {
+            // Stop monitoring without inventing a MIDI-recording failure when
+            // the output device fails during ordinary playback.
+            self.ready.store(false, Ordering::Release);
+            self.reset.fetch_add(1, Ordering::AcqRel);
+        }
     }
     fn fault_text(&self) -> Option<String> {
         match self.fault.load(Ordering::Acquire) {
@@ -910,6 +917,7 @@ impl AudioEngine {
         }
     }
     pub fn start_midi_recording(&mut self, tracks: Vec<u64>) -> Result<()> {
+        self.ensure_output_ready()?;
         self.midi.poll();
         let shared = &self.controls.midi;
         ensure!(
@@ -959,6 +967,10 @@ impl AudioEngine {
         self.controls
             .finished_generation
             .store(u64::MAX, Ordering::Release);
+        if let Err(error) = self.ensure_output_ready() {
+            self.controls.midi.output_failed();
+            return Err(error);
+        }
         Ok(())
     }
     /// Close capture at consumed output; monitoring keeps its independent voices.

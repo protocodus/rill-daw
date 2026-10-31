@@ -17,6 +17,46 @@ pub(crate) struct ErrorDetails {
 }
 
 impl DawApp {
+    pub(crate) fn has_failed_output_notice(&self) -> bool {
+        // Only our terminal output diagnostics qualify. Input failures and
+        // unrelated reports can contain output-device metadata or old causes.
+        self.error
+            && self
+                .engine
+                .as_ref()
+                .is_some_and(|engine| engine.snapshot().output_failed)
+            && self.last_error_report.as_ref().is_some_and(|report| {
+                report.status == self.status
+                    && (matches!(
+                        report.summary.as_str(),
+                        "Audio output stream failed or disconnected"
+                            | "Audio output dropout interrupted recording"
+                            | "Audio output failed during MIDI recording; captured notes were retained"
+                    ) || report.summary.starts_with("Audio output stream failed;"))
+            })
+    }
+
+    pub(crate) fn can_retry_playback(&self) -> bool {
+        self.has_failed_output_notice()
+            && self.loading.is_none()
+            && self.export_job.is_none()
+            && !self.project_io_pending()
+            && !self.state_sync_pending()
+            && !self.recording_busy()
+            && !self.recording_finalizing()
+            && self.document_guard.is_none()
+    }
+
+    pub(crate) fn retry_failed_playback(&mut self) {
+        // A retained notice or a click from an earlier frame must never toggle
+        // a healthy transport or retire a stream still finalizing a capture.
+        if !self.can_retry_playback() {
+            return;
+        }
+        self.cursor = self.engine.as_ref().unwrap().position_beats();
+        self.prepare_engine(true);
+    }
+
     pub(crate) fn make_error_report(&self, summary: String, diagnostic: String) -> ErrorReport {
         // Classify the original cause before appending the standard device
         // metadata, which appears in reports for unrelated errors too.
@@ -24,6 +64,8 @@ impl DawApp {
         let audio_setup = [
             "audio device",
             "audio output device",
+            "audio output stream",
+            "audio output dropout",
             "output device '",
             "device does not support the requested sample rate",
             "device buffer size",
@@ -160,6 +202,99 @@ impl DawApp {
 mod tests {
     use crate::app::DawApp;
     use daw_core::Project;
+    use daw_engine::{AudioEngine, DeviceSettings};
+    use std::sync::{Arc, atomic::AtomicBool, mpsc};
+
+    fn failed_output_app() -> DawApp {
+        let ctx = eframe::egui::Context::default();
+        let mut app = DawApp::with_context(&ctx, Project::new(), None);
+        app.virtual_audio = true;
+        let mut engine = AudioEngine::start_virtual_cancellable(
+            &app.project,
+            DeviceSettings::default(),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
+        engine.seek(2.0);
+        engine.fail_virtual_output().unwrap();
+        let diagnostic = engine.take_input_error().unwrap();
+        app.engine = Some(engine);
+        app.message(Err(anyhow::anyhow!(diagnostic)), "");
+        assert!(app.can_retry_playback());
+        app
+    }
+
+    #[test]
+    fn retry_revalidates_the_current_notice_and_never_pauses_a_healthy_engine() {
+        let mut app = failed_output_app();
+        let report = app.last_error_report.clone();
+        app.status = "A newer operation failed".into();
+        app.retry_failed_playback();
+        assert!(app.engine.as_ref().unwrap().snapshot().output_failed);
+        assert!(app.loading.is_none());
+        app.message(
+            Err(anyhow::anyhow!("Audio input stream failed or disconnected")),
+            "",
+        );
+        assert!(!app.has_failed_output_notice());
+        app.retry_failed_playback();
+        assert!(app.loading.is_none());
+
+        app.last_error_report = report;
+        app.status = app.last_error_report.as_ref().unwrap().status.clone();
+        let healthy = AudioEngine::start_virtual_cancellable(
+            &app.project,
+            DeviceSettings::default(),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
+        healthy.set_playing(true);
+        let identity = healthy.snapshot().engine_id;
+        app.engine = Some(healthy);
+        let project = app.project.clone();
+        let revision = app.revision;
+        app.retry_failed_playback();
+        assert!(app.engine.as_ref().unwrap().snapshot().playing);
+        assert_eq!(app.engine.as_ref().unwrap().snapshot().engine_id, identity);
+        assert_eq!(app.project, project);
+        assert_eq!(app.revision, revision);
+        assert!(app.loading.is_none());
+        assert!(!app.has_failed_output_notice());
+    }
+
+    #[test]
+    fn retry_waits_for_audio_preparation_export_and_queued_document_work() {
+        let mut app = failed_output_app();
+        let identity = app.engine.as_ref().unwrap().snapshot().engine_id;
+        let diagnostic = app.status.clone();
+        let (loading_sender, loading_receiver) = mpsc::channel();
+        app.loading = Some(loading_receiver);
+        assert!(app.has_failed_output_notice());
+        assert!(!app.can_retry_playback());
+        app.retry_failed_playback();
+        assert_eq!(app.engine.as_ref().unwrap().snapshot().engine_id, identity);
+        assert!(app.loading.is_some());
+        app.loading = None;
+        drop(loading_sender);
+
+        let (export_sender, export_receiver) = mpsc::channel();
+        app.export_job = Some(export_receiver);
+        assert!(!app.can_retry_playback());
+        app.retry_failed_playback();
+        assert_eq!(app.engine.as_ref().unwrap().snapshot().engine_id, identity);
+        assert!(app.export_job.is_some());
+
+        assert!(app.defer_document_request(crate::project_io::DocumentRequest::New));
+        app.export_job = None;
+        drop(export_sender);
+        app.message(Err(anyhow::anyhow!(diagnostic)), "");
+        assert!(app.project_io_pending());
+        assert!(app.has_failed_output_notice());
+        assert!(!app.can_retry_playback());
+        app.retry_failed_playback();
+        assert_eq!(app.engine.as_ref().unwrap().snapshot().engine_id, identity);
+        assert!(app.loading.is_none());
+    }
 
     #[test]
     fn report_preserves_all_causes_and_freezes_context() {

@@ -16,10 +16,10 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            gain: [-6.2, -10.4, -2.8],
+            gain: [0.49, 0.30, 0.72],
             pan: [0.0, -0.2, 0.1],
-            muted: [false; 3],
-            solo: [false; 3],
+            muted: [false, true, false],
+            solo: [false, false, true],
             precount: 1,
             click: true,
             click_gain: 0.35,
@@ -35,7 +35,10 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         ui.vertical(|ui| {
             ui.set_width(508.0);
             text::subtitle(ui, "Mixer channels");
-            text::note(ui, "mixer_strip · mixer_channel_button · stereo_meter");
+            text::note(
+                ui,
+                "mixer_fader · mixer_pan · mixer_mute_solo · mixer_level_meter",
+            );
             ui.add_space(tokens::SPACE_SM);
             let mut endpoints = Vec::new();
             ui.horizontal_top(|ui| {
@@ -65,7 +68,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                     let strip = ui::mixer_strip(
                         ui,
                         ("gallery_channel", index),
-                        vec2(160.0, 382.0),
+                        vec2(160.0, 460.0),
                         Some(color),
                         index == 1,
                         |ui| {
@@ -74,28 +77,23 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                             } else {
                                 ui::mixer_channel_button(ui, name, 136.0, color);
                             }
-                            text::note(ui, kind);
-                            ui.add(ui::channel_gain_number(&mut state.gain[index]));
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().slider_width = 176.0;
-                                ui.add_sized(
-                                    vec2(35.0, 176.0),
-                                    ui::slider(&mut state.gain[index], -60.0..=3.5)
-                                        .vertical()
-                                        .show_value(false),
-                                );
-                                ui::stereo_meter(ui, peaks, vec2(20.0, 176.0));
+                            ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
+                            text::note(ui, format!("Input · {kind}"));
+                            let mut db = ui::channel_gain_to_db(state.gain[index]);
+                            if ui.add(ui::channel_gain_number(&mut db)).changed() {
+                                state.gain[index] = ui::channel_gain_from_db(db);
+                            }
+                            ui.vertical_centered(|ui| {
+                                ui::mixer_fader(ui, &mut state.gain[index], 116.0);
                             });
-                            ui.add(
-                                ui::slider(&mut state.pan[index], -1.0..=1.0)
-                                    .text("Pan")
-                                    .show_value(false),
+                            ui::mixer_pan(ui, &mut state.pan[index], 136.0);
+                            ui::mixer_mute_solo(
+                                ui,
+                                &mut state.muted[index],
+                                &mut state.solo[index],
+                                136.0,
                             );
-                            ui.horizontal(|ui| {
-                                ui::checkbox(ui, &mut state.muted[index], "Mute");
-                                ui::checkbox(ui, &mut state.solo[index], "Solo");
-                            });
-                            ui.add_space(tokens::SPACE_SM);
+                            ui::mixer_level_meter(ui, peaks, 136.0);
                             ui::view_button(ui, if index == 2 { "Master" } else { "Music bus" });
                         },
                     );

@@ -143,7 +143,7 @@ fn assert_marker(state: &Value, scale_name: &str, expected: Marker) {
 }
 
 #[test]
-fn slider_markers_follow_mouse_edits_and_undo_without_changing_stored_values() {
+fn mixer_fader_markers_follow_mouse_edits_and_undo_without_changing_stored_values() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let mut project = Project::new();
@@ -158,13 +158,11 @@ fn slider_markers_follow_mouse_edits_and_undo_without_changing_stored_values() {
         );
         app.click("Mixer");
         let original = painted(&mut app);
-        assert_marker(&original, "pan_scale", Marker::Zero);
         assert_marker(&original, "fader_scale", Marker::Ordinary);
 
+        // Rotary pan uses an arc/index, covered by mixer_pan_knob_e2e;
+        // endpoint triangles and unity/midpoint glyphs belong to sliders.
         for (field, geometry, fraction, expected, marker) in [
-            ("pan", "pan_scale", 0.0, -1.0, Marker::Minimum),
-            ("pan", "pan_scale", 1.0, 1.0, Marker::Maximum),
-            ("pan", "pan_scale", 0.75, 0.5, Marker::Ordinary),
             ("gain", "fader_scale", 0.0, 0.0, Marker::Minimum),
             ("gain", "fader_scale", 1.0, 1.5, Marker::Maximum),
             ("gain", "fader_scale", 0.5, 0.75, Marker::Center),
@@ -186,7 +184,6 @@ fn slider_markers_follow_mouse_edits_and_undo_without_changing_stored_values() {
             let undone = app.command(json!({"command":"key", "key":"Z", "cmd":true}));
             assert_eq!(undone["project"], original["project"]);
             let restored = painted(&mut app);
-            assert_marker(&restored, "pan_scale", Marker::Zero);
             assert_marker(&restored, "fader_scale", Marker::Ordinary);
         }
         app.quit();

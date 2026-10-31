@@ -167,9 +167,17 @@ impl DawApp {
             .collect()
     }
 
+    pub(crate) fn export_midi_ready(&self) -> bool {
+        self.export_job.is_none() && !self.state_sync_pending() && !self.project_io_pending()
+    }
+
     pub(crate) fn export_midi_dialog(&mut self) {
+        // A native picker blocks polling. Let an earlier mixdown finish before
+        // starting another export so its result cannot replace this MIDI result.
+        if !self.export_midi_ready() {
+            return;
+        }
         if let Some(path) = self.pick_document_path(DocumentDialog::ExportMidi) {
-            self.exported_file = None;
             let result = self.project.export_midi(&path);
             match result {
                 Ok(()) => {
@@ -178,6 +186,7 @@ impl DawApp {
                         .unwrap_or(path.as_os_str())
                         .to_string_lossy();
                     self.message(Ok(()), &format!("Exported {name}"));
+                    self.finishing.midi_export_finished(&path);
                     self.exported_file = Some(path);
                 }
                 Err(error) => self.message(Err(error.context("MIDI export failed")), ""),
@@ -199,7 +208,15 @@ impl DawApp {
             return;
         }
         let duration = self.project.end_beat() * 60.0 / self.project.tempo;
-        let duration = format!("Arrangement · {}", daw_ui::format_clock_time(duration, 3));
+        let duration = format!(
+            "Arrangement · {}{}",
+            daw_ui::format_clock_time(duration, 3),
+            if self.export_include_effect_tails {
+                " + tails"
+            } else {
+                ""
+            },
+        );
         let mut export = false;
         let mut cancel = false;
         let missing_instruments = self.export_missing_instruments().join(", ");
@@ -209,7 +226,17 @@ impl DawApp {
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                daw_ui::text::body(ui, duration);
+                daw_ui::text::body(ui, duration).on_hover_text(
+                    if self.export_include_effect_tails {
+                        "The file includes releases and effect tails beyond this arrangement duration."
+                    } else {
+                        "The file ends exactly at this arrangement duration."
+                    }
+                );
+                daw_ui::text::note(ui, format!(
+                    "{} kHz · Stereo · 32-bit float",
+                    f64::from(self.settings.sample_rate) / 1000.0,
+                )).on_hover_text("Change the sample rate in Window → Setup → Audio.");
                 if !missing_instruments.is_empty() {
                     ui.add_space(daw_ui::tokens::SPACE_MD);
                     daw_ui::notice(ui, daw_ui::NoticeKind::Warning, "MIDI notes need an instrument", |_| {});

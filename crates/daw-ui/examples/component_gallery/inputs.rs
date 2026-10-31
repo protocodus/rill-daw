@@ -15,6 +15,8 @@ pub struct State {
     mode: u8,
     rate: u32,
     buffer: u32,
+    naming_draft: Option<String>,
+    naming_focus: bool,
 }
 impl Default for State {
     fn default() -> Self {
@@ -32,6 +34,8 @@ impl Default for State {
             mode: 0,
             rate: 48000,
             buffer: 256,
+            naming_draft: None,
+            naming_focus: false,
         }
     }
 }
@@ -54,11 +58,20 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 );
                 ui.end_row();
                 text::label(ui, "Duration");
-                ui.add(
-                    controls::number(&mut state.duration)
-                        .suffix(" beats")
-                        .speed(0.01)
-                        .range(0.001..=128.0),
+                controls::number_stepper(
+                    ui,
+                    &mut state.duration,
+                    1.0,
+                    0.001..=128.0,
+                    "duration",
+                    |ui, value| {
+                        ui.add(
+                            controls::number(value)
+                                .suffix(" beats")
+                                .speed(0.01)
+                                .range(0.001..=128.0),
+                        )
+                    },
                 );
                 ui.end_row();
                 text::label(ui, "API key");
@@ -73,22 +86,33 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         text::subtitle(left, "Paths and rotary values");
         controls::card(left.ctx()).show(left, |ui| {
             ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(egui::vec2(300.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                    controls::path_row(
-                        ui,
-                        std::path::Path::new("Music / Rill / Glass Current / Recordings"),
-                        |ui| { controls::small_button(ui, "Choose…"); },
-                    );
-                    text::note(ui, "Long paths truncate while their actions remain reachable.");
-                    ui.add_space(controls::tokens::SPACE_MD);
-                    text::body(ui, "Drag the dial or click its number to type.");
-                    text::note(ui, "The arc and written state identify automation. Shift makes a drag finer.");
-                });
-                ui.add(controls::knob(&mut state.rotary, 0.0..=100.0)
-                    .text("Normalized")
-                    .suffix(" %")
-                    .diameter(72.0)
-                    .automation(Some(controls::AutomationState::Read)));
+                ui.allocate_ui_with_layout(
+                    egui::vec2(300.0, 0.0),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        controls::path_row(
+                            ui,
+                            std::path::Path::new("Music / Rill / Glass Current / Recordings"),
+                            |ui| {
+                                controls::small_button(ui, "Choose…");
+                            },
+                        );
+                        ui.add_space(controls::tokens::SPACE_MD);
+                        text::note(
+                            ui,
+                            "Drag the dial or click its value. Shift adjusts finely.",
+                        );
+                        ui.add_space(controls::tokens::SPACE_SM);
+                        mouse_naming(ui, state);
+                    },
+                );
+                ui.add(
+                    controls::knob(&mut state.rotary, 0.0..=100.0)
+                        .text("Normalized")
+                        .suffix(" %")
+                        .diameter(72.0)
+                        .automation(Some(controls::AutomationState::Read)),
+                );
             });
         });
         let right = &mut columns[1];
@@ -133,11 +157,25 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             ui.add(controls::slider(&mut state.pan, -1.0..=1.0).text("L / R"));
             ui.add_space(controls::tokens::SPACE_MD);
             ui.columns(4, |columns| {
-                for (index, (column, label)) in columns.iter_mut().zip(["Minimum", "Maximum", "Center", "Zero"]).enumerate() {
+                for (index, (column, label)) in columns
+                    .iter_mut()
+                    .zip(["Minimum", "Maximum", "Center", "Zero"])
+                    .enumerate()
+                {
                     text::label(column, label);
                     column.spacing_mut().slider_width = column.available_width();
-                    column.add(controls::slider(&mut state.slider_landmarks[index], if index == 3 { -100.0..=100.0 } else { 0.0..=100.0 })
-                        .show_value(false).scale_labels(false));
+                    column.add(
+                        controls::slider(
+                            &mut state.slider_landmarks[index],
+                            if index == 3 {
+                                -100.0..=100.0
+                            } else {
+                                0.0..=100.0
+                            },
+                        )
+                        .show_value(false)
+                        .scale_labels(false),
+                    );
                 }
             });
             text::note(ui, "Down / up at limits · dot at midpoint · circle at zero");
@@ -152,4 +190,34 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             );
         });
     });
+}
+
+fn mouse_naming(ui: &mut Ui, state: &mut State) {
+    text::subtitle(ui, "Mouse naming");
+    let field = egui::Id::new("gallery_mouse_name");
+    if let Some(draft) = &mut state.naming_draft {
+        let response = controls::inline_name_editor(
+            ui,
+            field,
+            draft,
+            "Project name",
+            260.0,
+            state.naming_focus,
+        );
+        state.naming_focus = false;
+        match response.action {
+            controls::InlineNameAction::Commit => {
+                if !draft.trim().is_empty() {
+                    state.name = draft.clone();
+                }
+                state.naming_draft = None;
+            }
+            controls::InlineNameAction::Cancel => state.naming_draft = None,
+            controls::InlineNameAction::Editing => {}
+        }
+    } else if controls::button(ui, "Name with mouse…").clicked() {
+        state.naming_draft = Some(state.name.clone());
+        state.naming_focus = true;
+        controls::set_name_keyboard_open(ui.ctx(), field, true);
+    }
 }

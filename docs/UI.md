@@ -221,6 +221,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Focused workspace structure | `workspace_header`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
+| Mixer parameter controls and output level | `mixer_fader`, `mixer_pan`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `mixer_level_meter` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
 | Mixer identity, inserts and routing | `mixer_master_title`, `mixer_effects_button`, `mixer_insert_summary`, `mixer_bus_input_summary`, `paint_mixer_fader_scale`, `mixer_output_button`, `mixer_sends_button`, `MixerSend` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
@@ -233,17 +234,20 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Native pane middle-drag navigation | `scroll_area`, `scroll_area_is_panning` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
+| Mouse naming | `inline_name_editor`, `name_keyboard`, `set_name_keyboard_open`, `name_keyboard_open` |
 | Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantSubmitState`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button` |
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
-| Ghost clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
+| Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Arrangement clip surfaces and previews | `clip_surface`, `ClipSurfaceLayout`, `clip_note_preview` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
+| Numeric mouse steps and exact entry | `number_stepper`, `number_stepper_integer`, `mouse_value_entry`, `NumberStepperResponse` |
+| Exact time ranges and readouts | `duration::duration_presets`, `duration::timing_summary`, `duration::paint_loop_region`, `duration::loop_endpoint_handle` |
 | Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
 | Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `paint_track_header_sections`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
-| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
+| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_zoom_controls`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
@@ -266,6 +270,60 @@ native popup styling. Repeated hints for one response stack without intercepting
 pointer input: even a mouse move and press in the same frame reaches the control
 beneath a disappearing hint. Sliders and automation hints use this helper. Keep
 native `on_hover_ui` for tooltips that intentionally contain interactive content.
+
+`number_stepper` appends visible minus/plus actions and an optional **123** keypad
+to a caller-supplied numeric field. It preserves drag speed, formatting and text
+entry. The keypad uses a full-precision draft; only **Apply value** commits a
+finite value inside the range. Cancel, outside dismissal and unchanged Apply
+leave the value and history intact. `number_stepper_integer` additionally rejects
+fractional drafts for whole-bar fields. Each successful step or changed Apply
+returns `stepped`, allowing the caller to create a separate Undo entry.
+Steps add to the current value without rounding its fractional part;
+buttons disable when their result would exceed the range. Merely displaying an
+existing out-of-range value never clamps it. Use it for important musical timing
+fields and tempo rather than adding controls to every compact readout.
+
+`inline_name_editor` offers **Keyboard** beside its ordinary text field. The
+optional `name_keyboard` pad uses the field's Unicode character selection and
+cursor, supports upper/lowercase letters, digits, spaces, punctuation, Backspace,
+Select all and Clear, and limits new names to 128 characters. **Caps** keeps
+letters uppercase until toggled off. It edits only the
+caller's draft: **Apply name** commits one document edit and **Cancel** discards
+it. Native typing and F2/Enter/Escape remain available. Properties can open the
+same editor with its pad visible; **File → Rename project…** also uses it. An
+unsaved project's name supplies Save/WAV/MIDI defaults; naming a saved project
+does not rename its existing file. The title tooltip keeps that distinction
+visible alongside the arrangement duration.
+
+`duration::duration_presets` offers exact 5, 10, 15, 30, 60 and 120-second targets
+in an on-demand choice menu. It returns the selected duration and preserves the
+current value when dismissed. The caller owns tempo conversion, range limits and
+history. Rill's Range menu applies it from the existing loop start; repeating a
+selected phrase to that end retains rests and trims the final copy precisely.
+
+`duration::timing_summary` adds read-only Starts at, Ends at and Elapsed rows to
+a form grid, combining millisecond clock time with bar/beat positions and bar
+counts. Clip Properties and Range use the same conversions without rounding the
+stored values. `paint_loop_region` fits the loop's positions and clock times into
+the existing ruler strip; a hover hint retains the full summary for narrow ranges.
+Range also offers **Loop playback over arrangement** and quarter-beat endpoint steppers. These
+commands use ordinary loop editing and history; viewing the summaries does not.
+
+`duration::loop_endpoint_handle` adds a visible drag target at an actual loop
+endpoint; pass the unclipped range rectangle and the visible lane bounds. The
+helper paints and hit-tests only; the application owns the gesture and history.
+Arrangement omits handles for endpoints outside the viewport instead
+of placing them at clipped strip boundaries. Endpoint drags follow the current
+snap setting (Shift temporarily bypasses it), leave the other endpoint fixed,
+and commit one Undo step per gesture. A read-only pointer hint shows the
+endpoint and duration during the drag. Recording disables range edits, including
+the handles.
+
+`pointer_text(ctx, id, pointer, text)` uses the same read-only surface for
+immediate gesture feedback. Call it only while dragging; it paints within the
+viewport without adding a hit target, changing focus, or persisting state.
+Arranger trims use it to show the applied end time and clip duration in seconds
+and beats, including snapping and source limits, and hide it on release.
 
 Standard controls use 13-point horizontal and eight-point vertical padding; canvas-owned controls retain their compact geometry. Popups use 21-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows use a φ-point border with a 21-point blurred shadow; menus use a smaller 13-point shadow. Blur and shadows add depth without changing native hit targets or focus behavior.
 
@@ -311,7 +369,7 @@ automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
 and a muted dash for Bypassed, without covering the center index or captions.
 
 `knob` / `Knob::new` provides a calibrated 270-degree rotary control with
-minimum/maximum captions, a visible value index and an always-present shared
+minimum/maximum captions, a visible value index and, by default, a shared
 numeric editor. Dragging is relative: up or right increases, down or left
 decreases, and pressing a different part of the dial never jumps the value.
 Shift makes a drag ten times finer; the numeric field provides the same precision
@@ -330,6 +388,14 @@ dial, numeric input, arc endpoints and value index for host diagnostics. The
 component caches its arc directions and paints bounded geometry without timers.
 Native plug-in values are normalized; a 0–100% knob must be labelled as such
 unless the host supplies an actual physical-unit conversion.
+
+Use `.compact().diameter(48.0)` for a dial inside an existing parameter row.
+Compact mode keeps the endpoint labels inside the dial and retains its center
+tick, position index and relative drag behavior. It omits the separate numeric
+editor, label and status rows; the caller supplies a current-value caption,
+hover guidance and exact-entry context menu. `KnobGeometry.number` is
+`Rect::NOTHING` in this mode. The default plug-in parameter knob keeps its
+visible numeric editor.
 
 `assistant(ui, prompt, state, options)` provides a bounded, selectable conversation,
 captured-context label, optional progress, multiline **AI prompt**, and fixed
@@ -364,6 +430,18 @@ The project header uses the saved filename stem, with the full path on hover and
 
 Errors offer **Details** from the notification, plugin view, or unsaved-project dialog.
 Audio-device errors also offer **Audio setup…** in the notification, restoring the caller when Setup closes.
+
+Recoverable backend output dropouts use one nonfatal warning with the current
+count and the same setup action. Ordinary playback continues while the backend
+recovers; dismissing the warning does not restart the stream. A dropout during
+pending or active capture or pre-count stops the stream to preserve take timing
+and retains the recorded prefix. Other output-device faults remain fatal and retain their backend
+details, separate from plug-in/render failure counts. The fatal-output notice
+offers **Retry playback** to open a fresh stream at the current position. The
+action is guarded during loading, export, document work and capture finalization;
+stale or unrelated errors cannot restart or pause a healthy stream. **Play**
+also reconnects; **Stop**, then **Play**, starts from the beginning.
+
 The diagnostic view shows the full available cause chain and contextual plugin,
 channel, application, and audio configuration data. **Copy details** copies the
 report exactly; **Close** or Escape returns to the unchanged caller. The report is
@@ -451,7 +529,7 @@ in persistent toolbars; keep explicit filled actions for primary tasks and
 confirmation. `command_group` supplies one rounded surface, four-point padding
 and complete-group wrapping, without taking input itself.
 
-`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height, and faders and meters stretch with the window. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
+`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
 `device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections and producers. `filter_chip` shows an active filter and removes it when clicked; pair it with a **Clear filters** action.
 
@@ -529,6 +607,16 @@ clips. Paint it after content and selection overlays. The arranger spans empty
 space beneath tracks; the MIDI editor includes the velocity lane. It owns no
 input, snapping or transport state, and omits positions outside the viewport.
 
+`timeline_zoom_controls` exposes a wrapping **− / + / Fit / Fit selection** family
+in Arrangement and both clip editors. Zoom buttons have explicit accessible names
+and use the same center anchor, factors and bounds as keyboard zoom. Selection
+fitting stays visible when disabled, so selection changes do not reflow the group.
+Call `TimelineViewAction::apply_zoom` after canvas geometry is available and mark
+each button zoom as an explicit view-history step. Existing View-menu selection
+fitting and Previous view remain available; no navigation action edits music or
+changes selection. Arrangement's **1 bar** snap choice uses the current meter's
+beat count; a later meter change retains that increment with an explicit beat label.
+
 The arranger reserves a separate loop strip below bar/time labels. Drag the label
 gutter to resize all track headers, or a header's lower edge to resize every track
 row together. View → Track layout provides precise dimensions. These dimensions
@@ -584,21 +672,41 @@ continue to use `TimelinePane` for their full navigation model.
 Mixer, Channel Properties, and expanded track headers reuse `channel_gain_number` for precise volume
 entry. Double-click the dB value to type, or drag in 0.1 dB steps. The editing
 range is −60 dB (silence) through the channel maximum; quieter stored positive
-gains remain intact until edited. Readouts retain up to six decimal places as
-needed. Compact headers and Mixer pan expose exact entry through their context
+gains remain intact until edited. Idle captions show one decimal place; focused
+entry and hover expose the stored precision. Opening, blurring or cancelling an
+entry never rounds the gain or its automation. Compact headers and Mixer pan expose exact entry through their context
 menus; pan entry uses −100..100 percent consistently, with zero at center.
-Master peak is a readout rather than a gain
-field.
+Master peak is a readout rather than a gain field. Its engine-provided peaks
+measure the actual output mix and retain brief transients with a sample-rate-based
+release, including across silent callbacks; pause and stop clear the meters.
 
 Mixer follows signal order from top to bottom: source/channel settings, Effects
-and insert summary, volume and pan, Mute/Solo, then **Target** and auxiliary sends.
-The output control carries the destination's color. A separate send action names
-a single destination or shows the send count; hover lists every destination,
-pre/post position and level. **Add send…** opens Routing for an empty send list.
+and insert summary, volume and pan, **Mute**/**Solo**, horizontal stereo **Level**,
+then **Output** and auxiliary sends. `mixer_fader` applies the shared slider's
+mixer skin: a recessed vertical rail, a clear rectangular handle and calibrated
+dB landmarks. `mixer_pan` uses the shared compact rotary knob in the same
+55-point parameter row, retaining relative dragging, exact-value context entry
+and automation actions. Its 48-point dial shows L/R and a fixed center tick;
+the adjacent caption shows **Pan C**, **Pan L…** or **Pan R…**. The complete row
+is an exact-entry context target, and `knob_geometry` returns the actual dial
+geometry through its response ID. The full-height volume fader remains separate.
+`mixer_mute_solo` gives the two independent switches equal-width, full-height
+buttons with explicit selected states. `mixer_level_meter` shows separate L/R
+peaks on a fixed −60..0 dBFS scale after all processing controls; it reads engine
+peaks without adding smoothing or audio state.
+
+The toolbar places **Add send…** beside **Add bus**. Its send menu uses the
+selected audio, MIDI or bus channel and requires an explicit eligible destination;
+it excludes duplicate sends and feedback routes. **New bus and send** creates
+both in one Undo step. New sends start post-fader at gain 0.25. Without an eligible
+selected channel, the send action is disabled.
+The output control carries the destination's color. Each strip's separate send
+action names a single destination or shows the send count; hover lists every
+destination, pre/post position and level. The strip's **Add send…** opens Routing
+for an empty send list. Pre-fader sends tap after inserts and before volume/pan;
+post-fader sends include both, and all sends respect channel mute.
 Selecting or hovering a channel previews its output and
-pre/post sends in separate routing lanes below the controls. `mixer_route_lane` connects actual `MixerRouteEndpoint` positions with a continuous three-point-wide U-shaped ribbon, including the arrowhead touching the destination. Vertex colors blend smoothly from source to destination along the path; Master uses the theme accent. Each route uses eleven vertices, with no textures or repaint requests. Offscreen endpoints retain their true coordinates and remain named. **+ Bus** creates a bus, and Routing can add several sends or create
-a bus and send together. Output and send choices exclude feedback and duplicate
-sends; the model validates routing changes too.
+pre/post sends in separate routing lanes below the controls. `mixer_route_lane` connects actual `MixerRouteEndpoint` positions with a continuous three-point-wide U-shaped ribbon, including the arrowhead touching the destination. Vertex colors blend smoothly from source to destination along the path; Master uses the theme accent. Each route uses eleven vertices, with no textures or repaint requests. Offscreen endpoints retain their true coordinates and remain named. The model validates every routing change too.
 
 Mixer separates contiguous Tracks and Buses with group headings and spacing,
 followed by Master. Drag a channel name to place it before or after another
@@ -615,8 +723,9 @@ clear border, while track colors stay strongest in names and top markers. Bus
 input counts expose their named output/send sources on hover. Effects show an
 insert-count badge and bounded first-name summary; the full ordered chain and
 bypass states appear on hover. Fader marks show unity, −6, −12 and silence using
-the native fader's existing gain law. Master has a neutral identity header and
-aligned meters. These readouts add no timers or animated paint.
+the native fader's existing gain law. Master has a neutral identity header, a tall
+stereo output meter and an output row aligned with the channels. These readouts
+add no timers or animated paint.
 
 Effect slots use the shared `effect_slot` card: bounded identity and enable switch,
 Active/Bypassed status, then a separate wrapping action row. The chain overview
@@ -627,7 +736,13 @@ the original image aspect ratio remain intact.
 
 Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut, R Duplicate, T Glue, Z Erase, U Multi-draw, I Fade in, O Fade out, P Cursor. Each editor exposes only its applicable subset. The arranger retains fixed track headers and a fixed ruler while the musical canvas pans; its native vertical scrollbar remains available.
 
-`clip_title` paints an elided clip name and optional chain icon inside a timeline rectangle, returning the icon/text bounds for diagnostics. It adds no hit target. `clip_label` shows the same link identity in editor headers and Properties. Names remain ordinary Unicode text in the project; the link indicator is a vector icon, not a name prefix. Properties separates Clip, Track, and Channel pages, opening Clip for a valid selected clip and Track otherwise. **Start** and **Duration** are editable through the ordinary move/trim paths with Undo; Start uses one-based beats, and duration and the read-only source offset remain distances in beats. Only audio clips expose **Clip gain**; MIDI clips have no gain or pan. Track holds naming, color, hierarchy, and display options. Channel holds mixer gain, pan, mute, solo, and latency for audio, MIDI, and bus channels. Folders and automation tracks have no Channel page. Every ghost group member displays the shared name and exposes **Make independent**.
+`clip_title` paints an elided clip name and optional chain icon inside a timeline rectangle, returning the icon/text bounds for diagnostics. It adds no hit target. `clip_label` shows the same link identity in editor headers and Properties. Names remain ordinary Unicode text in the project; the link indicator is a vector icon, not a name prefix. Properties separates Clip, Track, and Channel pages, opening Clip for a valid selected clip and Track otherwise. **Start**, **Duration** and **Source offset** use numeric fields with visible one-beat steppers and Undo; Start uses one-based beats, while duration and source offset remain distances in beats. Moving or trimming uses the ordinary clip-edit paths, and source offset keeps the occurrence in place. Only audio clips expose **Clip gain**; MIDI clips have no gain or pan. Track holds naming, color, hierarchy, and display options. Channel holds mixer gain, pan, mute, solo, and latency for audio, MIDI, and bus channels. Folders and automation tracks have no Channel page. Every ghost group member displays the shared name and exposes **Make independent**.
+
+`clip_timing_fields` accepts the occurrence-specific supported stretch-duration range from its owner. Stretch intersects it with remaining timeline space and uses it consistently for the number, steppers and numeric keypad; Trim retains ordinary boundary limits. The app derives these bounds from the current source window and core playback-rate constants, so trimmed or already-stretched ghosts receive correct local limits without changing their peers. Invalid keypad drafts stay editable and cannot Apply.
+
+`clip_edge_handle` registers narrow drag-only targets at actual visible clip edges. It adds no paint or layout. Arrangement owns the original bounds and gesture transaction, ignores zero horizontal motion, retains source and snap limits, and gives audio fade handles priority. Small edge corrections do not wait for the body click/drag threshold; the release position completes the same Undo step.
+
+`clip_occurrence_hover` extends the existing clip hover with its full Unicode name, track, musical start and clock range. It preserves the linked-source explanation and adds no persistent geometry or project edits.
 
 `clip_surface` gives audio and MIDI clips the same opaque, track-tinted body and
 quiet title band, keeping the beat grid behind musical content. Its returned title
@@ -645,6 +760,11 @@ Every operation has a mouse-only path. Shortcuts accelerate the same visible
 controls or context-menu commands. Arbitrary selection membership is available
 through Add/Remove context actions as well as Shift-click. Long command menus
 use `command_menu_contents` to retain full-size targets inside short windows.
+
+In Arrangement, a plain click on a selected group member selects only that clip
+on release. Keeping the button held and dragging retains the group and moves it
+together. Context menus, Shift-click, pan gestures and cancellation preserve their
+existing selection behavior; selection-only clicks add no document history.
 
 Plain arrows navigate selection: left/right choose neighbouring times and
 up/down choose neighbouring visual rows. Shift extends selection. Ctrl/Cmd plus
@@ -763,6 +883,12 @@ no confirmation. Offline rendering does not depend on the output device. VST3 mi
 
 A running export keeps its filename and elapsed time visible independently of editor status. Completion remains distinct from rendering. **Retry export** repeats the failed mix, destination and options, retaining its original project snapshot even if later edits were made; hover the action for that scope. New/Open/Quit wait for active export completion. If export fails while switching, **Cancel** returns to its retry action and **Continue** resumes the normal document-save decision without claiming a WAV was completed.
 
+**File → Recent exports** retains the current document's last five successful
+WAV/MIDI destinations with their format, filename, full-path tooltip and **Copy
+path**. Repeating a destination moves it to the front; failed or cancelled exports
+add no receipt. New/Open clears the list. The latest completion remains the
+primary notice, and the last-WAV re-export command keeps its own destination.
+
 ## Device library and effect chains
 
 **Window → Library** opens a large card grid with Instruments and Effects tabs. Each card shows a cached native editor preview, the device name, and its developer. Names wrap to two lines; full text remains in the tooltip. Missing previews use a quiet instrument/effect icon. The grid adapts its columns to the available width and scrolls independently of the selected device's fixed action footer. Click to select, double-click or press Enter to insert/assign, and use arrow keys to move between cards. Left/Right remain text-editing keys while search has focus.
@@ -781,7 +907,7 @@ Plugin discovery stays metadata-only. After discovery, one isolated helper at a 
 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
 
-Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The **Channel** menu also provides **Open channel**, Instrument, Effects, and Routing actions where applicable. Channel, Effects, Instrument, and Routing share navigation links that keep the same channel selected. The links omit the current destination, whose context is already shown in the title; closing a utility returns to its caller. Each channel shows its own post-fader stereo meter beside the fader, and Master shows the stereo output meter. Readings come from the running engine.
+Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The **Channel** menu also provides **Open channel**, Instrument, Effects, and Routing actions where applicable. Channel, Effects, Instrument, and Routing share navigation links that keep the same channel selected. The links omit the current destination, whose context is already shown in the title; closing a utility returns to its caller. Each channel shows its own horizontal post-fader/pan stereo meter below Mute/Solo and above Output; Master shows the final stereo output meter. Readings come from the running engine.
 
 Instrument opens a concise device overview with the native **Open editor** action. **Automate…** opens a large parameter browser with automatic loading and focused search. Effect rows expose **Automate…** directly, without opening a native editor first. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
 
@@ -842,7 +968,9 @@ menu and retains the current tool and scale.
 
 `clip_editing` supplies item-anchored Rename with visible Apply/Cancel, and
 precise Start, Duration and Source offset fields. Duration explicitly chooses
-Trim or Stretch. F2 accelerates the same Edit/context Rename command.
+Trim or Stretch. The Properties Stretch readout always occupies its row, including
+the initial **100.0%**, so changing duration mode does not move the fields below
+it. F2 accelerates the same Edit/context Rename command.
 
 `batch_fades` supplies millisecond edge settings. Edit → Smooth edit boundaries
 applies the last accepted settings; Boundary fade settings offers Apply,
@@ -855,7 +983,7 @@ selected channels. Mixer context menus provide Select/Add/Remove/All/Clear;
 Shift-click and arrows accelerate those selection changes. Re-export uses the
 last successful destination and tail setting through the normal export path.
 
-`EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent active underline and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Unsupported tools reset to Select when changing editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.
+`EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent active underline and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Each workspace retains its own supported tool when navigating between editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.
 
 `editor_tools_with_context(ui, tool, supported, context)` exposes every supported
 mode as a direct button with contextual wording, a shortcut hint, and a persistent
@@ -866,22 +994,26 @@ preserves neighboring geometry, document state, selection, and history.
 Call `editor_tool_shortcuts` separately to route supported keys through the same
 mode state. Native controls retain keyboard focus and disabled behavior.
 
-Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips. Arrangement supports groups of selected clips and time selections that retain rests.
+Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips. Arrangement supports groups of selected clips and time selections that retain rests. Erase targets the pointed clip only, even if several clips are selected after a cut. Edit/context Delete retains its bulk-selection behavior; Undo restores the erased clip and its selection state.
 
-Transport **Range → Loop selection** and the clip context menu share one range
+Transport **Range → Loop playback over selection** and the clip context menu share one range
 action. A selected time span takes precedence over the enclosing bounds of
 selected clips. Setting the bounds and enabling looping is one undoable edit;
 the cursor, selection and viewport stay in place. Empty selections and recording
 cannot change the loop through this action. Exact start/end fields remain in
-Range for manual adjustment. In Clip Editor the action is named **Loop clip**
+Range for manual adjustment. In Clip Editor the action is named **Loop playback over clip**
 and targets the open clip, independent of note or waveform selections. An
-unselected arranger clip's context menu also uses **Loop clip** and retains the
+unselected arranger clip's context menu also uses **Loop playback over clip** and retains the
 existing selection.
 
 Arrangement, MIDI and audio use `editor_tool_help` inside their toolbar. Its
 full-size **Tool help** button opens the current tool's name, shortcut and full
 instructions in a bounded popup; hover offers the same explanation. Escape or
-an outside click dismisses it. The canvas has no permanent instruction band.
+an outside click dismisses it. `editor_tool_caption` uses only the toolbar's
+remaining width for the active tool's first gesture, such as **Click a clip to
+duplicate**. It truncates without wrapping or moving neighboring controls; the
+full help remains reachable when space is tight. The canvas has no permanent
+instruction band.
 `ToolHintContext` preserves each editor's semantics. Automation continues to use
 `interaction_hint` for fixed point interactions; `editor_tool_hint` remains
 available to hosts that need inline guidance. Opening help never changes
@@ -926,10 +1058,16 @@ temporarily show all pitches so off-scale choices remain visible. Draft generati
 is cached by settings, bounded to 8,192 notes and never allocates project IDs.
 
 `generation_root_selector` exposes all twelve pitch classes in a three-column menu without scrolling. `generation_bar_range` edits a one-based **Start bar** and **Length** in whole bars
-using the shared native numeric controls, and displays the inclusive active bar
-range. Zero length represents a view with no complete bars; the caller disables
-confirmation until a valid range is chosen. Returned input responses expose
-change state, focus and precise interaction rectangles.
+using the shared `number_stepper` controls, and displays the inclusive active bar
+range. Dragging, typing, whole-bar steps and the shared exact-value keypad all
+edit the same bounded values. Zero length represents a view with no complete
+bars; the caller disables confirmation until a valid range is chosen. Returned
+input responses expose change state, focus and precise interaction rectangles.
+
+`generation_footer` reserves two lines for draft, success or error feedback from
+the first frame. **Add notes**, **Next range**, and **Cancel**/**Done** retain
+their positions through repeated additions and validation errors; bounded status
+text exposes its full value on hover. The caller owns validation and edits.
 
 Generation previews stay in the live piano roll. Draw the ordinary canvas, then
 `paint_generation_backdrop`, `paint_generation_range` and

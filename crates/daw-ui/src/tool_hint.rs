@@ -18,6 +18,35 @@ impl ToolHintContext {
         }
     }
 
+    /// The first pointer gesture, short enough for an editor toolbar caption.
+    pub fn gesture(self, tool: EditorTool) -> &'static str {
+        use EditorTool::*;
+        match (self, tool) {
+            (Self::Arrangement, Select) => "Select clips · Drag to move or trim",
+            (Self::Midi, Select) => "Select notes · Drag to move or resize",
+            (_, Select) => "Drag to move · Drag edges to trim",
+            (Self::Arrangement, Pencil) => "Click a MIDI track to draw a clip",
+            (_, Pencil) => "Draw notes · Drag to set length",
+            (Self::Midi, Cursor) => "Click to place the playback cursor",
+            (_, Cursor) => "Click to seek · Drag to select time",
+            (Self::Arrangement, Cut) => "Click a clip to split",
+            (Self::Midi, Cut) => "Click a note to split",
+            (_, Cut) => "Click the waveform to split",
+            (Self::Midi, Duplicate) => "Click a note to duplicate",
+            (_, Duplicate) => "Click a clip to duplicate",
+            (Self::Arrangement, Glue) => "Click a clip to choose clips to join",
+            (_, Glue) => "Click notes to join with the selection",
+            (Self::Midi, Erase) => "Click or drag across notes to erase",
+            (_, Erase) => "Click a clip to erase it",
+            (_, MultiDraw) => "Draw a chord or scale",
+            (_, FadeIn) => "Drag to set the fade-in",
+            (_, FadeOut) => "Drag to set the fade-out",
+            (_, Ghost) => "Click a clip to create a linked copy",
+            (_, Stretch) => "Drag to change duration",
+            (_, Slip) => "Drag audio inside clip edges",
+        }
+    }
+
     pub fn hint(self, tool: EditorTool) -> &'static str {
         use EditorTool::*;
         match (self, tool) {
@@ -36,7 +65,7 @@ impl ToolHintContext {
             }
             (Self::Arrangement, Glue) => "Click a clip to choose the clips to join.",
             (Self::Arrangement, Erase) => {
-                "Click a selected clip to delete the selected clips or time block; click another clip to delete it."
+                "Click a clip to delete only that clip. Use the selection menu to delete selected clips or a time block."
             }
             (Self::Arrangement, Stretch) => {
                 "Drag a clip to change its duration. Audio keeps its pitch; MIDI note timing scales. Shift bypasses snap."
@@ -97,34 +126,46 @@ pub fn editor_tool_help(ui: &mut Ui, tool: EditorTool, context: ToolHintContext)
     response
 }
 
+/// Fill only the unused part of an existing toolbar row with pointer guidance.
+/// Call after the controls in `toolbar_trailing`: the caption cannot wrap the
+/// row, move its controls, or add another instruction band above the canvas.
+/// Full instructions remain available through the separate Tool help control.
+pub fn editor_tool_caption(
+    ui: &mut Ui,
+    tool: EditorTool,
+    context: ToolHintContext,
+) -> Option<Response> {
+    let available = ui.available_rect_before_wrap().intersect(ui.clip_rect());
+    let width = available.width();
+    if width < tokens::CONTROL_HEIGHT {
+        return None;
+    }
+    Some(
+        ui.allocate_ui_with_layout(
+            egui::vec2(width, tokens::CONTROL_HEIGHT),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.add(
+                    Label::new(TextRole::Note.rich(ui.ctx(), context.gesture(tool)))
+                        .truncate()
+                        .selectable(false)
+                        .sense(Sense::hover()),
+                )
+                .on_hover_text(context.hint(tool))
+            },
+        )
+        .inner,
+    )
+}
+
 /// Keep the active interaction legible without letting instructions consume the
 /// canvas. Help is a view preference scoped to this editor, never a song edit.
 pub fn editor_tool_hint(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {
-    let summary = match (context, tool) {
-        (ToolHintContext::Arrangement, EditorTool::Select) => "Select clips · Drag to move or trim",
-        (ToolHintContext::Midi, EditorTool::Select) => "Select notes · Drag to move or resize",
-        (_, EditorTool::Select) => "Drag to move · Drag edges to trim",
-        (ToolHintContext::Arrangement, EditorTool::Pencil) => "Draw clips on a MIDI track",
-        (_, EditorTool::Pencil) => "Draw notes · Drag to set length",
-        (ToolHintContext::Midi, EditorTool::Cursor) => "Place the playback cursor",
-        (_, EditorTool::Cursor) => "Seek · Drag to select time",
-        (_, EditorTool::Cut) => "Split at the pointer",
-        (_, EditorTool::Duplicate) => "Create an independent copy",
-        (ToolHintContext::Arrangement, EditorTool::Glue) => "Choose clips to join",
-        (_, EditorTool::Glue) => "Join selected notes",
-        (_, EditorTool::Erase) => "Delete at the pointer",
-        (_, EditorTool::MultiDraw) => "Draw a chord or scale",
-        (_, EditorTool::FadeIn) => "Drag to set the fade-in",
-        (_, EditorTool::FadeOut) => "Drag to set the fade-out",
-        (_, EditorTool::Ghost) => "Create a linked copy",
-        (_, EditorTool::Stretch) => "Drag to change duration",
-        (_, EditorTool::Slip) => "Move audio inside clip edges",
-    };
     help_panel(
         ui,
         ui.make_persistent_id(("editor_tool_help", context)),
         &format!("{} · {}", context.label(tool), tool.key().name()),
-        summary,
+        context.gesture(tool),
         context.hint(tool),
     )
 }

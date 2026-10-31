@@ -40,16 +40,78 @@ pub fn channel_pan_label(pan: f32) -> String {
     }
 }
 
-/// The precise channel-level field used in Mixer and channel properties.
-/// Values outside the editing range remain intact until an intentional edit.
-pub fn channel_gain_number(db: &mut f32) -> crate::Number<'_> {
-    crate::number(db)
-        .range(-60.0..=20.0 * 1.5_f32.log10())
-        .clamp_existing_to_range(false)
-        .speed(0.1)
-        .min_decimals(1)
-        .max_decimals(6)
-        .suffix(" dB")
+/// Let a focused gain draft handle Escape before workspace navigation does.
+/// Native focus must belong to it or have been lost in the current frame:
+/// egui clears focus for Escape before the app or numeric field handles it.
+pub fn channel_gain_editing(ctx: &egui::Context) -> bool {
+    let focused = ctx.data(|data| data.get_temp::<egui::Id>(egui::Id::new("channel_gain_editing")));
+    focused.is_some_and(|id| {
+        ctx.memory(|memory| memory.has_focus(id) || memory.had_focus_last_frame(id))
+    })
+}
+
+/// A concise channel-level readout with precise entry in Mixer and Properties.
+/// Formatting never rounds the stored value. An unchanged draft is not an edit,
+/// including when an existing gain lies outside the ordinary editing limits.
+pub fn channel_gain_number(db: &mut f32) -> impl egui::Widget + '_ {
+    move |ui: &mut Ui| {
+        let id = ui.next_auto_id();
+        let initial_id = id.with("channel_gain_initial_text");
+        let focused = ui.memory(|memory| memory.has_focus(id));
+        let before = *db;
+        let exact = db.to_string();
+        let initial = ui
+            .data(|data| data.get_temp::<String>(initial_id))
+            .unwrap_or_else(|| exact.clone());
+        let mut response = ui.add(
+            crate::number(db)
+                .range(-60.0..=20.0 * 1.5_f32.log10())
+                .clamp_existing_to_range(false)
+                .speed(0.1)
+                .min_decimals(1)
+                .max_decimals(6)
+                .suffix(" dB")
+                .update_while_editing(false)
+                .custom_formatter(move |value, _| {
+                    if focused {
+                        (value as f32).to_string()
+                    } else {
+                        format!("{value:.1}")
+                    }
+                })
+                .custom_parser(move |text| {
+                    let text: String = text
+                        .chars()
+                        .filter(|character| !character.is_whitespace())
+                        .map(|character| if character == '−' { '-' } else { character })
+                        .collect();
+                    // Native numeric fields parse again on blur. Rejecting the
+                    // untouched initial text avoids treating viewing as a user
+                    // edit, which would otherwise clamp an out-of-range gain.
+                    (text != initial).then(|| text.parse().ok()).flatten()
+                }),
+        );
+        // TextEdit marks draft changes too. The app should only create an Undo
+        // entry or automation override after the numeric value is committed.
+        if *db == before {
+            response.flags.remove(egui::response::Flags::CHANGED);
+        }
+        let has_focus = response.has_focus();
+        if response.gained_focus() {
+            ui.data_mut(|data| data.insert_temp(initial_id, exact));
+        } else if !has_focus {
+            ui.data_mut(|data| data.remove::<String>(initial_id));
+        }
+        let focus_key = egui::Id::new("channel_gain_editing");
+        ui.data_mut(|data| {
+            if has_focus {
+                data.insert_temp(focus_key, id);
+            } else if data.get_temp::<egui::Id>(focus_key) == Some(id) {
+                data.remove::<egui::Id>(focus_key);
+            }
+        });
+        response
+    }
 }
 
 pub struct ChannelControlsResponse {

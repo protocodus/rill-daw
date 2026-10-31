@@ -20,6 +20,7 @@ const DETAILS_WIDTH: f32 = 300.0;
 /// Two card columns and the grid's scrollbar gutter.
 const CATALOG_MIN_WIDTH: f32 = 2.0 * daw_ui::DEVICE_CARD_MIN_WIDTH + SPACE_MD + 16.0;
 const PANE_GAP: f32 = daw_ui::tokens::SPACE_LG;
+const PREVIEW_IMAGE_HELP: &str = "An optional image of the plug-in editor. Image capture does not verify whether the plug-in can load or play; assignment remains available.";
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub(crate) enum LibraryTarget {
@@ -45,7 +46,7 @@ enum Collection {
     All,
     Favorites,
     WithPreview,
-    PreviewFailed,
+    WithoutPreview,
 }
 
 impl Collection {
@@ -53,7 +54,7 @@ impl Collection {
         Self::All,
         Self::Favorites,
         Self::WithPreview,
-        Self::PreviewFailed,
+        Self::WithoutPreview,
     ];
 
     fn label(self) -> &'static str {
@@ -61,7 +62,7 @@ impl Collection {
             Self::All => "All plug-ins",
             Self::Favorites => "Favorites",
             Self::WithPreview => "With preview",
-            Self::PreviewFailed => "Preview failed",
+            Self::WithoutPreview => "Without preview",
         }
     }
 
@@ -70,7 +71,7 @@ impl Collection {
             Self::All => true,
             Self::Favorites => item.favorite,
             Self::WithPreview => item.entry.status == ThumbnailStatus::Ready,
-            Self::PreviewFailed => matches!(item.entry.status, ThumbnailStatus::Failed { .. }),
+            Self::WithoutPreview => item.entry.status != ThumbnailStatus::Ready,
         }
     }
 }
@@ -686,7 +687,13 @@ impl DawApp {
                             daw_ui::theme::label(ui, "LIBRARY");
                             for collection in Collection::ALL {
                                 let count = kind_items.iter().filter(|item| collection.accepts(item)).count();
-                                if daw_ui::count_item(ui, state.collection == collection, collection.label(), count).clicked() {
+                                let response = daw_ui::count_item(ui, state.collection == collection, collection.label(), count);
+                                let response = if matches!(collection, Collection::WithPreview | Collection::WithoutPreview) {
+                                    response.on_hover_text(PREVIEW_IMAGE_HELP)
+                                } else {
+                                    response
+                                };
+                                if response.clicked() {
                                     state.collection = collection;
                                 }
                             }
@@ -877,14 +884,17 @@ impl DawApp {
                                 row("Kind", kind_label(&entry.plugin).into());
                                 row("Version", if entry.plugin.version.is_empty() { "Unknown".into() } else { entry.plugin.version.clone() });
                                 row("Architecture", if entry.plugin.architectures.is_empty() { "Unknown".into() } else { entry.plugin.architectures.join(", ") });
-                                row("Preview", match &entry.status {
+                                row("Preview image", match &entry.status {
                                     ThumbnailStatus::Ready => "Captured".into(),
                                     ThumbnailStatus::Missing => "Not captured".into(),
-                                    ThumbnailStatus::Failed { .. } => "Failed".into(),
+                                    ThumbnailStatus::Failed { .. } => "Unavailable".into(),
                                 });
                             });
                             if let ThumbnailStatus::Failed { message } = &entry.status {
-                                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, message, 3);
+                                daw_ui::text::note(ui, "Optional image; assignment remains available.")
+                                    .on_hover_text(PREVIEW_IMAGE_HELP);
+                                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, message, 3)
+                                    .on_hover_text(format!("Preview image capture: {message}"));
                             }
                         });
                     }
@@ -936,17 +946,20 @@ impl DawApp {
                                 edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), !item.favorite));
                                 ui.close();
                             }
-                            if daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" }).clicked() {
+                            if daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" })
+                                .on_hover_text("Capture an optional image of the plug-in editor. This does not assign or replace the plug-in.")
+                                .clicked() {
                                 retry = Some(entry.plugin.clone());
                                 ui.close();
+                            }
+                            if let ThumbnailStatus::Failed { message } = &entry.status {
+                                daw_ui::text::note(ui, "Image unavailable")
+                                    .on_hover_text(format!("{PREVIEW_IMAGE_HELP}\n\nPreview image capture: {message}"));
                             }
                             if details == 0.0 {
                                 // Without room for the detail pane, keep its facts reachable.
                                 ui.separator();
                                 daw_ui::text::note(ui, if entry.plugin.category.is_empty() { "Unverified VST3".to_owned() } else { format!("VST3 · {}", entry.plugin.category.replace('|', " · ")) });
-                                if let ThumbnailStatus::Failed { message } = &entry.status {
-                                    daw_ui::text::note(ui, "Preview unavailable").on_hover_text(message);
-                                }
                                 daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
                             }
                         });

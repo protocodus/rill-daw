@@ -110,7 +110,7 @@ fn range_loops_discontiguous_clips_exactly_in_one_undo_and_preserves_context() {
     let mut app = fixture();
     let before = select_phrases(&mut app);
     assert_eq!(before["selected_clips"].as_array().unwrap().len(), 2);
-    let looped = menu(&mut app, "Range", "Loop selection");
+    let looped = menu(&mut app, "Range", "Loop playback over selection");
     assert_range(&looped, 1.375, 7.875);
     assert_context_unchanged(&before, &looped);
     assert_eq!(looped["history"]["undo"], json!(["Loop selection"]));
@@ -121,7 +121,7 @@ fn range_loops_discontiguous_clips_exactly_in_one_undo_and_preserves_context() {
     let redone = menu(&mut app, "Edit", "Redo");
     assert_eq!(redone["project"], looped["project"]);
     assert_context_unchanged(&before, &redone);
-    let repeated = menu(&mut app, "Range", "Loop selection");
+    let repeated = menu(&mut app, "Range", "Loop playback over selection");
     assert_eq!(repeated["history"], redone["history"]);
     assert_eq!(repeated["project"], redone["project"]);
 
@@ -154,7 +154,7 @@ fn context_loop_selection_keeps_phrase_rests_and_loop_clip_keeps_existing_select
     assert_eq!(before["selection_span"], json!([0.5, 8.5]));
     assert_eq!(before["selected_clips"].as_array().unwrap().len(), 2);
     context(&mut app, "First phrase");
-    let looped = app.click("Loop selection");
+    let looped = app.click("Loop playback over selection");
     assert_range(&looped, 0.5, 8.5);
     assert_context_unchanged(&before, &looped);
     assert_eq!(looped["history"]["undo"], json!(["Loop selection"]));
@@ -164,7 +164,7 @@ fn context_loop_selection_keeps_phrase_rests_and_loop_clip_keeps_existing_select
     let redone = menu(&mut app, "Edit", "Redo");
     assert_eq!(redone["project"], looped["project"]);
     context(&mut app, "Outside phrase");
-    let clip_loop = app.click("Loop clip");
+    let clip_loop = app.click("Loop playback over clip");
     assert_range(&clip_loop, 9.5, 10.5);
     assert_context_unchanged(&before, &clip_loop);
     assert_eq!(clip_loop["history"]["undo"].as_array().unwrap().len(), 2);
@@ -180,7 +180,7 @@ fn loop_selection_is_disabled_without_selection_and_while_recording() {
     let before = menu(&mut app, "Edit", "Clear clip selection");
     assert!(before["selected_clips"].as_array().unwrap().is_empty());
     app.click("Range");
-    let disabled = app.click("Loop selection");
+    let disabled = app.click("Loop playback over selection");
     assert_eq!(disabled["project"], before["project"]);
     assert_eq!(disabled["history"], before["history"]);
     assert_eq!(disabled["native_menu"]["open"], true);
@@ -194,13 +194,17 @@ fn loop_selection_is_disabled_without_selection_and_while_recording() {
     app.click("Record");
     let recording = wait_recording(&mut app, "recording");
     app.click("Range");
-    let disabled = app.click("Loop selection");
+    let disabled = app.click("Loop playback over arrangement");
+    assert_eq!(disabled["project"], recording["project"]);
+    assert_eq!(disabled["history"], recording["history"]);
+    assert_eq!(disabled["recording"]["phase"], "recording");
+    let disabled = app.click("Loop playback over selection");
     assert_eq!(disabled["project"], recording["project"]);
     assert_eq!(disabled["history"], recording["history"]);
     assert_eq!(disabled["recording"]["phase"], "recording");
     app.key("Escape");
     context(&mut app, "First phrase");
-    let disabled = app.click("Loop selection");
+    let disabled = app.click("Loop playback over selection");
     assert_eq!(disabled["project"], recording["project"]);
     assert_eq!(disabled["history"], recording["history"]);
     assert_eq!(disabled["recording"]["phase"], "recording");
@@ -224,7 +228,7 @@ fn clip_editor_range_loops_only_the_open_clip_instead_of_the_retained_arranger_g
         .unwrap();
     let start = clip["start"].as_f64().unwrap();
     let end = start + clip["length"].as_f64().unwrap();
-    let looped = menu(&mut app, "Range", "Loop clip");
+    let looped = menu(&mut app, "Range", "Loop playback over clip");
     assert_range(&looped, start, end);
     assert_context_unchanged(&before, &looped);
     assert_eq!(looped["history"]["undo"].as_array().unwrap().len(), 1);

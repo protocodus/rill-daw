@@ -132,6 +132,7 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 "fader",
                 "pan",
                 "mute_solo",
+                "meter",
                 "target",
             ];
             for pair in stages.windows(2) {
@@ -325,9 +326,9 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     app.command(json!({"command":"open","path":path}));
     app.click("Mixer");
     let initial = app.inspect();
-    let added = app.click("+ Bus");
+    let added = app.click("Add bus");
     assert_eq!(added["project"]["tracks"].as_array().unwrap().len(), 5);
-    let second = app.click("+ Bus");
+    let second = app.click("Add bus");
     assert_eq!(second["project"]["tracks"][4]["name"], "New bus");
     assert_eq!(second["project"]["tracks"][5]["name"], "New bus 2");
     undo(&mut app, false);

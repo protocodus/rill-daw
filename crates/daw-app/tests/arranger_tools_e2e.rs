@@ -553,24 +553,42 @@ fn ghost_stretch_is_local_survives_portable_recall_and_join_preserves_rendered_t
 }
 
 #[test]
-fn switching_editors_resets_unsupported_tools_without_editing_the_project() {
+fn switching_editors_retains_each_supported_tool_without_editing_the_project() {
     let (mut app, id, _) = fixture(Kind::Midi);
-    let original = app.inspect()["project"].clone();
+    let original = app.inspect();
     menu(&mut app, "Window", "Clip Editor");
     let multi = app.key("U");
     assert_eq!(multi["midi_editor"]["tool"], "MultiDraw");
     let arranger = menu(&mut app, "Window", "Arrangement");
-    assert_eq!(arranger["timeline"]["tool"], "Select");
-    assert_eq!(arranger["project"], original);
+    assert_eq!(
+        arranger["timeline"]["tool"], "Select",
+        "MIDI-only MultiDraw must not enter the arranger"
+    );
     let state = app.key("S");
     assert_eq!(state["timeline"]["tool"], "Stretch");
     let editor = menu(&mut app, "Window", "Clip Editor");
-    assert_eq!(editor["midi_editor"]["tool"], "Select");
-    assert_eq!(editor["project"], original);
+    assert_eq!(
+        editor["midi_editor"]["tool"], "MultiDraw",
+        "Arranger-only Stretch must not replace the piano roll's choice"
+    );
     let state = menu(&mut app, "Window", "Arrangement");
+    assert_eq!(state["timeline"]["tool"], "Stretch");
     let selected = pointer(&mut app, "click", center(&state, id));
-    assert_eq!(selected["project"], original);
     assert_eq!(selected["selected_clip"], id);
+    for state in [&multi, &arranger, &editor, &state, &selected] {
+        for field in [
+            "project",
+            "history",
+            "modified",
+            "selected_track",
+            "selected_clip",
+        ] {
+            assert_eq!(
+                state[field], original[field],
+                "Workspace tools changed {field}"
+            );
+        }
+    }
     app.quit();
 }
 

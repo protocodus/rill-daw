@@ -1,4 +1,4 @@
-use crate::meter::{ChannelMeter, ChannelMeters};
+use crate::meter::{ChannelMeter, ChannelMeters, release_factor};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
 use daw_core::{
@@ -1732,9 +1732,7 @@ impl Renderer {
             timeline: !self.preview,
             live_input,
             meter_decay: if self.metering {
-                // Instant attack, 24 dB/second release, independent of block size.
-                (-std::f32::consts::LN_10 * 1.2 * output.len() as f32 / self.sample_rate as f32)
-                    .exp()
+                release_factor(output.len(), self.sample_rate)
             } else {
                 0.0
             },

@@ -239,9 +239,18 @@ fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
 }
 
 fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
+    let before = app.inspect();
+    let viewport = before["viewport"].clone();
+    // This check inspects the full painted strip. The larger shared control
+    // rows scroll at 720 px, so give Mixer enough height, then restore the
+    // caller's original compact Arranger viewport below.
+    let height = viewport[1].as_f64().unwrap().max(900.0);
+    app.command(json!({"command":"viewport", "width":viewport[0], "height":height}));
     app.click("Mixer");
     let state = painted(app);
     assert_eq!(state["view"], "Mixer");
+    assert_eq!(state["project"], before["project"]);
+    assert_eq!(state["history"], before["history"]);
     let palette = if state["effective_theme"] == "Dark" {
         daw_ui::theme::DARK
     } else {
@@ -330,6 +339,11 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
     );
     let fill = mixer_body(&state, track(&state, id)["name"].as_str().unwrap())["fill"].clone();
     app.click("Arranger");
+    let restored =
+        app.command(json!({"command":"viewport", "width":viewport[0], "height":viewport[1]}));
+    assert_eq!(restored["viewport"], viewport);
+    assert_eq!(restored["project"], before["project"]);
+    assert_eq!(restored["history"], before["history"]);
     fill
 }
 
