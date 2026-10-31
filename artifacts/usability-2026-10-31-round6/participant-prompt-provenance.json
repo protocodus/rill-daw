@@ -1,0 +1,43 @@
+{
+  "files": [
+    {
+      "name": "participant-1-prompt.txt",
+      "path": "/workspace/scratch/rill-usability-round6/participant-1-prompt.txt",
+      "sha256": "e5099bb4f86c10c11c801b80215aef4a392a0b62ced725f29ed93c742126d481"
+    },
+    {
+      "name": "participant-2-prompt.txt",
+      "path": "/workspace/scratch/rill-usability-round6/participant-2-prompt.txt",
+      "sha256": "a0800fb50986df49c2a95381180292d5f0c35ac5290bbdacb7488deafd1af827"
+    },
+    {
+      "name": "participant-3-prompt.txt",
+      "path": "/workspace/scratch/rill-usability-round6/participant-3-prompt.txt",
+      "sha256": "5191564d7e0ff8c4677c1b5cd1e46652c2d01c809bf2fec44c16cfb34af440d1"
+    },
+    {
+      "name": "participant-4-prompt.txt",
+      "path": "/workspace/scratch/rill-usability-round6/participant-4-prompt.txt",
+      "sha256": "6e348375de51ea9300e1e31b78cb0f522eca1147ea75203a4a2a4080f4b89b8e"
+    },
+    {
+      "name": "participant-5-prompt.txt",
+      "path": "/workspace/scratch/rill-usability-round6/participant-5-prompt.txt",
+      "sha256": "3f9af31f5100636d899d10637c479a6ec0fd240c10eceb8e05ceeba8b7b13159"
+    },
+    {
+      "name": "participant-prompts.json",
+      "path": "/workspace/scratch/rill-usability-round6/participant-prompts.json",
+      "sha256": "17c61d4b811c4b8e4d984f471e420315dbd501c5516dff7223af41325ac7f81c"
+    }
+  ],
+  "freeze_hashes": {
+    "participant-1-prompt.txt": "e5099bb4f86c10c11c801b80215aef4a392a0b62ced725f29ed93c742126d481",
+    "participant-2-prompt.txt": "a0800fb50986df49c2a95381180292d5f0c35ac5290bbdacb7488deafd1af827",
+    "participant-3-prompt.txt": "5191564d7e0ff8c4677c1b5cd1e46652c2d01c809bf2fec44c16cfb34af440d1",
+    "participant-4-prompt.txt": "6e348375de51ea9300e1e31b78cb0f522eca1147ea75203a4a2a4080f4b89b8e",
+    "participant-5-prompt.txt": "3f9af31f5100636d899d10637c479a6ec0fd240c10eceb8e05ceeba8b7b13159",
+    "participant-prompts.json": "17c61d4b811c4b8e4d984f471e420315dbd501c5516dff7223af41325ac7f81c"
+  },
+  "actual_dispatch_and_resolved_prompt_record": "participant-prompts.json"
+}

@@ -1,0 +1,11 @@
+{
+  "target": "stretch_duration_range_e2e",
+  "case": "invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once",
+  "frozen_binary": "/workspace/scratch/rill-usability-round6/baseline/rill",
+  "frozen_binary_sha256": "c8fbcfb33d5d713db57347d8a8565be1dea8afbfbec46f8fa998bd7a24a3adc4",
+  "test_source_sha256": "af9c8f4acb76e795abde064e2645bc59397e4d1bd587a3f20a81133536230e52",
+  "baseline_log": "artifacts/usability-2026-10-31-round6/validation/stretch-baseline-expected-failure-1.log",
+  "baseline_result": "Expected failure: old app closed invalid56 draft and reported source-speed error after Apply. Excluded from corrected coverage totals.",
+  "corrected_log": "artifacts/usability-2026-10-31-round6/validation/stretch-attempt-3.log",
+  "corrected_result": "All5tests passed."
+}

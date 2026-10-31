@@ -1,0 +1,14 @@
+Participant 4 — simulated beginner, ambient soundtrack interest.
+All composition input used the provided mouse driver. No keyboard events, project APIs, code inspection, or composition-file edits were used.
+
+19:39–19:40: File menu made naming easy to find. The on-screen keyboard was a welcome mouse-only solution; named the piece mist. Empty arranger text explained how to create MIDI. Instrument assignment was straightforward.
+19:40–19:41: Drew C4/E4/G4 notes in the piano roll. Stretch and exact elapsed time in Properties were useful. The note endings were slightly uneven after drawing. Numeric duration fields did not offer the naming keyboard, so exact lengths required several stepper clicks.
+19:41–19:42: Context-menu Duplicate immediately worked. Toolbar Duplicate was initially confusing because it selected a tool instead of immediately duplicating. Clicking the clip after selecting the tool worked. Zoom minus made room for the longer arrangement.
+19:42–19:43: Repeated the chord into four 7.5-second MIDI clips. Repeated the audio and trimmed its final clip until the project showed 0:30.000. Lowered the audio track to -27.6 dB. The playhead advanced and both meters moved; I did not hear or audition audio.
+19:43–19:44: Save automatically proposed mist.rill in the session directory. The first native dialog screenshot was briefly black, then it rendered normally. WAV export explicitly showed 0:30. Disabled effect tails. Export progress was visible and later changed to Exported · mist.wav.
+19:44–19:45: MIDI export proposed mist.mid and showed Exported · mist.mid. All requested UI steps completed. App left open, playback stopped, buttons released, final.png captured.
+
+Ratings: easy to use 4/5; looks 4/5; speed 4/5; confusion 2/5 (higher is worse); feature completeness 4/5.
+Strengths: readable dark arrangement, discoverable MIDI setup, mouse naming keyboard, exact time readouts, automatic filenames, explicit export notices.
+Difficulties: Duplicate tool/action distinction, beat-based duration adjustment requiring repeated clicks, dense piano roll, brief native-dialog black rendering in this laboratory desktop.
+Limitations: simulated beginner; no audio audition, no output file inspection, only the laboratory VST tested. Timing includes tool overhead. The coordinator should independently verify saved files and output duration.

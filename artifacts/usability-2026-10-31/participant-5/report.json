@@ -1,0 +1,145 @@
+{
+  "participant": 5,
+  "persona": "Beginner beatmaker new to RILL; aiming for a 30-second hip-hop-style loop",
+  "evaluation_type": "Independent simulated beginner usability session, not a human study",
+  "method": {
+    "app_interaction": "Mouse clicks, double-clicks, drags and one scroll only; screenshots for discovery",
+    "source_inspection": false,
+    "keyboard_or_state_injection": false,
+    "isolation": "Session 5 native instance and configuration",
+    "start_utc": "2026-10-31T16:23:11Z",
+    "finish_utc": "2026-10-31T16:29:38Z",
+    "elapsed_seconds": 387,
+    "mouse_actions": 67,
+    "screenshot_actions": 37,
+    "conditions": [
+      "Software OpenGL",
+      "Null audio output: no audible playback judgement",
+      "Only instrument available was the lab-provided native VST3 Rill Lab Sine; not third-party plugin validation"
+    ]
+  },
+  "completion": {
+    "arrangement_created": true,
+    "project_saved": true,
+    "wav_exported": true,
+    "midi_exported": true,
+    "duration_seconds": 30.0,
+    "audio": "Four stock Circuit rhythm audio clips, final clip trimmed slightly before 30 seconds",
+    "midi": "Six mouse-drawn notes in a two-bar phrase, duplicated to seven two-bar clips; 14 bars at 112 BPM",
+    "vst": "Rill Lab Sine explicitly shown as Format VST3 in Device library and assigned to New instrument track",
+    "audible_quality_verified": false,
+    "musical_limitations": "A simple repeated phrase over the stock rhythm; hip-hop intent cannot be confirmed by listening under null audio."
+  },
+  "ratings_scale": "1 to 5; higher means more of the named quality. Higher confusion is worse.",
+  "ratings": {
+    "easy_to_use": 3,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 3
+  },
+  "rating_notes": {
+    "easy_to_use": "Initial MIDI creation, pencil notes, duplication and export were straightforward; exact trimming and changing values caused detours.",
+    "how_cool_it_looks": "Cohesive dark teal appearance, clear waveforms and readable controls. Similar clip colors and sparse pitch labels make scanning less expressive.",
+    "how_fast_it_is": "Created and exported in about 6.5 minutes. UI actions generally responded promptly; rendering finished after the visible eight-second elapsed status and before the next check. No formal latency benchmark.",
+    "how_confusing_it_is": "Toolbar reflow, context-sensitive tool changes, beat versus bar values and unclear selection persistence required checks.",
+    "feature_completeness": "Audio, real VST MIDI, note editing, duplication, project saving and both export formats worked. Mouse-only exact numeric entry and naming are incomplete."
+  },
+  "findings": [
+    {
+      "id": "P5-1",
+      "severity": "medium",
+      "title": "Exact numeric properties are keyboard dependent",
+      "observed": "Duration opens a text field; scrolling and dragging the value did not change it. No visible increment/decrement controls.",
+      "impact": "I spent about a minute retrying exact clip trimming and left audio 0.25 beat short while the MIDI determines the 30-second project length.",
+      "recommendation": "Add mouse-operable stepper or scrub controls for beat/time values, with displayed seconds and useful increments.",
+      "evidence": [
+        "08-duration.png",
+        "18-audio-properties.png",
+        "19-duration-scroll.png",
+        "20-duration-drag.png",
+        "21-duration-check.png"
+      ]
+    },
+    {
+      "id": "P5-2",
+      "severity": "medium",
+      "title": "Tool switching reflows the note toolbar",
+      "observed": "Pencil selection moved Length from the left second row to the right first row. My subsequent click in the old area opened Scale.",
+      "impact": "Interrupted early note entry and made controls feel unstable.",
+      "recommendation": "Keep shared controls in stable locations across Select/Pencil, or reserve a stable row for note length/grid options.",
+      "evidence": [
+        "03-piano.png",
+        "04-lengths.png",
+        "05-pencil.png"
+      ]
+    },
+    {
+      "id": "P5-3",
+      "severity": "medium",
+      "title": "Active tools change across editors",
+      "observed": "The audio editor opened with Cursor active. Returning to arranger required checking and restoring Select during trimming attempts.",
+      "impact": "A drag may seek/select time instead of resizing a clip after returning from a different editor.",
+      "recommendation": "Preserve each editor workspace tool independently and make edge resize affordances visible.",
+      "evidence": [
+        "17-audio-editor.png",
+        "23-duration-check.png",
+        "24-trim-retry.png"
+      ]
+    },
+    {
+      "id": "P5-4",
+      "severity": "low",
+      "title": "VST preview failure looks like instrument failure",
+      "observed": "Device library shows Preview failed in the navigation and Preview Failed in details; assignment still succeeds.",
+      "impact": "A new user may assume the only instrument is broken.",
+      "recommendation": "Explain unavailable artwork/preview separately from load/play readiness. This specific plugin intentionally has no custom UI; avoid treating it as general VST playback failure.",
+      "evidence": [
+        "01-midi.png",
+        "02-assigned.png"
+      ]
+    },
+    {
+      "id": "P5-5",
+      "severity": "low",
+      "title": "Mouse-only project naming lacks an option",
+      "observed": "Save and export use text filename fields; I retained Midnight circuit and generic New pattern labels.",
+      "impact": "Cannot easily personalize or distinguish the composition under the strict mouse-only constraint.",
+      "recommendation": "Provide an on-screen input option or useful generated unique names when mouse-only accessibility is a supported goal.",
+      "evidence": [
+        "27-save-dialog.png",
+        "30-export-wait.png",
+        "35-midi-export-dialog.png"
+      ]
+    },
+    {
+      "id": "P5-6",
+      "severity": "low",
+      "title": "Musical timing uses multiple units without conversion in properties",
+      "observed": "Ruler labels bars plus seconds, while properties show Beat 49.00 and duration 7.75 beats; arrangement range shows Beats 1.00-17.00.",
+      "impact": "A first-time producer must translate bars and beats to find a 30-second endpoint.",
+      "recommendation": "Show bars/beats and seconds together, and expose arrangement duration before export.",
+      "evidence": [
+        "18-audio-properties.png",
+        "24-trim-retry.png",
+        "28-export.png"
+      ]
+    }
+  ],
+  "positives": [
+    "Empty-space Double-click for MIDI hint directly led to instrument assignment",
+    "Pencil drag created notes with visible pitch names and automatically extended the pattern",
+    "Context menu Duplicate and Fit made arrangement expansion fast",
+    "Export WAV accurately showed 0:30.000 and offered effect-tail control",
+    "Save, WAV export and MIDI export completed with mouse-only defaults"
+  ],
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability/session-5/Midnight circuit.rill",
+    "wav": "/workspace/scratch/rill-usability/session-5/Midnight circuit.wav",
+    "midi": "/workspace/scratch/rill-usability/session-5/Midnight circuit.mid",
+    "action_log": "/workspace/scratch/rill-usability/session-5/mouse-actions.jsonl",
+    "evidence": "/workspace/scratch/rill-usability/session-5/artifact-evidence.json",
+    "reactions": "/workspace/scratch/rill-usability/session-5/reactions.txt",
+    "final_screenshot": "/workspace/scratch/rill-usability/session-5/36-midi-export-completed.png"
+  }
+}

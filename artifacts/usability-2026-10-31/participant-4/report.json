@@ -1,0 +1,136 @@
+{
+  "participant": 4,
+  "persona": "Casual video creator new to music production",
+  "goal": "A 30-second ambient soundtrack with audio plus MIDI/VST, using only the mouse",
+  "method": "Independent simulated beginner session; no app source inspection or peer reports; screenshot discovery and logged mouse clicks/drags/scroll only. Post-task read-only artifact inspection verified evidence.",
+  "session_start_utc": "2026-10-31T16:23:05Z",
+  "session_end_utc": "2026-10-31T16:29:33Z",
+  "input_events": 68,
+  "result": {
+    "completed": true,
+    "duration_seconds": 30.0,
+    "tempo_bpm": 112,
+    "arrangement_beats": 56,
+    "audio": "Stock Circuit rhythm sample, repeated across four clips, final clip trimmed to 8 beats; gain 0.17",
+    "midi": "Mouse-drawn sustained C4/D#4/G4 and D4/F4/A4 chords; four clips, final clip trimmed to 8 beats (21 notes fall inside clip bounds; 24 stored notes)",
+    "vst": "Rill Lab Sine native VST3 selected via Device library and assigned to MIDI track; test fixture, not third-party validation",
+    "audio_audition": "Not heard: laboratory uses null audio output. Both track meters animated during playback; final stereo float WAV contains nonzero samples. Musical quality cannot be judged.",
+    "save_export": "Project, 30.000-second 48kHz stereo float WAV and MIDI export saved with default filenames using native mouse dialogs."
+  },
+  "ratings_scale": "1-5, higher means more of the named quality. High confusion is worse. Simulated subjective ratings, not human research.",
+  "ratings": {
+    "easy_to_use": 3,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Empty-lane MIDI hint, labelled Pencil, context Duplicate and Fit enabled a full piece quickly. Exact timing and numeric edits needed exploration.",
+    "how_cool_it_looks": "Consistent charcoal/teal design, clean waveforms and focused views feel polished. Extensive empty canvas and very small ruler seconds reduce information density.",
+    "how_fast_it_is": "Controls responded promptly and the first MIDI/audio arrangement appeared in roughly two minutes. Export showed progress and completed; precise final trimming consumed additional time. Software rendering/null audio limit performance conclusions.",
+    "how_confusing_it_is": "Pencil selection moved toolbar controls, Range uses beats while ruler shows bars and seconds, and short trim adjustments seemed ineffective without inline feedback.",
+    "feature_completeness": "This task had working audio arrangement, native VST MIDI, piano roll, mixer, project save, WAV and MIDI export. Mouse-only exact numeric entry and clear duration feedback are weak; broader plugin/effect coverage untested."
+  },
+  "findings": [
+    {
+      "id": "P4-1",
+      "severity": "medium",
+      "finding": "Toolbar controls jump when changing edit tools",
+      "evidence": [
+        "03-piano.png",
+        "04-length-menu.png",
+        "05-pencil.png"
+      ],
+      "observed": "After selecting Pencil, Length moved from the left second row to far right first row. Clicking its previous position opened Grid scale instead.",
+      "recommendation": "Reserve a stable row or fixed slot for Length and Grid scale across tool changes."
+    },
+    {
+      "id": "P4-2",
+      "severity": "medium",
+      "finding": "Exact mouse-only duration is hard to inspect and adjust",
+      "evidence": [
+        "14-trimmed.png",
+        "21-export.png",
+        "25-properties.png",
+        "26-duration.png",
+        "27-duration-scroll.png",
+        "29-duration-check.png"
+      ],
+      "observed": "Visual trim near 30s produced 30.134s. Tiny edge drags did not visibly change it. Duration properties entered text mode, and mouse wheel did not alter 8.25 beats. A larger shorten-and-extend gesture with quarter-note snap finally reached 30.000s.",
+      "recommendation": "Show live start/end/duration in bars and seconds while trimming, offer mouse step buttons or drag-value controls, and provide a direct 30-second export/range field."
+    },
+    {
+      "id": "P4-3",
+      "severity": "medium",
+      "finding": "Loop and timeline units need clearer relationship",
+      "evidence": [
+        "13-34-seconds.png",
+        "16-playing.png"
+      ],
+      "observed": "Stock Loop remained active with Beats 1.00-17.00 after the arrangement grew to 30s. The ruler shows bar numbers and seconds; the range reads beats. I disabled Loop to play the whole arrangement.",
+      "recommendation": "Use a visible loop region with bar-and-second labels and a discoverable loop-entire-arrangement action."
+    },
+    {
+      "id": "P4-4",
+      "severity": "low",
+      "finding": "Mixer displays excessive decimal precision",
+      "evidence": [
+        "17-mixer.png"
+      ],
+      "observed": "Mixer gain readouts showed -6.0206 dB and -2.498775 dB. These make simple balancing look more technical than needed.",
+      "recommendation": "Round normal gain display to one decimal place while retaining precise internal values."
+    },
+    {
+      "id": "P4-5",
+      "severity": "investigate",
+      "finding": "Master meter was silent while track meters moved",
+      "evidence": [
+        "17-mixer.png"
+      ],
+      "observed": "Both track meters were lit, while Master displayed negative infinity. Final WAV was nonzero. Null audio output may explain this; not classified as a verified app defect.",
+      "recommendation": "Confirm master-meter behavior on real output before changing audio routing or UI."
+    }
+  ],
+  "positive_findings": [
+    "Drop audio here / Double-click for MIDI made track creation discoverable.",
+    "Device library clearly identified the available instrument as VST3 and offered Assign instrument.",
+    "Pencil help explains dragging to set length, and drawing beyond initial clip end extends the clip.",
+    "Context Duplicate plus marquee selection and Fit made repetition easy.",
+    "Export dialog showed exact duration; progress and finished status provided confidence.",
+    "Default filenames allowed project/WAV/MIDI saving without keyboard input."
+  ],
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability/session-4/Midnight circuit.rill",
+    "wav": "/workspace/scratch/rill-usability/session-4/Midnight circuit.wav",
+    "midi": "/workspace/scratch/rill-usability/session-4/Midnight circuit.mid",
+    "mouse_actions": "/workspace/scratch/rill-usability/session-4/mouse-actions.jsonl",
+    "final_screenshot": "/workspace/scratch/rill-usability/session-4/34-final.png",
+    "exact_duration_screenshot": "/workspace/scratch/rill-usability/session-4/29-duration-check.png"
+  },
+  "verification": {
+    "project_zip_manifest_read_only": true,
+    "audio_clips": 4,
+    "midi_clips": 4,
+    "saved_vst_path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+    "wav_frames": 1440000,
+    "wav_sample_rate": 48000,
+    "wav_channels": 2,
+    "wav_float_peak": 0.1859866976737976,
+    "wav_nonzero_samples": 2879992
+  },
+  "limitations": [
+    "Simulated participant, not a human first-time user.",
+    "Only test-fixture VST available; no third-party instrument compatibility or sound browsing assessed.",
+    "Null output prevented listening, so ambient aesthetic and sound quality were not validated.",
+    "Stock audio starter was used instead of importing a separate recording."
+  ],
+  "logged_events_including_screenshots": 103,
+  "event_counts": {
+    "shot": 35,
+    "double": 3,
+    "click": 46,
+    "drag": 18,
+    "scroll": 1
+  }
+}

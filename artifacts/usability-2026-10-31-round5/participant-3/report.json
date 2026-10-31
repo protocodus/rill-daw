@@ -1,0 +1,101 @@
+{
+  "purpose": "Fixed report fields for independent simulated beginner participant 3; reports visible UI outcomes only.",
+  "participant": 3,
+  "persona": "Independent simulated beginner, first introduction to RILL, interested in a short melodic instrumental.",
+  "piece_name": "Moonlit",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Visible hints, drawing by dragging, direct duplication, an on-screen naming keyboard and direct exports enabled completion. Exact trimming needed several attempts and a Snap change.",
+    "how_cool_it_looks": "The dark layout, teal waveforms and readable MIDI rectangles looked cohesive and polished; the native white file dialogs were visually separate.",
+    "how_fast_it_is": "Editing and duplication responded promptly, and WAV export showed elapsed progress then completion. A save dialog briefly drew black and playback reported a dropout. This is a subjective lab-session rating.",
+    "how_confusing_it_is": "Most selected tools explained the mouse gesture. Precise endpoint trimming and a tiny drag without visible effect needed recovery. The dropout message reduced playback confidence.",
+    "feature_completeness": "All requested task functions were visible and usable: audio, drawn MIDI, an assigned VST3, mouse-only title, project save, WAV and MIDI exports. Only one simple instrument and a short two-track arrangement were tested."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.rill",
+    "wav": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.wav",
+    "midi": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "The blank-area 'Double-click for MIDI' hint led directly to the instrument library; Assign instrument created a MIDI clip with Rill Lab Sine shown on its track.",
+      "evidence": ["initial.png", "01-midi-created.png", "02-instrument-assigned.png"]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Pencil said 'Draw notes - Drag to set length'; note labels and lengths appeared while drawing, and adding notes beyond the original clip end extended it to four bars. A visible C-sharp note was corrected by dragging it down with Select.",
+      "evidence": ["03-piano-roll.png", "04-first-melody.png", "05-four-bars-drawn.png", "06-arrange-zoom-out.png"]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "Duplicate displayed 'Click a clip to duplicate'; clicking successive audio and MIDI copies quickly built a 34.286-second arrangement.",
+      "evidence": ["07-duplicate-tool.png", "08-extended-arrangement.png"]
+    },
+    {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "Dragging the last clip edges toward the 30-second grid initially produced 30.268 seconds, then 30.134. A four-pixel MIDI edge drag produced no visible shortening.",
+      "evidence": ["09-thirty-seconds-playing.png", "12-trim-corrected.png", "mouse-actions.jsonl at 2026-10-31T20:17:17Z"]
+    },
+    {
+      "id": "F5",
+      "kind": "recovery",
+      "observation": "Selecting Snap 1 bar and dragging the MIDI edge again aligned both track endings and the header showed 0:30.000.",
+      "evidence": ["13-snap-menu.png", "14-exact-thirty.png"]
+    },
+    {
+      "id": "F6",
+      "kind": "failure",
+      "observation": "Playback showed a moved playhead at 003.04.89 and active meters on both tracks, but the UI also reported 'Audio output dropout - 1 - Try a larger buffer in Audio setup.' Stopping returned to the beginning. No audible output was verified.",
+      "evidence": ["09-thirty-seconds-playing.png", "10-playback-progress.png", "12-trim-corrected.png"]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "File > Rename project exposed an on-screen keyboard with Clear and Caps controls. Mouse clicks entered Moonlit, and File > Save offered Moonlit.rill in session-3; accepting it removed the unsaved marker.",
+      "evidence": ["16-rename.png", "17-onscreen-keyboard.png", "18-save-project.png", "19-saved-project.png"]
+    },
+    {
+      "id": "F8",
+      "kind": "friction",
+      "observation": "The native WAV save dialog was briefly a black rectangle before the filename and folder controls appeared on the next observation.",
+      "evidence": ["21-save-wav.png", "22-save-wav-ready.png"]
+    },
+    {
+      "id": "F9",
+      "kind": "positive",
+      "observation": "WAV export displayed the 30-second arrangement, format details and an effect-tail checkbox. After disabling tails and accepting Moonlit.wav, elapsed progress changed to an Exported notice. MIDI export similarly accepted Moonlit.mid and showed an Exported notice.",
+      "evidence": ["20-export-wav-options.png", "21-save-wav.png", "23-wav-result.png", "25-wav-status.png", "26-midi-save.png", "27-midi-status.png", "final.png"]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the UI: a named 30.000-second audio-plus-VST-MIDI arrangement was saved, and both WAV and MIDI Exported notices were observed. File contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30.0,
+    "composition": "Two tracks at 112 BPM: existing Circuit rhythm audio repeated across the arrangement and a hand-drawn four-bar melodic phrase repeated on an instrument track. Three complete four-bar copies plus a final two-bar trimmed copy span 14 bars. Melody rises from C4 through E4, G4, D4, F4, A4, B4 and C5 before returning lower in the complete phrase.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play changed to Pause; a subsequent screenshot showed transport 003.04.89, a moved yellow playhead and lit meters on both tracks. An Audio output dropout count of 1 was also displayed. Playback was stopped before export and left stopped.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No composition file contents or heard audio were verified; independent coordinator verification follows.",
+    "Output paths were established from native save-dialog breadcrumbs and names, not filesystem inspection.",
+    "The laboratory uses software graphics and a timer-paced virtual audio sink with 60 ms buffering; the dropout observation is not a physical-device latency or audible-quality result.",
+    "Only Rill Lab Sine was used; no claim is made about other third-party plug-ins or broad production feature completeness.",
+    "Elapsed time includes screenshot, tool and reporting overhead, so it is not a performance benchmark."
+  ]
+}

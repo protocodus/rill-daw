@@ -1,0 +1,132 @@
+{
+  "participant": 2,
+  "persona": "Music fan new to music production; wanted a short dance groove",
+  "evaluation_type": "Independent simulated beginner; not a real human study",
+  "method": "Visible native UI and screenshots only. All composition, edits, playback, saving and exporting used mouse clicks, double-clicks, drags or scroll. No keyboard, source inspection or state injection.",
+  "started_at_utc": "2026-10-31T16:22:52Z",
+  "completed_at_utc": "2026-10-31T16:28:44Z",
+  "elapsed_seconds": 352,
+  "completion": {
+    "completed": true,
+    "duration_seconds": 30.0,
+    "audio": true,
+    "midi": true,
+    "actual_vst3": true,
+    "saved_project": true,
+    "exported_wav": true,
+    "exported_midi": true,
+    "instrument": "Rill Lab Sine (test-only native VST3)",
+    "composition": "14 bars at 112 BPM; manually drawn C4, D#4, G4, A#4 short notes per bar; stock Circuit rhythm audio repeated and final clip trimmed.",
+    "heard_playback": false,
+    "playback_evidence": "Both track meters moved while transport advanced; null audio output prevents listening."
+  },
+  "ratings_scale": "1 to 5, higher means more of the named property; high confusion is worse",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 3
+  },
+  "rating_reasons": {
+    "easy_to_use": "Visible double-click MIDI hint, pencil notes, context Duplicate and File export supported completion. Precise length and tempo editing needed exploration.",
+    "how_cool_it_looks": "Clean restrained dark palette, clear waveforms and note previews feel modern. Much empty space and muted controls make the starting surface a little austere.",
+    "how_fast_it_is": "Most click feedback and note edits felt immediate in screenshot evidence. First usable MIDI pattern appeared in under a minute. Export finished within the subsequent short interaction sequence. This is perceived workflow speed, not benchmarked latency.",
+    "how_confusing_it_is": "Toolbar controls moved when changing tools; tempo appeared text-only; there was no discoverable zoom-out control; source preview failure could look like a broken instrument.",
+    "feature_completeness": "The requested audio, piano-roll, VST3, duplication, trimming, save, WAV and MIDI workflows worked. Mouse-only tempo/renaming and easy precise duration controls were missing or undiscovered. Lab catalogue offered only one instrument, so sound-library breadth and third-party compatibility cannot be rated."
+  },
+  "findings": [
+    {
+      "id": "P2-01",
+      "severity": "medium",
+      "title": "Tool selection rearranges controls and causes misclicks",
+      "observed": "Switching Select to Pencil moved Length from the left of row 2 to the right of row 1. Clicking its former position opened Grid scale settings.",
+      "evidence": [
+        "03-editor.png",
+        "04-length.png",
+        "05-pencil.png"
+      ],
+      "recommendation": "Keep shared controls in stable positions across tools; reserve a predictable slot for tool-specific controls."
+    },
+    {
+      "id": "P2-02",
+      "severity": "medium",
+      "title": "Tempo has no discoverable mouse adjustment",
+      "observed": "Clicking 112.0 BPM selected a text input. Scrolling 16 steps did not change it. No +/- buttons or drag hint appeared.",
+      "evidence": [
+        "14-tempo.png",
+        "15-tempo-scroll.png"
+      ],
+      "recommendation": "Add visible decrement/increment controls or documented drag adjustment with precise value feedback."
+    },
+    {
+      "id": "P2-03",
+      "severity": "medium",
+      "title": "Exact duration requires export-dialog checking and tiny edge corrections",
+      "observed": "Trimming to the visible 0:30.00 ruler point produced 30.134 seconds. A 4 px correction did nothing; switching Snap to 1/4 and a larger trim gave exactly 30.000.",
+      "evidence": [
+        "19-export-dialog.png",
+        "22-exact-duration.png",
+        "23-snap.png",
+        "24-duration.png"
+      ],
+      "recommendation": "Show clip start/end/duration while trimming and provide mouse-friendly duration/range controls; offer bar snap."
+    },
+    {
+      "id": "P2-04",
+      "severity": "low",
+      "title": "Zoom out was not discoverable",
+      "observed": "View menu offered Fit selection and waveform amplitude but no visible zoom out. Scrolling the ruler did not change scale. Fit solved the immediate problem after duplication.",
+      "evidence": [
+        "10-view.png",
+        "11-zoom.png",
+        "13-eight-bars.png"
+      ],
+      "recommendation": "Expose small zoom-in/out controls adjacent to Fit, with tooltips."
+    },
+    {
+      "id": "P2-05",
+      "severity": "low",
+      "title": "Preview failure is easy to confuse with plugin failure",
+      "observed": "Library showed Preview failed 1 and Preview Failed for the only instrument, yet assignment and MIDI channel activity worked.",
+      "evidence": [
+        "01-midi-created.png",
+        "27-playing.png"
+      ],
+      "recommendation": "Distinguish unavailable preview artwork from an instrument load failure; use actionable status text."
+    }
+  ],
+  "positive_findings": [
+    "The empty area clearly said Double-click for MIDI and opened the correct instrument chooser.",
+    "Assign instrument action was visible and returned directly to a ready pattern.",
+    "Pencil drag length and note labels made the first pattern straightforward.",
+    "Marquee selection plus context Duplicate expanded both audio and MIDI reliably.",
+    "Native save/export dialogs supplied filenames, allowing mouse-only output without naming friction.",
+    "Export summary displayed exact arrangement duration and completion banner offered Copy path."
+  ],
+  "limits": [
+    "Simulated beginner feedback, not human research.",
+    "Null audio device means no listening evaluation or sound-quality claim.",
+    "Only lab sine VST3 was available; no third-party VST validation.",
+    "The piece reused stock audio; it did not test audio import or recording.",
+    "No professional mixing, effects or automation workflow tested."
+  ],
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability/session-2/Midnight circuit.rill",
+    "wav": "/workspace/scratch/rill-usability/session-2/Midnight circuit.wav",
+    "midi": "/workspace/scratch/rill-usability/session-2/Midnight circuit.mid",
+    "actions": "/workspace/scratch/rill-usability/session-2/mouse-actions.jsonl",
+    "final_screenshot": "/workspace/scratch/rill-usability/session-2/30-complete.png",
+    "reactions": "/workspace/scratch/rill-usability/session-2/reactions.txt"
+  },
+  "verification": {
+    "wav_sample_rate": 48000,
+    "wav_channels": 2,
+    "wav_duration_seconds": 30.0,
+    "wav_peak": 0.4422664940357208,
+    "wav_rms": 0.05796831183880178,
+    "non_silent": true,
+    "mouse_actions": 67,
+    "screenshots": 31
+  }
+}

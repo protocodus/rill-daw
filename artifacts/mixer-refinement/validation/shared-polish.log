@@ -1,0 +1,26 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.17s
+     Running tests/mixer_controls.rs (target/debug/deps/mixer_controls-39ee125adc85055e)
+
+running 8 tests
+test mixer_skin_does_not_change_neighboring_shared_slider_geometry ... ok
+test level_meter_has_a_bounded_captioned_footprint_and_sanitizes_nonfinite_input ... ok
+test level_meter_uses_decibel_travel_and_never_fabricates_or_overflows_signal ... ok
+test mixer_slider_pointer_and_keyboard_edits_follow_native_handle_travel ... ok
+test pan_keeps_direction_and_center_captions_visible_at_every_value ... ok
+test mute_and_solo_are_equal_sized_independent_native_buttons ... ok
+test mixer_sliders_preserve_precise_and_out_of_range_values_when_inspected ... ok
+test mixer_slider_secondary_middle_and_disabled_input_never_edit_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/mixer_flow.rs (target/debug/deps/mixer_flow-18a6abff442d9199)
+
+running 4 tests
+test scrolling_route_lanes_keeps_stems_attached_to_channel_bottoms ... ok
+test clipped_routes_keep_their_true_endpoints_and_reject_invalid_geometry ... ok
+test route_lanes_connect_channels_with_bounded_gradient_ribbons_in_both_directions ... ok
+test compact_channel_actions_leave_readable_source_kinds_without_smaller_tap_targets ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

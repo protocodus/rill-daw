@@ -1,0 +1,1704 @@
+{
+  "summary": {
+    "passed": 1049,
+    "failed": 0,
+    "ignored": 18,
+    "targets": 209
+  },
+  "method": "Full app suite and full shared UI/engine suites, then replacement results for corrected and affected targets. Historical failures are retained in their original logs. Counts include each target once.",
+  "runner_errors": [
+    {
+      "target": "focus_gesture_e2e",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "daw-app",
+        "--test",
+        "focus_gesture_e2e",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 0.2,
+      "summaries": [],
+      "log": "rebased-final-focus_gesture_e2e.log"
+    }
+  ],
+  "runner_error_resolution": "The nonexistent focus_gesture_e2e target was a command-name typo; actual focus_e2e was subsequently run and passed.",
+  "targets": [
+    {
+      "package": "daw-app",
+      "target": "unit",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 137,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "appearance_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "application_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "arranger_layout_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-arranger_layout_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "arranger_selection_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-arranger_selection_e2e.log",
+      "passed": 12,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "arranger_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "assistant_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "assistant_guidance_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "assistant_readiness_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "assistant_scope_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "assistant_settings_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_common_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_editor_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_gestures_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_pitch_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_playback_edit_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_setup_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_silence_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_takes_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "audio_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "automation_color_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-automation_color_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "automation_curves_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "automation_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "automation_indicators_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "automation_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "batch_audio_fades_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "beat_ruler_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "branding_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "channel_layout_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "channel_meter_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-channel_meter_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "channel_properties_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "clip_instrument_navigation_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "clip_surface_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "clones_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "compact_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "components_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "composer_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "control_roles_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "crossfade_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "cue_editor_flow_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "cursor_visibility_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "cut_current_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "device_cards_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "document_context_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "document_guard_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "editor_unavailable_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "effect_chain_layout_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "empty_workspace_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "error_details_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "export_feedback_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "export_options_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-export_options_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "export_retry_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "export_sequence_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-export_sequence_e2e.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "features_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "finishing_actions_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "focus_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-check-focus_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "foreground_shortcuts_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "generation_workflow_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "header_channel_controls_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-header_channel_controls_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "header_readability_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-header_readability_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "history_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "instrument_context_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "instrument_targets_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "instrument_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "join_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "joins_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "library_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "library_preview_status_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "live_edit_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "loop_duration_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-loop_duration_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "loop_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-check-loop_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "loop_selection_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-loop_selection_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "main_toolbar_roles_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-main_toolbar_roles_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "master_meter_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-master_meter_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_clipboard_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_editor_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-midi_editor_e2e.log",
+      "passed": 16,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_generate_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_generation_memory_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_note_entry_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_overlap_merge_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_recording_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-midi_recording_e2e.log",
+      "passed": 19,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "midi_toolbar_stability_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-midi_toolbar_stability_e2e.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_flow_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_gain_entry_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-mixer_gain_entry_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_gain_precision_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-mixer_gain_precision_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_height_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-mixer_height_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_navigation_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mixer_readability_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "mouse_naming_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-mouse_naming_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "native_parameter_automation_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "native_picker_arguments",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "navigation_selection_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "normalized_destination_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "novice_clip_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "novice_documents_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "novice_library_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "novice_recovery_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "number_stepper_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-number_stepper_e2e.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "numeric_replacement_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-numeric_replacement_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "offline_processing_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "output_error_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-check-output_error_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "parameter_search_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "piano_roll_refinement_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "piano_toolbar_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "plugin_catalog_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "plugin_loading_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "plugin_recall_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "plugin_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "popup_backdrop_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-popup_backdrop_e2e.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "popup_close_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "practical_controls_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "precise_clip_editing_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-precise_clip_editing_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "project_io_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "properties_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-properties_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "quiet_current_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "recording_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-recording_e2e.log",
+      "passed": 19,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "recording_tools_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "render_error_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "routing_layout_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "row_alignment_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-row_alignment_e2e.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "selection_click_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-selection_click_e2e.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "setup_layout_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "shared_theory_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "shortcut_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "slider_automation_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "slider_markers_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "slider_scale_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-slider_scale_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "song_workflow_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "source_preservation_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "spectrum_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "spectrum_view_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "studio_windows_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "time_signature_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "timeline_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "timing_discovery_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-timing_discovery_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "tool_document_export_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "tool_hints_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "track_color_picker_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-track_color_picker_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "track_colors_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "track_header_sections_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "track_reorder_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "track_reorder_playback_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "trim_feedback_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-trim_feedback_e2e.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "typography_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "visual_polish_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "package": "daw-app",
+      "target": "waveform_refinement_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "waveform_scale_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "workspace_switch_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "workspace_tool_memory_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-app-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-app",
+      "target": "zoom_controls_e2e",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-final-zoom_controls_e2e.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-engine",
+      "target": "unit",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 134,
+      "failed": 0,
+      "ignored": 7
+    },
+    {
+      "package": "daw-engine",
+      "target": "audio_edits",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-engine",
+      "target": "boundary_fades",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-engine",
+      "target": "export_options",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-engine",
+      "target": "isolated_graph",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 4
+    },
+    {
+      "package": "daw-engine",
+      "target": "rendering",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 19,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "unit",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 28,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "assistant",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "assistant_readiness",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "backdrop_blur",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "beat_ruler",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "bounded_panes",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "channel_controls",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "channel_readouts",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "clips",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "color",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "compact_tools",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "component_materials",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "control_roles",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "crossfade",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "curve_segments",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "curves",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "empty_workspace",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "error_details",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "forms",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "icons",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "input_materials",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "interactions",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "knob",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "layout",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "menu_roles",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "menus",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "mixer_flow",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "modals",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "navigation",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "notices",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "numeric_entry",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "parameter_browser",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "popup_backdrop",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "popup_close",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "selection_glow",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "selection_navigation",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "slider_markers",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "slider_scale",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "surfaces",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "theme",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "timeline",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "timeline_views",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "tool_hint",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "tooltip",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "track_header",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "track_layout",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "track_mix",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "track_reorder",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "typography",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "value_entry",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "package": "daw-ui",
+      "target": "waveform_refinement",
+      "log": "artifacts/usability-2026-10-31-round2/validation/rebased-shared-engine-suite.log",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    }
+  ]
+}

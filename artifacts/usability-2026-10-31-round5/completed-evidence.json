@@ -1,0 +1,27 @@
+{
+  "at_utc": "2026-10-31T20:22:58Z",
+  "round": 5,
+  "artifact_directory": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5",
+  "summary": {
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "saved_project_wav_and_midi": 5,
+    "wav_within_half_second_of_30": 5,
+    "wav_audio_and_vst_components_verified": 5,
+    "elapsed_seconds_mean": 317.6,
+    "total_mouse_input_events": 370,
+    "total_screenshots": 150,
+    "prior_pieces_checked": 60,
+    "all_prior_pieces_unchanged": true,
+    "assembled_and_exported_exact_30_second_outputs": 5
+  },
+  "mean_ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "current_round_original_preservation": true,
+  "collector_path": "/workspace/scratch/rill-usability-cycles/collect_cycle.py",
+  "collector_sha256": "764893c8627935a5d5e1fb66d0a4253f0e90e74369d4b75b5ffff91d9d12798c"
+}

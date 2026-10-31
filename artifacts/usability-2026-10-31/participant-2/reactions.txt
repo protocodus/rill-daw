@@ -1,0 +1,21 @@
+Participant 2: brief observable reactions and action summary
+This is a simulated beginner evaluation. These are concise user-facing reactions tied to visible actions, not a private reasoning transcript.
+
+16:22:52 — Double-clicked the visible “Double-click for MIDI” area. Reaction: “That hint makes the first step obvious.” The Device library opened.
+16:23:01 — Clicked Assign instrument for Rill Lab Sine. Reaction: “I have a new instrument and a pattern without needing to wire anything.” The library said Preview failed, which made the instrument seem questionable despite assignment working.
+16:23:08 — Double-clicked New pattern and saw a piano-roll grid. Reaction: “Pencil looks like the way to put in notes.”
+16:23:17–27 — Selected Pencil, then tried the former Length-control position. A scale menu opened because controls had moved. Reaction: “The setting I was about to use changed places.”
+16:23:46–50 — Drew four short notes using drags: C4, D#4, G4, A#4. Reaction: “The note names and lengths are clear once I draw them.”
+16:23:59–16:24:31 — Returned to arranger, opened clip context menu, duplicated, then marquee-selected two clips and duplicated again. Reaction: “Duplicate is the easiest way to turn the little idea into a pattern.”
+16:24:31–40 — Looked in View and scrolled ruler to find zoom out. Neither provided discoverable zoom controls. Reaction: “I need to see more time.”
+16:24:51–16:25:16 — Marquee-selected audio and MIDI, duplicated into 8 then 16 bars, and used Fit. Reaction: “Fit is useful; now the whole piece is visible.”
+16:25:16–28 — Clicked tempo and tried mouse scrolling. The value stayed 112.0. Reaction: “It seems to want typing. I can use the time ruler instead.”
+16:25:47–58 — Trimmed audio to the 30-second ruler mark and deleted the last two MIDI clips through the context menu. Reaction: “The seconds below the bars help me meet the length target.”
+16:26:09–44 — Saved with the suggested filename, opened Export WAV and disabled tails. Export showed 30.134 seconds. Reaction: “I thought I hit 30 exactly; the export summary tells me I missed a little.”
+16:27:00–30 — Tried a tiny edge correction, then chose Snap 1/4 and trimmed again. Export showed 30.000 seconds. Reaction: “Coarser snap fixed it, but a duration readout while dragging would have saved checking.”
+16:27:42–16:28:20 — Exported over the earlier WAV, played briefly, observed both meters moving, stopped, and saved. No audio was heard because this lab uses null audio output.
+16:28:31–44 — Exported MIDI with the default filename. Reaction: “I have the project, audio and MIDI files. The completion message is clear.”
+
+Result: 30.000-second WAV, saved project, and MIDI exported through mouse only. Approximately 5 minutes 52 seconds from first action to final export; 67 mouse interactions, plus screenshots. The music is a simple repeated ascending four-note dance motif over the existing drum audio.
+
+Ratings (1–5; high confusion is worse): easy to use 4; how cool it looks 4; how fast it is 4; how confusing it is 3; feature completeness 3.

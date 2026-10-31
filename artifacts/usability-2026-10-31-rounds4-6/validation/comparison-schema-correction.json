@@ -1,0 +1,10 @@
+{
+  "at_utc": "2026-10-31T20:52:17Z",
+  "original_script_sha256": "4a7145b4407189a8729ece200b4e98dfe9177f4e8af2eee9cfdc7907b5f5ff36",
+  "corrected_script_sha256": "2239b9838db0dd173fac5cd5cd86521e07612aa4b49f54c00181b7ce936f628e",
+  "original_failure": "KeyError: kind while reading round3 participant findings",
+  "cause": "Round3 participant3 omitted kind; participant5 used type. New fixed-schema rounds4\u20136 use kind.",
+  "correction": "Read kind or type, otherwise preserve unspecified. Do not infer missing categories or alter reports/ratings.",
+  "application_failure": false,
+  "original_study_evidence_modified": false
+}

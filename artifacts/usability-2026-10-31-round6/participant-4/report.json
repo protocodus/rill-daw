@@ -1,0 +1,142 @@
+{
+  "purpose": "Independent simulated beginner mouse-only usability report using the fixed question set.",
+  "participant": 4,
+  "persona": "Simulated first-time RILL beginner interested in a short ambient soundtrack sketch.",
+  "piece_name": "mist",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The visible double-click-for-MIDI hint, Assign instrument button, Pencil tool, duplicate tool, clip edge trimming, and on-screen naming keyboard enabled the full task with mouse clicks. Stretch limits and the first playback failure interrupted the flow.",
+    "how_cool_it_looks": "The dark layout, teal waveforms and notes, yellow playhead, and readable track controls looked cohesive and made the two layers easy to distinguish. Much of the screen remained empty with this small arrangement.",
+    "how_fast_it_is": "Notes, duplicates, trimming, naming and MIDI export responded promptly. WAV export displayed an elapsed-time spinner for roughly the piece length. These are session impressions, not hardware or latency benchmarks.",
+    "how_confusing_it_is": "The duration keypad accepted a proposed 56 beats but applying it in Stretch mode failed with a 25%-400% limit that was not stated on the keypad. The initial output-stream error also needed recovery. The Retry playback action was clear.",
+    "feature_completeness": "This session exposed audio arrangement, MIDI note drawing, VST3 assignment, volume, exact timing, a mouse keyboard, project saving, and WAV/MIDI export. Only a simple lab sine instrument was used, and richer sound design or effects were not evaluated."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round6/session-4/mist.rill",
+    "wav": "/workspace/scratch/rill-usability-round6/session-4/mist.wav",
+    "midi": "/workspace/scratch/rill-usability-round6/session-4/mist.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the area labelled Double-click for MIDI opened Device library. Selecting Assign instrument created a New instrument track showing Rill Lab Sine and a new MIDI pattern.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument-assigned.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "The Pencil tool accepted three horizontal note drags. The pattern then showed three note lines. Properties exposed duration controls and a mouse-operated numerical keypad.",
+      "evidence": [
+        "03-piano-roll.png",
+        "04-notes-properties.png",
+        "06-duration-keypad.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Setting a four-beat pattern to 56 beats with Stretch selected left its duration unchanged and showed Stretch must stay between 25% and 400% of source speed. The keypad itself had displayed a much larger general numerical range.",
+      "evidence": [
+        "05-duration-mode.png",
+        "06-duration-keypad.png",
+        "07-expanded-arrangement.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "recovery",
+      "observation": "A 16-beat stretch succeeded. Clicking the visible Duplicate tool and then clips created adjacent copies. Trimming the final audio and MIDI clip edges to bar 15 produced the visible title duration 0:30.000.",
+      "evidence": [
+        "09-duplicate-tool.png",
+        "10-duplicates.png",
+        "11-trim-to-30.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard button. Its Clear, letter buttons and Done control allowed the chosen title mist to be entered entirely by mouse.",
+      "evidence": [
+        "12-file-menu.png",
+        "13-name-keyboard.png",
+        "14-keyboard.png",
+        "15-playback.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "failure",
+      "observation": "The first Play click left the playhead at the start and displayed Audio output stream failed or disconnected with Retry playback and Audio setup actions.",
+      "evidence": [
+        "15-playback.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "recovery",
+      "observation": "Clicking Retry playback changed Play to Pause. A later screenshot showed transport 003.04.66, a moved playhead, and illuminated meters on both tracks. Stop returned transport to the start.",
+      "evidence": [
+        "16-retry-playback.png",
+        "17-playback-progress.png",
+        "18-save.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "Save proposed mist.rill. Choosing the session-4 bookmark and OK closed the dialog and removed the unsaved dot. Export WAV identified Arrangement 0:30; after unchecking effect tails and accepting mist.wav, the UI eventually displayed Exported mist.wav. Export MIDI proposed mist.mid in the same visible session-4 directory and displayed Exported mist.mid.",
+      "evidence": [
+        "18-save.png",
+        "19-saved.png",
+        "20-export-wav.png",
+        "21-wav-file.png",
+        "25-wav-completion.png",
+        "26-midi-dialog.png",
+        "27-midi-completion.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "During WAV export the bottom spinner reported elapsed seconds. Attempts to open File and MIDI export during that period did not open a menu or dialog; the normal action worked once the export completed.",
+      "evidence": [
+        "22-wav-result.png",
+        "23-wav-success.png",
+        "24-export-midi.png",
+        "25-wav-completion.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed as established by the UI: named and saved a 30.000-second audio plus VST MIDI arrangement and saw WAV and MIDI export success notices. File content verification remains with the coordinator.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "A simple ambient-intended sketch: the supplied Circuit rhythm audio repeated for three full sections plus a shortened fourth, lowered to -27.6 dB; a three-note sustained MIDI chord drawn in the piano roll, stretched to 16 beats and repeated with a shortened final section. MIDI channel remained at -2.5 dB. Both layers end at bar 15 at 112 BPM.",
+    "instrument": "Rill Lab Sine, displayed as VST3 in Device library and assigned on the instrument track.",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "First playback failed with an output-stream error. Retry playback recovered visible advancement to 003.04.66 and active audio and MIDI track meters. No audio was heard or captured by this participant.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "All composition input used the supplied mouse driver and visible native UI. No source, project-state API, file contents, previous reports, or other participant records were inspected.",
+    "Artifact paths derive from the selected session-4 bookmark, visible export breadcrumbs, filenames, and UI completion. Contents and physical file duration were not independently inspected by this participant.",
+    "No audio capture was auditioned; perceived sound quality, musical balance, and audible ambient character are unverified.",
+    "The lab uses software graphics and a timer-paced virtual audio sink with 60 ms buffering and a 1024-frame request at 48 kHz. Playback recovery and export observations do not establish physical-device latency or third-party VST compatibility.",
+    "Screenshot 23-wav-success.png was named optimistically before inspection and actually shows an in-progress export; the success evidence is 25-wav-completion.png.",
+    "Elapsed interaction time includes screenshots, tools and reporting overhead and is not a performance benchmark. App remains open and stopped; final.png captures the final arrangement."
+  ]
+}

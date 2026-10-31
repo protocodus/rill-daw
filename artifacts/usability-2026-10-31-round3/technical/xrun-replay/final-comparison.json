@@ -1,0 +1,100 @@
+{
+  "purpose": "Final actual-native CPAL xrun verification, after fixes, separate from simulated ratings",
+  "final_run": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/after-play-retry-1/result.json",
+  "before_reproduction": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/before-1/result.json",
+  "prior_attempts_retained": [
+    "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/before-1/result.json",
+    "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/after-1/result.json",
+    "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/after-2/result.json",
+    "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/before-warm-1/result.json",
+    "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/technical/xrun-replay/after-warm-1/result.json"
+  ],
+  "final_binary_sha256": "98c127f14209e7eaaa0b26dfecc1ec1e0fdf81145f0812584d993a3a560ef24e",
+  "final_helper_sha256": "98357c49fddfb1dd28aa8c6dd3fbc994ea352a3cd1af12bb946b567f3ece8a26",
+  "variation": {
+    "name": "One explicit visible Play retry after startup output failure",
+    "retry_play_on_startup_failure": true,
+    "maximum_explicit_retries": 1,
+    "server_settle_seconds": 0,
+    "audio_directory": "a (short name keeps native UNIX socket path within107 bytes; no backend setting changes)",
+    "script": "/workspace/scratch/rill-usability-round3/technical/xrun-replay/replay_retry.py",
+    "script_sha256": "02ab0788b8f1bef2ee310f3787b70a3ca43401dea55cee9d8ee7ba82c86efad2",
+    "policy": "Keep initial failure and old/new engine IDs; never clear a failed latch or automatically retry. The optional retry is one explicit visible Play command."
+  },
+  "startup": "Healthy initial playback; conditional explicit Play retry was not needed and was not sent.",
+  "explicit_play_retry_exercised": false,
+  "stall_ms": 250,
+  "gate": {
+    "engine_id": 1,
+    "consumed_frames": 60016,
+    "render_errors": 0,
+    "output_failed": false,
+    "output_dropouts": 0
+  },
+  "first_post_stall": {
+    "engine_id": 1,
+    "consumed_frames": 71500,
+    "render_errors": 0,
+    "output_failed": false,
+    "output_dropouts": 1
+  },
+  "last_post_stall": {
+    "engine_id": 1,
+    "consumed_frames": 310200,
+    "render_errors": 0,
+    "output_failed": false,
+    "output_dropouts": 1
+  },
+  "post_reference_pcm": {
+    "window_excludes_first_seconds": 1.0,
+    "method": "Capture frame offsets observed at two snapshots at least one second after resume; avoids attributing pre-stall queued samples to recovery.",
+    "first_snapshot_wall_seconds": 5.023474948999137,
+    "last_snapshot_wall_seconds": 9.138452232000418,
+    "start_frame": 121533,
+    "end_frame": 319085,
+    "frames": 197552,
+    "seconds": 4.115666666666667,
+    "finite": true,
+    "nonzero_samples": 351258,
+    "peak": 0.425689697265625,
+    "rms": 0.05606520638996747
+  },
+  "continuation": {
+    "same_engine_continued_consuming": true,
+    "backend_output_dropout_count_increased": true,
+    "backend_output_dropout_count_before": 0,
+    "backend_output_dropout_count_after": 1,
+    "post_reference_pcm_nonzero": true,
+    "post_reference_pcm_finite": true,
+    "recovered_xrun_with_actual_pcm_supported": true
+  },
+  "revised_native_xrun_recovery_verified": true,
+  "all_original_files_unchanged": true,
+  "cleanup": [
+    {
+      "process": "app",
+      "pid": 126272,
+      "result": "already exited",
+      "returncode": 0
+    },
+    {
+      "process": "parec",
+      "pid": 126271,
+      "result": "SIGTERM",
+      "returncode": 0
+    },
+    {
+      "process": "pulse",
+      "pid": 126268,
+      "result": "SIGTERM",
+      "returncode": 0
+    }
+  ],
+  "conclusion": "After a 250 ms scheduler stall, the real output-backend dropout counter increased from 0 to 1 and the same engine continued consuming frames with output_failed=false, zero render errors, and 4.116 seconds of nonzero finite post-resume PCM. This supports actual CPAL xrun continuation for the final build in this virtual ALSA/Pulse laboratory. The frozen before build had latched an actual xrun as fatal and emitted silent post-resume PCM.",
+  "limits": [
+    "The final run did not exercise explicit Play retry after a failed engine; that path needs its separate automated test evidence.",
+    "Three earlier revised-build attempts hit startup ALSA EIO before consuming any frames; they remain preserved and are not reclassified or claimed fixed by this result.",
+    "The application accepts backend recovery of a recoverable xrun; this is not recovery of a terminal EIO stream.",
+    "No hardware latency, audible quality, general VST compatibility or revised participant-rating claim follows from this controlled technical replay."
+  ]
+}

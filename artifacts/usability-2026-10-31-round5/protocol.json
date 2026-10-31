@@ -1,0 +1,38 @@
+{
+  "study_type": "Five fresh independent simulated beginners, not a human user study",
+  "round": 5,
+  "agent_context": "Fresh fork_turns=none tasks; no previous feedback, source code or peer sessions provided",
+  "task": "Compose a 30-second piece using audio plus MIDI through a VST instrument, save the project and export WAV and MIDI using only a mouse. Give the piece a chosen name if possible.",
+  "comparison_note": "Core task and mouse driver match round3. Personalized naming remains encouraged. Elapsed time includes screenshots, tool overhead and reporting pauses; it is not a human performance or hardware latency benchmark. Each cycle uses a separately frozen validated build.",
+  "inputs": "Only screenshots plus logged click, double-click, drag, drag_hold, down, up, scroll and pointer move. No keyboard input, project injection or source inspection during attempt.",
+  "reset": "Five new native windows on :581\u2013:585, empty caches and fresh working directories. No projects or preferences from prior participants. Settings seed only 48 kHz / 1024 frames. Unmodified production starter audio and byte-identical native Rill Lab Sine VST3.",
+  "viewport": [
+    1440,
+    1000
+  ],
+  "rating_scale": "1\u20135; higher means more of the named quality. Higher confusion is worse.",
+  "rating_keys": [
+    "easy_to_use",
+    "how_cool_it_looks",
+    "how_fast_it_is",
+    "how_confusing_it_is",
+    "feature_completeness"
+  ],
+  "audio": "Per-session timer-paced PulseAudio virtual sink via ALSA bridge at48kHz, Rill requested1024 output frames and PULSE_LATENCY_MSEC=60. No physical hardware or listening claims. Shared host, software graphics and virtual backend can affect responsiveness; this is not a latency benchmark.",
+  "validation": "Independent read-only verification of saved project ZIP, embedded audio, native VST assignment, MIDI events and WAV samples; isolated analysis copies rendered with frozen binary to check actual audio and VST mix contributions. Original outputs remain unmodified.",
+  "reporting": "Observable action/reaction summaries, screenshots and timestamped mouse logs, not private reasoning transcripts.",
+  "frozen_build": "Native executable and adjacent plugin helper frozen only after coordinator confirms validation; git HEAD/main, staged+unstaged source diff, untracked source archive, full source hashes and executable hashes recorded.",
+  "limitations": [
+    "Simulated participants, not human research.",
+    "No window manager; native dialog placement may differ from desktop installations.",
+    "Only the native laboratory sine VST is included; no third-party compatibility claims.",
+    "Audible quality is not assessed unless explicitly auditioned and documented."
+  ],
+  "fixed_questions": [
+    "Did you complete and save the requested piece?",
+    "Did WAV and MIDI export show success?",
+    "What actions were easy or difficult, and what visible evidence supports each observation?",
+    "Rate ease, appearance, speed, confusion and feature completeness from1to5, explaining each rating.",
+    "What remains unverified, including heard audio and file contents?"
+  ]
+}

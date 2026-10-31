@@ -1,0 +1,1073 @@
+{
+  "study": "Five independent simulated beginner mouse-only RILL composition attempts",
+  "baseline": true,
+  "sample_size": 5,
+  "method": {
+    "independence": "Five isolated native app sessions/configs; participants report no source inspection, peer outputs or composition state injection during evaluation.",
+    "interaction": "Mouse clicks, double-clicks, drags and scroll; screenshots used to discover visible UI. Instrument and sample were provided equally in the lab.",
+    "timing": "Elapsed is first non-screenshot driver action to last non-screenshot action, measured from UTC driver logs; it includes evaluation pauses. Not a human task-speed benchmark.",
+    "actions": "One driver click/double/drag/scroll/move counts as one input event; screenshots are counted separately, and a double-click counts as one gesture.",
+    "verification": "Read-only inspection of original ZIP project manifests, embedded assets, binary MIDI events and all WAV sample values. SHA-256 recorded for provenance. Project note overlap counts exclude notes entirely outside trimmed clip source windows.",
+    "rating_scale": "1\u20135, higher means more of the named quality; higher confusion is worse. Subjective simulated ratings, not benchmark results.",
+    "issue_frequency": "Counts represent participants explicitly reporting each issue. Missing mention does not prove absence. Related issues overlap and frequencies must not be summed as unique problems."
+  },
+  "participants": [
+    {
+      "participant": 1,
+      "persona": "Absolute beginner seeking a relaxed lo-fi sketch",
+      "report": "/workspace/scratch/rill-usability/session-1/report.json",
+      "report_sha256": "e843e8cfb8ab3147ae635604a18f2b0d2713accf0b2cb73f341db76231208acf",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 5,
+        "how_confusing_it_is": 3,
+        "feature_completeness": 4
+      },
+      "mouse_log": "/workspace/scratch/rill-usability/session-1/mouse-actions.jsonl",
+      "mouse_log_sha256": "c11dc1823b1e730c2a62e52cf0ef520d8fbdffd2dae212891966b5449dd808bc",
+      "first_input_utc": "2026-10-31T16:22:50Z",
+      "last_input_utc": "2026-10-31T16:32:00Z",
+      "elapsed_seconds_first_to_last_input": 550.0,
+      "mouse_input_events": 104,
+      "screenshots": 45,
+      "input_event_counts": {
+        "double": 2,
+        "click": 86,
+        "drag": 16
+      },
+      "unexpected_input_actions": [],
+      "project": {
+        "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.rill",
+        "bytes": 3292636,
+        "sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": true,
+        "loop_start": 0.0,
+        "loop_end": 56.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 4,
+        "stored_note_count": 32,
+        "notes_overlapping_clip_source_window": 28,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 4,
+            "stored_note_count": 32,
+            "notes_overlapping_clip_source_window": 28,
+            "pitch_set": [
+              60,
+              62,
+              63,
+              64,
+              65,
+              67
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.wav",
+        "bytes": 11520068,
+        "sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2571380,
+        "peak": 0.4422664940357208,
+        "rms": 0.05982241787830043
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.mid",
+        "bytes": 350,
+        "sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 28,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 28,
+            "note_off_count": 28,
+            "last_event_tick": 53520,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              62,
+              63,
+              64,
+              65,
+              67
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true
+      }
+    },
+    {
+      "participant": 2,
+      "persona": "Music fan new to music production; wanted a short dance groove",
+      "report": "/workspace/scratch/rill-usability/session-2/report.json",
+      "report_sha256": "68b44dd37f7b7969fbec30be58d6500b54b10eab3ed8b1c7565879021795ea55",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 3,
+        "feature_completeness": 3
+      },
+      "mouse_log": "/workspace/scratch/rill-usability/session-2/mouse-actions.jsonl",
+      "mouse_log_sha256": "76d7832d989464a631e21e144497c72375cce8dd141c26d76f5a81b04627940f",
+      "first_input_utc": "2026-10-31T16:22:52Z",
+      "last_input_utc": "2026-10-31T16:28:44Z",
+      "elapsed_seconds_first_to_last_input": 352.0,
+      "mouse_input_events": 67,
+      "screenshots": 31,
+      "input_event_counts": {
+        "double": 2,
+        "click": 52,
+        "drag": 11,
+        "scroll": 2
+      },
+      "unexpected_input_actions": [],
+      "project": {
+        "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.rill",
+        "bytes": 3292747,
+        "sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": true,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 14,
+        "stored_note_count": 56,
+        "notes_overlapping_clip_source_window": 56,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 14,
+            "stored_note_count": 56,
+            "notes_overlapping_clip_source_window": 56,
+            "pitch_set": [
+              60,
+              63,
+              67,
+              70
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.wav",
+        "bytes": 11520068,
+        "sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2038756,
+        "peak": 0.4422664940357208,
+        "rms": 0.05796831183880178
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.mid",
+        "bytes": 630,
+        "sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 56,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 56,
+            "note_off_count": 56,
+            "last_event_tick": 53280,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              63,
+              67,
+              70
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true
+      }
+    },
+    {
+      "participant": 3,
+      "persona": "Instrumentalist new to DAWs; short melodic piece",
+      "report": "/workspace/scratch/rill-usability/session-3/report.json",
+      "report_sha256": "fc2c0161d62f36717daa9f111dcf434ef562c37898c69ee8d9162d4e69f60ef5",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 2,
+        "feature_completeness": 3
+      },
+      "mouse_log": "/workspace/scratch/rill-usability/session-3/mouse-actions.jsonl",
+      "mouse_log_sha256": "0a1872076cbf6d48980cf17ac9425e908bb68aaabc8da44dd1a98a79cdf220e7",
+      "first_input_utc": "2026-10-31T16:22:57Z",
+      "last_input_utc": "2026-10-31T16:28:21Z",
+      "elapsed_seconds_first_to_last_input": 324.0,
+      "mouse_input_events": 65,
+      "screenshots": 29,
+      "input_event_counts": {
+        "double": 4,
+        "click": 58,
+        "drag": 3
+      },
+      "unexpected_input_actions": [],
+      "project": {
+        "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.rill",
+        "bytes": 3292980,
+        "sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 14,
+        "stored_note_count": 112,
+        "notes_overlapping_clip_source_window": 112,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 14,
+            "stored_note_count": 112,
+            "notes_overlapping_clip_source_window": 112,
+            "pitch_set": [
+              60,
+              62,
+              63,
+              64,
+              67,
+              68
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.wav",
+        "bytes": 11520068,
+        "sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2121214,
+        "peak": 0.4422664940357208,
+        "rms": 0.057932971683788304
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.mid",
+        "bytes": 1190,
+        "sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 112,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 112,
+            "note_off_count": 112,
+            "last_event_tick": 53520,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              62,
+              63,
+              64,
+              67,
+              68
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true
+      }
+    },
+    {
+      "participant": 4,
+      "persona": "Casual video creator new to music production",
+      "report": "/workspace/scratch/rill-usability/session-4/report.json",
+      "report_sha256": "eebbfb915db71c1d62a332ec61118bb1a223f486ac98313753d5253938cb7b6e",
+      "ratings": {
+        "easy_to_use": 3,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 3,
+        "feature_completeness": 4
+      },
+      "mouse_log": "/workspace/scratch/rill-usability/session-4/mouse-actions.jsonl",
+      "mouse_log_sha256": "6ace321b1ebbb2bdd90228978b31aaf8133ef5d60e79c155a8dadffc6915ead4",
+      "first_input_utc": "2026-10-31T16:23:05Z",
+      "last_input_utc": "2026-10-31T16:29:33Z",
+      "elapsed_seconds_first_to_last_input": 388.0,
+      "mouse_input_events": 68,
+      "screenshots": 35,
+      "input_event_counts": {
+        "double": 3,
+        "click": 46,
+        "drag": 18,
+        "scroll": 1
+      },
+      "unexpected_input_actions": [],
+      "project": {
+        "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.rill",
+        "bytes": 3292582,
+        "sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 4,
+        "stored_note_count": 24,
+        "notes_overlapping_clip_source_window": 21,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 4,
+            "stored_note_count": 24,
+            "notes_overlapping_clip_source_window": 21,
+            "pitch_set": [
+              60,
+              62,
+              63,
+              65,
+              67,
+              69
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.wav",
+        "bytes": 11520068,
+        "sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2879992,
+        "peak": 0.1859866976737976,
+        "rms": 0.03007061492021603
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.mid",
+        "bytes": 231,
+        "sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 21,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 21,
+            "note_off_count": 21,
+            "last_event_tick": 53520,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              62,
+              63,
+              65,
+              67,
+              69
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true
+      }
+    },
+    {
+      "participant": 5,
+      "persona": "Beginner beatmaker new to RILL; aiming for a 30-second hip-hop-style loop",
+      "report": "/workspace/scratch/rill-usability/session-5/report.json",
+      "report_sha256": "90bbb56d5fa3b4d2cc0b5a369951c95727ee67c0c7a3472291cf50975f07eec5",
+      "ratings": {
+        "easy_to_use": 3,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 3,
+        "feature_completeness": 3
+      },
+      "mouse_log": "/workspace/scratch/rill-usability/session-5/mouse-actions.jsonl",
+      "mouse_log_sha256": "15495fcad534563e364d8b889c4b986dd9751340d2ba07c99e464f34378a61a8",
+      "first_input_utc": "2026-10-31T16:23:11Z",
+      "last_input_utc": "2026-10-31T16:29:38Z",
+      "elapsed_seconds_first_to_last_input": 387.0,
+      "mouse_input_events": 67,
+      "screenshots": 37,
+      "input_event_counts": {
+        "double": 5,
+        "click": 47,
+        "drag": 14,
+        "scroll": 1
+      },
+      "unexpected_input_actions": [],
+      "project": {
+        "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.rill",
+        "bytes": 3292677,
+        "sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": true,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 7,
+        "stored_note_count": 42,
+        "notes_overlapping_clip_source_window": 42,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 55.75,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 7,
+            "stored_note_count": 42,
+            "notes_overlapping_clip_source_window": 42,
+            "pitch_set": [
+              60,
+              62,
+              63,
+              65
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.wav",
+        "bytes": 11520068,
+        "sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2065420,
+        "peak": 0.4422664940357208,
+        "rms": 0.05812111845553835
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.mid",
+        "bytes": 490,
+        "sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 42,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 42,
+            "note_off_count": 42,
+            "last_event_tick": 53520,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              62,
+              63,
+              65
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true
+      }
+    }
+  ],
+  "mean_ratings": {
+    "easy_to_use": 3.6,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4.2,
+    "how_confusing_it_is": 2.8,
+    "feature_completeness": 3.4
+  },
+  "summary": {
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "elapsed_seconds_mean": 400.2,
+    "elapsed_seconds_min": 324.0,
+    "elapsed_seconds_max": 550.0,
+    "total_mouse_input_events": 371,
+    "total_screenshots": 177
+  },
+  "reported_issue_frequencies": [
+    {
+      "id": "precise_mouse_numeric_adjustment",
+      "observation": "Exact values lack discoverable mouse controls",
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "participant_count": 5,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 1,
+          "finding_or_path": "P1-F1"
+        },
+        {
+          "participant": 2,
+          "finding_or_path": "P2-02"
+        },
+        {
+          "participant": 3,
+          "finding_or_path": "P3-2"
+        },
+        {
+          "participant": 4,
+          "finding_or_path": "P4-2"
+        },
+        {
+          "participant": 5,
+          "finding_or_path": "P5-1"
+        }
+      ]
+    },
+    {
+      "id": "precise_trim_feedback",
+      "observation": "Exact final trim needs retries or export/properties checks",
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "participant_count": 5,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 1,
+          "finding_or_path": "P1-F4"
+        },
+        {
+          "participant": 2,
+          "finding_or_path": "P2-03"
+        },
+        {
+          "participant": 3,
+          "finding_or_path": "P3-2"
+        },
+        {
+          "participant": 4,
+          "finding_or_path": "P4-2"
+        },
+        {
+          "participant": 5,
+          "finding_or_path": "P5-1"
+        }
+      ]
+    },
+    {
+      "id": "toolbar_reflow",
+      "observation": "Changing note tools moves shared toolbar controls",
+      "participants": [
+        2,
+        4,
+        5
+      ],
+      "participant_count": 3,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 2,
+          "finding_or_path": "P2-01"
+        },
+        {
+          "participant": 4,
+          "finding_or_path": "P4-1"
+        },
+        {
+          "participant": 5,
+          "finding_or_path": "P5-2"
+        }
+      ]
+    },
+    {
+      "id": "cross_editor_tool_persistence",
+      "observation": "Tool mode carries across editor workspaces unexpectedly",
+      "participants": [
+        1,
+        5
+      ],
+      "participant_count": 2,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 1,
+          "finding_or_path": "P1-F2"
+        },
+        {
+          "participant": 5,
+          "finding_or_path": "P5-3"
+        }
+      ]
+    },
+    {
+      "id": "mixed_timing_units",
+      "observation": "Bars, beats and seconds require translation",
+      "participants": [
+        3,
+        4,
+        5
+      ],
+      "participant_count": 3,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 3,
+          "finding_or_path": "rating_reasons.how_confusing_it_is"
+        },
+        {
+          "participant": 4,
+          "finding_or_path": "P4-3"
+        },
+        {
+          "participant": 5,
+          "finding_or_path": "P5-6"
+        }
+      ]
+    },
+    {
+      "id": "preview_status_ambiguity",
+      "observation": "Preview image failure resembles instrument failure",
+      "participants": [
+        2,
+        5
+      ],
+      "participant_count": 2,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 2,
+          "finding_or_path": "P2-05"
+        },
+        {
+          "participant": 5,
+          "finding_or_path": "P5-4"
+        }
+      ]
+    },
+    {
+      "id": "zoom_discoverability",
+      "observation": "Fitting/zooming into precise endpoints takes discovery",
+      "participants": [
+        1,
+        2
+      ],
+      "participant_count": 2,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 1,
+          "finding_or_path": "P1-F4"
+        },
+        {
+          "participant": 2,
+          "finding_or_path": "P2-04"
+        }
+      ]
+    },
+    {
+      "id": "selection_persistence",
+      "observation": "Plain click retains multiple-clip selection unexpectedly",
+      "participants": [
+        1
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 1,
+          "finding_or_path": "P1-F3"
+        }
+      ]
+    },
+    {
+      "id": "effect_tail_duration",
+      "observation": "Enabled effect tails extend advertised arrangement duration",
+      "participants": [
+        3
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 3,
+          "finding_or_path": "P3-3"
+        }
+      ]
+    },
+    {
+      "id": "midi_export_confirmation",
+      "observation": "MIDI export retains the previous WAV success message",
+      "participants": [
+        3
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 3,
+          "finding_or_path": "P3-4"
+        }
+      ]
+    },
+    {
+      "id": "export_format_visibility",
+      "observation": "WAV format/sample-rate choices not visible",
+      "participants": [
+        3
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 3,
+          "finding_or_path": "P3-5"
+        }
+      ]
+    },
+    {
+      "id": "pitch_name_visibility",
+      "observation": "Most piano-key pitch names are hidden",
+      "participants": [
+        3
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 3,
+          "finding_or_path": "P3-1"
+        }
+      ]
+    },
+    {
+      "id": "excessive_gain_precision",
+      "observation": "Mixer gain displays excessive decimal precision",
+      "participants": [
+        4
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 4,
+          "finding_or_path": "P4-4"
+        }
+      ]
+    },
+    {
+      "id": "mouse_only_naming",
+      "observation": "No observed way to personalize names without typing",
+      "participants": [
+        5
+      ],
+      "participant_count": 1,
+      "denominator": 5,
+      "report_references": [
+        {
+          "participant": 5,
+          "finding_or_path": "P5-5"
+        }
+      ]
+    }
+  ],
+  "unresolved_lab_observations": [
+    {
+      "id": "master_meter",
+      "participants": [
+        4
+      ],
+      "report_references": [
+        "P4-5"
+      ],
+      "observation": "Master meter showed negative infinity while channel meters moved; final WAV was nonzero. Null output may explain this. Not established as an application defect."
+    }
+  ],
+  "lab_and_scope_limits": [
+    "Five simulated agents, not five human first-time users; no population-level usability claims.",
+    "Null audio output prevented listening, sonic quality assessment and genre/aesthetic verification.",
+    "Only the native Rill Lab Sine VST3 fixture was supplied. Project assignment and rendered signal do not establish third-party VST compatibility or library breadth.",
+    "Software OpenGL and concurrent isolated app sessions preclude generalizing performance; no latency, throughput or CPU benchmark was run.",
+    "All participants reused stock Circuit rhythm audio; recording, external audio import, broad effects, automation and professional mixing were not evaluated.",
+    "A nonzero mixed WAV alone does not isolate the VST contribution; saved native VST assignment, MIDI notes and participant meter observations are corroborating evidence."
+  ]
+}

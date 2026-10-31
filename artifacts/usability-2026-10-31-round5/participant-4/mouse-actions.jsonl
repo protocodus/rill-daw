@@ -1,0 +1,109 @@
+{"time": "2026-10-31T20:14:17Z", "started_unix": 1793477657.4377804, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/initial.png"], "held_button_after": null}
+{"time": "2026-10-31T20:15:23Z", "started_unix": 1793477723.0456538, "action": "click", "args": ["107", "22"], "held_button_after": null}
+{"time": "2026-10-31T20:15:23Z", "started_unix": 1793477723.7017653, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/01-file-menu.png"], "held_button_after": null}
+{"time": "2026-10-31T20:15:29Z", "started_unix": 1793477729.1295545, "action": "click", "args": ["205", "235"], "held_button_after": null}
+{"time": "2026-10-31T20:15:30Z", "started_unix": 1793477729.909697, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/02-rename.png"], "held_button_after": null}
+{"time": "2026-10-31T20:15:34Z", "started_unix": 1793477734.6004705, "action": "click", "args": ["1164", "24"], "held_button_after": null}
+{"time": "2026-10-31T20:15:35Z", "started_unix": 1793477735.2146742, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/03-keyboard.png"], "held_button_after": null}
+{"time": "2026-10-31T20:15:42Z", "started_unix": 1793477742.3224564, "action": "click", "args": ["1196", "302"], "held_button_after": null}
+{"time": "2026-10-31T20:15:43Z", "started_unix": 1793477743.1237838, "action": "click", "args": ["1044", "178"], "held_button_after": null}
+{"time": "2026-10-31T20:15:44Z", "started_unix": 1793477744.000308, "action": "click", "args": ["1167", "136"], "held_button_after": null}
+{"time": "2026-10-31T20:15:45Z", "started_unix": 1793477744.7573273, "action": "click", "args": ["1284", "136"], "held_button_after": null}
+{"time": "2026-10-31T20:15:45Z", "started_unix": 1793477745.4495144, "action": "click", "args": ["1321", "177"], "held_button_after": null}
+{"time": "2026-10-31T20:15:46Z", "started_unix": 1793477746.1015198, "action": "click", "args": ["1321", "177"], "held_button_after": null}
+{"time": "2026-10-31T20:15:47Z", "started_unix": 1793477746.845841, "action": "click", "args": ["1168", "22"], "held_button_after": null}
+{"time": "2026-10-31T20:15:47Z", "started_unix": 1793477747.4739218, "action": "click", "args": ["1271", "22"], "held_button_after": null}
+{"time": "2026-10-31T20:15:48Z", "started_unix": 1793477748.1130939, "action": "click", "args": ["32", "173"], "held_button_after": null}
+{"time": "2026-10-31T20:15:49Z", "started_unix": 1793477748.7281377, "action": "click", "args": ["32", "173"], "held_button_after": null}
+{"time": "2026-10-31T20:15:49Z", "started_unix": 1793477749.388328, "action": "click", "args": ["32", "173"], "held_button_after": null}
+{"time": "2026-10-31T20:15:50Z", "started_unix": 1793477750.0443366, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/04-named-zoomed.png"], "held_button_after": null}
+{"time": "2026-10-31T20:15:58Z", "started_unix": 1793477758.3663216, "action": "click", "args": ["32", "173"], "held_button_after": null}
+{"time": "2026-10-31T20:15:59Z", "started_unix": 1793477759.0939157, "action": "click", "args": ["32", "173"], "held_button_after": null}
+{"time": "2026-10-31T20:16:00Z", "started_unix": 1793477759.8057404, "action": "click", "args": ["903", "131"], "held_button_after": null}
+{"time": "2026-10-31T20:16:00Z", "started_unix": 1793477760.6259773, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/05-stretch-view.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:06Z", "started_unix": 1793477765.8292706, "action": "drag", "args": ["538", "355", "1177", "355"], "held_button_after": null}
+{"time": "2026-10-31T20:16:07Z", "started_unix": 1793477767.2292309, "action": "click", "args": ["65", "131"], "held_button_after": null}
+{"time": "2026-10-31T20:16:08Z", "started_unix": 1793477767.9457805, "action": "click", "args": ["80", "347"], "held_button_after": null}
+{"time": "2026-10-31T20:16:09Z", "started_unix": 1793477768.5792983, "action": "double", "args": ["294", "457"], "held_button_after": null}
+{"time": "2026-10-31T20:16:09Z", "started_unix": 1793477769.4631379, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/06-midi-created.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:17Z", "started_unix": 1793477777.5910351, "action": "click", "args": ["176", "934"], "held_button_after": null}
+{"time": "2026-10-31T20:16:18Z", "started_unix": 1793477778.2939746, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/07-instrument-assigned.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:26Z", "started_unix": 1793477786.4752152, "action": "click", "args": ["700", "351", "3"], "held_button_after": null}
+{"time": "2026-10-31T20:16:27Z", "started_unix": 1793477787.0743165, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/08-audio-context.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:33Z", "started_unix": 1793477792.925647, "action": "click", "args": ["779", "643"], "held_button_after": null}
+{"time": "2026-10-31T20:16:33Z", "started_unix": 1793477793.4954596, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/09-stretch-menu-result.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:40Z", "started_unix": 1793477800.065206, "action": "click", "args": ["1189", "172"], "held_button_after": null}
+{"time": "2026-10-31T20:16:40Z", "started_unix": 1793477800.7247741, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/10-snap-menu.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:47Z", "started_unix": 1793477807.047773, "action": "click", "args": ["1116", "260"], "held_button_after": null}
+{"time": "2026-10-31T20:16:48Z", "started_unix": 1793477807.6942477, "action": "drag", "args": ["1179", "351", "1167", "351"], "held_button_after": null}
+{"time": "2026-10-31T20:16:49Z", "started_unix": 1793477809.037944, "action": "click", "args": ["65", "132"], "held_button_after": null}
+{"time": "2026-10-31T20:16:50Z", "started_unix": 1793477809.7336426, "action": "double", "args": ["320", "496"], "held_button_after": null}
+{"time": "2026-10-31T20:16:50Z", "started_unix": 1793477810.5852895, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/11-piano-roll.png"], "held_button_after": null}
+{"time": "2026-10-31T20:16:57Z", "started_unix": 1793477816.750828, "action": "click", "args": ["810", "130"], "held_button_after": null}
+{"time": "2026-10-31T20:16:57Z", "started_unix": 1793477817.5084226, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/12-midi-properties.png"], "held_button_after": null}
+{"time": "2026-10-31T20:17:08Z", "started_unix": 1793477828.5224864, "action": "click", "args": ["827", "567"], "held_button_after": null}
+{"time": "2026-10-31T20:17:09Z", "started_unix": 1793477829.2935357, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/13-duration-keypad.png"], "held_button_after": null}
+{"time": "2026-10-31T20:17:16Z", "started_unix": 1793477836.3183408, "action": "click", "args": ["920", "877"], "held_button_after": null}
+{"time": "2026-10-31T20:17:17Z", "started_unix": 1793477837.1142256, "action": "click", "args": ["919", "751"], "held_button_after": null}
+{"time": "2026-10-31T20:17:18Z", "started_unix": 1793477837.9894547, "action": "click", "args": ["997", "751"], "held_button_after": null}
+{"time": "2026-10-31T20:17:19Z", "started_unix": 1793477838.79729, "action": "click", "args": ["852", "962"], "held_button_after": null}
+{"time": "2026-10-31T20:17:19Z", "started_unix": 1793477839.530331, "action": "click", "args": ["986", "377"], "held_button_after": null}
+{"time": "2026-10-31T20:17:20Z", "started_unix": 1793477840.2166119, "action": "click", "args": ["1084", "231"], "held_button_after": null}
+{"time": "2026-10-31T20:17:21Z", "started_unix": 1793477840.8958254, "action": "click", "args": ["1084", "231"], "held_button_after": null}
+{"time": "2026-10-31T20:17:21Z", "started_unix": 1793477841.6416354, "action": "click", "args": ["1084", "231"], "held_button_after": null}
+{"time": "2026-10-31T20:17:22Z", "started_unix": 1793477842.3974338, "action": "click", "args": ["1084", "231"], "held_button_after": null}
+{"time": "2026-10-31T20:17:23Z", "started_unix": 1793477843.0497594, "action": "click", "args": ["1084", "231"], "held_button_after": null}
+{"time": "2026-10-31T20:17:24Z", "started_unix": 1793477843.728207, "action": "click", "args": ["1084", "231"], "held_button_after": null}
+{"time": "2026-10-31T20:17:24Z", "started_unix": 1793477844.395945, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/14-long-midi.png"], "held_button_after": null}
+{"time": "2026-10-31T20:17:33Z", "started_unix": 1793477853.1655939, "action": "click", "args": ["173", "190"], "held_button_after": null}
+{"time": "2026-10-31T20:17:34Z", "started_unix": 1793477853.841171, "action": "drag", "args": ["64", "684", "633", "684"], "held_button_after": null}
+{"time": "2026-10-31T20:17:36Z", "started_unix": 1793477855.2403572, "action": "drag", "args": ["64", "612", "633", "612"], "held_button_after": null}
+{"time": "2026-10-31T20:17:37Z", "started_unix": 1793477856.6880136, "action": "drag", "args": ["64", "558", "633", "558"], "held_button_after": null}
+{"time": "2026-10-31T20:17:38Z", "started_unix": 1793477858.032623, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/15-first-chord.png"], "held_button_after": null}
+{"time": "2026-10-31T20:17:49Z", "started_unix": 1793477869.162328, "action": "click", "args": ["65", "190"], "held_button_after": null}
+{"time": "2026-10-31T20:17:50Z", "started_unix": 1793477869.8551095, "action": "drag", "args": ["548", "613", "633", "613"], "held_button_after": null}
+{"time": "2026-10-31T20:17:52Z", "started_unix": 1793477871.1881797, "action": "drag", "args": ["548", "559", "633", "559"], "held_button_after": null}
+{"time": "2026-10-31T20:17:52Z", "started_unix": 1793477872.5906067, "action": "click", "args": ["173", "190"], "held_button_after": null}
+{"time": "2026-10-31T20:17:54Z", "started_unix": 1793477873.2232997, "action": "drag", "args": ["635", "594", "1043", "594"], "held_button_after": null}
+{"time": "2026-10-31T20:17:55Z", "started_unix": 1793477874.6136372, "action": "drag", "args": ["635", "522", "1043", "522"], "held_button_after": null}
+{"time": "2026-10-31T20:17:56Z", "started_unix": 1793477875.9254441, "action": "drag", "args": ["635", "468", "1043", "468"], "held_button_after": null}
+{"time": "2026-10-31T20:17:57Z", "started_unix": 1793477877.262189, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/16-second-chord.png"], "held_button_after": null}
+{"time": "2026-10-31T20:18:07Z", "started_unix": 1793477887.2442675, "action": "click", "args": ["65", "190"], "held_button_after": null}
+{"time": "2026-10-31T20:18:08Z", "started_unix": 1793477887.9924603, "action": "drag", "args": ["958", "595", "1044", "595"], "held_button_after": null}
+{"time": "2026-10-31T20:18:10Z", "started_unix": 1793477889.2479298, "action": "drag", "args": ["958", "523", "1044", "523"], "held_button_after": null}
+{"time": "2026-10-31T20:18:10Z", "started_unix": 1793477890.5474174, "action": "click", "args": ["173", "190"], "held_button_after": null}
+{"time": "2026-10-31T20:18:12Z", "started_unix": 1793477891.2055562, "action": "drag", "args": ["1045", "684", "1206", "684"], "held_button_after": null}
+{"time": "2026-10-31T20:18:13Z", "started_unix": 1793477892.4537554, "action": "drag", "args": ["1045", "612", "1206", "612"], "held_button_after": null}
+{"time": "2026-10-31T20:18:14Z", "started_unix": 1793477893.6713305, "action": "drag", "args": ["1045", "558", "1206", "558"], "held_button_after": null}
+{"time": "2026-10-31T20:18:15Z", "started_unix": 1793477894.91229, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/17-third-chord.png"], "held_button_after": null}
+{"time": "2026-10-31T20:18:23Z", "started_unix": 1793477903.6646, "action": "click", "args": ["65", "132"], "held_button_after": null}
+{"time": "2026-10-31T20:18:24Z", "started_unix": 1793477904.2472587, "action": "click", "args": ["1158", "76"], "held_button_after": null}
+{"time": "2026-10-31T20:18:25Z", "started_unix": 1793477904.8799913, "action": "click", "args": ["89", "493"], "held_button_after": null}
+{"time": "2026-10-31T20:18:25Z", "started_unix": 1793477905.4850285, "action": "click", "args": ["237", "75"], "held_button_after": null}
+{"time": "2026-10-31T20:18:26Z", "started_unix": 1793477906.0927324, "action": "click", "args": ["320", "75"], "held_button_after": null}
+{"time": "2026-10-31T20:18:26Z", "started_unix": 1793477906.7536423, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/18-playback.png"], "held_button_after": null}
+{"time": "2026-10-31T20:18:32Z", "started_unix": 1793477912.3705184, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/19-playback-progress.png"], "held_button_after": null}
+{"time": "2026-10-31T20:18:39Z", "started_unix": 1793477919.595791, "action": "click", "args": ["431", "75"], "held_button_after": null}
+{"time": "2026-10-31T20:18:40Z", "started_unix": 1793477920.168462, "action": "click", "args": ["108", "22"], "held_button_after": null}
+{"time": "2026-10-31T20:18:41Z", "started_unix": 1793477920.7657619, "action": "click", "args": ["162", "149"], "held_button_after": null}
+{"time": "2026-10-31T20:18:41Z", "started_unix": 1793477921.3323739, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/20-save-dialog.png"], "held_button_after": null}
+{"time": "2026-10-31T20:18:47Z", "started_unix": 1793477927.607685, "action": "click", "args": ["776", "389"], "held_button_after": null}
+{"time": "2026-10-31T20:18:48Z", "started_unix": 1793477928.3384047, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/21-project-saved.png"], "held_button_after": null}
+{"time": "2026-10-31T20:18:56Z", "started_unix": 1793477936.1623313, "action": "click", "args": ["108", "22"], "held_button_after": null}
+{"time": "2026-10-31T20:18:57Z", "started_unix": 1793477936.7371423, "action": "click", "args": ["184", "332"], "held_button_after": null}
+{"time": "2026-10-31T20:18:57Z", "started_unix": 1793477937.3952236, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/22-wav-settings.png"], "held_button_after": null}
+{"time": "2026-10-31T20:19:07Z", "started_unix": 1793477947.5696948, "action": "click", "args": ["631", "573"], "held_button_after": null}
+{"time": "2026-10-31T20:19:08Z", "started_unix": 1793477948.305716, "action": "click", "args": ["665", "627"], "held_button_after": null}
+{"time": "2026-10-31T20:19:09Z", "started_unix": 1793477949.101233, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/23-wav-file-dialog.png"], "held_button_after": null}
+{"time": "2026-10-31T20:19:18Z", "started_unix": 1793477958.1961753, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/24-wav-dialog-ready.png"], "held_button_after": null}
+{"time": "2026-10-31T20:19:24Z", "started_unix": 1793477964.150155, "action": "click", "args": ["775", "388"], "held_button_after": null}
+{"time": "2026-10-31T20:19:25Z", "started_unix": 1793477964.9180892, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/25-wav-export-started.png"], "held_button_after": null}
+{"time": "2026-10-31T20:19:33Z", "started_unix": 1793477973.6957884, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/26-wav-export-result.png"], "held_button_after": null}
+{"time": "2026-10-31T20:19:46Z", "started_unix": 1793477986.3386235, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/27-wav-export-result.png"], "held_button_after": null}
+{"time": "2026-10-31T20:19:52Z", "started_unix": 1793477992.5503705, "action": "click", "args": ["108", "22"], "held_button_after": null}
+{"time": "2026-10-31T20:19:53Z", "started_unix": 1793477993.1384337, "action": "click", "args": ["175", "417"], "held_button_after": null}
+{"time": "2026-10-31T20:19:53Z", "started_unix": 1793477993.7336397, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/28-midi-export.png"], "held_button_after": null}
+{"time": "2026-10-31T20:20:01Z", "started_unix": 1793478001.493561, "action": "click", "args": ["775", "389"], "held_button_after": null}
+{"time": "2026-10-31T20:20:02Z", "started_unix": 1793478002.0935478, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/29-midi-success.png"], "held_button_after": null}
+{"time": "2026-10-31T20:21:14Z", "started_unix": 1793478073.9431272, "action": "up", "args": [], "held_button_after": null}
+{"time": "2026-10-31T20:21:14Z", "started_unix": 1793478074.4186225, "action": "shot", "args": ["/workspace/scratch/rill-usability-round5/session-4/final.png"], "held_button_after": null}

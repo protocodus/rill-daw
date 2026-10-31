@@ -1,0 +1,13 @@
+Participant 5 — simulated beginner; mouse-only session.
+19:39:56 — The visible Double-click for MIDI hint opened the instrument library. Assign instrument was straightforward.
+19:40:10–19:40:26 — Opened piano roll and drew C4/E4/G4/E4 using Pencil. The colored notes and labels gave clear feedback.
+19:40:36–19:41:03 — Context-menu Duplicate appended a clip. I expected the toolbar Duplicate button to do the same and clicked it repeatedly; the arrangement stayed at two MIDI patterns.
+19:41:13 — Tool help explained that Duplicate is a mode requiring a click on a clip. This recovered the task without keyboard use.
+19:41:23–19:41:58 — Zoomed out until the thirty-second grid mark was visible. Repeated the synth and drum clips by clicking with Duplicate active.
+19:42:08–19:42:13 — Cut the final audio at bar 15 and erased the remainder. The title showed 0:30.000. Play changed to Pause, transport advanced, and both track meters lit. I did not hear or audition audio.
+19:42:29–19:43:03 — Rename project had an on-screen keyboard. Used it to enter Night pocket. Save inherited that filename and the session folder. First screenshot of the native dialog was black; a later screenshot displayed it normally.
+19:43:19 — Accepted Save. The arranger returned with Night pocket and no unsaved dot.
+19:43:27–19:44:10 — WAV export showed 0:30 plus optional tails. Turned tails off and exported. The status strip displayed elapsed progress and then Exported Night pocket.wav. I could open the mixer during export.
+19:44:18–19:44:32 — Export MIDI inherited Night pocket.mid. Initial picker was incompletely drawn; later screenshot was normal. Accepted it and saw Exported Night pocket.mid.
+19:44:43 — Returned to arranger and captured final.png. App remains open, playback stopped, no mouse button held.
+Overall reaction — The simple task was achievable by mouse, including custom naming. Duplicate command-versus-tool behavior was the main confusion; helpful tool text resolved it. The dark teal UI looked polished, though repeated clip names became abbreviated when viewing the full piece. Saved/exported paths are based on visible dialogs and success notices, not filesystem inspection.

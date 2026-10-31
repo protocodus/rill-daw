@@ -1,0 +1,163 @@
+{
+  "purpose": "Independent simulated beginner mouse-only Rill usability report; visible observations only.",
+  "participant": 1,
+  "persona": "Simulated first-time beginner interested in a short relaxed lo-fi sketch.",
+  "piece_name": "rain room",
+  "ratings": {
+    "easy_to_use": 3,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Instrument assignment, chord generation, naming, save and export were achievable by mouse. Numeric dragging and the moving generator buttons required trial and correction.",
+    "how_cool_it_looks": "The dark layout, teal waveforms, note previews and clear text labels look coherent and readable. It felt polished visually, though much of the workspace is empty for a small sketch.",
+    "how_fast_it_is": "Most clicks and edits responded promptly. WAV export displayed an elapsed timer, and a playback failure plus recovery slowed the session. Tool and screenshot overhead is not a software benchmark.",
+    "how_confusing_it_is": "Moderate confusion: clicking a number exposed text editing without explaining dragging; Add notes moved after the first addition; Duplicate selected a tool rather than immediately copying; WAV progress was displaced by a MIDI notice.",
+    "feature_completeness": "The visible app provided audio clips, a native VST3 instrument, generated MIDI chords, volume controls, mouse naming, project saving, WAV and MIDI export. This covers this sketch; broader DAW features and other plugins were not evaluated."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round4/session-1/rain room.rill",
+    "wav": "/workspace/scratch/rill-usability-round4/session-1/rain room.wav",
+    "midi": "/workspace/scratch/rill-usability-round4/session-1/rain room.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "The empty-area Double-click for MIDI instruction led directly to the Device library. Assign instrument added Rill Lab Sine and a new MIDI clip.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument-assigned.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Generate offered visible chord previews and root/chord choices. The completed pattern visibly contains four successive chord sections.",
+      "evidence": [
+        "04-generate.png",
+        "05-chord-options.png",
+        "15-arrangement-30s.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Clicking Length selected a text value; scrolling did not change it. Horizontal dragging changed the numeric value, but this mouse interaction was not obvious from the field.",
+      "evidence": [
+        "06-length-control.png",
+        "07-generated-chord.png",
+        "10-length-drag.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "After adding the first chord, a status line moved Add notes and Next range downward. Clicks at the former Add notes position missed; Fit initially showed only the first chord. Reopening the generator and clicking the lower button added the missing sections.",
+      "evidence": [
+        "07-generated-chord.png",
+        "09-second-chord.png",
+        "11-midi-30-seconds.png",
+        "14-range-set.png",
+        "15-arrangement-30s.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "recovery",
+      "observation": "Selecting Duplicate alone made no copy. Tool help explained clicking a clip; doing that created adjacent drum copies.",
+      "evidence": [
+        "16-duplicate-tool.png",
+        "17-duplicate-help.png",
+        "18-audio-duplicate.png",
+        "19-four-audio-clips.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "friction",
+      "observation": "Dragging the last audio edge toward the MIDI end first produced a 30.536-second arrangement. A second trim left the project at 30.000 seconds, with the audio visually ending slightly before the MIDI.",
+      "evidence": [
+        "20-playback.png",
+        "28-project-saved.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "failure",
+      "observation": "Initial playback activated meters, then stopped at transport 002.01.61 with Audio output stream failed or disconnected. Error details showed ALSA snd_pcm_avail_delay and I/O error (5).",
+      "evidence": [
+        "20-playback.png",
+        "21-playback-advanced.png",
+        "23-audio-error-details.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "recovery",
+      "observation": "After dismissing the error and using Stop, Start and Play, the playhead advanced into bars 6 and 9 with both track meters active. No audio was auditioned.",
+      "evidence": [
+        "25-rename-project.png",
+        "26-name-keyboard.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "positive",
+      "observation": "Rename project exposed a clickable Keyboard. Its Clear, letters and Space controls entered rain room entirely with the mouse; Save inherited the name.",
+      "evidence": [
+        "25-rename-project.png",
+        "26-name-keyboard.png",
+        "27-project-save.png",
+        "28-project-saved.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "friction",
+      "observation": "Exporting MIDI while the WAV result was still unconfirmed replaced the visible bottom status with the MIDI success notice. Re-export last WAV provided a later unambiguous WAV success notice.",
+      "evidence": [
+        "32-wav-complete.png",
+        "34-midi-export-result.png",
+        "37-reexport-menu.png",
+        "38-wav-reexport.png",
+        "39-wav-final-result.png"
+      ]
+    },
+    {
+      "id": "F11",
+      "kind": "positive",
+      "observation": "The UI displayed Arrangement 0:30 in WAV export, allowed effect tails to be unchecked, and ultimately showed success notices for both MIDI and WAV.",
+      "evidence": [
+        "29-wav-export-settings.png",
+        "30-wav-save-dialog.png",
+        "34-midi-export-result.png",
+        "39-wav-final-result.png",
+        "final.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed in the visible UI: named and saved a 30-second audio-plus-VST-MIDI arrangement and saw WAV and MIDI export success notices. Files require independent verification.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "112 BPM, 4/4. Starting Circuit rhythm audio duplicated into four clips, with the last trimmed to near the end. One MIDI clip contains sustained C minor, F minor, G minor and C minor triads in 4, 4, 4 and 2-bar sections. Drums set to -12 dB and instrument to -13.2 dB. Intended as a simple relaxed sketch; audible style unverified.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Initially meters activated, then playback stopped with an audio-output-stream error at 002.01.61. After Stop/Start/Play, screenshots show playback at 006.02.14 and 009.03.57 with both track meters active. Playback was stopped before saving; no full uninterrupted pass was verified.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No composition file contents were inspected and no audio was heard or auditioned; independent coordinator verification follows.",
+    "Observed playback failure occurred in the specified software-graphics, timer-paced virtual-audio laboratory. It does not establish physical-hardware latency or reliability.",
+    "Only the installed Rill Lab Sine instrument was used; other third-party plugins were not evaluated.",
+    "Screenshot filenames 11-midi-30-seconds.png and 32-wav-complete.png describe premature intentions; their visible contents and this report are authoritative.",
+    "Elapsed session time includes screenshot, tool and report overhead and is not a performance benchmark."
+  ]
+}

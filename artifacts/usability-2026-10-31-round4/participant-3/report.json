@@ -1,0 +1,94 @@
+{
+  "purpose": "Independent simulated beginner mouse-only RILL usability session; observations are limited to the visible UI.",
+  "participant": 3,
+  "persona": "Simulated first-time RILL beginner interested in making a short melodic instrumental.",
+  "piece_name": "luna loop",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The empty-track hint, instrument assignment, labeled piano-roll notes, exact loop duration and on-screen naming keyboard let me complete the composition and file workflows by mouse. Duplicate needed help and trimming needed a correction.",
+    "how_cool_it_looks": "The dark teal arrangement, waveforms, note previews and moving meters looked coherent and readable. The restrained palette and similar clip colors were less visually distinctive.",
+    "how_fast_it_is": "Drawing, repeating and naming responded promptly, but playback recovery consumed extra steps and WAV export showed an elapsed-time wait before completion. This is a laboratory-session impression, not a hardware benchmark.",
+    "how_confusing_it_is": "Moderate confusion: Duplicate initially appeared to be an immediate command; Tool help explained clicking a clip. One MIDI trim left 30.536 seconds and needed another attempt. The output failure persisted after following the suggested setup recovery.",
+    "feature_completeness": "The visible app provided audio arranging, a VST3 instrument, MIDI drawing, group duplication, trimming, mouse-only naming, project saving and both requested exports. Reliable sustained playback was not established in this session, and other plug-ins or advanced features were not evaluated."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round4/session-3/luna loop.rill",
+    "wav": "/workspace/scratch/rill-usability-round4/session-3/luna loop.wav",
+    "midi": "/workspace/scratch/rill-usability-round4/session-3/luna loop.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "The empty arranger hint said double-click for MIDI. Doing so opened the device library, and Assign instrument created a MIDI track labeled Rill Lab Sine.",
+      "evidence": ["initial.png", "01-midi-added.png", "02-instrument.png"]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Pencil drags created notes with pitch labels. Drawing beyond the original clip end visibly extended the clip. A four-bar rising and falling melody could be drawn without typing.",
+      "evidence": ["03-piano-roll.png", "04-melody-drawn.png", "05-playing.png"]
+    },
+    {
+      "id": "F3",
+      "kind": "failure",
+      "observation": "Play initially showed active audio and instrument meters and the playhead advanced from bar 1 to bar 4. A later warning said Audio output stream failed or disconnected; details named ALSA snd_pcm_avail_delay I/O error (5). Selecting Rill lab paced output in Audio setup, applying and trying Stop/Play returned the warning.",
+      "evidence": ["05-playing.png", "06-playhead-advanced.png", "07-zoomed-out.png", "08-audio-error-details.png", "10-output-options.png", "11-retry-playback.png"]
+    },
+    {
+      "id": "F4",
+      "kind": "recovery",
+      "observation": "Clicking Duplicate selected a tool without immediately copying anything. Tool help explained clicking a clip; clicking a selected clip then duplicated both marquee-selected tracks together.",
+      "evidence": ["12-duplicate-attempt.png", "13-duplicate-help.png", "14-duplicated.png", "15-full-repeats.png"]
+    },
+    {
+      "id": "F5",
+      "kind": "friction",
+      "observation": "Trimming the last audio repeat worked, but the first MIDI trim left the project at 30.536 seconds. A small second trim aligned both tracks at 30.000 seconds. The loop end label provided precise timing feedback.",
+      "evidence": ["16-trim-attempt.png", "17-thirty-seconds.png", "22-saved.png"]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard button with clickable letters, Clear and Space. This allowed the chosen title luna loop; Save reused that title as the default filename.",
+      "evidence": ["19-rename.png", "20-name-keyboard.png", "21-save-dialog.png", "22-saved.png"]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "The WAV dialog reported Arrangement 0:30. Disabling effect tails preserved that displayed duration. Both WAV and MIDI file pickers reused the project name, and each export eventually displayed an explicit Exported notice.",
+      "evidence": ["23-wav-export.png", "24-wav-save-dialog.png", "28-wav-wait.png", "30-midi-save-dialog.png", "31-midi-success.png"]
+    },
+    {
+      "id": "F8",
+      "kind": "friction",
+      "observation": "During WAV export the bottom status showed elapsed seconds. Attempts to open the File menu had no visible effect until export completed, and no remaining-time estimate was shown.",
+      "evidence": ["25-wav-success.png", "26-wav-result.png", "27-midi-export.png", "28-wav-wait.png"]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible composition, save and export workflows; playback encountered an unresolved laboratory output error and file contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "A 112 BPM, 4/4, fourteen-bar instrumental arrangement: supplied Circuit rhythm audio repeated across the drum track, plus a manually drawn twelve-note rising/falling four-bar melody repeated on a MIDI instrument track with the final repeat trimmed to two bars. Both tracks and the loop end visibly align at 30.000 seconds.",
+    "instrument": "Rill Lab Sine, shown as VST3 in the device library",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Initially Pause was shown, the playhead advanced from bar 1 to bar 4 and both track meters were active. An audio output stream failed/disconnected warning later appeared. The suggested output-selection and Stop/Play recovery did not establish sustained playback. No audio was auditioned.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows. Artifact paths are derived from visible native file dialogs and completion notices.",
+    "The timer-paced virtual audio backend and software graphics are laboratory conditions; observed output errors, elapsed export time and responsiveness should not be generalized to physical audio hardware.",
+    "Only the installed Rill Lab Sine VST3 instrument was assigned; results do not establish compatibility with other third-party plug-ins.",
+    "The supplied audio was reused and repeated. The melody was composed visually without listening, so musical quality and mix balance were not assessed."
+  ]
+}

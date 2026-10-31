@@ -1,0 +1,215 @@
+{
+  "summary": {
+    "passed": 83,
+    "failed": 0,
+    "ignored": 1,
+    "targets": 27
+  },
+  "targets": [
+    {
+      "target": "control_roles_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "toolbar-regression.log"
+    },
+    {
+      "target": "export_feedback_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "export_options_e2e",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 1,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "export_retry_e2e",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "finishing_actions_e2e",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "focus_e2e",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "header_readability_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "library_e2e",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "loop_selection_e2e",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "main_toolbar_roles_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "toolbar-regression.log"
+    },
+    {
+      "target": "novice_clip_e2e",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "novice_documents_e2e",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "numeric_replacement_e2e",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "piano_roll_refinement_e2e",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "precise_clip_editing_e2e",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "studio_windows_e2e",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "workspace_switch_e2e",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    },
+    {
+      "target": "arranger_tools_e2e",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "log": "workspace-tool-regression.log"
+    },
+    {
+      "target": "workspace_tool_memory_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "export_sequence_e2e",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "library_preview_status_e2e",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "loop_duration_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "midi_toolbar_stability_e2e",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "number_stepper_e2e",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "trim_feedback_e2e",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-new-regressions.log"
+    },
+    {
+      "target": "numeric_entry",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-shared-ui-tests.log"
+    },
+    {
+      "target": "tooltip",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "final-shared-ui-tests.log"
+    }
+  ],
+  "superseded_results": [
+    {
+      "target": "main_toolbar_roles_e2e",
+      "passed": 1,
+      "failed": 1,
+      "ignored": 0,
+      "log": "regression-suite.log"
+    }
+  ],
+  "superseded_reason": "The toolbar regression expected a single row at 1100 points. Visible tempo steps now wrap whole control groups below 1280; the revised test additionally verifies single rows at 1280 and 1440. The final toolbar/control-role rerun passes.",
+  "ignored_reason": "Optional installed-Surge-XT tail test requires a third-party plugin not present in the environment. Native lab VST rendering and MIDI/WAV sequence tests passed.",
+  "format_check": "cargo fmt --all -- --check passed",
+  "diff_check": "git diff --check passed",
+  "gallery": "component_gallery built, all 16 captures generated; revised inputs/navigation inspected in both themes",
+  "native_ui": "See ../revised/visual-smoke.json; 800x600, 1280x800 and 1440x1000 checked.",
+  "rill_binary_sha256": "d9acacea489c6232013d006a48e6f441a14ec1abc0c9329cd3e716e09d88fe14"
+}

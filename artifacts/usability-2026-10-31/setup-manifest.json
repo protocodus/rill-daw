@@ -1,0 +1,117 @@
+{
+  "date": "2026-10-31",
+  "baseline_git_sha": "c34252a84db9e7d9b95b512d19914f525964d5bb",
+  "repository": "/workspace/rill-daw",
+  "activation": ". /workspace/.rill-tools/activate.sh",
+  "baseline_binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability/baseline/rill",
+      "sha256": "1db8948090f89fcea474bc9ed7276fe42874eb519d9dbb162c4ab1ac71c97f6b"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability/baseline/daw-plugin-host",
+      "sha256": "efc1846a816a64109d90e611989e88baa7881de20aecdc0511c5658e7a021242"
+    }
+  },
+  "scripts": {
+    "launch.py": "/workspace/scratch/rill-usability/launch.py",
+    "mouse.py": "/workspace/scratch/rill-usability/mouse.py",
+    "lab_sine_plugin.rs": "/workspace/scratch/rill-usability/lab_sine_plugin.rs",
+    "build_lab_sine.py": "/workspace/scratch/rill-usability/build_lab_sine.py",
+    "verify_synth.rs": "/workspace/scratch/rill-usability/verify_synth.rs"
+  },
+  "sessions": [
+    {
+      "participant": 1,
+      "display": ":181",
+      "directory": "/workspace/scratch/rill-usability/session-1",
+      "viewport": [
+        1440,
+        1000
+      ]
+    },
+    {
+      "participant": 2,
+      "display": ":182",
+      "directory": "/workspace/scratch/rill-usability/session-2",
+      "viewport": [
+        1440,
+        1000
+      ]
+    },
+    {
+      "participant": 3,
+      "display": ":183",
+      "directory": "/workspace/scratch/rill-usability/session-3",
+      "viewport": [
+        1440,
+        1000
+      ]
+    },
+    {
+      "participant": 4,
+      "display": ":184",
+      "directory": "/workspace/scratch/rill-usability/session-4",
+      "viewport": [
+        1440,
+        1000
+      ]
+    },
+    {
+      "participant": 5,
+      "display": ":185",
+      "directory": "/workspace/scratch/rill-usability/session-5",
+      "viewport": [
+        1440,
+        1000
+      ]
+    }
+  ],
+  "isolation": [
+    "Independent Xvfb displays, cwd, config and cache",
+    "Unchanged default project from production app",
+    "Frozen app and matching plugin host copied before source changes",
+    "Mouse driver emits only XTest motion/button/scroll events and screenshots; no keyboard or direct project state changes"
+  ],
+  "plugin": {
+    "name": "Rill Lab Sine",
+    "path": "/workspace/scratch/rill-usability/plugins/RillLabSine.vst3",
+    "purpose": "Local test-only polyphonic sine instrument built from retained copy of repository editor_probe_plugin.rs; real VST3 SDK and production hosting",
+    "changes_from_fixture": [
+      "MIDI pitches drive separate sine voices at current sample rate",
+      "Velocity and Level control amplitude",
+      "Note-off silences matching voice",
+      "createView safely returns null (no custom GUI)",
+      "Descriptive lab identity"
+    ],
+    "verification": {
+      "project": "/workspace/scratch/rill-usability/synth-verification.rill",
+      "wav": "/workspace/scratch/rill-usability/synth-verification.wav",
+      "command": "baseline/rill --render synth-verification.rill synth-verification.wav",
+      "sample_rate": 48000,
+      "seconds": 2.2,
+      "peak": 0.03543306887149811,
+      "first_second_rms": 0.025054964120102576,
+      "first_second_positive_crossings": 440,
+      "all_finite": true,
+      "last_second_peak": 0
+    }
+  },
+  "native_picker": {
+    "runtime": "Zenity 4.1.90, GTK4",
+    "installation": "Signed Debian trixie apt packages downloaded/extracted into /workspace/.rill-tools/sysroot, schemas compiled there",
+    "evidence": "/workspace/scratch/rill-usability/picker-check/dialog2.png",
+    "mouse_confirmation": "/workspace/scratch/rill-usability/picker-check/chosen.txt",
+    "result": "Independent display :186 native Save picker accepted default filename by mouse and returned correct path"
+  },
+  "limitations": [
+    "Simulated agents, not human participants",
+    "Virtual desktop with software OpenGL; concurrent sessions are not controlled performance benchmarks",
+    "ALSA null output, no human audition or physical audio/MIDI hardware",
+    "Null PCM may not pace playback like hardware; transport wall-clock speed is not authoritative",
+    "One lab VST3 with no custom GUI; no claim of third-party editor/compatibility coverage",
+    "Native dialogs run without a window manager; window placement may differ from desktop",
+    "30-second completion requires saved/exported artifact duration verification independently of visual timeline or playback"
+  ],
+  "source_changes_during_setup": false
+}

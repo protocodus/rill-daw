@@ -1,0 +1,41 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.12s
+     Running tests/mixer_e2e.rs (target/debug/deps/mixer_e2e-99eea96e537fe291)
+
+running 3 tests
+test aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand ... ok
+test output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks ... ok
+test sequencer_mixer_controls_route_undo_persist_and_change_exported_audio ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.51s
+
+     Running tests/mixer_readability_e2e.rs (target/debug/deps/mixer_readability_e2e-785f83a47e1714e5)
+
+running 1 test
+test mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/mixer_signal_flow_e2e.rs (target/debug/deps/mixer_signal_flow_e2e-7e23b614678f43ff)
+
+running 2 tests
+test adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channel ... ok
+test mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+

@@ -1,0 +1,27 @@
+{
+  "all_frozen_source_hashes_match_current_checkout": true,
+  "base_commit": "c34252a84db9e7d9b95b512d19914f525964d5bb",
+  "tracked_source_patch": "source-diff.patch",
+  "untracked_source_archive": "untracked-frozen-source.tar.gz",
+  "untracked_source_archive_sha256": "f745735d46a3510a96e9da89d461a8be0d29719ed1a4ca9d49beedbb76f3cf80",
+  "untracked_files": [
+    "crates/daw-app/tests/export_sequence_e2e.rs",
+    "crates/daw-app/tests/library_preview_status_e2e.rs",
+    "crates/daw-app/tests/loop_duration_e2e.rs",
+    "crates/daw-app/tests/master_meter_e2e.rs",
+    "crates/daw-app/tests/midi_toolbar_stability_e2e.rs",
+    "crates/daw-app/tests/mixer_gain_precision_e2e.rs",
+    "crates/daw-app/tests/mouse_naming_e2e.rs",
+    "crates/daw-app/tests/number_stepper_e2e.rs",
+    "crates/daw-app/tests/selection_click_e2e.rs",
+    "crates/daw-app/tests/timing_discovery_e2e.rs",
+    "crates/daw-app/tests/trim_feedback_e2e.rs",
+    "crates/daw-app/tests/workspace_tool_memory_e2e.rs",
+    "crates/daw-app/tests/zoom_controls_e2e.rs",
+    "crates/daw-engine/src/output_meter_tests.rs",
+    "crates/daw-ui/src/duration.rs",
+    "crates/daw-ui/src/name_keyboard.rs",
+    "crates/daw-ui/src/number_stepper.rs"
+  ],
+  "note": "Base commit plus tracked patch plus untracked source archive reconstructs the evaluated source. Binaries and per-file hashes are frozen separately."
+}

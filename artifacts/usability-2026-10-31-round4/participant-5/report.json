@@ -1,0 +1,141 @@
+{
+  "purpose": "Independent simulated beginner mouse-only usability session; observations from visible Rill UI.",
+  "participant": 5,
+  "persona": "Simulated beginner encountering Rill for the first time, interested in a short hip-hop beat with a simple synth part.",
+  "piece_name": "Night pocket",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The visible MIDI hint, instrument assignment, pencil notes, cut/erase tools, on-screen naming keyboard, and File exports let me finish entirely by mouse. Duplicate mode needed help.",
+    "how_cool_it_looks": "The dark teal arrangement, clear waveforms, colored piano-roll notes, and mixer routing lines felt polished. Small repeated clip names were truncated after zooming out.",
+    "how_fast_it_is": "Most edits appeared promptly and the full task took about five minutes including screenshot/tool overhead. The WAV export showed elapsed progress and finished while the UI remained usable; this is not a performance benchmark.",
+    "how_confusing_it_is": "I initially treated toolbar Duplicate as an immediate command, unlike the identically named context-menu command. Tool help resolved it. Native save dialogs briefly showed incomplete or black contents before drawing.",
+    "feature_completeness": "Everything needed for this simple audio-plus-VST MIDI arrangement, project naming/saving, WAV and MIDI export was exposed. I did not assess effects, recording, other VSTs, or more complex composition."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.rill",
+    "wav": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.wav",
+    "midi": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Following the visible Double-click for MIDI hint opened the instrument library; Assign instrument created a MIDI track showing Rill Lab Sine.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-assigned.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Double-clicking the new pattern opened a piano roll. Pencil drags created four visible notes C4, E4, G4, E4, which also appeared in the arranger clip preview.",
+      "evidence": [
+        "03-piano-roll.png",
+        "04-notes-drawn.png",
+        "06-duplicate.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Context-menu Duplicate immediately appended a pattern, but clicking toolbar Duplicate repeatedly only selected its mode and left two patterns. The same label concealed different interaction requirements.",
+      "evidence": [
+        "05-clip-menu.png",
+        "06-duplicate.png",
+        "07-synth-repeated.png",
+        "mouse-actions.jsonl: 2026-10-31T19:40:55Z through 19:41:03Z"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "recovery",
+      "observation": "Tool help explicitly said to click a clip to duplicate it. After that, clicking consecutive clips quickly produced fourteen MIDI patterns and four audio segments. Cut and Erase removed the final two audio bars, leaving the title duration at 0:30.000.",
+      "evidence": [
+        "08-duplicate-help.png",
+        "11-third-pattern.png",
+        "12-repeated-arrangement.png",
+        "13-thirty-seconds-playing.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "Play changed to Pause, transport position advanced from 001.01.00 to 001.01.31, the playhead shifted from the start, and both track meters were illuminated. Stop returned the transport to the start.",
+      "evidence": [
+        "13-thirty-seconds-playing.png",
+        "19-project-saved.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "Rename project exposed a Keyboard button. Its on-screen Select all, Caps, letter, and Space controls allowed the chosen name Night pocket. The native Save dialog inherited Night pocket.rill in the session-5 folder, and after OK the project title had no unsaved marker.",
+      "evidence": [
+        "15-rename-project.png",
+        "16-onscreen-keyboard.png",
+        "18-save-dialog-ready.png",
+        "19-project-saved.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "friction",
+      "observation": "The first screenshot of the Save dialog showed a black rectangle, and the first MIDI picker screenshot lacked folder contents and breadcrumbs. Later screenshots showed fully drawn native dialogs without recovery input.",
+      "evidence": [
+        "17-save-dialog.png",
+        "18-save-dialog-ready.png",
+        "25-midi-picker.png",
+        "26-midi-picker-ready.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "WAV export clearly showed Arrangement 0:30 and optional effect tails. I unchecked tails, accepted Night pocket.wav, saw exporting progress, then Exported Night pocket.wav. MIDI export inherited Night pocket.mid and showed its own Exported notice.",
+      "evidence": [
+        "20-export-options.png",
+        "21-wav-picker.png",
+        "22-wav-export-result.png",
+        "24-mixer-during-export.png",
+        "26-midi-picker-ready.png",
+        "27-midi-complete.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "At the zoom needed to see thirty seconds, the one-bar MIDI names were shortened to New pa...; note previews still distinguished their contents.",
+      "evidence": [
+        "12-repeated-arrangement.png",
+        "final.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: thirty-second arrangement named and saved, with WAV and MIDI export success notices. File contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "112 BPM, 4/4, fourteen bars. Startup Circuit rhythm audio duplicated into three full four-bar segments plus a final two-bar segment. Four-note C4/E4/G4/E4 MIDI pattern repeated in fourteen one-bar clips on a Rill Lab Sine track. Intended as a simple hip-hop beat with synth; musical or sonic quality was not auditioned.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play became Pause, transport advanced to 001.01.31, playhead moved slightly past the start, and both audio and instrument track meters lit. Playback was stopped afterward. No audible monitoring or capture audition occurred.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows.",
+    "Used only the provided starter audio and installed laboratory Rill Lab Sine VST3; no claims about third-party plug-in compatibility.",
+    "Software graphics, virtual audio sink, and absent window manager may affect responsiveness and native-dialog rendering. No hardware or latency conclusions.",
+    "Session elapsed time includes screenshots, tool execution, and report writing and is not a benchmark."
+  ]
+}

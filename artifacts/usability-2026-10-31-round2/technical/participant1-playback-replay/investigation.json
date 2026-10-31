@@ -1,0 +1,13 @@
+{
+  "method": "Independent post-session technical replay, frozen round2 binary, copy of participant1 saved project; actual CPAL ALSA/Pulse backend,1024-frame request,48k,Pulse60ms. Two Play attempts separated by Stop, no native graphics, reduced process load.",
+  "project_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+  "observed": "First startup34 generic plugin/render failures while output later progressed; second engine zero render_errors and audible-output meter values. Both recorded one internalqueue underrun.",
+  "actual_plugin_failure": "The separately observed participant1 Plugin processing failed on New instrument message did not recur. Historical cause cannot be recovered from participant screenshot alone because Details was not captured; not claimed fixed or attributed to CPAL.",
+  "code_cause": "output_stream_failed increments render_errors for every callback; InputShared preserves only firstboundedbackendfault. poll_recording reports backendfault, then idleMIDI reports recordingfailure, then app render-count fallback overwrites both in sameframe.",
+  "fix": "Latch output failure perstream; keep it separate from render/plugin counter; stop idleMIDI without inventing recordingfault; retain backendreport and Audio setup action; do not let startup/Play resurrect failedstream. UnitandE2EtestspendingrootCargo.",
+  "important_distinction": "CPAL ALSA automatically recovers Xrun; current handler preexistingfatalpolicy retained pending actualbackenddetail. Do not assume all streamerrorsarefataldisconnection.",
+  "confirmed_backend_cause": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'",
+  "confirmed_after_fix": "Real backend diagnostic retained, render_errors0, output_failedtrue, playingfalse, consumed_frames0. Fatalstream cannot be resurrected bystartup handoff. Two other revisedreplays were clean; intermittent labbackend failure remains real, not hidden/retried.",
+  "xrun_scope": "CPAL Xrun recovery taxonomy reviewed separately; no Xrun behavior change in this patch because actualcaptured causeis BackendError/EIO. Future Xrunpolicywork mustpreserve capturealignment.",
+  "validation": "Root owns Cargo: output_failure_tests3 tests, output_error_e2e1 running-app test, existingcapture/pluginregressions."
+}

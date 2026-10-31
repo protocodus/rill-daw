@@ -1,0 +1,1487 @@
+{
+  "checked_utc": "2026-10-31T20:58:58Z",
+  "all_unchanged": true,
+  "unique_files_checked": 240,
+  "category_counts": {
+    "original_outputs": 90,
+    "report": 30,
+    "published_report": 30,
+    "mouse_log": 30,
+    "published_mouse_log": 30,
+    "round4_6_original_completion_snapshot": 105
+  },
+  "source_aggregates": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/aggregate.json",
+      "sha256": "c3a3d2743b0a66440e7ffe54c8b5093e1a1e0e1d2ba3070dbc49a8cc9599fc79",
+      "bytes": 33175
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/aggregate.json",
+      "sha256": "bf061ac40f7c5281fdfefd7f79777896b850d977f5658920669645d0fddde425",
+      "bytes": 29657
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/aggregate.json",
+      "sha256": "7c7e35142975ed4145fa46fedfe746fed79c4984549e9b938744ec4a5d43e9aa",
+      "bytes": 41826
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/aggregate.json",
+      "sha256": "504f6d6c01fe71cbe0451a6ce9013d4fc0930842c432ee9349e2e7aa1d1074a5",
+      "bytes": 49079
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/aggregate.json",
+      "sha256": "e96bc4cbcd04038e30c12d4848e2581ed38a4fffd1b24351ed80627158d3f4d1",
+      "bytes": 54353
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/aggregate.json",
+      "sha256": "09a147a186ad9c45f31482405237af24ff074a0ef8dd9015b69bef675378e276",
+      "bytes": 60191
+    }
+  ],
+  "files": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-1/mouse-actions.jsonl",
+      "expected_sha256": "4a04c9da44bbbc2936aca36ec9cb3c87b398b30e5bb6dcb8bad6b88afe760b07",
+      "current_sha256": "4a04c9da44bbbc2936aca36ec9cb3c87b398b30e5bb6dcb8bad6b88afe760b07",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-1/report.json",
+      "expected_sha256": "c4e5da895250e7dde08cd7d3e37b57d801a102bd1c36359034bf478503d2f2a4",
+      "current_sha256": "c4e5da895250e7dde08cd7d3e37b57d801a102bd1c36359034bf478503d2f2a4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-2/mouse-actions.jsonl",
+      "expected_sha256": "bb77fcd841c61f257dc270001685417b21352139b1e7910bccdeef034525b7fe",
+      "current_sha256": "bb77fcd841c61f257dc270001685417b21352139b1e7910bccdeef034525b7fe",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-2/report.json",
+      "expected_sha256": "716c7f3df6714d18a9adbf7f2598db1c059d5a856e02b0a1222fd8b02a931e7f",
+      "current_sha256": "716c7f3df6714d18a9adbf7f2598db1c059d5a856e02b0a1222fd8b02a931e7f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-3/mouse-actions.jsonl",
+      "expected_sha256": "df4c7f7d1e7ba6d2e0171360f1dbfeb9c6b5dca5636b5c3c50e97ab2035ba37d",
+      "current_sha256": "df4c7f7d1e7ba6d2e0171360f1dbfeb9c6b5dca5636b5c3c50e97ab2035ba37d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-3/report.json",
+      "expected_sha256": "a5590416896b950b89e368ec0b6969f5f2d873fdaa5ca0447f287f6052d4e02b",
+      "current_sha256": "a5590416896b950b89e368ec0b6969f5f2d873fdaa5ca0447f287f6052d4e02b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-4/mouse-actions.jsonl",
+      "expected_sha256": "660b767132707fd44e5fba0b0b4b7fb2ad1a8cb0dc858eaeaefdb509dd83d057",
+      "current_sha256": "660b767132707fd44e5fba0b0b4b7fb2ad1a8cb0dc858eaeaefdb509dd83d057",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-4/report.json",
+      "expected_sha256": "531d297c2fa63461fa43c149be7952b488693d2c24cefdad56dccc3e21a70018",
+      "current_sha256": "531d297c2fa63461fa43c149be7952b488693d2c24cefdad56dccc3e21a70018",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-5/mouse-actions.jsonl",
+      "expected_sha256": "e64e5e5c4a61b6878bcd95fe8e453dd8134e075293626dc70151f25a856a13f1",
+      "current_sha256": "e64e5e5c4a61b6878bcd95fe8e453dd8134e075293626dc70151f25a856a13f1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round2/participant-5/report.json",
+      "expected_sha256": "4a0f7d8da4f6f5a5bb673e0425903883491f120a41155ba6267d75a28b3e37a5",
+      "current_sha256": "4a0f7d8da4f6f5a5bb673e0425903883491f120a41155ba6267d75a28b3e37a5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-1/mouse-actions.jsonl",
+      "expected_sha256": "91b31f77297ea43fa382f2f85c2dd49f5419abb5f65bab95ef51e1858bb2a6d3",
+      "current_sha256": "91b31f77297ea43fa382f2f85c2dd49f5419abb5f65bab95ef51e1858bb2a6d3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-1/report.json",
+      "expected_sha256": "f635df1122c1e68e8603e838c3b7c660fe842740b88569379c827d356e1feea8",
+      "current_sha256": "f635df1122c1e68e8603e838c3b7c660fe842740b88569379c827d356e1feea8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-2/mouse-actions.jsonl",
+      "expected_sha256": "021326843d78ffc52d3ff36f94178460c67a8c41fb1cecc6ebba0b09ef69fe36",
+      "current_sha256": "021326843d78ffc52d3ff36f94178460c67a8c41fb1cecc6ebba0b09ef69fe36",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-2/report.json",
+      "expected_sha256": "d47e03378d0bd1ac0fdd928d5d5f12aea8d5c9f04f600e4dbb659152125d7029",
+      "current_sha256": "d47e03378d0bd1ac0fdd928d5d5f12aea8d5c9f04f600e4dbb659152125d7029",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-3/mouse-actions.jsonl",
+      "expected_sha256": "e7c94eae81124e60b2b7eeebacf32cc0e7a4cf91ba4b72e670ba419c6b4d526b",
+      "current_sha256": "e7c94eae81124e60b2b7eeebacf32cc0e7a4cf91ba4b72e670ba419c6b4d526b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-3/report.json",
+      "expected_sha256": "92fb13a45b76bbee648af55bca55c10c6908bd50bf098f3365c1713fbca91bdb",
+      "current_sha256": "92fb13a45b76bbee648af55bca55c10c6908bd50bf098f3365c1713fbca91bdb",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-4/mouse-actions.jsonl",
+      "expected_sha256": "f94567b655ff04eeccd00b14599a66d1f862b012caeabe094d37bcd345bd0ff8",
+      "current_sha256": "f94567b655ff04eeccd00b14599a66d1f862b012caeabe094d37bcd345bd0ff8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-4/report.json",
+      "expected_sha256": "d4e9151d41266bfb4041ad0c599efb607fe3e1e8e12f3f8fc12f4cb5acc23a8f",
+      "current_sha256": "d4e9151d41266bfb4041ad0c599efb607fe3e1e8e12f3f8fc12f4cb5acc23a8f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-5/mouse-actions.jsonl",
+      "expected_sha256": "e3707929e3b1fc7d29a9a0707f7341bc738866bf9f421821af46c664cc313a38",
+      "current_sha256": "e3707929e3b1fc7d29a9a0707f7341bc738866bf9f421821af46c664cc313a38",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round3/participant-5/report.json",
+      "expected_sha256": "3620d15a082d1c9483c487ab98ae248d0a81c5335aee4fc5fcdf657b44b19739",
+      "current_sha256": "3620d15a082d1c9483c487ab98ae248d0a81c5335aee4fc5fcdf657b44b19739",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-1/mouse-actions.jsonl",
+      "expected_sha256": "39326f4570145256eea4fc9e096aef6fb10a40d9cdf3a7307c7437bdcf0b01d1",
+      "current_sha256": "39326f4570145256eea4fc9e096aef6fb10a40d9cdf3a7307c7437bdcf0b01d1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-1/report.json",
+      "expected_sha256": "7d3126bd1d987865f465b9bf13369ef75c544828e55cb85c8809a72b561c2eea",
+      "current_sha256": "7d3126bd1d987865f465b9bf13369ef75c544828e55cb85c8809a72b561c2eea",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-2/mouse-actions.jsonl",
+      "expected_sha256": "51d2ebc3b4cb79cce5b3307abf0e85e25f0f11c63556bdaf43a468fb3114bf17",
+      "current_sha256": "51d2ebc3b4cb79cce5b3307abf0e85e25f0f11c63556bdaf43a468fb3114bf17",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-2/report.json",
+      "expected_sha256": "6a8a52b55b1a89d39163f33328743ae794aad0a9836ea28e000d19653ccfdc4c",
+      "current_sha256": "6a8a52b55b1a89d39163f33328743ae794aad0a9836ea28e000d19653ccfdc4c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-3/mouse-actions.jsonl",
+      "expected_sha256": "9a5175a52ade7690e76b2bc8ed9d30cd49d3f16b29a410e38260229cb31e1e91",
+      "current_sha256": "9a5175a52ade7690e76b2bc8ed9d30cd49d3f16b29a410e38260229cb31e1e91",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-3/report.json",
+      "expected_sha256": "d8e0255ff89ef1d0071727a8a0c06e07c7f679ebb990230dabe6ca6c3b7eb291",
+      "current_sha256": "d8e0255ff89ef1d0071727a8a0c06e07c7f679ebb990230dabe6ca6c3b7eb291",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-4/mouse-actions.jsonl",
+      "expected_sha256": "7a42a01a09152c4cae20fcadc0afcd25baf02152af427670dcb61c22502deabf",
+      "current_sha256": "7a42a01a09152c4cae20fcadc0afcd25baf02152af427670dcb61c22502deabf",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-4/report.json",
+      "expected_sha256": "b6a43531a829aba5f55733d5da9cb98aa5722c1753295e89f5426971c5d9334d",
+      "current_sha256": "b6a43531a829aba5f55733d5da9cb98aa5722c1753295e89f5426971c5d9334d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-5/mouse-actions.jsonl",
+      "expected_sha256": "9fe9d2dcf361df8f677b89b965bf4d5afc4db84eeb516a631ade3e716b29359d",
+      "current_sha256": "9fe9d2dcf361df8f677b89b965bf4d5afc4db84eeb516a631ade3e716b29359d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round4/participant-5/report.json",
+      "expected_sha256": "3c728e275efcedf52a359c182a9689baf58c948f53a7b568b2fc1775afd49219",
+      "current_sha256": "3c728e275efcedf52a359c182a9689baf58c948f53a7b568b2fc1775afd49219",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-1/mouse-actions.jsonl",
+      "expected_sha256": "71f39f8ff742b5b770f875595f0210324ea55594aeb158c91701ae423b8b04e3",
+      "current_sha256": "71f39f8ff742b5b770f875595f0210324ea55594aeb158c91701ae423b8b04e3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-1/report.json",
+      "expected_sha256": "6247e36f8d372251b5080a33c74461473cc58727df858ccc9af909d89bb32662",
+      "current_sha256": "6247e36f8d372251b5080a33c74461473cc58727df858ccc9af909d89bb32662",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-2/mouse-actions.jsonl",
+      "expected_sha256": "28697a917d50823c739680b6543021eefc9e2bc8bc018bbfca9ba7b2d6bf969c",
+      "current_sha256": "28697a917d50823c739680b6543021eefc9e2bc8bc018bbfca9ba7b2d6bf969c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-2/report.json",
+      "expected_sha256": "253d18d8b3daba90150989a59317121eb7bd2dbad2a09afa499ed3a17b0c9809",
+      "current_sha256": "253d18d8b3daba90150989a59317121eb7bd2dbad2a09afa499ed3a17b0c9809",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-3/mouse-actions.jsonl",
+      "expected_sha256": "467098baf7cc35b8b6a0847df32e62438fbc35ecc19788ac235cd960bb48dc12",
+      "current_sha256": "467098baf7cc35b8b6a0847df32e62438fbc35ecc19788ac235cd960bb48dc12",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-3/report.json",
+      "expected_sha256": "7edfdc79f3384c0567d2d59cbd8f705dedd1f1964f5a2f1b42700b7d48f36c75",
+      "current_sha256": "7edfdc79f3384c0567d2d59cbd8f705dedd1f1964f5a2f1b42700b7d48f36c75",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-4/mouse-actions.jsonl",
+      "expected_sha256": "403c5c24eefe83797daff5ba8fc6574f33ce2affcc28fff859fb6108a7675c9d",
+      "current_sha256": "403c5c24eefe83797daff5ba8fc6574f33ce2affcc28fff859fb6108a7675c9d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-4/report.json",
+      "expected_sha256": "d6132e09115e19c3374650bcb4b29dd6c02725b6f03ce011002e3a5196ba151a",
+      "current_sha256": "d6132e09115e19c3374650bcb4b29dd6c02725b6f03ce011002e3a5196ba151a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-5/mouse-actions.jsonl",
+      "expected_sha256": "9b57ffa00c00a778d17c1f23b7147c5553806380d8fef070c168f4e2b8da731a",
+      "current_sha256": "9b57ffa00c00a778d17c1f23b7147c5553806380d8fef070c168f4e2b8da731a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-5/report.json",
+      "expected_sha256": "be4c25be16a4ff84520e6db5d6bf0cc66ab8a2ed7e62d3779b78d7993db8bd6c",
+      "current_sha256": "be4c25be16a4ff84520e6db5d6bf0cc66ab8a2ed7e62d3779b78d7993db8bd6c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-1/mouse-actions.jsonl",
+      "expected_sha256": "c72584a5a5b7348cf7104da62c267fe1972ef3a6e3ff0c18554530c073f982a9",
+      "current_sha256": "c72584a5a5b7348cf7104da62c267fe1972ef3a6e3ff0c18554530c073f982a9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-1/report.json",
+      "expected_sha256": "2db8dd30e97370c547f77d641f2a9f216c6ad618407a9769e3e68ba4ce6438c5",
+      "current_sha256": "2db8dd30e97370c547f77d641f2a9f216c6ad618407a9769e3e68ba4ce6438c5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-2/mouse-actions.jsonl",
+      "expected_sha256": "f241e4840ccd1972212f2c2694d331fc1c12540a58fd448760d3c3d18f14c6a1",
+      "current_sha256": "f241e4840ccd1972212f2c2694d331fc1c12540a58fd448760d3c3d18f14c6a1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-2/report.json",
+      "expected_sha256": "5bcb504663b05f31833e8dfdd2da5601dadd5e2832a9b6f477567a36265f8c52",
+      "current_sha256": "5bcb504663b05f31833e8dfdd2da5601dadd5e2832a9b6f477567a36265f8c52",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-3/mouse-actions.jsonl",
+      "expected_sha256": "d024ffa10fb988a52db6686cbe0d8a96b26e3b3943149815775e33a59815232e",
+      "current_sha256": "d024ffa10fb988a52db6686cbe0d8a96b26e3b3943149815775e33a59815232e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-3/report.json",
+      "expected_sha256": "712aef6b0b37b6bbc0ccb7ab3c3314050def30e0433c703b7afa653a7f29fe6e",
+      "current_sha256": "712aef6b0b37b6bbc0ccb7ab3c3314050def30e0433c703b7afa653a7f29fe6e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-4/mouse-actions.jsonl",
+      "expected_sha256": "1d2fbbb5af2685e763cbf0021c553d85683240339a4bdeb761ab4124a42f8a07",
+      "current_sha256": "1d2fbbb5af2685e763cbf0021c553d85683240339a4bdeb761ab4124a42f8a07",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-4/report.json",
+      "expected_sha256": "90be33e80387881ca2436aec7c699d9eb4cc841f20ef9bc21a5bd07a3c325acb",
+      "current_sha256": "90be33e80387881ca2436aec7c699d9eb4cc841f20ef9bc21a5bd07a3c325acb",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-5/mouse-actions.jsonl",
+      "expected_sha256": "22a7240f20f8552aea21fdec9d0f80dddac0e3c3fc1acaf94a2ebbc989328b6b",
+      "current_sha256": "22a7240f20f8552aea21fdec9d0f80dddac0e3c3fc1acaf94a2ebbc989328b6b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/participant-5/report.json",
+      "expected_sha256": "86875a4822beb1b013e40c24980ecff636520379f3a02f61569d0b3bb67a425e",
+      "current_sha256": "86875a4822beb1b013e40c24980ecff636520379f3a02f61569d0b3bb67a425e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-1/mouse-actions.jsonl",
+      "expected_sha256": "c11dc1823b1e730c2a62e52cf0ef520d8fbdffd2dae212891966b5449dd808bc",
+      "current_sha256": "c11dc1823b1e730c2a62e52cf0ef520d8fbdffd2dae212891966b5449dd808bc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-1/report.json",
+      "expected_sha256": "e843e8cfb8ab3147ae635604a18f2b0d2713accf0b2cb73f341db76231208acf",
+      "current_sha256": "e843e8cfb8ab3147ae635604a18f2b0d2713accf0b2cb73f341db76231208acf",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-2/mouse-actions.jsonl",
+      "expected_sha256": "76d7832d989464a631e21e144497c72375cce8dd141c26d76f5a81b04627940f",
+      "current_sha256": "76d7832d989464a631e21e144497c72375cce8dd141c26d76f5a81b04627940f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-2/report.json",
+      "expected_sha256": "68b44dd37f7b7969fbec30be58d6500b54b10eab3ed8b1c7565879021795ea55",
+      "current_sha256": "68b44dd37f7b7969fbec30be58d6500b54b10eab3ed8b1c7565879021795ea55",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-3/mouse-actions.jsonl",
+      "expected_sha256": "0a1872076cbf6d48980cf17ac9425e908bb68aaabc8da44dd1a98a79cdf220e7",
+      "current_sha256": "0a1872076cbf6d48980cf17ac9425e908bb68aaabc8da44dd1a98a79cdf220e7",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-3/report.json",
+      "expected_sha256": "fc2c0161d62f36717daa9f111dcf434ef562c37898c69ee8d9162d4e69f60ef5",
+      "current_sha256": "fc2c0161d62f36717daa9f111dcf434ef562c37898c69ee8d9162d4e69f60ef5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-4/mouse-actions.jsonl",
+      "expected_sha256": "6ace321b1ebbb2bdd90228978b31aaf8133ef5d60e79c155a8dadffc6915ead4",
+      "current_sha256": "6ace321b1ebbb2bdd90228978b31aaf8133ef5d60e79c155a8dadffc6915ead4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-4/report.json",
+      "expected_sha256": "eebbfb915db71c1d62a332ec61118bb1a223f486ac98313753d5253938cb7b6e",
+      "current_sha256": "eebbfb915db71c1d62a332ec61118bb1a223f486ac98313753d5253938cb7b6e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-5/mouse-actions.jsonl",
+      "expected_sha256": "15495fcad534563e364d8b889c4b986dd9751340d2ba07c99e464f34378a61a8",
+      "current_sha256": "15495fcad534563e364d8b889c4b986dd9751340d2ba07c99e464f34378a61a8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/participant-5/report.json",
+      "expected_sha256": "90bbb56d5fa3b4d2cc0b5a369951c95727ee67c0c7a3472291cf50975f07eec5",
+      "current_sha256": "90bbb56d5fa3b4d2cc0b5a369951c95727ee67c0c7a3472291cf50975f07eec5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-1/mouse-actions.jsonl",
+      "expected_sha256": "4a04c9da44bbbc2936aca36ec9cb3c87b398b30e5bb6dcb8bad6b88afe760b07",
+      "current_sha256": "4a04c9da44bbbc2936aca36ec9cb3c87b398b30e5bb6dcb8bad6b88afe760b07",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.mid",
+      "expected_sha256": "1c9f6b1dc57eda8ebb3a5f2790e7f04240eb3e2aa505555ace727466ab2498d9",
+      "current_sha256": "1c9f6b1dc57eda8ebb3a5f2790e7f04240eb3e2aa505555ace727466ab2498d9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.rill",
+      "expected_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+      "current_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.wav",
+      "expected_sha256": "e295d5e1f30e7f6c71b515d00bd7feef549eaedebd3dd7d0de7498043c970651",
+      "current_sha256": "e295d5e1f30e7f6c71b515d00bd7feef549eaedebd3dd7d0de7498043c970651",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-1/report.json",
+      "expected_sha256": "c4e5da895250e7dde08cd7d3e37b57d801a102bd1c36359034bf478503d2f2a4",
+      "current_sha256": "c4e5da895250e7dde08cd7d3e37b57d801a102bd1c36359034bf478503d2f2a4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.mid",
+      "expected_sha256": "d14eebccea8c8aa495f740bb422bafa2d878c43973ff8084b052d03affc4a5a6",
+      "current_sha256": "d14eebccea8c8aa495f740bb422bafa2d878c43973ff8084b052d03affc4a5a6",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.rill",
+      "expected_sha256": "33e8ee2cd69e9734c3b401a50e0c8f8708e1e4fe18b0121448b963ec0963d6b2",
+      "current_sha256": "33e8ee2cd69e9734c3b401a50e0c8f8708e1e4fe18b0121448b963ec0963d6b2",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.wav",
+      "expected_sha256": "3f2359948ce2d5edeef07af308f0a36dafc3e3a61f2bdd46c90d1bb1330781a8",
+      "current_sha256": "3f2359948ce2d5edeef07af308f0a36dafc3e3a61f2bdd46c90d1bb1330781a8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-2/mouse-actions.jsonl",
+      "expected_sha256": "bb77fcd841c61f257dc270001685417b21352139b1e7910bccdeef034525b7fe",
+      "current_sha256": "bb77fcd841c61f257dc270001685417b21352139b1e7910bccdeef034525b7fe",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-2/report.json",
+      "expected_sha256": "716c7f3df6714d18a9adbf7f2598db1c059d5a856e02b0a1222fd8b02a931e7f",
+      "current_sha256": "716c7f3df6714d18a9adbf7f2598db1c059d5a856e02b0a1222fd8b02a931e7f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.mid",
+      "expected_sha256": "4c21a8a8bc45cf961d736807b2484c293861dc1b75a7c89d0011ef2774e12d48",
+      "current_sha256": "4c21a8a8bc45cf961d736807b2484c293861dc1b75a7c89d0011ef2774e12d48",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.rill",
+      "expected_sha256": "5d798540668e2d75879b6e821e72d67c931659f44c7d75a04f9d8474dcad0986",
+      "current_sha256": "5d798540668e2d75879b6e821e72d67c931659f44c7d75a04f9d8474dcad0986",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.wav",
+      "expected_sha256": "60430c296811d2b7199a21e2c9cff7406e05f56d3dca8099c16bf795956112df",
+      "current_sha256": "60430c296811d2b7199a21e2c9cff7406e05f56d3dca8099c16bf795956112df",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-3/mouse-actions.jsonl",
+      "expected_sha256": "df4c7f7d1e7ba6d2e0171360f1dbfeb9c6b5dca5636b5c3c50e97ab2035ba37d",
+      "current_sha256": "df4c7f7d1e7ba6d2e0171360f1dbfeb9c6b5dca5636b5c3c50e97ab2035ba37d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-3/report.json",
+      "expected_sha256": "a5590416896b950b89e368ec0b6969f5f2d873fdaa5ca0447f287f6052d4e02b",
+      "current_sha256": "a5590416896b950b89e368ec0b6969f5f2d873fdaa5ca0447f287f6052d4e02b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.mid",
+      "expected_sha256": "4e519661a1090709eb6b0ccd7d79b9fb99bb9f6cf8c0fd11e7def0dde7bcd8b1",
+      "current_sha256": "4e519661a1090709eb6b0ccd7d79b9fb99bb9f6cf8c0fd11e7def0dde7bcd8b1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.rill",
+      "expected_sha256": "ea0835f0ca05e37b8e15d15a2a713a63433e7562c01f80ef2c9cbdc38e5fa4de",
+      "current_sha256": "ea0835f0ca05e37b8e15d15a2a713a63433e7562c01f80ef2c9cbdc38e5fa4de",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.wav",
+      "expected_sha256": "1fe461c26ccfe60180236298e5e5484cdb7bd76ae4b80aacdc57ce5fcd5b899d",
+      "current_sha256": "1fe461c26ccfe60180236298e5e5484cdb7bd76ae4b80aacdc57ce5fcd5b899d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-4/mouse-actions.jsonl",
+      "expected_sha256": "660b767132707fd44e5fba0b0b4b7fb2ad1a8cb0dc858eaeaefdb509dd83d057",
+      "current_sha256": "660b767132707fd44e5fba0b0b4b7fb2ad1a8cb0dc858eaeaefdb509dd83d057",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-4/report.json",
+      "expected_sha256": "531d297c2fa63461fa43c149be7952b488693d2c24cefdad56dccc3e21a70018",
+      "current_sha256": "531d297c2fa63461fa43c149be7952b488693d2c24cefdad56dccc3e21a70018",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.mid",
+      "expected_sha256": "b4d9521015ca42d04191a7a3d9ed9bb339b0d8f70036d8a4da6f514ddb0cf991",
+      "current_sha256": "b4d9521015ca42d04191a7a3d9ed9bb339b0d8f70036d8a4da6f514ddb0cf991",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.rill",
+      "expected_sha256": "e8b72c7d33107163ee4df687c0ca5202135a77ad43bc708fe0588a1abb94eeea",
+      "current_sha256": "e8b72c7d33107163ee4df687c0ca5202135a77ad43bc708fe0588a1abb94eeea",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.wav",
+      "expected_sha256": "881818b6961674103ce8f69297a65fd9269559569695fe1b46a95ad1a36cc7df",
+      "current_sha256": "881818b6961674103ce8f69297a65fd9269559569695fe1b46a95ad1a36cc7df",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-5/mouse-actions.jsonl",
+      "expected_sha256": "e64e5e5c4a61b6878bcd95fe8e453dd8134e075293626dc70151f25a856a13f1",
+      "current_sha256": "e64e5e5c4a61b6878bcd95fe8e453dd8134e075293626dc70151f25a856a13f1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round2/session-5/report.json",
+      "expected_sha256": "4a0f7d8da4f6f5a5bb673e0425903883491f120a41155ba6267d75a28b3e37a5",
+      "current_sha256": "4a0f7d8da4f6f5a5bb673e0425903883491f120a41155ba6267d75a28b3e37a5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-1/mouse-actions.jsonl",
+      "expected_sha256": "91b31f77297ea43fa382f2f85c2dd49f5419abb5f65bab95ef51e1858bb2a6d3",
+      "current_sha256": "91b31f77297ea43fa382f2f85c2dd49f5419abb5f65bab95ef51e1858bb2a6d3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.mid",
+      "expected_sha256": "96290c235c50e6baf9710383b69b9797d63b3071acaf403f90be2da7013fcdd6",
+      "current_sha256": "96290c235c50e6baf9710383b69b9797d63b3071acaf403f90be2da7013fcdd6",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.rill",
+      "expected_sha256": "f80d60a6c3823fa41ec8ca64db38444e7e7e3110adc5d36ee6148f0593b194c7",
+      "current_sha256": "f80d60a6c3823fa41ec8ca64db38444e7e7e3110adc5d36ee6148f0593b194c7",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.wav",
+      "expected_sha256": "87df71c9a8e665d9a650c1c76c058c28c2e8bfee52311ca89a80e34285e766f7",
+      "current_sha256": "87df71c9a8e665d9a650c1c76c058c28c2e8bfee52311ca89a80e34285e766f7",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-1/report.json",
+      "expected_sha256": "f635df1122c1e68e8603e838c3b7c660fe842740b88569379c827d356e1feea8",
+      "current_sha256": "f635df1122c1e68e8603e838c3b7c660fe842740b88569379c827d356e1feea8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.mid",
+      "expected_sha256": "5a601b19830863da1ec3f5b64365909c9796ff0a72553453fcb7cf5691f1bc6b",
+      "current_sha256": "5a601b19830863da1ec3f5b64365909c9796ff0a72553453fcb7cf5691f1bc6b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.rill",
+      "expected_sha256": "a0e82e548c110b45deb50d24513170d96954d32fa09e26ad434512764d1b0b16",
+      "current_sha256": "a0e82e548c110b45deb50d24513170d96954d32fa09e26ad434512764d1b0b16",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.wav",
+      "expected_sha256": "63ea1c39adfe42f1f38d6ee077fa37d19f5fa333a2bdb4bc23fbe7f761d37fd4",
+      "current_sha256": "63ea1c39adfe42f1f38d6ee077fa37d19f5fa333a2bdb4bc23fbe7f761d37fd4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-2/mouse-actions.jsonl",
+      "expected_sha256": "021326843d78ffc52d3ff36f94178460c67a8c41fb1cecc6ebba0b09ef69fe36",
+      "current_sha256": "021326843d78ffc52d3ff36f94178460c67a8c41fb1cecc6ebba0b09ef69fe36",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-2/report.json",
+      "expected_sha256": "d47e03378d0bd1ac0fdd928d5d5f12aea8d5c9f04f600e4dbb659152125d7029",
+      "current_sha256": "d47e03378d0bd1ac0fdd928d5d5f12aea8d5c9f04f600e4dbb659152125d7029",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.mid",
+      "expected_sha256": "1f5baec3dca939f909dbad5dbe67837f64436e29a7b8cc5eb17b6748a9b96c10",
+      "current_sha256": "1f5baec3dca939f909dbad5dbe67837f64436e29a7b8cc5eb17b6748a9b96c10",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.rill",
+      "expected_sha256": "745ef703a9e71ebc29e00b17c03d851c33a9c6a0a8a03c3a966bbb21af3668ec",
+      "current_sha256": "745ef703a9e71ebc29e00b17c03d851c33a9c6a0a8a03c3a966bbb21af3668ec",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.wav",
+      "expected_sha256": "829fe9089ea4f443825294ffca7d8768fd05345623ffff5329a2df6f15703f85",
+      "current_sha256": "829fe9089ea4f443825294ffca7d8768fd05345623ffff5329a2df6f15703f85",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-3/mouse-actions.jsonl",
+      "expected_sha256": "e7c94eae81124e60b2b7eeebacf32cc0e7a4cf91ba4b72e670ba419c6b4d526b",
+      "current_sha256": "e7c94eae81124e60b2b7eeebacf32cc0e7a4cf91ba4b72e670ba419c6b4d526b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-3/report.json",
+      "expected_sha256": "92fb13a45b76bbee648af55bca55c10c6908bd50bf098f3365c1713fbca91bdb",
+      "current_sha256": "92fb13a45b76bbee648af55bca55c10c6908bd50bf098f3365c1713fbca91bdb",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.mid",
+      "expected_sha256": "6637f6ca6c27f61e685addfce7f18785ff8bc911d54287d53aed9b1984b684c3",
+      "current_sha256": "6637f6ca6c27f61e685addfce7f18785ff8bc911d54287d53aed9b1984b684c3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.rill",
+      "expected_sha256": "11b62bc209b8866e2e38f1282fce50edbf5be46dfe8ed119c57a441e05f68781",
+      "current_sha256": "11b62bc209b8866e2e38f1282fce50edbf5be46dfe8ed119c57a441e05f68781",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.wav",
+      "expected_sha256": "805d9ab42a3119e15bcd6814a6e0dfc6f6d6f54dadca60f73ca9de47bfb0a4b7",
+      "current_sha256": "805d9ab42a3119e15bcd6814a6e0dfc6f6d6f54dadca60f73ca9de47bfb0a4b7",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-4/mouse-actions.jsonl",
+      "expected_sha256": "f94567b655ff04eeccd00b14599a66d1f862b012caeabe094d37bcd345bd0ff8",
+      "current_sha256": "f94567b655ff04eeccd00b14599a66d1f862b012caeabe094d37bcd345bd0ff8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-4/report.json",
+      "expected_sha256": "d4e9151d41266bfb4041ad0c599efb607fe3e1e8e12f3f8fc12f4cb5acc23a8f",
+      "current_sha256": "d4e9151d41266bfb4041ad0c599efb607fe3e1e8e12f3f8fc12f4cb5acc23a8f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-5/mouse-actions.jsonl",
+      "expected_sha256": "e3707929e3b1fc7d29a9a0707f7341bc738866bf9f421821af46c664cc313a38",
+      "current_sha256": "e3707929e3b1fc7d29a9a0707f7341bc738866bf9f421821af46c664cc313a38",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-5/report.json",
+      "expected_sha256": "3620d15a082d1c9483c487ab98ae248d0a81c5335aee4fc5fcdf657b44b19739",
+      "current_sha256": "3620d15a082d1c9483c487ab98ae248d0a81c5335aee4fc5fcdf657b44b19739",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.mid",
+      "expected_sha256": "a73fb8b4a1cd1cd9f9045eed1fc624fdebfc756a48bd3322efe821ee106cc555",
+      "current_sha256": "a73fb8b4a1cd1cd9f9045eed1fc624fdebfc756a48bd3322efe821ee106cc555",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.rill",
+      "expected_sha256": "2a406e38224ed0ed879b4bb165978aa5a8cf1410d843869dc90f6cae80ebb4e4",
+      "current_sha256": "2a406e38224ed0ed879b4bb165978aa5a8cf1410d843869dc90f6cae80ebb4e4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.wav",
+      "expected_sha256": "6c52d8f972697c467020e7fdb25dbcf844034dbf0a3cd47209befc48903d2aff",
+      "current_sha256": "6c52d8f972697c467020e7fdb25dbcf844034dbf0a3cd47209befc48903d2aff",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/final.png",
+      "expected_sha256": "3a8ca1fce80a9876e9ed7734eeb89c162b457f56dc57d1c5d8b4fdbe59609f6c",
+      "current_sha256": "3a8ca1fce80a9876e9ed7734eeb89c162b457f56dc57d1c5d8b4fdbe59609f6c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/mouse-actions.jsonl",
+      "expected_sha256": "39326f4570145256eea4fc9e096aef6fb10a40d9cdf3a7307c7437bdcf0b01d1",
+      "current_sha256": "39326f4570145256eea4fc9e096aef6fb10a40d9cdf3a7307c7437bdcf0b01d1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.mid",
+      "expected_sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "current_sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.rill",
+      "expected_sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "current_sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.wav",
+      "expected_sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "current_sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/reactions.txt",
+      "expected_sha256": "0a79a0bda1ae2303c1ef4e12ce5b847c60965147284098e17eca7be300a82e62",
+      "current_sha256": "0a79a0bda1ae2303c1ef4e12ce5b847c60965147284098e17eca7be300a82e62",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/report.json",
+      "expected_sha256": "7d3126bd1d987865f465b9bf13369ef75c544828e55cb85c8809a72b561c2eea",
+      "current_sha256": "7d3126bd1d987865f465b9bf13369ef75c544828e55cb85c8809a72b561c2eea",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/final.png",
+      "expected_sha256": "7f0e7a85b24e6c66c25635f76d6d43c58f1009964280874650f470203fe017cb",
+      "current_sha256": "7f0e7a85b24e6c66c25635f76d6d43c58f1009964280874650f470203fe017cb",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/mouse-actions.jsonl",
+      "expected_sha256": "51d2ebc3b4cb79cce5b3307abf0e85e25f0f11c63556bdaf43a468fb3114bf17",
+      "current_sha256": "51d2ebc3b4cb79cce5b3307abf0e85e25f0f11c63556bdaf43a468fb3114bf17",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.mid",
+      "expected_sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "current_sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.rill",
+      "expected_sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "current_sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.wav",
+      "expected_sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "current_sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/reactions.txt",
+      "expected_sha256": "9c52d19f625dd1ff36f7224c7a040005ac10ade1083e5754e8b3a1709360c836",
+      "current_sha256": "9c52d19f625dd1ff36f7224c7a040005ac10ade1083e5754e8b3a1709360c836",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/report.json",
+      "expected_sha256": "6a8a52b55b1a89d39163f33328743ae794aad0a9836ea28e000d19653ccfdc4c",
+      "current_sha256": "6a8a52b55b1a89d39163f33328743ae794aad0a9836ea28e000d19653ccfdc4c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/final.png",
+      "expected_sha256": "d56da9ef680c1ef5907fed63609fec3b30e6747662e363b549a48a135cbd0f09",
+      "current_sha256": "d56da9ef680c1ef5907fed63609fec3b30e6747662e363b549a48a135cbd0f09",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.mid",
+      "expected_sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "current_sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.rill",
+      "expected_sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "current_sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.wav",
+      "expected_sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "current_sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/mouse-actions.jsonl",
+      "expected_sha256": "9a5175a52ade7690e76b2bc8ed9d30cd49d3f16b29a410e38260229cb31e1e91",
+      "current_sha256": "9a5175a52ade7690e76b2bc8ed9d30cd49d3f16b29a410e38260229cb31e1e91",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/reactions.txt",
+      "expected_sha256": "7e37c4fadcd570f6e957742529b7f0379169953fa07d34b6c5ba2933ccb414df",
+      "current_sha256": "7e37c4fadcd570f6e957742529b7f0379169953fa07d34b6c5ba2933ccb414df",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/report.json",
+      "expected_sha256": "d8e0255ff89ef1d0071727a8a0c06e07c7f679ebb990230dabe6ca6c3b7eb291",
+      "current_sha256": "d8e0255ff89ef1d0071727a8a0c06e07c7f679ebb990230dabe6ca6c3b7eb291",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/final.png",
+      "expected_sha256": "b514b8c12a9966679c48e9aca0ebffcaaf5b8c6831eb8ede2663cc9a27b1de58",
+      "current_sha256": "b514b8c12a9966679c48e9aca0ebffcaaf5b8c6831eb8ede2663cc9a27b1de58",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.mid",
+      "expected_sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "current_sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.rill",
+      "expected_sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "current_sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.wav",
+      "expected_sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "current_sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mouse-actions.jsonl",
+      "expected_sha256": "7a42a01a09152c4cae20fcadc0afcd25baf02152af427670dcb61c22502deabf",
+      "current_sha256": "7a42a01a09152c4cae20fcadc0afcd25baf02152af427670dcb61c22502deabf",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/reactions.txt",
+      "expected_sha256": "7215f0e7f32c0dbd98cef4a658f4eb22a21edac984adf6c903a2940658eb9229",
+      "current_sha256": "7215f0e7f32c0dbd98cef4a658f4eb22a21edac984adf6c903a2940658eb9229",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/report.json",
+      "expected_sha256": "b6a43531a829aba5f55733d5da9cb98aa5722c1753295e89f5426971c5d9334d",
+      "current_sha256": "b6a43531a829aba5f55733d5da9cb98aa5722c1753295e89f5426971c5d9334d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.mid",
+      "expected_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "current_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.rill",
+      "expected_sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "current_sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.wav",
+      "expected_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "current_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/final.png",
+      "expected_sha256": "2f547f290fd67d8dc236251352ed32882dc9cfbeda19656f0cc5d32a57037613",
+      "current_sha256": "2f547f290fd67d8dc236251352ed32882dc9cfbeda19656f0cc5d32a57037613",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/mouse-actions.jsonl",
+      "expected_sha256": "9fe9d2dcf361df8f677b89b965bf4d5afc4db84eeb516a631ade3e716b29359d",
+      "current_sha256": "9fe9d2dcf361df8f677b89b965bf4d5afc4db84eeb516a631ade3e716b29359d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/reactions.txt",
+      "expected_sha256": "666caf51422c428bc99cb02654dbcd8a772d469037e57b8dcabdfcb7a8bf829e",
+      "current_sha256": "666caf51422c428bc99cb02654dbcd8a772d469037e57b8dcabdfcb7a8bf829e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/report.json",
+      "expected_sha256": "3c728e275efcedf52a359c182a9689baf58c948f53a7b568b2fc1775afd49219",
+      "current_sha256": "3c728e275efcedf52a359c182a9689baf58c948f53a7b568b2fc1775afd49219",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/final.png",
+      "expected_sha256": "4b3237483476a585a3454511f8026882530241b00bf0045d1b15e859fc972a37",
+      "current_sha256": "4b3237483476a585a3454511f8026882530241b00bf0045d1b15e859fc972a37",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/mouse-actions.jsonl",
+      "expected_sha256": "71f39f8ff742b5b770f875595f0210324ea55594aeb158c91701ae423b8b04e3",
+      "current_sha256": "71f39f8ff742b5b770f875595f0210324ea55594aeb158c91701ae423b8b04e3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/reactions.txt",
+      "expected_sha256": "39ee1fded9b426413929f15c7953f498dd1f4751a21231577897d8537f4b17c9",
+      "current_sha256": "39ee1fded9b426413929f15c7953f498dd1f4751a21231577897d8537f4b17c9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/report.json",
+      "expected_sha256": "6247e36f8d372251b5080a33c74461473cc58727df858ccc9af909d89bb32662",
+      "current_sha256": "6247e36f8d372251b5080a33c74461473cc58727df858ccc9af909d89bb32662",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.mid",
+      "expected_sha256": "1856e5d9b757ee95e2d1560fa93a20e7a815863465438ef4f95962f58c769e6b",
+      "current_sha256": "1856e5d9b757ee95e2d1560fa93a20e7a815863465438ef4f95962f58c769e6b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.rill",
+      "expected_sha256": "835fbd4964a02aff848de3992ab715b7524e7859546e58dd0829c0073c169447",
+      "current_sha256": "835fbd4964a02aff848de3992ab715b7524e7859546e58dd0829c0073c169447",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.wav",
+      "expected_sha256": "cf9a477c5bb358c8701f2e561444e3ecae4d35fc91422fc0497409b23313f1ce",
+      "current_sha256": "cf9a477c5bb358c8701f2e561444e3ecae4d35fc91422fc0497409b23313f1ce",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/final.png",
+      "expected_sha256": "a4d71f895192478274a36474b6b3fc994e18e722069b9e9e479802575d06835b",
+      "current_sha256": "a4d71f895192478274a36474b6b3fc994e18e722069b9e9e479802575d06835b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/mouse-actions.jsonl",
+      "expected_sha256": "28697a917d50823c739680b6543021eefc9e2bc8bc018bbfca9ba7b2d6bf969c",
+      "current_sha256": "28697a917d50823c739680b6543021eefc9e2bc8bc018bbfca9ba7b2d6bf969c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.mid",
+      "expected_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "current_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.rill",
+      "expected_sha256": "6a89339238ad09248db6d6ec029aaaa96e9d2c54326abc1d61dad8ea7d4675b3",
+      "current_sha256": "6a89339238ad09248db6d6ec029aaaa96e9d2c54326abc1d61dad8ea7d4675b3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.wav",
+      "expected_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "current_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/reactions.txt",
+      "expected_sha256": "439ace74dfbe2841c24490d5dab53a1380d12adc86dcbf429fe6f254d927f8f4",
+      "current_sha256": "439ace74dfbe2841c24490d5dab53a1380d12adc86dcbf429fe6f254d927f8f4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-2/report.json",
+      "expected_sha256": "253d18d8b3daba90150989a59317121eb7bd2dbad2a09afa499ed3a17b0c9809",
+      "current_sha256": "253d18d8b3daba90150989a59317121eb7bd2dbad2a09afa499ed3a17b0c9809",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.mid",
+      "expected_sha256": "31ee17c156fc500999e28f8321f207c2a93ca51bd4e800f8ab1cef5cb62a296b",
+      "current_sha256": "31ee17c156fc500999e28f8321f207c2a93ca51bd4e800f8ab1cef5cb62a296b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.rill",
+      "expected_sha256": "14d4c9d1ab22d8f016e809ef47b64992bd942d2a07287c5b86e8305cb6551e8d",
+      "current_sha256": "14d4c9d1ab22d8f016e809ef47b64992bd942d2a07287c5b86e8305cb6551e8d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.wav",
+      "expected_sha256": "dd4cef52d27c01fa894c9acb951e3d8a6f84c376327d18d31230953e4f95f493",
+      "current_sha256": "dd4cef52d27c01fa894c9acb951e3d8a6f84c376327d18d31230953e4f95f493",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/final.png",
+      "expected_sha256": "49cf11e4b799cf5fb7d9808b04f56c6eff9801d312194985c11bef44076c3b15",
+      "current_sha256": "49cf11e4b799cf5fb7d9808b04f56c6eff9801d312194985c11bef44076c3b15",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/mouse-actions.jsonl",
+      "expected_sha256": "467098baf7cc35b8b6a0847df32e62438fbc35ecc19788ac235cd960bb48dc12",
+      "current_sha256": "467098baf7cc35b8b6a0847df32e62438fbc35ecc19788ac235cd960bb48dc12",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/reactions.txt",
+      "expected_sha256": "7d48032f1ee983cfa38928d05a7ac04f6059095846c02c8be4e249d8d3350d2c",
+      "current_sha256": "7d48032f1ee983cfa38928d05a7ac04f6059095846c02c8be4e249d8d3350d2c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-3/report.json",
+      "expected_sha256": "7edfdc79f3384c0567d2d59cbd8f705dedd1f1964f5a2f1b42700b7d48f36c75",
+      "current_sha256": "7edfdc79f3384c0567d2d59cbd8f705dedd1f1964f5a2f1b42700b7d48f36c75",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/final.png",
+      "expected_sha256": "fb3101ef2b0580a6a34cdab7358de5c9991892f710a7fb518a4756743cada411",
+      "current_sha256": "fb3101ef2b0580a6a34cdab7358de5c9991892f710a7fb518a4756743cada411",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/mouse-actions.jsonl",
+      "expected_sha256": "403c5c24eefe83797daff5ba8fc6574f33ce2affcc28fff859fb6108a7675c9d",
+      "current_sha256": "403c5c24eefe83797daff5ba8fc6574f33ce2affcc28fff859fb6108a7675c9d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/reactions.txt",
+      "expected_sha256": "65a71816281bd48fda3d391c6870069497323bc90eb268a6e4b6c5e1dd6933ab",
+      "current_sha256": "65a71816281bd48fda3d391c6870069497323bc90eb268a6e4b6c5e1dd6933ab",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/report.json",
+      "expected_sha256": "d6132e09115e19c3374650bcb4b29dd6c02725b6f03ce011002e3a5196ba151a",
+      "current_sha256": "d6132e09115e19c3374650bcb4b29dd6c02725b6f03ce011002e3a5196ba151a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.mid",
+      "expected_sha256": "04d58c5a8964f2b9ab89d303bc4d0df536cdd8ef87bff286f979484b97f2798d",
+      "current_sha256": "04d58c5a8964f2b9ab89d303bc4d0df536cdd8ef87bff286f979484b97f2798d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.rill",
+      "expected_sha256": "70421fe61d45a4595ce0f9791eb60ebe0d6cbff40490217ac5bba5d48377878a",
+      "current_sha256": "70421fe61d45a4595ce0f9791eb60ebe0d6cbff40490217ac5bba5d48377878a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.wav",
+      "expected_sha256": "4b78f2490f4cfe573c33762daf1ba8c494b94716a550cf46036bb86a8870f7b5",
+      "current_sha256": "4b78f2490f4cfe573c33762daf1ba8c494b94716a550cf46036bb86a8870f7b5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/final.png",
+      "expected_sha256": "4ff2df3101d20c2341ca825b70599c003a2e8484fa24256517ae95263157d7ec",
+      "current_sha256": "4ff2df3101d20c2341ca825b70599c003a2e8484fa24256517ae95263157d7ec",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/mouse-actions.jsonl",
+      "expected_sha256": "9b57ffa00c00a778d17c1f23b7147c5553806380d8fef070c168f4e2b8da731a",
+      "current_sha256": "9b57ffa00c00a778d17c1f23b7147c5553806380d8fef070c168f4e2b8da731a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.mid",
+      "expected_sha256": "6b264f42152f9999a8dc6c56be0590b53cab01f8ef85d1fd55a6bc5737ae1845",
+      "current_sha256": "6b264f42152f9999a8dc6c56be0590b53cab01f8ef85d1fd55a6bc5737ae1845",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.rill",
+      "expected_sha256": "3e01a576c900598ed5595ab291111b98bf19cfe41bedda5a4416c7c438136833",
+      "current_sha256": "3e01a576c900598ed5595ab291111b98bf19cfe41bedda5a4416c7c438136833",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.wav",
+      "expected_sha256": "05bf2a2d5a57ed7df04f7c10d8c287153834d16e72b1aff2ae0cadb8ce2c5759",
+      "current_sha256": "05bf2a2d5a57ed7df04f7c10d8c287153834d16e72b1aff2ae0cadb8ce2c5759",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/reactions.txt",
+      "expected_sha256": "98d98945379394687a0bc72af59af3f7c1fb604a08325614f2ae7f015182dc3d",
+      "current_sha256": "98d98945379394687a0bc72af59af3f7c1fb604a08325614f2ae7f015182dc3d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round5/session-5/report.json",
+      "expected_sha256": "be4c25be16a4ff84520e6db5d6bf0cc66ab8a2ed7e62d3779b78d7993db8bd6c",
+      "current_sha256": "be4c25be16a4ff84520e6db5d6bf0cc66ab8a2ed7e62d3779b78d7993db8bd6c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/final.png",
+      "expected_sha256": "8e3e7080c7430aaacd0b43eff68da76457fed937514eafb4525ba83093e83489",
+      "current_sha256": "8e3e7080c7430aaacd0b43eff68da76457fed937514eafb4525ba83093e83489",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/mouse-actions.jsonl",
+      "expected_sha256": "c72584a5a5b7348cf7104da62c267fe1972ef3a6e3ff0c18554530c073f982a9",
+      "current_sha256": "c72584a5a5b7348cf7104da62c267fe1972ef3a6e3ff0c18554530c073f982a9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/reactions.txt",
+      "expected_sha256": "01d0e84ddc89f9ac169427112f3ca748fe0f2b97cd108088ede67ec7eea7480d",
+      "current_sha256": "01d0e84ddc89f9ac169427112f3ca748fe0f2b97cd108088ede67ec7eea7480d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/report.json",
+      "expected_sha256": "2db8dd30e97370c547f77d641f2a9f216c6ad618407a9769e3e68ba4ce6438c5",
+      "current_sha256": "2db8dd30e97370c547f77d641f2a9f216c6ad618407a9769e3e68ba4ce6438c5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.mid",
+      "expected_sha256": "ff383d1ef9464218f180092b15f220ff75ab6850e81782f343e89b29755f41fc",
+      "current_sha256": "ff383d1ef9464218f180092b15f220ff75ab6850e81782f343e89b29755f41fc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.rill",
+      "expected_sha256": "781ce35bc761cc10ada8dab926e964998682b13dcc0da2eabe6be1c10c7ba122",
+      "current_sha256": "781ce35bc761cc10ada8dab926e964998682b13dcc0da2eabe6be1c10c7ba122",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.wav",
+      "expected_sha256": "88c4490f9e0742ba9be8a8cb7acac4b07fb562f88e627b915c9009583637401c",
+      "current_sha256": "88c4490f9e0742ba9be8a8cb7acac4b07fb562f88e627b915c9009583637401c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/final.png",
+      "expected_sha256": "7deaa527380a4058b4ab1048bec2bc4ea4ec5299c79518236e03b4dfa95ce5a4",
+      "current_sha256": "7deaa527380a4058b4ab1048bec2bc4ea4ec5299c79518236e03b4dfa95ce5a4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/mouse-actions.jsonl",
+      "expected_sha256": "f241e4840ccd1972212f2c2694d331fc1c12540a58fd448760d3c3d18f14c6a1",
+      "current_sha256": "f241e4840ccd1972212f2c2694d331fc1c12540a58fd448760d3c3d18f14c6a1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.mid",
+      "expected_sha256": "27104f997525fc21be1f53d63920b3770beae09f140a0c5ad86c1d83ab2bfc25",
+      "current_sha256": "27104f997525fc21be1f53d63920b3770beae09f140a0c5ad86c1d83ab2bfc25",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.rill",
+      "expected_sha256": "a51b72246479951093d98f1fd61dcad33f8ee8c18d3da14bab4cc3c63e37cc1d",
+      "current_sha256": "a51b72246479951093d98f1fd61dcad33f8ee8c18d3da14bab4cc3c63e37cc1d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.wav",
+      "expected_sha256": "2f87df4f7c092113fb5072fa9754f51faca9fb858914cad0d5e78983c7aa6549",
+      "current_sha256": "2f87df4f7c092113fb5072fa9754f51faca9fb858914cad0d5e78983c7aa6549",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/reactions.txt",
+      "expected_sha256": "cca1578f658414b7f9edf347875c253b4f323ae7e0570bd0d340699c00fee0f0",
+      "current_sha256": "cca1578f658414b7f9edf347875c253b4f323ae7e0570bd0d340699c00fee0f0",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-2/report.json",
+      "expected_sha256": "5bcb504663b05f31833e8dfdd2da5601dadd5e2832a9b6f477567a36265f8c52",
+      "current_sha256": "5bcb504663b05f31833e8dfdd2da5601dadd5e2832a9b6f477567a36265f8c52",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/final.png",
+      "expected_sha256": "0f7517bf3d4f8963f561989fd20bc7a1c02eae0f4ec7dc14ac41c778d6ea5067",
+      "current_sha256": "0f7517bf3d4f8963f561989fd20bc7a1c02eae0f4ec7dc14ac41c778d6ea5067",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/mouse-actions.jsonl",
+      "expected_sha256": "d024ffa10fb988a52db6686cbe0d8a96b26e3b3943149815775e33a59815232e",
+      "current_sha256": "d024ffa10fb988a52db6686cbe0d8a96b26e3b3943149815775e33a59815232e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/reactions.txt",
+      "expected_sha256": "1b49c29416dc38b48adf649807b562c81b0b13a4cb53664d1e6642fe92cf0a3a",
+      "current_sha256": "1b49c29416dc38b48adf649807b562c81b0b13a4cb53664d1e6642fe92cf0a3a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/report.json",
+      "expected_sha256": "712aef6b0b37b6bbc0ccb7ab3c3314050def30e0433c703b7afa653a7f29fe6e",
+      "current_sha256": "712aef6b0b37b6bbc0ccb7ab3c3314050def30e0433c703b7afa653a7f29fe6e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.mid",
+      "expected_sha256": "6db2fdc1007c7ec250bf3023f5efec6f28dababe2729eb6126c4c351e244cfec",
+      "current_sha256": "6db2fdc1007c7ec250bf3023f5efec6f28dababe2729eb6126c4c351e244cfec",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.rill",
+      "expected_sha256": "6a80b616f3897316075bfcc929a5196c9b4364ebb5cc7dbe15485a9a815df22c",
+      "current_sha256": "6a80b616f3897316075bfcc929a5196c9b4364ebb5cc7dbe15485a9a815df22c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.wav",
+      "expected_sha256": "98c065b3a941b5d2b9dc75aff5327cda761041238b5df3038229037a65ff1197",
+      "current_sha256": "98c065b3a941b5d2b9dc75aff5327cda761041238b5df3038229037a65ff1197",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/final.png",
+      "expected_sha256": "86e66c054fb3530d2c36875eb6e98684b28edb451fe9f044e3fef35be9a066e3",
+      "current_sha256": "86e66c054fb3530d2c36875eb6e98684b28edb451fe9f044e3fef35be9a066e3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mist.mid",
+      "expected_sha256": "53fe994e7c972403c131d65e2c0605bc2db811b78bf07c770311595dad14c4a0",
+      "current_sha256": "53fe994e7c972403c131d65e2c0605bc2db811b78bf07c770311595dad14c4a0",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mist.rill",
+      "expected_sha256": "bb163b29fbefb5e4bf66b708df6cba1ff2629b6d4969f1de98294dae268eb3f6",
+      "current_sha256": "bb163b29fbefb5e4bf66b708df6cba1ff2629b6d4969f1de98294dae268eb3f6",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mist.wav",
+      "expected_sha256": "075fe49a6d701ec39eb31eddf89e5f99cdb14966ab2cbd9514f4d2e39879f0cc",
+      "current_sha256": "075fe49a6d701ec39eb31eddf89e5f99cdb14966ab2cbd9514f4d2e39879f0cc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mouse-actions.jsonl",
+      "expected_sha256": "1d2fbbb5af2685e763cbf0021c553d85683240339a4bdeb761ab4124a42f8a07",
+      "current_sha256": "1d2fbbb5af2685e763cbf0021c553d85683240339a4bdeb761ab4124a42f8a07",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/reactions.txt",
+      "expected_sha256": "ff3696c15f47503dea1274e9e9a0a379025502e6e1747a935941b3356c0bac1d",
+      "current_sha256": "ff3696c15f47503dea1274e9e9a0a379025502e6e1747a935941b3356c0bac1d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-4/report.json",
+      "expected_sha256": "90be33e80387881ca2436aec7c699d9eb4cc841f20ef9bc21a5bd07a3c325acb",
+      "current_sha256": "90be33e80387881ca2436aec7c699d9eb4cc841f20ef9bc21a5bd07a3c325acb",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.mid",
+      "expected_sha256": "e03d38dc674eb5c83cc43a436d3d7ed82c4fdb6115d3faf1f62a1d825afff724",
+      "current_sha256": "e03d38dc674eb5c83cc43a436d3d7ed82c4fdb6115d3faf1f62a1d825afff724",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.rill",
+      "expected_sha256": "99c1e43432f55d30454f1186b1044b8a7604cd60b46451b6daecef13eb984e9c",
+      "current_sha256": "99c1e43432f55d30454f1186b1044b8a7604cd60b46451b6daecef13eb984e9c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.wav",
+      "expected_sha256": "0886e38cf740f52022f6232e171962c06c8b977480fe82d92518f458920fc422",
+      "current_sha256": "0886e38cf740f52022f6232e171962c06c8b977480fe82d92518f458920fc422",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/final.png",
+      "expected_sha256": "76b80202d021de464b32b99a946659f6e061cee9769e4bbedcc0dbc8347ab59c",
+      "current_sha256": "76b80202d021de464b32b99a946659f6e061cee9769e4bbedcc0dbc8347ab59c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/mouse-actions.jsonl",
+      "expected_sha256": "22a7240f20f8552aea21fdec9d0f80dddac0e3c3fc1acaf94a2ebbc989328b6b",
+      "current_sha256": "22a7240f20f8552aea21fdec9d0f80dddac0e3c3fc1acaf94a2ebbc989328b6b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/reactions.txt",
+      "expected_sha256": "36d99dae0755b377ac7b36013d5d5f45001fcae10ccb981e7153dcb25292ef31",
+      "current_sha256": "36d99dae0755b377ac7b36013d5d5f45001fcae10ccb981e7153dcb25292ef31",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round6/session-5/report.json",
+      "expected_sha256": "86875a4822beb1b013e40c24980ecff636520379f3a02f61569d0b3bb67a425e",
+      "current_sha256": "86875a4822beb1b013e40c24980ecff636520379f3a02f61569d0b3bb67a425e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.mid",
+      "expected_sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+      "current_sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.rill",
+      "expected_sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+      "current_sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.wav",
+      "expected_sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+      "current_sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-1/mouse-actions.jsonl",
+      "expected_sha256": "c11dc1823b1e730c2a62e52cf0ef520d8fbdffd2dae212891966b5449dd808bc",
+      "current_sha256": "c11dc1823b1e730c2a62e52cf0ef520d8fbdffd2dae212891966b5449dd808bc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-1/report.json",
+      "expected_sha256": "e843e8cfb8ab3147ae635604a18f2b0d2713accf0b2cb73f341db76231208acf",
+      "current_sha256": "e843e8cfb8ab3147ae635604a18f2b0d2713accf0b2cb73f341db76231208acf",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.mid",
+      "expected_sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+      "current_sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.rill",
+      "expected_sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+      "current_sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.wav",
+      "expected_sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+      "current_sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-2/mouse-actions.jsonl",
+      "expected_sha256": "76d7832d989464a631e21e144497c72375cce8dd141c26d76f5a81b04627940f",
+      "current_sha256": "76d7832d989464a631e21e144497c72375cce8dd141c26d76f5a81b04627940f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-2/report.json",
+      "expected_sha256": "68b44dd37f7b7969fbec30be58d6500b54b10eab3ed8b1c7565879021795ea55",
+      "current_sha256": "68b44dd37f7b7969fbec30be58d6500b54b10eab3ed8b1c7565879021795ea55",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.mid",
+      "expected_sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+      "current_sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.rill",
+      "expected_sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+      "current_sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.wav",
+      "expected_sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+      "current_sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-3/mouse-actions.jsonl",
+      "expected_sha256": "0a1872076cbf6d48980cf17ac9425e908bb68aaabc8da44dd1a98a79cdf220e7",
+      "current_sha256": "0a1872076cbf6d48980cf17ac9425e908bb68aaabc8da44dd1a98a79cdf220e7",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-3/report.json",
+      "expected_sha256": "fc2c0161d62f36717daa9f111dcf434ef562c37898c69ee8d9162d4e69f60ef5",
+      "current_sha256": "fc2c0161d62f36717daa9f111dcf434ef562c37898c69ee8d9162d4e69f60ef5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.mid",
+      "expected_sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+      "current_sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.rill",
+      "expected_sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+      "current_sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.wav",
+      "expected_sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+      "current_sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-4/mouse-actions.jsonl",
+      "expected_sha256": "6ace321b1ebbb2bdd90228978b31aaf8133ef5d60e79c155a8dadffc6915ead4",
+      "current_sha256": "6ace321b1ebbb2bdd90228978b31aaf8133ef5d60e79c155a8dadffc6915ead4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-4/report.json",
+      "expected_sha256": "eebbfb915db71c1d62a332ec61118bb1a223f486ac98313753d5253938cb7b6e",
+      "current_sha256": "eebbfb915db71c1d62a332ec61118bb1a223f486ac98313753d5253938cb7b6e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.mid",
+      "expected_sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+      "current_sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.rill",
+      "expected_sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+      "current_sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.wav",
+      "expected_sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+      "current_sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-5/mouse-actions.jsonl",
+      "expected_sha256": "15495fcad534563e364d8b889c4b986dd9751340d2ba07c99e464f34378a61a8",
+      "current_sha256": "15495fcad534563e364d8b889c4b986dd9751340d2ba07c99e464f34378a61a8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability/session-5/report.json",
+      "expected_sha256": "90bbb56d5fa3b4d2cc0b5a369951c95727ee67c0c7a3472291cf50975f07eec5",
+      "current_sha256": "90bbb56d5fa3b4d2cc0b5a369951c95727ee67c0c7a3472291cf50975f07eec5",
+      "unchanged": true
+    }
+  ]
+}

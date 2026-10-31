@@ -1,0 +1,121 @@
+{
+  "participant": 3,
+  "persona": "Simulated first-time RILL user and beginner producer making an atmospheric minor-key sketch; not a human study.",
+  "piece_name": "moon glass",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round3/session-3/moon glass.rill",
+    "wav": "/workspace/scratch/rill-usability-round3/session-3/moon glass.wav",
+    "midi": "/workspace/scratch/rill-usability-round3/session-3/moon glass.mid"
+  },
+  "findings": [
+    {
+      "observation": "The empty arrangement area explicitly invited double-clicking for MIDI. This opened Device library and Assign instrument created a track using Rill Lab Sine.",
+      "evidence": [
+        "02-midi.png",
+        "03-assigned.png"
+      ],
+      "impact": "Low-friction instrument setup."
+    },
+    {
+      "observation": "Pencil dragging drew named sustained notes, and drawing beyond the initial end extended the MIDI clip.",
+      "evidence": [
+        "05-first-note-held.png",
+        "06-progression.png",
+        "07-arrangement.png"
+      ],
+      "impact": "Quick progression and melody entry."
+    },
+    {
+      "observation": "Rename project exposed an on-screen Keyboard with Clear and Apply name, allowing a unique project name with mouse input.",
+      "evidence": [
+        "09-rename.png",
+        "10-keyboard.png",
+        "11-name-zoom.png"
+      ],
+      "impact": "Mouse-only naming succeeded."
+    },
+    {
+      "observation": "Duplicate was initially ambiguous as a tool versus immediate action. Tool help explained clicking clips to create independent copies; repeating then succeeded.",
+      "evidence": [
+        "12-duplicate-help.png",
+        "13-duplicate.png",
+        "14-repeats.png"
+      ],
+      "impact": "Small discoverability cost, resolved in app."
+    },
+    {
+      "observation": "Dragging the audio right edge displayed End 30.000 s / Beat 57.00. After resizing both last clips the project showed 0:30.000. The MIDI miniature appeared compressed, making the precise note-timing effect unclear without opening it.",
+      "evidence": [
+        "15-trim-held.png",
+        "16-trimmed.png"
+      ],
+      "impact": "Exact endpoint feedback was useful; MIDI trim versus resize behavior remained uncertain."
+    },
+    {
+      "observation": "The immediate playback screenshot had Pause active but no transport or meter change; a later screenshot showed 005.04.66 and active meters on both tracks and master.",
+      "evidence": [
+        "17-mixer-playback.png",
+        "18-playback-check.png"
+      ],
+      "impact": "Brief uncertainty resolved by visible playback activity; no audio was auditioned."
+    },
+    {
+      "observation": "Native save dialogs were briefly late to paint, including one black frame. Subsequent screenshots showed the correct names and session folder.",
+      "evidence": [
+        "19-save.png",
+        "20-save-dialog.png",
+        "23-wav-save.png",
+        "24-wav-dialog-ready.png"
+      ],
+      "impact": "Short wait before save/export controls were usable."
+    },
+    {
+      "observation": "Save removed the unsaved marker; WAV export offered Arrangement 0:30 and effect-tail control; both WAV and MIDI showed Exported banners.",
+      "evidence": [
+        "21-saved.png",
+        "22-wav-export.png",
+        "27-wav-complete.png",
+        "29-midi-result.png",
+        "final.png"
+      ],
+      "impact": "Requested outputs completed in the visible workflow."
+    }
+  ],
+  "rating_reasons": {
+    "easy_to_use": "4/5: Completed creation, note drawing, repeats, naming, save and both exports by mouse; duplicate help and endpoint interpretation added small friction.",
+    "how_cool_it_looks": "4/5: Clean dark layout, clear waveforms and note previews, consistent teal controls; large unused regions felt sparse.",
+    "how_fast_it_is": "4/5: Editing and duplication responded quickly; native dialogs and first playback feedback briefly lagged, and WAV export displayed elapsed seconds.",
+    "how_confusing_it_is": "2/5, higher is worse: Mostly discoverable, with uncertainty around Duplicate mode, MIDI edge resizing and initial playback feedback.",
+    "feature_completeness": "4/5: Instrument assignment, piano roll, audio arrangement, mixer, project save and exports covered this short sketch; advanced features were not evaluated."
+  },
+  "outcome": {
+    "status": "Completed through visible UI; file contents and exact output duration pending independent verification.",
+    "visible_duration_seconds": 30.0,
+    "composition": "Four-bar A-minor/F-major/G-major/E-minor chord phrase with upper melody, repeated with supplied Circuit rhythm audio to a 30-second endpoint; final clip pair shortened.",
+    "instrument": "Rill Lab Sine VST3 selected from the installed library and visible on MIDI track.",
+    "save_evidence": "Unsaved marker disappeared after saving moon glass.rill.",
+    "export_evidence": [
+      "Exported \u00b7 moon glass.wav",
+      "Exported \u00b7 moon glass.mid"
+    ],
+    "playback_evidence": "Transport and meters advanced in mixer.",
+    "audio_auditioned": false,
+    "app_left_open": true,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated beginner usability evaluation, not a human participant or benchmark.",
+    "Mouse-only interaction through the provided driver; no keyboard shortcuts or events, source inspection, app APIs, project editing, or inspection of saved composition contents.",
+    "No audio capture auditioned, so no claim about heard sound, tonal balance, clipping, or audio quality.",
+    "Laboratory virtual audio sink, software graphics, 60 ms buffering and 1024-frame requests at 48 kHz; findings do not establish physical hardware latency.",
+    "Only the installed Rill Lab Sine instrument was exercised; other plug-in editors, recording and advanced effects were not tested.",
+    "30-second endpoint and completion were observed in UI; coordinator independently verifies project, MIDI, WAV duration and PCM."
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "baseline_git_sha": "c34252a84db9e7d9b95b512d19914f525964d5bb",
+  "working_tree_status": "source-status.txt",
+  "source_diff": "source-diff.patch",
+  "source_hashes": "source-hashes.json",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability-round2/baseline/rill",
+      "sha256": "96698c239c2f0376988ac5e271d307a1e772a792e88cc917971f28a2bd8ee642"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability-round2/baseline/daw-plugin-host",
+      "sha256": "de51ecdd4172bbe27d881f6fb8c11c1a4d8bebce65fe8a0c8def4ebdb19826df"
+    }
+  },
+  "plugin": {
+    "name": "Rill Lab Sine",
+    "path": "/workspace/scratch/rill-usability-round2/plugins/RillLabSine.vst3",
+    "sha256": "ea9c162882be7efc282dcba683c92010d1804cc3218b37ffa99af7e813d253b8"
+  },
+  "launched_at_utc": "2026-10-31T17:47:32Z",
+  "viewport": [
+    1440,
+    1000
+  ],
+  "audio": "Separate timer-paced PulseAudio null sink + ALSA pulse bridge per session; sink 48000 Hz; Rill 1024-frame lab output request; Pulse backend buffering 60 ms via PULSE_LATENCY_MSEC",
+  "sessions": [
+    {
+      "participant": 1,
+      "directory": "/workspace/scratch/rill-usability-round2/session-1",
+      "app": 43932,
+      "xvfb": 43929,
+      "pulse": 43926,
+      "display": ":281"
+    },
+    {
+      "participant": 2,
+      "directory": "/workspace/scratch/rill-usability-round2/session-2",
+      "app": 43963,
+      "xvfb": 43960,
+      "pulse": 43957,
+      "display": ":282"
+    },
+    {
+      "participant": 3,
+      "directory": "/workspace/scratch/rill-usability-round2/session-3",
+      "app": 43994,
+      "xvfb": 43991,
+      "pulse": 43988,
+      "display": ":283"
+    },
+    {
+      "participant": 4,
+      "directory": "/workspace/scratch/rill-usability-round2/session-4",
+      "app": 44025,
+      "xvfb": 44022,
+      "pulse": 44019,
+      "display": ":284"
+    },
+    {
+      "participant": 5,
+      "directory": "/workspace/scratch/rill-usability-round2/session-5",
+      "app": 44056,
+      "xvfb": 44053,
+      "pulse": 44050,
+      "display": ":285"
+    }
+  ],
+  "runtime_repairs": [
+    {
+      "link": "/workspace/.rill-tools/sysroot/usr/lib/x86_64-linux-gnu/libxcb.so.1.1.0",
+      "target": "/usr/lib/x86_64-linux-gnu/libxcb.so.1.1.0"
+    }
+  ]
+}

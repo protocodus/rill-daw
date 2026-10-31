@@ -1,0 +1,101 @@
+{
+  "purpose": "Independent simulated beginner mouse-only usability report based on visible RILL actions and screenshots.",
+  "participant": 5,
+  "persona": "Simulated beginner, first introduction to RILL, interested in a short hip-hop beat with a simple synth part.",
+  "piece_name": "night hop",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Visible MIDI creation prompt, direct note drawing, instrument assignment and mouse keyboard enabled the full task. Exact trimming and Duplicate behavior required small corrections.",
+    "how_cool_it_looks": "Clean dark interface with coordinated teal clips, readable waveforms and note previews; sparse enough to follow. The many similar narrow repeated clips are visually repetitive and their names become truncated.",
+    "how_fast_it_is": "Most clicks and note edits gave immediate visible feedback. Playback briefly prepared audio and WAV export took several seconds before a clear completion notice. Screenshot/tool overhead is not an app speed benchmark.",
+    "how_confusing_it_is": "Mostly clear labels, but context-menu Duplicate immediately copied while toolbar Duplicate selected a tool. A small edge drag did not correct the trim until coarser snapping was used; stopping playback also dismissed rename mode.",
+    "feature_completeness": "The requested audio arrangement, VST instrument, mouse-drawn MIDI, naming, project save, WAV and MIDI exports were all available. This narrow session does not establish broader production or third-party plug-in completeness."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round5/session-5/night hop.rill",
+    "wav": "/workspace/scratch/rill-usability-round5/session-5/night hop.wav",
+    "midi": "/workspace/scratch/rill-usability-round5/session-5/night hop.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the labeled empty MIDI area opened the instrument library; Assign instrument created the track and clip with Rill Lab Sine displayed.",
+      "evidence": ["01-midi.png", "02-instrument.png"]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Pencil drags created a visible four-note motif with labeled notes and velocity stems.",
+      "evidence": ["03-piano.png", "04-notes.png"]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Context-menu Duplicate immediately created a neighboring MIDI clip. Clicking toolbar Duplicate twice did not add clips; it selected a mode whose help text required clicking a clip.",
+      "evidence": ["05-clip-menu.png", "06-duplicate.png", "07-zoom.png"]
+    },
+    {
+      "id": "F4",
+      "kind": "recovery",
+      "observation": "The first audio trim produced 30.134 seconds and a tiny corrective drag left it unchanged. Selecting 1-bar snapping and dragging again produced the visible 30.000-second end.",
+      "evidence": ["10-trim30.png", "11-full-arrangement.png", "12-snap.png", "13-playback.png"]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "After a Preparing audio state, playback advanced the playhead and transport position, with visible activity in the audio and instrument track meters.",
+      "evidence": ["13-playback.png", "15-rename.png"]
+    },
+    {
+      "id": "F6",
+      "kind": "friction",
+      "observation": "Stopping playback while project rename controls were open dismissed those controls; reopening Rename project restored access to the keyboard.",
+      "evidence": ["15-rename.png", "16-keyboard.png", "17-name-keys.png"]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "The on-screen keyboard accepted a mouse-entered name. Save and both export dialogs automatically proposed filenames using that name.",
+      "evidence": ["17-name-keys.png", "19-save-dialog.png", "20-saved.png", "22-wav-path.png", "25-midi-dialog.png"]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "WAV export displayed an arrangement length summary and an effect-tails toggle. WAV and MIDI exports both showed explicit Exported notices.",
+      "evidence": ["21-export-wav.png", "22-wav-path.png", "24-wav-result.png", "26-midi-success.png"]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "The immediate first save screenshot contained a black rectangle over the dialog area; the next screenshot showed a readable native save dialog without intervention.",
+      "evidence": ["18-save.png", "19-save-dialog.png"]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: named and saved the project, arranged audio and VST MIDI to a displayed 30.000 seconds, and saw success notices for both exports. File contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "112 BPM, 4/4; supplied Circuit rhythm audio duplicated into three full four-bar clips and a final two-bar trim, with a one-bar C4/D#4/G4/F4 MIDI motif repeated across 14 bars. Intended as a simple beat with synth part; sound and stylistic success were not auditioned.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play changed to Pause, initially showed Preparing audio, then the playhead and transport advanced to approximately bar 7 with both tracks' meters active. Stopped and returned to the beginning before save/export.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows.",
+    "Used only assigned session screenshots and mouse driver for composition and app operation; reports were written separately as allowed.",
+    "Laboratory software graphics and virtual audio sink; observed speed and meters are not physical hardware latency or audio quality measurements.",
+    "One supplied native VST3 instrument was tested; no conclusion about other third-party plug-ins.",
+    "Used supplied startup audio; the result is a repetitive beginner arrangement and was not auditioned to assess hip-hop style or musical quality."
+  ]
+}

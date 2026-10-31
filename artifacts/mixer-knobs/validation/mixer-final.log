@@ -1,0 +1,46 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.42s
+     Running tests/mixer_e2e.rs (target/debug/deps/mixer_e2e-99eea96e537fe291)
+
+running 3 tests
+test aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand ... ok
+test output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks ... ok
+test sequencer_mixer_controls_route_undo_persist_and_change_exported_audio ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.45s
+
+     Running tests/mixer_flow_e2e.rs (target/debug/deps/mixer_flow_e2e-67c18b430cc541f4)
+
+running 2 tests
+test mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback ... ok
+test mixer_orders_signal_stages_and_separates_primary_and_send_arrows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.70s
+
+     Running tests/mixer_pan_knob_e2e.rs (target/debug/deps/mixer_pan_knob_e2e-cf37329a893f99d5)
+
+running 2 tests
+test mixer_pan_knob_arc_and_relative_drags_preserve_click_values_and_undo ... ok
+test mixer_pan_knob_drag_and_exact_entry_override_automation_without_rewriting_the_curve ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s
+
+     Running tests/mixer_readability_e2e.rs (target/debug/deps/mixer_readability_e2e-785f83a47e1714e5)
+
+running 1 test
+test mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+

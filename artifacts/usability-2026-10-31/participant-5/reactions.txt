@@ -1,0 +1,15 @@
+Participant 5 — observable action and reaction summary (simulated beginner; not private reasoning)
+16:23:11 — Followed the empty-lane “Double-click for MIDI” hint. Reaction: “That tells me where to start.”
+16:23:18 — Assigned Rill Lab Sine. Reaction: “Preview failed sounds broken, but the assignment button still works.”
+16:23:25 — Opened New pattern by double-clicking. Reaction: “The piano grid looks like the place to draw my tune.”
+16:23:37 — Selected Pencil, then accidentally opened Scale because the toolbar reflowed. Reaction: “The length menu moved when I changed tools.”
+16:23:54–16:24:00 — Drew six notes with drags, C4/C4/D#4/F4/D#4/D4. Reaction: “Dragging a note to choose its length feels natural.”
+16:24:20–16:24:36 — Opened clip properties and Duration. Reaction: “This value is editable, but it expects typing.”
+16:24:44–16:25:21 — Extended the MIDI clip to a two-bar boundary, duplicated it, marquee-selected the audio plus patterns, duplicated twice, and used Fit. Reaction: “I can build the arrangement quickly by repeating a section.”
+16:25:33–16:25:46 — Trimmed final audio and deleted the last MIDI clip. Used Select only this clip before Delete. Reaction: “I want to be sure this deletes only the ending clip.”
+16:25:58–16:27:29 — Checked exact audio duration; tried scroll and drag on the numeric field, returned to arranger, changed snap and retried trimming. Reaction: “Getting an exact boundary with the mouse is much harder than drawing the music.” Final audio is a quarter beat short; MIDI still defines 30-second arrangement length.
+16:27:46 — Clicked Play, then Stop. Playback could not be heard because the laboratory uses null audio output; no sonic judgement recorded.
+16:27:56–16:28:10 — Saved the project using the default filename and opened WAV export. Reaction: “The export panel finally tells me clearly that the arrangement is exactly 30 seconds.”
+16:28:20–16:29:05 — Disabled effect tails and exported WAV. Reaction: “The progress/status message makes it clear that rendering is happening and when it finishes.”
+16:29:20–16:29:38 — Exported MIDI via File menu using the default name. Reaction: “Both export formats are easy to find.”
+After session — Read-only file verification measured a 30.000-second stereo 48 kHz float WAV, peak 0.4423 and RMS 0.0581. No audio was heard. The native project and a standard MIDI file exist.

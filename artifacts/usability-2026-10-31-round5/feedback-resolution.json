@@ -1,0 +1,1059 @@
+{
+  "round": 5,
+  "prepared_utc": "2026-10-31T20:24:43Z",
+  "status": "Three scoped fix clusters implemented and validated before the fresh round6 evaluation.",
+  "source_reports": [
+    {
+      "participant": 1,
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-1/report.json",
+      "sha256": "6247e36f8d372251b5080a33c74461473cc58727df858ccc9af909d89bb32662"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-2/report.json",
+      "sha256": "253d18d8b3daba90150989a59317121eb7bd2dbad2a09afa499ed3a17b0c9809"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-3/report.json",
+      "sha256": "7edfdc79f3384c0567d2d59cbd8f705dedd1f1964f5a2f1b42700b7d48f36c75"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-4/report.json",
+      "sha256": "d6132e09115e19c3374650bcb4b29dd6c02725b6f03ce011002e3a5196ba151a"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/participant-5/report.json",
+      "sha256": "be4c25be16a4ff84520e6db5d6bf0cc66ab8a2ed7e62d3779b78d7993db8bd6c"
+    }
+  ],
+  "findings": [
+    {
+      "id": "R5-P1-F1",
+      "participant": 1,
+      "source_finding_id": "F1",
+      "participant_kind": "positive",
+      "observation": "Double-clicking the empty lane using its visible MIDI hint opened Device library; Assign instrument created a pattern and a track labeled with Rill Lab Sine.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument-assigned.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P1-F2",
+      "participant": 1,
+      "source_finding_id": "F2",
+      "participant_kind": "positive",
+      "observation": "Pencil drags drew labeled notes with visible lengths, and drawing beyond the initial clip end expanded the MIDI pattern.",
+      "evidence": [
+        "03-piano-roll.png",
+        "04-notes.png",
+        "05-four-bar-midi.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P1-F3",
+      "participant": 1,
+      "source_finding_id": "F3",
+      "participant_kind": "friction",
+      "observation": "The Loop clip menu action did not visibly produce repeated clips. The Duplicate toolbar button activated a tool first; its Click a clip to duplicate hint explained the required next click.",
+      "evidence": [
+        "06-clip-menu.png",
+        "07-loop-audio.png",
+        "08-duplicate.png"
+      ],
+      "response_status": "partial_response_with_validated_change",
+      "related_fixes": [
+        "loop_and_clip_identity"
+      ],
+      "response": "Duplicate retains its explicit click gesture. The validated Loop playback over clip/selection/arrangement wording now identifies a playback range, while Repeat explains that it creates copies. Fresh round6 reports did not exercise these revised menu actions.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "partial_response",
+      "initial_response": "Duplicate already exposes the click gesture; preserve that supported tool/command distinction. The unaddressed part is interpreting Loop clip as creation of repeated clips."
+    },
+    {
+      "id": "R5-P1-F4",
+      "participant": 1,
+      "source_finding_id": "F4",
+      "participant_kind": "positive",
+      "observation": "A rectangle selection and Duplicate click copied both selected tracks together; repeated clicks on the new groups extended the arrangement to 34.286 seconds.",
+      "evidence": [
+        "09-first-duplicate.png",
+        "10-long-arrangement.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P1-F5",
+      "participant": 1,
+      "source_finding_id": "F5",
+      "participant_kind": "friction",
+      "observation": "Trimming the selected audio and MIDI endings required separate edge drags. The first attempt at the 30-second grid line left a visible project duration of 30.268 seconds.",
+      "evidence": [
+        "11-trim.png",
+        "12-playback.png"
+      ],
+      "response_status": "partial_response_with_validated_change",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "Validated shared drag-only edge targets accept short corrective movements and apply the final release position. Trimming remains scoped to the pointed clip; selecting several clips does not resize all their edges together.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "partial_response",
+      "initial_response": "Immediate short edge dragging is under investigation. Trims remain scoped to the pointed clip; selecting a group intentionally does not make every edge resize together."
+    },
+    {
+      "id": "R5-P1-F6",
+      "participant": 1,
+      "source_finding_id": "F6",
+      "participant_kind": "recovery",
+      "observation": "Holding a trim drag displayed exact End and Duration values. Small corrections brought both track endings to 30.000 seconds, also shown in the project header.",
+      "evidence": [
+        "14-trim-feedback.png",
+        "15-exact-30.png"
+      ],
+      "response_status": "retain_existing_recovery_with_validated_change",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "Live End/Duration readouts already helped reach exactly 30 seconds. The validated short-drag and final-release corrections remove the confirmed gesture defects while preserving that feedback.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "retain_existing_recovery_with_candidate",
+      "initial_response": "Live End/Duration readouts already helped reach exact30seconds; the candidate targets the extra short-drag attempts."
+    },
+    {
+      "id": "R5-P1-F7",
+      "participant": 1,
+      "source_finding_id": "F7",
+      "participant_kind": "positive",
+      "observation": "Play changed to Pause, and a subsequent screenshot showed the playhead advanced with both audio and instrument meters lit. Stop returned the transport to the beginning.",
+      "evidence": [
+        "12-playback.png",
+        "13-playback-later.png",
+        "15-exact-30.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P1-F8",
+      "participant": 1,
+      "source_finding_id": "F8",
+      "participant_kind": "positive",
+      "observation": "Rename project offered an onscreen Keyboard with Clear and Space. Mouse clicks entered soft rain; Save as and export dialogs automatically used that chosen name.",
+      "evidence": [
+        "17-rename.png",
+        "18-onscreen-keyboard.png",
+        "20-save-dialog-ready.png",
+        "21-saved.png",
+        "23-wav-path.png",
+        "28-midi-path.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P1-F9",
+      "participant": 1,
+      "source_finding_id": "F9",
+      "participant_kind": "friction",
+      "observation": "The first Save as dialog capture was black and the first MIDI dialog capture had an empty location/list; a subsequent capture showed each rendered correctly without recovery actions.",
+      "evidence": [
+        "19-save-dialog.png",
+        "20-save-dialog-ready.png",
+        "27-midi-export.png",
+        "28-midi-path.png"
+      ],
+      "response_status": "documented_environment_limit",
+      "related_fixes": [],
+      "response": "Native GTK dialog painting completed on the next capture without recovery actions; no platform/toolkit drawing fix is claimed."
+    },
+    {
+      "id": "R5-P1-F10",
+      "participant": 1,
+      "source_finding_id": "F10",
+      "participant_kind": "positive",
+      "observation": "WAV export displayed its 30-second arrangement scope, sample format, and effect-tail option. After tails were unchecked, export showed elapsed status and later a success checkmark. MIDI export also showed a success checkmark.",
+      "evidence": [
+        "22-wav-export.png",
+        "23-wav-path.png",
+        "24-wav-result.png",
+        "26-wav-status.png",
+        "29-midi-result.png",
+        "final.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P2-F1",
+      "participant": 2,
+      "source_finding_id": "F1",
+      "participant_kind": "positive",
+      "observation": "Double-clicking beneath the audio lane, as the visible hint suggested, opened Device library. Assign instrument created a MIDI pattern with Rill Lab Sine visibly assigned.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P2-F2",
+      "participant": 2,
+      "source_finding_id": "F2",
+      "participant_kind": "positive",
+      "observation": "Double-clicking the MIDI pattern opened the piano roll. Pencil showed Draw notes / Drag to set length, and four mouse drags produced visible C4, E4, G4 and E4 notes.",
+      "evidence": [
+        "03-piano.png",
+        "04-notes.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P2-F3",
+      "participant": 2,
+      "source_finding_id": "F3",
+      "participant_kind": "positive",
+      "observation": "The Duplicate tool said Click a clip to duplicate. Clicking successive audio and MIDI clips appended copies, allowing the arrangement to grow without keyboard shortcuts.",
+      "evidence": [
+        "06-duplicate-tool.png",
+        "07-audio-duplicate.png",
+        "10-four-patterns.png",
+        "12-playback.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P2-F4",
+      "participant": 2,
+      "source_finding_id": "F4",
+      "participant_kind": "friction",
+      "observation": "The first audio trim ended at 30.134 seconds. After changing Snap to 1 bar, a five-pixel drag still left 30.134 visible; an eight-pixel held drag then displayed End 30.000 s and Duration 4.286 s.",
+      "evidence": [
+        "08-thirty-seconds.png",
+        "09-snap-menu.png",
+        "10-four-patterns.png",
+        "11-trim-feedback.png"
+      ],
+      "response_status": "implemented_and_validated",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "Running-app before/after tests confirmed the edge threshold defect. Validated drag-only targets now accept short movements while preserving snap, source limits and one Undo; no arbitrary musical rounding change was introduced.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "candidate_fix",
+      "initial_response": "The report specifically compares a5pixel movement with an8pixel held drag; investigate the drag threshold rather than changing snap or musical rounding arbitrarily."
+    },
+    {
+      "id": "R5-P2-F5",
+      "participant": 2,
+      "source_finding_id": "F5",
+      "participant_kind": "failure",
+      "observation": "The first Play attempt left the playhead at the start and displayed Audio output stream failed or disconnected.",
+      "evidence": [
+        "12-playback.png"
+      ],
+      "response_status": "documented_output_failure",
+      "related_fixes": [],
+      "response": "A fatal output banner was observed before playback progressed. This report does not retain a backend cause, so do not infer a specific ALSA EIO from other sessions."
+    },
+    {
+      "id": "R5-P2-F6",
+      "participant": 2,
+      "source_finding_id": "F6",
+      "participant_kind": "recovery",
+      "observation": "Audio setup showed System default output. Selecting Rill lab paced output, applying and pressing Play produced a Pause button, later playhead movement to 004.03.18, and visible meters on both tracks.",
+      "evidence": [
+        "13-audio-setup.png",
+        "14-output-choice.png",
+        "15-playback-retry.png",
+        "16-playhead.png"
+      ],
+      "response_status": "retain_existing_recovery",
+      "related_fixes": [],
+      "response": "Selecting the available output and pressing Play recovered visible playback. This does not prove the explicit Retry playback button was exercised, or establish audible output."
+    },
+    {
+      "id": "R5-P2-F7",
+      "participant": 2,
+      "source_finding_id": "F7",
+      "participant_kind": "positive",
+      "observation": "File / Rename project exposed a Keyboard button. Its on-screen keys, Select all and Space let me enter neon step entirely by mouse; Save proposed neon step.rill in session-2, and accepting returned to an unmarked project title.",
+      "evidence": [
+        "17-file-menu.png",
+        "18-rename.png",
+        "19-onscreen-keyboard.png",
+        "20-save-dialog.png",
+        "21-saved.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P2-F8",
+      "participant": 2,
+      "source_finding_id": "F8",
+      "participant_kind": "positive",
+      "observation": "WAV export identified Arrangement 0:30. I unchecked Include effect tails, accepted neon step.wav in the session-2 picker, and saw Exported / neon step.wav. MIDI export similarly proposed neon step.mid and showed its success notice.",
+      "evidence": [
+        "22-wav-settings.png",
+        "23-wav-save-dialog.png",
+        "24-wav-export.png",
+        "26-wav-progress.png",
+        "28-midi-save-dialog.png",
+        "29-midi-complete.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P2-F9",
+      "participant": 2,
+      "source_finding_id": "F9",
+      "participant_kind": "friction",
+      "observation": "At the zoom needed to see the whole 30-second piece, the repeated MIDI clip names all displayed as New p..., making individual clips hard to distinguish by title.",
+      "evidence": [
+        "21-saved.png",
+        "final.png"
+      ],
+      "response_status": "partial_response_with_validated_change",
+      "related_fixes": [
+        "loop_and_clip_identity"
+      ],
+      "response": "The validated hover now shows the full clip name, track and exact start/end position, distinguishing equally named copies. Narrow titles remain abbreviated; round6 did not demonstrate discovery of the hover.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "candidate_fix",
+      "initial_response": "The existing full-name hover is extended with track and start/end position. Position distinguishes copies sharing New pattern without renaming them or crowding narrow clip bodies."
+    },
+    {
+      "id": "R5-P3-F1",
+      "participant": 3,
+      "source_finding_id": "F1",
+      "participant_kind": "positive",
+      "observation": "The blank-area 'Double-click for MIDI' hint led directly to the instrument library; Assign instrument created a MIDI clip with Rill Lab Sine shown on its track.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument-assigned.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P3-F2",
+      "participant": 3,
+      "source_finding_id": "F2",
+      "participant_kind": "positive",
+      "observation": "Pencil said 'Draw notes - Drag to set length'; note labels and lengths appeared while drawing, and adding notes beyond the original clip end extended it to four bars. A visible C-sharp note was corrected by dragging it down with Select.",
+      "evidence": [
+        "03-piano-roll.png",
+        "04-first-melody.png",
+        "05-four-bars-drawn.png",
+        "06-arrange-zoom-out.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P3-F3",
+      "participant": 3,
+      "source_finding_id": "F3",
+      "participant_kind": "positive",
+      "observation": "Duplicate displayed 'Click a clip to duplicate'; clicking successive audio and MIDI copies quickly built a 34.286-second arrangement.",
+      "evidence": [
+        "07-duplicate-tool.png",
+        "08-extended-arrangement.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P3-F4",
+      "participant": 3,
+      "source_finding_id": "F4",
+      "participant_kind": "friction",
+      "observation": "Dragging the last clip edges toward the 30-second grid initially produced 30.268 seconds, then 30.134. A four-pixel MIDI edge drag produced no visible shortening.",
+      "evidence": [
+        "09-thirty-seconds-playing.png",
+        "12-trim-corrected.png",
+        "mouse-actions.jsonl at 2026-10-31T20:17:17Z"
+      ],
+      "response_status": "implemented_and_validated",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "The short edge threshold defect was confirmed and corrected, with before/after running-app validation and single-Undo protection. The implementation preserves source bounds, snapping and zero-motion behavior.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "candidate_fix",
+      "initial_response": "The observed4pixel edge movement is consistent with a click/drag threshold issue; implementation and regression validation remain pending."
+    },
+    {
+      "id": "R5-P3-F5",
+      "participant": 3,
+      "source_finding_id": "F5",
+      "participant_kind": "recovery",
+      "observation": "Selecting Snap 1 bar and dragging the MIDI edge again aligned both track endings and the header showed 0:30.000.",
+      "evidence": [
+        "13-snap-menu.png",
+        "14-exact-thirty.png"
+      ],
+      "response_status": "retain_existing_recovery_with_validated_change",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "Snap to one bar and another edge drag already reached exactly 30 seconds. The validated correction supports shorter corrective gestures while retaining this recovery path.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "retain_existing_recovery_with_candidate",
+      "initial_response": "Snap1bar and a further edge drag already reached exact30seconds; retain this recovery while checking short gestures."
+    },
+    {
+      "id": "R5-P3-F6",
+      "participant": 3,
+      "source_finding_id": "F6",
+      "participant_kind": "failure",
+      "observation": "Playback showed a moved playhead at 003.04.89 and active meters on both tracks, but the UI also reported 'Audio output dropout - 1 - Try a larger buffer in Audio setup.' Stopping returned to the beginning. No audible output was verified.",
+      "evidence": [
+        "09-thirty-seconds-playing.png",
+        "10-playback-progress.png",
+        "12-trim-corrected.png"
+      ],
+      "response_status": "documented_nonfatal_dropout",
+      "related_fixes": [],
+      "response": "The participant called this a failure, but the visible message is a recoverable dropout count with an advancing playhead and active meters. Preserve the original label while separately noting that playback visibly continued; audio was not auditioned.",
+      "coordinator_classification": "recoverable_backend_dropout_warning_with_visible_playback_continuation"
+    },
+    {
+      "id": "R5-P3-F7",
+      "participant": 3,
+      "source_finding_id": "F7",
+      "participant_kind": "positive",
+      "observation": "File > Rename project exposed an on-screen keyboard with Clear and Caps controls. Mouse clicks entered Moonlit, and File > Save offered Moonlit.rill in session-3; accepting it removed the unsaved marker.",
+      "evidence": [
+        "16-rename.png",
+        "17-onscreen-keyboard.png",
+        "18-save-project.png",
+        "19-saved-project.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P3-F8",
+      "participant": 3,
+      "source_finding_id": "F8",
+      "participant_kind": "friction",
+      "observation": "The native WAV save dialog was briefly a black rectangle before the filename and folder controls appeared on the next observation.",
+      "evidence": [
+        "21-save-wav.png",
+        "22-save-wav-ready.png"
+      ],
+      "response_status": "documented_environment_limit",
+      "related_fixes": [],
+      "response": "Brief native GTK save-dialog painting recovered without intervention; no platform rendering change is claimed."
+    },
+    {
+      "id": "R5-P3-F9",
+      "participant": 3,
+      "source_finding_id": "F9",
+      "participant_kind": "positive",
+      "observation": "WAV export displayed the 30-second arrangement, format details and an effect-tail checkbox. After disabling tails and accepting Moonlit.wav, elapsed progress changed to an Exported notice. MIDI export similarly accepted Moonlit.mid and showed an Exported notice.",
+      "evidence": [
+        "20-export-wav-options.png",
+        "21-save-wav.png",
+        "23-wav-result.png",
+        "25-wav-status.png",
+        "26-midi-save.png",
+        "27-midi-status.png",
+        "final.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P4-F1",
+      "participant": 4,
+      "source_finding_id": "F1",
+      "participant_kind": "positive",
+      "observation": "File > Rename project offered Keyboard, Select all, letter keys and Apply name. Mouse clicks successfully named the piece still.",
+      "evidence": [
+        "02-rename.png",
+        "03-keyboard.png",
+        "04-named-zoomed.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P4-F2",
+      "participant": 4,
+      "source_finding_id": "F2",
+      "participant_kind": "recovery",
+      "observation": "The first audio stretch ended at a displayed 30.402 seconds. Switching Snap to 1 bar and adjusting the edge gave a displayed 30.000 seconds.",
+      "evidence": [
+        "07-instrument-assigned.png",
+        "10-snap-menu.png",
+        "11-piano-roll.png"
+      ],
+      "response_status": "retain_existing_recovery_with_validated_change",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "The participant reached exactly 30 seconds after changing Snap and adjusting the audio edge. The validated shared edge change preserves snapping and source bounds; it does not establish that this larger stretch discrepancy had the same cause as ignored tiny trims.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "retain_existing_recovery_with_candidate",
+      "initial_response": "The audio stretch reached exact30seconds after changing Snap and adjusting the edge. Do not assume this larger stretch error had the same cause as ignored tiny trim drags."
+    },
+    {
+      "id": "R5-P4-F3",
+      "participant": 4,
+      "source_finding_id": "F3",
+      "participant_kind": "positive",
+      "observation": "Double-clicking the area labeled Double-click for MIDI opened the device library. Rill Lab Sine was visibly identified as a VST3 instrument; Assign instrument created the track and showed its name on the track.",
+      "evidence": [
+        "06-midi-created.png",
+        "07-instrument-assigned.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P4-F4",
+      "participant": 4,
+      "source_finding_id": "F4",
+      "participant_kind": "positive",
+      "observation": "Clip Properties offered a 123 numeric keypad for duration. Setting 56 beats by mouse produced a MIDI clip whose visible end was 30 seconds.",
+      "evidence": [
+        "12-midi-properties.png",
+        "13-duration-keypad.png",
+        "14-long-midi.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P4-F5",
+      "participant": 4,
+      "source_finding_id": "F5",
+      "participant_kind": "friction",
+      "observation": "Pencil drags from the same start x to the same endpoint x gave differing visible lengths within the first and second chords. Some notes were one bar shorter. The cause was not established.",
+      "evidence": [
+        "15-first-chord.png",
+        "16-second-chord.png",
+        "mouse-actions.jsonl at 2026-10-31T20:17:34Z through 2026-10-31T20:17:56Z"
+      ],
+      "response_status": "partial_response_with_confirmed_code_fix",
+      "related_fixes": [
+        "midi_release_position"
+      ],
+      "response": "Active MIDI gestures now apply the final pointer position arriving with release. Running-app before/after tests demonstrate and validate that correction. It is consistent with the reported note lengths, but the native participant sequence does not establish the sole cause.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "partial_response_with_confirmed_code_fix",
+      "initial_response": "The code drops a final MIDI pointer position when it arrives with release; a minimal released-frame update and running-app regression are being implemented. This is consistent with the reported note lengths, but the raw native session does not establish it as the sole cause."
+    },
+    {
+      "id": "R5-P4-F6",
+      "participant": 4,
+      "source_finding_id": "F6",
+      "participant_kind": "recovery",
+      "observation": "Switching to Select and dragging the shorter note edges aligned each chord's ends. The final editor showed three sustained triads spanning the clip to 30 seconds.",
+      "evidence": [
+        "16-second-chord.png",
+        "17-third-chord.png"
+      ],
+      "response_status": "retain_existing_recovery",
+      "related_fixes": [
+        "midi_release_position"
+      ],
+      "response": "Select-edge corrections visibly aligned the notes. The validated release-position fix protects the final position of active MIDI gestures; the original recovery and limit on native causal attribution remain.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "retain_existing_recovery",
+      "initial_response": "Select-edge corrections visibly aligned the notes. The release-position fix protects final gesture positions; retain the participant recovery and the limit on attributing the original cause."
+    },
+    {
+      "id": "R5-P4-F7",
+      "participant": 4,
+      "source_finding_id": "F7",
+      "participant_kind": "positive",
+      "observation": "After a Preparing audio status, playback visibly advanced the transport and yellow playhead, with both track meters lit. Playback was then stopped.",
+      "evidence": [
+        "18-playback.png",
+        "19-playback-progress.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P4-F8",
+      "participant": 4,
+      "source_finding_id": "F8",
+      "participant_kind": "positive",
+      "observation": "Save defaulted to still.rill in the session folder. After OK, the dialog closed and the modified-dot indicator disappeared.",
+      "evidence": [
+        "20-save-dialog.png",
+        "21-project-saved.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P4-F9",
+      "participant": 4,
+      "source_finding_id": "F9",
+      "participant_kind": "friction",
+      "observation": "The WAV file chooser initially appeared as a black rectangle in the screenshot; the subsequent screenshot showed a usable native save dialog without additional corrective input.",
+      "evidence": [
+        "23-wav-file-dialog.png",
+        "24-wav-dialog-ready.png"
+      ],
+      "response_status": "documented_environment_limit",
+      "related_fixes": [],
+      "response": "The native WAV picker completed its paint on the next observation; no additional recovery input was needed."
+    },
+    {
+      "id": "R5-P4-F10",
+      "participant": 4,
+      "source_finding_id": "F10",
+      "participant_kind": "positive",
+      "observation": "WAV export showed the 30-second arrangement duration and allowed effect tails to be disabled. WAV and MIDI dialogs inherited the chosen project name, and separate Exported notices confirmed both operations in the UI.",
+      "evidence": [
+        "22-wav-settings.png",
+        "24-wav-dialog-ready.png",
+        "27-wav-export-result.png",
+        "28-midi-export.png",
+        "29-midi-success.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P5-F1",
+      "participant": 5,
+      "source_finding_id": "F1",
+      "participant_kind": "positive",
+      "observation": "Double-clicking the labeled empty MIDI area opened the instrument library; Assign instrument created the track and clip with Rill Lab Sine displayed.",
+      "evidence": [
+        "01-midi.png",
+        "02-instrument.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P5-F2",
+      "participant": 5,
+      "source_finding_id": "F2",
+      "participant_kind": "positive",
+      "observation": "Pencil drags created a visible four-note motif with labeled notes and velocity stems.",
+      "evidence": [
+        "03-piano.png",
+        "04-notes.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P5-F3",
+      "participant": 5,
+      "source_finding_id": "F3",
+      "participant_kind": "friction",
+      "observation": "Context-menu Duplicate immediately created a neighboring MIDI clip. Clicking toolbar Duplicate twice did not add clips; it selected a mode whose help text required clicking a clip.",
+      "evidence": [
+        "05-clip-menu.png",
+        "06-duplicate.png",
+        "07-zoom.png"
+      ],
+      "response_status": "retain_explained_tool_semantics",
+      "related_fixes": [],
+      "response": "Toolbar Duplicate selects a tool; context Duplicate executes on its target immediately. The active gesture caption states the required clip click. The distinction remained a source of uncertainty in later round6 reports; no claim that the caption eliminates every misunderstanding is made.",
+      "initial_response": "Toolbar Duplicate selects a tool; context Duplicate executes on its target immediately. The active gesture caption already states the required clip click. Retain the observation and reevaluate discoverability without claiming confusion is eliminated."
+    },
+    {
+      "id": "R5-P5-F4",
+      "participant": 5,
+      "source_finding_id": "F4",
+      "participant_kind": "recovery",
+      "observation": "The first audio trim produced 30.134 seconds and a tiny corrective drag left it unchanged. Selecting 1-bar snapping and dragging again produced the visible 30.000-second end.",
+      "evidence": [
+        "10-trim30.png",
+        "11-full-arrangement.png",
+        "12-snap.png",
+        "13-playback.png"
+      ],
+      "response_status": "implemented_and_validated",
+      "related_fixes": [
+        "precise_edge_drag"
+      ],
+      "response": "Validated drag-only clip-edge targets accept small corrective movements and retain snapping. The original one-bar Snap recovery remains recorded, and round6 P1/P5 demonstrated successful small follow-up trims.",
+      "implementation_status": "related_fix_implemented_and_validated",
+      "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+      "initial_response_status": "candidate_fix",
+      "initial_response": "Tiny corrective trim did not change the end;1bar Snap plus another drag succeeded. The candidate targets small-motion initiation, while preserving snapping."
+    },
+    {
+      "id": "R5-P5-F5",
+      "participant": 5,
+      "source_finding_id": "F5",
+      "participant_kind": "positive",
+      "observation": "After a Preparing audio state, playback advanced the playhead and transport position, with visible activity in the audio and instrument track meters.",
+      "evidence": [
+        "13-playback.png",
+        "15-rename.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P5-F6",
+      "participant": 5,
+      "source_finding_id": "F6",
+      "participant_kind": "friction",
+      "observation": "Stopping playback while project rename controls were open dismissed those controls; reopening Rename project restored access to the keyboard.",
+      "evidence": [
+        "15-rename.png",
+        "16-keyboard.png",
+        "17-name-keys.png"
+      ],
+      "response_status": "documented_interaction_choice",
+      "related_fixes": [],
+      "response": "The rename popup follows the existing outside-click dismissal rule when Stop is clicked. Reopening restored access and the report provides no evidence of lost committed data. Keep this interaction choice; no recovery or data-loss fix is claimed."
+    },
+    {
+      "id": "R5-P5-F7",
+      "participant": 5,
+      "source_finding_id": "F7",
+      "participant_kind": "positive",
+      "observation": "The on-screen keyboard accepted a mouse-entered name. Save and both export dialogs automatically proposed filenames using that name.",
+      "evidence": [
+        "17-name-keys.png",
+        "19-save-dialog.png",
+        "20-saved.png",
+        "22-wav-path.png",
+        "25-midi-dialog.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P5-F8",
+      "participant": 5,
+      "source_finding_id": "F8",
+      "participant_kind": "positive",
+      "observation": "WAV export displayed an arrangement length summary and an effect-tails toggle. WAV and MIDI exports both showed explicit Exported notices.",
+      "evidence": [
+        "21-export-wav.png",
+        "22-wav-path.png",
+        "24-wav-result.png",
+        "26-midi-success.png"
+      ],
+      "response_status": "retain_existing_positive",
+      "related_fixes": [],
+      "response": "Retain the working behavior and evidence; no corrective change requested by this observation."
+    },
+    {
+      "id": "R5-P5-F9",
+      "participant": 5,
+      "source_finding_id": "F9",
+      "participant_kind": "friction",
+      "observation": "The immediate first save screenshot contained a black rectangle over the dialog area; the next screenshot showed a readable native save dialog without intervention.",
+      "evidence": [
+        "18-save.png",
+        "19-save-dialog.png"
+      ],
+      "response_status": "documented_environment_limit",
+      "related_fixes": [],
+      "response": "The first native picker capture was black, then became readable without intervention; retain the platform/lab observation."
+    }
+  ],
+  "additional_rating_observations": [
+    {
+      "id": "R5-RATING-LAYOUT",
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "observation": "Similar clip colors/repeated names and visually separate native dialogs remain aesthetic reservations; every appearance rating is4/5.",
+      "response": "The implemented identity hover adds full name, track and timing for narrow clips. Abbreviated titles and native picker styling remain explicit display limitations; no broad redesign or perfect-appearance claim is made.",
+      "initial_response": "Preserve the favorable design and native picker behavior; investigate useful narrow-clip identity only. No broad redesign or perfect-appearance claim."
+    },
+    {
+      "id": "R5-RATING-TIMING-UNITS",
+      "participants": [
+        4
+      ],
+      "observation": "A30second goal required conversion to beat duration. The visible numeric pad allowed entering56beats.",
+      "response": "Existing exact loop-duration presets, bar/clock summaries and fractional numeric entry remain available. This participant used the new keypad successfully; do not claim everyone found or used it."
+    },
+    {
+      "id": "R5-RATING-SCOPE",
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "observation": "Only a short arrangement and one laboratory VST were evaluated; none auditioned audio.",
+      "response": "Retain limits on heard quality, general plug-in compatibility, advanced feature completeness and hardware performance."
+    }
+  ],
+  "summary": {
+    "explicit_findings": 47,
+    "status_counts": {
+      "retain_existing_positive": 27,
+      "partial_response_with_validated_change": 3,
+      "retain_existing_recovery_with_validated_change": 3,
+      "documented_environment_limit": 4,
+      "implemented_and_validated": 3,
+      "documented_output_failure": 1,
+      "retain_existing_recovery": 2,
+      "documented_nonfatal_dropout": 1,
+      "partial_response_with_confirmed_code_fix": 1,
+      "retain_explained_tool_semantics": 1,
+      "documented_interaction_choice": 1
+    },
+    "all_explicit_findings_mapped": true,
+    "fix_clusters": 3
+  },
+  "validation_status": "validated",
+  "next_evaluation": "Round6: five fresh independent mouse-only beginners after coordinator validation",
+  "original_reports_or_scores_modified": false,
+  "updated_utc": "2026-10-31T21:00:34Z",
+  "fixes": {
+    "precise_edge_drag": {
+      "status": "implemented_and_validated",
+      "title": "Immediate short clip-edge corrections",
+      "response": "Use shared drag-only targets on real clip edges so sub6pixel corrections and the final release endpoint are applied, with zero-motion, source-bound, group, fade, snap and single-Undo guards. Preserve body-click selection and group dragging.",
+      "acceptance": "Short audio/MIDI edge drags apply their final snapped/free position; an unmoved edge press does not edit; group/body/fade behavior and one Undo per gesture remain correct."
+    },
+    "midi_release_position": {
+      "status": "implemented_and_validated",
+      "title": "Apply the final MIDI pointer position on release",
+      "response": "Process the final released-frame pointer location for active MIDI gestures as well as button-down updates, with a regression that distinguishes the before/after behavior.",
+      "acceptance": "A running-app before/after scenario demonstrates the dropped final-position bug and its correction. This addresses a confirmed code path consistent with P4, while the exact cause of that native participant gesture remains unproven."
+    },
+    "loop_and_clip_identity": {
+      "status": "implemented_and_validated",
+      "title": "Clarify playback looping and repeated clip identity",
+      "response": "Use explicit Loop playback over clip/selection/arrangement wording and clarify that Repeat creates copies. Extend the existing full-name hover with track and start/end position so equally named repeated clips can be distinguished.",
+      "acceptance": "Visible wording separates playback range from clip creation; hover identifies full clip/track name and exact location without changing project/history."
+    }
+  },
+  "native_causality_limit": "The released-frame bug is verified in application code and will receive running-app regression evidence; it is not asserted to explain every observed native note-length difference.",
+  "fresh_evaluation_status": "round6_completed_with_scoped_coverage",
+  "focused_validation": {
+    "evidence_files": [
+      {
+        "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/frozen-regression-proof.json",
+        "sha256": "fb3cab985531b31ee9228b3175277f002ffaa75b46a356463cbdfa7f3bb9f729"
+      },
+      {
+        "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/gesture_release_e2e-frozen-baseline.log",
+        "sha256": "c74d564d5e5666c21b2b168b9f37f08f983995e41675cb92ff78ef2b52b65946"
+      },
+      {
+        "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/precise_trim_e2e-frozen-baseline.log",
+        "sha256": "12ecffd364ca548d411571526507095e400cc4a82add7f963facce35c6b6dc8f"
+      },
+      {
+        "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/gesture-targets.log",
+        "sha256": "125754a1c4589b42c857516af1dc85a656311e2196bb2c7690717205bcf3ab69"
+      },
+      {
+        "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/batched-attempt-3.log",
+        "sha256": "aa10e5ab113defe7f83fe15c15ffe6f4cee6402f8c3ea8f758e06883c0f58be4"
+      }
+    ],
+    "corrected_targets": [
+      {
+        "target": "gesture_release_e2e",
+        "passed": 3,
+        "failed": 0,
+        "log": "validation/gesture-targets.log",
+        "scope": "Only this target section; earlier failures of another target in the same log remain retained."
+      },
+      {
+        "target": "precise_trim_e2e",
+        "passed": 7,
+        "failed": 0,
+        "log": "validation/batched-attempt-3.log"
+      },
+      {
+        "target": "precise_trim_batched_e2e",
+        "passed": 3,
+        "failed": 0,
+        "log": "validation/batched-attempt-3.log"
+      },
+      {
+        "target": "clip_identity_e2e",
+        "passed": 1,
+        "failed": 0,
+        "log": "validation/batched-attempt-3.log"
+      }
+    ],
+    "frozen_round5_before_fix": [
+      {
+        "target": "gesture_release_e2e",
+        "passed": 0,
+        "failed": 3,
+        "log": "validation/gesture_release_e2e-frozen-baseline.log"
+      },
+      {
+        "target": "precise_trim_e2e",
+        "passed": 2,
+        "failed": 5,
+        "log": "validation/precise_trim_e2e-frozen-baseline.log"
+      }
+    ],
+    "frozen_failures_are_expected_regression_proof": true,
+    "earlier_failed_attempts_preserved": true,
+    "latest_corrected_edge_identity_evidence": "validation/batched-attempt-3.log"
+  },
+  "implementation_limits": [
+    {
+      "scope": "Entire edge gesture coalesced into one frame",
+      "limit": "When press, move and release all arrive in one frame and end outside the edge hit area, the toolkit accepts no edge target. This case is safely left unchanged. Ordinary outward drags and accepted inward batched drags pass.",
+      "evidence": "validation/batched-attempt-3.log: complete_outward_batch_without_an_accepted_edge_hit_is_left_unchanged_limitation"
+    },
+    {
+      "scope": "Menu dismissal",
+      "behavior": "A press used to dismiss an open menu/popup cannot begin the custom trim gesture.",
+      "evidence": "validation/batched-attempt-3.log: batched_zero_motion_fade_overlap_and_popup_presses_cannot_trim"
+    },
+    {
+      "scope": "Narrow clip identity display",
+      "behavior": "An icon-only tiny clip is legitimate at extreme widths. The test was corrected after measuring geometry; no production UI change was made to force text into that clip. Full identity remains in the hover."
+    },
+    {
+      "scope": "Participant4 native note-length cause",
+      "limit": "The MIDI final-release-position defect is demonstrated by before/after running-app tests; the original native-session cause is not claimed fully proven."
+    }
+  ],
+  "validated_at_utc": "2026-10-31T20:43:04Z",
+  "validation_evidence": {
+    "summary": {
+      "passed": 1091,
+      "failed": 0,
+      "ignored": 18,
+      "targets": 217
+    },
+    "verified_results": {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/verified-results.json",
+      "sha256": "51872b2ed4e5fe13c24cd68ac1af528edea27017e2fb061904d671d25552dc7a"
+    },
+    "final_checks": {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/final-checks.json",
+      "sha256": "944c501259c282fa1d9f94fe33bf7cc55e8f80097517e098a190de3d7b49507a"
+    },
+    "expected_frozen_regression": {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/frozen-regression-proof.json",
+      "sha256": "fb3cab985531b31ee9228b3175277f002ffaa75b46a356463cbdfa7f3bb9f729"
+    },
+    "final_same_test_source_frozen_before": {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round5/validation/precise_trim_e2e-frozen-baseline-final.log",
+      "sha256": "5daee5f7f289e421fb16a7a35ae7f61f63e05d89724877e40e6530f039fbdab6",
+      "expected_passed": 2,
+      "expected_failed": 5
+    },
+    "coordinator_confirmation": "Affected suites, workspace build, formatting and diff checks passed; jobs stopped and source edits paused before round6 freeze."
+  },
+  "next_frozen_build": {
+    "setup_manifest": "/workspace/scratch/rill-usability-round6/setup-manifest.json",
+    "rill_sha256": "c8fbcfb33d5d713db57347d8a8565be1dea8afbfbec46f8fa998bd7a24a3adc4",
+    "helper_sha256": "dd4bdaaf4a89fa7402501eaefcdb0922e4f8e01054dedb4dfd49dbdf87fe1ec3",
+    "source_file_count": 931
+  },
+  "fresh_evaluation_evidence": {
+    "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/aggregate.json",
+    "sha256": "09a147a186ad9c45f31482405237af24ff074a0ef8dd9015b69bef675378e276",
+    "mean_ratings": {
+      "easy_to_use": 4,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 4,
+      "how_confusing_it_is": 2.2,
+      "feature_completeness": 4.2
+    },
+    "sample_size": 5,
+    "scope": "Fresh workflow observations do not demonstrate every new control."
+  },
+  "observed_next_round_coverage": {
+    "precise_edge_drag": {
+      "observed": true,
+      "evidence": [
+        "R6-P1-F5",
+        "R6-P5-F5",
+        "R6-P5-F6"
+      ],
+      "note": "After an initial 30.134-second edge position, a small follow-up drag reached 30.000 seconds. First-gesture exactness is not guaranteed; automated tests isolate the corrected threshold and release behavior."
+    },
+    "midi_release_position": {
+      "observed": false,
+      "workflow_succeeded": true,
+      "evidence": [
+        "R6-P1-F3",
+        "R6-P2-F2",
+        "R6-P3-F2",
+        "R6-P4-F2",
+        "R6-P5-F2"
+      ],
+      "note": "All fresh participants drew notes successfully; their reports do not establish the specific coalesced-release case. Running-app before/after tests remain the direct regression evidence."
+    },
+    "loop_and_clip_identity": {
+      "observed": false,
+      "evidence": [
+        "R6-P2-F5"
+      ],
+      "note": "No report explicitly demonstrates the revised Loop playback command or identity hover. Narrow clip titles remain a reported display limit; automated validation supports the available hover details."
+    }
+  }
+}

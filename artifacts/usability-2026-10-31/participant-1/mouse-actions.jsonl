@@ -1,0 +1,149 @@
+{"time": "2026-10-31T16:22:05Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/initial.png"]}
+{"time": "2026-10-31T16:22:34Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/initial.png"]}
+{"time": "2026-10-31T16:22:50Z", "action": "double", "args": ["430", "383"]}
+{"time": "2026-10-31T16:22:50Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/01-midi-created.png"]}
+{"time": "2026-10-31T16:22:56Z", "action": "click", "args": ["173", "938"]}
+{"time": "2026-10-31T16:22:56Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/02-vst-assigned.png"]}
+{"time": "2026-10-31T16:23:02Z", "action": "double", "args": ["347", "398"]}
+{"time": "2026-10-31T16:23:02Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/03-piano.png"]}
+{"time": "2026-10-31T16:23:12Z", "action": "click", "args": ["166", "178"]}
+{"time": "2026-10-31T16:23:13Z", "action": "drag", "args": ["66", "698", "204", "698"]}
+{"time": "2026-10-31T16:23:14Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/04-first-note.png"]}
+{"time": "2026-10-31T16:23:24Z", "action": "drag", "args": ["218", "644", "357", "644"]}
+{"time": "2026-10-31T16:23:26Z", "action": "drag", "args": ["379", "572", "515", "572"]}
+{"time": "2026-10-31T16:23:27Z", "action": "drag", "args": ["536", "608", "674", "608"]}
+{"time": "2026-10-31T16:23:29Z", "action": "drag", "args": ["692", "662", "830", "662"]}
+{"time": "2026-10-31T16:23:30Z", "action": "drag", "args": ["849", "626", "986", "626"]}
+{"time": "2026-10-31T16:23:32Z", "action": "drag", "args": ["1006", "698", "1143", "698"]}
+{"time": "2026-10-31T16:23:33Z", "action": "drag", "args": ["1162", "644", "1300", "644"]}
+{"time": "2026-10-31T16:23:34Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/05-melody.png"]}
+{"time": "2026-10-31T16:23:49Z", "action": "click", "args": ["951", "119"]}
+{"time": "2026-10-31T16:23:49Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/06-properties.png"]}
+{"time": "2026-10-31T16:23:57Z", "action": "click", "args": ["676", "623"]}
+{"time": "2026-10-31T16:23:57Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/07-duration-edit.png"]}
+{"time": "2026-10-31T16:24:16Z", "action": "click", "args": ["991", "431"]}
+{"time": "2026-10-31T16:24:17Z", "action": "click", "args": ["50", "120"]}
+{"time": "2026-10-31T16:24:17Z", "action": "click", "args": ["800", "397", "3"]}
+{"time": "2026-10-31T16:24:18Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/08-context.png"]}
+{"time": "2026-10-31T16:24:30Z", "action": "click", "args": ["1072", "600"]}
+{"time": "2026-10-31T16:24:31Z", "action": "drag", "args": ["1002", "406", "1016", "406"]}
+{"time": "2026-10-31T16:24:32Z", "action": "click", "args": ["826", "397", "3"]}
+{"time": "2026-10-31T16:24:32Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/09-duplicate-menu.png"]}
+{"time": "2026-10-31T16:24:44Z", "action": "click", "args": ["911", "774"]}
+{"time": "2026-10-31T16:24:44Z", "action": "click", "args": ["1390", "121"]}
+{"time": "2026-10-31T16:24:45Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/10-first-copy.png"]}
+{"time": "2026-10-31T16:24:55Z", "action": "click", "args": ["145", "23"]}
+{"time": "2026-10-31T16:24:56Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/11-edit-menu.png"]}
+{"time": "2026-10-31T16:25:04Z", "action": "click", "args": ["192", "67"]}
+{"time": "2026-10-31T16:25:05Z", "action": "click", "args": ["58", "120"]}
+{"time": "2026-10-31T16:25:06Z", "action": "drag", "args": ["824", "405", "836", "405"]}
+{"time": "2026-10-31T16:25:07Z", "action": "click", "args": ["800", "399", "3"]}
+{"time": "2026-10-31T16:25:08Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/12-retry-duplicate.png"]}
+{"time": "2026-10-31T16:25:17Z", "action": "click", "args": ["867", "777"]}
+{"time": "2026-10-31T16:25:17Z", "action": "click", "args": ["1400", "120"]}
+{"time": "2026-10-31T16:25:18Z", "action": "click", "args": ["600", "299", "3"]}
+{"time": "2026-10-31T16:25:18Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/13-audio-duplicate.png"]}
+{"time": "2026-10-31T16:25:29Z", "action": "click", "args": ["674", "760"]}
+{"time": "2026-10-31T16:25:30Z", "action": "click", "args": ["1392", "121"]}
+{"time": "2026-10-31T16:25:31Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/14-two-layers.png"]}
+{"time": "2026-10-31T16:25:41Z", "action": "click", "args": ["145", "23"]}
+{"time": "2026-10-31T16:25:42Z", "action": "click", "args": ["200", "207"]}
+{"time": "2026-10-31T16:25:43Z", "action": "click", "args": ["1040", "394", "3"]}
+{"time": "2026-10-31T16:25:44Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/15-all-selected.png"]}
+{"time": "2026-10-31T16:25:53Z", "action": "click", "args": ["1118", "771"]}
+{"time": "2026-10-31T16:25:53Z", "action": "click", "args": ["1393", "121"]}
+{"time": "2026-10-31T16:25:54Z", "action": "click", "args": ["1158", "71"]}
+{"time": "2026-10-31T16:25:55Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/16-range-menu.png"]}
+{"time": "2026-10-31T16:26:04Z", "action": "click", "args": ["1183", "214"]}
+{"time": "2026-10-31T16:26:05Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/17-range-end.png"]}
+{"time": "2026-10-31T16:26:14Z", "action": "click", "args": ["1000", "484"]}
+{"time": "2026-10-31T16:26:15Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/18-full-arrangement.png"]}
+{"time": "2026-10-31T16:26:26Z", "action": "click", "args": ["1200", "398"]}
+{"time": "2026-10-31T16:26:28Z", "action": "drag", "args": ["1402", "400", "1259", "400"]}
+{"time": "2026-10-31T16:26:28Z", "action": "click", "args": ["1200", "300"]}
+{"time": "2026-10-31T16:26:30Z", "action": "drag", "args": ["1402", "304", "1259", "304"]}
+{"time": "2026-10-31T16:26:30Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/19-thirty-second-trim.png"]}
+{"time": "2026-10-31T16:26:42Z", "action": "click", "args": ["145", "23"]}
+{"time": "2026-10-31T16:26:43Z", "action": "click", "args": ["198", "205"]}
+{"time": "2026-10-31T16:26:43Z", "action": "click", "args": ["1190", "397", "3"]}
+{"time": "2026-10-31T16:26:44Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/20-loop-all-menu.png"]}
+{"time": "2026-10-31T16:26:53Z", "action": "click", "args": ["1261", "552"]}
+{"time": "2026-10-31T16:26:54Z", "action": "click", "args": ["343", "72"]}
+{"time": "2026-10-31T16:26:54Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/21-playback.png"]}
+{"time": "2026-10-31T16:27:08Z", "action": "click", "args": ["444", "71"]}
+{"time": "2026-10-31T16:27:08Z", "action": "click", "args": ["1263", "121"]}
+{"time": "2026-10-31T16:27:09Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/22-snap-options.png"]}
+{"time": "2026-10-31T16:27:19Z", "action": "click", "args": ["1230", "207"]}
+{"time": "2026-10-31T16:27:20Z", "action": "click", "args": ["1195", "399"]}
+{"time": "2026-10-31T16:27:21Z", "action": "drag", "args": ["1261", "399", "1257", "399"]}
+{"time": "2026-10-31T16:27:22Z", "action": "click", "args": ["1195", "300"]}
+{"time": "2026-10-31T16:27:23Z", "action": "drag", "args": ["1261", "300", "1257", "300"]}
+{"time": "2026-10-31T16:27:24Z", "action": "click", "args": ["145", "23"]}
+{"time": "2026-10-31T16:27:24Z", "action": "click", "args": ["198", "205"]}
+{"time": "2026-10-31T16:27:25Z", "action": "click", "args": ["1159", "71"]}
+{"time": "2026-10-31T16:27:25Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/23-tighten-range.png"]}
+{"time": "2026-10-31T16:27:35Z", "action": "click", "args": ["1180", "117"]}
+{"time": "2026-10-31T16:27:35Z", "action": "click", "args": ["106", "23"]}
+{"time": "2026-10-31T16:27:36Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/24-file-menu.png"]}
+{"time": "2026-10-31T16:27:47Z", "action": "click", "args": ["147", "150"]}
+{"time": "2026-10-31T16:27:48Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/25-save-dialog.png"]}
+{"time": "2026-10-31T16:27:56Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/26-save-rendered.png"]}
+{"time": "2026-10-31T16:28:06Z", "action": "click", "args": ["777", "387"]}
+{"time": "2026-10-31T16:28:07Z", "action": "click", "args": ["106", "23"]}
+{"time": "2026-10-31T16:28:08Z", "action": "click", "args": ["179", "289"]}
+{"time": "2026-10-31T16:28:08Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/27-export-options.png"]}
+{"time": "2026-10-31T16:28:23Z", "action": "click", "args": ["633", "563"]}
+{"time": "2026-10-31T16:28:24Z", "action": "click", "args": ["664", "617"]}
+{"time": "2026-10-31T16:28:25Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/28-export-file.png"]}
+{"time": "2026-10-31T16:28:33Z", "action": "click", "args": ["778", "389"]}
+{"time": "2026-10-31T16:28:34Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/29-export-result.png"]}
+{"time": "2026-10-31T16:28:55Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/30-export-complete.png"]}
+{"time": "2026-10-31T16:29:04Z", "action": "click", "args": ["106", "23"]}
+{"time": "2026-10-31T16:29:04Z", "action": "click", "args": ["179", "373"]}
+{"time": "2026-10-31T16:29:05Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/31-midi-export.png"]}
+{"time": "2026-10-31T16:29:15Z", "action": "click", "args": ["775", "388"]}
+{"time": "2026-10-31T16:29:16Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/32-midi-result.png"]}
+{"time": "2026-10-31T16:29:30Z", "action": "click", "args": ["816", "120"]}
+{"time": "2026-10-31T16:29:31Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/33-view-menu.png"]}
+{"time": "2026-10-31T16:29:43Z", "action": "click", "args": ["1050", "600"]}
+{"time": "2026-10-31T16:29:44Z", "action": "click", "args": ["1188", "398"]}
+{"time": "2026-10-31T16:29:44Z", "action": "click", "args": ["816", "120"]}
+{"time": "2026-10-31T16:29:45Z", "action": "click", "args": ["863", "164"]}
+{"time": "2026-10-31T16:29:45Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/34-fit-final.png"]}
+{"time": "2026-10-31T16:29:57Z", "action": "click", "args": ["1331", "705", "3"]}
+{"time": "2026-10-31T16:29:57Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/35-select-only.png"]}
+{"time": "2026-10-31T16:30:09Z", "action": "click", "args": ["1221", "329"]}
+{"time": "2026-10-31T16:30:10Z", "action": "click", "args": ["816", "120"]}
+{"time": "2026-10-31T16:30:10Z", "action": "click", "args": ["863", "164"]}
+{"time": "2026-10-31T16:30:11Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/36-zoom-final.png"]}
+{"time": "2026-10-31T16:30:26Z", "action": "click", "args": ["1263", "121"]}
+{"time": "2026-10-31T16:30:27Z", "action": "click", "args": ["1230", "291"]}
+{"time": "2026-10-31T16:30:28Z", "action": "drag", "args": ["1414", "600", "1379", "600"]}
+{"time": "2026-10-31T16:30:29Z", "action": "click", "args": ["1396", "121"]}
+{"time": "2026-10-31T16:30:29Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/37-trim-midi-exact.png"]}
+{"time": "2026-10-31T16:30:43Z", "action": "click", "args": ["1305", "299"]}
+{"time": "2026-10-31T16:30:43Z", "action": "click", "args": ["816", "120"]}
+{"time": "2026-10-31T16:30:44Z", "action": "click", "args": ["863", "164"]}
+{"time": "2026-10-31T16:30:45Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/38-fit-audio.png"]}
+{"time": "2026-10-31T16:30:55Z", "action": "drag", "args": ["1414", "600", "1379", "600"]}
+{"time": "2026-10-31T16:30:56Z", "action": "click", "args": ["1396", "121"]}
+{"time": "2026-10-31T16:30:56Z", "action": "click", "args": ["145", "23"]}
+{"time": "2026-10-31T16:30:57Z", "action": "click", "args": ["198", "205"]}
+{"time": "2026-10-31T16:30:57Z", "action": "click", "args": ["1159", "71"]}
+{"time": "2026-10-31T16:30:58Z", "action": "click", "args": ["1180", "117"]}
+{"time": "2026-10-31T16:30:59Z", "action": "click", "args": ["106", "23"]}
+{"time": "2026-10-31T16:30:59Z", "action": "click", "args": ["147", "150"]}
+{"time": "2026-10-31T16:31:00Z", "action": "click", "args": ["106", "23"]}
+{"time": "2026-10-31T16:31:00Z", "action": "click", "args": ["179", "289"]}
+{"time": "2026-10-31T16:31:01Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/39-exact-export.png"]}
+{"time": "2026-10-31T16:31:11Z", "action": "click", "args": ["667", "617"]}
+{"time": "2026-10-31T16:31:12Z", "action": "click", "args": ["777", "388"]}
+{"time": "2026-10-31T16:31:13Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/40-replace-export.png"]}
+{"time": "2026-10-31T16:31:24Z", "action": "click", "args": ["482", "104"]}
+{"time": "2026-10-31T16:31:35Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/41-final-audio.png"]}
+{"time": "2026-10-31T16:31:48Z", "action": "click", "args": ["106", "23"]}
+{"time": "2026-10-31T16:31:49Z", "action": "click", "args": ["179", "373"]}
+{"time": "2026-10-31T16:31:49Z", "action": "click", "args": ["775", "388"]}
+{"time": "2026-10-31T16:31:50Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/42-replace-midi.png"]}
+{"time": "2026-10-31T16:32:00Z", "action": "click", "args": ["482", "104"]}
+{"time": "2026-10-31T16:32:00Z", "action": "shot", "args": ["/workspace/scratch/rill-usability/session-1/final.png"]}

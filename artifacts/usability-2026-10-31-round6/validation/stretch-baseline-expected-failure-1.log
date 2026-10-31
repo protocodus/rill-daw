@@ -1,0 +1,15 @@
+
+running 1 test
+test invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once ... 
+thread 'invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once' (174925) panicked at crates/daw-app/tests/stretch_duration_range_e2e.rs:76:28:
+Missing 56: ["RILL","File","Edit","Track","Window","Help","AI","0:03.000","duration-range","Arranger","Mixer","Start","Play","Stop","Record","001 . 01 . 00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Details","Dismiss","Stretch must stay between 25% and 400% of source speed","AI for this context","Clip","Track","Channel","Name","Duration phrase","Keyboard…","Start","Beat 3.00","−","+","123","Duration","4.00 beats","−","+","123","Stretch","Source offset","0.00 beats","−","+","123","Stretch","100.0%","Pitch & time","Pitch","Clip gain","0.0 dB","Fade in","0.00 beats","Fade out","0.00 beats","Time","Starts at","0:01.000 · Bar 1 · Beat 3.00","Ends at","0:03.000 · Bar 2 · Beat 3.00","Elapsed","0:02.000 · 1.000 bars","Properties of Duration phrase"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.39s
+

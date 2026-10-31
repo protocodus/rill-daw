@@ -1,0 +1,112 @@
+{
+  "participant": 1,
+  "persona": "Absolute beginner seeking a relaxed lo-fi sketch",
+  "study_type": "Independent simulated beginner evaluation; not a human participant",
+  "protocol": {
+    "app_interaction": "Mouse only: click, double-click, drag; screenshots for observation",
+    "implementation_inspected": false,
+    "other_participant_outputs_inspected": false,
+    "composition_state_injected": false,
+    "lab_limits": [
+      "Software OpenGL",
+      "Null audio output: no listening or subjective sonic-quality claims",
+      "Actual native test VST3 Rill Lab Sine; does not validate third-party plug-ins",
+      "Stock demo audio was supplied by the app"
+    ]
+  },
+  "outcome": {
+    "complete": true,
+    "duration_seconds": 30.0,
+    "audio": true,
+    "midi": true,
+    "vst3_assigned": true,
+    "project_saved": true,
+    "wav_exported": true,
+    "midi_exported": true,
+    "first_near_30s_export_seconds_approx": 343,
+    "exact_30s_export_seconds_approx": 514,
+    "session_elapsed_seconds_approx": 550,
+    "music_description": "Repeated eight-note sine melody over the stock Circuit rhythm audio, with both final clips trimmed at 30 seconds. No audible musical assessment was possible."
+  },
+  "ratings_1_to_5": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 5,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_scale": "Higher is more of the named quality; high confusion is worse. Ratings are simulated impressions of observed workflow, not benchmarks.",
+  "rating_reasons": {
+    "easy_to_use": "Could create and export the audio+MIDI piece without outside workflow instructions. Mouse precision and selection behavior added recovery steps.",
+    "how_cool_it_looks": "Consistent restrained dark palette, clear waveform and note displays, readable labels. Modal blur obscures the context while menus are open.",
+    "how_fast_it_is": "Actions generally responded immediately, drawing and duplication felt direct, and the 30-second render completed in seconds. Software OpenGL/null audio limits performance generalization.",
+    "how_confusing_it_is": "Pencil state carried from piano roll into arranger; clicking an already-selected clip retained the whole selection; numeric timing fields had no visible mouse controls.",
+    "feature_completeness": "Core audio, VST3 MIDI, editing, looping, save and WAV/MIDI export worked. Mouse-only exact values and naming remain weaker; preset/instrument richness was not assessable with one test instrument."
+  },
+  "findings": [
+    {
+      "id": "P1-F1",
+      "severity": "medium",
+      "problem": "Duration and loop-end numeric editors expose text editing but no visible +/- or mouse adjustment affordance.",
+      "observed": "Clicked Properties Duration and Range End; both became text inputs. Reaching exact30 required repeated trims and discovery of Fit selection.",
+      "evidence": [
+        "07-duration-edit.png",
+        "17-range-end.png",
+        "27-export-options.png",
+        "39-exact-export.png"
+      ],
+      "recommendation": "Provide accessible increment/decrement controls and a clear unit selector for beats/bars/seconds, with immediate duration feedback."
+    },
+    {
+      "id": "P1-F2",
+      "severity": "medium",
+      "problem": "Tool mode persists from piano-roll note drawing into arranger unexpectedly.",
+      "observed": "Returned with Pencil active; attempted clip-edge trim did not change length. Switched Select and retried successfully.",
+      "evidence": [
+        "10-first-copy.png",
+        "12-retry-duplicate.png"
+      ],
+      "recommendation": "Remember tool per editor or explicitly announce the active tool on return; ensure an edge hover explains resize availability."
+    },
+    {
+      "id": "P1-F3",
+      "severity": "medium",
+      "problem": "Clicking a selected clip retains a multiple-clip selection, so Fit selection zoomed all clips when one was intended.",
+      "observed": "Clicked final MIDI clip after Select all, chose Fit selection, and all clips enlarged. Right-click Select only this clip resolved it.",
+      "evidence": [
+        "34-fit-final.png",
+        "35-select-only.png",
+        "36-zoom-final.png"
+      ],
+      "recommendation": "Make selection count visible and make a plain click select only the clicked clip when no drag follows, while preserving group drag behavior."
+    },
+    {
+      "id": "P1-F4",
+      "severity": "low",
+      "problem": "Precise snap timing is difficult when a beat occupies only a few pixels; the initial 30-second trim landed at30.134s.",
+      "observed": "Initial export showed0:30.134; fit final clips then trim achieved0:30.000.",
+      "evidence": [
+        "27-export-options.png",
+        "39-exact-export.png"
+      ],
+      "recommendation": "Show start/end/duration during trim, and offer Fit selection near main Fit or a contextual zoom action."
+    }
+  ],
+  "positive_findings": [
+    "The empty-lane Double-click for MIDI hint directly enabled instrument creation.",
+    "Instrument chooser clearly exposed format VST3 and an Assign instrument action.",
+    "Pencil tool explained drag to set note length, and the clip grew as notes were drawn beyond its initial end.",
+    "Context menus exposed Duplicate, Loop selection, and Select only this clip without requiring keyboard shortcuts.",
+    "Save and export had useful default names, allowing mouse-only completion.",
+    "WAV export displayed exact duration and a clear success toast."
+  ],
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability/session-1/Midnight circuit.rill",
+    "audio": "/workspace/scratch/rill-usability/session-1/Midnight circuit.wav",
+    "midi": "/workspace/scratch/rill-usability/session-1/Midnight circuit.mid",
+    "action_log": "/workspace/scratch/rill-usability/session-1/mouse-actions.jsonl",
+    "action_summary": "/workspace/scratch/rill-usability/session-1/reactions-and-actions.txt",
+    "verification": "/workspace/scratch/rill-usability/session-1/evidence.json",
+    "final_screenshot": "/workspace/scratch/rill-usability/session-1/final.png"
+  }
+}

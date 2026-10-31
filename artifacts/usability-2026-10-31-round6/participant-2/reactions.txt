@@ -1,0 +1,19 @@
+Participant 2: independent simulated beginner, first introduction to RILL, interested in a small electronic dance groove.
+Observable action/reaction record only. No audio audition and no file-content verification.
+
+20:43:39 — Double-clicked the blank lane following its MIDI hint. Device library appeared with Rill Lab Sine; the assignment action was easy to identify. Evidence: 01-midi-created.png.
+20:43:44 — Clicked Assign instrument. A new instrument track and MIDI pattern appeared, with Rill Lab Sine named in the track. Evidence: 02-instrument-assigned.png.
+20:43:51–20:44:06 — Opened the pattern, selected Pencil, dragged four short notes. The piano roll showed C4, C4, E4 and G4 with velocity bars. Clear feedback made note placement straightforward. Evidence: 03-midi-editor.png, 04-notes-drawn.png.
+20:44:15–20:44:29 — Opened a clip context menu, used Duplicate and zoomed out. The new copy appeared immediately next to the first. Evidence: 05-clip-menu.png, 06-duplicate-zoom.png.
+20:44:36–20:44:42 — Clicked toolbar Duplicate. It selected a tool rather than making another copy. The instruction Click a clip to duplicate explained the extra step; clicking the clip worked. Mild initial confusion. Evidence: 07-duplicate-tool.png, 08-third-pattern.png.
+20:44:51–20:45:08 — Zoomed out farther and clicked successive patterns to duplicate. The title duration reached 0:30.000. The process was easy but repetitive, and the compact titles became New p.... Evidence: 09-wide-view.png, 10-midi-30-seconds.png.
+20:45:16–20:45:26 — Duplicated the drum audio three times, selected the trim tool behavior with Select, and dragged the last audio edge to the MIDI endpoint. Duration changed from 0:34.286 to 0:30.000. Evidence: 11-audio-repeated.png, 12-playback.png.
+20:45:26–20:45:38 — Turned Loop off and pressed Play. Pause label, advancing transport, moving yellow line and illuminated meters were visible. Then pressed Stop. No heard-audio claim. Evidence: 12-playback.png, 13-playback-advanced.png.
+20:45:46–20:46:13 — Chose Rename project, opened its Keyboard, clicked Select all and on-screen letters to enter neon pulse, then applied the name. The mouse keyboard was helpful, though naming takes many clicks. Save proposed neon pulse.rill in the session-2 folder. Evidence: 15-rename-project.png, 16-name-keyboard.png, 17-save-project.png.
+20:46:19 — Accepted the project save dialog. It closed and the arrangement displayed neon pulse without the earlier unsaved dot. Evidence: 18-project-saved.png.
+20:46:27–20:46:42 — Chose Export WAV. The panel said Arrangement 0:30, 48 kHz Stereo 32-bit float. Unchecked Include effect tails, accepted neon pulse.wav, and saw Exporting. Evidence: 19-wav-settings.png, 20-wav-filename.png, 21-wav-success.png (despite the filename, this screenshot shows progress).
+20:47:11 approximately — The WAV status displayed Exported, with Copy path and Dismiss controls. Good clear completion feedback. Evidence: 23-wav-exported.png.
+20:47:17–20:47:40 — Chose Export MIDI. The first capture of the native dialog was briefly black; the next capture was fully painted. Accepted neon pulse.mid and saw Exported. Evidence: 24-midi-filename.png, 25-midi-dialog.png, 26-midi-exported.png.
+20:47:52 — Released mouse buttons, moved pointer away, and captured final.png. App remains open and stopped at the beginning.
+
+Ratings (1–5): easy to use 4; cool appearance 4; speed 4; confusion 2 (higher is worse); feature completeness 4. Detailed reasons and output paths are in report.json.

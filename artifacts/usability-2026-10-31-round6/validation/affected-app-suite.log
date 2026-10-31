@@ -1,0 +1,87 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.48s
+     Running tests/arranger_tools_e2e.rs (target/debug/deps/arranger_tools_e2e-cfcfca0b6e2e9dd7)
+
+running 10 tests
+test both_edge_trims_shift_snap_bypass_and_stretch_are_distinct_single_undo_gestures ... ok
+test common_duplicate_cut_ghost_and_join_tools_select_the_result_for_audio_and_midi ... ok
+test ghost_stretch_is_local_survives_portable_recall_and_join_preserves_rendered_timing ... ok
+test join_tool_prepares_the_clicked_track_before_opening_its_context ... ok
+test rejected_shift_duplicate_cannot_turn_into_a_move_of_the_original_while_held ... ok
+test shift_body_drag_duplicates_once_and_keeps_the_entire_gesture_in_one_undo_step ... ok
+test stretching_and_undo_keep_the_running_audio_graph_and_continuous_pcm ... ok
+test switching_editors_retains_each_supported_tool_without_editing_the_project ... ok
+test toolbar_keeps_every_tool_directly_accessible_at_compact_and_wide_sizes ... ok
+test trimming_very_short_audio_and_midi_clips_keeps_the_app_and_source_window_valid ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.61s
+
+     Running tests/export_sequence_e2e.rs (target/debug/deps/export_sequence_e2e-3c31fc90723f60ca)
+
+running 4 tests
+test midi_results_replace_wav_feedback_without_losing_previous_success_on_failure ... ok
+test pending_wav_disables_midi_picker_and_reexport_without_consuming_the_next_destination ... ok
+test recent_exports_keep_five_completed_outputs_and_move_repeated_paths_to_the_front ... ok
+test tail_summary_changes_with_the_checkbox_and_matches_the_rendered_boundary ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.92s
+
+     Running tests/number_stepper_e2e.rs (target/debug/deps/number_stepper_e2e-00ac5ddfc280fcd2)
+
+running 3 tests
+test boundary_buttons_do_not_round_clamp_or_create_history ... ok
+test clip_timing_steps_remain_visible_and_preserve_source_notes_and_fractional_values ... ok
+test tempo_steps_preserve_fractions_and_each_click_has_its_own_undo ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.75s
+
+     Running tests/numeric_keypad_e2e.rs (target/debug/deps/numeric_keypad_e2e-487c308d57563a93)
+
+running 4 tests
+test clip_duration_and_nested_loop_keypads_commit_exact_values_with_independent_undo ... ok
+test existing_step_drag_and_keyboard_entry_still_work_after_keypad_cancel ... ok
+test invalid_cancelled_and_dismissed_keypad_drafts_never_clamp_or_create_history ... ok
+test tempo_keypad_preserves_precision_and_commits_once_in_both_themes_and_widths ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.92s
+
+     Running tests/precise_clip_editing_e2e.rs (target/debug/deps/precise_clip_editing_e2e-97e2348a2dec49d9)
+
+running 4 tests
+test comp_timing_retains_archived_takes_and_f2_respects_text_and_menu_focus ... ok
+test exact_fields_move_trim_stretch_and_slip_reversed_ghosts_without_changing_sources ... ok
+test exact_midi_window_and_stretch_keep_all_source_notes_recoverable ... ok
+test inline_rename_has_mouse_actions_f2_cancel_ghost_sync_and_one_undo ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.85s
+
+     Running tests/properties_e2e.rs (target/debug/deps/properties_e2e-49e9ac51da86f641)
+
+running 4 tests
+test clip_gain_and_fades_edit_linked_instances_and_support_undo_then_independence ... ok
+test compact_properties_keep_scoped_ai_and_clip_controls_reachable ... ok
+test inspecting_existing_high_gain_does_not_change_or_dirty_the_project ... ok
+test properties_pages_fit_and_expose_only_controls_for_the_selected_item ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.39s
+
+     Running tests/properties_stability_e2e.rs (target/debug/deps/properties_stability_e2e-17d11e579bb20ceb)
+
+running 2 tests
+test audio_properties_keep_first_and_repeated_stretch_steps_stable_at_small_and_large_sizes ... ok
+test midi_properties_keep_first_and_repeated_stretch_steps_stable_at_small_and_large_sizes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.38s
+
