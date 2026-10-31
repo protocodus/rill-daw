@@ -169,6 +169,7 @@ fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_p
     menu(&mut app, "Track", "Add MIDI track");
     app.key("Escape");
     menu(&mut app, "Window", "Clip Editor");
+    app.click("Draw settings");
     app.click("C · Natural minor");
     let open = app.click("Natural minor");
     assert!(visible(&open, "Dorian"));
@@ -837,6 +838,24 @@ fn adding_midi_track_immediately_assigns_instrument_and_cancel_keeps_ready_patte
 
 #[test]
 fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_tracks() {
+    fn click_header(app: &mut Harness, track: &Value, section: &str) -> Value {
+        let state = app.inspect();
+        let header = state["timeline"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|header| header["track"] == *track)
+            .unwrap();
+        let rect = if section == "name" {
+            &header["name"]
+        } else {
+            &header["sections"][section]
+        };
+        let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+        app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+    }
+
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
     for _ in 0..2 {
@@ -850,7 +869,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
 
     // Both rows are unassigned. Clicking the first row's instrument control
     // must target that row, regardless of which track was selected beforehand.
-    let state = app.click("Choose instrument…");
+    let state = click_header(&mut app, &first, "device");
     assert_only_popup(&state, "library");
     assert_eq!(state["selected_track"], first);
     let state = app.key("Escape");
@@ -858,8 +877,9 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
         state["project"], original["project"],
         "Cancel preserves the unassigned tracks"
     );
-    app.command(json!({"command":"click","label":"New instrument","occurrence":1}));
-    app.click("Choose instrument…");
+    let selected = click_header(&mut app, &second, "name");
+    assert_eq!(selected["selected_track"], second);
+    click_header(&mut app, &first, "device");
     app.command(json!({"command":"text","text":"Fixture A"}));
     common::wait_visible(&mut app, "Rill Fixture A");
     assert!(visible(&app.inspect(), "Assign instrument"));
@@ -879,18 +899,23 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
         original["project"]["tracks"][0]["clips"]
     );
 
-    // The compact row keeps its instrument control. Replacing from that row
-    // must still affect the first track while the second track is selected.
+    // The compact row exposes its instrument through the channel-details
+    // button. It must target that row even while the second track is selected.
     app.key("Escape");
     menu(&mut app, "Window", "Properties");
     click_front(&mut app, "Track");
     app.click("Compact track");
     app.key("Escape");
-    let state = app.command(json!({"command":"click","label":"New instrument","occurrence":1}));
+    let state = click_header(&mut app, &second, "name");
     assert_eq!(state["selected_track"], second);
-    assert!(visible(&state, "Rill Fixture A"));
     let before_replacement = state["project"].clone();
-    let state = app.click("Rill Fixture A");
+    let state = click_header(&mut app, &first, "details");
+    assert_only_popup(&state, "properties");
+    assert_eq!(state["selected_track"], first);
+    let state = click_front(&mut app, "Instrument");
+    assert_only_popup(&state, "instrument");
+    assert!(visible(&state, "Rill Fixture A"));
+    let state = app.click("Change instrument");
     assert_only_popup(&state, "library");
     assert_eq!(state["selected_track"], first);
     app.command(json!({"command":"text","text":"Fixture B"}));
@@ -914,7 +939,9 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     assert_eq!(state["project"], before_replacement);
     let state = menu(&mut app, "Edit", "Redo");
     assert_eq!(state["project"], replaced["project"]);
-    app.key("Escape");
+    menu(&mut app, "Window", "Arrangement");
+    click_header(&mut app, &first, "details");
+    click_front(&mut app, "Instrument");
     assert!(visible(&app.inspect(), "Rill Fixture B"));
     app.quit();
 }

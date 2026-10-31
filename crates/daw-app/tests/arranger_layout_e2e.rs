@@ -85,8 +85,15 @@ fn label_and_all_row_sizes_resize_without_edits_and_loop_range_has_its_own_lane(
         );
         unchanged(&resized, &before);
         assert!(
-            (resized["timeline"]["canvas"]["min"][0].as_f64().unwrap() - old_width - 60.).abs()
-                < 0.01
+            (resized["timeline"]["canvas"]["min"][0].as_f64().unwrap()
+                - before["timeline"]["canvas"]["min"][0].as_f64().unwrap()
+                - 60.)
+                .abs()
+                < 0.01,
+            "Resized header and timeline origin must align: width {}, canvas {}, prior canvas {}",
+            resized["timeline"]["header_width"],
+            resized["timeline"]["canvas"],
+            before["timeline"]["canvas"]
         );
         let old_height = resized["timeline"]["row_height"].as_f64().unwrap();
         let (x, y) = center(&resized["timeline"]["row_resize"][0]["rect"]);
@@ -235,7 +242,7 @@ fn buses_keep_a_distinct_shared_identity_at_narrow_and_compact_sizes_without_cha
     let before = app.command(json!({"command":"open","path":path}));
     let original_audio = export(&mut app, "Bus before.wav");
     for (width, density, dark, labels, rows) in
-        [(800., 1., false, 224., 56.), (1400., 2., true, 360., 96.)]
+        [(800., 1., false, 224., 56.), (1400., 2., true, 360., 144.)]
     {
         app.command(
             json!({"command":"viewport","width":width,"height":900,"pixels_per_point":density}),
@@ -283,24 +290,33 @@ fn buses_keep_a_distinct_shared_identity_at_narrow_and_compact_sizes_without_cha
                 .count(),
             1
         );
-        for label in ["Ch 2 > Master", "Ch 3 > Master"] {
-            assert!(
-                state["visible_labels"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|value| value == label)
-            );
+        for (id, destination) in [
+            (audio, "Rhythm room with a deliberately long name"),
+            (bus, "Master"),
+            (midi, "Master"),
+        ] {
+            let sections = &track(&state, id)["sections"];
+            if rows < f64::from(daw_ui::TRACK_HEADER_HEIGHT) {
+                assert!(sections["routing"].is_null());
+                assert!(
+                    sections["details"].is_object(),
+                    "Compact headers retain access to channel details"
+                );
+            } else {
+                let routing = &sections["routing"];
+                assert!(routing.is_object());
+                for text in ["Routing", destination] {
+                    assert!(
+                        state["label_rects"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|label| { label["text"] == text && contains(routing, label) }),
+                        "{text} must stay inside its dedicated routing section"
+                    );
+                }
+            }
         }
-        assert!(
-            state["visible_labels"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|label| label
-                    .as_str()
-                    .is_some_and(|label| label.starts_with("Ch 1 > Rhythm room")))
-        );
     }
     assert_eq!(
         export(&mut app, "Bus after.wav").samples,
@@ -432,8 +448,10 @@ fn recursive_folder_borders_enclose_descendant_lanes_with_common_grid_and_clippe
                 .iter()
                 .filter(|label| {
                     let text = label["text"].as_str().unwrap_or("");
-                    (matches!(text, "M" | "S" | "FOLDER" | "Inputs…") || text.starts_with("Ch "))
-                        && label["min"][1].as_f64().unwrap() >= header["min"][1].as_f64().unwrap()
+                    matches!(
+                        text,
+                        "M" | "S" | "FOLDER" | "Routing" | "Input" | "Instrument"
+                    ) && label["min"][1].as_f64().unwrap() >= header["min"][1].as_f64().unwrap()
                         && label["max"][1].as_f64().unwrap() <= header["max"][1].as_f64().unwrap()
                 })
             {

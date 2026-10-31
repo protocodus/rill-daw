@@ -96,12 +96,18 @@ fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep
     );
     let mixer = menu(&mut app, "Window", "Mixer");
     assert_eq!(mixer["project"], panned["project"]);
+    let expected_db = 20.0 * gain.log10();
     assert!(
         mixer["visible_labels"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| label == &json!(format!("{:.1} dB", 20.0 * gain.log10())))
+            .filter_map(Value::as_str)
+            .filter_map(|label| label.strip_suffix(" dB"))
+            .filter_map(|value| value.parse::<f64>().ok())
+            .any(|db| (db - expected_db).abs() < 0.0001),
+        "The precise mixer field must reflect the edited header gain: {}",
+        mixer["visible_labels"]
     );
     menu(&mut app, "Window", "Arrangement");
     app.click("Audio");

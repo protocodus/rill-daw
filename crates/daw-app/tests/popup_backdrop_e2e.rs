@@ -189,7 +189,16 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
     app.key("Escape");
     assert_clear(&mut app);
 
-    app.click("Ch 1 > Master");
+    let state = app.inspect();
+    let routing = &state["timeline"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["track"] == track)
+        .unwrap()["sections"]["routing"];
+    let [left, top, right, bottom] = bounds(routing);
+    app.command(json!({"command":"pointer", "phase":"click",
+        "x":(left+right)*0.5, "y":(top+bottom)*0.5}));
     assert_backdrop(&painted(&mut app), "Master");
     app.key("Escape");
     assert_clear(&mut app);

@@ -30,7 +30,9 @@ fn frame(
                         messages,
                         status: busy.then_some("Creating a variation"),
                         busy,
-                        can_submit: true,
+                        submit_state: daw_ui::AssistantSubmitState::Ready,
+                        failure: None,
+                        recover_prompt: false,
                         can_undo: true,
                         context: "Bass · Bars 9–16",
                         scope: "Global · Entire song",
@@ -239,7 +241,8 @@ fn guided_frame(
                         messages: &[],
                         status: busy.then_some("Building a progression"),
                         busy,
-                        can_submit: true,
+                        submit_state: daw_ui::AssistantSubmitState::Ready,
+                        failure: None, recover_prompt: false,
                         can_undo: true,
                         context: "Glass Current · 112 BPM · 4/4 · Bass · Phrase · 8 notes · Beats 8–16",
                         scope: "Piano roll · Bass / Phrase",
@@ -315,7 +318,7 @@ fn browsing_and_inserting_an_example_preserves_draft_and_requires_send() {
     theme::apply(&ctx);
     let mut state = daw_ui::AssistantState::default();
     let mut prompt = "Keep the melody unchanged.".to_owned();
-    let response = click_guide(&ctx, &mut prompt, &mut state, "Browse examples");
+    let response = click_guide(&ctx, &mut prompt, &mut state, "Examples");
     assert!(!response.send);
     assert_eq!(state.page, daw_ui::AssistantPage::Examples);
     assert_eq!(prompt, "Keep the melody unchanged.");
@@ -336,11 +339,9 @@ fn browsing_and_inserting_an_example_preserves_draft_and_requires_send() {
 fn oversized_example_never_replaces_or_truncates_an_existing_draft() {
     let ctx = Context::default();
     theme::apply(&ctx);
-    let mut state = daw_ui::AssistantState {
-        page: daw_ui::AssistantPage::Examples,
-        category: "Compose".into(),
-        ..Default::default()
-    };
+    let mut state = daw_ui::AssistantState::default();
+    state.page = daw_ui::AssistantPage::Examples;
+    state.category = "Compose".into();
     let original = "音".repeat(daw_ui::ASSISTANT_PROMPT_LIMIT - 1);
     let mut prompt = original.clone();
     let response = click_guide(&ctx, &mut prompt, &mut state, "Start a progression");
@@ -387,10 +388,8 @@ fn scoped_tool_browser_selects_a_tool_and_preserves_an_unsent_draft() {
 fn tool_search_filters_supplied_tools_and_clears_stale_selection() {
     let ctx = Context::default();
     theme::apply(&ctx);
-    let mut state = daw_ui::AssistantState {
-        page: daw_ui::AssistantPage::Tools,
-        ..Default::default()
-    };
+    let mut state = daw_ui::AssistantState::default();
+    state.page = daw_ui::AssistantPage::Tools;
     let mut prompt = "Keep the draft.".to_owned();
     click_guide(&ctx, &mut prompt, &mut state, "Search tools…");
     let (_, filtered) = guided_frame(
@@ -429,10 +428,8 @@ fn tool_search_filters_supplied_tools_and_clears_stale_selection() {
 fn oversized_tool_prompt_never_clobbers_a_draft() {
     let ctx = Context::default();
     theme::apply(&ctx);
-    let mut state = daw_ui::AssistantState {
-        page: daw_ui::AssistantPage::Tools,
-        ..Default::default()
-    };
+    let mut state = daw_ui::AssistantState::default();
+    state.page = daw_ui::AssistantPage::Tools;
     let original = "音".repeat(daw_ui::ASSISTANT_PROMPT_LIMIT - 1);
     let mut prompt = original.clone();
     let response = click_guide(&ctx, &mut prompt, &mut state, "Use tool");
@@ -516,7 +513,8 @@ fn popup_browsing_actions_fit_below_reserved_transport_at_minimum_app_size() {
                         .show(ctx, |ui| {
                             daw_ui::assistant(ui, &mut prompt, &mut state, AssistantOptions {
                                 messages: &[], status: None, busy: false,
-                                can_submit: false, can_undo: false,
+                                submit_state: daw_ui::AssistantSubmitState::SetupRequired,
+                                failure: None, recover_prompt: false, can_undo: false,
                                 scope: "Piano roll · Keys / Phrase",
                                 context: "120 BPM · 4/4 · Context stays fixed when selection changes",
                                 provider: "Example provider", configured: false, can_reuse: false,
@@ -533,12 +531,12 @@ fn popup_browsing_actions_fit_below_reserved_transport_at_minimum_app_size() {
                     label_position(
                         &output,
                         if page == daw_ui::AssistantPage::Conversation {
-                            "Browse examples"
+                            "Start with an idea"
                         } else {
                             "Use tool"
                         },
                     );
-                    label_position(&output, "Send");
+                    label_position(&output, "Connect AI");
                 }
             }
             assert!(painted, "Assistant popup never painted {page:?}");

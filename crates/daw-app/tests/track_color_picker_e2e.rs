@@ -193,6 +193,23 @@ fn assert_arranger_paint(state: &Value, id: u64) {
 }
 
 fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
+    let strip = if name == "Master" {
+        &state["mixer"]["master_strip"]
+    } else {
+        let track = state["project"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|track| track["name"] == name)
+            .unwrap();
+        &state["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["track"] == track["id"])
+            .unwrap()["strip"]
+    };
+    let [strip_left, strip_top, strip_right, strip_bottom] = bounds(strip);
     state["label_rects"]
         .as_array()
         .unwrap()
@@ -210,8 +227,10 @@ fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
                         && right > x
                         && top < y
                         && bottom > y
-                        && (right - left - (180.0 - f64::from(daw_ui::tokens::SPACE_XS))).abs()
-                            < 0.1
+                        && left > strip_left
+                        && right < strip_right
+                        && (top - strip_top).abs() < 0.1
+                        && (bottom - strip_bottom).abs() < 0.1
                         && shape["fill"][3].as_u64().unwrap_or(0) > 0
                         && bottom - top > 250.0
                 })
@@ -361,6 +380,9 @@ fn compact_and_folder_color_strips_do_not_select_tracks_or_collapse_folders() {
     let mut app = Harness::new();
     app.command(json!({"command":"viewport", "width":1100, "height":720}));
     let (_, midi, folder, bus) = fixture(&mut app);
+    // Check the complete painted stripe for each channel, including the bus
+    // below the expanded folder, rather than its partially clipped scroll view.
+    app.click("Fit");
     for (id, red) in [(midi, 227), (folder, 71), (bus, 19)] {
         let (_, changed) = choose_red(&mut app, id, red);
         assert_eq!(track(&changed, midi)["collapsed"], true);

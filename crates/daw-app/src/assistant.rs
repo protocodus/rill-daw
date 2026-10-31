@@ -37,6 +37,8 @@ pub(crate) struct Assistant {
     pub prompt: String,
     pub messages: Vec<daw_ui::AssistantMessage>,
     pub status: String,
+    failure: Option<String>,
+    recover_prompt: bool,
     ui: daw_ui::AssistantState,
     conversation: Vec<daw_ai::ConversationMessage>,
     last_prompt: String,
@@ -107,6 +109,8 @@ impl Assistant {
         self.request_prompt.clear();
         self.last_tool_error = None;
         self.status.clear();
+        self.failure = None;
+        self.recover_prompt = false;
         self.ui = Default::default();
     }
 
@@ -130,7 +134,17 @@ impl Assistant {
         if let Some(run) = self.run.take() {
             run.cancel();
             self.status = "Stopped".into();
+            self.failure = None;
+            self.recover_prompt = true;
         }
+    }
+
+    fn fail(&mut self, message: String, recover_prompt: bool) {
+        self.status.clone_from(&message);
+        self.ui.reset_failure_reveal();
+        self.failure = Some(message);
+        self.recover_prompt = recover_prompt;
+        self.ui.page = daw_ui::AssistantPage::Conversation;
     }
     pub fn cancel_all_tools(&self) {
         for job in &self.pending {
@@ -226,10 +240,32 @@ impl DawApp {
         }
     }
 
+    fn assistant_block_reason(&self) -> Option<String> {
+        self.assistant
+            .scope
+            .validate_target(&self.project)
+            .err()
+            .map(|error| error.message)
+            .or_else(|| {
+                (self.assistant.scope_instrument
+                    != self.assistant_instrument_identity(&self.assistant.scope))
+                .then(|| "The instrument changed. Open AI from the instrument again.".to_owned())
+            })
+            .or_else(|| self.tool_block_reason().map(str::to_owned))
+    }
+
     pub(crate) fn assistant_diagnostics(&self, ctx: &egui::Context) -> Value {
         let rect = |id: &str| {
             ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new(id)))
                 .map(|r| json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))
+        };
+        let blocked = self.assistant_block_reason();
+        let submit_state = if blocked.is_some() {
+            "Blocked"
+        } else if self.settings.ai.api_key.is_some() || self.assistant.next_script.is_some() {
+            "Ready"
+        } else {
+            "SetupRequired"
         };
         json!({"busy":self.assistant.busy(),"prompt":self.assistant.prompt,
             "context":self.assistant_context(),
@@ -240,6 +276,8 @@ impl DawApp {
             "last_tool_error":self.assistant.last_tool_error,
             "provider":self.settings.ai.provider.name(),
             "configured":self.settings.ai.api_key.is_some(),
+            "submit_state":submit_state,"submit_reason":blocked,
+            "failure":self.assistant.failure,"recover_prompt":self.assistant.recover_prompt,
             "page":format!("{:?}",self.assistant.ui.page),"category":self.assistant.ui.category,
             "last_prompt":self.assistant.last_prompt,
             "conversation":self.assistant.conversation.iter().map(|message| match message {
@@ -256,27 +294,22 @@ impl DawApp {
         if self.assistant.busy() {
             return;
         }
+        if let Some(reason) = self.assistant_block_reason() {
+            self.assistant.fail(reason, false);
+            return;
+        }
         if let Err(error) = self.tool_ready() {
-            self.assistant.status = error.message;
+            self.assistant.fail(error.message, false);
             return;
         }
         let scope = self.assistant.scope;
-        if self.assistant.scope_instrument != self.assistant_instrument_identity(&scope) {
-            self.assistant.status =
-                "The instrument changed. Open AI from the instrument again.".into();
-            return;
-        }
-        if let Err(error) = scope.validate_target(&self.project) {
-            self.assistant.status = error.message;
-            return;
-        }
         let context = if scope.is_global() {
             match self.call_tool("get_song_context", json!({})) {
                 Ok(song) => json!({"song":song,
                 "selection":{"track_id":self.selected_track,"clip_id":self.selected_clip,"note_ids":self.selected_notes,"cursor_beat":self.cursor,"clips":self.arranger_selection_ids(),"range":self.arranger_phrase_span()},
                 "tracks":self.call_tool("list_tracks",json!({"limit":100})).ok()}),
                 Err(error) => {
-                    self.assistant.status = error.message;
+                    self.assistant.fail(error.message, false);
                     return;
                 }
             }
@@ -329,6 +362,8 @@ impl DawApp {
                 self.assistant.run_instrument = self.assistant.scope_instrument.clone();
                 self.assistant.request_prompt = request_prompt;
                 self.assistant.last_tool_error = None;
+                self.assistant.failure = None;
+                self.assistant.recover_prompt = false;
                 self.assistant.run = Some(run);
                 self.assistant.last_prompt.clone_from(&prompt);
                 self.assistant
@@ -340,7 +375,7 @@ impl DawApp {
                 self.assistant.prompt.clear();
                 self.assistant.status = "Working…".into();
             }
-            Err(error) => self.assistant.status = error,
+            Err(error) => self.assistant.fail(error, false),
         }
     }
 
@@ -710,14 +745,18 @@ impl DawApp {
                         text,
                     });
                     self.assistant.status = "Done".into();
+                    self.assistant.failure = None;
+                    self.assistant.recover_prompt = false;
                     self.assistant.run = None;
                 }
                 AgentEvent::Failed(error) => {
-                    self.assistant.status = error;
+                    self.assistant.fail(error, true);
                     self.assistant.run = None;
                 }
                 AgentEvent::Cancelled => {
                     self.assistant.status = "Stopped".into();
+                    self.assistant.failure = None;
+                    self.assistant.recover_prompt = true;
                     self.assistant.run = None;
                 }
             }
@@ -785,17 +824,7 @@ impl DawApp {
         }
         let context = self.assistant_context();
         let scope_label = self.assistant.scope.label(&self.project);
-        let unavailable = self
-            .assistant
-            .scope
-            .validate_target(&self.project)
-            .err()
-            .map(|error| error.message)
-            .or_else(|| {
-                (self.assistant.scope_instrument
-                    != self.assistant_instrument_identity(&self.assistant.scope))
-                .then(|| "The instrument changed. Open AI from the instrument again.".to_owned())
-            });
+        let blocked = self.assistant_block_reason();
         let examples: Vec<_> = daw_ai::scoped_prompt_examples(self.assistant.scope.context_key())
             .iter()
             .map(|example| daw_ui::AssistantExample {
@@ -844,9 +873,13 @@ impl DawApp {
             .collect();
         let mut open = true;
         let mut action = None;
-        let can_submit = !self.recording_busy()
-            && unavailable.is_none()
-            && (self.settings.ai.api_key.is_some() || self.assistant.next_script.is_some());
+        let submit_state = if let Some(reason) = blocked.as_deref() {
+            daw_ui::AssistantSubmitState::Blocked(reason)
+        } else if self.settings.ai.api_key.is_some() || self.assistant.next_script.is_some() {
+            daw_ui::AssistantSubmitState::Ready
+        } else {
+            daw_ui::AssistantSubmitState::SetupRequired
+        };
         // Undo is song-wide history; a contextual assistant must not undo an
         // unrelated edit merely because it is the most recent history item.
         let can_undo = self.assistant.scope.is_global() && self.history.can_undo();
@@ -863,9 +896,11 @@ impl DawApp {
                     &mut self.assistant.ui,
                     daw_ui::AssistantOptions {
                         messages: &self.assistant.messages,
-                        status: Some(unavailable.as_deref().unwrap_or(&self.assistant.status)),
+                        status: Some(&self.assistant.status),
+                        failure: self.assistant.failure.as_deref(),
+                        recover_prompt: self.assistant.recover_prompt,
                         busy: self.assistant.run.is_some(),
-                        can_submit,
+                        submit_state,
                         can_undo,
                         context: &context,
                         scope: &scope_label,

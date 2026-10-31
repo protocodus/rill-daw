@@ -647,50 +647,15 @@ impl DawApp {
             local_region
         };
         daw_ui::toolbar(ui, |ui| {
-            daw_ui::editor_tools(ui, &mut state.tool, TOOLS);
-            fit = daw_ui::timeline_fit_button(ui).clicked();
-            daw_ui::select(
-                "audio_snap",
-                if self.snap > 0.0 {
-                    format!("Grid {}", self.snap)
-                } else {
-                    "Grid off".into()
-                },
-            )
-            .width(90.0)
-            .height(380.0)
-            .show_ui(ui, |ui| {
-                daw_ui::text::label(ui, "Grid");
-                for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
-                    daw_ui::selectable_value(
-                        ui,
-                        &mut self.snap,
-                        snap,
-                        if snap == 0.0 {
-                            "Off".into()
-                        } else {
-                            format!("{snap} beat")
-                        },
-                    );
-                }
-                ui.separator();
-                daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
-                daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
-                daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
-                    .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
-                daw_ui::text::note(ui, "Hold Shift to bypass snapping");
-            });
+            daw_ui::editor_tools_with_context(
+                ui,
+                &mut state.tool,
+                TOOLS,
+                daw_ui::ToolHintContext::Audio,
+            );
+            ui.add_space(daw_ui::tokens::SPACE_SM);
             nudge = daw_ui::nudge_menu(ui, true);
-            daw_ui::view_menu(ui, "View", |ui| {
-                self.clip_navigation_controls(ui);
-                ui.separator();
-                view_action = daw_ui::timeline_selection_view_actions(ui, "audio", true);
-                ui.separator();
-                daw_ui::checkbox(ui, &mut state.show_markers, "Show transient markers");
-                daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips");
-                crate::spectrogram::view_options(ui);
-            });
-            daw_ui::action_menu(ui, "Clip", |ui| {
+            daw_ui::quiet_action_menu(ui, "Clip", |ui| {
                 daw_ui::command_menu_contents(ui, |ui| {
                     if daw_ui::button(ui, "Copy").clicked() {
                         clipboard_action = Some(AudioClipboardAction::Copy);
@@ -853,7 +818,7 @@ impl DawApp {
                     }
                 });
             });
-            daw_ui::action_menu(ui, "Process", |ui| {
+            daw_ui::quiet_action_menu(ui, "Process", |ui| {
                 let mut reversed = *reverse;
                 if daw_ui::checkbox(ui, &mut reversed, "Reverse").changed() {
                     edit = Some(Edit::Reverse);
@@ -905,8 +870,51 @@ impl DawApp {
             if audio_processing_menu(ui, &mut processing) {
                 edit = Some(Edit::Processing(processing));
             }
+            daw_ui::toolbar_trailing(ui, 360.0, |ui| {
+                daw_ui::editor_tool_help(ui, state.tool, daw_ui::ToolHintContext::Audio);
+                fit = daw_ui::timeline_fit_button(ui).clicked();
+                daw_ui::quiet_view_menu(ui, "View", |ui| {
+                    self.clip_navigation_controls(ui);
+                    ui.separator();
+                    view_action = daw_ui::timeline_selection_view_actions(ui, "audio", true);
+                    ui.separator();
+                    daw_ui::checkbox(ui, &mut state.show_markers, "Show transient markers");
+                    daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips");
+                    crate::spectrogram::view_options(ui);
+                });
+                daw_ui::select(
+                "audio_snap",
+                if self.snap > 0.0 {
+                    format!("Grid {}", self.snap)
+                } else {
+                    "Grid off".into()
+                },
+            )
+            .width(90.0)
+            .height(380.0)
+            .show_ui(ui, |ui| {
+                daw_ui::text::label(ui, "Grid");
+                for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
+                    daw_ui::selectable_value(
+                        ui,
+                        &mut self.snap,
+                        snap,
+                        if snap == 0.0 {
+                            "Off".into()
+                        } else {
+                            format!("{snap} beat")
+                        },
+                    );
+                }
+                ui.separator();
+                daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
+                daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
+                daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
+                    .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
+                daw_ui::text::note(ui, "Hold Shift to bypass snapping");
+            });
+            });
         });
-        daw_ui::editor_tool_hint(ui, state.tool, daw_ui::ToolHintContext::Audio);
         if matches!(state.tool, EditorTool::FadeIn | EditorTool::FadeOut) {
             daw_ui::toolbar(ui, |ui| {
                 let (duration, curve, label) = if state.tool == EditorTool::FadeIn {
@@ -966,7 +974,7 @@ impl DawApp {
             });
         }
         if state.transients_open {
-            daw_ui::toolbar(ui, |ui| {
+            daw_ui::parameter_toolbar(ui, |ui| {
                 let previous = state.settings;
                 daw_ui::select("transient_algorithm", state.settings.algorithm.name())
                     .width(135.0)
@@ -1278,14 +1286,6 @@ impl DawApp {
             clip.end(),
             palette(ui.ctx()).accent,
         );
-        let cursor_x = state.view.x_at(canvas, self.cursor);
-        painter.with_clip_rect(canvas).line_segment(
-            [
-                Pos2::new(cursor_x, canvas.top()),
-                Pos2::new(cursor_x, canvas.bottom()),
-            ],
-            Stroke::new(1.0_f32, palette(ui.ctx()).text),
-        );
         let response = ui
             .interact(
                 canvas,
@@ -1545,6 +1545,12 @@ impl DawApp {
                 Stroke::new(2.0_f32, palette(ui.ctx()).orange),
             );
         }
+        daw_ui::paint_timeline_cursor(
+            &painter,
+            ruler,
+            canvas,
+            state.view.x_at(canvas, self.cursor),
+        );
         let edit = edit.filter(|edit| match edit {
             Edit::Bounds(original, start, length, stretch) => {
                 clip.start != *start

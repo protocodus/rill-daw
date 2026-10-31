@@ -176,16 +176,23 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
                 assert!(left >= 0.0 && top >= 0.0);
                 assert!(right <= f64::from(width) && bottom <= f64::from(height));
             }
-            let command = background(&initial, "Generate…").expect("filled command");
-            assert!(command["fill"][3].as_u64().unwrap() > 0);
-            assert_eq!(command["stroke_width"], 0.0);
-            for text in ["View", "Fit"] {
-                let view = background(&initial, text).expect("outlined view control");
-                assert_eq!(
-                    view["fill"][3], 0,
-                    "{text} must have an idle transparent fill"
+            for text in ["Generate…", "View", "Fit"] {
+                assert!(
+                    background(&initial, text).is_none_or(|shape| {
+                        shape["fill"][3] == 0 && shape["stroke_width"] == 0.0
+                    }),
+                    "Idle {text} uses the shared quiet toolbar treatment"
                 );
-                assert!(view["stroke_width"].as_f64().unwrap() > 0.0);
+                assert!(!underline(&initial, text, dark));
+                let [left, top, right, bottom] = bounds(label(&initial, text));
+                app.command(json!({"command":"pointer", "phase":"move",
+                    "x":(left+right)*0.5, "y":(top+bottom)*0.5}));
+                let hovered = app.command(json!({"command":"inspect", "paint":true}));
+                let target = background(&hovered, text).expect("visible native hover target");
+                assert!(
+                    target["fill"][3].as_u64().unwrap() > 0
+                        || target["stroke_width"].as_f64().unwrap() > 0.0
+                );
             }
             if let Some(inactive) = background(&initial, "Pencil") {
                 assert_eq!(inactive["fill"][3], 0, "Inactive modes remain flat");

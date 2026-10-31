@@ -39,8 +39,14 @@ fn unicode_emoji_names_edit_display_and_recall_at_both_densities_and_appearances
         for dark in [true, false] {
             let state = app.command(json!({"command":"system_theme","dark":dark}));
             assert_eq!(state["project"]["tracks"][0]["name"], name);
-            assert_eq!(state["text_sizes"]["body"], 15.0);
-            assert!(state["text_sizes"]["note"].as_f64().unwrap() >= 14.0);
+            assert_eq!(
+                state["text_sizes"]["body"].as_f64().unwrap(),
+                f64::from(daw_ui::tokens::FONT_BODY)
+            );
+            assert_eq!(
+                state["text_sizes"]["note"].as_f64().unwrap(),
+                f64::from(daw_ui::tokens::FONT_SMALL)
+            );
             let row = state["label_rects"]
                 .as_array()
                 .unwrap()

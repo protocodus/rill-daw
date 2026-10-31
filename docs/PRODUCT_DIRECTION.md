@@ -1,5 +1,20 @@
 # Rill feature comparison and development direction
 
+## Current product priorities
+
+Rill is an AI-first DAW for bedroom producers. Simplicity takes precedence over
+feature parity: make it easier to start an idea, hear it, refine it, and finish a
+song. AI should act within a clear musical context, explain when it cannot
+continue, and leave edits recoverable. Keep sound selection and editing close to
+the phrase without adding permanent panels. New work should improve these
+everyday paths before adding specialist studio or integration capabilities.
+
+The comparison below is a historical implementation snapshot. Its missing-feature
+lists and proposed sequence are research context, not a requirement to reproduce
+every competitor feature or defer Rill's now-implemented AI workflows.
+
+## Historical comparison
+
 Research date: 25 October 2026. Rill implementation reviewed at commit `48fed63`.
 
 **Recommendation: prioritize depth in the next development cycle, with live MIDI performance recording as the first substantial addition.** Rill already has a broad editing surface. The next milestone should make composing, editing during playback, automating, saving, recovering, and exporting one complete song dependable.

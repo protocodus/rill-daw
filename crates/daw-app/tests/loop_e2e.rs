@@ -70,7 +70,7 @@ fn loop_indicator_clears_ruler_labels_without_shifting_the_canvas_when_toggled()
                 .as_array()
                 .unwrap()
                 .iter()
-                .find(|label| label["text"] == "0:00.00")
+                .find(|label| label["text"] == "0:00")
                 .expect("visible clock label");
             assert!(
                 clock["max"][1].as_f64().unwrap() + 8.0 <= strip_top,
@@ -107,13 +107,21 @@ fn loop_range_toggle_undo_archive_reopen_and_full_song_export() {
     app.key("Escape");
     let enabled = app.click("Loop");
     assert_range(&enabled, 2.25, 5.5, true);
-    assert!(
-        enabled["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|label| label == "Beats 3.25–6.50")
-    );
+    let range = app.click("Range");
+    for label in ["Start beat 3.25", "End beat 6.50"] {
+        assert!(
+            range["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == label),
+            "Missing exact range field {label}: {}",
+            range["visible_labels"]
+        );
+    }
+    assert_eq!(range["project"], enabled["project"]);
+    assert_eq!(range["history"], enabled["history"]);
+    app.key("Escape");
     assert_range(&edit(&mut app, "Undo"), 2.25, 5.5, false);
     assert_range(&edit(&mut app, "Undo"), 2.25, 16.0, false);
     assert_range(&edit(&mut app, "Undo"), 0.0, 16.0, false);

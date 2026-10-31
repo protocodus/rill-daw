@@ -47,6 +47,15 @@ fn painted(app: &mut Harness) -> Value {
 }
 
 fn mixer_strips(state: &Value) -> Vec<Bounds> {
+    let columns: Vec<_> = state["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|channel| Bounds::from(&channel["strip"]))
+        .chain(std::iter::once(Bounds::from(
+            &state["mixer"]["master_strip"],
+        )))
+        .collect();
     let mut strips: Vec<_> = state["painted_rects"]
         .as_array()
         .unwrap()
@@ -54,12 +63,23 @@ fn mixer_strips(state: &Value) -> Vec<Bounds> {
         .filter(|shape| shape["fill"][3].as_u64().unwrap_or(0) > 0)
         .map(|shape| Bounds::from(&shape["rect"]))
         .filter(|rect| {
-            (rect.width() - (180.0 - f64::from(daw_ui::tokens::SPACE_XS))).abs() < 0.1
-                && rect.height() > 250.0
+            rect.height() > 250.0
+                && columns.iter().any(|column| {
+                    // The upper edge can be clipped after a short window scrolls.
+                    rect.top >= column.top - 0.1
+                        && (rect.bottom - column.bottom).abs() < 0.1
+                        && rect.left >= column.left
+                        && rect.right <= column.right
+                        && rect.width() >= column.width() * 0.5
+                })
         })
         .collect();
     strips.sort_by(|a, b| a.left.total_cmp(&b.left));
-    assert_eq!(strips.len(), 4, "three channels plus Master: {strips:?}");
+    assert_eq!(
+        strips.len(),
+        4,
+        "three channels plus Master: {strips:?}; columns: {columns:?}"
+    );
     strips
 }
 
@@ -131,8 +151,28 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
             assert!((control.top - controls[0].top).abs() < 1.0);
         }
     }
+    assert_aligned_targets(state, height);
     assert_eq!(labels(state, "Back").len(), 1);
     all_rails[0].height()
+}
+
+fn assert_aligned_targets(state: &Value, height: f64) {
+    let targets = labels(state, "Target");
+    assert_eq!(
+        targets.len(),
+        4,
+        "three channel targets plus the output sink"
+    );
+    for target in &targets {
+        assert!(
+            target.bottom <= height && target.height() >= f64::from(daw_ui::tokens::FONT_CAPTION),
+            "Target captions must remain readable and visible: {targets:?}"
+        );
+        assert!(
+            (target.top - targets[0].top).abs() < 1.0,
+            "Channel and Master output rows must align: {targets:?}"
+        );
+    }
 }
 
 #[test]
@@ -172,17 +212,7 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
             app.inspect();
         }
         let compact = painted(&mut app);
-        let actions = labels(&compact, "Target");
-        assert_eq!(
-            actions.len(),
-            4,
-            "three channel targets plus the output sink"
-        );
-        assert!(
-            actions
-                .iter()
-                .all(|action| action.bottom <= 600.0 && action.height() >= 17.0)
-        );
+        assert_aligned_targets(&compact, 600.0);
         assert!((labels(&compact, "Back")[0].top - back.top).abs() < 0.1);
         app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":1000.0}));
         for _ in 0..20 {

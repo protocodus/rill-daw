@@ -118,10 +118,6 @@ fn labelled_icon_tools_remain_clickable_in_arranger_and_note_editor() {
     app.command(json!({"command":"open","path":path}));
     let original = app.inspect()["project"].clone();
     for label in ["Pencil", "Cut", "Duplicate", "Erase", "Cursor", "Select"] {
-        if matches!(label, "Duplicate" | "Erase") {
-            app.click("Select");
-            app.click("More tools");
-        }
         let state = app.click(label);
         assert_eq!(state["timeline"]["tool"], label);
     }

@@ -134,7 +134,7 @@ fn click_fraction(app: &mut Harness, scale: Scale, fraction: f64) -> Value {
     app.command(json!({"command":"pointer", "phase":"click", "x":point.x, "y":point.y}))
 }
 
-/// These assertions observe real painter lines/rectangles, independently of the
+/// These assertions observe real painter shapes, independently of the
 /// geometry returned by the component. Pointer edits below also prove that the
 /// displayed positions address the parameter's actual native hit target.
 fn assert_paint_alignment(state: &Value, scale: Scale, fraction: f64, ticks: &[f64]) {
@@ -167,14 +167,59 @@ fn assert_paint_alignment(state: &Value, scale: Scale, fraction: f64, ticks: &[f
             }
         })
     };
+    let has_landmark = |point: Point| {
+        state["painted_circles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|circle| {
+                Point::from(&circle["center"]).distance(point) <= 0.7
+                    && (0.5..=5.0).contains(&circle["radius"].as_f64().unwrap())
+                    && (circle["fill"][3].as_u64().unwrap() > 0
+                        || circle["stroke_width"].as_f64().unwrap() > 0.0)
+            })
+            || state["painted_paths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|path| {
+                    let points = path["points"].as_array().unwrap();
+                    if points.len() != 3
+                        || path["closed"] != true
+                        || path["fill"][3].as_u64().unwrap() == 0
+                    {
+                        return false;
+                    }
+                    let mut minimum = Point {
+                        x: f64::INFINITY,
+                        y: f64::INFINITY,
+                    };
+                    let mut maximum = Point {
+                        x: f64::NEG_INFINITY,
+                        y: f64::NEG_INFINITY,
+                    };
+                    for vertex in points {
+                        let vertex = Point::from(vertex);
+                        minimum.x = minimum.x.min(vertex.x);
+                        minimum.y = minimum.y.min(vertex.y);
+                        maximum.x = maximum.x.max(vertex.x);
+                        maximum.y = maximum.y.max(vertex.y);
+                    }
+                    minimum.between(maximum, 0.5).distance(point) <= 0.7
+                        && (1.0..=10.0).contains(&(maximum.x - minimum.x))
+                        && (1.0..=10.0).contains(&(maximum.y - minimum.y))
+                })
+    };
     for tick in ticks {
+        let position = scale.min.between(scale.max, *tick);
         assert!(
-            has_cross_line(scale.min.between(scale.max, *tick)),
+            has_cross_line(position)
+                || (position.distance(scale.handle) <= 0.7 && has_landmark(position)),
             "Missing painted tick {tick} on {scale:?}"
         );
     }
     assert!(
-        has_cross_line(scale.handle),
+        has_cross_line(scale.handle) || has_landmark(scale.handle),
         "The handle needs a visible center index: {scale:?}"
     );
     assert!(
@@ -281,7 +326,7 @@ fn mixer_ranges_ticks_and_handle_indices_match_mouse_edits_at_multiple_sizes() {
 }
 
 #[test]
-fn arrangement_compact_controls_keep_range_and_current_value_visible_and_editable() {
+fn arrangement_controls_keep_current_values_and_native_endpoint_mapping_without_micro_scales() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let id = fixture(&mut app);
@@ -301,12 +346,12 @@ fn arrangement_compact_controls_keep_range_and_current_value_visible_and_editabl
             let channel = arrangement_channel(&state, id);
             assert_eq!(channel["compact"], compact);
             let pan = Scale::from(&channel["pan_scale"]);
-            caption_below(&state, pan, "L");
-            caption_below(&state, pan, "R");
-            if compact {
-                let gain = Scale::from(&channel["gain_scale"]);
-                caption_below(&state, gain, "−∞");
-                caption_below(&state, gain, "+3.5");
+            for name in ["gain_scale", "pan_scale"] {
+                assert_eq!(
+                    channel[name]["ticks"],
+                    json!([]),
+                    "Header rails should avoid miniature scales"
+                );
             }
             for fraction in [0.0, 0.5, 1.0] {
                 let pan = Scale::from(&arrangement_channel(&painted(&mut app), id)["pan_scale"]);
@@ -317,25 +362,52 @@ fn arrangement_compact_controls_keep_range_and_current_value_visible_and_editabl
                     1e-5,
                 );
                 let state = painted(&mut app);
-                assert_paint_alignment(
-                    &state,
-                    Scale::from(&arrangement_channel(&state, id)["pan_scale"]),
-                    fraction,
-                    &[0.0, 0.5, 1.0],
+                let channel = arrangement_channel(&state, id);
+                let scale = Scale::from(&channel["pan_scale"]);
+                assert!(
+                    scale
+                        .handle
+                        .distance(scale.min.between(scale.max, fraction))
+                        <= 0.7
                 );
-                if compact {
-                    caption_below(
-                        &state,
-                        Scale::from(&arrangement_channel(&state, id)["pan_scale"]),
-                        if fraction == 0.0 {
-                            "L100"
-                        } else if fraction == 1.0 {
-                            "R100"
-                        } else {
-                            "C"
-                        },
-                    );
-                }
+                let caption = if fraction == 0.0 {
+                    "L100"
+                } else if fraction == 1.0 {
+                    "R100"
+                } else {
+                    "C"
+                };
+                let rect = &channel["pan_readout"];
+                assert!(
+                    state["painted_text"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|label| {
+                            label["text"] == caption
+                                && label["rect"]["min"][0].as_f64().unwrap()
+                                    >= rect["min"][0].as_f64().unwrap() - 0.5
+                                && label["rect"]["max"][0].as_f64().unwrap()
+                                    <= rect["max"][0].as_f64().unwrap() + 0.5
+                                && label["rect"]["max"][1].as_f64().unwrap()
+                                    <= rect["max"][1].as_f64().unwrap() + 0.5
+                        }),
+                    "The current pan value must remain in its own readout"
+                );
+            }
+            for fraction in [0.0, 0.5, 1.0] {
+                let gain = Scale::from(&arrangement_channel(&painted(&mut app), id)["gain_scale"]);
+                let edited = click_fraction(&mut app, gain, fraction);
+                let db = -60.0 + fraction * (60.0 + f64::from(20.0 * 1.5_f32.log10()));
+                let expected = if fraction == 0.0 {
+                    0.0
+                } else {
+                    10.0_f64.powf(db / 20.0)
+                };
+                near(track(&edited, id)["gain"].as_f64().unwrap(), expected, 1e-5);
+                let after = painted(&mut app);
+                let gain = Scale::from(&arrangement_channel(&after, id)["gain_scale"]);
+                assert!(gain.handle.distance(gain.min.between(gain.max, fraction)) <= 0.7);
             }
             assert!(
                 pan.length() > 20.0,

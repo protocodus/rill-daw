@@ -77,10 +77,10 @@ fn header_captions_stay_bounded_and_exact_popup_dismissal_preserves_precision() 
         for width in [1100, 1480] {
             app.command(json!({"command":"viewport", "width":width, "height":900, "pixels_per_point":density}));
             for (track, gain_label, pan_label, gain) in [
-                (tracks[0], "-6.0 dB", "Pan 12", 0.5_f32),
-                (tracks[1], "-86.0 dB", "Pan -100", 0.00005_f32),
-                (tracks[2], "6.0 dB", "Pan 100", 2.0_f32),
-                (tracks[3], "−∞ dB", "Pan -50", 0.0_f32),
+                (tracks[0], "-6.0 dB", "R12", 0.5_f32),
+                (tracks[1], "-86.0 dB", "L100", 0.00005_f32),
+                (tracks[2], "6.0 dB", "R100", 2.0_f32),
+                (tracks[3], "−∞ dB", "L50", 0.0_f32),
             ] {
                 let state = app.command(json!({"command":"inspect", "paint":true}));
                 assert_eq!(channel(&state, track)["compact"], false);
@@ -150,7 +150,7 @@ fn concise_header_fields_still_accept_precise_values_and_undo_them() {
     let redone = app.click("Redo");
     assert_eq!(redone["project"], gained["project"]);
 
-    click_label(&mut app, "Pan 12", false);
+    click_label(&mut app, "R12", false);
     app.command(json!({"command":"text", "text":"-23.45678"}));
     let panned = app.click("Apply value");
     assert!((panned["project"]["tracks"][0]["pan"].as_f64().unwrap() + 0.2345678).abs() < 1e-7);

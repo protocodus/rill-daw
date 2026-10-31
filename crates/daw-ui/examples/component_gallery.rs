@@ -26,8 +26,10 @@ mod mixer;
 mod navigation;
 #[path = "component_gallery/timeline.rs"]
 mod timeline;
+#[path = "component_gallery/tracks.rs"]
+mod tracks;
 
-const PAGES: [(&str, &str, &str); 8] = [
+const PAGES: [(&str, &str, &str); 9] = [
     (
         "actions",
         "Actions, tools, and views",
@@ -68,6 +70,11 @@ const PAGES: [(&str, &str, &str); 8] = [
         "Feedback and assistant",
         "Notices and the provider-independent assistant, populated with labelled sample content.",
     ),
+    (
+        "tracks",
+        "Track headers",
+        "Identity, mix, routing, source and stereo metering, with fixed demonstration levels.",
+    ),
 ];
 
 #[derive(Default)]
@@ -93,6 +100,7 @@ struct Gallery {
     curves: curves::State,
     devices: devices::State,
     feedback: feedback::State,
+    tracks: tracks::State,
 }
 
 impl Gallery {
@@ -120,6 +128,7 @@ impl Gallery {
             curves: Default::default(),
             devices: Default::default(),
             feedback: Default::default(),
+            tracks: Default::default(),
         }
     }
 
@@ -222,7 +231,11 @@ impl eframe::App for Gallery {
         theme::set_appearance(ctx, self.appearance);
         let palette = theme::palette(ctx);
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(palette.bg).inner_margin(24))
+            .frame(
+                egui::Frame::new()
+                    .fill(palette.bg)
+                    .inner_margin(ui::tokens::SPACE_LG),
+            )
             .show(ctx, |ui| {
                 if self.capture.is_none() {
                     ui.horizontal_wrapped(|ui| {
@@ -240,13 +253,13 @@ impl eframe::App for Gallery {
                             };
                         }
                     });
-                    ui.add_space(12.0);
+                    ui.add_space(ui::tokens::SPACE_MD);
                 }
                 ui::text::title(ui, PAGES[self.page].1);
                 ui::text::note(ui, PAGES[self.page].2);
-                ui.add_space(16.0);
+                ui.add_space(ui::tokens::SPACE_MD);
                 ui.separator();
-                ui.add_space(16.0);
+                ui.add_space(ui::tokens::SPACE_MD);
                 ui.push_id(PAGES[self.page].0, |ui| match self.page {
                     0 => actions::show(ui, &mut self.actions),
                     1 => inputs::show(ui, &mut self.inputs),
@@ -259,6 +272,7 @@ impl eframe::App for Gallery {
                     5 => curves::show(ui, &mut self.curves),
                     6 => devices::show(ui, &mut self.devices),
                     7 => feedback::show(ui, &mut self.feedback),
+                    8 => tracks::show(ui, &mut self.tracks),
                     _ => unreachable!(),
                 });
             });
@@ -282,7 +296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         Some("--help" | "-h") => {
             println!(
-                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes eight light/dark PNG pairs and exits."
+                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes nine light/dark PNG pairs and exits."
             );
             return Ok(());
         }

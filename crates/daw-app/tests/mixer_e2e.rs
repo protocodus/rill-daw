@@ -56,6 +56,52 @@ fn drag(app: &mut Harness, track: &Value, control: &str, distance: f64) -> Value
     app.command(json!({"command":"pointer","x":x,"y":y,"phase":"drag","to_x":x+distance,"to_y":y}))
 }
 
+fn track_header<'a>(state: &'a Value, track: &Value) -> &'a Value {
+    state["timeline"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|header| header["track"] == *track)
+        .expect("visible track header")
+}
+
+fn click_header_section(app: &mut Harness, track: &Value, section: &str) -> Value {
+    let state = app.inspect();
+    let header = track_header(&state, track);
+    let rect = if section == "name" {
+        &header["name"]
+    } else {
+        &header["sections"][section]
+    };
+    assert!(
+        !rect.is_null(),
+        "Missing {section} on track {track}: {header}"
+    );
+    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+}
+
+fn assert_header_output(state: &Value, track: &Value, destination: &str) {
+    let bounds = &track_header(state, track)["sections"]["routing"];
+    assert!(
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| {
+                label["text"] == destination
+                    && (0..2).all(|axis| {
+                        label["min"][axis].as_f64().unwrap()
+                            >= bounds["min"][axis].as_f64().unwrap()
+                            && label["max"][axis].as_f64().unwrap()
+                                <= bounds["max"][axis].as_f64().unwrap()
+                    })
+            }),
+        "The track's Routing section must show {destination}"
+    );
+}
+
 #[test]
 fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     let mut app = Harness::new();
@@ -72,37 +118,39 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     app.command(json!({"command":"drop","paths":[source],"track":0}));
     menu(&mut app, "Track", "Add folder");
     let state = menu(&mut app, "Track", "Add bus");
-    assert!(visible(&state, "Ch 1 > Master"));
-    assert!(visible(&state, "Ch 2 > Master"));
+    let source_track = state["project"]["tracks"][0]["id"].clone();
+    let folder = state["project"]["tracks"][1]["id"].clone();
+    let bus = state["project"]["tracks"][2]["id"].clone();
+    assert_header_output(&state, &source_track, "Master");
+    assert_header_output(&state, &bus, "Master");
+    assert_eq!(state["timeline"]["channels"].as_array().unwrap().len(), 2);
     assert!(
-        !visible(&state, "Ch 3 > Master"),
+        track_header(&state, &folder)["sections"]["routing"].is_null(),
         "Folders must not consume mixer channels"
     );
 
     let before_routing = state["project"].clone();
-    app.click("Ch 1 > Master");
+    click_header_section(&mut app, &source_track, "routing");
     let state = app.key("Escape");
     assert_eq!(
         state["project"], before_routing,
         "Cancel must preserve routing"
     );
-    app.click("Ch 1 > Master");
+    click_header_section(&mut app, &source_track, "routing");
     let state = click_front(&mut app, "New bus");
-    let bus = state["project"]["tracks"][2]["id"].clone();
     assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
-    assert!(visible(&state, "Ch 1 > New bus"));
+    assert_header_output(&state, &source_track, "New bus");
     let state = menu(&mut app, "Edit", "Undo");
     assert!(state["project"]["tracks"][0]["output_bus"].is_null());
     let state = menu(&mut app, "Edit", "Redo");
     assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
-    app.click("Ch 1 > New bus");
+    click_header_section(&mut app, &source_track, "routing");
     let state = click_front(&mut app, "Master");
     assert!(state["project"]["tracks"][0]["output_bus"].is_null());
     let state = menu(&mut app, "Edit", "Undo");
     assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
 
     let original_gain = state["project"]["tracks"][0]["gain"].as_f64().unwrap();
-    let source_track = state["project"]["tracks"][0]["id"].clone();
     let state = drag(&mut app, &source_track, "gain", -6.0);
     let gain = state["project"]["tracks"][0]["gain"].as_f64().unwrap();
     assert!(
@@ -273,10 +321,17 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
             .filter(|row| row["text"] == "Target")
             .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
     );
-    // The pointer stayed over the fader while scrolling settled. Its stacked
-    // value/volume/automation hints cover the output target in this compact
-    // layout. Move and press immediately; read-only hints must let that first
-    // click reach the target underneath instead of consuming the press.
+    // Hover the actual fader after scrolling settles; shared padding can move
+    // it without changing the control. Its stacked value/volume/automation
+    // hints must let the first press reach the output target underneath.
+    let fader = &scrolled["mixer"]["channels"][0]["fader"];
+    let x = (fader["min"][0].as_f64().unwrap() + fader["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (fader["min"][1].as_f64().unwrap() + fader["max"][1].as_f64().unwrap()) * 0.5;
+    assert!((0.0..800.0).contains(&x) && (0.0..600.0).contains(&y));
+    app.command(json!({"command":"pointer","phase":"move","x":x,"y":y}));
+    for _ in 0..20 {
+        scrolled = app.inspect();
+    }
     assert!(visible(&scrolled, "Channel volume"));
     assert!(visible(
         &scrolled,
@@ -301,7 +356,10 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
     }
     menu(&mut app, "Track", "Add audio track");
     let before = app.inspect();
-    let opened = app.click("Ch 1 > Master");
+    let bus_a = before["project"]["tracks"][0]["id"].clone();
+    let bus_b = before["project"]["tracks"][1]["id"].clone();
+    let bus_c = before["project"]["tracks"][2]["id"].clone();
+    let opened = click_header_section(&mut app, &bus_a, "routing");
     assert_eq!(
         label_count(&opened, "Bus A"),
         label_count(&before, "Bus A"),
@@ -321,7 +379,7 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
         state["project"]["tracks"][0]["output_bus"],
         state["project"]["tracks"][1]["id"]
     );
-    app.click("Ch 2 > Master");
+    click_header_section(&mut app, &bus_b, "routing");
     let state = click_front(&mut app, "Bus C");
     assert_eq!(
         state["project"]["tracks"][1]["output_bus"],
@@ -329,7 +387,7 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
     );
 
     let before = app.inspect();
-    let opened = app.click("Ch 3 > Master");
+    let opened = click_header_section(&mut app, &bus_c, "routing");
     for name in ["Bus A", "Bus B", "Bus C"] {
         assert_eq!(
             label_count(&opened, name),
@@ -341,13 +399,18 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
     let state = app.key("Escape");
     assert_eq!(state["project"], before["project"]);
 
-    app.click("Bus B");
+    let selected = click_header_section(&mut app, &bus_b, "name");
+    assert_eq!(selected["selected_track"], bus_b);
     menu(&mut app, "Window", "Properties");
     app.click("Compact track");
     app.key("Escape");
-    let state = app.click("Ch 2 > Bus C");
-    assert!(visible(&state, "Master"));
-    let state = click_front(&mut app, "Master");
+    let state = click_header_section(&mut app, &bus_b, "details");
+    assert_eq!(state["selected_track"], bus_b);
+    assert_eq!(state["popups"]["properties"], true);
+    let state = click_front(&mut app, "Routing");
+    assert_eq!(state["popups"]["routing"], true);
+    click_front(&mut app, "Bus C");
+    let state = click_front(&mut app, "Master output");
     assert!(state["project"]["tracks"][1]["output_bus"].is_null());
     assert_eq!(state["project"]["tracks"][1]["collapsed"], true);
     let state = menu(&mut app, "Edit", "Undo");

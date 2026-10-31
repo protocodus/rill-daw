@@ -2,7 +2,7 @@
 
 Double-click a clip, or select it and choose **Window > Clip Editor**. Each editor uses the same timeline gestures: middle-drag or Alt-drag to pan, Ctrl/Cmd-wheel to zoom time, and Ctrl/Cmd-Shift-wheel to zoom vertically. **Fit** or **F** shows all relevant content on both axes. Bars and elapsed time appear together in the ruler. Opening a utility popup preserves the editor context; Escape returns to it after dismissing an open menu first.
 
-Previous/Next buttons in the existing editor header inspect neighbouring clips;
+Previous/Next buttons appear in the editor header when a neighboring clip exists;
 the View menu provides the same commands and Tab/Shift+Tab are shortcuts. Tool
 and zoom stay in place. View also offers Fit selection and Previous view. Mouse
 context menus provide Add/Remove selection, and Edit offers Select all/Clear.
@@ -13,7 +13,7 @@ Shift extends selection. Text fields keep ordinary text cursor navigation.
 
 The audio editor changes source references and playback parameters. Source WAV files remain unchanged. The arrangement overview and exported audio use the same reverse and envelope settings.
 
-The **Clip** menu contains cursor jumps, trimming, splitting and clipboard actions. **Process** contains reversal, normalization and transient analysis. Gain stays beside the tools; fade duration and curve controls appear only with the corresponding fade tool. **Close transients** dismisses the analysis settings and markers, including a preview still being calculated.
+The **Clip** menu contains cursor jumps, trimming, splitting and clipboard actions. **Process** contains reversal, normalization and transient analysis. **Select**, **Cursor**, **Cut**, **Stretch**, **Slip**, **Fade in**, and **Fade out** are individual toolbar buttons. Separators distinguish related tools, and complete families wrap when space is limited. **Tool help** opens the current tool’s full instructions. Gain stays beside the tools; fade duration and curve controls appear only with the corresponding fade tool. **Close transients** dismisses the analysis settings and markers, including a preview still being calculated.
 
 - **Cursor (P)** seeks by clicking or dragging the waveform. **Clip start** and **Clip end** jump to its bounds. **Set start** and **Set end** trim to the cursor; **Snap end** moves the end to the nearest selected grid division. Trimming cannot expose samples before the source begins.
 - **Cut (E)** splits at the clicked grid position. **Split at cursor** uses the current playback position. Splits and trims preserve the original fade envelope and source samples, including reversed regions.
@@ -47,7 +47,7 @@ separate. Pointer gestures merge on release; keyboard and clipboard commands
 commit the merge together with their edit. Undo restores the complete gesture.
 Selecting notes or changing velocity alone does not clean up imported overlaps.
 
-The root/scale field, such as **C · Natural minor**, opens root, scale and chord choices. **View** contains separate **Highlight scale**, **Highlight chord**, and **Only scale keys** switches. Highlighting preserves the contrast between black and white keys; folding hides other pitch rows without changing their notes. These view controls are visually distinct from the **Notes** actions and the root/scale choice field.
+**Draw settings** contains drawing Length and the root/scale field, such as **C · Natural minor**, which opens root, scale and chord choices. **View** contains separate **Highlight scale**, **Highlight chord**, and **Only scale keys** switches. Highlighting preserves the contrast between black and white keys; folding hides other pitch rows without changing their notes. These view controls are visually distinct from the **Notes** actions and the root/scale choice field.
 
 Folded editing uses the visible pitch rows for drawing, audition, note movement, selection, velocity painting and Fit. A vertical group drag moves each note by the same number of scale steps. Hidden notes keep playing and remain in the project; the hidden-note count offers **Show all**. An untouched selection returns when its hidden rows become visible again. Choosing a new selection, editing notes, or leaving the editor clears that retained hidden selection. Changing a scale or toggling these views creates no musical undo entry.
 

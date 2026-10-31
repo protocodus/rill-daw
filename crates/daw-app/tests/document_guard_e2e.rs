@@ -4,6 +4,7 @@
 mod common;
 use common::Harness;
 use daw_core::Project;
+use eframe::egui;
 use serde_json::{Value, json};
 use std::{
     path::Path,
@@ -53,6 +54,25 @@ fn cmd(app: &mut Harness, key: &str) -> Value {
     app.command(json!({"command":"key", "key":key, "cmd":true}))
 }
 
+fn full_title_size(title: &str, density: f32) -> egui::Vec2 {
+    let ctx = egui::Context::default();
+    daw_ui::theme::apply(&ctx);
+    ctx.set_pixels_per_point(density);
+    let mut size = egui::Vec2::ZERO;
+    let _ = ctx.run(egui::RawInput::default(), |ctx| {
+        size = ctx.fonts_mut(|fonts| {
+            fonts
+                .layout_no_wrap(
+                    title.to_owned(),
+                    daw_ui::text::TextRole::Note.font(),
+                    egui::Color32::WHITE,
+                )
+                .size()
+        });
+    });
+    size
+}
+
 #[test]
 fn new_confirmation_is_bounded_blocks_background_edits_and_cancel_restores_context() {
     for dark in [false, true] {
@@ -62,16 +82,25 @@ fn new_confirmation_is_bounded_blocks_background_edits_and_cancel_restores_conte
             app.command(
                 json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":scale}),
             );
-            let initial = app.inspect();
-            let title = initial["label_rects"]
+            let initial = app.command(json!({"command":"inspect", "paint":true}));
+            let title = initial["painted_text"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .find(|rect| rect["text"] == "Untitled session")
                 .unwrap();
+            let rect = &title["rect"];
+            let expected = full_title_size("Untitled session", scale as f32);
+            let width = rect["max"][0].as_f64().unwrap() - rect["min"][0].as_f64().unwrap();
+            let height = rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
             assert!(
-                title["max"][0].as_f64().unwrap() - title["min"][0].as_f64().unwrap() > 100.0,
-                "Project title must be readable, not clipped to the viewport edge: {title}"
+                (width - f64::from(expected.x)).abs() <= 0.5
+                    && (height - f64::from(expected.y)).abs() <= 0.5,
+                "The complete project title must be painted at its shared text size: {title}, expected {expected:?}"
+            );
+            assert!(
+                rect["min"][0].as_f64().unwrap() >= 0.0
+                    && rect["max"][0].as_f64().unwrap() <= 1100.0
             );
             let mut project = Project::new();
             project.name =

@@ -51,6 +51,17 @@ impl DrawNoteLength {
 /// Native, mouse-selectable length choice. Dragging a new note may override
 /// this initial duration; the application retains ownership of that gesture.
 pub fn drawing_note_length(ui: &mut Ui, length: &mut DrawNoteLength) -> Response {
+    if egui::containers::menu::is_in_menu(ui) {
+        return crate::choice_menu(ui, format!("Length · {}", length.label()), |ui| {
+            for choice in DrawNoteLength::ALL {
+                if crate::selectable_value(ui, length, choice, choice.label()).clicked() {
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .on_hover_text("Initial length for new notes. Drag a new note to choose its end.");
+    }
     crate::select("drawing_note_length", format!("Length · {}", length.label()))
         .width(146.0)
         .height(

@@ -131,9 +131,11 @@ fn selected_clips_and_channels_gain_a_bounded_halo_without_editing_content() {
             unchanged(&state, &baseline);
             for channel in state["mixer"]["channels"].as_array().unwrap() {
                 let mut rect = bounds(&channel["strip"]);
-                // Shared strips reserve a two-point gutter inside each side.
-                rect[0] += 2.0;
-                rect[2] -= 2.0;
+                let gutter = f64::from(
+                    (daw_ui::tokens::SPACE_XS * daw_ui::tokens::GOLDEN_RATIO_INVERSE).round(),
+                );
+                rect[0] += gutter;
+                rect[2] -= gutter;
                 assert_glow(&state, rect, channel["track"] == selected);
             }
             let repeated = painted(&mut app);

@@ -6,6 +6,55 @@ use std::hash::Hash;
 
 /// A compact action row which wraps as complete controls when space is limited.
 pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
+    toolbar_with_row_height(ui, tokens::CONTROL_HEIGHT, contents)
+}
+
+/// A toolbar containing calibrated sliders. Reserve the whole row before any
+/// controls are painted so preceding labels, choices and buttons share its axis.
+pub fn parameter_toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
+    toolbar_with_row_height(ui, tokens::PARAMETER_ROW_HEIGHT, contents)
+}
+
+/// A centered parameter row. Scale captions belong below a slider's
+/// rail; they must not pull the rail above adjacent fields, labels or actions.
+pub fn parameter_row<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
+    row_with_height(ui, tokens::PARAMETER_ROW_HEIGHT, false, contents)
+}
+
+/// A responsive parameter row that wraps complete controls onto centered rows.
+pub fn parameter_row_wrapped<R>(
+    ui: &mut Ui,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    row_with_height(ui, tokens::PARAMETER_ROW_HEIGHT, true, contents)
+}
+
+fn row_with_height<R>(
+    ui: &mut Ui,
+    height: f32,
+    wrap: bool,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let layout = if ui.layout().prefer_right_to_left() {
+        egui::Layout::right_to_left(egui::Align::Center)
+    } else {
+        egui::Layout::left_to_right(egui::Align::Center)
+    };
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_size_before_wrap().x, height),
+        layout.with_main_wrap(wrap),
+        |ui| {
+            ui.set_min_height(height);
+            contents(ui)
+        },
+    )
+}
+
+fn toolbar_with_row_height<R>(
+    ui: &mut Ui,
+    row_height: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
     let colors = theme::palette(ui.ctx());
     let row = egui::Frame::new()
         .fill(colors.panel)
@@ -16,7 +65,7 @@ pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResp
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
-            ui.horizontal_wrapped(contents).inner
+            row_with_height(ui, row_height, true, contents).inner
         });
     ui.painter().hline(
         row.response.rect.x_range(),
@@ -38,7 +87,17 @@ pub fn tool_group<R>(
     let group = toolbar_group_sized_with_spacing(ui, width, tokens::SPACE_XS, contents);
     ui.painter().set(
         background,
-        egui::Shape::rect_filled(group.response.rect, tokens::RADIUS, colors.bg),
+        crate::surface::component_shape(
+            ui.painter(),
+            group.response.rect,
+            tokens::SURFACE_RADIUS,
+            colors.bg,
+            egui::Stroke::new(
+                tokens::BORDER_WIDTH,
+                colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
+            ),
+            crate::surface::ComponentMaterial::default(),
+        ),
     );
     group
 }
@@ -76,6 +135,45 @@ pub fn toolbar_group_sized_with_spacing<R>(
         |ui| {
             ui.spacing_mut().item_spacing.x = spacing.max(0.0);
             contents(ui)
+        },
+    )
+}
+
+/// A single shared surface for a family of commands or a musical readout.
+/// Reserve the complete group before wrapping; its background never takes focus.
+pub fn command_group<R>(
+    ui: &mut Ui,
+    minimum_width: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    let colors = theme::palette(ui.ctx());
+    let width = minimum_width.max(0.0).min(ui.max_rect().width().max(0.0));
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, tokens::CONTROL_HEIGHT + tokens::SPACE_XS * 2.0),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            let background = ui.painter().add(egui::Shape::Noop);
+            let frame = egui::Frame::new()
+                .inner_margin(tokens::SPACE_XS as i8)
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+                    ui.horizontal(contents).inner
+                });
+            ui.painter().set(
+                background,
+                crate::surface::component_shape(
+                    ui.painter(),
+                    frame.response.rect,
+                    tokens::SURFACE_RADIUS,
+                    colors.bg,
+                    egui::Stroke::new(
+                        tokens::BORDER_WIDTH,
+                        colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
+                    ),
+                    crate::surface::ComponentMaterial::default(),
+                ),
+            );
+            frame.inner
         },
     )
 }
@@ -287,7 +385,7 @@ pub fn workspace_header<R>(
                     ui.add_space(tokens::SPACE_MD);
                     let back = ui
                         .with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            let back = crate::button(ui, "Back")
+                            let back = crate::quiet_button(ui, "Back")
                                 .on_hover_text("Return to the previous workspace");
                             ui.add_space(tokens::SPACE_XS);
                             let title = ui.add(
@@ -399,7 +497,9 @@ pub fn mixer_strip<R>(
         });
         // A real canvas gutter keeps adjacent strips separate even when they
         // share a track color. Preserve the total width and control alignment.
-        let gutter = tokens::SPACE_XS * 0.5;
+        // Frame margins are integral: round once so inner + outer margins
+        // retain the exact channel width at every display density.
+        let gutter = (tokens::SPACE_XS * tokens::GOLDEN_RATIO_INVERSE).round();
         let frame = egui::Frame::new()
             .fill(fill)
             .corner_radius(tokens::RADIUS)

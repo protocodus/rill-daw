@@ -14,6 +14,9 @@ pub fn clip_navigation_header_controls(
     previous: bool,
     next: bool,
 ) -> Option<ClipStep> {
+    if !previous && !next {
+        return None;
+    }
     let width = 220.0_f32.min(ui.available_width());
     let gap = crate::tokens::SPACE_XS;
     // "Previous" needs more room than "Next" after icon and native padding.
@@ -30,6 +33,7 @@ pub fn clip_navigation_header_controls(
                         egui::vec2(previous_width, crate::tokens::CONTROL_HEIGHT),
                         crate::IconButton::with_icon(crate::Icon::Back, "Previous")
                             .presentation()
+                            .quiet()
                             .wrap_mode(egui::TextWrapMode::Extend),
                     )
                 })
@@ -42,6 +46,7 @@ pub fn clip_navigation_header_controls(
                         egui::vec2(next_width, crate::tokens::CONTROL_HEIGHT),
                         crate::IconButton::with_icon(crate::Icon::ChevronRight, "Next")
                             .presentation()
+                            .quiet()
                             .wrap_mode(egui::TextWrapMode::Extend),
                     )
                 })

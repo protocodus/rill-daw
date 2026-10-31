@@ -247,3 +247,47 @@ fn help_stays_reachable_when_a_previous_control_widens_the_parent() {
     assert!(panel.right() <= 800.0);
     assert!(text_rect(&output, "Tool help").right() <= 800.0);
 }
+
+#[test]
+fn toolbar_help_has_a_full_target_and_native_keyboard_open_and_dismiss() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        theme::set_appearance(&ctx, appearance);
+        let draw = |events: Vec<Event>| {
+            let mut response = None;
+            let output = ctx.run(input(800.0, events), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    response = Some(daw_ui::editor_tool_help(
+                        ui,
+                        EditorTool::Pencil,
+                        ToolHintContext::Midi,
+                    ));
+                });
+            });
+            (output, response.unwrap())
+        };
+        let (closed, response) = draw(vec![]);
+        assert!(response.rect.height() >= tokens::CONTROL_HEIGHT);
+        assert!(!egui::Popup::is_any_open(&ctx));
+        assert!(!closed.shapes.iter().any(|shape| matches!(&shape.shape,
+            Shape::Text(text) if text.galley.text() == ToolHintContext::Midi.hint(EditorTool::Pencil)
+        )));
+        response.request_focus();
+        let key = |key, pressed| Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        };
+        draw(vec![key(Key::Enter, true)]);
+        let (opened, _) = draw(vec![key(Key::Enter, false)]);
+        assert!(egui::Popup::is_any_open(&ctx));
+        text_rect(&opened, "Pencil · W");
+        text_rect(&opened, ToolHintContext::Midi.hint(EditorTool::Pencil));
+        draw(vec![key(Key::Escape, true)]);
+        draw(vec![key(Key::Escape, false)]);
+        assert!(!egui::Popup::is_any_open(&ctx));
+    }
+}

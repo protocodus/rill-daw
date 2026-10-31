@@ -1,5 +1,5 @@
 //! Shared musical-time viewport and gestures for every editing canvas.
-use egui::{Id, Key, PointerButton, Pos2, Rect, Response, Ui, Vec2};
+use egui::{Id, Key, PointerButton, Pos2, Rect, Response, Ui, Vec2, emath::GuiRounding};
 use std::hash::Hash;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -130,91 +130,22 @@ pub fn editor_tools(ui: &mut Ui, tool: &mut EditorTool, supported: &[EditorTool]
     editor_tools_with_labels(ui, tool, supported, EditorTool::label);
 }
 
-/// Keep everyday modes in place and collect the remaining modes in one chooser.
-/// Its width is stable across all supported tools; the chosen secondary mode
-/// stays visible with the same active underline as a directly exposed tool.
-/// Call `editor_tool_shortcuts` separately so every supported mode retains its key.
-pub fn compact_editor_tools(
+/// Every supported mode stays one click away. Related modes share a row when
+/// possible, separated by quiet rules rather than a menu or another surface.
+/// Shortcuts remain with `editor_tool_shortcuts`, so the host owns their scope.
+pub fn editor_tools_with_context(
     ui: &mut Ui,
     tool: &mut EditorTool,
     supported: &[EditorTool],
-    primary: &[EditorTool],
     context: crate::ToolHintContext,
-) -> Option<Response> {
-    let primary: Vec<_> = primary
-        .iter()
-        .copied()
-        .filter(|candidate| supported.contains(candidate))
-        .collect();
-    editor_tools_with_labels(ui, tool, &primary, |candidate| context.label(candidate));
-    let secondary: Vec<_> = supported
-        .iter()
-        .copied()
-        .filter(|candidate| !primary.contains(candidate))
-        .collect();
-    if secondary.is_empty() {
-        return None;
-    }
-    let secondary_active = secondary.contains(tool);
-    let label = if secondary_active {
-        context.label(*tool)
-    } else {
-        "More tools"
-    };
-    let width = std::iter::once("More tools")
-        .chain(secondary.iter().map(|candidate| context.label(*candidate)))
-        .map(|label| {
-            let text = ui
-                .painter()
-                .layout_no_wrap(
-                    label.into(),
-                    egui::TextStyle::Button.resolve(ui.style()),
-                    ui.visuals().text_color(),
-                )
-                .size()
-                .x;
-            let icon = if crate::Icon::for_label(label).is_some() {
-                18.0 + ui.spacing().item_spacing.x
-            } else {
-                0.0
-            };
-            text + icon + 12.0 + ui.spacing().item_spacing.x + 2.0 * ui.spacing().button_padding.x
-        })
-        .fold(0.0_f32, f32::max)
-        .ceil();
-    let mut response = ui.add_sized(
-        egui::vec2(width, crate::tokens::CONTROL_HEIGHT),
-        crate::IconButton::tool_choice(secondary_active, label),
-    );
-    let before = *tool;
-    egui::Popup::menu(&response)
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            for candidate in secondary {
-                ui.horizontal(|ui| {
-                    if crate::tool_value(ui, tool, candidate, context.label(candidate))
-                        .on_hover_text(context.hint(candidate))
-                        .clicked()
-                    {
-                        ui.close();
-                    }
-                    crate::text::note(ui, candidate.key().name());
-                });
-            }
-        });
-    if before != *tool {
-        response.mark_changed();
-    }
-    Some(response.on_hover_text(if secondary_active {
-        format!(
-            "{} tool · {}\n{}\nChoose another tool",
-            context.label(*tool),
-            tool.key().name(),
-            context.hint(*tool)
-        )
-    } else {
-        "Choose another editing tool. Keyboard shortcuts remain available.".into()
-    }))
+) -> Vec<Response> {
+    editor_tool_families(
+        ui,
+        tool,
+        supported,
+        |candidate| context.label(candidate),
+        |candidate| context.hint(candidate),
+    )
 }
 
 /// Contextual wording keeps the same tool identity and shortcut in each editor.
@@ -224,8 +155,18 @@ pub fn editor_tools_with_labels(
     supported: &[EditorTool],
     label: impl Fn(EditorTool) -> &'static str,
 ) {
-    // Consistent families across Arrangement, MIDI, audio and automation. Keep
-    // every tool visible and give wrapping a useful boundary on small displays.
+    editor_tool_families(ui, tool, supported, label, EditorTool::hint);
+}
+
+fn editor_tool_families(
+    ui: &mut Ui,
+    tool: &mut EditorTool,
+    supported: &[EditorTool],
+    label: impl Fn(EditorTool) -> &'static str,
+    hint: impl Fn(EditorTool) -> &'static str,
+) -> Vec<Response> {
+    // Stable families make a long toolbar easy to scan. Unsupported modes are
+    // omitted without leaving empty groups, separators or inaccessible choices.
     const GROUPS: &[&[EditorTool]] = &[
         &[
             EditorTool::Select,
@@ -242,53 +183,88 @@ pub fn editor_tools_with_labels(
             EditorTool::FadeOut,
         ],
     ];
+    let mut previous: Option<Rect> = None;
+    let mut responses = Vec::with_capacity(supported.len());
     for group in GROUPS {
-        let tools = || {
-            group
-                .iter()
-                .copied()
-                .filter(|candidate| supported.contains(candidate))
-        };
-        let count = tools().count();
-        if count == 0 {
+        let tools: Vec<_> = group
+            .iter()
+            .copied()
+            .filter(|candidate| supported.contains(candidate))
+            .collect();
+        if tools.is_empty() {
             continue;
         }
-        let width = tools()
-            .map(|candidate| {
-                let text = label(candidate);
-                let text_width = ui
-                    .painter()
-                    .layout_no_wrap(
-                        text.into(),
-                        egui::TextStyle::Button.resolve(ui.style()),
-                        ui.visuals().text_color(),
-                    )
-                    .size()
-                    .x;
-                let icon_width = if crate::Icon::for_label(text).is_some() {
-                    18.0 + crate::tokens::SPACE_XS
-                } else {
-                    0.0
-                };
-                (text_width + icon_width + 2.0 * ui.spacing().button_padding.x).ceil()
-            })
-            .sum::<f32>()
-            + (count - 1) as f32 * crate::tokens::SPACE_XS;
-        crate::tool_group(ui, width, |ui| {
-            for candidate in tools() {
+        let group = editor_tool_family(ui, tool, &tools, &label, &hint);
+        let rect = group.response.rect;
+        if let Some(previous) = previous
+            && (previous.center().y - rect.center().y).abs() < 1.0
+        {
+            // Paint in the existing inter-family gap after native wrapping has
+            // settled. A wrapped family therefore never starts with a rule.
+            let x = (previous.right() + rect.left()) * 0.5;
+            let half_height = crate::tokens::COMPACT_HEIGHT * 0.5;
+            ui.painter().vline(
+                x,
+                rect.center().y - half_height..=rect.center().y + half_height,
+                egui::Stroke::new(
+                    crate::tokens::BORDER_WIDTH,
+                    crate::theme::palette(ui.ctx()).line,
+                ),
+            );
+        }
+        previous = Some(rect);
+        responses.extend(group.inner);
+    }
+    responses
+}
+
+fn editor_tool_family(
+    ui: &mut Ui,
+    tool: &mut EditorTool,
+    tools: &[EditorTool],
+    label: impl Fn(EditorTool) -> &'static str,
+    hint: impl Fn(EditorTool) -> &'static str,
+) -> egui::InnerResponse<Vec<Response>> {
+    let width = tools
+        .iter()
+        .map(|&candidate| {
+            let text = label(candidate);
+            let text_width = ui
+                .painter()
+                .layout_no_wrap(
+                    text.into(),
+                    egui::TextStyle::Button.resolve(ui.style()),
+                    ui.visuals().text_color(),
+                )
+                .size()
+                .x;
+            let icon_width = if crate::Icon::for_label(text).is_some() {
+                18.0 + ui.spacing().icon_spacing
+            } else {
+                0.0
+            };
+            (text_width + icon_width + 2.0 * ui.spacing().button_padding.x).ceil()
+        })
+        .sum::<f32>()
+        + (tools.len() - 1) as f32 * crate::tokens::SPACE_XS;
+    crate::toolbar_group_sized_with_spacing(ui, width, crate::tokens::SPACE_XS, |ui| {
+        tools
+            .iter()
+            .map(|&candidate| {
                 crate::tool_value(ui, tool, candidate, label(candidate)).on_hover_text(format!(
                     "{} tool · {}\n{}",
                     label(candidate),
                     candidate.key().name(),
-                    candidate.hint(),
-                ));
-            }
-        });
-    }
+                    hint(candidate),
+                ))
+            })
+            .collect()
+    })
 }
 
 pub fn timeline_fit_button(ui: &mut Ui) -> egui::Response {
-    crate::view_button(ui, "Fit").on_hover_text("Fit all content on both axes · F")
+    ui.add(crate::view_button_widget("Fit").quiet())
+        .on_hover_text("Fit all content on both axes · F")
 }
 
 /// Shared by the arranger and focused audio editor. This is an edit increment,
@@ -327,7 +303,7 @@ impl NudgeUnit {
 pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
     let mut unit = NudgeUnit::load(ui.ctx());
     let mut direction = 0;
-    crate::action_menu(ui, "Nudge", |ui| {
+    crate::quiet_action_menu(ui, "Nudge", |ui| {
         crate::text::label(ui, "Increment");
         for (value, label) in [
             (NudgeUnit::Grid, "Grid"),
@@ -388,6 +364,63 @@ pub fn time_signature_choice(ui: &mut Ui, beats_per_bar: &mut u8) -> Response {
     response
 }
 
+/// A high-contrast position marker shared by the arranger and clip editors.
+/// Paint last, above clips and selections. It owns no input or transport state;
+/// callers supply the exact time mapping and the complete visible canvas.
+pub fn paint_timeline_cursor(painter: &egui::Painter, ruler: Rect, canvas: Rect, x: f32) {
+    if !x.is_finite()
+        || !ruler.is_finite()
+        || !canvas.is_finite()
+        || !ruler.is_positive()
+        || !canvas.is_positive()
+        || !(canvas.left()..=canvas.right()).contains(&x)
+    {
+        return;
+    }
+    let bounds = Rect::from_min_max(egui::pos2(canvas.left(), ruler.top()), canvas.max);
+    let painter = painter.with_clip_rect(painter.clip_rect().intersect(bounds));
+    let colors = crate::theme::palette(painter.ctx());
+    // Align the three-point core's edges to physical pixels at every density.
+    let core_width = 3.0;
+    let x = (x - core_width * 0.5).round_to_pixels(painter.pixels_per_point()) + core_width * 0.5;
+    let start = ruler.bottom();
+    let line = [egui::pos2(x, start), egui::pos2(x, canvas.bottom())];
+    for (width, opacity) in [
+        (crate::tokens::SPACE_MD, 0.08),
+        (crate::tokens::SPACE_SM, 0.18),
+    ] {
+        painter.line_segment(
+            line,
+            egui::Stroke::new(width, colors.cursor.gamma_multiply(opacity)),
+        );
+    }
+    // The opposite-luminance edge keeps the core legible over arbitrary clips.
+    painter.line_segment(
+        line,
+        egui::Stroke::new(crate::tokens::SPACE_XS, colors.cursor_outline),
+    );
+    painter.line_segment(line, egui::Stroke::new(core_width, colors.cursor));
+
+    let half = crate::tokens::SPACE_MD * 0.5;
+    let head = vec![
+        egui::pos2(x - half, start - crate::tokens::SPACE_SM),
+        egui::pos2(x + half, start - crate::tokens::SPACE_SM),
+        egui::pos2(x + half, start - crate::tokens::SPACE_XS),
+        egui::pos2(x, start),
+        egui::pos2(x - half, start - crate::tokens::SPACE_XS),
+    ];
+    painter.add(egui::Shape::convex_polygon(
+        head.clone(),
+        egui::Color32::TRANSPARENT,
+        egui::Stroke::new(crate::tokens::SPACE_XS, colors.cursor.gamma_multiply(0.18)),
+    ));
+    painter.add(egui::Shape::convex_polygon(
+        head,
+        colors.cursor,
+        egui::Stroke::new(1.0_f32, colors.cursor_outline),
+    ));
+}
+
 /// Musical position and elapsed clock time use the canvas's exact mapping.
 /// At closer zoom, beat and quarter-beat anchors keep a view between bar lines
 /// readable. Bar labels remain primary; all labels require their full bounds.
@@ -420,7 +453,7 @@ pub fn paint_timeline_ruler(
     let end = end_beat.ceil().max(0.0) as usize;
     let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     let palette = crate::theme::palette(painter.ctx());
-    let font = egui::FontId::monospace(crate::tokens::FONT_CANVAS);
+    let font = egui::FontId::proportional(crate::tokens::FONT_CANVAS);
     let mut upper = Vec::new();
     let mut lower = Vec::new();
     let label = |text: String, x: f32, top: bool, color, placed: &mut Vec<Rect>| {
@@ -456,7 +489,7 @@ pub fn paint_timeline_ruler(
         let seconds = beat * 60.0 / tempo.max(1.0);
         seconds
             .is_finite()
-            .then(|| format!("{}:{:05.2}", seconds as u64 / 60, seconds % 60.0))
+            .then(|| crate::format_clock_time(seconds, 2))
     };
     let tick = |x: f32, length: f32| {
         if x >= rect.left() && x <= rect.right() {

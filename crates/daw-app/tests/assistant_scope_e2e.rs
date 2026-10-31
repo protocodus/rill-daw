@@ -277,7 +277,8 @@ fn piano_roll_scope_filters_tools_edits_one_clip_and_global_ai_resets_the_bounda
         )],
     );
     unchanged(&denied, &changed);
-    let local_undo = app.click("Undo");
+    let local_undo = app.inspect();
+    assert!(!visible(&local_undo, "Undo"));
     unchanged(&local_undo, &changed);
 
     // The global toolbar always opens the whole song, even from a piano roll.
@@ -364,7 +365,12 @@ fn composition_dialog_ai_uses_the_same_clip_boundary_in_both_appearances() {
         assert_eq!(scoped["assistant"]["scope"]["track_id"], channel);
         assert_eq!(scoped["assistant"]["scope"]["clip_id"], selected);
         let tools = app.click("Tools");
-        for text in ["Tools", "Find a tool", "Use tool", "Send"] {
+        let primary = if tools["assistant"]["submit_state"] == "SetupRequired" {
+            "Connect AI"
+        } else {
+            "Send"
+        };
+        for text in ["Tools", "Find a tool", "Use tool", primary] {
             assert!(
                 visible(&tools, text),
                 "Missing {text}: {}",

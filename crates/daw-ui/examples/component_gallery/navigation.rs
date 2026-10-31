@@ -28,10 +28,10 @@ impl Default for State {
 
 pub fn show(ui: &mut Ui, state: &mut State) {
     controls::workspace_header(ui, "Clip Editor · Glass arpeggio", |ui| {
-        controls::button(ui, "Properties");
-        controls::button(ui, "Next");
+        controls::quiet_button(ui, "Properties");
+        controls::quiet_button(ui, "Next");
     });
-    ui.add_space(16.0);
+    ui.add_space(controls::tokens::SPACE_MD);
     if let Some(view) = controls::view_links(
         ui,
         state.view,
@@ -65,9 +65,9 @@ pub fn show(ui: &mut Ui, state: &mut State) {
     ) {
         state.view = view;
     }
-    ui.add_space(20.0);
+    ui.add_space(controls::tokens::SPACE_LG);
     controls::toolbar(ui, |ui| {
-        controls::action_menu(ui, "Process", |ui| {
+        controls::quiet_action_menu(ui, "Process", |ui| {
             controls::button(ui, "Normalize");
             controls::button(ui, "Reverse");
         });
@@ -90,17 +90,17 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         if state.keep_menu_open {
             egui::Popup::open_id(ui.ctx(), egui::Popup::default_response_id(&choice.response));
         }
-        controls::view_menu(ui, "View", |ui| {
+        controls::quiet_view_menu(ui, "View", |ui| {
             controls::checkbox(ui, &mut state.highlight, "Highlight scale");
         });
-        controls::view_button(ui, "Fit");
+        controls::timeline_fit_button(ui);
+        controls::editor_tool_help(
+            ui,
+            controls::EditorTool::Select,
+            controls::ToolHintContext::Midi,
+        );
     });
-    controls::editor_tool_hint(
-        ui,
-        controls::EditorTool::Select,
-        controls::ToolHintContext::Midi,
-    );
-    ui.add_space(20.0);
+    ui.add_space(controls::tokens::SPACE_LG);
     if !state.capture {
         ui.horizontal(|ui| {
             controls::checkbox(ui, &mut state.keep_menu_open, "Keep example menu open");
@@ -135,7 +135,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             ],
         );
     });
-    ui.add_space(16.0);
+    ui.add_space(controls::tokens::SPACE_MD);
     text::note(
         ui,
         "Menus keep native popup behavior; utilities retain caller-owned state.",
@@ -143,7 +143,10 @@ pub fn show(ui: &mut Ui, state: &mut State) {
     let context = ui.ctx().clone();
     controls::popup("Clip properties", &context)
         .open(&mut state.popup_open)
-        .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-24.0, 230.0))
+        .anchor(
+            egui::Align2::RIGHT_TOP,
+            egui::vec2(-controls::tokens::POPUP_MARGIN, 230.0),
+        )
         .default_width(360.0)
         .resizable(false)
         .vscroll(false)
@@ -159,7 +162,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 ui.add(controls::number(&mut state.length).suffix(" beats"));
                 ui.end_row();
             });
-            ui.add_space(12.0);
+            ui.add_space(controls::tokens::SPACE_MD);
             controls::action_row(
                 ui,
                 |ui| {
