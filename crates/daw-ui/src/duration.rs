@@ -178,7 +178,7 @@ pub fn loop_endpoint_handle(
         grip_x,
         (region.top() + 3.0)..=(region.bottom() - 3.0),
         egui::Stroke::new(
-            if active { 2.0 } else { 1.0 },
+            if active { 2.0_f32 } else { 1.0_f32 },
             ink.gamma_multiply(if active { 1.0 } else { 0.65 }),
         ),
     );

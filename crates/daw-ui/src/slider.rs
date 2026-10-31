@@ -376,7 +376,7 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
         ui.painter().line_segment(
             [anchor, geometry.handle],
             Stroke::new(
-                2.0,
+                2.0_f32,
                 if ui.is_enabled() {
                     colors.accent
                 } else {
@@ -425,7 +425,7 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
                         geometry.handle
                             + egui::vec2(sign * (geometry.handle_half_extent.x - 3.0), y),
                     ],
-                    Stroke::new(1.0, colors.muted.gamma_multiply(0.6)),
+                    Stroke::new(1.0_f32, colors.muted.gamma_multiply(0.6)),
                 );
             }
         }
