@@ -186,3 +186,30 @@ fn invalid_viewports_cannot_submit_nonfinite_labels_or_ticks() {
         assert!(ruler.labels.is_empty() && ruler.ticks.is_empty());
     }
 }
+
+#[test]
+fn elapsed_clock_carries_rounded_seconds_and_keeps_only_useful_precision() {
+    for (seconds, precision, expected) in [
+        (0.0, 2, "0:00"),
+        (15.0, 2, "0:15"),
+        (165.0, 2, "2:45"),
+        (18_955.0, 2, "5:15:55"),
+        (0.15, 2, "0:00.15"),
+        (1.5, 2, "0:01.5"),
+        (1.234, 3, "0:01.234"),
+        (1.234, usize::MAX, "0:01.234"),
+        (59.999, 2, "1:00"),
+        (3599.999, 2, "1:00:00"),
+        (3599.9996, 3, "1:00:00"),
+        (59.6, 0, "1:00"),
+        (-1.0, 2, "0:00"),
+        (f64::NAN, 2, "—"),
+        (f64::INFINITY, 2, "—"),
+    ] {
+        assert_eq!(
+            daw_ui::format_clock_time(seconds, precision),
+            expected,
+            "{seconds} with {precision} fractional digits"
+        );
+    }
+}

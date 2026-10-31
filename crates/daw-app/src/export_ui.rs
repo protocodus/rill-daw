@@ -199,13 +199,7 @@ impl DawApp {
             return;
         }
         let duration = self.project.end_beat() * 60.0 / self.project.tempo;
-        let milliseconds = (duration * 1000.0).round() as u64;
-        let duration = format!(
-            "Arrangement · {}:{:02}.{:03}",
-            milliseconds / 60_000,
-            milliseconds / 1000 % 60,
-            milliseconds % 1000,
-        );
+        let duration = format!("Arrangement · {}", daw_ui::format_clock_time(duration, 3));
         let mut export = false;
         let mut cancel = false;
         let missing_instruments = self.export_missing_instruments().join(", ");

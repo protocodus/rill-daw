@@ -592,33 +592,21 @@ impl DawApp {
                 if state.generate.is_some() {
                     ui.disable();
                 }
-                daw_ui::editor_tools(ui, &mut self.tool, &supported);
+                daw_ui::editor_tools_with_context(
+                    ui,
+                    &mut self.tool,
+                    &supported,
+                    daw_ui::ToolHintContext::Midi,
+                );
+                ui.add_space(daw_ui::tokens::SPACE_SM);
                 open_generate = ui
                     .add_enabled(
                         state.transform.is_none(),
-                        daw_ui::button_widget("Generate…"),
+                        daw_ui::quiet_button_widget("Generate…"),
                     )
                     .on_hover_text("Create chords, arpeggios or melodies with a live preview")
                     .clicked();
-                if self.tool == Tool::Select {
-                    let transform_enabled =
-                        !self.selected_notes.is_empty() && state.transform.is_none();
-                    if ui
-                        .add_enabled(transform_enabled, daw_ui::button_widget("Randomize…"))
-                        .on_hover_text("Preview velocity and timing variation on selected notes")
-                        .clicked()
-                    {
-                        open_transform = Some(NoteTransform::Randomize(state.randomize_settings));
-                    }
-                    if ui
-                        .add_enabled(transform_enabled, daw_ui::button_widget("Quantize…"))
-                        .on_hover_text("Preview selected notes aligned to a rhythmic grid")
-                        .clicked()
-                    {
-                        open_transform = Some(NoteTransform::Quantize(state.quantize_settings));
-                    }
-                }
-                daw_ui::action_menu(ui, "Notes", |ui| {
+                daw_ui::quiet_action_menu(ui, "Notes", |ui| {
                     ui.add_enabled_ui(
                     !self.selected_notes.is_empty() && state.transform.is_none(),
                     |ui| {
@@ -756,14 +744,10 @@ impl DawApp {
                         }
                     }
                 });
-                daw_ui::toolbar_group_sized(ui, 166.0, |ui| {
+                daw_ui::quiet_picker_button(ui, "Draw settings", |ui| {
+                    ui.set_min_width(260.0);
                     daw_ui::drawing_note_length(ui, &mut state.draw_length);
-                });
-                ui.separator();
-                daw_ui::toolbar_group_sized(
-                    ui,
-                    daw_ui::tokens::SELECT_WIDTH + 6.0 * daw_ui::tokens::SPACE_LG,
-                    |ui| {
+                    ui.separator();
                         let grid_scale_label = daw_ui::text::truncated(
                             ui,
                             daw_ui::text::TextRole::Label,
@@ -820,29 +804,10 @@ impl DawApp {
                 self.scale.name(),
                 state.chord.name()
             ));
-                    },
-                );
-                daw_ui::view_menu(ui, "View", |ui| {
-                    self.clip_navigation_controls(ui);
-                    ui.separator();
-                    view_action = daw_ui::timeline_selection_view_actions(
-                        ui,
-                        "midi",
-                        !self.selected_notes.is_empty(),
-                    );
-                    ui.separator();
-                    daw_ui::checkbox(ui, &mut state.highlight_scale, "Highlight scale");
-                    daw_ui::checkbox(ui, &mut state.highlight_chord, "Highlight chord");
-                    daw_ui::checkbox(
-                        ui,
-                        &mut state.color_out_of_scale,
-                        "Color out-of-scale notes",
-                    )
-                    .on_hover_text("Show notes outside the selected grid scale in red");
-                    daw_ui::checkbox(ui, &mut state.only_scale_keys, "Only scale keys")
-                        .on_hover_text("Hide other pitches without changing your notes");
-                });
-                fit = daw_ui::timeline_fit_button(ui).clicked();
+                }).0.on_hover_text(format!(
+                    "Length · {} · {} {} · {}\nSet note length, grid scale and multi-draw harmony",
+                    state.draw_length.label(), pitch_class(self.root), self.scale.name(), state.chord.name(),
+                ));
                 let hidden_count = source_notes
                     .iter()
                     .filter(|note| {
@@ -930,8 +895,34 @@ impl DawApp {
                         },
                     );
                 }
+                let view_controls_id = ui.make_persistent_id("midi_view_controls");
+                daw_ui::toolbar_trailing(ui, 270.0, |ui| {
+                    ui.scope_builder(egui::UiBuilder::new().id(view_controls_id), |ui| {
+                        daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Midi);
+                        fit = daw_ui::timeline_fit_button(ui).clicked();
+                        daw_ui::quiet_view_menu(ui, "View", |ui| {
+                            self.clip_navigation_controls(ui);
+                            ui.separator();
+                            view_action = daw_ui::timeline_selection_view_actions(
+                                ui,
+                                "midi",
+                                !self.selected_notes.is_empty(),
+                            );
+                            ui.separator();
+                            daw_ui::checkbox(ui, &mut state.highlight_scale, "Highlight scale");
+                            daw_ui::checkbox(ui, &mut state.highlight_chord, "Highlight chord");
+                            daw_ui::checkbox(
+                                ui,
+                                &mut state.color_out_of_scale,
+                                "Color out-of-scale notes",
+                            )
+                            .on_hover_text("Show notes outside the selected grid scale in red");
+                            daw_ui::checkbox(ui, &mut state.only_scale_keys, "Only scale keys")
+                                .on_hover_text("Hide other pitches without changing your notes");
+                        });
+                    });
+                });
             });
-            daw_ui::editor_tool_hint(ui, self.tool, daw_ui::ToolHintContext::Midi);
         }
 
         // Preview always exposes its pitches; closing restores the original
@@ -988,7 +979,7 @@ impl DawApp {
             daw_ui::card(ui.ctx()).show(ui, |ui| {
                 match &mut preview.settings {
                     NoteTransform::Quantize(settings) => {
-                        ui.horizontal_wrapped(|ui| {
+                        daw_ui::parameter_row_wrapped(ui, |ui| {
                             ui.label("Quantize preview");
                             daw_ui::select("quantize_grid", format!("{} beat", settings.grid)).width(90.0).show_ui(ui, |ui| {
                                 for grid in [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0] { daw_ui::selectable_value(ui, &mut settings.grid, grid, format!("{grid} beat")); }
@@ -2228,15 +2219,12 @@ impl DawApp {
             serde_json::Value::Null
         };
         let cursor = view.x_at(plot, self.cursor - clip_start);
-        if (plot.left()..=plot.right()).contains(&cursor) {
-            row_painter.line_segment(
-                [
-                    Pos2::new(cursor, plot.top()),
-                    Pos2::new(cursor, plot.bottom()),
-                ],
-                Stroke::new(1.5_f32, palette(ui.ctx()).orange),
-            );
-        }
+        daw_ui::paint_timeline_cursor(
+            &painter,
+            ruler,
+            Rect::from_min_max(plot.min, velocity_rect.max),
+            cursor,
+        );
         ui.ctx().data_mut(|data|data.insert_temp(egui::Id::new("midi_editor_diagnostics"),serde_json::json!({
             "plot":rect_json(plot),"velocity":rect_json(velocity_rect),"keys":key_diagnostics,"notes":note_diagnostics,
             "outside_clip":outside_clip.map(rect_json),"clip_end_label":clip_end_label.map(rect_json),

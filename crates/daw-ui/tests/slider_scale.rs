@@ -227,14 +227,15 @@ fn adaptive_scale_uses_native_handle_centers_and_keeps_midpoint_at_every_density
                             .iter()
                             .all(|tick| geometry.rail.contains(tick.center))
                     );
-                    let hair = output.shapes.iter().any(|shape| match shape.shape {
-                        egui::Shape::LineSegment { points, stroke } => {
-                            stroke.width == 1.5
-                                && points[0].lerp(points[1], 0.5).distance(geometry.handle) < 0.001
+                    let zero = output.shapes.iter().any(|shape| match shape.shape {
+                        egui::Shape::Circle(circle) => {
+                            circle.fill == egui::Color32::TRANSPARENT
+                                && circle.stroke.width > 0.0
+                                && circle.center.distance(geometry.handle) < 0.001
                         }
                         _ => false,
                     });
-                    assert!(hair, "centerhair must actually be painted at native value");
+                    assert!(zero, "zero circle must actually be painted at native value");
                     for shape in &output.shapes {
                         if let egui::Shape::LineSegment { points, stroke } = shape.shape
                             && stroke.width == 1.0
@@ -247,7 +248,12 @@ fn adaptive_scale_uses_native_handle_centers_and_keeps_midpoint_at_every_density
                     }
                     if !vertical {
                         assert!(
-                            response.rect.height() <= if compact { 24.1 } else { 34.1 },
+                            response.rect.height()
+                                <= if compact {
+                                    24.1
+                                } else {
+                                    daw_ui::tokens::PARAMETER_ROW_HEIGHT + 0.1
+                                },
                             "{:?}",
                             response.rect
                         );

@@ -63,7 +63,7 @@ fn minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_pro
 
     let state = options(&mut app);
     assert_eq!(state["export_include_effect_tails"], true);
-    assert!(has(&state, "Arrangement · 1:00.000"));
+    assert!(has(&state, "Arrangement · 1:00"));
     let full_path = app.directory.path().join("With tails.wav");
     let full = finish(&mut app, &full_path);
     assert_eq!(full.frames(), 48_000 * 60 + 48_000 / 5);

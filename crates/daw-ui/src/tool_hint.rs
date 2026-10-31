@@ -75,6 +75,28 @@ impl ToolHintContext {
     }
 }
 
+/// Full instructions stay one click from the canvas without a permanent band.
+/// This popup changes no tool, selection, viewport, or document state.
+pub fn editor_tool_help(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {
+    let response = crate::quiet_button(ui, "Tool help").on_hover_text(format!(
+        "{} · {}\n{}",
+        context.label(tool),
+        tool.key().name(),
+        context.hint(tool),
+    ));
+    egui::Popup::menu(&response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.set_max_width(360.0);
+            crate::text::label(
+                ui,
+                format!("{} · {}", context.label(tool), tool.key().name()),
+            );
+            crate::text::body(ui, context.hint(tool));
+        });
+    response
+}
+
 /// Keep the active interaction legible without letting instructions consume the
 /// canvas. Help is a view preference scoped to this editor, never a song edit.
 pub fn editor_tool_hint(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {

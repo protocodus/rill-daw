@@ -9,7 +9,7 @@ They use fixed example values for waveforms, meters, device metadata, and the
 assistant transcript. Each preview follows your page's light or dark theme;
 the links below it open either version at full size.
 
-[Actions and control roles](#actions-and-control-roles) · [Inputs and forms](#inputs-and-forms) · [Navigation and menus](#navigation-and-menus) · [Musical canvas primitives](#musical-canvas-primitives) · [Mixer and recording](#mixer-and-recording) · [Curves and crossfades](#curves-and-crossfades) · [Devices and parameters](#devices-and-parameters) · [Feedback and assistant](#feedback-and-assistant)
+[Actions and control roles](#actions-and-control-roles) · [Inputs and forms](#inputs-and-forms) · [Navigation and menus](#navigation-and-menus) · [Musical canvas primitives](#musical-canvas-primitives) · [Mixer and recording](#mixer-and-recording) · [Track headers](#track-headers) · [Curves and crossfades](#curves-and-crossfades) · [Devices and parameters](#devices-and-parameters) · [Feedback and assistant](#feedback-and-assistant)
 
 ### Actions and control roles
 
@@ -62,7 +62,7 @@ Musical time, piano-key states, velocities, waveforms, and clip regions use the 
 
 [Light preview](assets/ui-gallery/timeline-light.png) · [Dark preview](assets/ui-gallery/timeline-dark.png)
 
-[`paint_timeline_ruler`](../crates/daw-ui/src/timeline.rs) · [`piano_key`, `velocity_marker`](../crates/daw-ui/src/piano.rs) · [`paint_audio_waveform`](../crates/daw-ui/src/waveform.rs)
+[`paint_timeline_ruler`, `paint_timeline_cursor`](../crates/daw-ui/src/timeline.rs) · [`piano_key`, `velocity_marker`](../crates/daw-ui/src/piano.rs) · [`paint_audio_waveform`](../crates/daw-ui/src/waveform.rs)
 
 ### Mixer and recording
 
@@ -76,6 +76,21 @@ Channel strips, meters, gain/pan controls, and recording controls with fixed dem
 [Light preview](assets/ui-gallery/mixer-light.png) · [Dark preview](assets/ui-gallery/mixer-dark.png)
 
 [`mixer_strip`, `stereo_meter`](../crates/daw-ui/src/layout.rs) · [`channel_controls_at`](../crates/daw-ui/src/channel_controls.rs) · [`record_button`, `input_meter`](../crates/daw-ui/src/recording.rs)
+
+### Track headers
+
+Track identity, volume/pan and M/S, routing, source selection, and a dedicated
+stereo meter stay in distinct sections. Compact examples keep a visible route
+to full channel controls.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/tracks-dark.png">
+  <img alt="Audio, MIDI and bus track headers with separated controls, plus compact, narrow and short layouts." src="assets/ui-gallery/tracks-light.png" width="1120">
+</picture>
+
+[Light preview](assets/ui-gallery/tracks-light.png) · [Dark preview](assets/ui-gallery/tracks-dark.png)
+
+[`TrackHeaderLayout`, `track_header_link_at`, `track_header_details_at`](../crates/daw-ui/src/track_header.rs) · [`track_mix_controls_at`](../crates/daw-ui/src/track_mix.rs)
 
 ### Curves and crossfades
 
@@ -163,12 +178,13 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 
 | Token family | Values |
 | --- | --- |
-| Spacing | `SPACE_XS` 4, `SPACE_SM` 8, `SPACE_MD` 12, `SPACE_LG` 16, `SPACE_XL` 24 |
-| Controls | `CONTROL_HEIGHT` 34, `COMPACT_HEIGHT` 24, `SELECT_WIDTH` 160 |
+| Spacing | `SPACE_XS` 5, `SPACE_SM` 8, `SPACE_MD` 13, `SPACE_LG` 21, `SPACE_XL` 34 |
+| Controls | `CONTROL_HEIGHT` 34, `COMPACT_HEIGHT` 21, `SELECT_WIDTH` 144; button padding 13 × 8 |
 | Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
-| Typography | Caption 13, note 14, button/body 15, subtitle 16, title 20; canvas 12, track title 14, dense scale 10 |
+| Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
+| Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
 
-Sizes are logical screen points and follow egui's display scaling. Surfaces use neutral graphite in Dark and cool porcelain in Light, with a muted sage accent and a restrained luminance hierarchy. Action buttons have a quiet fill; inputs retain visible boundaries. Accent color identifies active choices and keyboard focus. Cards and controls stay flat; utility windows use a clearer border and a soft shadow to distinguish them from the workspace. Sections use spacing rather than nested outlines. Body and button text remain 15 points, with 34-point action targets. Avoid introducing a second app-specific palette or copied spacing scale.
+Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light, with a muted sage accent. Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. Primary actions gain a small blurred shadow; selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
 
 Choose controls by what they change:
 
@@ -192,15 +208,17 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 
 | Purpose | API |
 | --- | --- |
-| Standard actions | `button`, `primary_button`, `small_button` |
+| Standard actions | `button`, `primary_button`, `primary_button_widget`, `small_button` |
+| Secondary toolbar actions | `quiet_button`, `quiet_button_widget`, `quiet_toggle`, `quiet_action_menu`, `quiet_view_menu`, `quiet_picker_button` |
 | Presentation commands | `view_button`, `view_button_widget` |
 | Exclusive interaction modes | `tool_value`, `IconButton::tool` |
+| Quiet page navigation | `tab_choice`, `IconButton::tab` |
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Toolbar command, choice, and presentation menus | `action_menu`, `choice_menu`, `view_menu` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
-| Focused workspace structure | `workspace_header`, `toolbar`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
+| Focused workspace structure | `workspace_header`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
@@ -215,7 +233,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Native pane middle-drag navigation | `scroll_area`, `scroll_area_is_panning` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
-| Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button` |
+| Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantSubmitState`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button` |
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
 | Ghost clip identity | `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
@@ -224,7 +242,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
-| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `compact_editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
+| Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `paint_track_header_sections`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
+| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
@@ -237,7 +256,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Library navigation and active filters | `count_item`, `filter_chip`, `Icon::Star`, `Icon::StarFilled` |
 | Bounded context titles | `text::bounded_block` |
 | Inactive clip regions | `paint_clip_tail` |
-| Surfaces | `panel`, `card`, `inset`, `soft_surface`, `paint_ambient`, `paint_selection_glow` |
+| Surfaces | `panel`, `card`, `inset`, `component_shape`, `material_overlay_shape`, `soft_surface`, `paint_ambient`, `paint_selection_glow` |
 | Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
 | On-demand windows | `popup`, `workspace_popup` |
 | Compact section label | `theme::label` |
@@ -248,10 +267,19 @@ pointer input: even a mouse move and press in the same frame reaches the control
 beneath a disappearing hint. Sliders and automation hints use this helper. Keep
 native `on_hover_ui` for tooltips that intentionally contain interactive content.
 
-Standard controls use comfortable horizontal/vertical padding; canvas-owned controls retain their compact geometry. Popups use 24-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows have a prominent but restrained 1.5-point border and a broad, soft shadow; menus use a smaller shadow. Panels and controls remain flat.
+Standard controls use 13-point horizontal and eight-point vertical padding; canvas-owned controls retain their compact geometry. Popups use 21-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows use a φ-point border with a 21-point blurred shadow; menus use a smaller 13-point shadow. Blur and shadows add depth without changing native hit targets or focus behavior.
 
 `slider` retains native dragging, keyboard focus and exact numeric entry, with
-minimum/maximum captions and a center line on its handle. Scale positions use
+minimum/maximum captions and a value marker inside its handle. Minimum shows a
+small downward triangle, maximum an upward triangle, midpoint a filled dot,
+and zero a hollow circle. Endpoints take precedence when zero is also a limit;
+zero takes precedence when it is also the midpoint. Ordinary values retain the
+center line. The same markers appear in track-header sliders, in both rail
+orientations and at compact sizes. They are paint-only: no snapping or value
+changes. Values outside the range keep their distinct overflow indicator.
+For a converted scale, `.zero_reference(...)` identifies its displayed zero:
+the Mixer fader uses linear gain 1.0 for the hollow circle at 0 dB.
+Scale positions use
 the handle's actual travel, so a tick and the handle center identify the same
 value. Short rails show halves; at 100 points of travel they add fifths, and at
 200 points they show tenths. The midpoint remains visible at every density.
@@ -305,7 +333,7 @@ unless the host supplies an actual physical-unit conversion.
 
 `assistant(ui, prompt, state, options)` provides a bounded, selectable conversation,
 captured-context label, optional progress, multiline **AI prompt**, and fixed
-**Send**, **Stop**, and **Undo** controls. Enter adds a newline; Ctrl/Cmd+Enter
+primary, cancellation/recovery, and **Undo** controls. Enter adds a newline; Ctrl/Cmd+Enter
 submits only while the prompt owns focus. The application owns execution,
 conversation retention, cancellation, permission checks, and undo; closing its
 window does not imply cancellation. Returned responses expose interaction bounds
@@ -316,7 +344,9 @@ keeping actions visible even for a long draft. `secret_field` masks a credential
 using ordinary shared input spacing; callers still protect its backing value and
 must never include it in diagnostic or conversation text.
 
-`paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases retain flat fills; selected clips and channels add a soft track-colored outline glow. The tint uses one bounded mesh (at most 425 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
+`component_shape` paints a flat fill, a rounded linear/radial gradient, and a crisp inside border beneath native control content. `ComponentMaterial` enables a small blurred shadow for elevated actions or an accent glow for active controls. Both use an eight-point blur; elevated shadows have a three-point offset. One 55 × 34 texture per appearance supplies the low-opacity gradient, with its light centered at the golden-ratio complement. Native rounded rectangles provide anti-aliasing and pixel snapping at the current display scale. Transparent fills omit the gradient. Reserve a painter slot before drawing the native control, retain its frame padding with transparent fill/no stroke, then replace the slot using the returned rectangle and native interaction state. `material_overlay_shape` supplies only the tint when a caller already owns the base. These helpers create no hit targets, animations, software blur, or repaint requests.
+
+`paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases retain flat fills; selected clips and channels add a soft track-colored outline glow. The tint uses golden-ratio light placement, one bounded mesh (at most 308 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
 
 `paint_selection_glow` adds a six-point track-colored halo using one fixed mesh (128 vertices, 576 indices). It respects the parent clip and culls hidden items. Clip and mixer selection use this shared treatment without altering layout, input, or playback.
 
@@ -381,7 +411,7 @@ Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The 
 
 When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable. `popup_body_size(ctx)` supplies the available utility content bounds when a view needs an explicit minimum height. Routing uses this bound to keep a useful send viewport below its navigation and AI actions as display density changes; long send lists and output choices scroll together.
 
-`workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
+`workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. Back and Properties are quiet actions; the Previous/Next pair is omitted when the clip has no neighbors. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
 
 `toolbar_group_sized(ui, width, contents)` reserves a known width before drawing
 related controls from left to right. It stays on the current row when space
@@ -389,18 +419,37 @@ permits and wraps as a complete group otherwise. Use it for fixed-width choice
 groups such as MIDI multi-draw's two selectors; keep `toolbar_trailing` for
 existing right-aligned controls.
 
-`editor_tools` uses shared `tool_group` surfaces to keep selection/drawing,
-cut/join/erase, copy, and timing tools together. Groups wrap as whole units with
-every applicable tool still visible. Toolbars have a quiet panel fill and bottom
+Horizontal control rows center their labels, icons, fields and actions vertically
+by default. Ordinary rows use the 34-point control height. A calibrated slider
+with scale captions reserves 55 points: its rail stays on the row's center line,
+with balanced space around it and readable captions below. Use
+`parameter_row(ui, contents)` when mixing those sliders with other controls.
+`parameter_row_wrapped` and `parameter_toolbar` retain that alignment when rows
+wrap. Each reserves the height before painting. Form grids center each label beside
+its complete control. Structural columns, such as mixer strips, align at the top.
+
+`editor_tools` keeps selection/drawing, cut/join/erase, copy, and timing tools
+together as individual quiet buttons. A fine vertical separator distinguishes
+families sharing a row; wrapped rows start cleanly. Every supported tool stays
+visible, and families wrap as whole units where space permits. Toolbars have a quiet panel fill and bottom
 divider; active tools retain their underline and keyboard semantics.
 
-Use distinct control roles consistently. Direct actions use filled buttons. `action_menu` keeps that filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
+Use distinct control roles consistently. Primary and confirmation actions use filled buttons; persistent secondary toolbar commands use the quiet variants below. `action_menu` keeps the filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
 
-The main bar groups workspace views, transport commands, musical position/tempo,
-and playback guides separately. Arranger/Mixer and Click/Loop use quiet outlined
-choices; transport commands retain their filled treatment. Guide controls retain
-their playback and project semantics. Reserve each group's measured width before
-painting it so narrow windows wrap the complete group without clipping controls.
+The main bar uses quiet `tab_choice` navigation for Arranger/Mixer and two
+`command_group` surfaces for playback and musical position/tempo/meter. Play is
+the primary action and has a stable 100-point target across Play/Pause. Start,
+Stop and idle Record share their group surface; recording retains its active
+color and explicit Stop recording label. Click/Loop retain a selected fill when
+active. Range opens exact loop values; the permanent range caption is omitted.
+Each group wraps intact at narrow widths, without changing playback or history.
+
+`quiet_button`, `quiet_toggle` and the quiet menu variants remove only the idle
+box. They retain full 34-point targets, hover/focus surfaces, accessible labels,
+native popup behavior and selected-state feedback. Use these secondary controls
+in persistent toolbars; keep explicit filled actions for primary tasks and
+confirmation. `command_group` supplies one rounded surface, four-point padding
+and complete-group wrapping, without taking input itself.
 
 `mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height, and faders and meters stretch with the window. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
@@ -412,25 +461,73 @@ painting it so narrow windows wrap the complete group without clipping controls.
 
 `number_at(ui, rect, id_salt, number(&mut value))` places the shared `Number` widget inside a canvas rectangle without advancing the parent layout. Its builder preserves native `DragValue` range, speed, precision, prefix, suffix and deferred-commit behavior. Drag to adjust; enter text mode and double/triple-click to select the entire numeric value, including its sign and decimal portion. Ordinary single-click caret editing stays native. Use a stable ID such as `(track.id, "gain")`, and commit when the returned response reports `changed()`.
 
-Expanded track headers show concise gain and pan readouts beside their sliders,
-leaving room for the meter. Clicking a readout opens the shared exact-value
+Track headers show concise gain and pan readouts above simple rails, with M/S
+beside them and the meter in a separate column. Clicking a readout opens the shared exact-value
 editor with the precise current value. Enter or **Apply value** commits an edit;
 Cancel, Escape or clicking outside leaves the channel unchanged. The sliders
 retain direct dragging, and right-click still opens parameter automation actions.
 
 `button_at` places a compact action in a canvas rectangle, truncating long labels without changing the row geometry. `picker_at` uses the same action with an anchored choice popup; it returns the action response and optional popup result. Both require stable IDs and retain native keyboard/focus behavior. Add a tooltip when the full label may be clipped, and use `ui.close()` when a choice is accepted.
 
-Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Click this label to choose Master or an eligible output bus; self-routing and feedback through outputs or sends are excluded. MIDI headers also show their assigned instrument (or `Choose instrument…`); clicking it opens the VST chooser bound to that track. Assigning returns to the composition caller; open **Window → Instrument** explicitly to edit its sound. Both pickers remain available in compact rows. Rows reuse `selectable_at` for mute/solo and `channel_controls_at` for volume and pan slider rails with a stereo level meter. Expanded rows provide dB volume and −100..100 pan readouts with exact entry on click; compact rows keep both rails and expose their precise values in tooltips. Meters read each channel's post-insert, post-fader, post-pan engine output, including buses and routed audio. Peaks attack immediately, release at 24 dB/s, and clear when stopped; channel meters do not copy the master level. Folders and automation lanes have no audio channel number, gain/pan rails, or meter; folder mute/solo acts on descendants.
+`TrackHeaderLayout::new(rect)` measures the header from its actual available
+rectangle. The default is 288 × 144 points, with an 89-point compact row. Its
+identity row reserves the color strip, track icon, name and reorder grip;
+builders add a recording-arm target, bus badge or folder disclosure only where
+applicable. `paint_track_header_identity` and `paint_track_header_sections` paint
+within those bounds. The caller retains selection, reordering, folder state and
+recording actions.
+
+The body separates volume/pan and M/S, **Routing**, and **Instrument** (MIDI),
+**Input** (audio), or **Channel** (bus). `track_header_link_at` aligns an icon,
+section label, destination value and disclosure inside each connection row.
+Routing chooses Master or an eligible output bus; self-routing and feedback
+through outputs or sends remain excluded. Instrument selection targets that
+track and returns to the composition caller. Open **Window → Instrument**
+explicitly to edit its sound. Input opens recording and monitoring settings.
+
+`track_mix_controls_at` draws native interactive rails with concise value
+captions and no miniature tick scales. Volume displays dB; pan uses C at center
+and L/R percentages away from it. Clicking a value opens exact entry, and
+right-click retains automation actions. In a 21-point mix section, readable
+value controls replace the separate rails and captions; their scale metadata is
+absent and the control/readout rectangles identify the same target.
+`TrackMixResponse` returns the actual control, readout and M/S responses; rendering or dismissing an editor never rounds
+or clamps the stored value. The caller commits real changes through the normal
+channel edit path.
+
+Shorter headers omit connection rows as a unit instead of
+squeezing them beside the title. `track_header_details_at` opens the complete
+Channel view. Mix controls remain when usable bounds exist; very small fitted
+rows retain identity and the existing context actions. The meter has its own
+column and reads actual post-insert, post-fader, post-pan stereo engine peaks,
+including buses and routed audio. Peaks attack immediately, release at 24 dB/s,
+and clear when stopped; this is peak metering, not simulated VU ballistics.
+Folders and automation lanes have no audio channel gain/pan or meter; folder
+mute/solo acts on descendants.
 
 **Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. The chooser identifies its target by name. Selecting an instrument assigns that existing track and returns to its caller without opening another panel; **Window → Instrument** remains available explicitly. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
 
-Arrangement **Add pattern** creates a four-beat pattern at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes.
+Arrangement **Add pattern** creates a four-beat pattern at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
 
 New tracks advance through a shared palette of distinct colors, preferring unused colors before reusing one. This applies to menu additions, imported tracks, and instrument or send creation. Existing and manually chosen colors remain unchanged; undo/redo and saved projects retain each assignment.
 
 Click the color strip at the left of an arranger track header to open its color picker. Edits update the shared track color used by its clips and mixer channel; other tracks retain their colors. Mixer channel names use the exact track color with contrasting text, and the full strip carries a quiet tint of that color in both themes. Master stays neutral. The strip remains usable on compact tracks and folders, and opening the picker does not change selection or collapse a folder. Color changes support Undo/Redo and project recall.
 
-Arrangement and clip editors share `TimelineViewport` and `TimelinePane`. Call `navigate` before domain hit testing and suppress edits while its `navigating` flag is true. Middle drag or Alt+left drag pans; Ctrl+wheel zooms horizontally around the pointer, Ctrl+Shift+wheel vertically; Ctrl+right or Ctrl+middle drag zooms around the initial pointer position, with Shift selecting the vertical axis. Plain wheel scrolls vertically and Shift+wheel horizontally. Plus/minus zoom horizontally; Shift+plus/minus vertically. `Fit` or F fits the earliest-to-latest event interval and every relevant row on both axes; Arrangement caps fitted row height at 96 points so sparse projects retain ordinary track proportions. The shared ruler shows musical bars and elapsed clock time using the same mapping. Arrangement reserves a separate loop-indicator strip below the two label rows with eight points of clearance. Text entry, disabled background canvases, and open menus do not consume editor shortcuts.
+Arrangement and clip editors share `TimelineViewport` and `TimelinePane`. Call `navigate` before domain hit testing and suppress edits while its `navigating` flag is true. Middle drag or Alt+left drag pans; Ctrl+wheel zooms horizontally around the pointer, Ctrl+Shift+wheel vertically; Ctrl+right or Ctrl+middle drag zooms around the initial pointer position, with Shift selecting the vertical axis. Plain wheel scrolls vertically and Shift+wheel horizontally. Plus/minus zoom horizontally; Shift+plus/minus vertically. `Fit` or F fits the earliest-to-latest event interval and every relevant row on both axes; Arrangement caps fitted row height at 144 points so sparse projects retain ordinary track proportions. The shared ruler shows musical bars and elapsed clock time using the same mapping. Arrangement reserves a separate loop-indicator strip below the two label rows with eight points of clearance. Text entry, disabled background canvases, and open menus do not consume editor shortcuts.
+
+Time and musical-position displays use proportional text. `format_clock_time`
+shows elapsed time as `m:ss` below one hour and `h:mm:ss` thereafter: `0:15`,
+`2:45`, `5:15:55`. Rulers retain useful hundredths and export duration retains
+useful milliseconds; redundant fractional zeroes disappear. Rounding carries
+across minute/hour boundaries before the fields are formatted.
+
+`paint_timeline_cursor(painter, ruler, canvas, x)` marks playback/edit position with
+a three-point amber core, a contrasting five-point edge, and soft eight- and
+thirteen-point glow layers. The pointed ruler marker and pixel-aligned line use
+dedicated theme colors so they remain visible over waveforms, notes and selected
+clips. Paint it after content and selection overlays. The arranger spans empty
+space beneath tracks; the MIDI editor includes the velocity lane. It owns no
+input, snapping or transport state, and omits positions outside the viewport.
 
 The arranger reserves a separate loop strip below bar/time labels. Drag the label
 gutter to resize all track headers, or a header's lower edge to resize every track
@@ -540,7 +637,7 @@ very high and low notes remain distinct and never cover the name. These helpers
 only paint; selection, dragging, trimming and ghost identity retain the clip's
 existing interaction target.
 
-`DrawNoteLength` supplies **Last note**, 1/16, 1/8, 1/4, 1/2 and one-bar drawing choices through `drawing_note_length`. Last note begins at 1/16 and remembers the last drawn or selected duration; the application converts audible beats to source time. `paint_clip_end_label` marks the visible **Clip end** without adding hit targets. Drawing beyond it extends the MIDI occurrence in the same Undo step as the note.
+The piano toolbar groups length, grid scale and multi-draw harmony under **Draw settings**; its tooltip shows the current values. `DrawNoteLength` supplies **Last note**, 1/16, 1/8, 1/4, 1/2 and one-bar drawing choices through `drawing_note_length`. Last note begins at 1/16 and remembers the last drawn or selected duration; the application converts audible beats to source time. `paint_clip_end_label` marks the visible **Clip end** without adding hit targets. Drawing beyond it extends the MIDI occurrence in the same Undo step as the note.
 
 ## State, focus, and accessibility
 
@@ -716,8 +813,9 @@ Inter 4.1 Regular and Semibold are embedded for interface text, with Noto Sans C
 2.004 for Chinese, Japanese and Korean names. Numeric readouts retain Hack;
 egui's Noto Emoji fallback renders monochrome emoji. No runtime font downloads or
 system-font lookup is needed. Fonts rasterize at the current display density;
-canvas labels use at least 12 logical points and hide when a zoomed row cannot fit
-them. Interface text is 15 points, notes 14, subtitles 16, and titles 20.
+canvas labels use 13 logical points and hide when a zoomed row cannot fit them.
+Interface text is about 14.85 points, notes 13, subtitles about 16.09, and titles
+21, following the shared Fibonacci and golden-ratio type scale.
 
 Font coverage does not imply full Unicode shaping: colored emoji, joined emoji
 sequences, bidirectional layout and complex-script shaping are not guaranteed by
@@ -759,16 +857,14 @@ last successful destination and tail setting through the normal export path.
 
 `EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent active underline and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Unsupported tools reset to Select when changing editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.
 
-`compact_editor_tools(ui, tool, supported, primary, context)` keeps the supplied
-primary modes visible and places the remaining modes in a shared tool chooser.
-Arrangement uses Select, Pencil, Cursor and Cut as its primary modes. The chooser
-reads **More tools** until a secondary mode is selected, then shows that mode's
-name and active underline. Its width remains stable as modes change; the
-disclosure arrow stays visible. Choices include their existing shortcut and
-contextual hover hint. `IconButton::tool_choice` supplies the shared styling;
-callers continue routing shortcuts through `editor_tool_shortcuts`. Tool changes
-leave selection and project history unchanged. The other editors retain their
-existing tool strips.
+`editor_tools_with_context(ui, tool, supported, context)` exposes every supported
+mode as a direct button with contextual wording, a shortcut hint, and a persistent
+active underline. The arranger, piano roll, and audio editor use the same
+selection/drawing, edit, copy, and timing families. Fine separators divide
+families on the same row; no tool is hidden in an overflow menu. Tool selection
+preserves neighboring geometry, document state, selection, and history.
+Call `editor_tool_shortcuts` separately to route supported keys through the same
+mode state. Native controls retain keyboard focus and disabled behavior.
 
 Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips. Arrangement supports groups of selected clips and time selections that retain rests.
 
@@ -782,14 +878,14 @@ and targets the open clip, independent of note or waveform selections. An
 unselected arranger clip's context menu also uses **Loop clip** and retains the
 existing selection.
 
-`editor_tool_hint` keeps the active tool's name, shortcut and a concise gesture
-summary on one quiet line below the toolbar. **Tool help** expands the complete
-instructions and shortcuts with a mouse click; click it again to reclaim canvas
-space. Arrangement, MIDI and audio use `ToolHintContext` for their own semantics
-and retain separate disclosure preferences when changing tools. The summary does
-not claim focus or consume editing shortcuts; only the help button is a normal
-keyboard focus target. Automation uses `interaction_hint` for its fixed point
-interactions. Opening help never changes selection, song state or undo history.
+Arrangement, MIDI and audio use `editor_tool_help` inside their toolbar. Its
+full-size **Tool help** button opens the current tool's name, shortcut and full
+instructions in a bounded popup; hover offers the same explanation. Escape or
+an outside click dismisses it. The canvas has no permanent instruction band.
+`ToolHintContext` preserves each editor's semantics. Automation continues to use
+`interaction_hint` for fixed point interactions; `editor_tool_hint` remains
+available to hosts that need inline guidance. Opening help never changes
+selection, song state or undo history.
 
 Arranger **View → Waveform amplitude** uses the shared
 `WaveformAmplitudeScale` choice: **Default** retains the ordinary level scale,
@@ -944,12 +1040,43 @@ MIDI audition pauses during pre-count so the prepared timeline can start exactly
 ### Assistant workspace
 
 `assistant(ui, prompt, state, options)` keeps Conversation, Examples, Tools, and Tips in
-one bounded body above a fixed prompt and Send/Stop/Undo row. Hosts supply
+one bounded body above a fixed prompt and action row. Hosts supply
 provider readiness, a pinned scope, current musical context, example categories,
 available tools, and tips; the
 component does not depend on a provider, project, or tool registry. Tool transcript
 rows are labeled **Activity**, since starting a tool is not proof that an edit
 succeeded. Context and long status rows retain their full bounded text on hover.
+The compact header keeps scope beside **AI settings** and **More**, with provider
+readiness on the settings tooltip. Page navigation uses shared `tab_choice`
+controls: full-height targets, an active underline, and a surface on hover or
+keyboard focus. The primary action stays at the right of the composer footer;
+**Stop** appears only during a run, and **Undo** only when available and idle.
+Absent footer actions return disabled, zero-size responses to the host.
+
+An empty Conversation centers a short invitation and up to three existing scoped
+example actions. It prefers distinct categories, then fills from the host's
+catalog order. These starters use the same append-only draft behavior and length
+limit as Examples; choosing one focuses the composer without sending. Short
+windows arrange the starters in one row when width allows, and reduce top spacing
+so the choices remain usable in the scrolling body.
+
+`AssistantSubmitState::Ready` enables **Send** for a nonblank draft;
+`SetupRequired` replaces it with **Connect AI**, which requests settings without
+sending. `Blocked(reason)` keeps Send disabled and displays the reason above the
+composer. Ctrl/Cmd+Enter only submits a Ready request while the prompt has focus.
+The app shares its read-only recording/edit/document readiness checks with tool
+execution; painting never flushes edits or broadens a pinned scope.
+
+The host supplies `failure` text and an explicit `recover_prompt` flag after a
+failed or stopped run. Failure details wrap inside Conversation's scrolling body
+(up to 8,192 characters), keeping the composer visible. A newly reported failure
+reveals its explanation once; subsequent frames preserve manual scrolling. Hosts
+call `AssistantState::reset_failure_reveal` for each failed attempt, including an
+identical error that arrives while the window is closed. With an empty draft and
+`can_reuse`, **Edit last prompt** appears in the footer and returns
+`reuse_last`; it never submits or restores text itself. A new draft hides this
+shortcut, and a busy run retains **Stop**. The host clears recovery state on a new
+run, New chat, or context/song change.
 
 `AssistantOptions::scope` appears persistently as **Scope · …**, separate from
 the changing musical selection. Global scope is explicitly labeled as the entire
@@ -983,4 +1110,5 @@ to 64 items. Tool catalogs are bounded to 128 items, searches to 256 characters,
 and selected tool descriptions to 4,096 characters. Browsing pages and short
 popups use a one-line composer that scrolls the complete draft; Conversation
 uses a taller composer when space allows. Scope, browsing actions, and the
-Send/Stop/Undo row remain reachable at compact window sizes.
+primary and any available Stop/recovery or Undo actions remain reachable at
+compact window sizes.

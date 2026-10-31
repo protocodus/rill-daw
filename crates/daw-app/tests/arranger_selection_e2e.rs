@@ -369,7 +369,6 @@ fn arranger_slip_and_fade_handles_edit_sources_non_destructively_and_fit_selecti
         );
     }
     app.click("Select");
-    app.click("More tools");
     app.click("Slip");
     let view = app.inspect();
     let p = rect_center(clip_rect(&view, id));
@@ -500,10 +499,6 @@ fn leading_rests_stop_at_zero_and_undo_abandons_a_held_audio_gesture() {
     app.click("Select");
     click_clip(&mut app, id, false);
     for slip in [true, false] {
-        if slip {
-            app.click("Select");
-            app.click("More tools");
-        }
         app.click(if slip { "Slip" } else { "Select" });
         let before = app.inspect();
         let p = if slip {

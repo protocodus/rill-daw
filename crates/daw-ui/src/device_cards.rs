@@ -1,7 +1,7 @@
 //! Cached device previews in a responsive, virtualized grid or list. Device
 //! identities, image loading and insertion actions belong to the caller.
 use crate::{Icon, text::TextRole, theme, tokens};
-use egui::{Id, Rect, Response, Ui};
+use egui::{Id, Rect, Response, Ui, emath::GuiRounding};
 use std::hash::Hash;
 
 pub const DEVICE_CARD_HEIGHT: f32 = 208.0;
@@ -87,7 +87,12 @@ pub fn device_grid_layout(width: f32) -> DeviceGridLayout {
         .max(1.0) as usize;
     DeviceGridLayout {
         columns,
-        card_width: ((width - gap * columns.saturating_sub(1) as f32) / columns as f32).max(0.0),
+        // Native layout rounds every allocation to its GUI precision. Round
+        // equal widths down first so fractional columns cannot accumulate into
+        // the reserved scrollbar gutter as the cursor advances across a row.
+        card_width: ((width - gap * columns.saturating_sub(1) as f32) / columns as f32)
+            .floor_ui()
+            .max(0.0),
         row_height: DEVICE_CARD_HEIGHT + gap,
     }
 }
@@ -640,7 +645,7 @@ mod tests {
     #[test]
     fn responsive_grid_fits_columns_without_clipping_or_building_hidden_cards() {
         for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-            for width in [280.0, 640.0, 940.0, 1440.0] {
+            for width in [280.0, 640.0, 940.0, 1440.0, 1440.5, 1597.25] {
                 let ctx = egui::Context::default();
                 theme::apply(&ctx);
                 ctx.set_theme(appearance.preference());
@@ -653,7 +658,12 @@ mod tests {
                 for (_, card) in &grid.cards {
                     let rect = card.response.rect;
                     assert!(rect.left() >= grid.rect.left() - 0.01);
-                    assert!(rect.right() <= grid.rect.right() - SCROLLBAR_GUTTER + 0.01);
+                    assert!(
+                        rect.right() <= grid.rect.right() - SCROLLBAR_GUTTER + 0.01,
+                        "card {rect:?} must fit grid {:?} with reserved gutter at width {width}, layout {:?}",
+                        grid.rect,
+                        grid.layout,
+                    );
                     assert_eq!(rect.height(), DEVICE_CARD_HEIGHT);
                     assert!(rect.contains_rect(card.preview_rect));
                 }

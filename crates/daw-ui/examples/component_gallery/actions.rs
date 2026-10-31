@@ -13,26 +13,30 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         let left = &mut columns[0];
         text::subtitle(left, "Commands");
         ui::panel(left.ctx()).show(left, |ui| {
-            text::note(ui, "Filled controls execute an action.");
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                ui::button(ui, "Play");
-                ui::button(ui, "Stop");
-                ui::button(ui, "Record");
+            text::note(
+                ui,
+                "One primary action; secondary commands share a surface.",
+            );
+            ui.add_space(ui::tokens::SPACE_MD);
+            ui::command_group(ui, 350.0, |ui| {
+                ui::quiet_button(ui, "Start");
+                ui::primary_button(ui, "Play");
+                ui::quiet_button(ui, "Stop");
+                ui::record_button(ui, false, true);
             });
-            ui.add_space(12.0);
+            ui.add_space(ui::tokens::SPACE_MD);
             ui.horizontal(|ui| {
                 ui::primary_button(ui, "Add notes");
                 ui::button(ui, "Duplicate");
                 ui::small_button(ui, "Undo");
             });
-            ui.add_space(12.0);
+            ui.add_space(ui::tokens::SPACE_MD);
             ui.horizontal(|ui| {
                 ui.add_enabled(false, ui::button_widget("Save"));
                 ui::button(ui, "Export WAV…");
             });
         });
-        left.add_space(24.0);
+        left.add_space(ui::tokens::SPACE_LG);
         text::subtitle(left, "Vector icons");
         ui::card(left.ctx()).show(left, |ui| {
             ui.horizontal(|ui| {
@@ -48,11 +52,13 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                     Icon::Automation,
                     Icon::Folder,
                 ] {
-                    let (rect, _) =
-                        ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::Vec2::splat(ui::tokens::CONTROL_HEIGHT),
+                        egui::Sense::hover(),
+                    );
                     icon.paint(
                         ui.painter(),
-                        rect.shrink(5.0),
+                        rect.shrink(ui::tokens::SPACE_XS),
                         ui::theme::palette(ui.ctx()).text,
                     );
                 }
@@ -69,25 +75,25 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 ui,
                 "The active tool retains its underline and selected tint.",
             );
-            ui.add_space(12.0);
+            ui.add_space(ui::tokens::SPACE_MD);
             ui.horizontal(|ui| {
                 ui::tool_value(ui, &mut state.tool, 0, "Select");
                 ui::tool_value(ui, &mut state.tool, 1, "Pencil");
                 ui::tool_value(ui, &mut state.tool, 2, "Cut");
             });
-            ui.add_space(20.0);
+            ui.add_space(ui::tokens::SPACE_LG);
             text::subtitle(ui, "Presentation");
-            text::note(ui, "Outlined controls change views or framing.");
-            ui.add_space(8.0);
+            text::note(ui, "Quiet navigation keeps the current workspace clear.");
+            ui.add_space(ui::tokens::SPACE_SM);
             ui.horizontal(|ui| {
-                ui::view_choice(ui, true, "Arranger");
-                ui::view_choice(ui, false, "Mixer");
-                ui::view_button(ui, "Fit");
+                ui::tab_choice(ui, true, "Arranger");
+                ui::tab_choice(ui, false, "Mixer");
+                ui::timeline_fit_button(ui);
             });
-            ui.add_space(12.0);
-            ui::view_toggle(ui, &mut state.looped, "Loop");
+            ui.add_space(ui::tokens::SPACE_MD);
+            ui::quiet_toggle(ui, &mut state.looped, "Loop");
         });
-        right.add_space(24.0);
+        right.add_space(ui::tokens::SPACE_LG);
         ui::inset(right.ctx()).show(right, |ui| {
             text::title(ui, "Inter · Shared typography");
             text::body(ui, "Titles, labels, and notes share one palette.");
@@ -98,17 +104,16 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             );
         });
     });
-    ui.add_space(24.0);
+    ui.add_space(ui::tokens::SPACE_LG);
     text::subtitle(ui, "Focused editing tools");
     ui::toolbar(ui, |ui| {
         use ui::EditorTool::*;
-        ui::compact_editor_tools(
+        ui::editor_tools_with_context(
             ui,
             &mut state.editor_tool,
             &[
                 Select, Pencil, Cursor, Cut, Duplicate, Glue, Ghost, Stretch, Slip, Erase,
             ],
-            &[Select, Pencil, Cursor, Cut],
             ui::ToolHintContext::Arrangement,
         );
     });

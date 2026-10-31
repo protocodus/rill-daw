@@ -5,6 +5,51 @@ use egui::{
 };
 use std::ops::RangeInclusive;
 
+/// Landmarks shown inside a slider thumb, without changing its stored value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SliderValueMarker {
+    Minimum,
+    Maximum,
+    Center,
+    Zero,
+}
+
+/// Endpoints take precedence over zero; zero takes precedence over midpoint.
+/// A tiny relative tolerance accommodates f32 parameters without inventing a
+/// zero detent, or labelling a pinned out-of-range value as an endpoint.
+pub fn slider_value_marker(value: f64, range: RangeInclusive<f64>) -> Option<SliderValueMarker> {
+    value_marker_with_zero(value, range, 0.0)
+}
+
+fn value_marker_with_zero(
+    value: f64,
+    range: RangeInclusive<f64>,
+    zero_reference: f64,
+) -> Option<SliderValueMarker> {
+    let (start, end) = (*range.start(), *range.end());
+    if !value.is_finite() || !start.is_finite() || !end.is_finite() || start == end {
+        return None;
+    }
+    let (minimum, maximum) = (start.min(end), start.max(end));
+    if value < minimum || value > maximum {
+        return None;
+    }
+    let matches = |landmark: f64| {
+        (value - landmark).abs() <= f64::from(f32::EPSILON) * landmark.abs().min(maximum - minimum)
+    };
+    if matches(minimum) {
+        Some(SliderValueMarker::Minimum)
+    } else if matches(maximum) {
+        Some(SliderValueMarker::Maximum)
+    } else if value == zero_reference {
+        Some(SliderValueMarker::Zero)
+    } else if matches(minimum * 0.5 + maximum * 0.5) {
+        Some(SliderValueMarker::Center)
+    } else {
+        None
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SliderTick {
     pub fraction: f32,
@@ -23,6 +68,8 @@ pub struct SliderScaleGeometry {
     pub orientation: SliderOrientation,
     pub range: [f64; 2],
     pub value: f64,
+    /// Numeric value represented as zero by the caller's displayed scale.
+    pub zero_reference: f64,
     pub divisions: usize,
     pub ticks: Vec<SliderTick>,
 }
@@ -102,15 +149,79 @@ impl SliderScaleGeometry {
             orientation,
             range: [min, max],
             value,
+            zero_reference: 0.0,
             divisions,
             ticks,
         }
+    }
+
+    pub fn value_marker(&self) -> Option<SliderValueMarker> {
+        value_marker_with_zero(
+            self.value,
+            self.range[0]..=self.range[1],
+            self.zero_reference,
+        )
     }
 }
 
 /// The calibrated rail belonging to a slider response, including focused value fields.
 pub fn slider_scale_geometry(ctx: &egui::Context, id: Id) -> Option<SliderScaleGeometry> {
     ctx.data(|data| data.get_temp(id.with("slider_scale_geometry")))
+}
+
+/// Paint a value landmark inside the native thumb. Returns false for ordinary
+/// values so callers may retain their usual index. This adds no hit targets.
+pub fn paint_slider_value_marker(ui: &Ui, geometry: &SliderScaleGeometry) -> bool {
+    let Some(marker) = geometry.value_marker() else {
+        return false;
+    };
+    let radius = (geometry.handle_half_extent.min_elem() - crate::tokens::BORDER_WIDTH * 0.5)
+        .clamp(0.0, crate::tokens::SPACE_XS);
+    if radius <= 0.0 || !ui.is_rect_visible(geometry.rail) {
+        return false;
+    }
+    let colors = crate::theme::palette(ui.ctx());
+    let color = if ui.is_enabled() {
+        colors.text
+    } else {
+        colors.muted
+    };
+    match marker {
+        SliderValueMarker::Minimum | SliderValueMarker::Maximum => {
+            let height = radius * crate::tokens::GOLDEN_RATIO_INVERSE;
+            let direction = if marker == SliderValueMarker::Minimum {
+                1.0
+            } else {
+                -1.0
+            };
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![
+                    geometry.handle + egui::vec2(-radius, -direction * height),
+                    geometry.handle + egui::vec2(radius, -direction * height),
+                    geometry.handle + egui::vec2(0.0, direction * height),
+                ],
+                color,
+                Stroke::NONE,
+            ));
+        }
+        SliderValueMarker::Center => {
+            ui.painter().circle_filled(
+                geometry.handle,
+                radius * crate::tokens::GOLDEN_RATIO_INVERSE,
+                color,
+            );
+        }
+        SliderValueMarker::Zero => {
+            let width =
+                crate::tokens::BORDER_WIDTH.min(radius * crate::tokens::GOLDEN_RATIO_INVERSE);
+            ui.painter().circle_stroke(
+                geometry.handle,
+                radius - width * 0.5,
+                Stroke::new(width, color),
+            );
+        }
+    }
+    true
 }
 
 /// Paint-only scale: marks never add hit targets or take keyboard focus.
@@ -125,7 +236,13 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
     } else {
         geometry.rail.height()
     } * 0.5;
+    let marked = geometry.value_marker().is_some();
     for tick in &geometry.ticks {
+        // At a landmark the thumb supplies the index. Keep a scale tick from
+        // crossing its hollow circle on the smallest compact rails.
+        if marked && tick.center.distance(geometry.handle) < 0.5 {
+            continue;
+        }
         let reach = if tick.major {
             cross - 1.0
         } else {
@@ -167,17 +284,19 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
     } else {
         egui::vec2(0.0, (half - 2.0).max(1.0))
     };
-    ui.painter().line_segment(
-        [geometry.handle - offset, geometry.handle + offset],
-        Stroke::new(
-            1.5_f32,
-            if ui.is_enabled() {
-                colors.text
-            } else {
-                colors.muted
-            },
-        ),
-    );
+    if !paint_slider_value_marker(ui, geometry) {
+        ui.painter().line_segment(
+            [geometry.handle - offset, geometry.handle + offset],
+            Stroke::new(
+                1.5_f32,
+                if ui.is_enabled() {
+                    colors.text
+                } else {
+                    colors.muted
+                },
+            ),
+        );
+    }
     // A pinned handle must not imply an out-of-range stored value equals the
     // endpoint. Show a directional overflow mark without changing that value.
     if geometry.value.is_finite() && geometry.range[0] != geometry.range[1] {
@@ -195,11 +314,13 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
             let center = geometry.handle + direction * (along - radius);
             let cross = egui::vec2(-direction.y, direction.x) * radius;
             ui.painter().add(egui::Shape::convex_polygon(
-                vec![
+                [
                     center + direction * radius,
                     center - direction * radius + cross,
                     center - direction * radius - cross,
-                ],
+                ]
+                .map(|point| point.clamp(geometry.rail.min, geometry.rail.max))
+                .to_vec(),
                 colors.orange,
                 Stroke::NONE,
             ));
@@ -224,6 +345,7 @@ pub struct Slider<'a> {
     suffix: String,
     endpoint_labels: Option<[String; 2]>,
     current_label: Option<String>,
+    zero_reference: f64,
     smart_aim: bool,
     step: Option<f64>,
     min_decimals: usize,
@@ -253,6 +375,7 @@ impl<'a> Slider<'a> {
             suffix: String::new(),
             endpoint_labels: None,
             current_label: None,
+            zero_reference: 0.0,
             smart_aim: true,
             step: None,
             min_decimals: 0,
@@ -292,6 +415,12 @@ impl<'a> Slider<'a> {
     /// Short readout between the endpoints, for controls with an external exact editor.
     pub fn current_label(mut self, label: impl Into<String>) -> Self {
         self.current_label = Some(label.into());
+        self
+    }
+    /// Identify zero on a converted scale, such as linear gain 1.0 at 0 dB.
+    /// This changes only the landmark glyph, never the range or value mapping.
+    pub fn zero_reference(mut self, value: f64) -> Self {
+        self.zero_reference = value;
         self
     }
     /// A 24-point rail-and-caption control for canvas-owned rows.
@@ -390,7 +519,7 @@ impl<'a> Slider<'a> {
         } else if orientation == SliderOrientation::Vertical {
             crate::tokens::CONTROL_HEIGHT - crate::tokens::SPACE_XS
         } else {
-            20.0
+            crate::tokens::COMPACT_HEIGHT
         };
         let text_height = if self.compact {
             crate::tokens::FONT_SCALE
@@ -414,7 +543,23 @@ impl<'a> Slider<'a> {
             labels[index] = format!("> {}", labels[index]);
         }
         let vertical = orientation == SliderOrientation::Vertical;
-        let caption_height = if self.compact { 12.0 } else { 14.0 };
+        let aligned_horizontal = !vertical && !self.compact;
+        let caption_height = if self.compact {
+            12.0
+        } else if aligned_horizontal {
+            (crate::tokens::PARAMETER_ROW_HEIGHT - thickness) * 0.5
+        } else {
+            14.0
+        };
+        let rail_padding = if aligned_horizontal {
+            if self.scale_labels {
+                caption_height
+            } else {
+                (crate::tokens::CONTROL_HEIGHT - thickness) * 0.5
+            }
+        } else {
+            0.0
+        };
         let minimum_width = labels
             .iter()
             .map(|label| {
@@ -430,6 +575,12 @@ impl<'a> Slider<'a> {
             .fold(thickness, f32::max);
         let response = ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
+            // Balance the endpoint footer with space above the rail. Its
+            // center then matches the Number, label and neighboring controls,
+            // while the complete control retains one comfortable hit target.
+            if aligned_horizontal {
+                ui.add_space(rail_padding);
+            }
             if vertical && self.scale_labels {
                 let (rect, _) = ui.allocate_exact_size(
                     egui::vec2(minimum_width, caption_height),
@@ -496,13 +647,14 @@ impl<'a> Slider<'a> {
                 })
                 .inner;
             let value = (self.value)(None);
-            let geometry = SliderScaleGeometry::new(
+            let mut geometry = SliderScaleGeometry::new(
                 rail_response.rect,
                 orientation,
                 shape,
                 self.range.clone(),
                 value,
             );
+            geometry.zero_reference = self.zero_reference;
             paint_slider_scale(ui, &geometry);
             if self.scale_labels {
                 let width = if vertical {
@@ -572,6 +724,8 @@ impl<'a> Slider<'a> {
                         }
                     }
                 }
+            } else if aligned_horizontal {
+                ui.add_space(rail_padding);
             }
             (rail_response, geometry)
         });
@@ -690,6 +844,30 @@ impl Widget for Slider<'_> {
                 ui.spacing_mut().interact_size.y = 0.0;
             }
             let response = match self.orientation {
+                SliderOrientation::Horizontal if !self.compact => {
+                    let height = if self.scale_labels {
+                        crate::tokens::PARAMETER_ROW_HEIGHT
+                    } else {
+                        crate::tokens::CONTROL_HEIGHT
+                    };
+                    let layout = if ui.layout().prefer_right_to_left() {
+                        egui::Layout::right_to_left(egui::Align::Center)
+                    } else {
+                        egui::Layout::left_to_right(egui::Align::Center)
+                    };
+                    // Reserve the complete height before the parent centers
+                    // this child. Growing a native 34-point row afterward
+                    // would leave its rail below neighboring control centers.
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_size_before_wrap().x, height),
+                        layout,
+                        |ui| {
+                            ui.set_min_height(height);
+                            ui.set_row_height(height);
+                            self.add_contents(ui)
+                        },
+                    )
+                }
                 SliderOrientation::Horizontal => ui.horizontal(|ui| self.add_contents(ui)),
                 SliderOrientation::Vertical => ui.vertical(|ui| self.add_contents(ui)),
             };

@@ -3,6 +3,7 @@ mod common;
 
 use common::Harness;
 use daw_core::AudioData;
+use eframe::egui;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
@@ -24,7 +25,7 @@ fn label<'a>(state: &'a Value, text: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("Missing {text}: {}", state["visible_labels"]))
 }
 
-fn background<'a>(state: &'a Value, text: &str) -> &'a Value {
+fn background<'a>(state: &'a Value, text: &str) -> Option<&'a Value> {
     let [left, top, right, bottom] = bounds(label(state, text));
     state["painted_rects"]
         .as_array()
@@ -47,7 +48,6 @@ fn background<'a>(state: &'a Value, text: &str) -> &'a Value {
             };
             area(a).total_cmp(&area(b))
         })
-        .unwrap_or_else(|| panic!("No control background for {text}"))
 }
 
 fn same_row(state: &Value, labels: &[&str]) {
@@ -66,8 +66,25 @@ fn same_row(state: &Value, labels: &[&str]) {
     );
 }
 
+fn full_button_text_width(text: &str, density: f32) -> f32 {
+    let ctx = egui::Context::default();
+    daw_ui::theme::apply(&ctx);
+    ctx.set_pixels_per_point(density);
+    let mut width = 0.0;
+    let _ = ctx.run(egui::RawInput::default(), |ctx| {
+        let font = egui::TextStyle::Button.resolve(&ctx.style());
+        width = ctx.fonts_mut(|fonts| {
+            fonts
+                .layout_no_wrap(text.to_owned(), font, egui::Color32::WHITE)
+                .size()
+                .x
+        });
+    });
+    width
+}
+
 #[test]
-fn main_bar_keeps_related_controls_together_and_distinguishes_commands_from_views() {
+fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
     let mut app = Harness::new();
     let before = app.inspect();
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
@@ -93,13 +110,59 @@ fn main_bar_keeps_related_controls_together_and_distinguishes_commands_from_view
                     &["Arranger", "Start", "120.0 BPM", "Click", "Range"],
                 );
             }
+            // Diagnostics retain the original string even if the actual galley
+            // is ellipsized. Compare painted width to untruncated font layout.
+            for text in ["Click", "Loop", "Range"] {
+                let painted = state["painted_text"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|shape| shape["text"] == text)
+                    .unwrap();
+                let [left, _, right, _] = bounds(&painted["rect"]);
+                let expected = f64::from(full_button_text_width(text, density as f32));
+                assert!(
+                    right - left + 0.5 >= expected,
+                    "{text} was truncated at width{width}: painted {}, expected {expected}",
+                    right - left
+                );
+            }
+            let primary = background(&state, "Play").expect("Play remains the primary action");
+            assert!(primary["fill"][3].as_u64().unwrap() > 0);
+            assert_eq!(primary["stroke_width"], 0.0);
+            let primary_bounds = bounds(&primary["rect"]);
+            assert!((primary_bounds[2] - primary_bounds[0] - 100.0).abs() <= 0.5);
+            for text in ["Start", "Stop", "Record", "Mixer", "Click", "Loop", "Range"] {
+                assert!(
+                    background(&state, text).is_none_or(|shape| {
+                        shape["fill"][3] == 0 && shape["stroke_width"] == 0.0
+                    }),
+                    "Idle {text} must not compete with Play"
+                );
+            }
+            assert!(
+                !state["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|text| { text.as_str().is_some_and(|text| text.starts_with("Beats ")) }),
+                "Loop detail belongs in Range and its tooltip"
+            );
+            // Hover exposes each native target even when its idle surface is
+            // quiet. Check the real clickable rectangles, not just text bounds.
             let mut rectangles: Vec<(&str, [f64; 4])> = Vec::new();
             for text in [
                 "Arranger", "Mixer", "Start", "Play", "Stop", "Record", "Click", "Loop", "Range",
             ] {
-                let control = background(&state, text);
+                let [left, top, right, bottom] = bounds(label(&state, text));
+                app.command(json!({"command":"pointer", "phase":"move",
+                    "x":(left + right) * 0.5, "y":(top + bottom) * 0.5}));
+                let hovered = app.command(json!({"command":"inspect", "paint":true}));
+                let control = background(&hovered, text)
+                    .unwrap_or_else(|| panic!("{text} needs a visible hover/focus target"));
                 let rect = bounds(&control["rect"]);
                 assert!(rect[0] >= 0.0 && rect[1] >= 40.0, "{text}: {rect:?}");
+                assert!(rect[3] - rect[1] >= 34.0, "{text} keeps a full-size target");
                 assert!(
                     rect[2] <= f64::from(width) && rect[3] < 240.0,
                     "{text}: {rect:?}"
@@ -114,22 +177,9 @@ fn main_bar_keeps_related_controls_together_and_distinguishes_commands_from_view
                     );
                 }
                 rectangles.push((text, rect));
-            }
-            for text in ["Start", "Play", "Stop", "Record"] {
-                let control = background(&state, text);
-                assert!(
-                    control["fill"][3].as_u64().unwrap() > 0,
-                    "{text} is a filled command"
-                );
-                assert_eq!(control["stroke_width"], 0.0);
-            }
-            for text in ["Mixer", "Click", "Loop"] {
-                let control = background(&state, text);
-                assert_eq!(
-                    control["fill"][3], 0,
-                    "Idle {text} uses the quiet view outline"
-                );
-                assert!(control["stroke_width"].as_f64().unwrap() > 0.0);
+                for field in ["project", "history", "selected_track", "selected_clip"] {
+                    assert_eq!(hovered[field], before[field]);
+                }
             }
             let tool = bounds(label(&state, "Select"));
             assert!(
@@ -174,6 +224,9 @@ fn view_navigation_and_playback_guides_preserve_their_existing_transport_and_edi
         }
     }
     assert_eq!(app.inspect()["timeline"]["tool"], "Cut");
+    app.command(json!({"command":"pointer", "phase":"move", "x":780.0, "y":880.0}));
+    let idle = app.command(json!({"command":"inspect", "paint":true}));
+    let play_bounds = bounds(&background(&idle, "Play").unwrap()["rect"]);
     app.click("Play");
     let deadline = Instant::now() + Duration::from_secs(10);
     let playing = loop {
@@ -187,6 +240,19 @@ fn view_navigation_and_playback_guides_preserve_their_existing_transport_and_edi
         );
         std::thread::sleep(Duration::from_millis(5));
     };
+    let active = app.command(json!({"command":"inspect", "paint":true}));
+    let pause_bounds = bounds(&background(&active, "Pause").unwrap()["rect"]);
+    assert_eq!(
+        play_bounds, pause_bounds,
+        "Play/Pause keeps one stable target"
+    );
+    for text in ["Start", "Stop", "Record"] {
+        assert_eq!(
+            label(&idle, text)["min"][0],
+            label(&active, text)["min"][0],
+            "Playback never shifts the {text} target"
+        );
+    }
     let clicked = app.click("Click");
     assert_eq!(clicked["project"]["metronome_enabled"], true);
     assert_eq!(

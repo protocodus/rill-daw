@@ -5,12 +5,14 @@ pub struct State {
     prompt: String,
     messages: Vec<AssistantMessage>,
     assistant: daw_ui::AssistantState,
+    example_state: usize,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
             assistant: daw_ui::AssistantState::default(),
+            example_state: 0,
             prompt: "Lower the pads by 2 dB and keep the melody unchanged.".into(),
             messages: vec![
                 AssistantMessage {
@@ -66,6 +68,17 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             left,
             "Messages and transcript are static gallery sample data.",
         );
+        left.add_space(daw_ui::tokens::SPACE_MD);
+        daw_ui::text::label(left, "Try assistant states");
+        left.horizontal_wrapped(|ui| {
+            for (index, label) in ["Ready", "Connect", "Interrupted"].into_iter().enumerate() {
+                if daw_ui::view_choice(ui, state.example_state == index, label).clicked() {
+                    state.example_state = index;
+                    state.assistant.page = daw_ui::AssistantPage::Conversation;
+                    state.prompt.clear();
+                }
+            }
+        });
 
         let right = &mut columns[1];
         daw_ui::text::subtitle(right, "Assistant");
@@ -80,12 +93,18 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 messages: &state.messages,
                 status: Some("Sample conversation"),
                 busy: false,
-                can_submit: true,
+                submit_state: if state.example_state == 1 {
+                    daw_ui::AssistantSubmitState::SetupRequired
+                } else {
+                    daw_ui::AssistantSubmitState::Ready
+                },
+                failure: (state.example_state == 2).then_some("The provider could not finish this request. Check the connection, then edit the prompt when you are ready."),
+                recover_prompt: state.example_state == 2,
                 can_undo: true,
                 context: "Selected track · Glass arpeggio",
                 scope: "Global · Entire song",
                 provider: "Example provider",
-                configured: true,
+                configured: state.example_state != 1,
                 can_reuse,
                 tools: &[
                     daw_ui::AssistantTool {

@@ -55,7 +55,7 @@ pub fn spectrum_view_controls(
     ui.label("Spectrum");
     let mut intensity = options.opacity * 100.0;
     let mut slider_changed = false;
-    let number = ui.horizontal(|ui| {
+    let number = crate::parameter_row(ui, |ui| {
         ui.label("Intensity");
         ui.scope(|ui| {
             ui.spacing_mut().slider_width = 100.0;

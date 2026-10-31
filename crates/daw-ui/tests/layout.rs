@@ -10,6 +10,184 @@ fn input(events: Vec<Event>, size: Vec2) -> RawInput {
 }
 
 #[test]
+fn mixed_control_rows_keep_targets_and_text_centered_during_numeric_entry() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for (density, width) in [
+            (1.0, 1600.0),
+            (1.25, 1600.0),
+            (2.0, 1600.0),
+            (1.0, 500.0),
+            (2.0, 500.0),
+        ] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            theme::set_appearance(&ctx, appearance);
+            ctx.set_pixels_per_point(density);
+            let size = egui::vec2(width, 400.0);
+            let _ = ctx.run(input(vec![], size), |_| {});
+            let mut number = -6.5;
+            let mut name = "Glass".to_owned();
+            let mut enabled = false;
+            for editing in [false, true] {
+                let mut targets = Vec::new();
+                let output = ctx.run(input(vec![], size), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        controls::toolbar(ui, |ui| {
+                            targets.push(("Mix", ui.label("Mix")));
+                            targets.push((
+                                "number",
+                                ui.add(
+                                    controls::number(&mut number)
+                                        .fixed_decimals(2)
+                                        .suffix(" dB"),
+                                ),
+                            ));
+                            targets.push((
+                                "Glass",
+                                controls::text_field(ui, &mut name, "Name", 120.0),
+                            ));
+                            targets.push(("Apply", controls::button(ui, "Apply")));
+                            targets.push((
+                                "Snap 1/16",
+                                controls::select("row_snap", "Snap 1/16")
+                                    .show_ui(ui, |_| {})
+                                    .response,
+                            ));
+                            targets
+                                .push(("Monitor", controls::switch(ui, &mut enabled, "Monitor")));
+                            targets
+                                .push(("View", controls::view_menu(ui, "View", |_| {}).response));
+                        });
+                    });
+                });
+                assert_eq!(targets[1].1.has_focus(), editing);
+                let mut row = Rect::NOTHING;
+                let mut center = 0.0;
+                let mut row_centers = Vec::new();
+                for (name, response) in &targets {
+                    if !row.is_positive() || response.rect.top() >= row.bottom() {
+                        row = response.rect;
+                        center = row.center().y;
+                    } else {
+                        row = row.union(response.rect);
+                    }
+                    row_centers.push(center);
+                    assert!(
+                        (response.rect.center().y - center).abs() <= 0.5 / density,
+                        "{name} target drifts at {density}×, width {width}, editing={editing}: {:?}; expected center {center}",
+                        response.rect,
+                    );
+                }
+                if width < 600.0 {
+                    assert!(targets.last().unwrap().1.rect.top() > targets[0].1.rect.bottom());
+                }
+                let mut seen = vec![false; targets.len()];
+                for shape in &output.shapes {
+                    if let egui::Shape::Text(text) = &shape.shape {
+                        let text_bounds = text.galley.rect.translate(text.pos.to_vec2());
+                        let label = text.galley.text();
+                        if let Some((index, (name, response))) =
+                            targets.iter().enumerate().find(|(_, (name, _))| {
+                                *name == label
+                                    || (*name == "number" && ["-6.50", "-6.50 dB"].contains(&label))
+                            })
+                        {
+                            seen[index] = true;
+                            let center = row_centers[index];
+                            assert!(response.rect.contains_rect(text_bounds));
+                            assert!(
+                                (text_bounds.center().y - center).abs() <= 0.5 / density,
+                                "{name} text drifts at {density}×, width {width}, editing={editing}: {text_bounds:?}; expected center {center}",
+                            );
+                        }
+                    }
+                }
+                assert!(
+                    seen.iter().all(|seen| *seen),
+                    "Every control must expose its real painted caption: {seen:?}"
+                );
+                if !editing {
+                    targets[1].1.request_focus();
+                }
+                assert_eq!(number, -6.5);
+                assert_eq!(name, "Glass");
+                assert!(!enabled);
+            }
+        }
+    }
+}
+
+#[test]
+fn parameter_rows_align_slider_rails_with_fields_labels_and_actions() {
+    for density in [1.0, 1.25, 2.0] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_pixels_per_point(density);
+        let size = egui::vec2(1400.0, 400.0);
+        let _ = ctx.run(input(vec![], size), |_| {});
+        let mut strength = 100.0;
+        let mut swing = 50.0;
+        let mut ends = false;
+        let mut targets = Vec::new();
+        let output = ctx.run(input(vec![], size), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                controls::parameter_row(ui, |ui| {
+                    targets.push(ui.label("Quantize preview"));
+                    targets.push(
+                        controls::select("quantize_grid", "1/16 beat")
+                            .width(100.0)
+                            .show_ui(ui, |_| {})
+                            .response,
+                    );
+                    targets.push(
+                        ui.add(
+                            controls::slider(&mut strength, 0.0..=100.0)
+                                .text("Strength")
+                                .suffix("%"),
+                        ),
+                    );
+                    targets.push(
+                        ui.add(
+                            controls::slider(&mut swing, 50.0..=75.0)
+                                .text("Swing")
+                                .suffix("%"),
+                        ),
+                    );
+                    targets.push(controls::checkbox(ui, &mut ends, "Note ends"));
+                    targets.push(controls::button(ui, "Apply quantize"));
+                });
+            });
+        });
+        let center = targets[0].rect.center().y;
+        for target in &targets {
+            assert!(
+                (target.rect.center().y - center).abs() <= 0.5 / density,
+                "Mixed parameter targets drift at {density}×: {:?}, expected center {center}",
+                target.rect,
+            );
+        }
+        for target in &targets[2..4] {
+            let geometry = controls::slider_scale_geometry(&ctx, target.id).unwrap();
+            assert!(
+                (geometry.rail.center().y - center).abs() <= 0.5 / density,
+                "Slider rail is offset from neighboring fields at {density}×: {:?}, expected center {center}",
+                geometry.rail,
+            );
+        }
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && ["Strength", "Swing", "Note ends", "Apply quantize"]
+                    .contains(&text.galley.text())
+            {
+                let bounds = text.galley.rect.translate(text.pos.to_vec2());
+                assert!((bounds.center().y - center).abs() <= 0.5 / density);
+            }
+        }
+        assert_eq!((strength, swing, ends), (100.0, 50.0, false));
+    }
+}
+
+#[test]
 fn workspace_header_stays_at_the_top_and_back_keeps_native_keyboard_accessibility() {
     let ctx = Context::default();
     theme::apply(&ctx);
@@ -91,6 +269,84 @@ fn toolbar_wraps_complete_native_controls_without_eating_the_canvas() {
             }
         });
     });
+}
+
+#[test]
+fn command_families_wrap_together_without_shrinking_targets_or_leaking_styles() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for density in [1.0, 2.0] {
+            for (width, wraps) in [(380.0, true), (800.0, false)] {
+                let ctx = Context::default();
+                theme::apply(&ctx);
+                theme::set_appearance(&ctx, appearance);
+                ctx.set_pixels_per_point(density);
+                // egui applies a requested scale at the first frame boundary.
+                let _ = ctx.run(input(vec![], egui::vec2(width, 600.0)), |_| {});
+                let _ = ctx.run(input(vec![], egui::vec2(width, 600.0)), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let style = ui.style().clone();
+                        let available = ui.max_rect();
+                        let mut click = false;
+                        let mut looping = true;
+                        let groups = ui
+                            .horizontal_wrapped(|ui| {
+                                let playback = controls::command_group(ui, 280.0, |ui| {
+                                    [
+                                        controls::quiet_button(ui, "Start"),
+                                        controls::primary_button(ui, "Play"),
+                                        controls::quiet_button(ui, "Stop"),
+                                    ]
+                                });
+                                let guides = controls::command_group(ui, 200.0, |ui| {
+                                    [
+                                        controls::quiet_toggle(ui, &mut click, "Click"),
+                                        controls::quiet_toggle(ui, &mut looping, "Loop"),
+                                    ]
+                                });
+                                (playback, guides)
+                            })
+                            .inner;
+                        assert_eq!(*ui.style(), style);
+                        assert!(!click && looping, "layout must not change playback guides");
+                        let (playback, guides) = groups;
+                        if wraps {
+                            assert!(
+                                guides.response.rect.top() >= playback.response.rect.bottom(),
+                                "width {width}, density {density}, available {available:?}: playback {:?}, guides {:?}",
+                                playback.response.rect, guides.response.rect,
+                            );
+                        } else {
+                            assert!(
+                                (guides.response.rect.top() - playback.response.rect.top()).abs()
+                                    < 0.5
+                            );
+                        }
+                        let mut preceding = Vec::new();
+                        for (group, targets) in [
+                            (&playback.response, playback.inner.as_slice()),
+                            (&guides.response, guides.inner.as_slice()),
+                        ] {
+                            assert!(available.contains_rect(group.rect));
+                            for target in targets {
+                                assert!(group.rect.contains_rect(target.rect));
+                                assert!(target.rect.height() >= controls::tokens::CONTROL_HEIGHT);
+                                assert!(
+                                    (target.rect.center().y - targets[0].rect.center().y).abs()
+                                        < 0.5
+                                );
+                                assert!(
+                                    preceding
+                                        .iter()
+                                        .all(|rect: &Rect| !rect.intersects(target.rect))
+                                );
+                                preceding.push(target.rect);
+                            }
+                        }
+                    });
+                });
+            }
+        }
+    }
 }
 
 #[test]

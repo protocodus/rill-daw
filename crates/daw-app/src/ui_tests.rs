@@ -223,6 +223,57 @@ impl Harness {
             _ => panic!("expected MIDI clip"),
         }
     }
+
+    fn midi_diagnostics(&self) -> serde_json::Value {
+        self.ctx.data(|data| {
+            data.get_temp::<serde_json::Value>(egui::Id::new("midi_editor_diagnostics"))
+                .expect("Piano roll has been rendered")
+        })
+    }
+
+    fn note_rect(&self, id: u64) -> Rect {
+        let diagnostics = self.midi_diagnostics();
+        let note = diagnostics["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == id)
+            .unwrap_or_else(|| panic!("Could not find rendered note {id}"));
+        rect_from_diagnostics(&note["rect"])
+    }
+
+    fn piano_position(&self, beat: f64, pitch: u8) -> Pos2 {
+        let diagnostics = self.midi_diagnostics();
+        let plot = rect_from_diagnostics(&diagnostics["plot"]);
+        let key = diagnostics["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|key| key["pitch"] == pitch)
+            .unwrap_or_else(|| panic!("Pitch {pitch} is not visible"));
+        let x = plot.left()
+            + ((beat - diagnostics["start_beat"].as_f64().unwrap())
+                * diagnostics["pixels_per_beat"].as_f64().unwrap()) as f32;
+        let point = Pos2::new(x, rect_from_diagnostics(&key["rect"]).center().y);
+        assert!(
+            plot.contains(point),
+            "Piano target must be visible: {point:?}"
+        );
+        point
+    }
+}
+
+fn rect_from_diagnostics(value: &serde_json::Value) -> Rect {
+    Rect::from_min_max(
+        Pos2::new(
+            value["min"][0].as_f64().unwrap() as f32,
+            value["min"][1].as_f64().unwrap() as f32,
+        ),
+        Pos2::new(
+            value["max"][0].as_f64().unwrap() as f32,
+            value["max"][1].as_f64().unwrap() as f32,
+        ),
+    )
 }
 
 fn text_position(output: &FullOutput, text: &str, minimum_x: f32) -> Pos2 {
@@ -265,27 +316,6 @@ fn front_text_position(output: &FullOutput, text: &str) -> Pos2 {
         .unwrap_or_else(|| panic!("Could not find foreground {text:?}"))
 }
 
-fn note_position(output: &FullOutput, text: &str) -> Pos2 {
-    output
-        .shapes
-        .iter()
-        .filter_map(|shape| {
-            if let egui::epaint::Shape::Text(shape) = &shape.shape
-                && shape.galley.job.text == text
-                && shape.galley.job.sections.first().is_some_and(|section| {
-                    section.format.font_id.size == daw_ui::tokens::FONT_CANVAS
-                })
-            {
-                Some(shape.pos)
-            } else {
-                None
-            }
-        })
-        // Piano keys share the same readable font; notes are to their right.
-        .max_by(|left, right| left.x.total_cmp(&right.x))
-        .unwrap_or_else(|| panic!("Could not find rendered note {text:?}"))
-}
-
 /// A tenth of a second of mono PCM, sufficient to exercise decoding and waveform caching.
 fn wav_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
@@ -316,8 +346,8 @@ fn wav_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn piano_roll_drag_uses_total_displacement_across_multiple_frames() {
     let mut harness = Harness::new(0.0);
-    let output = harness.settle(true);
-    let start = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
+    harness.settle(true);
+    let start = harness.note_rect(harness.notes()[0].id).center();
     let distance = harness.app.note_zoom;
     harness.pointer(start, true, true);
     harness.frame(
@@ -342,9 +372,8 @@ fn piano_roll_drag_uses_total_displacement_across_multiple_frames() {
 fn pencil_click_creates_a_snapped_note_at_the_selected_pitch() {
     let mut harness = Harness::new(0.0);
     harness.app.tool = Tool::Pencil;
-    let output = harness.settle(true);
-    let reference = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
-    let target = reference + Vec2::new(harness.app.note_zoom * 2.0, -36.0);
+    harness.settle(true);
+    let target = harness.piano_position(3.2, 62);
     harness.pointer(target, true, true);
     harness.pointer(target, false, true);
     assert_eq!(harness.notes().len(), 2);
@@ -384,10 +413,8 @@ fn arrangement_clip_drag_accumulates_movement_and_preserves_source_offset() {
 fn cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input() {
     let mut harness = Harness::new(0.0);
     harness.app.tool = Tool::Cut;
-    let output = harness.settle(true);
-    let label = note_position(&output, "C4");
-    // The note label begins five points inside the note; half a beat lands in its middle.
-    let cut = label + Vec2::new(harness.app.note_zoom * 0.5 - 5.0, 5.0);
+    harness.settle(true);
+    let cut = harness.piano_position(1.5, 60);
     harness.pointer(cut, true, true);
     harness.pointer(cut, false, true);
     assert_eq!(harness.notes().len(), 2);
@@ -395,7 +422,7 @@ fn cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input() {
 
     harness.app.tool = Tool::Glue;
     harness.settle(true);
-    // Both halves have the same label, and Cut selects the second half. Clicking
+    // Cut selects the second half. Clicking
     // the first adds it to Glue's selection; clicking the second again does not.
     let first_id = harness
         .notes()
@@ -403,20 +430,7 @@ fn cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input() {
         .find(|note| note.start == 1.0)
         .unwrap()
         .id;
-    let diagnostics = harness.ctx.data(|data| {
-        data.get_temp::<serde_json::Value>(egui::Id::new("midi_editor_diagnostics"))
-            .unwrap()
-    });
-    let rect = &diagnostics["notes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|note| note["id"] == first_id)
-        .unwrap()["rect"];
-    let first_half = Pos2::new(
-        ((rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5) as f32,
-        ((rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5) as f32,
-    );
+    let first_half = harness.note_rect(first_id).center();
     harness.pointer(first_half, true, true);
     harness.pointer(first_half, false, true);
     assert_eq!(harness.notes().len(), 1);
@@ -539,18 +553,26 @@ fn duplicating_the_final_note_extends_the_clip_and_renders_both_notes() {
     let mut harness = Harness::new(0.0);
     harness.app.project.tracks[0].clips[0].length = 2.0;
     harness.app.tool = Tool::Duplicate;
-    let output = harness.settle(true);
-    let note = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
+    harness.settle(true);
+    let note = harness.note_rect(harness.notes()[0].id).center();
     harness.pointer(note, true, true);
     harness.pointer(note, false, true);
     assert_eq!(harness.notes().len(), 2);
     assert_eq!(harness.notes()[1].start, 2.0);
     assert_eq!(harness.app.selected().unwrap().length, 3.0);
     let output = harness.settle(true);
-    let visible_notes = output.shapes.iter().filter(|shape| {
-        matches!(&shape.shape, egui::epaint::Shape::Text(shape) if shape.galley.job.text == "C4" && shape.pos.x > 70.0)
-    }).count();
-    assert_eq!(visible_notes, 2);
+    let plot = rect_from_diagnostics(&harness.midi_diagnostics()["plot"]);
+    for note in harness.notes() {
+        let rect = harness.note_rect(note.id);
+        assert!(
+            plot.contains_rect(rect),
+            "Both notes must fit in the piano roll"
+        );
+        assert!(output.shapes.iter().any(|shape| {
+            shape.clip_rect.intersects(rect)
+                && matches!(&shape.shape, egui::epaint::Shape::Rect(painted) if painted.rect == rect)
+        }), "Each note must be painted");
+    }
 }
 
 #[test]
@@ -770,9 +792,9 @@ fn offline_setup_discards_device_inventory_and_keeps_portable_export_rates() {
 #[test]
 fn leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the_clip() {
     let mut harness = Harness::new(0.0);
-    let output = harness.menu("Window", "Clip Editor");
+    harness.menu("Window", "Clip Editor");
     assert_eq!(harness.app.view, WorkspaceView::Clip);
-    let note = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
+    let note = harness.note_rect(harness.notes()[0].id).center();
     harness.full_click(note);
     harness.settle_full();
     assert_eq!(harness.app.selected_notes.len(), 1);
@@ -800,8 +822,8 @@ fn leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the
 fn escape_from_the_clip_editor_clears_note_selection_before_arrangement_edits() {
     let mut harness = Harness::new(0.0);
     harness.app.open_workspace(WorkspaceView::Clip);
-    let output = harness.settle_full();
-    let note = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
+    harness.settle_full();
+    let note = harness.note_rect(harness.notes()[0].id).center();
     harness.full_click(note);
     assert_eq!(harness.app.selected_notes.len(), 1);
     harness.full_key(egui::Key::Escape, egui::Modifiers::NONE);
@@ -815,14 +837,18 @@ fn escape_from_the_clip_editor_clears_note_selection_before_arrangement_edits() 
 fn nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll() {
     let mut harness = Harness::new(0.0);
     harness.app.open_workspace(WorkspaceView::Clip);
-    let output = harness.settle_full();
-    harness.full_click(note_position(&output, "C4") + Vec2::new(8.0, 5.0));
+    harness.settle_full();
+    let note_id = harness.notes()[0].id;
+    let before_scroll = harness.note_rect(note_id).center();
+    harness.full_click(before_scroll);
     let selected = harness.app.selected_notes.clone();
+    assert_eq!(selected.len(), 1);
     let track = harness.app.selected_track;
     let clip = harness.app.selected_clip;
+    let plot = rect_from_diagnostics(&harness.midi_diagnostics()["plot"]);
     harness.full_frame(RawInput {
         events: vec![
-            Event::PointerMoved(Pos2::new(650.0, 500.0)),
+            Event::PointerMoved(plot.center()),
             Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
                 delta: Vec2::new(0.0, -72.0),
@@ -834,7 +860,9 @@ fn nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll() {
     for _ in 0..30 {
         harness.full_frame(RawInput::default());
     }
-    let scrolled = note_position(&harness.settle_full(), "C4");
+    harness.settle_full();
+    let scrolled = harness.note_rect(note_id).center();
+    assert!(scrolled.distance(before_scroll) > 1.0);
     harness.menu("Window", "Properties");
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
     assert!(harness.app.inspector_open);
@@ -849,7 +877,8 @@ fn nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll() {
     assert_eq!(harness.app.selected_track, track);
     assert_eq!(harness.app.selected_clip, clip);
     assert_eq!(harness.app.selected_notes, selected);
-    let restored = note_position(&harness.settle_full(), "C4");
+    harness.settle_full();
+    let restored = harness.note_rect(note_id).center();
     assert!(
         restored.distance(scrolled) < 1.0,
         "Returning must retain piano-roll scroll"
@@ -867,9 +896,12 @@ fn nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll() {
 fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
     let mut harness = Harness::new(0.0);
     harness.app.open_workspace(WorkspaceView::Clip);
-    let output = harness.settle_full();
-    harness.full_click(note_position(&output, "C4") + Vec2::new(8.0, 5.0));
+    harness.settle_full();
+    harness.full_click(harness.note_rect(harness.notes()[0].id).center());
     let selected = harness.app.selected_notes.clone();
+    assert_eq!(selected.len(), 1);
+    let output = harness.settle_full();
+    harness.full_click(text_position(&output, "Draw settings", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
     harness.full_click(text_position(&output, "C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
@@ -1012,8 +1044,8 @@ fn assert_linked_note_start(harness: &Harness, track: u64, clips: [u64; 3], star
 fn linked_midi_note_drag_updates_every_instance_on_each_frame_and_undoes_once() {
     let (mut harness, track, clips) = linked_midi_harness(1.0);
     let before = harness.app.project.clone();
-    let output = harness.settle_full();
-    let start = note_position(&output, "C4") + Vec2::new(8.0, 5.0);
+    harness.settle_full();
+    let start = harness.note_rect(harness.notes()[0].id).center();
     let distance = harness.app.note_zoom;
     harness.full_pointer(start, PointerButton::Primary, true);
     for (fraction, expected) in [(0.5, 1.5), (1.0, 2.0), (1.5, 2.5)] {

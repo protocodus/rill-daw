@@ -558,6 +558,10 @@ pub struct IconButton {
     accessible_label: Option<String>,
     role: ButtonRole,
     disclosure: bool,
+    frame: Option<bool>,
+    frame_when_inactive: bool,
+    fill: Option<Color32>,
+    stroke: Option<Stroke>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -566,6 +570,7 @@ enum ButtonRole {
     Tool,
     ToolChoice,
     View,
+    Tab,
 }
 
 impl IconButton {
@@ -600,10 +605,41 @@ impl IconButton {
         button.accessible_label = Some(accessible_label);
         button
     }
+    /// A named family keeps its label and width while its icon identifies the
+    /// active tool. Assistive technology also receives the full active name.
+    pub fn tool_group_choice(label: &str, icon: Icon, active_tool: Option<&str>) -> Self {
+        let mut button = Self::from_parts_with_disclosure(label.into(), Some(icon), true)
+            .selected(active_tool.is_some())
+            .quiet();
+        button.role = ButtonRole::ToolChoice;
+        button.accessible_label = Some(match active_tool {
+            Some(tool) => format!("{label} · {tool}"),
+            None => label.to_owned(),
+        });
+        button
+    }
+    /// Quiet exclusive page navigation: full-size targets and a persistent
+    /// underline, with a surface only on hover or keyboard focus.
+    pub fn tab(selected: bool, label: impl Into<WidgetText>) -> Self {
+        let label = label.into();
+        let accessible_label = label.text().to_owned();
+        let mut button = Self::from_parts(label, None)
+            .selected(selected)
+            .frame_when_inactive(false);
+        button.role = ButtonRole::Tab;
+        button.accessible_label = Some(accessible_label);
+        button
+    }
     /// Presentation commands have an outline rather than an action fill.
     pub fn presentation(mut self) -> Self {
         self.role = ButtonRole::View;
-        self.button = self.button.frame(true).frame_when_inactive(true);
+        self.frame(true).frame_when_inactive(true)
+    }
+    /// Secondary commands share the toolbar surface until hovered or focused.
+    /// Apply after `selected` so active choices retain their state fill.
+    pub fn quiet(mut self) -> Self {
+        self.frame_when_inactive = self.selected;
+        self.button = self.button.frame_when_inactive(self.frame_when_inactive);
         self
     }
     /// An icon-only control still exposes its action to assistive technology.
@@ -643,13 +679,20 @@ impl IconButton {
             accessible_label: None,
             role: ButtonRole::Action,
             disclosure,
+            frame: None,
+            frame_when_inactive: true,
+            fill: None,
+            stroke: None,
         }
     }
     pub fn fill(mut self, fill: Color32) -> Self {
+        self.fill = Some(fill);
         self.button = self.button.fill(fill);
         self
     }
     pub fn stroke(mut self, stroke: Stroke) -> Self {
+        self.stroke = Some(stroke);
+        self.frame = Some(true);
         self.button = self.button.stroke(stroke);
         self
     }
@@ -666,10 +709,12 @@ impl IconButton {
         self
     }
     pub fn frame(mut self, frame: bool) -> Self {
+        self.frame = Some(frame);
         self.button = self.button.frame(frame);
         self
     }
     pub fn frame_when_inactive(mut self, frame: bool) -> Self {
+        self.frame_when_inactive = frame;
         self.button = self.button.frame_when_inactive(frame);
         self
     }
@@ -692,10 +737,14 @@ impl Widget for IconButton {
         // Keep this native widget in its parent's layout: a nested `scope`
         // prevents horizontal_wrapped from wrapping individual buttons.
         let previous_style = ui.style().clone();
-        ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
-        ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::NONE;
+        let colors = crate::theme::palette(ui.ctx());
+        ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(
+            crate::tokens::BORDER_WIDTH,
+            colors
+                .line
+                .gamma_multiply(crate::tokens::GOLDEN_RATIO_INVERSE),
+        );
         if self.role == ButtonRole::View {
-            let colors = crate::theme::palette(ui.ctx());
             ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
             ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
             ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.accent);
@@ -704,7 +753,43 @@ impl Widget for IconButton {
             .accessible_label
             .as_ref()
             .map(|_| ui.output(|output| output.events.len()));
-        let output = self.button.atom_ui(ui);
+        let background = ui.painter().add(egui::Shape::Noop);
+        let has_frame = self.frame.unwrap_or(ui.visuals().button_frame);
+        // Keep native frame padding and hit geometry, but paint its material in
+        // the reserved slot beneath the native text, icons and accessibility.
+        let output = self
+            .button
+            .fill(Color32::TRANSPARENT)
+            .stroke(Stroke::NONE)
+            .frame(has_frame)
+            .atom_ui(ui);
+        let response = &output.response;
+        if has_frame
+            && (self.frame_when_inactive
+                || response.hovered()
+                || response.is_pointer_button_down_on()
+                || response.has_focus())
+        {
+            let visuals = ui.style().interact_selectable(response, self.selected);
+            let fill = self.fill.unwrap_or(visuals.weak_bg_fill);
+            let stroke = self.stroke.unwrap_or(visuals.bg_stroke);
+            let material = crate::surface::ComponentMaterial {
+                elevated: self.fill.is_some_and(|fill| fill != Color32::TRANSPARENT)
+                    && ui.is_enabled(),
+                active: ui.is_enabled() && (self.selected || response.has_focus()),
+            };
+            ui.painter().set(
+                background,
+                crate::surface::component_shape(
+                    ui.painter(),
+                    response.rect,
+                    crate::tokens::RADIUS,
+                    fill,
+                    stroke,
+                    material,
+                ),
+            );
+        }
         ui.set_style(previous_style);
         if let (Some(label), Some(index)) = (self.accessible_label, native_event_index) {
             // A custom atom has no text, so native Button emits an unlabelled
@@ -714,14 +799,16 @@ impl Widget for IconButton {
                 if output.events.get(index).is_some_and(|event| {
                     let info = event.widget_info();
                     info.typ == egui::WidgetType::Button
-                        && (matches!(self.role, ButtonRole::Tool | ButtonRole::ToolChoice)
-                            || info.label.is_none())
+                        && (matches!(
+                            self.role,
+                            ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
+                        ) || info.label.is_none())
                 }) {
                     output.events.remove(index);
                 }
             });
             output.response.widget_info(|| {
-                if self.role == ButtonRole::Tool {
+                if matches!(self.role, ButtonRole::Tool | ButtonRole::Tab) {
                     egui::WidgetInfo::selected(
                         egui::WidgetType::RadioButton,
                         ui.is_enabled(),
@@ -733,7 +820,11 @@ impl Widget for IconButton {
                 }
             });
         }
-        if matches!(self.role, ButtonRole::Tool | ButtonRole::ToolChoice) && self.selected {
+        if matches!(
+            self.role,
+            ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
+        ) && self.selected
+        {
             // A shape cue remains legible without relying on accent color alone.
             let rect = output.response.rect;
             let indicator = Rect::from_min_max(

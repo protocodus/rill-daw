@@ -510,6 +510,7 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     ] {
         assert!(!visible(&before, label), "{label} should be contextual");
     }
+    app.click("Draw settings");
     let pitch = app.click("C · Natural minor");
     assert!(visible(&pitch, "Natural minor"));
     assert!(visible(&pitch, "Major triad"));
@@ -531,7 +532,7 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     let multi = app.key("U");
     assert!(visible(&multi, "Chord stack"));
     assert!(visible(&multi, "Major triad"), "{}", multi["label_rects"]);
-    assert!(visible(&multi, "C · Natural minor"));
+    assert!(visible(&multi, "Draw settings"));
     let plot = &multi["midi_editor"]["plot"];
     let top = plot["min"][1].as_f64().unwrap();
     let bottom = plot["max"][1].as_f64().unwrap();
@@ -885,12 +886,15 @@ fn folded_fit_and_root_changes_handle_hidden_only_clips_without_edits() {
         assert_eq!(disabled["history"], original["history"]);
         app.click("Fit");
     }
+    app.click("Draw settings");
     app.click("C · Natural minor");
     app.click("C");
     let revealed = app.click("C♯");
     assert_eq!(revealed["midi_editor"]["hidden_notes"], 0);
     assert_eq!(revealed["project"], original["project"]);
-    app.key("Escape");
+    if app.inspect()["native_menu"]["open"] == true {
+        app.key("Escape");
+    }
     let state = app.inspect();
     pointer(
         &mut app,

@@ -1,10 +1,42 @@
 # Application E2E tests
 
-`compact_tools_e2e` opens the arranger's **More tools** chooser through actual
-mouse input, selects every secondary mode, and verifies its visible active name,
-shortcut parity, stable neighboring controls, and unchanged song history and
-selection at 800, 1100 and 1480 points in both appearances. Existing arranger
-editing scenarios also traverse the chooser before exercising the tools.
+`main_toolbar_roles_e2e` checks the grouped transport across 800–1600 point
+windows in both appearances: full-size targets, fixed Play/Pause geometry, quiet
+secondary commands, and preserved playback, loop, click, export and history
+behavior. `tool_hints_e2e` opens and dismisses full tool instructions by mouse
+without changing the canvas, tools or song. `cue_editor_flow_e2e` checks clip
+navigation and the single-clip header, where unavailable navigation is omitted.
+
+```sh
+cargo test --locked -p daw-app --test main_toolbar_roles_e2e --test tool_hints_e2e --test cue_editor_flow_e2e --test piano_toolbar_e2e
+```
+
+`assistant_readiness_e2e` exercises the visible **Connect AI** action, settings
+return with an intact draft and pinned scope, recording and missing-target
+explanations, deterministic provider failure before/after an edit, and direct
+prompt recovery without sending or overwriting new text. Scripted providers keep
+these checks independent of network access and credentials.
+
+`clip_instrument_navigation_e2e` assigns a sound from a non-first MIDI phrase,
+then opens its persistent **Instrument** action and returns by mouse or Escape.
+It verifies retained note selection, horizontal/vertical viewport, history, and
+song state in light/dark and narrow/wide layouts. A metadata-only plug-in fixture
+avoids requiring an installed instrument or audio device.
+
+```sh
+cargo test --locked -p daw-app --test assistant_readiness_e2e --test clip_instrument_navigation_e2e -- --test-threads=1
+cargo test --locked -p daw-ui --test assistant --test assistant_readiness -- --test-threads=1
+```
+
+`compact_tools_e2e` selects every arranger tool directly through mouse input.
+It checks full labels, shortcut parity, stable neighboring controls, and
+unchanged song history and selection at 800, 1100 and 1480 points in both
+appearances. Related families remain visible as the toolbar wraps.
+
+`piano_toolbar_e2e` checks direct access to every piano-roll tool, shortcut parity,
+and stable neighboring controls across narrow and wide layouts. Notes-menu
+transformations remain reachable by mouse, with cancellation preserving notes
+and history. Audio editor coverage checks the same direct-tool convention.
 
 `loop_selection_e2e` uses transport and clip context menus to loop fractional
 clip bounds and selected phrases including rests. It checks retained selection
@@ -16,7 +48,7 @@ value popups, precise committed edits, Undo/Redo, and preservation of values and
 history when an entry is dismissed.
 
 ```sh
-cargo test --locked -p daw-app --test compact_tools_e2e --test loop_selection_e2e --test header_readability_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test compact_tools_e2e --test piano_toolbar_e2e --test loop_selection_e2e --test header_readability_e2e -- --test-threads=1
 ```
 
 `assistant_scope_e2e` opens AI from the piano roll, composition dialog, audio
@@ -40,6 +72,8 @@ cargo test --locked -p daw-app --test assistant_scope_e2e -- --test-threads=1
 `assistant_guidance_e2e` browses musical examples and prompting tips through the
 running Assistant, checks editable insertion without automatic submission, and
 keeps the composer and actions accessible at 800×600 in both appearances. A
+welcome-state scenario inserts scoped starters, preserves existing text, and
+checks Unicode prompt limits without executing an armed provider request. A
 deterministic provider fixture turns an edited example into eight bars of chords,
 arpeggio and bass, then refines the mix through a follow-up and mouse-driven
 Undo. It also covers conversation continuity despite many tool activities,
@@ -81,8 +115,8 @@ history. Opt-in paint diagnostics include paths, circles and text colors.
 
 `slider_scale_e2e` compares actual painted ticks and handle center lines with
 mouse edits at range endpoints and fractional positions. It checks adaptive
-scales, endpoint/current captions, compact headers, both themes and display
-densities. `slider_automation_e2e` creates gain, pan and send lanes directly from
+mixer scales, direct track-header rail mapping and current-value readouts,
+compact headers, both themes and display densities. `slider_automation_e2e` creates gain, pan and send lanes directly from
 controls, checks exact ownership, Undo/Redo, override and Resume. The optional
 `inspect` paint output includes `painted_lines` for these visual checks.
 
@@ -182,7 +216,7 @@ By default the tests launch Cargo's application binary. Set `RILL_E2E_BINARY` to
 
 The audio scenario creates five tracks through the Track menu, drops generated WAV files with different lengths and sample rates onto their rows, exports the complete arrangement, and checks duration including the release tail, finite samples, nonzero stereo content, a distinct audible frequency from each of the five sources, 48 kHz / 32-bit floating-point format, recovered session contents, and successful process exit. Another scenario drops multiple files into empty arrangement space and checks that new tracks appear. Launch-and-quit and File → Quit scenarios verify display-free startup and shutdown. Further scenarios cover track creation and Undo/Redo, instrument/library selection, effect insertion/bypass/reordering and bus routing, mixer mute/solo, folder membership/collapse, and Setup Apply/Cancel persistence. The Add MIDI track scenario verifies automatic assignment-chooser opening and its four-beat pattern; choosing an instrument preserves that pattern. The `mixer_e2e` target drags arranger volume/pan controls, checks channel/destination labels against Mixer, verifies that folders do not consume channel numbers, exercises mute/solo and Undo/Redo, saves/reopens the session, and verifies that the exported stereo balance and level reflect those edits. All subprocess scenarios share `crates/daw-app/tests/common/mod.rs`.
 
-Header-picker scenarios change the output bus directly from the sequencer, return to Master, cancel, undo/redo, and verify the saved route in exported audio. They check that self-routing and transitive feedback destinations are absent and that compact rows retain the picker. MIDI scenarios open the instrument chooser from an unselected track's header, assign and replace its VST, and verify that other tracks, existing patterns, and track count remain unchanged.
+Header-picker scenarios change the output bus directly from the sequencer, return to Master, cancel, undo/redo, and verify the saved route in exported audio. They check that self-routing and transitive feedback destinations are absent and that compact rows retain access through their channel-controls button. MIDI scenarios open the instrument chooser from an unselected track's header, assign and replace its VST, and verify that other tracks, existing patterns, and track count remain unchanged.
 
 The headless tests cover application behavior, UI event handling, model changes, decoding, rendering, export, and shutdown. Metadata-only VST fixtures verify folder setup, scans, search, multi-class instrument assignment, insert chains, and automation without claiming to execute a real plug-in. Native window tests are separate; platform file dialogs and hardware drivers still need manual testing.
 
@@ -198,15 +232,31 @@ freshly extracted copies, with command-line and engine export coverage too.
 in Arrangement, MIDI, audio and automation. It checks selection and history stay
 intact and guards text/numeric entry, menus, utilities and document decisions.
 `beat_ruler_e2e` checks readable beat and subdivision labels across those same
-editors, including 3/4 and 4/4, both themes and display densities.
+editors, including 3/4 and 4/4, both themes and display densities. It also checks
+compact elapsed-time labels at 15 seconds, 2:45 and 5:15:55 through real viewport
+navigation. Shared typography tests verify proportional fonts and ruler spacing;
+formatter cases cover fractional precision and minute/hour rounding carry.
 `mixer_gain_entry_e2e` types an exact dB value, checks Undo/Redo and portable
 recall against exported level, and ensures middle-drag scrolling and stored
 values outside the editing range do not change gain.
+`slider_markers_e2e` checks the actual triangles, filled midpoint dot and hollow
+zero circle on horizontal pan controls, vertical mixer faders and standard/compact
+arranger header rails in both themes and at 1×/2× density. Mouse edits move the
+markers, endpoint/zero precedence stays unambiguous, and Undo restores both the
+value and its marker. Unity gain's 0 dB ring stays distinct from the gain rail's
+midpoint dot in both the linear Mixer fader and the dB-scaled arranger rail.
+Paint inspection must leave the project and history unchanged.
 
 `main_toolbar_roles_e2e` checks complete control groups at 800–1600 px, their
 painted action/view roles, and real transport/Click/Loop behavior. The spectrum
 view tests check intensity and both cached palettes in actual uploaded textures
 and painted quads, with unchanged playback, source files and exports.
+
+`row_alignment_e2e` checks actual slider rails, numeric text, labels, checkboxes
+and actions in the Quantize preview at wide and narrow widths, both themes and
+1×/2× density. Wrapping and focusing a numeric field preserve the common center
+line and leave the project/history unchanged. Shared layout tests also cover
+ordinary mixed rows and fractional display density.
 `arranger_layout_e2e` drives label and global row resizing, verifies the loop's
 separate painted lane, and creates/reparents nested folders with safe choices,
 Undo and portable recall. `mixer_flow_e2e` verifies signal-stage order and actual
@@ -270,6 +320,20 @@ On Linux, `cargo test --locked -p daw-plugins --test native_context_menu -- --ig
 
 `workspace_switch_e2e` exercises the persistent Arranger/Mixer switch from both workspaces, Clip Editor, and contextual utilities, including selecting the already active caller to dismiss a popup. It checks bounds at 800×600 and 1100×720, both appearances and densities, and preserves project/history/selection. `channel_properties_e2e` verifies separate Clip/Track/Channel scopes, audio-only clip gain, channel gain/pan, and navigation among Mixer, Channel, Effects, Instrument, and Routing. `instrument_context_e2e` checks concise native-editor overviews, the on-demand **Automate…** parameter page, contextual titles, effect-editor-to-instrument navigation, and clean failure of metadata-only plugin fixtures.
 
+`cursor_visibility_e2e` places the cursor through the mouse in the arranger,
+MIDI editor and audio editor, in both themes at 1×/2× density. It verifies the
+actual opaque cursor line and wider translucent glow, contrast against the
+canvas, full-height visibility, and unchanged project/history state.
+
+`track_header_sections_e2e` verifies distinct identity, mix, routing, source and
+meter bounds at 224/288/400-point widths and 56/89/144/233-point row heights in
+both appearances and at 1×/2× density. It exercises M/S, routing and source
+navigation, Undo, and the compact channel-controls affordance. Short-row value
+fields preserve precise edits, cancellation and Undo on the intended channel. Shared
+`track_header` and `track_mix` tests verify bounded geometry, native focus and
+keyboard interaction, disabled behavior, exact entry, and unchanged stored
+values when controls are only displayed.
+
 `header_channel_controls_e2e` drags the graphical gain/pan sliders in normal and compact track headers, verifies the same mixer values and undo/redo, preserves clip data, saves/reopens the project, and checks the exported audio level/balance. On Linux, `channel_meter_e2e` runs a real render worker and CPAL stream against an isolated ALSA null PCM. Its child-only `ALSA_CONFIG_PATH` cannot choose host audio hardware. It validates distinct source, silent-channel, and bus levels after gain/pan, then zero readings on pause/stop. This target requires no display or physical sound device; non-Linux builds skip it.
 
 `live_edit_e2e` drives volume/pan, MIDI notes, audio/MIDI clip edits, source imports, and Undo/Redo while the production render worker is active. A device-free sink consumes the same bounded audio queue and callback path through explicit `pump_audio` commands; it never opens physical audio hardware. A temporary Rust instrument/effect worker speaks the real isolation protocol and retains sustained voices plus a 32-frame delay. Tests inspect actual output samples, engine/generation identity, sandbox process identity, lifecycle/MIDI logs, and applied revisions. Audio is also consumed between pointer Down/Move/Up events: fader previews must sound before release, a gesture returning to its starting value must restore audio without an Undo entry, and dragging a sounding MIDI note must not add a duplicate audition voice. Rapid edits must converge on the latest project; failed source preparation must preserve the previous audio; structural changes still use controlled engine replacement. This deterministic suite verifies musical continuity and instance preservation, not real-time hardware deadline performance or native VST compatibility. It runs on every platform and in containers:
@@ -283,7 +347,7 @@ cargo test --locked -p daw-app --test live_edit_e2e
 `mixer_height_e2e` resizes the running mixer between 1100×720, 1440×1100, and 800×600 in light and dark appearances. It checks the actual strip, fader, and stereo-meter paint bounds, full-height expansion, aligned controls, compact-window scrolling, Effects navigation, and a resized fader edit with Undo.
 
 ```sh
-cargo test --locked -p daw-app --test workspace_switch_e2e --test channel_properties_e2e --test instrument_context_e2e --test header_channel_controls_e2e --test channel_meter_e2e
+cargo test --locked -p daw-app --test workspace_switch_e2e --test channel_properties_e2e --test instrument_context_e2e --test track_header_sections_e2e --test header_channel_controls_e2e --test channel_meter_e2e
 ```
 
 Run the native application test on a desktop (or prefix with `xvfb-run -a` on Linux):
@@ -351,7 +415,7 @@ Supported commands:
 
 File → Quit closes the process through the application's normal viewport command after any unsaved-change decision. Native file picker presentation requires a windowing environment; the driver can supply Open/Save/Export picker results, or start a default export with an explicit path. These are automated UI regressions, not a replacement for native mouse-and-keyboard testing. `--headless` is an opt-in test driver, not a network service. Commands can operate on files with the current user's permissions, so feed it trusted input.
 
-Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, version, architectures, first-indexed time, favorite and categories, `plugin_scanning`, and `instrument_parameter_rect`. The open library's `library` snapshot adds its pane rectangles, view, collection/developer/category filters, sort, result `order`, and background `sync` status. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.channels` reports the actual header slider/meter rectangles and engine peak readings. `recording` reports `phase` (`idle`, `starting`, `counting_in`, `recording`, `finalizing`), armed tracks, monitor modes, input readiness/channels/peaks, captured frames, completed passes, dropped frames, `dummy_device` configuration, the last published files/clip IDs, and error details. Its `midi` snapshot reports port readiness, capture activity, event and held-note counts; `timing` reports remaining count-in beats/frames and capture gates. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
+Snapshots also expose `native_editor` lifecycle and parameter metadata, `plugin_catalog` thumbnail status, version, architectures, first-indexed time, favorite and categories, `plugin_scanning`, and `instrument_parameter_rect`. The open library's `library` snapshot adds its pane rectangles, view, collection/developer/category filters, sort, result `order`, and background `sync` status. `popup_context` reports the inactive caller's source title, shape count, and nesting depth; `inspector_page` identifies the active property scope. `timeline.tracks[].sections` reports identity, mix, routing, device, meter and compact-details bounds; omitted sections are null. `timeline.channels` reports actual rail, readout, M/S and meter rectangles with engine peak readings. `recording` reports `phase` (`idle`, `starting`, `counting_in`, `recording`, `finalizing`), armed tracks, monitor modes, input readiness/channels/peaks, captured frames, completed passes, dropped frames, `dummy_device` configuration, the last published files/clip IDs, and error details. Its `midi` snapshot reports port readiness, capture activity, event and held-note counts; `timing` reports remaining count-in beats/frames and capture gates. These are observations for driving real UI interactions; they do not mutate the project. Save, Export, Quit, New, Open, and recovery transitions wait for an active native editor's state with a bounded timeout. Failed state synchronization cancels the operation and writes the last known project to recovery.
 
 With `RILL_TEST_VST_INSTRUMENT` set to Surge XT, the ignored `installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit` test in `features_e2e` drives the complete production app: direct instrument creation, automatic native editor opening, note editing, last-touched automation, Undo/Redo protection, saved state restoration, cached thumbnails, two independent VST tracks with audible export, New/Open recovery, and shutdown. The regular suite separately covers keyboard and double-click creation using metadata fixtures.
 

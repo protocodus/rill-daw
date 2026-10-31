@@ -273,10 +273,17 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
             .filter(|row| row["text"] == "Target")
             .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
     );
-    // The pointer stayed over the fader while scrolling settled. Its stacked
-    // value/volume/automation hints cover the output target in this compact
-    // layout. Move and press immediately; read-only hints must let that first
-    // click reach the target underneath instead of consuming the press.
+    // Hover the actual fader after scrolling settles; shared padding can move
+    // it without changing the control. Its stacked value/volume/automation
+    // hints must let the first press reach the output target underneath.
+    let fader = &scrolled["mixer"]["channels"][0]["fader"];
+    let x = (fader["min"][0].as_f64().unwrap() + fader["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (fader["min"][1].as_f64().unwrap() + fader["max"][1].as_f64().unwrap()) * 0.5;
+    assert!((0.0..800.0).contains(&x) && (0.0..600.0).contains(&y));
+    app.command(json!({"command":"pointer","phase":"move","x":x,"y":y}));
+    for _ in 0..20 {
+        scrolled = app.inspect();
+    }
     assert!(visible(&scrolled, "Channel volume"));
     assert!(visible(
         &scrolled,

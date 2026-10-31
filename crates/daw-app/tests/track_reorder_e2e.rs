@@ -340,6 +340,9 @@ fn folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles() {
             .as_bool()
             .unwrap()
     );
+    // Expanded rows can exceed the viewport at the comfortable default height.
+    // Fit exposes both drag endpoints before testing the hierarchy operation.
+    app.click("Fit");
 
     let (before, pending, to) =
         start_drag(&mut app, View::Arrangement, folder, nested, "IntoFolder");

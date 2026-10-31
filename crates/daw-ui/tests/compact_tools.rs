@@ -1,51 +1,39 @@
 use daw_ui::{EditorTool, ToolHintContext, theme};
 use egui::{Context, Event, FullOutput, Modifiers, PointerButton, RawInput, Rect, Response, Shape};
 
-const PRIMARY: &[EditorTool] = &[
-    EditorTool::Select,
-    EditorTool::Pencil,
-    EditorTool::Cursor,
-    EditorTool::Cut,
-];
-const SUPPORTED: &[EditorTool] = &[
-    EditorTool::Select,
-    EditorTool::Pencil,
-    EditorTool::Cursor,
-    EditorTool::Cut,
-    EditorTool::Duplicate,
-    EditorTool::Glue,
-    EditorTool::Ghost,
-    EditorTool::Stretch,
-    EditorTool::Slip,
-    EditorTool::Erase,
-];
-
-fn frame(ctx: &Context, tool: &mut EditorTool, events: Vec<Event>) -> (FullOutput, Response) {
-    let mut response = None;
+fn frame(
+    ctx: &Context,
+    tool: &mut EditorTool,
+    width: f32,
+    enabled: bool,
+    events: Vec<Event>,
+) -> (FullOutput, Vec<Response>) {
+    let mut responses = Vec::new();
     let output = ctx.run(
         RawInput {
             screen_rect: Some(Rect::from_min_size(
                 egui::Pos2::ZERO,
-                egui::vec2(800.0, 600.0),
+                egui::vec2(width, 600.0),
             )),
             events,
             ..Default::default()
         },
         |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                daw_ui::toolbar(ui, |ui| {
-                    response = daw_ui::compact_editor_tools(
-                        ui,
-                        tool,
-                        SUPPORTED,
-                        PRIMARY,
-                        ToolHintContext::Arrangement,
-                    );
+                ui.add_enabled_ui(enabled, |ui| {
+                    daw_ui::toolbar(ui, |ui| {
+                        responses = daw_ui::editor_tools_with_context(
+                            ui,
+                            tool,
+                            &EditorTool::ALL,
+                            ToolHintContext::Arrangement,
+                        );
+                    });
                 });
             });
         },
     );
-    (output, response.unwrap())
+    (output, responses)
 }
 
 fn label(output: &FullOutput, name: &str) -> Rect {
@@ -61,11 +49,13 @@ fn label(output: &FullOutput, name: &str) -> Rect {
         .unwrap_or_else(|| panic!("Missing {name}"))
 }
 
-fn click(ctx: &Context, tool: &mut EditorTool, at: egui::Pos2) {
+fn click(ctx: &Context, tool: &mut EditorTool, width: f32, enabled: bool, at: egui::Pos2) {
     for pressed in [true, false] {
         frame(
             ctx,
             tool,
+            width,
+            enabled,
             vec![
                 Event::PointerMoved(at),
                 Event::PointerButton {
@@ -77,152 +67,148 @@ fn click(ctx: &Context, tool: &mut EditorTool, at: egui::Pos2) {
             ],
         );
     }
-    frame(ctx, tool, vec![]);
 }
 
 #[test]
-fn secondary_choice_is_mouse_accessible_and_keeps_its_width_and_active_indicator() {
+fn every_tool_is_visible_and_one_click_away_without_moving_adjacent_controls() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-        let ctx = Context::default();
-        theme::apply(&ctx);
-        theme::set_appearance(&ctx, appearance);
-        let mut tool = EditorTool::Select;
-        let (_, initial) = frame(&ctx, &mut tool, vec![]);
-        let width = initial.rect.width();
-        for candidate in SUPPORTED.iter().filter(|tool| !PRIMARY.contains(tool)) {
-            let (_, chooser) = frame(&ctx, &mut tool, vec![]);
-            click(&ctx, &mut tool, chooser.rect.center());
-            assert!(egui::Popup::is_any_open(&ctx));
-            let (menu, _) = frame(&ctx, &mut tool, vec![]);
-            click(
-                &ctx,
-                &mut tool,
-                label(&menu, ToolHintContext::Arrangement.label(*candidate)).center(),
-            );
-            assert_eq!(tool, *candidate);
-            assert!(!egui::Popup::is_any_open(&ctx));
-            let (selected, chooser) = frame(&ctx, &mut tool, vec![]);
-            assert!((chooser.rect.width() - width).abs() < 0.1);
-            assert!(
-                chooser
-                    .rect
-                    .contains_rect(label(&selected, ToolHintContext::Arrangement.label(tool)))
-            );
-            assert!(selected.shapes.iter().any(|shape| matches!(&shape.shape,
-                Shape::Rect(shape) if shape.rect.height() == 3.0 && chooser.rect.contains_rect(shape.rect)
-            )), "Selected secondary mode keeps the tool underline");
-        }
-        let (selected, _) = frame(&ctx, &mut tool, vec![]);
-        click(&ctx, &mut tool, label(&selected, "Select").center());
-        assert_eq!(tool, EditorTool::Select);
-        let (reset, chooser) = frame(&ctx, &mut tool, vec![]);
-        assert!(chooser.rect.contains_rect(label(&reset, "More tools")));
-        assert!((chooser.rect.width() - width).abs() < 0.1);
-        click(&ctx, &mut tool, chooser.rect.center());
-        click(&ctx, &mut tool, egui::pos2(760.0, 550.0));
-        assert_eq!(
-            tool,
-            EditorTool::Select,
-            "Dismissing choices never changes mode"
-        );
-        assert!(!egui::Popup::is_any_open(&ctx));
-    }
-}
-
-#[test]
-fn chooser_supports_keyboard_open_and_escape_without_selecting_a_tool() {
-    let ctx = Context::default();
-    theme::apply(&ctx);
-    let mut tool = EditorTool::Stretch;
-    let (_, chooser) = frame(&ctx, &mut tool, vec![]);
-    chooser.request_focus();
-    for pressed in [true, false] {
-        frame(
-            &ctx,
-            &mut tool,
-            vec![Event::Key {
-                key: egui::Key::Enter,
-                physical_key: None,
-                pressed,
-                repeat: false,
-                modifiers: Modifiers::NONE,
-            }],
-        );
-    }
-    assert!(egui::Popup::is_any_open(&ctx));
-    assert_eq!(tool, EditorTool::Stretch);
-    for pressed in [true, false] {
-        frame(
-            &ctx,
-            &mut tool,
-            vec![Event::Key {
-                key: egui::Key::Escape,
-                physical_key: None,
-                pressed,
-                repeat: false,
-                modifiers: Modifiers::NONE,
-            }],
-        );
-    }
-    assert!(!egui::Popup::is_any_open(&ctx));
-    assert_eq!(tool, EditorTool::Stretch);
-}
-
-#[test]
-fn chooser_emits_one_labelled_button_event_instead_of_a_mode_selection() {
-    for (initial, name) in [
-        (EditorTool::Select, "More tools"),
-        (EditorTool::Stretch, "Stretch"),
-    ] {
-        let ctx = Context::default();
-        theme::apply(&ctx);
-        let mut tool = initial;
-        frame(&ctx, &mut tool, vec![]);
-        let mut focused = None;
-        for _ in 0..5 {
-            for pressed in [true, false] {
-                let output = frame(
-                    &ctx,
-                    &mut tool,
-                    vec![Event::Key {
-                        key: egui::Key::Tab,
-                        physical_key: None,
-                        pressed,
-                        repeat: false,
-                        modifiers: Modifiers::NONE,
-                    }],
-                )
-                .0;
-                if pressed {
-                    focused = Some(output);
+        for density in [1.0, 2.0] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            theme::set_appearance(&ctx, appearance);
+            ctx.set_pixels_per_point(density);
+            let mut tool = EditorTool::Select;
+            frame(&ctx, &mut tool, 800.0, true, vec![]);
+            for width in [800.0, 1100.0] {
+                let (output, controls) = frame(&ctx, &mut tool, width, true, vec![]);
+                let initial: Vec<_> = controls.iter().map(|response| response.rect).collect();
+                assert_eq!(controls.len(), EditorTool::ALL.len());
+                let viewport = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 600.0));
+                for (index, response) in controls.iter().enumerate() {
+                    assert!(viewport.contains_rect(response.rect));
+                    assert!(response.rect.height() >= daw_ui::tokens::CONTROL_HEIGHT);
+                    for other in &controls[..index] {
+                        assert!(!other.rect.intersects(response.rect));
+                    }
+                }
+                assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
+                    Shape::Text(text) if text.galley.text() == "More tools"
+                )));
+                for candidate in EditorTool::ALL {
+                    let name = ToolHintContext::Arrangement.label(candidate);
+                    let target = label(&output, name);
+                    let response = controls
+                        .iter()
+                        .find(|response| response.rect.contains_rect(target))
+                        .unwrap();
+                    click(&ctx, &mut tool, width, true, response.rect.center());
+                    assert_eq!(tool, candidate);
+                    assert!(!egui::Popup::is_any_open(&ctx));
+                    let (selected, current) = frame(&ctx, &mut tool, width, true, vec![]);
+                    assert_eq!(
+                        current
+                            .iter()
+                            .map(|response| response.rect)
+                            .collect::<Vec<_>>(),
+                        initial
+                    );
+                    assert!(selected.shapes.iter().any(|shape| matches!(&shape.shape,
+                        Shape::Rect(shape) if shape.rect.height() == 3.0 && response.rect.contains_rect(shape.rect)
+                    )), "The active {name} mode keeps its underline");
                 }
             }
         }
-        let activated = frame(
-            &ctx,
-            &mut tool,
-            vec![Event::Key {
-                key: egui::Key::Enter,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: Modifiers::NONE,
-            }],
-        )
-        .0;
-        for output in [focused.unwrap(), activated] {
-            let events = output.platform_output.events;
-            assert_eq!(
-                events.len(),
-                1,
-                "Chooser must expose exactly one focus or click event"
-            );
-            let info = events[0].widget_info();
-            assert_eq!(info.typ, egui::WidgetType::Button);
-            assert_eq!(info.label.as_deref(), Some(name));
-            assert_eq!(info.selected, None, "Opening a menu does not select a tool");
-        }
-        assert_eq!(tool, initial);
-        assert!(egui::Popup::is_any_open(&ctx));
     }
+}
+
+#[test]
+fn separators_only_divide_adjacent_families_on_the_same_row() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let mut tool = EditorTool::Select;
+    for width in [800.0, 1100.0] {
+        let (output, controls) = frame(&ctx, &mut tool, width, true, vec![]);
+        let separators: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match shape.shape {
+                Shape::LineSegment { points, stroke }
+                    if points[0].x == points[1].x
+                        && (points[1].y - points[0].y - daw_ui::tokens::COMPACT_HEIGHT).abs()
+                            < 0.1
+                        && stroke.width == daw_ui::tokens::BORDER_WIDTH =>
+                {
+                    Some(points)
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(
+            !separators.is_empty(),
+            "Related tool families have visible separators"
+        );
+        for [top, bottom] in separators {
+            let center = (top.y + bottom.y) * 0.5;
+            let on_row = |response: &&Response| (response.rect.center().y - center).abs() < 1.0;
+            assert!(
+                controls
+                    .iter()
+                    .filter(on_row)
+                    .any(|response| response.rect.right() < top.x)
+            );
+            assert!(
+                controls
+                    .iter()
+                    .filter(on_row)
+                    .any(|response| response.rect.left() > top.x)
+            );
+            assert!(!controls.iter().any(|response| response.rect.contains(top)));
+        }
+    }
+}
+
+#[test]
+fn individual_tools_keep_keyboard_radio_semantics_and_disabled_state() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let mut tool = EditorTool::Select;
+    let (output, controls) = frame(&ctx, &mut tool, 800.0, true, vec![]);
+    let stretch = label(&output, "Stretch");
+    let target = controls
+        .iter()
+        .find(|response| response.rect.contains_rect(stretch))
+        .unwrap();
+    target.request_focus();
+    frame(&ctx, &mut tool, 800.0, true, vec![]);
+    let (activated, _) = frame(
+        &ctx,
+        &mut tool,
+        800.0,
+        true,
+        vec![Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        }],
+    );
+    assert_eq!(tool, EditorTool::Stretch);
+    assert!(!egui::Popup::is_any_open(&ctx));
+    let events = activated.platform_output.events;
+    assert_eq!(events.len(), 1);
+    let info = events[0].widget_info();
+    assert_eq!(info.typ, egui::WidgetType::RadioButton);
+    assert_eq!(info.label.as_deref(), Some("Stretch"));
+    assert!(info.enabled);
+    frame(&ctx, &mut tool, 800.0, false, vec![]);
+    click(
+        &ctx,
+        &mut tool,
+        800.0,
+        false,
+        label(&output, "Erase").center(),
+    );
+    assert_eq!(tool, EditorTool::Stretch);
+    assert!(!egui::Popup::is_any_open(&ctx));
 }

@@ -41,7 +41,7 @@ fn trimming_very_short_audio_and_midi_clips_keeps_the_app_and_source_window_vali
 }
 
 #[test]
-fn compact_toolbar_keeps_every_tool_mouse_accessible_at_compact_and_wide_sizes() {
+fn toolbar_keeps_every_tool_directly_accessible_at_compact_and_wide_sizes() {
     let (mut app, _, _) = fixture(Kind::Midi);
     let project = app.inspect()["project"].clone();
     for width in [800.0, 1100.0, 1800.0] {
@@ -58,10 +58,6 @@ fn compact_toolbar_keeps_every_tool_mouse_accessible_at_compact_and_wide_sizes()
             ("Erase", "Erase"),
             ("Cursor", "Cursor"),
         ] {
-            if !matches!(label, "Select" | "Pencil" | "Cursor" | "Cut") {
-                app.click("Select");
-                app.click("More tools");
-            }
             let state = app.inspect();
             let rect = state["label_rects"]
                 .as_array()
@@ -318,9 +314,10 @@ fn common_duplicate_cut_ghost_and_join_tools_select_the_result_for_audio_and_mid
         assert!(clip(&copied, independent)["link_group"].is_null());
         let state = app.key("T");
         assert!(
-            visible(&state, "Join"),
+            visible(&state, "Join") && !visible(&state, "Glue"),
             "{kind:?}: arranger uses a contextual Join label"
         );
+        assert_eq!(state["timeline"]["tool"], "Glue");
         let popup = pointer(&mut app, "click", center(&state, independent));
         assert_eq!(popup["popups"]["join"], true);
         assert_eq!(

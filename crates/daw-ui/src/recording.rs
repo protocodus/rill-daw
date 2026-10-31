@@ -16,6 +16,8 @@ pub fn record_button(ui: &mut Ui, active: bool, enabled: bool) -> Response {
     let mut button = IconButton::new(label);
     if active {
         button = button.fill(recording_color(ui.ctx()).gamma_multiply(0.2));
+    } else {
+        button = button.quiet();
     }
     ui.add_enabled(enabled, button)
 }

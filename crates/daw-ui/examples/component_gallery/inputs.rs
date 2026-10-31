@@ -8,6 +8,7 @@ pub struct State {
     gain: f64,
     duration: f64,
     pan: f64,
+    slider_landmarks: [f64; 4],
     rotary: f64,
     enabled: bool,
     monitor: bool,
@@ -24,6 +25,7 @@ impl Default for State {
             gain: -6.5,
             duration: 1.25,
             pan: 0.2,
+            slider_landmarks: [0.0, 100.0, 50.0, 0.0],
             rotary: 42.375,
             enabled: true,
             monitor: false,
@@ -63,11 +65,11 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 controls::secret_field(ui, &mut state.secret, "API key", 290.0);
                 ui.end_row();
             });
-            ui.add_space(12.0);
+            ui.add_space(controls::tokens::SPACE_MD);
             controls::text_field(ui, &mut state.search, "Search", ui.available_width());
             text::note(ui, "The masked key above is sample data.");
         });
-        left.add_space(20.0);
+        left.add_space(controls::tokens::SPACE_LG);
         text::subtitle(left, "Paths and rotary values");
         controls::card(left.ctx()).show(left, |ui| {
             ui.horizontal_top(|ui| {
@@ -118,18 +120,28 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 });
                 ui.end_row();
             });
-            ui.add_space(16.0);
+            ui.add_space(controls::tokens::SPACE_MD);
             controls::switch(ui, &mut state.enabled, "Enable monitoring");
             controls::checkbox(ui, &mut state.monitor, "Arm on selection");
-            ui.add_space(12.0);
+            ui.add_space(controls::tokens::SPACE_MD);
             ui.horizontal(|ui| {
                 controls::radio_value(ui, &mut state.mode, 0, "High quality");
                 controls::radio_value(ui, &mut state.mode, 1, "Fast");
             });
-            ui.add_space(16.0);
+            ui.add_space(controls::tokens::SPACE_MD);
             text::label(ui, "Pan");
             ui.add(controls::slider(&mut state.pan, -1.0..=1.0).text("L / R"));
-            ui.add_space(12.0);
+            ui.add_space(controls::tokens::SPACE_MD);
+            ui.columns(4, |columns| {
+                for (index, (column, label)) in columns.iter_mut().zip(["Minimum", "Maximum", "Center", "Zero"]).enumerate() {
+                    text::label(column, label);
+                    column.spacing_mut().slider_width = column.available_width();
+                    column.add(controls::slider(&mut state.slider_landmarks[index], if index == 3 { -100.0..=100.0 } else { 0.0..=100.0 })
+                        .show_value(false).scale_labels(false));
+                }
+            });
+            text::note(ui, "Down / up at limits · dot at midpoint · circle at zero");
+            ui.add_space(controls::tokens::SPACE_MD);
             controls::action_row(
                 ui,
                 |ui| {

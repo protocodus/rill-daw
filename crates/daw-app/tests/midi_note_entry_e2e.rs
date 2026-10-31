@@ -124,6 +124,7 @@ fn undo_redo(app: &mut Harness, before: &Value, after: &Value) {
 fn choose_length(app: &mut Harness, choice: &str) -> Value {
     let state = app.inspect();
     let selected = state["midi_editor"]["draw_length"].as_str().unwrap();
+    app.click("Draw settings");
     app.click(&format!("Length · {selected}"));
     app.click(choice)
 }
@@ -185,13 +186,17 @@ fn clicks_drags_and_double_clicks_extend_only_the_selected_stretched_ghost_bound
 fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
     let (mut app, _, selected) = open(false, 3);
     let baseline = app.inspect();
+    let drawing = app.click("Draw settings");
+    assert_eq!(drawing["project"], baseline["project"]);
+    assert_eq!(drawing["history"], baseline["history"]);
     assert!(
-        baseline["visible_labels"]
+        drawing["visible_labels"]
             .as_array()
             .unwrap()
             .iter()
             .any(|label| label == "Grid scale")
     );
+    app.key("Escape");
     let choice = choose_length(&mut app, "1 bar");
     assert_eq!(choice["project"], baseline["project"]);
     assert_eq!(choice["history"], baseline["history"]);

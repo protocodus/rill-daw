@@ -48,12 +48,17 @@ See the [audio editor coverage and shortcuts](AUDIO_EDITOR.md) for common workfl
 
 Choose **Window → Setup → AI**, select OpenAI or Anthropic, enter your model and
 API key, and apply. The assistant's **AI settings** button opens that page
-directly. Open **AI** in the menu bar or **Window → Assistant**, then choose
-**Examples** for editable starting points under **Compose**, **Develop**,
+directly. Before setup, **Connect AI** opens the same page and keeps your draft
+and selected AI context when you Apply or Cancel. Open **AI** in the menu bar or
+**Window → Assistant**. An empty Conversation offers up to three starting points for
+the current scope. Choose **Examples** to browse more under **Compose**, **Develop**,
 **Mix**, and **Learn**. Choosing an example adds it to your draft; it does not
 run it or replace text you have already written. Review the prompt and choose
 **Send**, or use Ctrl/Cmd+Enter while the prompt is focused. **Tips** explains
 how to specify scope, musical constraints, instruments, and follow-up requests.
+If recording, an unfinished edit, or a document operation prevents sending, the
+composer explains what needs to finish. An unavailable local target stays scoped
+to that object; reopen AI from the intended editor to choose a different context.
 
 The menu-bar **AI** button and **Window → Assistant** open global AI for the
 current song. For a local edit, open the piano roll, audio clip, instrument,
@@ -75,8 +80,13 @@ against casual inspection. Provider charges and usage limits apply.
 After a result, audition it with the transport and ask for a specific refinement.
 **Undo** in global AI reverses the latest song edit; use **Edit → Undo** for
 local results. A request that makes several edits can require several undo
-steps. **Stop** cancels further assistant work but keeps edits already committed. **More → Edit last prompt** restores the last sent
-prompt when the draft is empty, without sending it. **More → New chat** clears
+steps. **Undo** appears when an edit is available to undo. During a request,
+**Stop** cancels further assistant work but keeps edits already committed.
+After a failed or stopped request, **Edit last prompt** appears beside the primary
+action when the draft is empty. It restores the request for editing without
+sending or undoing anything. Failure details remain readable in Conversation;
+review any edits already made before sending again. **More → Edit last prompt**
+also makes a completed request available for editing. **More → New chat** clears
 the conversation while preserving the song and any unsent draft. Opening a
 different AI scope stops the old run and starts a fresh conversation. Changing
 songs also clears the draft so old requests do not carry over.
@@ -96,7 +106,12 @@ See [AI architecture, tool inventory, and verification](AI_TOOLS.md).
 
 ## Working with the editors
 
-The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose a VST3 to assign it and open its native editor; closing the chooser leaves the pattern unassigned.
+The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose a VST3 to assign it and return to your caller; closing the chooser leaves the pattern unassigned.
+
+The MIDI Clip Editor keeps **Instrument** beside its editing actions after a sound
+is assigned. Open it to inspect or change the sound, then close it or press Escape
+to return to the same phrase, selected notes, and editing position. An unassigned
+track shows **Choose instrument…** in that position.
 
 Arrangement is the main canvas. **Window** opens one focused tool at a time:
 
@@ -116,18 +131,19 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 
 Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups with a softly blurred, inactive background; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
 
-Editing tools stay in a single shared strip. Audio **Clip** and **Process** menus reveal trimming, copy/paste, normalization, reversal, and transient analysis; fade settings appear with the selected fade tool. MIDI **Notes** and **Pitch** menus hold note transformations and scale/chord settings. Secondary controls appear when needed, leaving the waveform or notes in focus.
+Editing tools stay in a single shared strip. Audio **Clip** and **Process** menus reveal trimming, copy/paste, normalization, reversal, and transient analysis; fade settings appear with the selected fade tool. MIDI **Notes** holds note transformations; **Draw settings** holds note length, grid scale and harmony. Secondary controls appear when needed, leaving the waveform or notes in focus.
 
-The line below each editor's tools shows the active tool and its main gesture.
-Choose **Tool help** to expand all gestures and shortcuts, and choose it again
-to give that space back to the canvas. Each editor remembers its help setting
-for the current app session.
+Choose **Tool help** in the toolbar for the active tool's gestures and shortcut.
+Escape or a click outside closes the help. Hovering any tool also explains its
+use, leaving the waveform and notes free of a permanent instruction strip.
 
 In the piano roll, **Generate…** opens Chord, Arpeggio and Melody modes. Start bar and Length initially cover the completely visible bars; edit either field to change the highlighted range. Choices and range are remembered per clip for the app session, including after Cancel; **Next range** advances by the current length while retaining settings. Violet notes preview the result alongside existing notes. **New variation** rerolls random patterns, **Fit preview** reveals their full extent, and **Add notes** commits the exact preview and keeps the generator open. Use **Next range** to continue, then **Done** to close it. Before adding notes, **Cancel** discards only the preview; closing the generator after an addition keeps the committed notes. Parameter controls scroll independently so the range and confirmation buttons remain reachable.
 
-Arrangement channel headers match Mixer channel numbers and show the destination, such as `Ch 1 > Master` or `Ch 1 > Drum bus`. Expanded audio, MIDI, and bus rows expose **M**ute, **S**olo, volume in dB, and pan from −100 (left) to 100 (right). Drag a slider for quick adjustments, or click its value to enter an exact number and press Enter or **Apply value**. Cancel, Escape or clicking outside discards the draft. Short captions leave room for the meter without rounding the stored value; −60 dB silences the channel. Click the destination to choose Master or an output bus directly; routes that would create feedback are excluded. MIDI headers also show the assigned instrument: click it to choose or replace the VST and open its native editor. Both pickers remain available in compact rows. Folders and automation tracks do not consume audio channel numbers; folder mute/solo controls their descendants.
+Arrangement track headers separate the title, icon and color from the mix controls. Volume and pan sit beside **M**ute and **S**olo; **Routing** and **Instrument** or **Input** each have their own row. Stereo output meters occupy a dedicated column. Drag a volume or pan rail, or click its value for exact entry. Pan shows **C** at center and **L/R** percentages elsewhere. Cancel, Escape or clicking outside the value popup discards the draft; displaying a rounded caption never changes stored precision. −60 dB silences the channel.
 
-In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start** and **Duration** in beats, with a read-only source offset; start is one-based, and either timing edit supports Undo. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 96 points while fitting the song horizontally.
+Click **Routing** to choose Master or an eligible output bus. **Instrument** chooses or replaces the MIDI track's VST; **Input** opens audio recording and monitoring settings. The default header is 288 × 144 points. Compact tracks keep mix controls and expose the complete Channel view through the sliders icon beside the title. Very short rows use readable value controls instead of miniature rails. Folders and automation tracks have no audio meter or gain/pan controls; folder mute/solo acts on descendants.
+
+In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start** and **Duration** in beats, with a read-only source offset; start is one-based, and either timing edit supports Undo. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
 
 | Shortcut | Action |
 | --- | --- |
@@ -145,11 +161,13 @@ In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor o
 | Shift + click | Add/remove a note from selection |
 | Right-click a note | Open the selection menu to add or remove the note |
 
-The piano roll separates note actions from the **View** menu. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. The scale choice shows the current root and scale. Natural-key rows use a neutral base and black-key rows are slightly darker; scale and chord guides add a subtle green tint. Notes are blue, with stronger shades for higher velocities. Selected notes keep their shade and gain an outline. Notes outside the grid scale are red; turn off **View → Color out-of-scale notes** to keep every note blue. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
+The piano roll separates note actions from the **View** menu. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. **Draw settings** shows the current length, root and scale, with root/scale/chord choices inside. Natural-key rows use a neutral base and black-key rows are slightly darker; scale and chord guides add a subtle green tint. Notes are blue, with stronger shades for higher velocities. Selected notes keep their shade and gain an outline. Notes outside the grid scale are red; turn off **View → Color out-of-scale notes** to keep every note blue. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
 
-The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**, **Cursor**, **Cut**, **Glue**, **Erase**, and **Duplicate**. Separators distinguish related tool families; the toolbar wraps when needed. The active tool keeps its underline, and all shortcuts remain available.
 
-Select notes with the mouse or **Edit → Select all notes**, then use **Randomize…** or **Quantize…** in the Select toolbar. The **Notes** menu offers these actions with every tool:
+The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Draw settings → Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+
+Select notes with the mouse or **Edit → Select all notes**, then open **Notes** for Randomize, Quantize, and Legato. These actions are available with every tool:
 
 - **Randomize…** previews velocity variation (initially ±16). Set **Timing ±** for up to ±0.25 beats of onset variation; zero keeps the rhythm fixed. Pitch and length stay fixed. **New variation** changes the seed; **Apply randomize** commits the preview and **Cancel randomize** discards it.
 - **Quantize…** previews alignment to the chosen beat grid, with Strength, Swing, and optional Note ends. Apply or cancel before continuing to edit.
@@ -159,7 +177,7 @@ Each applied action is one Undo step. Randomize and Quantize leave the song unch
 
 ## Clips and looping
 
-The arranger keeps **Select**, **Pencil**, **Cursor**, and **Cut** in view. **More tools** opens Duplicate, Join, Erase, Ghost copy, Stretch, and Slip; choosing one keeps its name visible in the toolbar. The shortcuts remain **Q Select**, **W Pencil**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **L Slip**, **Z Erase**, and **P Cursor**.
+The arranger shows every tool directly, separated into related families: **Select**, **Pencil**, and **Cursor**; **Cut**, **Join**, and **Erase**; **Duplicate** and **Ghost copy**; **Stretch** and **Slip**. The toolbar wraps when needed. The active tool retains its underline; hover or **Tool help** shows its instructions and shortcut. The shortcuts remain **Q Select**, **W Pencil**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **L Slip**, **Z Erase**, and **P Cursor**.
 
 Audio and MIDI clips share these tools; Pencil creates MIDI clips and Slip moves audio within fixed clip edges. Select drags move clips; either edge trims the visible source window. Shift-dragging the body creates one independent copy, while Shift at a trim/stretch edge temporarily bypasses snap. Join opens a focused chooser. Actions select their resulting clip consistently, whether invoked from tools, menus, or the context menu.
 
@@ -198,6 +216,26 @@ Select a track and choose **Window → Effects**, or use **Channel → Effects**
 
 To group channels for shared processing, choose their output bus in **Window → Routing**. A bus can feed another bus. Folder membership is independent of audio routing: set **Folder** in Properties to organize tracks. Folder mute/solo applies to descendants. Track color is available in Properties; track-header context menus provide collapse/expand.
 
+## Track headers
+
+Each track has a clear order: its color, icon and name; volume, pan and **M/S**;
+then **Routing** and **Instrument** or **Input**. A separate stereo meter shows
+the channel's output level. Bus tracks offer **Channel** for effects and sends.
+Click a routing destination to choose its output bus, an instrument name to
+choose its sound, or the input row for recording and monitoring settings.
+
+Drag the volume or pan rail to adjust it. Click a displayed value for precise
+entry; pan shows **C** at center and **L/R** percentages to either side. **M**
+mutes the track and **S** solos it. Clicking the color strip opens the color
+picker, while the name and grip retain track selection and reordering.
+
+The default header is 288 points wide and each normal row is 144 points high.
+Resize the header gutter or track's lower edge, or use **View → Track layout**.
+Compact tracks keep mix controls and expose the full channel through the small
+channel-controls button; they do not squeeze routing and instrument names into
+the title. Resizing the header or rows is view state and leaves the song and
+its history intact.
+
 ## Automation
 
 Right-click a channel fader, pan slider, or send level to enter an exact value.
@@ -208,7 +246,7 @@ headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left th
 has a directly editable volume readout. Exact-entry fields retain fractional
 values; the short track-header captions do not change their stored precision.
 
-Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Sliders display their range endpoints and current value; the line through the handle's center marks the exact position. Tick spacing adapts to the available space, showing halves, fifths, or tenths. Pan uses L/R endpoints and C for center. Mixer volume shows dB endpoints and a separate editable dB readout.
+Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Track-header rails keep only a concise current value and pan center mark. Mixer and parameter sliders retain endpoint captions and adaptive tick scales, showing halves, fifths, or tenths. Pan uses L/R endpoints and C for center. Mixer volume shows dB endpoints and a separate editable dB readout.
 
 An orange **A** identifies a control following automation, a coral **!** identifies
 a manual override, and a muted dash identifies bypassed automation. **Override
