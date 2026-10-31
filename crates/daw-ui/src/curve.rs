@@ -197,6 +197,9 @@ pub fn curve_segment_controls(ui: &mut Ui, curve: &mut f32) -> Response {
         changed |= ui
             .add(
                 crate::slider(curve, -1.0..=1.0)
+                    // The adjacent Log/Linear/Exp choices already explain
+                    // the endpoints; keep this inline control on one row.
+                    .scale_labels(false)
                     .text("Slope")
                     .step_by(0.01)
                     .fixed_decimals(2),

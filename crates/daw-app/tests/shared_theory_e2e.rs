@@ -358,6 +358,7 @@ fn deep_scale_picker_highlights_filters_draws_and_generates_the_composer_scale()
 
     // This nested grid picker must remain reachable in a short window.
     app.command(json!({"command":"viewport","width":1440,"height":720}));
+    app.click("Draw settings");
     app.click(format!("C · {}", Scale::Minor.name()).as_str());
     app.click(Scale::Minor.name());
     let (selected, scrolled) = choose_open_popup(&mut app, label);

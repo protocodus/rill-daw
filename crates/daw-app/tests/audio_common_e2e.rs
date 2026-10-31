@@ -426,11 +426,24 @@ fn nudge_uses_shared_sample_millisecond_and_grid_steps_in_both_workspaces() {
 }
 
 #[test]
-fn compact_common_controls_work_in_narrow_and_wide_editors() {
+fn exposed_tools_and_common_controls_work_in_narrow_and_wide_audio_editors() {
     let mut app = fixture(false, false);
-    for width in [900.0, 1600.0] {
+    for width in [800.0, 1100.0, 1600.0] {
         app.command(json!({"command":"viewport","width":width,"height":760.0}));
-        for label in ["Slip", "Nudge", "Clip", "View"] {
+        app.click("Select");
+        for label in [
+            "Select",
+            "Cursor",
+            "Cut",
+            "Slip",
+            "Stretch",
+            "Fade in",
+            "Fade out",
+            "Nudge",
+            "Clip",
+            "View",
+            "Tool help",
+        ] {
             let state = app.inspect();
             assert!(
                 state["visible_labels"]
@@ -440,6 +453,33 @@ fn compact_common_controls_work_in_narrow_and_wide_editors() {
                     .any(|value| value == label),
                 "Missing {label} at {width}"
             );
+        }
+        let original = app.inspect();
+        assert!(
+            !original["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label == "More tools")
+        );
+        for (label, key, tool) in [
+            ("Select", "Q", "Select"),
+            ("Cursor", "P", "Cursor"),
+            ("Cut", "E", "Cut"),
+            ("Stretch", "S", "Stretch"),
+            ("Slip", "L", "Slip"),
+            ("Fade in", "I", "Fade in"),
+            ("Fade out", "O", "Fade out"),
+        ] {
+            let selected = app.click(label);
+            assert_eq!(selected["audio_editor"]["tool"], tool);
+            assert_eq!(selected["project"], original["project"]);
+            assert_eq!(selected["history"], original["history"]);
+            app.click(if tool == "Select" { "Cursor" } else { "Select" });
+            let keyed = app.key(key);
+            assert_eq!(keyed["audio_editor"]["tool"], tool);
+            assert_eq!(keyed["project"], original["project"]);
+            assert_eq!(keyed["history"], original["history"]);
         }
         app.click("Nudge");
         app.click("1 sample");

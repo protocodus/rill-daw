@@ -28,6 +28,12 @@ fn timeline_bar_and_clock_labels_have_separate_readable_rows() {
         .iter()
         .filter_map(|shape| {
             if let egui::Shape::Text(text) = &shape.shape {
+                assert!(
+                    text.galley.job.sections.iter().all(|section| {
+                        section.format.font_id.family == egui::FontFamily::Proportional
+                    }),
+                    "Musical positions and elapsed time use proportional text"
+                );
                 Some((
                     text.galley.text().to_owned(),
                     text.galley.rect.translate(text.pos.to_vec2()),
@@ -38,7 +44,7 @@ fn timeline_bar_and_clock_labels_have_separate_readable_rows() {
         })
         .collect();
     let bar = labels.iter().find(|(text, _)| text == "1").unwrap().1;
-    let clock = labels.iter().find(|(text, _)| text == "0:00.00").unwrap().1;
+    let clock = labels.iter().find(|(text, _)| text == "0:00").unwrap().1;
     assert!(
         bar.bottom() + 2.0 <= clock.top(),
         "bar {bar:?} overlaps clock {clock:?}"
@@ -63,17 +69,17 @@ fn timeline_ruler_omits_partial_edge_labels_after_panning_and_in_narrow_views() 
             (
                 32.0,
                 393.0,
-                &["9", "10", "0:16.00", "0:18.00"][..],
-                &["11", "0:20.00"][..],
+                &["9", "10", "0:16", "0:18"][..],
+                &["11", "0:20"][..],
             ),
             (
                 32.2,
                 389.0,
-                &["10", "0:18.00"][..],
-                &["9", "11", "0:16.00", "0:20.00"][..],
+                &["10", "0:18"][..],
+                &["9", "11", "0:16", "0:20"][..],
             ),
-            (0.0, 44.0, &["1"][..], &["0:00.00"][..]),
-            (0.2, 44.0, &[][..], &["1", "0:00.00"][..]),
+            (0.0, 22.0, &["1"][..], &["0:00"][..]),
+            (0.2, 22.0, &[][..], &["1", "0:00"][..]),
         ] {
             let rect = Rect::from_min_size(
                 egui::pos2(30.0, 30.0),
@@ -104,7 +110,10 @@ fn timeline_ruler_omits_partial_edge_labels_after_panning_and_in_narrow_views() 
                             text.galley.text()
                         );
                         if text.galley.text() == "10" {
-                            assert!((text.pos.x - (view.x_at(rect, 36.0) + 4.0)).abs() < 0.01);
+                            assert!(
+                                (text.pos.x - (view.x_at(rect, 36.0) + tokens::SPACE_XS)).abs()
+                                    < 0.01
+                            );
                         }
                         Some(text.galley.text())
                     }

@@ -631,7 +631,15 @@ fn input_selection_can_be_cleared_without_mutating_existing_recordings() {
     let disarmed = app.command(click_arm);
     assert_eq!(disarmed["recording"]["armed"], json!([]));
     assert_eq!(disarmed["popups"]["routing"], false);
-    let popup = app.click("Inputs…");
+    let device = &disarmed["timeline"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|header| header["track"] == track)
+        .unwrap()["sections"]["device"];
+    let popup = app.command(json!({"command":"pointer", "phase":"click",
+        "x":(device["min"][0].as_f64().unwrap()+device["max"][0].as_f64().unwrap())*0.5,
+        "y":(device["min"][1].as_f64().unwrap()+device["max"][1].as_f64().unwrap())*0.5}));
     assert_eq!(popup["popups"]["recording"], true);
     assert!(
         popup["visible_labels"]

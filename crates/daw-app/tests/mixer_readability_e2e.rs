@@ -138,6 +138,10 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
 
         let mut strips = Vec::new();
         for channel in channels {
+            let column = Bounds::from(&channel["strip"]);
+            let gutter = f64::from(
+                (daw_ui::tokens::SPACE_XS * daw_ui::tokens::GOLDEN_RATIO_INVERSE).round(),
+            );
             let name = Bounds::from(&channel["name"]);
             let output = Bounds::from(&channel["target"]);
             let sends = Bounds::from(&channel["sends"]);
@@ -152,7 +156,8 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                 .iter()
                 .find(|paint| {
                     let rect = Bounds::from(&paint["rect"]);
-                    (rect.width() - 176.0).abs() <= 0.1
+                    (rect.left - column.left - gutter).abs() <= 0.1
+                        && (column.right - rect.right - gutter).abs() <= 0.1
                         && rect.contains(name)
                         && rect.contains(sends)
                         && rect.height() > 250.0

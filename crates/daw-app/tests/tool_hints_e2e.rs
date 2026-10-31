@@ -1,4 +1,4 @@
-//! Compact tool summaries disclose full gesture help without changing music.
+//! On-demand tool help stays reachable without taking space from the musical canvas.
 mod common;
 
 use common::Harness;
@@ -67,7 +67,7 @@ fn hint<'a>(state: &'a Value, title: &str, fragment: &str) -> &'a Value {
     assert_eq!(
         matches.len(),
         1,
-        "Missing or repeated persistent hint {title}: {}",
+        "Missing or repeated tool help {title}: {}",
         state["visible_labels"]
     );
     matches[0]
@@ -87,59 +87,46 @@ fn unchanged(state: &Value, before: &Value) {
     }
 }
 
-fn persistent_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, before: &Value) {
-    // Keep the pointer away from the tool and its panel, so hover cannot explain
-    // the text. Repeated ordinary frames must retain the guidance.
+fn disclosed_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, before: &Value) {
+    let opened = app.click("Tool help");
+    unchanged(&opened, before);
+    // The help remains readable without hovering the opener, and repeated
+    // ordinary frames must leave the underlying musical canvas in place.
     let state = app.command(json!({"command":"pointer", "phase":"move", "x":2.0, "y":2.0}));
     let title = format!("{label} · {key}");
-    let summary = hint(&state, &title, "");
+    hint(&state, &title, "");
     let panel = hint(&state, "", fragment);
-    let rect = |value: &Value| {
-        [
-            value["min"][0].as_f64().unwrap(),
-            value["min"][1].as_f64().unwrap(),
-            value["max"][0].as_f64().unwrap(),
-            value["max"][1].as_f64().unwrap(),
-        ]
-    };
-    let [left, top, right, bottom] = rect(panel);
-    let tool = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|value| value["text"] == label)
-        .unwrap();
-    assert!(
-        summary["min"][1].as_f64().unwrap() >= rect(tool)[3]
-            && top >= summary["max"][1].as_f64().unwrap(),
-        "Hint must appear below the tool toolbar"
-    );
-    assert!(
-        left >= 0.0 && right <= state["viewport"][0].as_f64().unwrap(),
-        "Hint must wrap inside the viewport"
-    );
+    let left = panel["min"][0].as_f64().unwrap();
+    let top = panel["min"][1].as_f64().unwrap();
+    let right = panel["max"][0].as_f64().unwrap();
+    let bottom = panel["max"][1].as_f64().unwrap();
+    assert!(left >= 0.0 && top >= 0.0);
+    assert!(right <= state["viewport"][0].as_f64().unwrap());
     assert!(bottom <= state["viewport"][1].as_f64().unwrap());
     unchanged(&state, before);
     let later = app.inspect();
     assert_eq!(hint(&later, "", fragment)["text"], panel["text"]);
     unchanged(&later, before);
+    let closed = app.key("Escape");
+    unchanged(&closed, before);
+    assert!(
+        !closed["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| { label.as_str().is_some_and(|text| text.contains(fragment)) }),
+        "Dismissed help must not leave a permanent instruction band"
+    );
 }
 
 fn tools(app: &mut Harness, choices: &[(&str, &str, &str)]) {
     let before = app.inspect();
-    app.click("Tool help");
     for (label, key, fragment) in choices {
-        if before["view"] == "Arrangement"
-            && !matches!(*label, "Select" | "Pencil" | "Cursor" | "Cut")
-        {
-            app.click("Select");
-            app.click("More tools");
-        }
         app.click(label);
-        persistent_hint(app, label, key, fragment, &before);
+        disclosed_hint(app, label, key, fragment, &before);
         app.key(if *key == "Q" { "P" } else { "Q" });
         app.key(key);
-        persistent_hint(app, label, key, fragment, &before);
+        disclosed_hint(app, label, key, fragment, &before);
     }
 }
 
@@ -226,8 +213,6 @@ fn compact_help_preserves_canvas_space_and_toggles_with_the_mouse() {
             json!({"command":"viewport", "width":800, "height":600, "pixels_per_point":density}),
         );
         let before = app.inspect();
-        let summary = hint(&before, "Select · Q", "Select clips");
-        assert!(summary["max"][1].as_f64().unwrap() - summary["min"][1].as_f64().unwrap() < 24.0);
         assert!(
             !before["visible_labels"]
                 .as_array()
@@ -239,14 +224,29 @@ fn compact_help_preserves_canvas_space_and_toggles_with_the_mouse() {
         );
         let expanded = app.click("Tool help");
         hint(&expanded, "", "Ctrl/Cmd+arrows nudge");
-        assert!(
-            expanded["timeline"]["ruler"]["min"][1].as_f64().unwrap()
-                > before["timeline"]["ruler"]["min"][1].as_f64().unwrap()
+        assert_eq!(
+            expanded["timeline"]["ruler"], before["timeline"]["ruler"],
+            "On-demand help must not move or shrink the canvas"
         );
         unchanged(&expanded, &before);
-        let collapsed = app.click("Tool help");
+        let collapsed =
+            app.command(json!({"command":"pointer", "phase":"click", "x":2.0, "y":2.0}));
         assert_eq!(collapsed["timeline"]["ruler"], before["timeline"]["ruler"]);
         unchanged(&collapsed, &before);
+        assert!(
+            !collapsed["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| {
+                    label
+                        .as_str()
+                        .is_some_and(|text| text.contains("Ctrl/Cmd+arrows nudge"))
+                })
+        );
+        app.click("Tool help");
+        let dismissed = app.key("Escape");
+        unchanged(&dismissed, &before);
         app.quit();
     }
 }

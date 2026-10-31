@@ -222,7 +222,8 @@ impl DawApp {
         let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
         let spacing = daw_ui::tokens::SPACE_XS;
         let fixed_height = 2.0 * daw_ui::tokens::SPACE_MD
-            + 8.0 * daw_ui::tokens::CONTROL_HEIGHT
+            + 7.0 * daw_ui::tokens::CONTROL_HEIGHT
+            + daw_ui::tokens::PARAMETER_ROW_HEIGHT
             + daw_ui::tokens::COMPACT_HEIGHT
             + 18.0
             + 10.0 * spacing;
@@ -384,6 +385,7 @@ impl DawApp {
                                 let mut gain = displayed_gain;
                                 let response = ui.add_sized(Vec2::new(30.0, fader_height),
                                     daw_ui::slider(&mut gain, 0.0..=1.5)
+                                        .zero_reference(1.0)
                                         .clamping(egui::SliderClamping::Edits).vertical().show_value(false).scale_labels(false));
                                 let response = daw_ui::hover_text(response, "Channel volume");
                                 let scale = daw_ui::slider_scale_geometry(ui.ctx(), response.id);
@@ -496,7 +498,7 @@ impl DawApp {
                         });
                         daw_ui::stereo_meter(ui, [meter.peak_left, meter.peak_right], Vec2::new(56.0, fader_height));
                     });
-                    ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT));
+                    ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::PARAMETER_ROW_HEIGHT));
                     ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT));
                     ui.allocate_ui_with_layout(Vec2::new(content_width, 18.0),
                         egui::Layout::left_to_right(egui::Align::Center), |ui| { daw_ui::text::note(ui, "Target"); });

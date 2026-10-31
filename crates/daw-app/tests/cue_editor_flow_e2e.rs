@@ -86,6 +86,58 @@ fn export(app: &mut Harness, name: &str) -> AudioData {
 }
 
 #[test]
+fn single_clip_header_keeps_actions_without_empty_navigation_controls() {
+    for (dark, width) in [(false, 800), (true, 1480)] {
+        let mut app = Harness::new();
+        let mut project = Project::new();
+        let track = project.add_midi_track("Keys");
+        project.track_mut(track).unwrap().clips.push(Clip::midi(
+            "Only phrase",
+            0.0,
+            4.0,
+            vec![Note::new(60, 0.0, 1.0, 100)],
+        ));
+        let path = app.directory.path().join("one-phrase.rill");
+        project.save(&path).unwrap();
+        app.command(json!({"command":"open", "path":path}));
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.command(json!({"command":"viewport", "width":width, "height":760}));
+        app.click("Only phrase");
+        app.click("Window");
+        let before = app.click("Clip Editor");
+        let labels = before["visible_labels"].as_array().unwrap();
+        assert!(
+            !labels
+                .iter()
+                .any(|label| label == "Previous" || label == "Next")
+        );
+        for label in [
+            "Back",
+            "Properties",
+            "Choose instrument…",
+            "AI for this context",
+        ] {
+            assert!(labels.iter().any(|text| text == label), "Missing {label}");
+        }
+        app.click("Properties");
+        let returned = app.key("Escape");
+        for field in [
+            "project",
+            "history",
+            "selected_track",
+            "selected_clip",
+            "view",
+        ] {
+            assert_eq!(returned[field], before[field], "Properties changed {field}");
+        }
+        let back = app.click("Back");
+        assert_eq!(back["project"], before["project"]);
+        assert_eq!(back["history"], before["history"]);
+        app.quit();
+    }
+}
+
+#[test]
 fn next_previous_and_arrow_selection_keep_tool_scale_project_and_history() {
     let (mut app, first, second, lower, original) = fixture();
     let compact = app.command(json!({"command":"viewport","width":800.0,"height":760.0}));

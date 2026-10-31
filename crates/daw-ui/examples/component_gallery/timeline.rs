@@ -32,7 +32,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
     text::subtitle(ui, "Waveform, musical time, and clip identity");
     text::note(
         ui,
-        "paint_timeline_ruler · clip_title · paint_audio_waveform · clip edges and selection",
+        "Musical ruler · waveform · clip edges and selection · high-contrast position cursor",
     );
     ui.add_space(tokens::SPACE_SM);
     let colors = theme::palette(ui.ctx());
@@ -76,6 +76,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
     ui::paint_timeline_selection(ui.painter(), plot, view, 2.5, 4.0);
     ui::paint_audio_clip_edges(ui.painter(), plot, view, 0.0, 7.0, colors.accent);
     ui::paint_clip_tail(ui.painter(), plot, view.x_at(plot, 7.0));
+    ui::paint_timeline_cursor(ui.painter(), ruler, clip, view.x_at(plot, 3.25));
     ui.add_space(tokens::SPACE_LG);
     ui.columns(2, |columns| {
         text::subtitle(&mut columns[0], "Piano-key states");

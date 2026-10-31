@@ -15,6 +15,25 @@ pub fn button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(button_widget(label))
 }
 
+/// A secondary toolbar command with a full target and native hover/focus feedback.
+pub fn quiet_button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
+    button_widget(label).quiet()
+}
+
+pub fn quiet_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
+    ui.add(quiet_button_widget(label))
+}
+
+/// Playback guides keep their selected fill; idle choices share the bar surface.
+pub fn quiet_toggle(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Response {
+    let mut response = ui.add(button_widget(label).selected(*value).quiet());
+    if response.clicked() {
+        *value = !*value;
+        response.mark_changed();
+    }
+    response
+}
+
 /// A command that changes presentation without editing the document or tool.
 pub fn view_button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
     let label = label.into();
@@ -33,6 +52,12 @@ pub fn view_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
 /// The owner handles navigation; this component never changes a tool or document.
 pub fn view_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> Response {
     ui.add(button_widget(label).presentation().selected(selected))
+}
+
+/// A quiet page choice with an active underline, native keyboard activation,
+/// and the same full-size target as other controls. The host owns navigation.
+pub fn tab_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> Response {
+    ui.add(crate::IconButton::tab(selected, label))
 }
 
 /// A presentation or playback-guide toggle with the same view affordance.
@@ -61,8 +86,12 @@ pub fn tool_value<T: PartialEq>(
     response
 }
 
+pub fn primary_button_widget(ui: &Ui, label: impl Into<WidgetText>) -> crate::IconButton {
+    button_widget(label).fill(theme::palette(ui.ctx()).track_selected)
+}
+
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
-    ui.add(button_widget(label).fill(theme::palette(ui.ctx()).track_selected))
+    ui.add(primary_button_widget(ui, label))
 }
 
 pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
@@ -166,6 +195,35 @@ pub(crate) enum MenuRole {
     Action,
     Choice,
     View,
+    QuietAction,
+    QuietChoice,
+    QuietView,
+}
+
+/// A secondary command menu, retaining its icon and disclosure without a box.
+pub fn quiet_action_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    semantic_menu(ui, label, MenuRole::QuietAction, contents)
+}
+
+pub fn quiet_view_menu<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    semantic_menu(ui, label, MenuRole::QuietView, contents)
+}
+
+/// A quiet chooser preserves the open popup while its values are edited.
+pub fn quiet_picker_button<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> (Response, Option<InnerResponse<R>>) {
+    semantic_picker(ui, label, MenuRole::QuietChoice, false, None, contents)
 }
 
 /// The three toolbar roles share native layout, focus, and popup handling.
@@ -176,7 +234,9 @@ pub(crate) fn semantic_menu<R>(
     role: MenuRole,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
-    if egui::containers::menu::is_in_menu(ui) && role == MenuRole::Action {
+    if egui::containers::menu::is_in_menu(ui)
+        && matches!(role, MenuRole::Action | MenuRole::QuietAction)
+    {
         return menu_button(ui, label, contents);
     }
     let (response, inner) = semantic_picker(ui, label, role, false, None, contents);
@@ -223,13 +283,19 @@ fn semantic_picker<R>(
 ) -> (Response, Option<InnerResponse<R>>) {
     use egui::containers::menu::{MenuConfig, MenuState, SubMenu};
 
+    let (role, quiet) = match role {
+        MenuRole::QuietAction => (MenuRole::Action, true),
+        MenuRole::QuietChoice => (MenuRole::Choice, true),
+        MenuRole::QuietView => (MenuRole::View, true),
+        role => (role, false),
+    };
     let nested = egui::containers::menu::is_in_menu(ui);
     let label = label.into();
     let icon = match role {
         MenuRole::View => Some(crate::Icon::View),
         MenuRole::Action if !compact => crate::Icon::for_label(label.text()),
         MenuRole::Action => None,
-        MenuRole::Choice => None,
+        _ => None,
     };
     let icon_id = egui::Id::new("rill-menu-role-icon");
     let disclosure_id = egui::Id::new("rill-menu-disclosure");
@@ -257,17 +323,21 @@ fn semantic_picker<R>(
     let visuals = &mut ui.visuals_mut().widgets;
     match role {
         MenuRole::Action => {
-            visuals.inactive.bg_stroke = egui::Stroke::NONE;
-            visuals.hovered.bg_stroke = egui::Stroke::NONE;
+            visuals.inactive.bg_stroke = egui::Stroke::new(
+                tokens::BORDER_WIDTH,
+                colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
+            );
         }
         MenuRole::Choice => {
             visuals.inactive.weak_bg_fill = colors.bg;
-            visuals.inactive.bg_stroke = egui::Stroke::new(1.0_f32, colors.line);
+            visuals.inactive.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.line);
         }
         MenuRole::View => {
             visuals.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-            visuals.inactive.bg_stroke = egui::Stroke::new(1.0_f32, colors.line);
+            visuals.inactive.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.line);
+            visuals.hovered.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.accent);
         }
+        _ => unreachable!("quiet menu roles normalize before styling"),
     }
     if nested {
         let next_id = ui.next_auto_id();
@@ -278,12 +348,40 @@ fn semantic_picker<R>(
             ui.visuals_mut().widgets.inactive = ui.visuals().widgets.open;
         }
     }
+    // Keep the native frame's padding and hit target. Only its paint is replaced;
+    // `frame(false)` would also remove the button's horizontal breathing room.
+    let background = ui.painter().add(egui::Shape::Noop);
+    let has_frame = ui.visuals().button_frame;
     let button = Button::new(atoms)
+        .frame_when_inactive(!quiet)
+        .fill(egui::Color32::TRANSPARENT)
+        .stroke(egui::Stroke::NONE)
+        .frame(has_frame)
         .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
         .corner_radius(tokens::RADIUS)
         .wrap_mode(egui::TextWrapMode::Truncate)
         .atom_ui(ui);
-    let color = ui.style().interact(&button.response).text_color();
+    let visuals = ui.style().interact(&button.response);
+    let color = visuals.text_color();
+    let engaged = button.response.hovered()
+        || button.response.is_pointer_button_down_on()
+        || button.response.has_focus();
+    if has_frame && (!quiet || engaged) {
+        ui.painter().set(
+            background,
+            crate::component_shape(
+                ui.painter(),
+                button.response.rect,
+                tokens::RADIUS,
+                visuals.weak_bg_fill,
+                visuals.bg_stroke,
+                crate::ComponentMaterial {
+                    elevated: false,
+                    active: button.response.enabled() && button.response.has_focus(),
+                },
+            ),
+        );
+    }
     if let (Some(icon), Some(rect)) = (icon, button.rect(icon_id)) {
         icon.paint(ui.painter(), rect, color);
     }
@@ -433,13 +531,17 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
         } else {
             visuals.bg_fill
         };
-        ui.painter().rect(
+        ui.painter().add(crate::component_shape(
+            ui.painter(),
             track,
-            tokens::SWITCH_HEIGHT * 0.5,
+            (tokens::SWITCH_HEIGHT * 0.5).round() as u8,
             fill,
             visuals.bg_stroke,
-            egui::StrokeKind::Inside,
-        );
+            crate::ComponentMaterial {
+                elevated: false,
+                active: response.enabled() && response.has_focus(),
+            },
+        ));
         let animation = ui.ctx().animate_bool(response.id, *value);
         let radius = (tokens::SWITCH_HEIGHT - tokens::SPACE_XS) * 0.5;
         let center_x = egui::lerp(
@@ -447,11 +549,18 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
                 ..=(track.right() - tokens::SWITCH_HEIGHT * 0.5),
             animation,
         );
-        ui.painter().circle_filled(
+        let thumb = egui::Rect::from_center_size(
             egui::pos2(center_x, track.center().y),
-            radius,
-            if *value { colors.bg } else { colors.muted },
+            egui::Vec2::splat(radius * 2.0),
         );
+        ui.painter().add(crate::component_shape(
+            ui.painter(),
+            thumb,
+            radius.round() as u8,
+            if *value { colors.bg } else { colors.muted },
+            egui::Stroke::NONE,
+            crate::ComponentMaterial::default(),
+        ));
         ui.painter().galley(
             egui::pos2(track.right() + gap, rect.center().y - galley.size().y * 0.5),
             galley,
@@ -461,7 +570,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
             ui.painter().rect_stroke(
                 rect.expand(2.0),
                 tokens::RADIUS,
-                egui::Stroke::new(1.5_f32, theme::palette(ui.ctx()).accent),
+                egui::Stroke::new(tokens::FOCUS_WIDTH, theme::palette(ui.ctx()).accent),
                 egui::StrokeKind::Outside,
             );
         }
@@ -647,8 +756,10 @@ pub fn picker_at<R>(
 }
 
 pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Response {
-    ui.add(
+    let background = ui.painter().add(egui::Shape::Noop);
+    let response = ui.add(
         egui::TextEdit::singleline(value)
+            .frame(false)
             .hint_text(hint)
             .desired_width(width.max(0.0))
             .margin(egui::vec2(
@@ -657,7 +768,39 @@ pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Re
             ))
             .vertical_align(egui::Align::Center)
             .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
-    )
+    );
+    paint_input_material(ui, background, &response, ui.visuals().text_edit_bg_color());
+    response
+}
+
+/// Paint an editor's frame below its text and selection, without allocating a
+/// widget or changing native focus, geometry, or text-edit state.
+fn paint_input_material(
+    ui: &Ui,
+    background: egui::layers::ShapeIdx,
+    response: &Response,
+    fill: egui::Color32,
+) {
+    let visuals = ui.style().interact(response);
+    let stroke = if response.has_focus() {
+        ui.visuals().selection.stroke
+    } else {
+        visuals.bg_stroke
+    };
+    ui.painter().set(
+        background,
+        crate::component_shape(
+            ui.painter(),
+            response.rect,
+            tokens::RADIUS,
+            fill,
+            stroke,
+            crate::ComponentMaterial {
+                elevated: false,
+                active: response.enabled() && response.has_focus(),
+            },
+        ),
+    );
 }
 
 /// Editable numeric canvas control that preserves the parent's row geometry.
@@ -807,7 +950,33 @@ impl Widget for Number<'_> {
         } else {
             None
         };
+        // DragValue alternates between native Button and TextEdit. Retain both
+        // layouts and all text selection behavior while giving them one frame.
+        let background = ui.painter().add(egui::Shape::Noop);
+        let previous_style = ui.style().clone();
+        let visuals = ui.visuals_mut();
+        visuals.text_edit_bg_color = Some(egui::Color32::TRANSPARENT);
+        // Keep the selection color: TextEdit also uses it for selected glyphs.
+        visuals.selection.stroke.width = 0.0;
+        for visual in [
+            &mut visuals.widgets.noninteractive,
+            &mut visuals.widgets.inactive,
+            &mut visuals.widgets.hovered,
+            &mut visuals.widgets.active,
+            &mut visuals.widgets.open,
+        ] {
+            visual.bg_fill = egui::Color32::TRANSPARENT;
+            visual.weak_bg_fill = egui::Color32::TRANSPARENT;
+            visual.bg_stroke.width = 0.0;
+        }
         let response = self.0.ui(ui);
+        ui.set_style(previous_style);
+        let fill = if response.has_focus() {
+            ui.visuals().text_edit_bg_color()
+        } else {
+            ui.style().interact(&response).weak_bg_fill
+        };
+        paint_input_material(ui, background, &response, fill);
         if let Some(pointer) = pointer {
             ui.input_mut(|input| input.pointer = pointer);
         }
@@ -961,15 +1130,25 @@ pub fn panel(ctx: &egui::Context) -> Frame {
 }
 
 pub fn card(ctx: &egui::Context) -> Frame {
+    let colors = theme::palette(ctx);
     Frame::new()
-        .fill(theme::palette(ctx).raised)
+        .fill(colors.raised)
+        .stroke(egui::Stroke::new(
+            tokens::BORDER_WIDTH,
+            colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
+        ))
         .inner_margin(tokens::SPACE_MD)
         .corner_radius(tokens::SURFACE_RADIUS)
 }
 
 pub fn inset(ctx: &egui::Context) -> Frame {
+    let colors = theme::palette(ctx);
     Frame::new()
-        .fill(theme::palette(ctx).bg)
+        .fill(colors.bg)
+        .stroke(egui::Stroke::new(
+            tokens::BORDER_WIDTH,
+            colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
+        ))
         .inner_margin(tokens::SPACE_SM)
         .corner_radius(tokens::SURFACE_RADIUS)
 }

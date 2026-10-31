@@ -1,10 +1,163 @@
-//! Broad, low-contrast surface tint. These helpers paint behind existing
-//! controls; they never allocate an input target or own interaction state.
+//! Quiet component materials and broad surface tint. These helpers paint behind
+//! existing controls; they never allocate an input target or own interaction state.
 use crate::{theme, tokens};
-use egui::{Color32, Frame, InnerResponse, Painter, Rect, Shape, Ui};
+use egui::{Color32, Frame, InnerResponse, Painter, Rect, Shape, Stroke, Ui};
 
-const COLUMNS: usize = 24;
-const ROWS: usize = 16;
+const COLUMNS: usize = 21;
+const ROWS: usize = 13;
+const MATERIAL_WIDTH: usize = 55;
+const MATERIAL_HEIGHT: usize = 34;
+
+/// Visual emphasis for a component. Native widgets continue to own interaction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ComponentMaterial {
+    /// Lift a floating surface with a small, blurred shadow.
+    pub elevated: bool,
+    /// Add a quiet accent halo for the selected or keyboard-focused component.
+    pub active: bool,
+}
+
+/// Build a complete component background for a reserved painter slot.
+///
+/// Reserve the slot before a native widget with transparent fill and no stroke,
+/// then replace it with this shape using the response rectangle and native
+/// visual state. Keep the native frame setting so its padding is preserved. The flat
+/// fill, rounded gradient and inset border share native egui anti-aliasing and
+/// pixel snapping. The optional shadow and glow are native blurred rectangles;
+/// no software blur, layout, interaction, or repaint state is introduced.
+pub fn component_shape(
+    painter: &Painter,
+    rect: Rect,
+    radius: u8,
+    fill: Color32,
+    stroke: Stroke,
+    material: ComponentMaterial,
+) -> Shape {
+    if !material_is_visible(painter, rect) {
+        return Shape::Noop;
+    }
+
+    let dark = painter.ctx().theme() == egui::Theme::Dark;
+    let mut shapes = Vec::with_capacity(6);
+    if material.elevated {
+        shapes.push(
+            egui::epaint::Shadow {
+                offset: [0, 3],
+                blur: 8,
+                spread: 0,
+                color: Color32::from_black_alpha(if dark { 34 } else { 21 }),
+            }
+            .as_shape(rect, radius)
+            .with_round_to_pixels(true)
+            .into(),
+        );
+    }
+    if material.active {
+        let accent = theme::palette(painter.ctx()).accent;
+        shapes.push(
+            egui::epaint::Shadow {
+                offset: [0, 0],
+                blur: 8,
+                spread: 0,
+                color: Color32::from_rgba_unmultiplied(
+                    accent.r(),
+                    accent.g(),
+                    accent.b(),
+                    if dark { 21 } else { 13 },
+                ),
+            }
+            .as_shape(rect, radius)
+            .with_round_to_pixels(true)
+            .into(),
+        );
+    }
+    if fill != Color32::TRANSPARENT {
+        shapes.push(
+            egui::epaint::RectShape::filled(rect, radius, fill)
+                .with_round_to_pixels(true)
+                .into(),
+        );
+        shapes.push(material_overlay_shape(painter, rect, radius));
+    }
+    if !stroke.is_empty() {
+        shapes.push(
+            egui::epaint::RectShape::stroke(rect, radius, stroke, egui::StrokeKind::Inside)
+                .with_round_to_pixels(true)
+                .into(),
+        );
+    }
+    Shape::Vec(shapes)
+}
+
+/// Build a restrained linear and radial tint above a flat fill, below content.
+///
+/// One 55 × 34 texture is retained per appearance and reused at every size. Its
+/// brush uses egui's rounded rectangle tessellation, including anti-aliased
+/// corners, instead of a rectangular mesh or an offscreen render target.
+pub fn material_overlay_shape(painter: &Painter, rect: Rect, radius: u8) -> Shape {
+    if !material_is_visible(painter, rect) {
+        return Shape::Noop;
+    }
+    let texture = material_texture(painter.ctx());
+    egui::epaint::RectShape::filled(rect, radius, Color32::WHITE)
+        .with_texture(
+            texture.id(),
+            Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+        )
+        .with_round_to_pixels(true)
+        .into()
+}
+
+fn material_is_visible(painter: &Painter, rect: Rect) -> bool {
+    rect.is_finite()
+        && rect.is_positive()
+        && rect.size().is_finite()
+        && painter.is_visible()
+        && painter.clip_rect().intersects(rect.expand(8.0))
+}
+
+fn material_texture(ctx: &egui::Context) -> egui::TextureHandle {
+    let dark = ctx.theme() == egui::Theme::Dark;
+    let id = egui::Id::new("rill_component_material").with(dark);
+    if let Some(texture) = ctx.data(|data| data.get_temp::<egui::TextureHandle>(id)) {
+        return texture;
+    }
+
+    let accent = theme::palette(ctx).accent;
+    let ratio = tokens::GOLDEN_RATIO_INVERSE;
+    let complementary = 1.0 - ratio;
+    let max_alpha = if dark { 13.0 } else { 8.0 };
+    let mut pixels = Vec::with_capacity(MATERIAL_WIDTH * MATERIAL_HEIGHT);
+    for row in 0..MATERIAL_HEIGHT {
+        let y = row as f32 / (MATERIAL_HEIGHT - 1) as f32;
+        for column in 0..MATERIAL_WIDTH {
+            let x = column as f32 / (MATERIAL_WIDTH - 1) as f32;
+            let linear = (1.0 - smooth(y)) * ratio;
+            let radial = radial(x, y, complementary, complementary, ratio, 1.0) * complementary;
+            let strength = linear + radial;
+            let tint = radial / strength.max(f32::EPSILON);
+            let channel =
+                |value: u8| (255.0 * (1.0 - tint) + f32::from(value) * tint).round() as u8;
+            pixels.push(Color32::from_rgba_unmultiplied(
+                channel(accent.r()),
+                channel(accent.g()),
+                channel(accent.b()),
+                (max_alpha * strength).round() as u8,
+            ));
+        }
+    }
+    let texture = ctx.load_texture(
+        if dark {
+            "rill_component_material_dark"
+        } else {
+            "rill_component_material_light"
+        },
+        egui::ColorImage::new([MATERIAL_WIDTH, MATERIAL_HEIGHT], pixels),
+        egui::TextureOptions::LINEAR,
+    );
+    ctx.data_mut(|data| data.insert_temp(id, texture.clone()));
+    texture
+}
 
 /// Paint a soft, track-colored halo around an active clip or mixer channel.
 ///
@@ -125,8 +278,8 @@ pub fn soft_surface<R>(
 fn ambient_mesh(painter: &Painter, rect: Rect) -> Option<egui::Mesh> {
     // Avoid allocating for clipped rows, tiny controls, or unbounded layouts.
     if !rect.is_finite()
-        || rect.width() < 48.0
-        || rect.height() < 32.0
+        || rect.width() < 55.0
+        || rect.height() < 34.0
         || !rect.size().is_finite()
         || !painter.clip_rect().intersects(rect)
         || !painter.is_visible()
@@ -136,14 +289,16 @@ fn ambient_mesh(painter: &Painter, rect: Rect) -> Option<egui::Mesh> {
 
     let colors = theme::palette(painter.ctx());
     let max_alpha = if painter.ctx().theme() == egui::Theme::Dark {
-        14.0
+        13.0
     } else {
-        10.0
+        8.0
     };
     // The bound is independent of display resolution and surface dimensions.
     // A short header needs fewer vertical samples than a large utility backdrop.
-    let columns = ((rect.width() / 48.0).ceil() as usize).clamp(8, COLUMNS);
-    let rows = ((rect.height() / 48.0).ceil() as usize).clamp(4, ROWS);
+    let columns = ((rect.width() / 55.0).ceil() as usize).clamp(8, COLUMNS);
+    let rows = ((rect.height() / 55.0).ceil() as usize).clamp(3, ROWS);
+    let ratio = tokens::GOLDEN_RATIO_INVERSE;
+    let complementary = 1.0 - ratio;
     let stride = columns + 1;
     let mut mesh = egui::Mesh::default();
     mesh.vertices.reserve_exact(stride * (rows + 1));
@@ -152,8 +307,8 @@ fn ambient_mesh(painter: &Painter, rect: Rect) -> Option<egui::Mesh> {
         let y = row as f32 / rows as f32;
         for column in 0..=columns {
             let x = column as f32 / columns as f32;
-            let primary = radial(x, y, 0.24, 0.34, 0.55, 0.72);
-            let secondary = 0.45 * radial(x, y, 0.80, 0.64, 0.60, 0.80);
+            let primary = radial(x, y, complementary, complementary, ratio, 1.0);
+            let secondary = complementary * radial(x, y, ratio, ratio, ratio, 1.0);
             let strength = (primary + secondary).min(1.0);
             let fade = smooth((x.min(1.0 - x) * 5.0).min(y.min(1.0 - y) * 5.0));
             let alpha = (max_alpha * strength * fade).round() as u8;

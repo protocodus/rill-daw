@@ -1960,18 +1960,20 @@ impl DawApp {
         egui::TopBottomPanel::top("transport")
             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
             .show(ctx, |ui| {
-                let show_loop_summary = ui.available_width() >= 1400.0;
                 let compact = ui.available_width() < 1200.0;
                 let group_spacing = if compact {
                     daw_ui::tokens::SPACE_XS
                 } else {
                     daw_ui::tokens::SPACE_SM
                 };
-                // Wrap related controls as complete groups. Views, commands,
-                // musical settings and playback guides retain distinct roles.
+                // Navigation stays quiet; playback and musical position have
+                // distinct shared surfaces. Each complete group wraps intact.
+                ui.spacing_mut().item_spacing = egui::vec2(
+                    if compact { daw_ui::tokens::SPACE_SM } else { daw_ui::tokens::SPACE_MD },
+                    daw_ui::tokens::SPACE_SM,
+                );
                 if compact {
                     ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-                    ui.spacing_mut().item_spacing.x = group_spacing;
                 }
                 let recording_busy = self.recording_busy();
                 let count_in = self.engine.as_ref().and_then(|engine| {
@@ -1986,12 +1988,26 @@ impl DawApp {
                 ].into_iter().flatten().map(|text| ui.painter().layout_no_wrap(
                     text.into(), egui::TextStyle::Body.resolve(ui.style()), palette(ui.ctx()).muted,
                 ).size().x + group_spacing).sum::<f32>();
-                let loop_summary = format!("Beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.loop_end + 1.0);
-                let guide_width = if compact { 260.0 } else { 280.0 } + if show_loop_summary {
-                    ui.painter().layout_no_wrap(loop_summary.clone(), egui::TextStyle::Monospace.resolve(ui.style()), palette(ui.ctx()).muted).size().x + group_spacing
-                } else { 0.0 };
+                // Reserve text, icons, disclosure and padding before laying out
+                // the group. The Range opener truncates inside a narrow child UI
+                // even when the overall window still has spare space.
+                let guide_text_width = |label: &str| ui.painter().layout_no_wrap(
+                    label.into(), egui::TextStyle::Button.resolve(ui.style()), palette(ui.ctx()).text,
+                ).size().x.ceil();
+                let navigation_width = ["Arranger", "Mixer"].into_iter().map(|label| {
+                    guide_text_width(label) + 2.0 * ui.spacing().button_padding.x
+                }).sum::<f32>() + group_spacing + 2.0;
+                let guide_width = ["Click", "Loop"].into_iter().map(|label| {
+                    guide_text_width(label) + 18.0 + ui.spacing().icon_spacing + 2.0 * ui.spacing().button_padding.x
+                }).sum::<f32>()
+                    + guide_text_width("Range") + 12.0 + ui.spacing().icon_spacing
+                    + 2.0 * daw_ui::tokens::BUTTON_PADDING_X
+                    + 2.0 * group_spacing;
                 ui.horizontal_wrapped(|ui| {
-                    daw_ui::toolbar_group_sized_with_spacing(ui, 200.0, group_spacing, |ui| {
+                    let row_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_XS * 2.0;
+                    ui.set_min_height(row_height);
+                    ui.set_row_height(row_height);
+                    daw_ui::toolbar_group_sized_with_spacing(ui, navigation_width, group_spacing, |ui| {
                         let active = self.navigation.iter().rev().find_map(|snapshot| match snapshot.view {
                             FocusedView::Workspace(view) => Some(view),
                             _ => None,
@@ -2000,30 +2016,32 @@ impl DawApp {
                             (WorkspaceView::Arrangement, "Arranger"),
                             (WorkspaceView::Mixer, "Mixer"),
                         ] {
-                            if daw_ui::view_choice(ui, active == view, label).clicked() {
+                            if daw_ui::tab_choice(ui, active == view, label).clicked() {
                                 self.open_workspace(view);
                             }
                         }
-                        ui.separator();
                     });
-                    daw_ui::toolbar_group_sized_with_spacing(ui, 400.0 + status_width, group_spacing, |ui| {
+                    daw_ui::command_group(ui, (if compact { 350.0 } else { 380.0 }) + status_width, |ui| {
                         if refining {
                             daw_ui::text::note(ui, "Refining audio…");
                         }
-                        if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Start"))
+                        if ui.add_enabled(!self.recording_busy(), daw_ui::quiet_button_widget("Start"))
                             .on_hover_text("Return to start · Home")
                             .clicked()
                         {
                             self.seek(0.0);
                         }
                         let playing = self.recording_busy() || self.playing() || (self.loading.is_some() && self.desired_playing);
-                        if daw_ui::primary_button(ui, if playing { "Pause" } else { "Play" })
+                        if ui.add_sized(
+                            egui::vec2(100.0, daw_ui::tokens::CONTROL_HEIGHT),
+                            daw_ui::primary_button_widget(ui, if playing { "Pause" } else { "Play" }),
+                        )
                             .on_hover_text("Space")
                             .clicked()
                         {
                             self.play();
                         }
-                        if daw_ui::button(ui, "Stop")
+                        if daw_ui::quiet_button(ui, "Stop")
                             .on_hover_text("Stop and reset instruments")
                             .clicked()
                         {
@@ -2035,9 +2053,8 @@ impl DawApp {
                         }
                         if self.recording_finalizing() { daw_ui::text::note(ui, "Finishing recording…"); }
                         if let Some(count_in) = &count_in { daw_ui::text::note(ui, count_in); }
-                        ui.separator();
                     });
-                    daw_ui::toolbar_group_sized_with_spacing(ui, 320.0, group_spacing, |ui| {
+                    daw_ui::command_group(ui, if compact { 300.0 } else { 320.0 }, |ui| {
                         let bar = (self.cursor / self.project.beats_per_bar as f64).floor() as u64 + 1;
                         let beat = (self.cursor % self.project.beats_per_bar as f64).floor() as u64 + 1;
                         ui.label(
@@ -2045,7 +2062,6 @@ impl DawApp {
                                 "{bar:03} . {beat:02} . {:02}",
                                 (self.cursor.fract() * 100.0) as u64
                             ))
-                            .monospace()
                             .size(daw_ui::tokens::FONT_SUBTITLE)
                             .color(palette(ui.ctx()).text),
                         );
@@ -2072,15 +2088,14 @@ impl DawApp {
                             self.edit_label = Some("Time signature".into());
                             self.changed();
                         }
-                        ui.separator();
                     });
                     daw_ui::toolbar_group_sized_with_spacing(ui, guide_width, group_spacing, |ui| {
                         let mut click = self.project.metronome_enabled;
-                        if daw_ui::view_toggle(ui, &mut click, "Click").on_hover_text("Metronome · Pre-count and level are in Window → Recording").changed() {
+                        if daw_ui::quiet_toggle(ui, &mut click, "Click").on_hover_text("Metronome · Pre-count and level are in Window → Recording").changed() {
                             self.begin_edit(); self.project.metronome_enabled = click; self.edit_label = Some("Metronome".into()); self.changed();
                         }
                         let mut looping = self.project.loop_enabled;
-                        if ui.add_enabled_ui(!recording_busy, |ui| daw_ui::view_toggle(ui, &mut looping, "Loop")).inner
+                        if ui.add_enabled_ui(!recording_busy, |ui| daw_ui::quiet_toggle(ui, &mut looping, "Loop")).inner
                             .on_hover_text("Repeat the range between Start beat and End beat")
                             .changed()
                         {
@@ -2088,7 +2103,7 @@ impl DawApp {
                             self.project.loop_enabled = looping;
                             self.changed();
                         }
-                        let range = daw_ui::picker_button(ui, "Range", |ui| {
+                        let range = daw_ui::quiet_picker_button(ui, "Range", |ui| {
                             if recording_busy { ui.disable(); }
                             let selection = self.loop_selection_range();
                             let clip_editor = self.view == WorkspaceView::Clip;
@@ -2154,12 +2169,6 @@ impl DawApp {
                             }
                         });
                         range.0.on_hover_text(format!("Loop beats {:.2}–{:.2} · Set start and end", self.project.loop_start + 1.0, self.project.loop_end + 1.0));
-                        if show_loop_summary { ui.label(
-                            RichText::new(&loop_summary)
-                            .monospace()
-                            .color(palette(ui.ctx()).muted),
-                        )
-                        .on_hover_text("Loop range in beats; the end is exclusive"); }
                     });
                 });
             });
@@ -3018,20 +3027,26 @@ impl DawApp {
                         self.mixer_add_bus();
                     }
                     if workspace == WorkspaceView::Clip
-                        && self
+                        && let Some(track) = self
                             .selected_track
                             .and_then(|id| self.project.track(id))
-                            .is_some_and(|track| {
-                                track.kind == TrackKind::Midi
-                                    && track.instrument == Instrument::None
-                            })
-                        && daw_ui::button(ui, "Choose instrument…")
-                            .on_hover_text(
-                                "These MIDI notes are silent until an instrument is assigned",
-                            )
-                            .clicked()
+                            .filter(|track| track.kind == TrackKind::Midi)
                     {
-                        self.open_instrument_chooser(true);
+                        let unassigned = track.instrument == Instrument::None;
+                        if daw_ui::button(ui, if unassigned { "Choose instrument…" } else { "Instrument" })
+                            .on_hover_text(if unassigned {
+                                "These MIDI notes are silent until an instrument is assigned"
+                            } else {
+                                "Open this track's instrument; return to the same notes and editing position"
+                            })
+                            .clicked()
+                        {
+                            if unassigned {
+                                self.open_instrument_chooser(true);
+                            } else {
+                                self.open_popup(PopupKind::Instrument);
+                            }
+                        }
                     }
                     if workspace == WorkspaceView::Clip
                         && self
@@ -3042,7 +3057,7 @@ impl DawApp {
                     }
                     if workspace == WorkspaceView::Clip {
                         self.clip_navigation_header(ui);
-                        if daw_ui::button(ui, "Properties").clicked() {
+                        if daw_ui::quiet_button(ui, "Properties").clicked() {
                             self.open_popup(PopupKind::Inspector);
                         }
                     }

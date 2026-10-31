@@ -199,9 +199,12 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
                 let note = &close["midi_editor"]["notes"][0]["rect"];
                 let label = ruler_label(&close, "1.1.2", rect).unwrap();
                 assert!(
-                    (label["min"][0].as_f64().unwrap() - 4.0 - note["min"][0].as_f64().unwrap())
-                        .abs()
-                        < 1.0
+                    (label["min"][0].as_f64().unwrap()
+                        - f64::from(daw_ui::tokens::SPACE_XS)
+                        - note["min"][0].as_f64().unwrap())
+                    .abs()
+                        < 1.0,
+                    "The note and ruler must share a time anchor: label {label}, note {note}"
                 );
             }
             let wide = navigate(&mut app, editor, 40.0, 0.0);
@@ -217,4 +220,47 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
             app.quit();
         }
     }
+}
+
+#[test]
+fn elapsed_clock_labels_omit_empty_hours_but_keep_real_hour_and_second_values() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    // One beat per second and per bar makes each expected elapsed time a
+    // primary ruler anchor, including one beyond five hours.
+    project.tempo = 60.0;
+    project.beats_per_bar = 1;
+    let track = project.add_midi_track("Long session");
+    project.track_mut(track).unwrap().clips.push(Clip::midi(
+        "Clock guide",
+        0.0,
+        19_000.0,
+        vec![Note::new(60, 0.0, 1.0, 90)],
+    ));
+    let path = app.directory.path().join("elapsed-clock.rill");
+    project.save(&path).unwrap();
+    let original = app.command(json!({"command":"open", "path":path}));
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.command(json!({"command":"viewport", "width":1100, "height":760,
+            "pixels_per_point":density}));
+        for (seconds, expected) in [(15.0, "0:15"), (165.0, "2:45"), (18_955.0, "5:15:55")] {
+            let state = navigate(&mut app, Editor::Arrangement, 160.0, seconds);
+            let (_, _, rect) = view(&state, Editor::Arrangement);
+            let label = ruler_label(&state, expected, rect).unwrap_or_else(|| {
+                panic!(
+                    "Missing elapsed time {expected}: {}",
+                    state["visible_labels"]
+                )
+            });
+            assert!(label["max"][0].as_f64().unwrap() <= rect[2]);
+            for field in ["project", "history", "modified"] {
+                assert_eq!(
+                    state[field], original[field],
+                    "Viewing a time changed {field}"
+                );
+            }
+        }
+    }
+    app.quit();
 }

@@ -200,7 +200,6 @@ fn short_arpeggio_notes_keep_whole_bars_and_next_range_adds_without_reopening() 
         .unwrap()["rect"]
         .clone();
     app.click("Select");
-    app.click("More tools");
     app.click("Duplicate");
     let copied = click_rect(&mut app, &rect);
     let copy = copied["project"]["tracks"][0]["clips"]
@@ -299,31 +298,36 @@ fn all_roots_are_visible_and_scale_sync_is_explicit_and_view_only() {
     choice(&mut app, "harmony", "Scale");
     choice(&mut app, "scale", "Dorian");
     let before_sync = choice(&mut app, "root", "D");
-    assert!(
-        before_sync["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|label| label == "C · Natural minor")
-    );
+    for key in before_sync["midi_editor"]["keys"].as_array().unwrap() {
+        let pitch = key["pitch"].as_u64().unwrap() % 12;
+        assert_eq!(
+            key["scale"],
+            [0, 2, 3, 5, 7, 8, 10].contains(&pitch),
+            "Generator choices must not silently change the C minor grid"
+        );
+    }
     let synced = app.click("Use scale for grid");
     assert_eq!(synced["project"], before_sync["project"]);
     assert_eq!(synced["history"], before_sync["history"]);
-    assert!(
-        synced["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|label| label == "D · Dorian")
-    );
+    for key in synced["midi_editor"]["keys"].as_array().unwrap() {
+        let pitch = key["pitch"].as_u64().unwrap() % 12;
+        assert_eq!(
+            key["scale"],
+            [0, 2, 4, 5, 7, 9, 11].contains(&pitch),
+            "Explicit scale sync updates the visible grid to D Dorian"
+        );
+    }
     let cancelled = app.click("Cancel");
     assert_eq!(cancelled["project"], before_sync["project"]);
+    let drawing = app.click("Draw settings");
     assert!(
-        cancelled["visible_labels"]
+        drawing["visible_labels"]
             .as_array()
             .unwrap()
             .iter()
             .any(|label| label == "D · Dorian")
     );
+    assert_eq!(drawing["project"], before_sync["project"]);
+    assert_eq!(drawing["history"], before_sync["history"]);
     app.quit();
 }

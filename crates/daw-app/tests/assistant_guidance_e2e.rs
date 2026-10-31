@@ -5,6 +5,7 @@ mod common;
 use common::Harness;
 use daw_ai::{PROMPT_EXAMPLES, PromptCategory, PromptExample};
 use daw_core::{Clip, Note, Project};
+use daw_ui::ASSISTANT_PROMPT_LIMIT;
 use serde_json::{Value, json};
 
 fn example(id: &str) -> &'static PromptExample {
@@ -17,6 +18,17 @@ fn visible(state: &Value, text: &str) -> bool {
         .unwrap()
         .iter()
         .any(|label| label == text)
+}
+
+fn footer_visible(state: &Value, text: &str) -> bool {
+    let top = state["assistant"]["prompt_rect"]["max"][1]
+        .as_f64()
+        .unwrap();
+    state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|rect| rect["text"] == text && rect["min"][1].as_f64().is_some_and(|y| y >= top))
 }
 
 fn label<'a>(state: &'a Value, text: &str) -> &'a Value {
@@ -76,17 +88,27 @@ fn more(app: &mut Harness, action: &str) -> Value {
 }
 
 fn assert_controls_fit(state: &Value, width: f64, height: f64) {
-    for name in [
+    let primary = if state["assistant"]["submit_state"] == "SetupRequired" {
+        "Connect AI"
+    } else {
+        "Send"
+    };
+    let mut controls = vec![
         "Conversation",
         "Examples",
+        "Tools",
         "Tips",
         "AI settings",
         "More",
         "AI prompt",
-        "Send",
-        "Stop",
-        "Undo",
-    ] {
+        primary,
+    ];
+    controls.extend(
+        ["Stop", "Undo", "Edit last prompt"]
+            .into_iter()
+            .filter(|name| footer_visible(state, name)),
+    );
+    for name in controls {
         let rect = label(state, name);
         let (left, top, right, bottom) = (
             rect["min"][0].as_f64().unwrap(),
@@ -115,8 +137,8 @@ fn examples_and_tips_preserve_drafts_and_keep_actions_visible_in_both_themes() {
         app.command(json!({"command":"system_theme","dark":dark}));
         app.click("AI");
         let start = app.click("Conversation");
-        assert!(visible(&start, "Browse examples"));
-        let browse = app.click("Browse examples");
+        assert!(visible(&start, "Examples"));
+        let browse = app.click("Examples");
         assert_eq!(browse["assistant"]["page"], "Examples");
         unchanged(&browse, &original);
 
@@ -169,6 +191,118 @@ fn examples_and_tips_preserve_drafts_and_keep_actions_visible_in_both_themes() {
         assert!(visible(&scrolled, "Connect your provider"));
         assert_controls_fit(&scrolled, 800.0, 600.0);
         unchanged(&scrolled, &before_tips);
+        app.quit();
+    }
+}
+
+#[test]
+fn conversation_starters_preserve_drafts_and_never_send_in_both_themes() {
+    for dark in [false, true] {
+        let mut app = Harness::new();
+        app.command(json!({"command":"viewport","width":800,"height":600}));
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.click("AI");
+        let original = app.inspect();
+        assert_eq!(original["assistant"]["page"], "Conversation");
+        assert_controls_fit(&original, 800.0, 600.0);
+        assert!(!footer_visible(&original, "Stop"));
+        assert!(!footer_visible(&original, "Undo"));
+
+        // The first view offers a useful range of existing musical examples.
+        let starters: Vec<_> = PROMPT_EXAMPLES
+            .iter()
+            .filter(|item| visible(&original, item.title))
+            .collect();
+        assert_eq!(starters.len(), 3, "{}", original["visible_labels"]);
+        for (index, item) in starters.iter().enumerate() {
+            assert!(
+                starters[..index]
+                    .iter()
+                    .all(|other| other.category != item.category)
+            );
+            let rect = label(&original, item.title);
+            assert!(rect["min"][0].as_f64().unwrap() >= 0.0, "{rect}");
+            assert!(rect["min"][1].as_f64().unwrap() >= 0.0, "{rect}");
+            assert!(rect["max"][0].as_f64().unwrap() <= 800.0, "{rect}");
+            assert!(rect["max"][1].as_f64().unwrap() <= 600.0, "{rect}");
+            assert!(
+                rect["max"][1].as_f64().unwrap()
+                    <= label(&original, "AI prompt")["min"][1].as_f64().unwrap(),
+                "Starter overlaps the composer: {rect}"
+            );
+        }
+
+        // An armed scripted provider makes accidental submission observable.
+        app.command(json!({"command":"assistant_script","turns":[
+            {"text":"This response must remain unused until Send is clicked."}
+        ]}));
+        let mut expected = String::new();
+        for item in &starters {
+            if !expected.is_empty() {
+                expected.push_str("\n\n");
+            }
+            expected.push_str(item.prompt);
+            let inserted = app.click(item.title);
+            assert_eq!(inserted["assistant"]["prompt"], expected);
+            assert_eq!(inserted["assistant"]["page"], "Conversation");
+            assert_eq!(inserted["assistant"]["busy"], false);
+            assert_eq!(inserted["assistant"]["messages"], json!([]));
+            assert_eq!(inserted["assistant"]["request_prompt"], "");
+            assert_eq!(inserted["assistant"]["submit_state"], "Ready");
+            unchanged(&inserted, &original);
+            assert_controls_fit(&inserted, 800.0, 600.0);
+        }
+
+        let item = starters[0];
+        let draft = "Keep my opening idea — and its dynamics.";
+        replace_prompt(&mut app, draft);
+        let appended = app.click(item.title);
+        assert_eq!(
+            appended["assistant"]["prompt"],
+            format!("{draft}\n\n{}", item.prompt)
+        );
+        unchanged(&appended, &original);
+
+        // Count characters, not UTF-8 bytes. A complete example fits exactly at
+        // the limit, but never truncates an existing draft to make itself fit.
+        let available = ASSISTANT_PROMPT_LIMIT - item.prompt.chars().count() - 2;
+        let full_draft = "é".repeat(available + 1);
+        replace_prompt(&mut app, &full_draft);
+        let protected = app.click(item.title);
+        assert_eq!(protected["assistant"]["prompt"], full_draft);
+        assert_eq!(protected["assistant"]["busy"], false);
+        assert_eq!(protected["assistant"]["messages"], json!([]));
+        unchanged(&protected, &original);
+
+        let fitting_draft = "é".repeat(available);
+        replace_prompt(&mut app, &fitting_draft);
+        let filled = app.click(item.title);
+        assert_eq!(
+            filled["assistant"]["prompt"],
+            format!("{fitting_draft}\n\n{}", item.prompt)
+        );
+        assert_eq!(
+            filled["assistant"]["prompt"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count(),
+            ASSISTANT_PROMPT_LIMIT
+        );
+        assert_eq!(filled["assistant"]["busy"], false);
+        assert_eq!(filled["assistant"]["messages"], json!([]));
+        assert_eq!(filled["assistant"]["request_prompt"], "");
+        assert_eq!(filled["assistant"]["submit_state"], "Ready");
+        unchanged(&filled, &original);
+        assert_controls_fit(&filled, 800.0, 600.0);
+
+        let examples = app.click("Examples");
+        assert_eq!(examples["assistant"]["page"], "Examples");
+        assert_eq!(
+            examples["assistant"]["prompt"],
+            filled["assistant"]["prompt"]
+        );
+        unchanged(&examples, &original);
         app.quit();
     }
 }

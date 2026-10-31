@@ -59,7 +59,10 @@ fn appearance(app: &mut Harness, density: f64, dark: bool) {
         state["effective_theme"],
         if dark { "Dark" } else { "Light" }
     );
-    assert!(state["text_sizes"]["body"].as_f64().unwrap() >= 15.0);
+    assert_eq!(
+        state["text_sizes"]["body"].as_f64().unwrap(),
+        f64::from(daw_ui::tokens::FONT_BODY)
+    );
 }
 
 fn text_rect(state: &Value, label: &str) -> Value {

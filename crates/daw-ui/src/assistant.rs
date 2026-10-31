@@ -48,6 +48,15 @@ pub struct AssistantState {
     pub category: String,
     pub tool_query: String,
     pub selected_tool: Option<String>,
+    last_revealed_failure: Option<String>,
+}
+
+impl AssistantState {
+    /// A new failed attempt should reveal its explanation even if it has the
+    /// same message as the previous attempt or finished while the window closed.
+    pub fn reset_failure_reveal(&mut self) {
+        self.last_revealed_failure = None;
+    }
 }
 
 /// Provider-independent example content supplied by the host.
@@ -74,12 +83,25 @@ pub struct AssistantTool<'a> {
     pub prompt: &'a str,
 }
 
+/// The next step belongs to the host's current musical context. Missing setup
+/// offers an action; a temporary block explains why a request cannot run yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AssistantSubmitState<'a> {
+    Ready,
+    SetupRequired,
+    Blocked(&'a str),
+}
+
 /// The application owns history, execution state, and the captured song context.
 pub struct AssistantOptions<'a> {
     pub messages: &'a [AssistantMessage],
     pub status: Option<&'a str>,
     pub busy: bool,
-    pub can_submit: bool,
+    pub submit_state: AssistantSubmitState<'a>,
+    /// Failed requests stay readable in the scrolling conversation, leaving the
+    /// composer and its recovery action available even in a short window.
+    pub failure: Option<&'a str>,
+    pub recover_prompt: bool,
     pub can_undo: bool,
     pub context: &'a str,
     /// A pinned edit boundary, distinct from the changing musical selection.
@@ -125,6 +147,9 @@ pub fn assistant(
     let mut reuse_last = false;
     let mut inserted_example = None;
     let mut inserted_tool = None;
+    if options.failure.is_none() {
+        state.reset_failure_reveal();
+    }
     crate::action_row(
         ui,
         |ui| {
@@ -164,19 +189,18 @@ pub fn assistant(
             settings = ui
                 .add_enabled_ui(!options.busy, |ui| crate::view_button(ui, "AI settings"))
                 .inner
+                .on_hover_text(if options.configured {
+                    format!("{} · Connected", bounded(options.provider, 120))
+                } else {
+                    "Choose a provider. Your draft stays here.".into()
+                })
                 .clicked();
         },
         |ui| {
-            let readiness = if options.configured {
-                format!("{} · Configured", bounded(options.provider, 120))
-            } else {
-                "Connect a provider to start".into()
-            };
-            text::truncated(ui, text::TextRole::Note, readiness);
+            let scope = format!("Scope · {}", bounded(options.scope, 2_048));
+            text::truncated(ui, text::TextRole::Label, scope);
         },
     );
-    let scope = format!("Scope · {}", bounded(options.scope, 2_048));
-    text::truncated(ui, text::TextRole::Label, &scope);
     if !options.context.is_empty() {
         text::truncated(ui, text::TextRole::Note, bounded(options.context, 2_048));
     }
@@ -187,12 +211,13 @@ pub fn assistant(
             (AssistantPage::Tools, "Tools"),
             (AssistantPage::Tips, "Tips"),
         ] {
-            if crate::view_choice(ui, state.page == page, label).clicked() {
+            if crate::tab_choice(ui, state.page == page, label).clicked() {
                 state.page = page;
             }
         }
     });
-    ui.add_space(tokens::SPACE_XS);
+    ui.separator();
+    ui.add_space(tokens::SPACE_SM);
 
     // Reserve every fixed control after measuring the actual header rows. All
     // pages share this bounded viewport, so long tips, tools and examples cannot
@@ -203,9 +228,18 @@ pub fn assistant(
     let compact_composer = state.page != AssistantPage::Conversation
         || ui.available_height() < tokens::CONTROL_HEIGHT * 9.0;
     let composer_height = tokens::CONTROL_HEIGHT * if compact_composer { 1.0 } else { 2.0 };
-    let show_status = options.busy || options.status.is_some_and(|status| !status.is_empty());
+    let blocked = match options.submit_state {
+        AssistantSubmitState::Blocked(reason) if !options.busy => Some(reason),
+        _ => None,
+    };
+    let show_status = options.busy
+        || blocked.is_some()
+        || options.failure.is_some()
+        || options.status.is_some_and(|status| !status.is_empty());
     let status_height = if show_status {
-        tokens::CONTROL_HEIGHT
+        // The optional row also contributes its native item gap and explicit
+        // inset. Reserve both before giving the transcript its scroll height.
+        tokens::CONTROL_HEIGHT + ui.spacing().item_spacing.y + tokens::SPACE_XS
     } else {
         0.0
     };
@@ -223,34 +257,23 @@ pub fn assistant(
             .max_height(body_height)
             .min_scrolled_height(0.0)
             .auto_shrink([false, false])
-            .stick_to_bottom(page == AssistantPage::Conversation && !options.messages.is_empty())
+            .stick_to_bottom(page == AssistantPage::Conversation && !options.messages.is_empty() && options.failure.is_none())
             .show(ui, |ui| match page {
                 AssistantPage::Conversation => {
-                    if options.messages.is_empty() {
-                        crate::action_row(
-                            ui,
-                            |ui| {
-                                if ui
-                                    .add_enabled_ui(!options.examples.is_empty(), |ui| {
-                                        crate::view_button(ui, "Browse examples")
-                                    })
-                                    .inner
-                                    .clicked()
-                                {
-                                    state.page = AssistantPage::Examples;
-                                }
-                            },
-                            |ui| {
-                                text::truncated(ui, text::TextRole::Subtitle, "Make music with AI");
-                            },
-                        );
-                        text::body(
-                            ui,
-                            "Describe a musical goal, choose an example, or ask for advice.",
-                        );
-                        text::note(ui, "Tip: include the style, key, length, and what to keep.");
+                    if options.messages.is_empty() && options.failure.is_none() {
+                        inserted_example = welcome(ui, prompt, options.examples, body_height);
                     } else {
                         transcript(ui, options.messages);
+                    }
+                    if let Some(failure) = options.failure {
+                        crate::notice(ui, crate::NoticeKind::Error, "Couldn’t finish this request", |_| {});
+                        let failure = bounded(failure, MESSAGE_CHAR_LIMIT);
+                        let detail = text::body(ui, failure);
+                        if state.last_revealed_failure.as_deref() != Some(failure) {
+                            detail.scroll_to_me(Some(egui::Align::TOP));
+                            state.last_revealed_failure = Some(failure.to_owned());
+                        }
+                        text::note(ui, "Edits already made are kept. Review them before sending another request.");
                     }
                 }
                 AssistantPage::Examples => {
@@ -277,24 +300,26 @@ pub fn assistant(
             if options.busy {
                 ui.spinner();
             }
-            text::truncated(
-                ui,
-                text::TextRole::Note,
-                bounded(
-                    options
-                        .status
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or("Working…"),
-                    512,
-                ),
-            );
+            let message = if let Some(reason) = blocked {
+                reason
+            } else if options.failure.is_some() {
+                "Request interrupted · details in Conversation"
+            } else {
+                options
+                    .status
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Working…")
+            };
+            text::truncated(ui, text::TextRole::Note, bounded(message, 512));
         });
         ui.add_space(tokens::SPACE_XS);
     }
 
     let label = text::label(ui, "AI prompt");
     let prompt_id = ui.make_persistent_id("assistant_prompt");
-    let can_send = options.can_submit && !options.busy && !prompt.trim().is_empty();
+    let can_send = options.submit_state == AssistantSubmitState::Ready
+        && !options.busy
+        && !prompt.trim().is_empty();
     let shortcut = can_send
         && ui.is_enabled()
         && ui.memory(|memory| memory.has_focus(prompt_id))
@@ -336,27 +361,70 @@ pub fn assistant(
         }
     }
     ui.add_space(tokens::SPACE_SM);
-    let (send_button, stop_button, undo_button) = ui
-        .horizontal_wrapped(|ui| {
-            let can_send = options.can_submit && !options.busy && !prompt.trim().is_empty();
+    let setup_required =
+        options.submit_state == AssistantSubmitState::SetupRequired && !options.busy;
+    let recover_prompt =
+        options.recover_prompt && options.can_reuse && prompt.is_empty() && !options.busy;
+    let (send_button, (stop_button, undo_button)) = crate::action_row(
+        ui,
+        |ui| {
+            let can_send = options.submit_state == AssistantSubmitState::Ready
+                && !options.busy
+                && !prompt.trim().is_empty();
             let send = ui
-                .add_enabled_ui(can_send, |ui| crate::primary_button(ui, "Send"))
-                .inner;
-            let send = crate::hover_text(send, "Send prompt · Ctrl/Cmd+Enter");
-            let stop = ui
-                .add_enabled_ui(options.busy, |ui| crate::button(ui, "Stop"))
-                .inner;
-            let undo = ui
-                .add_enabled_ui(options.can_undo && !options.busy, |ui| {
-                    crate::button(ui, "Undo")
+                .add_enabled_ui(can_send || setup_required, |ui| {
+                    crate::primary_button(ui, if setup_required { "Connect AI" } else { "Send" })
                 })
                 .inner;
-            (send, stop, undo)
-        })
-        .inner;
+            crate::hover_text(
+                send,
+                if setup_required {
+                    "Choose a provider in AI settings. Your draft stays here."
+                } else {
+                    "Send prompt · Ctrl/Cmd+Enter"
+                },
+            )
+        },
+        |ui| {
+            let stop = if options.busy || recover_prompt {
+                crate::button(
+                    ui,
+                    if recover_prompt {
+                        "Edit last prompt"
+                    } else {
+                        "Stop"
+                    },
+                )
+            } else {
+                hidden_action(ui)
+            };
+            let stop = crate::hover_text(
+                stop,
+                if recover_prompt {
+                    "Restore the last request for editing. Nothing is sent."
+                } else {
+                    "Stop further assistant work. Keep edits already made."
+                },
+            );
+            let undo = if options.can_undo && !options.busy {
+                crate::button(ui, "Undo")
+            } else {
+                hidden_action(ui)
+            };
+            (stop, undo)
+        },
+    )
+    .inner;
+    if setup_required && send_button.clicked() {
+        settings = true;
+    }
+    if recover_prompt && stop_button.clicked() {
+        reuse_last = true;
+        state.page = AssistantPage::Conversation;
+    }
     AssistantResponse {
-        send: shortcut || send_button.clicked(),
-        stop: stop_button.clicked(),
+        send: shortcut || (!setup_required && send_button.clicked()),
+        stop: !recover_prompt && stop_button.clicked(),
         undo: undo_button.clicked(),
         settings,
         new_chat,
@@ -368,6 +436,103 @@ pub fn assistant(
         stop_button,
         undo_button,
     }
+}
+
+// Keep response IDs available to hosts without showing unavailable actions or
+// registering a focusable target in the footer.
+fn hidden_action(ui: &mut Ui) -> Response {
+    ui.add_enabled_ui(false, |ui| {
+        ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
+    })
+    .inner
+}
+
+fn welcome(
+    ui: &mut Ui,
+    prompt: &mut String,
+    examples: &[AssistantExample<'_>],
+    body_height: f32,
+) -> Option<String> {
+    let examples = &examples[..examples.len().min(GUIDANCE_LIMIT)];
+    let mut starters: Vec<&AssistantExample<'_>> = Vec::new();
+    // Offer distinct musical starting points, preserving the host's scope and
+    // ordering. A smaller catalog may still supply up to three useful choices.
+    for example in examples {
+        if !starters
+            .iter()
+            .any(|chosen| chosen.category == example.category)
+        {
+            starters.push(example);
+        }
+        if starters.len() == 3 {
+            break;
+        }
+    }
+    for example in examples {
+        if starters.len() == 3 {
+            break;
+        }
+        if !starters.iter().any(|chosen| chosen.id == example.id) {
+            starters.push(example);
+        }
+    }
+    let compact = body_height < 200.0 && ui.available_width() >= 480.0;
+    let starter_rows = if compact { 1 } else { starters.len() };
+    let content_height = tokens::FONT_HEADING
+        + tokens::FONT_BODY * 1.5
+        + tokens::SPACE_LG * 2.0
+        + starter_rows as f32 * (tokens::CONTROL_HEIGHT + tokens::SPACE_XS);
+    ui.add_space(((body_height - content_height) * 0.5).clamp(0.0, tokens::SPACE_XL * 2.0));
+    let mut inserted = None;
+    ui.vertical_centered(|ui| {
+        text::title(ui, "Start with an idea");
+        text::note(ui, "Describe what you hear, or try a starting point.");
+        ui.add_space(tokens::SPACE_SM);
+        let starter_width = if compact {
+            let count = starters.len().max(1) as f32;
+            (ui.available_width() - ui.spacing().item_spacing.x * (count - 1.0)) / count
+        } else {
+            ui.available_width().min(360.0)
+        };
+        let draw_starters = |ui: &mut Ui| {
+            for example in starters {
+                ui.push_id(example.id, |ui| {
+                    let separator = if prompt.is_empty() { "" } else { "\n\n" };
+                    let fits =
+                        prompt.chars().count() + separator.len() + example.prompt.chars().count()
+                            <= ASSISTANT_PROMPT_LIMIT;
+                    let response = ui
+                        .add_enabled_ui(fits, |ui| {
+                            ui.add_sized(
+                                egui::vec2(starter_width, tokens::CONTROL_HEIGHT),
+                                crate::button_widget(bounded(example.title, 160)).truncate(),
+                            )
+                        })
+                        .inner;
+                    let hint = if fits {
+                        format!(
+                            "{}\n\nAdd to your draft, then edit and Send.",
+                            bounded(example.description, 1_024)
+                        )
+                    } else {
+                        "This example would exceed the prompt limit. Shorten the draft first."
+                            .to_owned()
+                    };
+                    if crate::hover_text(response, hint).clicked() {
+                        prompt.push_str(separator);
+                        prompt.push_str(example.prompt);
+                        inserted = Some(example.id.to_owned());
+                    }
+                });
+            }
+        };
+        if compact {
+            ui.horizontal(draw_starters);
+        } else {
+            ui.vertical_centered(draw_starters);
+        }
+    });
+    inserted
 }
 
 /// Consistent local AI entry point for a musical editor's toolbar. The host

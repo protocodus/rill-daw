@@ -19,21 +19,30 @@ impl DawApp {
         self.song_session.reset();
     }
 
-    pub(crate) fn tool_ready(&mut self) -> Result<(), ToolError> {
-        if self.edit_dirty
-            || self.recording_busy()
-            || self.state_sync_pending()
-            || self.document_guard.is_some()
-            || self.project_io_pending()
+    /// Read-only readiness shared by tool execution and the assistant composer.
+    /// Painting must never flush a pending gesture or advance song history.
+    pub(crate) fn tool_block_reason(&self) -> Option<&'static str> {
+        if self.recording_busy() {
+            Some("Finish recording before continuing")
+        } else if self.document_guard.is_some() || self.project_io_pending() {
+            Some("Finish the current document operation first")
+        } else if self.state_sync_pending() {
+            Some("Wait for the instrument or effect to finish updating")
+        } else if self.edit_dirty
             || self.drag.is_some()
             || self.arranger_selection.drag.is_some()
             || self.arranger_selection.audio_drag.is_some()
             || self.arranger_selection.gesture.is_some()
         {
-            return Err(ToolError::new(
-                "busy",
-                "Finish the active recording, edit or document operation first",
-            ));
+            Some("Finish the active edit first")
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn tool_ready(&mut self) -> Result<(), ToolError> {
+        if let Some(reason) = self.tool_block_reason() {
+            return Err(ToolError::new("busy", reason));
         }
         self.flush_pending_edit();
         Ok(())

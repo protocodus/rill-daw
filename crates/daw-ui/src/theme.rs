@@ -40,6 +40,9 @@ pub struct Palette {
     pub muted: Color32,
     pub accent: Color32,
     pub orange: Color32,
+    /// Playback/edit position stays distinct from selection and track colors.
+    pub cursor: Color32,
+    pub cursor_outline: Color32,
     /// Reserved for automation curves, handles, badges and owned controls.
     pub automation: Color32,
     /// Manual takeover of automation, distinct from the saved curve.
@@ -77,6 +80,8 @@ pub const DARK: Palette = Palette {
     muted: rgb(174, 184, 196),
     accent: rgb(145, 190, 177),
     orange: rgb(221, 176, 126),
+    cursor: rgb(255, 215, 80),
+    cursor_outline: rgb(30, 22, 8),
     automation: rgb(255, 155, 74),
     automation_override: rgb(255, 122, 132),
     track_selected: rgb(42, 61, 61),
@@ -106,6 +111,8 @@ pub const LIGHT: Palette = Palette {
     muted: rgb(78, 93, 111),
     accent: rgb(47, 105, 90),
     orange: rgb(139, 83, 31),
+    cursor: rgb(169, 70, 0),
+    cursor_outline: rgb(255, 255, 255),
     automation: rgb(170, 61, 10),
     automation_override: rgb(177, 39, 55),
     track_selected: rgb(216, 233, 228),
@@ -245,25 +252,26 @@ pub fn apply(ctx: &egui::Context) {
         style.visuals.extreme_bg_color = colors.bg;
         style.visuals.faint_bg_color = colors.raised;
         style.visuals.override_text_color = Some(colors.text);
+        style.override_text_valign = Some(egui::Align::Center);
         style.visuals.weak_text_color = Some(colors.muted);
         style.visuals.text_edit_bg_color = Some(colors.bg);
         style.visuals.code_bg_color = colors.bg;
         style.visuals.hyperlink_color = colors.accent;
         style.visuals.warn_fg_color = colors.orange;
-        style.visuals.text_cursor.stroke = Stroke::new(1.5_f32, colors.accent);
+        style.visuals.text_cursor.stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.accent);
         style.visuals.selection.bg_fill = colors.track_selected;
         style.visuals.selection.stroke = Stroke::new(1.0_f32, colors.accent);
         style.visuals.window_shadow = egui::epaint::Shadow {
             offset: [0, 8],
-            blur: 24,
+            blur: 21,
             spread: 0,
-            color: Color32::from_black_alpha(if theme == egui::Theme::Dark { 85 } else { 36 }),
+            color: Color32::from_black_alpha(if theme == egui::Theme::Dark { 55 } else { 34 }),
         };
         style.visuals.popup_shadow = egui::epaint::Shadow {
-            offset: [0, 4],
-            blur: 16,
+            offset: [0, 5],
+            blur: 13,
             spread: 0,
-            color: Color32::from_black_alpha(if theme == egui::Theme::Dark { 64 } else { 28 }),
+            color: Color32::from_black_alpha(if theme == egui::Theme::Dark { 34 } else { 21 }),
         };
         style.visuals.window_highlight_topmost = false;
         style.visuals.window_stroke =
@@ -278,11 +286,16 @@ pub fn apply(ctx: &egui::Context) {
         style.visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, colors.text);
         style.visuals.widgets.hovered.bg_fill = colors.control_hover;
         style.visuals.widgets.hovered.weak_bg_fill = colors.control_hover;
-        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.line);
+        style.visuals.widgets.hovered.bg_stroke = Stroke::new(
+            tokens::BORDER_WIDTH,
+            colors
+                .line
+                .lerp_to_gamma(colors.accent, tokens::GOLDEN_RATIO_INVERSE),
+        );
         style.visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, colors.text);
         style.visuals.widgets.active.bg_fill = colors.track_selected;
         style.visuals.widgets.active.weak_bg_fill = colors.track_selected;
-        style.visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, colors.accent);
+        style.visuals.widgets.active.bg_stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.accent);
         style.visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, colors.text);
         style.visuals.widgets.open.bg_fill = colors.track_selected;
         style.visuals.widgets.open.weak_bg_fill = colors.track_selected;
