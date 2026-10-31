@@ -223,22 +223,32 @@ fn async_spectral_underlays_cover_arranger_editor_neighbours_takes_and_both_them
         assert_document_unchanged(&state, &before);
         assert_eq!(spectrum(&state)["completed"], 1);
     }
-    // The neighbouring clip overlaps the middle, and the ghost shares a name.
-    // Select the original comp by clicking its uncovered leading edge.
+    // The neighbouring clip overlaps beats 1–3 of the 0–4 comp, and the ghost
+    // shares a name. Select the uncovered body before that overlap, clear of
+    // the dedicated ten-point trim handle at the leading edge.
     let state = app.inspect();
-    let rect = &state["timeline"]["clips"]
-        .as_array()
-        .unwrap()
+    let clips = state["timeline"]["clips"].as_array().unwrap();
+    let clip = clips.iter().find(|clip| clip["id"] == comp).unwrap();
+    let rect = &clip["rect"];
+    let left = rect["min"][0].as_f64().unwrap();
+    let uncovered_right = clips
         .iter()
-        .find(|clip| clip["id"] == comp)
-        .unwrap()["rect"];
+        .filter(|other| other["id"] != comp && other["track"] == clip["track"])
+        .map(|other| other["rect"]["min"][0].as_f64().unwrap())
+        .filter(|other_left| *other_left > left)
+        .fold(rect["max"][0].as_f64().unwrap(), f64::min);
+    let x = (left + uncovered_right) * 0.5;
+    assert!(x > left + 10.0 && x < uncovered_right);
+    let content = &clip["content_rect"];
     let state = app.command(json!({"command":"pointer", "phase":"click",
-        "x":rect["min"][0].as_f64().unwrap() + 8.0,
-        "y":(rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5}));
+        "x":x,
+        "y":(content["min"][1].as_f64().unwrap() + content["max"][1].as_f64().unwrap()) * 0.5}));
     assert_eq!(state["selected_clip"], comp);
+    assert_document_unchanged(&state, &before);
     app.click("Window");
     app.click("Clip Editor");
     let state = paint_frame(&mut app);
+    assert_document_unchanged(&state, &before);
     let selected = painted(&state, "audio_editor");
     assert!(selected.iter().any(|paint| paint["clip"] == comp));
     let neighbours = painted(&state, "audio_neighbour");

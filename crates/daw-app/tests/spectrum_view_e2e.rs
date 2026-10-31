@@ -206,16 +206,29 @@ fn opacity_and_palette_reuse_cached_textures_across_arranger_editor_and_takes() 
     intensity(&mut app, "100");
     let state = paint(&mut app);
     assert_texture_paint(&state, 1, "arranger");
-    let r = &state["timeline"]["clips"]
-        .as_array()
-        .unwrap()
+    // The comp spans beats 0–4 and its neighbour starts at beat 2. Click the
+    // uncovered body before the overlap, outside the ten-point trim handle.
+    let clips = state["timeline"]["clips"].as_array().unwrap();
+    let clip = clips.iter().find(|c| c["id"] == comp).unwrap();
+    let rect = &clip["rect"];
+    let left = rect["min"][0].as_f64().unwrap();
+    let uncovered_right = clips
         .iter()
-        .find(|c| c["id"] == comp)
-        .unwrap()["rect"];
-    app.command(json!({"command":"pointer", "phase":"click", "x":r["min"][0].as_f64().unwrap()+8.0, "y":(r["min"][1].as_f64().unwrap()+r["max"][1].as_f64().unwrap())*0.5}));
+        .filter(|other| other["id"] != comp && other["track"] == clip["track"])
+        .map(|other| other["rect"]["min"][0].as_f64().unwrap())
+        .filter(|other_left| *other_left > left)
+        .fold(rect["max"][0].as_f64().unwrap(), f64::min);
+    let x = (left + uncovered_right) * 0.5;
+    assert!(x > left + 10.0 && x < uncovered_right);
+    let content = &clip["content_rect"];
+    let selected = app.command(json!({"command":"pointer", "phase":"click", "x":x,
+        "y":(content["min"][1].as_f64().unwrap()+content["max"][1].as_f64().unwrap())*0.5}));
+    assert_eq!(selected["selected_clip"], comp);
+    unchanged(&selected, &before);
     app.click("Window");
     app.click("Clip Editor");
     let state = paint(&mut app);
+    unchanged(&state, &before);
     assert_texture_paint(&state, 1, "audio_editor");
     assert_texture_paint(&state, 1, "audio_neighbour");
     palette(&mut app, "Monochrome");
