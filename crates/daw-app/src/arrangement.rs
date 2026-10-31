@@ -2227,10 +2227,11 @@ impl DawApp {
                                     ui.end_row();
                                     let fade_length = envelope.map_or(clip.length * clip.source_rate, |region| region.length) / clip.source_rate;
                                     let label = daw_ui::text::label(ui, "Clip gain");
-                                    daw_ui::parameter_row(ui, |ui| {
+                                    ui.horizontal(|ui| {
                                         changed |= ui
                                             .add(daw_ui::slider(gain, 0.0..=2.0)
                                                 .zero_reference(1.0)
+                                                .scale_labels(false)
                                                 .clamping(egui::SliderClamping::Edits).show_value(false))
                                             .labelled_by(label.id)
                                             .changed();

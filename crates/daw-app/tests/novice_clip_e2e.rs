@@ -257,6 +257,7 @@ fn add_pattern_uses_the_selected_midi_lane_and_cursor_and_can_create_a_track() {
 #[test]
 fn automatic_arranger_fit_keeps_sparse_tracks_readable_and_still_reveals_every_row() {
     let mut app = Harness::new();
+    let ordinary_height = f64::from(daw_ui::TRACK_HEADER_HEIGHT);
     for tracks in [1, 2, 12] {
         let mut project = Project::new();
         for index in 0..tracks {
@@ -280,9 +281,12 @@ fn automatic_arranger_fit_keeps_sparse_tracks_readable_and_still_reveals_every_r
             };
             let view = &state["timeline"];
             let height = view["row_height"].as_f64().unwrap();
-            assert!(height <= 96.0, "Automatic Fit enlarged sparse rows: {view}");
+            assert!(
+                height <= ordinary_height,
+                "Automatic Fit enlarged sparse rows beyond the ordinary header: {view}"
+            );
             if tracks <= 2 {
-                assert_eq!(height, 96.0);
+                assert_eq!(height, ordinary_height);
             }
             let canvas_height = view["canvas"]["max"][1].as_f64().unwrap()
                 - view["canvas"]["min"][1].as_f64().unwrap();

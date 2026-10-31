@@ -558,8 +558,8 @@ and source bytes, and warm caching with hundreds of short visible clips.
 cargo test --locked -p daw-app --test midi_clipboard_e2e --test audio_common_e2e --test song_workflow_e2e -- --test-threads=1
 ```
 
-`control_roles_e2e` checks filled commands, persistent tool selection, and
-outlined presentation controls in both appearances at narrow and wide sizes.
+`control_roles_e2e` checks quiet toolbar surfaces, visible hover targets, and
+persistent tool selection in both appearances at narrow and wide sizes.
 Commands operate on notes without changing the chosen tool; highlighting,
 folding, and Fit preserve the project and history. Shared `control_roles` tests
 also check native radio accessibility, keyboard activation, disabled behavior,

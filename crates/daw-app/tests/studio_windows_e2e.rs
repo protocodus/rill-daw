@@ -72,6 +72,7 @@ fn utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes()
         for (width, height, density) in [(1600, 1000, 2.0), (800, 600, 1.0)] {
             app.command(json!({"command":"viewport", "width":width, "height":height,
                 "pixels_per_point":density}));
+            let margin = f64::from(daw_ui::tokens::POPUP_MARGIN) - 1.0 / density;
             for (menu, key, title, action) in [
                 ("Effects", "effects", "Effects of Studio synth", "+ Insert"),
                 (
@@ -96,10 +97,10 @@ fn utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes()
                 unchanged(&state, &original);
                 let [left, top, right, bottom] = bounds(popup_bounds(&state, title));
                 assert!(
-                    left >= 23.0 && right <= width as f64 - 23.0,
+                    left >= margin && right <= width as f64 - margin,
                     "{title}: {left}..{right}"
                 );
-                assert!(bottom <= height as f64 - 23.0, "{title}: bottom {bottom}");
+                assert!(bottom <= height as f64 - margin, "{title}: bottom {bottom}");
 
                 for control in ["Start", "Play", "Stop", "Record", "Click", "Loop", "Range"] {
                     // Properties can also contain Start/Loop fields. Transport
