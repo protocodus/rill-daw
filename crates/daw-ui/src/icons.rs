@@ -557,12 +557,14 @@ pub struct IconButton {
     selected: bool,
     accessible_label: Option<String>,
     role: ButtonRole,
+    disclosure: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ButtonRole {
     Action,
     Tool,
+    ToolChoice,
     View,
 }
 
@@ -586,6 +588,18 @@ impl IconButton {
         button.accessible_label = Some(accessible_label);
         button
     }
+    /// A tool chooser keeps the active-mode treatment and adds a visible menu arrow.
+    pub fn tool_choice(selected: bool, label: impl Into<WidgetText>) -> Self {
+        let label = label.into();
+        let accessible_label = label.text().to_owned();
+        let icon = Icon::for_label(label.text());
+        let mut button = Self::from_parts_with_disclosure(label, icon, true)
+            .selected(selected)
+            .frame_when_inactive(true);
+        button.role = ButtonRole::ToolChoice;
+        button.accessible_label = Some(accessible_label);
+        button
+    }
     /// Presentation commands have an outline rather than an action fill.
     pub fn presentation(mut self) -> Self {
         self.role = ButtonRole::View;
@@ -599,17 +613,26 @@ impl IconButton {
         button
     }
     fn from_parts(label: WidgetText, icon: Option<Icon>) -> Self {
+        Self::from_parts_with_disclosure(label, icon, false)
+    }
+    fn from_parts_with_disclosure(label: WidgetText, icon: Option<Icon>, disclosure: bool) -> Self {
         let id = Id::new("rill-button-icon");
-        let button = if icon.is_some() {
+        let mut atoms = egui::Atoms::new(label.clone());
+        if icon.is_some() {
             let atom = Atom::custom(id, Vec2::splat(18.0));
             if label.text().is_empty() {
-                Button::new(atom)
+                atoms = egui::Atoms::new(atom);
             } else {
-                Button::new((atom, label))
+                atoms.push_left(atom);
             }
-        } else {
-            Button::new(label)
-        };
+        }
+        if disclosure {
+            atoms.push_right(Atom::custom(
+                Id::new("rill-button-disclosure"),
+                Vec2::splat(12.0),
+            ));
+        }
+        let button = Button::new(atoms);
         Self {
             button: button
                 .min_size(egui::vec2(0.0, crate::tokens::CONTROL_HEIGHT))
@@ -619,6 +642,7 @@ impl IconButton {
             selected: false,
             accessible_label: None,
             role: ButtonRole::Action,
+            disclosure,
         }
     }
     pub fn fill(mut self, fill: Color32) -> Self {
@@ -690,7 +714,8 @@ impl Widget for IconButton {
                 if output.events.get(index).is_some_and(|event| {
                     let info = event.widget_info();
                     info.typ == egui::WidgetType::Button
-                        && (self.role == ButtonRole::Tool || info.label.is_none())
+                        && (matches!(self.role, ButtonRole::Tool | ButtonRole::ToolChoice)
+                            || info.label.is_none())
                 }) {
                     output.events.remove(index);
                 }
@@ -708,7 +733,7 @@ impl Widget for IconButton {
                 }
             });
         }
-        if self.role == ButtonRole::Tool && self.selected {
+        if matches!(self.role, ButtonRole::Tool | ButtonRole::ToolChoice) && self.selected {
             // A shape cue remains legible without relying on accent color alone.
             let rect = output.response.rect;
             let indicator = Rect::from_min_max(
@@ -731,6 +756,15 @@ impl Widget for IconButton {
                 ui.style().interact(&output.response).text_color()
             };
             icon.paint(ui.painter(), rect, color);
+        }
+        if self.disclosure
+            && let Some(rect) = output.rect(Id::new("rill-button-disclosure"))
+        {
+            Icon::ChevronDown.paint(
+                ui.painter(),
+                rect,
+                ui.style().interact(&output.response).text_color(),
+            );
         }
         output.response
     }

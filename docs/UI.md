@@ -224,7 +224,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
-| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
+| Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `compact_editor_tools`, `editor_tool_shortcuts`, `timeline_fit_button`, `paint_timeline_ruler` |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
@@ -412,9 +412,15 @@ painting it so narrow windows wrap the complete group without clipping controls.
 
 `number_at(ui, rect, id_salt, number(&mut value))` places the shared `Number` widget inside a canvas rectangle without advancing the parent layout. Its builder preserves native `DragValue` range, speed, precision, prefix, suffix and deferred-commit behavior. Drag to adjust; enter text mode and double/triple-click to select the entire numeric value, including its sign and decimal portion. Ordinary single-click caret editing stays native. Use a stable ID such as `(track.id, "gain")`, and commit when the returned response reports `changed()`.
 
+Expanded track headers show concise gain and pan readouts beside their sliders,
+leaving room for the meter. Clicking a readout opens the shared exact-value
+editor with the precise current value. Enter or **Apply value** commits an edit;
+Cancel, Escape or clicking outside leaves the channel unchanged. The sliders
+retain direct dragging, and right-click still opens parameter automation actions.
+
 `button_at` places a compact action in a canvas rectangle, truncating long labels without changing the row geometry. `picker_at` uses the same action with an anchored choice popup; it returns the action response and optional popup result. Both require stable IDs and retain native keyboard/focus behavior. Add a tooltip when the full label may be clipped, and use `ui.close()` when a choice is accepted.
 
-Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Click this label to choose Master or an eligible output bus; self-routing and feedback through outputs or sends are excluded. MIDI headers also show their assigned instrument (or `Choose instrument…`); clicking it opens the VST chooser bound to that track. Assigning returns to the composition caller; open **Window → Instrument** explicitly to edit its sound. Both pickers remain available in compact rows. Rows reuse `selectable_at` for mute/solo and `channel_controls_at` for volume and pan slider rails with a stereo level meter. Expanded rows retain editable dB volume and −100..100 pan readouts; compact rows keep both rails and expose their precise values in tooltips. Meters read each channel's post-insert, post-fader, post-pan engine output, including buses and routed audio. Peaks attack immediately, release at 24 dB/s, and clear when stopped; channel meters do not copy the master level. Folders and automation lanes have no audio channel number, gain/pan rails, or meter; folder mute/solo acts on descendants.
+Arrangement owns its 248-point header geometry. Audio, MIDI, and bus headers show the same channel number and destination as Mixer (`Ch N > Master` or a bus name). Click this label to choose Master or an eligible output bus; self-routing and feedback through outputs or sends are excluded. MIDI headers also show their assigned instrument (or `Choose instrument…`); clicking it opens the VST chooser bound to that track. Assigning returns to the composition caller; open **Window → Instrument** explicitly to edit its sound. Both pickers remain available in compact rows. Rows reuse `selectable_at` for mute/solo and `channel_controls_at` for volume and pan slider rails with a stereo level meter. Expanded rows provide dB volume and −100..100 pan readouts with exact entry on click; compact rows keep both rails and expose their precise values in tooltips. Meters read each channel's post-insert, post-fader, post-pan engine output, including buses and routed audio. Peaks attack immediately, release at 24 dB/s, and clear when stopped; channel meters do not copy the master level. Folders and automation lanes have no audio channel number, gain/pan rails, or meter; folder mute/solo acts on descendants.
 
 **Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. The chooser identifies its target by name. Selecting an instrument assigns that existing track and returns to its caller without opening another panel; **Window → Instrument** remains available explicitly. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
 
@@ -753,7 +759,28 @@ last successful destination and tail setting through the normal export path.
 
 `EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent active underline and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Unsupported tools reset to Select when changing editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.
 
-Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips; multi-clip arranger selection is not yet implemented.
+`compact_editor_tools(ui, tool, supported, primary, context)` keeps the supplied
+primary modes visible and places the remaining modes in a shared tool chooser.
+Arrangement uses Select, Pencil, Cursor and Cut as its primary modes. The chooser
+reads **More tools** until a secondary mode is selected, then shows that mode's
+name and active underline. Its width remains stable as modes change; the
+disclosure arrow stays visible. Choices include their existing shortcut and
+contextual hover hint. `IconButton::tool_choice` supplies the shared styling;
+callers continue routing shortcuts through `editor_tool_shortcuts`. Tool changes
+leave selection and project history unchanged. The other editors retain their
+existing tool strips.
+
+Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips. Arrangement supports groups of selected clips and time selections that retain rests.
+
+Transport **Range → Loop selection** and the clip context menu share one range
+action. A selected time span takes precedence over the enclosing bounds of
+selected clips. Setting the bounds and enabling looping is one undoable edit;
+the cursor, selection and viewport stay in place. Empty selections and recording
+cannot change the loop through this action. Exact start/end fields remain in
+Range for manual adjustment. In Clip Editor the action is named **Loop clip**
+and targets the open clip, independent of note or waveform selections. An
+unselected arranger clip's context menu also uses **Loop clip** and retains the
+existing selection.
 
 `editor_tool_hint` keeps the active tool's name, shortcut and a concise gesture
 summary on one quiet line below the toolbar. **Tool help** expands the complete

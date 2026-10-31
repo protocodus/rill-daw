@@ -130,6 +130,93 @@ pub fn editor_tools(ui: &mut Ui, tool: &mut EditorTool, supported: &[EditorTool]
     editor_tools_with_labels(ui, tool, supported, EditorTool::label);
 }
 
+/// Keep everyday modes in place and collect the remaining modes in one chooser.
+/// Its width is stable across all supported tools; the chosen secondary mode
+/// stays visible with the same active underline as a directly exposed tool.
+/// Call `editor_tool_shortcuts` separately so every supported mode retains its key.
+pub fn compact_editor_tools(
+    ui: &mut Ui,
+    tool: &mut EditorTool,
+    supported: &[EditorTool],
+    primary: &[EditorTool],
+    context: crate::ToolHintContext,
+) -> Option<Response> {
+    let primary: Vec<_> = primary
+        .iter()
+        .copied()
+        .filter(|candidate| supported.contains(candidate))
+        .collect();
+    editor_tools_with_labels(ui, tool, &primary, |candidate| context.label(candidate));
+    let secondary: Vec<_> = supported
+        .iter()
+        .copied()
+        .filter(|candidate| !primary.contains(candidate))
+        .collect();
+    if secondary.is_empty() {
+        return None;
+    }
+    let secondary_active = secondary.contains(tool);
+    let label = if secondary_active {
+        context.label(*tool)
+    } else {
+        "More tools"
+    };
+    let width = std::iter::once("More tools")
+        .chain(secondary.iter().map(|candidate| context.label(*candidate)))
+        .map(|label| {
+            let text = ui
+                .painter()
+                .layout_no_wrap(
+                    label.into(),
+                    egui::TextStyle::Button.resolve(ui.style()),
+                    ui.visuals().text_color(),
+                )
+                .size()
+                .x;
+            let icon = if crate::Icon::for_label(label).is_some() {
+                18.0 + ui.spacing().item_spacing.x
+            } else {
+                0.0
+            };
+            text + icon + 12.0 + ui.spacing().item_spacing.x + 2.0 * ui.spacing().button_padding.x
+        })
+        .fold(0.0_f32, f32::max)
+        .ceil();
+    let mut response = ui.add_sized(
+        egui::vec2(width, crate::tokens::CONTROL_HEIGHT),
+        crate::IconButton::tool_choice(secondary_active, label),
+    );
+    let before = *tool;
+    egui::Popup::menu(&response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            for candidate in secondary {
+                ui.horizontal(|ui| {
+                    if crate::tool_value(ui, tool, candidate, context.label(candidate))
+                        .on_hover_text(context.hint(candidate))
+                        .clicked()
+                    {
+                        ui.close();
+                    }
+                    crate::text::note(ui, candidate.key().name());
+                });
+            }
+        });
+    if before != *tool {
+        response.mark_changed();
+    }
+    Some(response.on_hover_text(if secondary_active {
+        format!(
+            "{} tool · {}\n{}\nChoose another tool",
+            context.label(*tool),
+            tool.key().name(),
+            context.hint(*tool)
+        )
+    } else {
+        "Choose another editing tool. Keyboard shortcuts remain available.".into()
+    }))
+}
+
 /// Contextual wording keeps the same tool identity and shortcut in each editor.
 pub fn editor_tools_with_labels(
     ui: &mut Ui,

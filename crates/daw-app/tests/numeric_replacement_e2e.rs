@@ -63,8 +63,14 @@ fn mouse_multiclick_replaces_tempo_gain_and_generator_length_without_keyboard_se
     let undone = app.click("Undo");
     assert_eq!(undone["project"]["tempo"], 120.72, "one-step tempo Undo");
 
+    // Header captions open a roomy exact-value editor; its draft starts fully
+    // selected and commits explicitly without rounding the stored gain.
     let gain = text_rect(&undone, |text| text.ends_with(" dB"));
-    let state = replace(&mut app, &gain, 0.35, "-24", None);
+    let x = (gain["min"][0].as_f64().unwrap() + gain["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (gain["min"][1].as_f64().unwrap() + gain["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    app.command(json!({"command":"text","text":"-24"}));
+    let state = app.click("Apply value");
     let expected = 10.0_f64.powf(-24.0 / 20.0);
     let actual = state["project"]["tracks"][0]["gain"].as_f64().unwrap();
     assert!(

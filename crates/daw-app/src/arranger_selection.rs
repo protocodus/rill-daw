@@ -95,6 +95,47 @@ impl DawApp {
             .and(self.arranger_selection.span)
     }
 
+    /// A phrase includes its rests; ordinary clip selections include the space
+    /// between their earliest start and latest end without rounding to the grid.
+    pub(crate) fn loop_selection_range(&self) -> Option<(f64, f64)> {
+        let range = if self.view == WorkspaceView::Clip {
+            self.selected().map(|clip| (clip.start, clip.end()))
+        } else {
+            self.arranger_phrase_span().or_else(|| {
+                self.arranger_selection_ids()
+                    .into_iter()
+                    .filter_map(|(track, clip)| self.project.clip(track, clip))
+                    .map(|clip| (clip.start, clip.end()))
+                    .reduce(|(start, end), (a, b)| (start.min(a), end.max(b)))
+            })
+        };
+        range.filter(|&(start, end)| {
+            start.is_finite() && end.is_finite() && start >= 0.0 && end > start && end <= MAX_BEAT
+        })
+    }
+
+    /// Looping changes the playback range, never the edit selection or cursor.
+    pub(crate) fn loop_range(&mut self, start: f64, end: f64) {
+        if self.recording_busy()
+            || !start.is_finite()
+            || !end.is_finite()
+            || start < 0.0
+            || end <= start
+            || end > MAX_BEAT
+            || self.project.loop_enabled
+                && self.project.loop_start == start
+                && self.project.loop_end == end
+        {
+            return;
+        }
+        self.begin_edit();
+        self.project.loop_start = start;
+        self.project.loop_end = end;
+        self.project.loop_enabled = true;
+        self.edit_label = Some("Loop selection".into());
+        self.changed();
+    }
+
     pub(crate) fn arranger_select_clips(
         &mut self,
         clips: impl IntoIterator<Item = (u64, u64)>,

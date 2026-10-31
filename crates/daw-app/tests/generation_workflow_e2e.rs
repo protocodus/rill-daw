@@ -199,6 +199,8 @@ fn short_arpeggio_notes_keep_whole_bars_and_next_range_adds_without_reopening() 
         .find(|clip| clip["id"] == id)
         .unwrap()["rect"]
         .clone();
+    app.click("Select");
+    app.click("More tools");
     app.click("Duplicate");
     let copied = click_rect(&mut app, &rect);
     let copy = copied["project"]["tracks"][0]["clips"]

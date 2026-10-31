@@ -4,6 +4,7 @@ use egui::Ui;
 #[derive(Default)]
 pub struct State {
     tool: usize,
+    editor_tool: ui::EditorTool,
     looped: bool,
 }
 
@@ -86,12 +87,29 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             ui.add_space(12.0);
             ui::view_toggle(ui, &mut state.looped, "Loop");
         });
+        right.add_space(24.0);
+        ui::inset(right.ctx()).show(right, |ui| {
+            text::title(ui, "Inter · Shared typography");
+            text::body(ui, "Titles, labels, and notes share one palette.");
+            text::label(ui, "音楽 · Melodía · Glass Current");
+            text::note(
+                ui,
+                "Native focus and accessible labels stay with each control.",
+            );
+        });
     });
     ui.add_space(24.0);
-    ui::inset(ui.ctx()).show(ui,|ui| {
-        text::title(ui,"Inter · Shared typography");
-        text::body(ui,"Titles, body text, labels, and notes share the same roles and palette.");
-        text::label(ui,"音楽 · Melodía · Glass Current");
-        text::note(ui,"Native focus, disabled states, tooltips, and accessible labels stay with each control.");
+    text::subtitle(ui, "Focused editing tools");
+    ui::toolbar(ui, |ui| {
+        use ui::EditorTool::*;
+        ui::compact_editor_tools(
+            ui,
+            &mut state.editor_tool,
+            &[
+                Select, Pencil, Cursor, Cut, Duplicate, Glue, Ghost, Stretch, Slip, Erase,
+            ],
+            &[Select, Pencil, Cursor, Cut],
+            ui::ToolHintContext::Arrangement,
+        );
     });
 }

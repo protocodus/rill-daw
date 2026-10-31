@@ -125,7 +125,7 @@ for the current app session.
 
 In the piano roll, **Generate…** opens Chord, Arpeggio and Melody modes. Start bar and Length initially cover the completely visible bars; edit either field to change the highlighted range. Choices and range are remembered per clip for the app session, including after Cancel; **Next range** advances by the current length while retaining settings. Violet notes preview the result alongside existing notes. **New variation** rerolls random patterns, **Fit preview** reveals their full extent, and **Add notes** commits the exact preview and keeps the generator open. Use **Next range** to continue, then **Done** to close it. Before adding notes, **Cancel** discards only the preview; closing the generator after an addition keeps the committed notes. Parameter controls scroll independently so the range and confirmation buttons remain reachable.
 
-Arrangement channel headers match Mixer channel numbers and show the destination, such as `Ch 1 > Master` or `Ch 1 > Drum bus`. Expanded audio, MIDI, and bus rows expose **M**ute, **S**olo, volume in dB, and pan from −100 (left) to 100 (right). Drag the numeric controls or double-click to type; −60 dB silences the channel. Click the destination to choose Master or an output bus directly; routes that would create feedback are excluded. MIDI headers also show the assigned instrument: click it to choose or replace the VST and open its native editor. Both pickers remain available in compact rows. Folders and automation tracks do not consume audio channel numbers; folder mute/solo controls their descendants.
+Arrangement channel headers match Mixer channel numbers and show the destination, such as `Ch 1 > Master` or `Ch 1 > Drum bus`. Expanded audio, MIDI, and bus rows expose **M**ute, **S**olo, volume in dB, and pan from −100 (left) to 100 (right). Drag a slider for quick adjustments, or click its value to enter an exact number and press Enter or **Apply value**. Cancel, Escape or clicking outside discards the draft. Short captions leave room for the meter without rounding the stored value; −60 dB silences the channel. Click the destination to choose Master or an output bus directly; routes that would create feedback are excluded. MIDI headers also show the assigned instrument: click it to choose or replace the VST and open its native editor. Both pickers remain available in compact rows. Folders and automation tracks do not consume audio channel numbers; folder mute/solo controls their descendants.
 
 In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start** and **Duration** in beats, with a read-only source offset; start is one-based, and either timing edit supports Undo. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 96 points while fitting the song horizontally.
 
@@ -159,7 +159,9 @@ Each applied action is one Undo step. Randomize and Quantize leave the song unch
 
 ## Clips and looping
 
-The arranger uses the same tools for audio and MIDI clips: **Q Select**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **Z Erase**, and **P Cursor**. **W Pencil** creates MIDI clips. Select drags move clips; either edge trims the visible source window. Shift-dragging the body creates one independent copy, while Shift at a trim/stretch edge temporarily bypasses snap. Join opens a focused chooser. Actions select their resulting clip consistently, whether invoked from tools, menus, or the context menu.
+The arranger keeps **Select**, **Pencil**, **Cursor**, and **Cut** in view. **More tools** opens Duplicate, Join, Erase, Ghost copy, Stretch, and Slip; choosing one keeps its name visible in the toolbar. The shortcuts remain **Q Select**, **W Pencil**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **L Slip**, **Z Erase**, and **P Cursor**.
+
+Audio and MIDI clips share these tools; Pencil creates MIDI clips and Slip moves audio within fixed clip edges. Select drags move clips; either edge trims the visible source window. Shift-dragging the body creates one independent copy, while Shift at a trim/stretch edge temporarily bypasses snap. Join opens a focused chooser. Actions select their resulting clip consistently, whether invoked from tools, menus, or the context menu.
 
 Stretch changes duration without replacing the source. Audio keeps its pitch; MIDI note positions and lengths scale in playback and the editor. Stretching one ghost changes only that occurrence's timing. Source-rate factors range from 0.25× to 4×, and each drag remains one Undo step. Preparing stretched audio happens in the background; the current sound continues until its replacement is ready. Extreme stretches can introduce artifacts, especially in transients and complex material.
 
@@ -173,7 +175,9 @@ Audio clips on one track are exclusive: the active clip with the latest start wi
 
 Use **Edit → Join clips…** or the clip context menu to choose clips on one track. MIDI joining preserves visible notes and timing. Audio joining renders source edits, overlaps, and crossfades to a new WAV in the scratch directory, including silent gaps; channel processing stays live. Include every audio clip intersecting the joined span. The result is an ordinary clip that can be split, trimmed, reversed, or joined again. Joining is undoable and its source travels inside saved `.rill` projects.
 
-The transport's **Loop** toggle repeats the range shown beside it. **Range** opens **Start beat** and **End beat**; drag the values or double-click to type. Beats start at 1, and the end is exclusive: Start 1 / End 5 repeats the first four beats. Changes are undoable and saved with the project. WAV export still renders the full arrangement once.
+Select a clip or a group of clips, then choose **Range → Loop selection** to repeat that phrase. A time selection made with **Cursor** includes its leading and trailing rests. The action sets the range and enables looping together, without moving the playback cursor; one Undo restores the previous range and loop state. A selected clip's context menu also offers **Loop selection**; right-clicking another clip offers **Loop clip** without changing your selection. In Clip Editor, **Range → Loop clip** repeats the open clip.
+
+The transport's **Loop** toggle switches repetition on or off. **Range** also opens **Start beat** and **End beat** for exact adjustment; drag the values or double-click to type. Beats start at 1, and the end is exclusive: Start 1 / End 5 repeats the first four beats. Range changes are disabled while recording and saved with the project. WAV export still renders the full arrangement once.
 
 ## Effects, sends, and folders
 
@@ -201,8 +205,8 @@ The menu shows the current value and allowed range; choose **Apply value** to
 commit or **Cancel** to keep the original. This also works in compact track
 headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left through
 0% center to 100% right, and send levels use a linear multiplier. Properties also
-has a directly editable volume readout. Fractional values remain visible instead
-of being rounded to whole pan positions or whole dB.
+has a directly editable volume readout. Exact-entry fields retain fractional
+values; the short track-header captions do not change their stored precision.
 
 Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Sliders display their range endpoints and current value; the line through the handle's center marks the exact position. Tick spacing adapts to the available space, showing halves, fifths, or tenths. Pan uses L/R endpoints and C for center. Mixer volume shows dB endpoints and a separate editable dB readout.
 

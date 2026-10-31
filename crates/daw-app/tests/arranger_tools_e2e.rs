@@ -41,7 +41,7 @@ fn trimming_very_short_audio_and_midi_clips_keeps_the_app_and_source_window_vali
 }
 
 #[test]
-fn common_toolbar_wraps_and_keeps_every_tool_clickable_at_compact_and_wide_sizes() {
+fn compact_toolbar_keeps_every_tool_mouse_accessible_at_compact_and_wide_sizes() {
     let (mut app, _, _) = fixture(Kind::Midi);
     let project = app.inspect()["project"].clone();
     for width in [800.0, 1100.0, 1800.0] {
@@ -54,9 +54,14 @@ fn common_toolbar_wraps_and_keeps_every_tool_clickable_at_compact_and_wide_sizes
             ("Join", "Glue"),
             ("Ghost copy", "Ghost"),
             ("Stretch", "Stretch"),
+            ("Slip", "Slip"),
             ("Erase", "Erase"),
             ("Cursor", "Cursor"),
         ] {
+            if !matches!(label, "Select" | "Pencil" | "Cursor" | "Cut") {
+                app.click("Select");
+                app.click("More tools");
+            }
             let state = app.inspect();
             let rect = state["label_rects"]
                 .as_array()

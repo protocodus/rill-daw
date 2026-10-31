@@ -1,5 +1,24 @@
 # Application E2E tests
 
+`compact_tools_e2e` opens the arranger's **More tools** chooser through actual
+mouse input, selects every secondary mode, and verifies its visible active name,
+shortcut parity, stable neighboring controls, and unchanged song history and
+selection at 800, 1100 and 1480 points in both appearances. Existing arranger
+editing scenarios also traverse the chooser before exercising the tools.
+
+`loop_selection_e2e` uses transport and clip context menus to loop fractional
+clip bounds and selected phrases including rests. It checks retained selection
+and cursor, one-step Undo/Redo, repeated-action no-ops, saved recall, recording
+and empty-selection guards, and the Clip Editor's **Loop clip** scope.
+
+`header_readability_e2e` checks bounded channel gain/pan captions, their exact
+value popups, precise committed edits, Undo/Redo, and preservation of values and
+history when an entry is dismissed.
+
+```sh
+cargo test --locked -p daw-app --test compact_tools_e2e --test loop_selection_e2e --test header_readability_e2e -- --test-threads=1
+```
+
 `assistant_scope_e2e` opens AI from the piano roll, composition dialog, audio
 editor, Mixer, Routing, automation lane, instrument, effect and effect-chain
 headers. Scripted provider calls exercise real note, audio, parameter, chain,
