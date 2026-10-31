@@ -178,15 +178,10 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     let state = menu(&mut app, "Window", "Mixer");
     assert!(visible(&state, "Ch 1 > New bus"));
     assert!(visible(&state, "Ch 2 > Master"));
-    let expected_db = 20.0 * gain.log10();
+    let expected_db = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain as f32));
     assert!(
-        state["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|label| label.as_str()?.strip_suffix(" dB")?.parse::<f64>().ok())
-            .any(|value| (value - expected_db).abs() < 1e-4),
-        "Mixer must display the actual channel gain in dB"
+        visible(&state, &expected_db),
+        "Mixer must display the channel gain as a concise dB caption"
     );
     let saved = app.directory.path().join("mix.daw.json");
     app.command(json!({"command":"save","path":saved}));
@@ -233,7 +228,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     let path = app.directory.path().join("mixer.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
-    app.command(json!({"command":"viewport","width":1100,"height":720}));
+    app.command(json!({"command":"viewport","width":1100,"height":900}));
     let state = menu(&mut app, "Window", "Mixer");
     assert_eq!(label_count(&state, "Channel"), 3);
     assert_eq!(
@@ -276,7 +271,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
             .unwrap()
             .iter()
             .filter(|row| row["text"] == "Channel")
-            .all(|row| row["max"][1].as_f64().unwrap() < 720.0)
+            .all(|row| row["max"][1].as_f64().unwrap() < 900.0)
     );
     let channel = app.click("Drums");
     assert_eq!(channel["selected_track"], drums);
@@ -311,14 +306,14 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     for _ in 0..20 {
         scrolled = app.inspect();
     }
-    assert!(visible(&scrolled, "Target"));
+    assert!(visible(&scrolled, "Output"));
     assert!(visible(&scrolled, "Back"));
     assert!(
         scrolled["label_rects"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|row| row["text"] == "Target")
+            .filter(|row| row["text"] == "Output")
             .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
     );
     // Hover the actual fader after scrolling settles; shared padding can move

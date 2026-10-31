@@ -229,6 +229,11 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
     if !ui.is_rect_visible(geometry.rail) {
         return;
     }
+    paint_slider_ticks(ui, geometry);
+    paint_slider_index(ui, geometry);
+}
+
+fn paint_slider_ticks(ui: &Ui, geometry: &SliderScaleGeometry) {
     let colors = crate::theme::palette(ui.ctx());
     let vertical = geometry.orientation == SliderOrientation::Vertical;
     let cross = if vertical {
@@ -274,6 +279,11 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
             );
         }
     }
+}
+
+fn paint_slider_index(ui: &Ui, geometry: &SliderScaleGeometry) {
+    let colors = crate::theme::palette(ui.ctx());
+    let vertical = geometry.orientation == SliderOrientation::Vertical;
     let half = if vertical {
         geometry.handle_half_extent.x
     } else {
@@ -328,6 +338,101 @@ pub fn paint_slider_scale(ui: &Ui, geometry: &SliderScaleGeometry) {
     }
 }
 
+/// Mixer skin over the native rail: the trough is deliberately narrower than
+/// its pointer target, and the cap stays centered on the native handle travel.
+fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeometry) {
+    if !ui.is_rect_visible(geometry.rail) {
+        return;
+    }
+    let colors = crate::theme::palette(ui.ctx());
+    let vertical = geometry.orientation == SliderOrientation::Vertical;
+    let axis = if vertical {
+        egui::vec2(0.0, 1.0)
+    } else {
+        egui::vec2(1.0, 0.0)
+    };
+    let cross = if vertical {
+        egui::vec2(1.0, 0.0)
+    } else {
+        egui::vec2(0.0, 1.0)
+    };
+    let first = geometry.minimum.min(geometry.maximum) - axis * 3.0;
+    let last = geometry.minimum.max(geometry.maximum) + axis * 3.0;
+    let trough = Rect::from_min_max(first - cross * 3.0, last + cross * 3.0);
+    ui.painter().rect(
+        trough,
+        3.0,
+        colors.bg,
+        Stroke::new(crate::tokens::BORDER_WIDTH, colors.line),
+        egui::StrokeKind::Inside,
+    );
+    let anchor = if !vertical && geometry.range[0] < 0.0 && geometry.range[1] > 0.0 {
+        let fraction = (-geometry.range[0] / (geometry.range[1] - geometry.range[0])) as f32;
+        geometry.minimum.lerp(geometry.maximum, fraction)
+    } else {
+        geometry.minimum
+    };
+    if anchor.distance(geometry.handle) > 0.5 {
+        ui.painter().line_segment(
+            [anchor, geometry.handle],
+            Stroke::new(
+                2.0_f32,
+                if ui.is_enabled() {
+                    colors.accent
+                } else {
+                    colors.muted
+                },
+            ),
+        );
+    }
+    paint_slider_ticks(ui, geometry);
+    let cap = Rect::from_center_size(geometry.handle, geometry.handle_half_extent * 2.0);
+    let active = response.dragged() || response.has_focus();
+    let fill = if response.hovered() || active {
+        colors.control_hover
+    } else {
+        colors.control_fill
+    };
+    ui.painter().add(crate::component_shape(
+        ui.painter(),
+        cap,
+        3,
+        fill,
+        Stroke::new(
+            if response.has_focus() {
+                crate::tokens::FOCUS_WIDTH
+            } else {
+                crate::tokens::BORDER_WIDTH
+            },
+            if active && ui.is_enabled() {
+                colors.accent
+            } else {
+                colors.line.lerp_to_gamma(colors.muted, 0.5)
+            },
+        ),
+        crate::ComponentMaterial {
+            elevated: false,
+            active: response.has_focus() && ui.is_enabled(),
+        },
+    ));
+    if vertical {
+        // Short grip lines leave the central landmark legible at every value.
+        for y in [-3.5, 3.5] {
+            for sign in [-1.0, 1.0] {
+                ui.painter().line_segment(
+                    [
+                        geometry.handle + egui::vec2(sign * 7.0, y),
+                        geometry.handle
+                            + egui::vec2(sign * (geometry.handle_half_extent.x - 3.0), y),
+                    ],
+                    Stroke::new(1.0_f32, colors.muted.gamma_multiply(0.6)),
+                );
+            }
+        }
+    }
+    paint_slider_index(ui, geometry);
+}
+
 /// Shared slider builder. Rail interaction is egui's native Slider; its exact
 /// numeric editor is the shared Number. Scale painting never writes values.
 #[must_use = "Add the slider to a Ui"]
@@ -339,6 +444,7 @@ pub struct Slider<'a> {
     show_value: bool,
     scale_labels: bool,
     compact: bool,
+    mixer_style: bool,
     orientation: SliderOrientation,
     text: WidgetText,
     prefix: String,
@@ -369,6 +475,7 @@ impl<'a> Slider<'a> {
             show_value: true,
             scale_labels: true,
             compact: false,
+            mixer_style: false,
             orientation: SliderOrientation::Horizontal,
             text: WidgetText::default(),
             prefix: String::new(),
@@ -426,6 +533,12 @@ impl<'a> Slider<'a> {
     /// A 24-point rail-and-caption control for canvas-owned rows.
     pub fn compact(mut self) -> Self {
         self.compact = true;
+        self
+    }
+    /// A recessed console rail and indexed cap; native input and numeric
+    /// mapping stay unchanged. Other sliders retain the default shared skin.
+    pub fn mixer_style(mut self) -> Self {
+        self.mixer_style = true;
         self
     }
     pub fn vertical(mut self) -> Self {
@@ -513,8 +626,20 @@ impl<'a> Slider<'a> {
 
     fn add_rail(&mut self, ui: &mut Ui) -> (Response, SliderScaleGeometry) {
         let orientation = self.orientation;
-        let shape = self.handle_shape.unwrap_or(ui.visuals().handle_shape);
-        let thickness = if self.compact {
+        let shape = self.handle_shape.unwrap_or(if self.mixer_style {
+            egui::style::HandleShape::Rect {
+                aspect_ratio: if orientation == SliderOrientation::Vertical {
+                    0.55
+                } else {
+                    1.1
+                },
+            }
+        } else {
+            ui.visuals().handle_shape
+        });
+        let thickness = if self.mixer_style && orientation == SliderOrientation::Vertical {
+            crate::tokens::SPACE_XL + crate::tokens::SPACE_XS
+        } else if self.compact {
             (ui.available_height().min(crate::tokens::COMPACT_HEIGHT) - 12.0).clamp(8.0, 12.0)
         } else if orientation == SliderOrientation::Vertical {
             crate::tokens::CONTROL_HEIGHT - crate::tokens::SPACE_XS
@@ -633,6 +758,11 @@ impl<'a> Slider<'a> {
                     if let Some(fill) = self.trailing_fill {
                         native = native.trailing_fill(fill);
                     }
+                    if self.mixer_style {
+                        // Only suppress native paint in this child scope. Its
+                        // Slider still owns input, focus, value law, and identity.
+                        ui.set_opacity(0.0);
+                    }
                     let native = ui.add(native);
                     // The native slider consists solely of its rail here. Register
                     // that same identity and rectangle as click-and-drag so a
@@ -655,7 +785,11 @@ impl<'a> Slider<'a> {
                 value,
             );
             geometry.zero_reference = self.zero_reference;
-            paint_slider_scale(ui, &geometry);
+            if self.mixer_style {
+                paint_mixer_slider(ui, &rail_response, &geometry);
+            } else {
+                paint_slider_scale(ui, &geometry);
+            }
             if self.scale_labels {
                 let width = if vertical {
                     minimum_width

@@ -6,6 +6,11 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
+/// Instant attack and 24 dB/second release, independent of callback/block size.
+pub(crate) fn release_factor(frames: usize, sample_rate: u32) -> f32 {
+    (-std::f32::consts::LN_10 * 1.2 * frames as f32 / sample_rate as f32).exp()
+}
+
 #[derive(Default)]
 pub(crate) struct ChannelMeter {
     stereo: AtomicU64,

@@ -18,37 +18,11 @@ fn paint(app: &mut Harness) -> Value {
 }
 
 fn fader(state: &Value, channel: usize) -> Value {
-    let left = channel as f64 * 180.0;
-    state["painted_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|shape| &shape["rect"])
-        .find(|rect| {
-            let x = rect["min"][0].as_f64().unwrap();
-            let width = rect["max"][0].as_f64().unwrap() - x;
-            let height = rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
-            x > left + 20.0 && x < left + 80.0 && (3.0..=8.0).contains(&width) && height > 80.0
-        })
-        .unwrap()
-        .clone()
+    state["mixer"]["channels"][channel]["fader_scale"]["rail"].clone()
 }
 
-fn pan_rail(state: &Value, channel: usize) -> Value {
-    let left = channel as f64 * 180.0;
-    state["painted_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|shape| &shape["rect"])
-        .find(|rect| {
-            let x = rect["min"][0].as_f64().unwrap();
-            let width = rect["max"][0].as_f64().unwrap() - x;
-            let height = rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
-            x > left + 8.0 && x < left + 35.0 && width > 80.0 && (3.0..=8.0).contains(&height)
-        })
-        .unwrap()
-        .clone()
+fn pan_dial(state: &Value, channel: usize) -> Value {
+    state["mixer"]["channels"][channel]["pan_knob"]["dial"].clone()
 }
 
 #[test]
@@ -113,14 +87,14 @@ fn middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edi
             "The overflowing mixer must actually pan"
         );
 
-        // Repeat from the horizontal pan slider. Expanding first resets the
+        // Repeat from the rotary pan dial. Expanding first resets the
         // horizontal offset, then the compact pane overflows again.
         app.command(json!({"command":"viewport","width":2400,"height":760}));
         app.command(json!({"command":"viewport","width":800,"height":600}));
         let before_pan = paint(&mut app);
-        let rail = pan_rail(&before_pan, 2);
-        let x = rail["min"][0].as_f64().unwrap() * 0.8 + rail["max"][0].as_f64().unwrap() * 0.2;
-        let y = (rail["min"][1].as_f64().unwrap() + rail["max"][1].as_f64().unwrap()) * 0.5;
+        let dial = pan_dial(&before_pan, 2);
+        let x = (dial["min"][0].as_f64().unwrap() + dial["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (dial["min"][1].as_f64().unwrap() + dial["max"][1].as_f64().unwrap()) * 0.5;
         let left_before = label_rect(&before_pan, "Bus 3")["min"][0].as_f64().unwrap();
         let down =
             app.command(json!({"command":"pointer","phase":"down","button":"middle","x":x,"y":y}));

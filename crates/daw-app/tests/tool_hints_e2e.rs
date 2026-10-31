@@ -87,7 +87,14 @@ fn unchanged(state: &Value, before: &Value) {
     }
 }
 
-fn disclosed_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, before: &Value) {
+fn disclosed_hint(
+    app: &mut Harness,
+    label: &str,
+    key: &str,
+    fragment: &str,
+    full_hint: &str,
+    before: &Value,
+) {
     let opened = app.click("Tool help");
     unchanged(&opened, before);
     // The help remains readable without hovering the opener, and repeated
@@ -95,7 +102,7 @@ fn disclosed_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, bef
     let state = app.command(json!({"command":"pointer", "phase":"move", "x":2.0, "y":2.0}));
     let title = format!("{label} · {key}");
     hint(&state, &title, "");
-    let panel = hint(&state, "", fragment);
+    let panel = hint(&state, full_hint, fragment);
     let left = panel["min"][0].as_f64().unwrap();
     let top = panel["min"][1].as_f64().unwrap();
     let right = panel["max"][0].as_f64().unwrap();
@@ -105,7 +112,7 @@ fn disclosed_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, bef
     assert!(bottom <= state["viewport"][1].as_f64().unwrap());
     unchanged(&state, before);
     let later = app.inspect();
-    assert_eq!(hint(&later, "", fragment)["text"], panel["text"]);
+    assert_eq!(hint(&later, full_hint, fragment)["text"], panel["text"]);
     unchanged(&later, before);
     let closed = app.key("Escape");
     unchanged(&closed, before);
@@ -114,19 +121,24 @@ fn disclosed_hint(app: &mut Harness, label: &str, key: &str, fragment: &str, bef
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| { label.as_str().is_some_and(|text| text.contains(fragment)) }),
-        "Dismissed help must not leave a permanent instruction band"
+            .any(|label| label.as_str() == Some(full_hint)),
+        "Dismissed help must not leave its full instructions on the canvas"
     );
 }
 
-fn tools(app: &mut Harness, choices: &[(&str, &str, &str)]) {
+fn tools(app: &mut Harness, context: daw_ui::ToolHintContext, choices: &[(&str, &str, &str)]) {
     let before = app.inspect();
     for (label, key, fragment) in choices {
+        let tool = daw_ui::EditorTool::ALL
+            .into_iter()
+            .find(|tool| tool.key().name() == *key)
+            .unwrap();
+        let full_hint = context.hint(tool);
         app.click(label);
-        disclosed_hint(app, label, key, fragment, &before);
+        disclosed_hint(app, label, key, fragment, full_hint, &before);
         app.key(if *key == "Q" { "P" } else { "Q" });
         app.key(key);
-        disclosed_hint(app, label, key, fragment, &before);
+        disclosed_hint(app, label, key, fragment, full_hint, &before);
     }
 }
 
@@ -136,6 +148,7 @@ fn tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboa
         let mut app = fixture(width, dark, density);
         tools(
             &mut app,
+            daw_ui::ToolHintContext::Arrangement,
             &[
                 ("Select", "Q", "Click or box-select clips"),
                 ("Pencil", "W", "create a MIDI clip"),
@@ -145,7 +158,7 @@ fn tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboa
                 ("Ghost copy", "G", "Source edits stay shared"),
                 ("Stretch", "S", "MIDI note timing scales"),
                 ("Slip", "L", "inside fixed clip edges"),
-                ("Erase", "Z", "delete the selected clips"),
+                ("Erase", "Z", "delete only that clip"),
                 ("Cursor", "P", "select a phrase, including rests"),
             ],
         );
@@ -154,6 +167,7 @@ fn tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboa
         window(&mut app, "Clip Editor");
         tools(
             &mut app,
+            daw_ui::ToolHintContext::Midi,
             &[
                 ("Select", "Q", "Shift-click toggles"),
                 ("Pencil", "W", "same pitch merge on release"),
@@ -171,6 +185,7 @@ fn tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboa
         window(&mut app, "Clip Editor");
         tools(
             &mut app,
+            daw_ui::ToolHintContext::Audio,
             &[
                 ("Select", "Q", "drag an edge to trim"),
                 ("Cursor", "P", "drag to select time"),
@@ -247,6 +262,165 @@ fn compact_help_preserves_canvas_space_and_toggles_with_the_mouse() {
         app.click("Tool help");
         let dismissed = app.key("Escape");
         unchanged(&dismissed, &before);
+        app.quit();
+    }
+}
+
+fn pointer_at_rect(app: &mut Harness, rect: &Value, button: &str) -> Value {
+    app.command(json!({
+        "command": "pointer", "phase": "click", "button": button,
+        "x": (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+        "y": (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
+    }))
+}
+
+fn clip_rect(state: &Value, id: &Value) -> Value {
+    state["timeline"]["clips"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|clip| clip["id"] == *id)
+        .unwrap()["rect"]
+        .clone()
+}
+
+fn caption(app: &mut Harness, gesture: &str) -> Value {
+    // Guidance must remain visible after the pointer leaves its tool button.
+    let state = app.command(json!({"command":"pointer", "phase":"move", "x":2.0, "y":2.0}));
+    let rect = hint(&state, gesture, "");
+    assert!(rect["min"][0].as_f64().unwrap() >= 0.0);
+    assert!(rect["max"][0].as_f64().unwrap() <= state["viewport"][0].as_f64().unwrap());
+    state
+}
+
+fn exact_label<'a>(state: &'a Value, text: &str) -> &'a Value {
+    state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|label| label["text"] == text)
+        .unwrap_or_else(|| panic!("Missing {text}: {}", state["visible_labels"]))
+}
+
+#[test]
+fn duplicate_caption_leads_to_a_canvas_gesture_without_changing_the_command() {
+    let mut app = fixture(1440, true, 1.0);
+    let before = app.click("Hint phrase");
+    let source = before["selected_clip"].clone();
+    let selected = app.click("Duplicate");
+    unchanged(&selected, &before);
+    let selected = caption(&mut app, "Click a clip to duplicate");
+    unchanged(&selected, &before);
+    // Clicking the toolbar again still selects a mode; it never edits the song.
+    unchanged(&app.click("Duplicate"), &before);
+    let copied = pointer_at_rect(&mut app, &clip_rect(&selected, &source), "primary");
+    assert_eq!(
+        copied["project"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let copy = copied["selected_clip"].clone();
+    assert_ne!(copy, source);
+    assert!(copied["project"]["tracks"][0]["clips"][1]["link_group"].is_null());
+    assert_eq!(copied["timeline"]["tool"], "Duplicate");
+    let repeated = pointer_at_rect(&mut app, &clip_rect(&copied, &copy), "primary");
+    assert_eq!(
+        repeated["project"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+
+    app.click("Select");
+    let selected = pointer_at_rect(&mut app, &clip_rect(&repeated, &source), "primary");
+    assert_eq!(selected["timeline"]["tool"], "Select");
+    pointer_at_rect(&mut app, &clip_rect(&selected, &source), "secondary");
+    let menu_copy = app.click("Duplicate");
+    assert_eq!(
+        menu_copy["project"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+    assert_eq!(menu_copy["timeline"]["tool"], "Select");
+
+    let selected = pointer_at_rect(&mut app, &clip_rect(&menu_copy, &source), "primary");
+    assert_eq!(selected["selected_clip"], source);
+    let before = window(&mut app, "Clip Editor");
+    unchanged(&app.click("Duplicate"), &before);
+    let selected = caption(&mut app, "Click a note to duplicate");
+    let note = &selected["midi_editor"]["notes"][0]["rect"];
+    let copied = pointer_at_rect(&mut app, note, "primary");
+    let notes = copied["project"]["tracks"][0]["clips"][0]["content"]["Midi"]["notes"]
+        .as_array()
+        .unwrap();
+    assert_eq!(notes.len(), 2);
+    assert_ne!(notes[0]["id"], notes[1]["id"]);
+    assert_eq!(notes[1]["start"].as_f64().unwrap(), 1.0);
+    let before = app.click("Select");
+    let state = pointer_at_rect(
+        &mut app,
+        &copied["midi_editor"]["notes"][0]["rect"],
+        "primary",
+    );
+    assert_eq!(state["project"], before["project"]);
+    app.quit();
+}
+
+#[test]
+fn active_tool_captions_preserve_toolbar_and_canvas_geometry_in_each_editor() {
+    use daw_ui::{EditorTool, ToolHintContext};
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = fixture(1440, dark, density);
+        for width in [800, 1100, 1440] {
+            app.command(json!({"command":"viewport", "width":width, "height":900, "pixels_per_point":density}));
+            for context in [
+                ToolHintContext::Arrangement,
+                ToolHintContext::Midi,
+                ToolHintContext::Audio,
+            ] {
+                app.click("Arranger");
+                app.click("Select");
+                if context != ToolHintContext::Arrangement {
+                    app.click(if context == ToolHintContext::Midi {
+                        "Hint phrase"
+                    } else {
+                        "Hint recording"
+                    });
+                    window(&mut app, "Clip Editor");
+                    app.click("Select");
+                }
+                let before = app.inspect();
+                for tool in [EditorTool::Cut, EditorTool::Cursor, EditorTool::Select] {
+                    unchanged(&app.click(context.label(tool)), &before);
+                    let state = caption(&mut app, context.gesture(tool));
+                    for label in ["Tool help", "View", "Fit"] {
+                        assert_eq!(
+                            exact_label(&state, label),
+                            exact_label(&before, label),
+                            "{context:?} {tool:?} moved {label} at {width}"
+                        );
+                    }
+                    for field in ["timeline", "midi_editor", "audio_editor"] {
+                        for rect in ["ruler", "plot", "canvas"] {
+                            assert_eq!(
+                                state[field][rect], before[field][rect],
+                                "{context:?} {tool:?} moved {field}.{rect} at {width}"
+                            );
+                        }
+                    }
+                    unchanged(&state, &before);
+                }
+                if context != ToolHintContext::Audio {
+                    unchanged(&app.click("Duplicate"), &before);
+                    caption(&mut app, context.gesture(EditorTool::Duplicate));
+                }
+            }
+        }
         app.quit();
     }
 }

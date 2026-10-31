@@ -10,6 +10,8 @@ pub struct State {
     clip: String,
     start: f64,
     length: f64,
+    duration_seconds: f64,
+    tool: controls::EditorTool,
 }
 impl Default for State {
     fn default() -> Self {
@@ -22,6 +24,8 @@ impl Default for State {
             clip: "Verse · Glass arpeggio".into(),
             start: 9.0,
             length: 16.0,
+            duration_seconds: 30.0,
+            tool: controls::EditorTool::Duplicate,
         }
     }
 }
@@ -93,12 +97,24 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         controls::quiet_view_menu(ui, "View", |ui| {
             controls::checkbox(ui, &mut state.highlight, "Highlight scale");
         });
-        controls::timeline_fit_button(ui);
-        controls::editor_tool_help(
+        controls::editor_tools_with_context(
             ui,
-            controls::EditorTool::Select,
+            &mut state.tool,
+            &[
+                controls::EditorTool::Select,
+                controls::EditorTool::Duplicate,
+            ],
             controls::ToolHintContext::Midi,
         );
+        if let Some(seconds) =
+            controls::duration::duration_presets(ui, state.duration_seconds, 120.0)
+        {
+            state.duration_seconds = seconds;
+        }
+        controls::toolbar_trailing(ui, 100.0, |ui| {
+            controls::editor_tool_help(ui, state.tool, controls::ToolHintContext::Midi);
+            controls::editor_tool_caption(ui, state.tool, controls::ToolHintContext::Midi);
+        });
     });
     ui.add_space(controls::tokens::SPACE_LG);
     if !state.capture {
@@ -107,12 +123,12 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             controls::checkbox(ui, &mut state.popup_open, "Show utility window");
         });
     }
-    ui.add_space(118.0);
+    ui.add_space(controls::tokens::SPACE_LG);
     // Keep the empty-workspace example clear of the simultaneously open menu
     // and utility used to demonstrate native popup behavior.
     let empty_rect = egui::Rect::from_min_size(
-        egui::pos2(ui.min_rect().left() + 300.0, ui.cursor().top()),
-        egui::vec2(320.0, 180.0),
+        egui::pos2(ui.min_rect().left() + 280.0, ui.cursor().top()),
+        egui::vec2(350.0, 180.0),
     );
     ui.scope_builder(egui::UiBuilder::new().max_rect(empty_rect), |ui| {
         controls::empty_workspace(
@@ -133,6 +149,26 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                     primary: false,
                 },
             ],
+        );
+    });
+    // Stack the compact generation example below the empty state, in the
+    // clear column between the open scale menu and properties utility.
+    let generation_rect = egui::Rect::from_min_size(
+        egui::pos2(
+            empty_rect.left(),
+            empty_rect.bottom() + controls::tokens::SPACE_SM,
+        ),
+        egui::vec2(empty_rect.width(), 112.0),
+    );
+    ui.scope_builder(egui::UiBuilder::new().max_rect(generation_rect), |ui| {
+        text::label(ui, "Generate notes");
+        ui.add_space(controls::tokens::SPACE_XS);
+        controls::generation_footer(
+            ui,
+            "Added 3 notes · Next range to continue",
+            true,
+            true,
+            true,
         );
     });
     ui.add_space(controls::tokens::SPACE_MD);
@@ -161,6 +197,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 text::label(ui, "Duration");
                 ui.add(controls::number(&mut state.length).suffix(" beats"));
                 ui.end_row();
+                controls::duration::timing_summary(ui, state.start - 1.0, state.length, 112.0, 4);
             });
             ui.add_space(controls::tokens::SPACE_MD);
             controls::action_row(

@@ -1,0 +1,7 @@
+{
+  "recorded_utc": "2026-10-31T19:40:17Z",
+  "condition": "Before round4,19positively identified idle virtual-display/audio services belonging to completed previous studies were stopped. No previous participant files were changed.",
+  "evidence": "prior-lab-process-cleanup.json",
+  "comparison_limit": "Removing old idle lab services reduces background resource use relative to round3. Any perceived speed or elapsed-time difference cannot be attributed solely to application changes. All five current participants still share the host and run concurrently.",
+  "native_diagnostic_policy": "No Cargo builds, test suites, native diagnostic jobs or component-render verification run while any of the five participant attempts remain active."
+}

@@ -1,0 +1,91 @@
+{
+  "status": "Final implementation captured after coordinator validation; not a new scored study build",
+  "captured_utc": "2026-10-31T20:59:01Z",
+  "baseline_git_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "origin_main_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "source_scope": "All existing Git-tracked and untracked non-ignored files under crates plus Cargo.toml and Cargo.lock, without extension filtering.",
+  "source_file_count": 932,
+  "source_reconstruction": "Checkout baseline_git_sha, apply source-diff.patch, extract untracked-source.tar.gz; verify source-hashes.json.",
+  "provenance_files": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/final-implementation/source-status.txt",
+      "sha256": "2c53a2a70f3bd951261fd211cdf6691553ef8fcd9a81aef597053aba8a9ce8fa",
+      "bytes": 4294
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/final-implementation/source-diff.patch",
+      "sha256": "e382ce78492f0e26a41705cab750fd5ab46cc8194702ba788b65f81f79c2c2dd",
+      "bytes": 289084
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/final-implementation/source-hashes.json",
+      "sha256": "bf2aeed27e28619dc183e607635811800f7d6d8b081244281adf6cc71420c676",
+      "bytes": 118248
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/final-implementation/untracked-source.tar.gz",
+      "sha256": "e2340cf7cc9c6679e585d416e23f33a73183fa0965f6a48707ceaf1cec9e39bf",
+      "bytes": 49885
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/final-implementation/original-preservation.json",
+      "sha256": "c741595618833b0b53124c8a3b77a27ae63258a5715b5e2a8e2d16bec9e1a95f",
+      "bytes": 75880
+    }
+  ],
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability-round6/final-implementation-binaries/rill",
+      "sha256": "bb72fd66f40c222dcc244e757aef1f3f4951630872c0a683f5b3215ffa325608",
+      "bytes": 435826136,
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/bb72fd66f40c222dcc244e757aef1f3f4951630872c0a683f5b3215ffa325608/rill",
+      "storage": "Hard link to immutable content-addressed copy; never linked to Cargo output"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability-round6/final-implementation-binaries/daw-plugin-host",
+      "sha256": "f3c966052cc94b926ecf9690b28e4089204a96c580303ffcce82a1102c95cc29",
+      "bytes": 203021824,
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/f3c966052cc94b926ecf9690b28e4089204a96c580303ffcce82a1102c95cc29/daw-plugin-host",
+      "storage": "Hard link to immutable content-addressed copy; never linked to Cargo output"
+    }
+  },
+  "validation_evidence": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/validation/verified-results.json",
+      "sha256": "26a90d4834b7460f918d89634e978a4493167f56b4a864f56493581acdda70d2",
+      "bytes": 49613
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/validation/final-checks.json",
+      "sha256": "e0cb32bed33a98f0d371b45ef0331aeed2773e2c3e2b834e445c25915eb84fc7",
+      "bytes": 91
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/validation/independent-final-review.json",
+      "sha256": "706e5a5178f9fce0d18c6e9e938cbfd613e75e2241d681d6feac69301abfb00f",
+      "bytes": 689
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/validation/frozen-regression-proof.json",
+      "sha256": "e1b73a7abe6d5b785eaf61f9196fe6eb7b4f86378efc92a6d699e4521214dd45",
+      "bytes": 790
+    }
+  ],
+  "original_scored_round6_freeze_manifest": {
+    "path": "/workspace/rill-daw/artifacts/usability-2026-10-31-round6/freeze-manifest.json",
+    "sha256": "b98ce744e7297299d0869672d49a5083f3a841ff277b73b2e4bcb1434d1934a4",
+    "bytes": 4065
+  },
+  "scored_round6_binary_hashes": {
+    "rill": "c8fbcfb33d5d713db57347d8a8565be1dea8afbfbec46f8fa998bd7a24a3adc4",
+    "daw-plugin-host": "dd4bdaaf4a89fa7402501eaefcdb0922e4f8e01054dedb4dfd49dbdf87fe1ec3"
+  },
+  "frozen_study_originals_unchanged": true,
+  "ratings_revised": false,
+  "additional_fresh_study_claimed": false,
+  "collector": {
+    "path": "/workspace/scratch/rill-usability-cycles/capture_final_implementation.py",
+    "sha256": "b8dd55bea20e33e6e1a05736aa84642f92f0c3040c03363110386abad00dc67f",
+    "bytes": 8846
+  }
+}

@@ -8,21 +8,15 @@ use serde_json::{Value, json};
 const RATE: usize = 48_000;
 
 fn gain_rect(state: &Value, gain: f64) -> &Value {
-    let expected_db = 20.0 * gain.log10();
+    let expected_db = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain as f32));
     state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|rect| {
-            rect["text"]
-                .as_str()
-                .and_then(|text| text.strip_suffix(" dB"))
-                .and_then(|text| text.parse::<f64>().ok())
-                .is_some_and(|db| (db - expected_db).abs() < 1e-5)
-        })
+        .find(|rect| rect["text"] == expected_db)
         .unwrap_or_else(|| {
             panic!(
-                "Missing precise {expected_db} dB readout: {}",
+                "Missing concise {expected_db} readout: {}",
                 state["visible_labels"]
             )
         })
@@ -39,7 +33,6 @@ fn type_gain(app: &mut Harness, current_gain: f64, db: &str) -> Value {
     let state = app.inspect();
     let (x, y) = center(gain_rect(&state, current_gain));
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
-    app.command(json!({"command":"key","key":"A","cmd":true}));
     app.command(json!({"command":"text","text":db}));
     app.key("Enter")
 }
@@ -168,19 +161,8 @@ fn viewing_extreme_values_and_middle_dragging_readout_or_fader_do_not_edit() {
 
     let state = app.command(json!({"command":"inspect","paint":true}));
     let readout = gain_rect(&state, 2.0).clone();
-    let fader = state["painted_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|shape| &shape["rect"])
-        .find(|rect| {
-            let left = rect["min"][0].as_f64().unwrap();
-            let width = rect["max"][0].as_f64().unwrap() - left;
-            let height = rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
-            (20.0..90.0).contains(&left) && (3.0..=8.0).contains(&width) && height > 80.0
-        })
-        .expect("first channel fader rail")
-        .clone();
+    let fader = state["mixer"]["channels"][0]["fader_scale"]["rail"].clone();
+    assert!(fader.is_object(), "first channel fader rail");
     for target in [&readout, &fader] {
         let (x, y) = center(target);
         unchanged(

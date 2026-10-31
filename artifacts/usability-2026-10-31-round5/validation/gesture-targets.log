@@ -1,0 +1,58 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running tests/gesture_release_e2e.rs (target/debug/deps/gesture_release_e2e-552e809d5a044947)
+
+running 3 tests
+test moving_and_both_resize_edges_apply_motion_delivered_with_release ... ok
+test release_length_merges_covered_notes_once_and_tool_changes_do_not_replay_it ... ok
+test repeated_chords_use_the_release_endpoint_snap_and_remembered_length ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.36s
+
+     Running tests/precise_trim_batched_e2e.rs (target/debug/deps/precise_trim_batched_e2e-f9655ee63352bae0)
+
+running 2 tests
+test batched_zero_motion_fade_overlap_and_popup_presses_cannot_trim ... ok
+test complete_short_audio_and_midi_edge_drags_in_one_frame_are_not_clicks ... FAILED
+
+failures:
+
+---- complete_short_audio_and_midi_edge_drags_in_one_frame_are_not_clicks stdout ----
+
+thread 'complete_short_audio_and_midi_edge_drags_in_one_frame_are_not_clicks' (162673) panicked at crates/daw-app/tests/precise_trim_batched_e2e.rs:85:9:
+assertion failed: (clip["length"].as_f64().unwrap() - expected_length).abs() < 1e-5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    complete_short_audio_and_midi_edge_drags_in_one_frame_are_not_clicks
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+error: test failed, to rerun pass `-p daw-app --test precise_trim_batched_e2e`
+     Running tests/precise_trim_e2e.rs (target/debug/deps/precise_trim_e2e-19c2b4231b6bfed0)
+
+running 7 tests
+test a_short_edge_trim_after_a_same_edge_click_does_not_open_the_editor ... ok
+test canceled_edge_captures_do_not_resume_on_further_held_motion ... ok
+test fade_handles_win_over_edges_and_body_selection_move_copy_and_double_click_still_work ... ok
+test off_grid_edge_presses_and_return_to_origin_do_not_change_the_document ... ok
+test popups_middle_pan_and_clipped_viewport_edges_cannot_start_a_trim ... ok
+test shift_and_snap_off_trims_apply_the_final_release_position ... ok
+test two_to_five_pixel_audio_and_midi_trims_preserve_group_and_single_undo ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.59s
+
+error: 1 target failed:
+    `-p daw-app --test precise_trim_batched_e2e`

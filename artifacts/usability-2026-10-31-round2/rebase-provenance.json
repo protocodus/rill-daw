@@ -1,0 +1,9 @@
+{
+  "original_head": "c34252a84db9e7d9b95b512d19914f525964d5bb",
+  "rebased_head": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "remote_main": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "preserved_stash": "75bcd57cd12073bf4b2e09da3c777f463f02515b",
+  "backup_directory": "/workspace/scratch/rill-rebase-backup-20261031",
+  "preserved_study_artifact_files": 196,
+  "changed_historical_artifacts": []
+}

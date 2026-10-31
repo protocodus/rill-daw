@@ -291,3 +291,65 @@ fn toolbar_help_has_a_full_target_and_native_keyboard_open_and_dismiss() {
         assert!(!egui::Popup::is_any_open(&ctx));
     }
 }
+
+#[test]
+fn toolbar_caption_uses_only_remaining_space_without_moving_controls_or_canvas() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for width in [160.0, 240.0, 800.0] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            theme::set_appearance(&ctx, appearance);
+            let draw = |tool: Option<EditorTool>| {
+                let mut controls = Vec::new();
+                let mut caption = None;
+                let mut toolbar = Rect::NOTHING;
+                let mut canvas = Rect::NOTHING;
+                let output = ctx.run(input(width, vec![]), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        toolbar = daw_ui::toolbar(ui, |ui| {
+                            daw_ui::toolbar_trailing(ui, 120.0, |ui| {
+                                controls.push(daw_ui::quiet_button(ui, "Tool help").rect);
+                                controls.push(daw_ui::quiet_button(ui, "Fit").rect);
+                                if let Some(tool) = tool {
+                                    caption = daw_ui::editor_tool_caption(
+                                        ui,
+                                        tool,
+                                        ToolHintContext::Arrangement,
+                                    );
+                                }
+                            });
+                        })
+                        .response
+                        .rect;
+                        canvas = ui.label("Canvas").rect;
+                    });
+                });
+                (output, controls, caption, toolbar, canvas)
+            };
+            draw(None);
+            let (_, controls, _, toolbar, canvas) = draw(None);
+            for tool in [
+                EditorTool::Select,
+                EditorTool::Duplicate,
+                EditorTool::Cursor,
+            ] {
+                let (output, actual_controls, caption, actual_toolbar, actual_canvas) =
+                    draw(Some(tool));
+                assert_eq!(actual_controls, controls);
+                assert_eq!(actual_toolbar, toolbar);
+                assert_eq!(actual_canvas, canvas);
+                if let Some(caption) = caption {
+                    assert_eq!(caption.sense, egui::Sense::hover());
+                    assert!(!caption.has_focus());
+                    assert!(toolbar.contains_rect(caption.rect));
+                    for control in &controls {
+                        assert!(!caption.rect.intersects(*control));
+                    }
+                    let painted = text_rect(&output, ToolHintContext::Arrangement.gesture(tool));
+                    assert!(toolbar.contains_rect(painted));
+                    assert!(painted.height() <= tokens::CONTROL_HEIGHT);
+                }
+            }
+        }
+    }
+}

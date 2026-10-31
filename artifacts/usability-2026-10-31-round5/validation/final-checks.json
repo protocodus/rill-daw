@@ -1,0 +1,8 @@
+{
+  "checks": {
+    "format-check": 0,
+    "diff-check": 0
+  },
+  "workspace_build_log": "artifacts/usability-2026-10-31-round5/validation/workspace-build.log",
+  "workspace_build_exit_code": 0
+}

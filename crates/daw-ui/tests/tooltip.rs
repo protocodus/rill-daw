@@ -1,6 +1,55 @@
 use egui::{Context, Event, PointerButton, Pos2, RawInput, Rect, Vec2};
 
 #[test]
+fn pointer_feedback_is_immediate_and_keeps_its_text_inside_the_viewport() {
+    for dark in [false, true] {
+        let ctx = Context::default();
+        daw_ui::theme::apply(&ctx);
+        ctx.set_visuals(if dark {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        });
+        for width in [320.0, 800.0, 1440.0] {
+            let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(width, 600.0));
+            for pointer in [
+                Pos2::new(1.0, 1.0),
+                Pos2::new(width - 1.0, 1.0),
+                Pos2::new(width - 1.0, 599.0),
+                Pos2::new(1.0, 599.0),
+            ] {
+                let id = egui::Id::new("pointer feedback");
+                let text = "End 30.000 s · Beat 57.00\nDuration 4.286 s · 8.00 beats";
+                let mut bounds = Rect::NOTHING;
+                let output = ctx.run(
+                    RawInput {
+                        screen_rect: Some(screen),
+                        ..Default::default()
+                    },
+                    |ctx| bounds = daw_ui::pointer_text(ctx, id, pointer, text),
+                );
+                assert!(screen.contains_rect(bounds));
+                let painted = output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| {
+                        if let egui::Shape::Text(painted) = &shape.shape {
+                            (painted.galley.text() == text).then_some((shape, painted))
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Text is painted on its first frame without a hover delay");
+                let text_bounds = painted.1.galley.rect.translate(painted.1.pos.to_vec2());
+                assert!(screen.contains_rect(text_bounds));
+                assert!(painted.0.clip_rect.contains_rect(text_bounds));
+                assert!(egui::AreaState::load(&ctx, id).is_none());
+            }
+        }
+    }
+}
+
+#[test]
 fn stacked_text_hints_allow_an_immediate_click_on_the_control_beneath_them() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);

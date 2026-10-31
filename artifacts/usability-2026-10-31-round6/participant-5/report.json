@@ -1,0 +1,155 @@
+{
+  "purpose": "Independent simulated beginner mouse-only usability report, based only on visible session-5 interaction.",
+  "participant": 5,
+  "persona": "Simulated first-time RILL beginner interested in a short hip-hop beat with a simple synth part.",
+  "piece_name": "NIGHT HOP",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The empty-lane hint, instrument assignment, pencil instructions and Duplicate tool let me complete the task by mouse. Exact trimming needed a small correction.",
+    "how_cool_it_looks": "The dark interface, teal waveforms and visible MIDI shapes look coherent and readable. Repeated clip names became abbreviated at the full-song zoom.",
+    "how_fast_it_is": "Drawing and duplicating clips responded quickly. Export displayed elapsed progress; native save dialogs briefly appeared black before rendering. This is a perceived session rating, not a performance benchmark.",
+    "how_confusing_it_is": "Most controls had useful labels. The main uncertainties were locating exact pitches on sparsely labelled piano keys and trimming precisely at a zoomed-out scale.",
+    "feature_completeness": "The visible workflow covered audio, MIDI notes, a VST instrument, mouse naming, saving and both requested exports. I only evaluated a simple repeated arrangement and the supplied laboratory instrument."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.rill",
+    "wav": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.wav",
+    "midi": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the empty lane opened the Device library. Assign instrument created a MIDI lane visibly assigned to Rill Lab Sine.",
+      "evidence": [
+        "01-midi-created.png",
+        "02-instrument-assigned.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "The piano-roll Pencil tool said to drag to set length. Four mouse drags produced visible C4, D#4, G4 and F4 notes.",
+      "evidence": [
+        "03-piano-roll.png",
+        "04-notes-drawn.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Before placing notes, most piano rows had no pitch labels. Labels on the newly drawn notes made the pitches clearer afterward.",
+      "evidence": [
+        "03-piano-roll.png",
+        "04-notes-drawn.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "Duplicate explained Click a clip to duplicate. Successive clicks placed the next audio and MIDI clips, and Fit brought the extended arrangement into view.",
+      "evidence": [
+        "05-duplicate-tool.png",
+        "06-pattern-duplicated.png",
+        "09-sixteen-bars-audio.png",
+        "12-full-arrangement.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "friction",
+      "observation": "Dragging the last audio clip edge toward the 30-second ruler mark initially left the displayed duration at 30.134 seconds.",
+      "evidence": [
+        "10-trim-thirty-seconds.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "recovery",
+      "observation": "A second small edge drag changed the duration to exactly 30.000 seconds. The title duration supplied useful feedback.",
+      "evidence": [
+        "11-trim-corrected.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard button. Clicking its on-screen keys and Apply name set NIGHT HOP without keyboard events.",
+      "evidence": [
+        "14-rename.png",
+        "15-mouse-keyboard.png",
+        "16-named-project.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "After switching off Loop and clicking Play, the playhead advanced from bar 1 to bar 3 and both track meters were lit. Stop returned the transport to the beginning.",
+      "evidence": [
+        "17-playback-a.png",
+        "18-playback-b.png",
+        "21-project-saved.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "The native project and WAV save dialogs briefly appeared as black rectangles before their controls rendered in the next screenshot. They became usable without intervention.",
+      "evidence": [
+        "19-save.png",
+        "20-save-dialog.png",
+        "23-wav-save-dialog.png",
+        "24-wav-dialog-ready.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "positive",
+      "observation": "The save picker proposed NIGHT HOP.rill in session-5. Clicking OK closed the picker and removed the unsaved dot beside the title.",
+      "evidence": [
+        "20-save-dialog.png",
+        "21-project-saved.png"
+      ]
+    },
+    {
+      "id": "F11",
+      "kind": "positive",
+      "observation": "WAV export showed Arrangement 0:30 and an Include effect tails checkbox. I unchecked tails. MIDI export showed Exported NIGHT HOP.mid, and Recent exports listed both NIGHT HOP.mid and NIGHT HOP.wav under Completed exports.",
+      "evidence": [
+        "22-wav-options.png",
+        "23-wav-save-dialog.png",
+        "24-wav-dialog-ready.png",
+        "25-wav-export-result.png",
+        "27-midi-export.png",
+        "28-midi-success.png",
+        "29-recent-exports.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed in the visible UI: a named 30.000-second arrangement, project save accepted, MIDI success banner and both files listed as completed exports. File contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "At 112 BPM in 4/4, the supplied Circuit rhythm audio was repeated across 14 bars, with the final audio copy trimmed to two bars. A four-note C4, D#4, G4, F4 MIDI motif was repeated in fourteen one-bar clips. This was intended as a simple hip-hop beat with a synth part; no sound or genre judgment was auditioned.",
+    "instrument": "Rill Lab Sine, shown as VST3 in the library and assigned on the instrument lane.",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play changed to Pause; transport advanced from 001.01.00 to 003.01.00, the yellow playhead moved, and both track meters lit. No visible playback failure was observed. This does not establish heard audio.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No composition/project/file contents were inspected. Output paths come from visible save-dialog breadcrumbs and filenames; independent coordinator verification follows.",
+    "No audio capture was auditioned, so sound, balance, genre fit and audio quality were not verified.",
+    "The WAV success indication was its entry under Completed exports, not a separately observed WAV completion toast. The screenshot named 26-wav-success.png actually shows export still in progress.",
+    "Only the installed laboratory VST3 instrument was tested; this does not establish compatibility with other plug-ins.",
+    "Laboratory software graphics and virtual audio conditions apply. Elapsed interaction time includes tools and screenshots and is not a hardware latency or performance benchmark."
+  ]
+}

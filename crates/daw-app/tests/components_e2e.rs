@@ -261,7 +261,50 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
 
             let mixer = window(&mut app, "Mixer");
             assert_eq!(mixer["view"], "Mixer");
-            accessible(&mixer, &["Calm controls", "Ch 1 > Master", "Back"]);
+            // Mixer preserves its scroll position between visits. First reveal
+            // the channel header, then reach its output with the same mouse
+            // scrolling required when the fader reaches its usable minimum.
+            app.command(json!({"command":"scroll","x":90.0,"y":350.0,"delta":1000.0}));
+            for _ in 0..20 {
+                app.inspect();
+            }
+            let top = app.inspect();
+            accessible(&top, &["Calm controls", "Channel", "Back"]);
+            let back_rect = text_rect(&top, "Back");
+            app.command(json!({"command":"scroll","x":90.0,"y":350.0,"delta":-1000.0}));
+            for _ in 0..20 {
+                app.inspect();
+            }
+            let scrolled = app.inspect();
+            accessible(&scrolled, &["Output", "Ch 1 > Master", "Back"]);
+            assert_eq!(text_rect(&scrolled, "Back"), back_rect);
+            for field in ["project", "history", "selected_track"] {
+                assert_eq!(scrolled[field], top[field], "Scrolling changed {field}");
+            }
+            let target = &scrolled["mixer"]["channels"][0]["target"];
+            let left = target["min"][0].as_f64().unwrap();
+            let top_y = target["min"][1].as_f64().unwrap();
+            let right = target["max"][0].as_f64().unwrap();
+            let bottom = target["max"][1].as_f64().unwrap();
+            assert!(left >= 0.0 && top_y >= 0.0 && right <= 1100.0 && bottom <= 720.0);
+            assert!(right > left && bottom - top_y >= f64::from(daw_ui::tokens::CONTROL_HEIGHT));
+            assert!(
+                top_y
+                    < top["mixer"]["channels"][0]["target"]["min"][1]
+                        .as_f64()
+                        .unwrap()
+            );
+            let routing = app.command(json!({"command":"pointer","phase":"click",
+                "x":(left+right)*0.5,"y":(top_y+bottom)*0.5}));
+            assert_eq!(routing["popups"]["routing"], true);
+            assert_eq!(routing["selected_track"], original["tracks"][0]["id"]);
+            accessible(&routing, &["Routing of Calm controls", "Master output"]);
+            let returned = app.click("Mixer");
+            assert_eq!(returned["view"], "Mixer");
+            assert_eq!(returned["popups"]["routing"], false);
+            assert_eq!(returned["project"], scrolled["project"]);
+            assert_eq!(returned["history"], scrolled["history"]);
+            accessible(&returned, &["Back"]);
             let back = app.click("Back");
             assert_eq!(back["view"], "Arrangement");
             assert_eq!(back["project"], original);

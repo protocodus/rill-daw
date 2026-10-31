@@ -181,17 +181,16 @@ impl GenerateDialog {
             .movable(true)
             .open(&mut open)
             .show(ctx, |ui| {
+                let body_top = ui.next_widget_position().y;
                 let ai =
                     daw_ui::contextual_ai_button(ui, &format!("Clip composition · {clip_name}"));
                 self.controls["ai"] = rect_json(ai.rect);
                 action.ai = ai.clicked();
-                ui.add_space(daw_ui::tokens::SPACE_SM);
                 ui.horizontal(|ui| {
                     for kind in GenerateKind::ALL {
                         daw_ui::selectable_value(ui, &mut self.settings.kind, kind, kind.name());
                     }
                 });
-                ui.add_space(daw_ui::tokens::SPACE_SM);
                 let range =
                     daw_ui::generation_bar_range(ui, &mut self.start_bar, &mut self.length_bars);
                 self.controls["start_bar"] = rect_json(range.start.rect);
@@ -199,16 +198,29 @@ impl GenerateDialog {
                 ui.separator();
                 // Scroll only the parameters; the range, preview and commit
                 // actions remain reachable on small displays.
-                let form_height = (ctx.content_rect().height()
-                    - daw_ui::tokens::POPUP_TOP
-                    - daw_ui::tokens::POPUP_MARGIN
-                    - daw_ui::tokens::CONTROL_HEIGHT
-                    - daw_ui::tokens::SPACE_SM
-                    - 440.0)
-                    .max(100.0);
+                let extra_actions =
+                    usize::from(
+                        self.settings.kind == GenerateKind::Melody
+                            || self.settings.kind == GenerateKind::Arpeggio
+                                && self.settings.arp == ArpeggioPattern::Random,
+                    ) + usize::from(matches!(self.settings.harmony, GenerateHarmony::Scale(_)));
+                // Budget from the viewport-derived maximum, not this auto-sized
+                // window's current available height: subtracting the footer
+                // from the latter repeatedly shrinks the options each frame.
+                // The measured header accounts for wrapped transport without
+                // forcing a 100-point scroll minimum. Native row spacing keeps
+                // the three pinned rows apart without doubled gaps.
+                let footer_height = daw_ui::tokens::CONTROL_HEIGHT * 3.0
+                    + daw_ui::tokens::SPACE_SM * 5.0
+                    + extra_actions as f32
+                        * (daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_SM);
+                let header_height = ui.next_widget_position().y - body_top;
+                let form_height = (daw_ui::popup_body_size(ctx).y - header_height - footer_height)
+                    .max(daw_ui::tokens::COMPACT_HEIGHT);
                 let form = egui::ScrollArea::vertical()
                     .id_salt("generate_options")
                     .max_height(form_height)
+                    .min_scrolled_height(daw_ui::tokens::COMPACT_HEIGHT)
                     .show(ui, |ui| {
                         daw_ui::form_grid(ui, "generate_fields", |ui| {
                             daw_ui::text::label(ui, "Harmony");
@@ -443,52 +455,40 @@ impl GenerateDialog {
                         .on_hover_text("Use this root and scale for the editor's visual guide")
                         .clicked();
                 }
-                ui.separator();
+                ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_SM));
                 // View-only controls are grouped apart from generation actions.
                 ui.horizontal(|ui| {
                     daw_ui::checkbox(ui, &mut self.preview, "Preview");
                     action.fit = daw_ui::view_button(ui, "Fit preview").clicked();
                     daw_ui::text::note(ui, format!("{} notes", self.notes.len()));
                 });
-                if let Some(error) = &self.error {
-                    daw_ui::text::note(ui, error);
-                }
-                if self.added_notes > 0 {
-                    daw_ui::text::note(
-                        ui,
-                        format!(
-                            "Added {} notes · choose Next range to continue",
-                            self.added_notes
-                        ),
-                    );
-                }
-                ui.add_space(daw_ui::tokens::SPACE_SM);
-                ui.horizontal(|ui| {
-                    ui.add_enabled_ui(
-                        self.error.is_none() && !self.notes.is_empty() && !self.already_added(),
-                        |ui| {
-                            action.apply = daw_ui::primary_button(ui, "Add notes").clicked();
-                        },
-                    );
-                    let next_start = self.next_start_bar(meter);
-                    if ui
-                        .add_enabled(next_start.is_some(), daw_ui::button_widget("Next range"))
-                        .on_hover_text("Move forward by this range's length, keeping your settings")
-                        .clicked()
-                    {
-                        self.start_bar = next_start.unwrap();
-                        self.refresh(meter);
+                let status = self.error.clone().unwrap_or_else(|| {
+                    if self.added_notes == 0 {
+                        "Preview only".into()
+                    } else if self.already_added() {
+                        format!("Added {} notes · Next range to continue", self.added_notes)
+                    } else {
+                        format!("Added {} notes · preview ready", self.added_notes)
                     }
-                    action.cancel = daw_ui::button(
-                        ui,
-                        if self.added_notes > 0 {
-                            "Done"
-                        } else {
-                            "Cancel"
-                        },
-                    )
-                    .clicked();
                 });
+                let next_start = self.next_start_bar(meter);
+                let footer = daw_ui::generation_footer(
+                    ui,
+                    &status,
+                    self.error.is_none() && !self.notes.is_empty() && !self.already_added(),
+                    next_start.is_some(),
+                    self.added_notes > 0,
+                );
+                self.controls["status"] = rect_json(footer.status);
+                self.controls["add_notes"] = rect_json(footer.add.rect);
+                self.controls["next_range"] = rect_json(footer.next.rect);
+                self.controls["close"] = rect_json(footer.close.rect);
+                action.apply = footer.add.clicked();
+                if footer.next.clicked() {
+                    self.start_bar = next_start.unwrap();
+                    self.refresh(meter);
+                }
+                action.cancel = footer.close.clicked();
             });
         action.cancel |= !open;
         action

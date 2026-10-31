@@ -1,0 +1,7 @@
+{
+  "checks": {
+    "workspace-build": 0,
+    "format-check": 0,
+    "diff-check": 0
+  }
+}

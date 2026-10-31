@@ -455,7 +455,7 @@ pub fn mixer_bus_button(ui: &mut Ui, name: &str, width: f32, tint: egui::Color32
             .rich(ui.ctx(), name)
             .color(foreground),
     );
-    atoms.push_right(egui::Atom::custom(badge_id, egui::vec2(32.0, 18.0)));
+    atoms.push_right(egui::Atom::custom(badge_id, egui::vec2(40.0, 18.0)));
     let button = egui::Button::new(atoms)
         .min_size(egui::vec2(width, tokens::CONTROL_HEIGHT))
         .fill(fill)

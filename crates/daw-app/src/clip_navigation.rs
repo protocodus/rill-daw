@@ -77,6 +77,7 @@ impl DawApp {
             self.midi_editor.select_clip_preserving_view(clip);
         }
         self.last_editor_clip = Some(clip);
+        self.sync_workspace_tool();
     }
 
     pub(crate) fn clip_navigation_shortcuts(&mut self, ctx: &egui::Context) -> bool {

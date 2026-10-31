@@ -1,0 +1,120 @@
+{
+  "participant": 3,
+  "persona": "Instrumentalist new to DAWs; short melodic piece",
+  "evaluation_type": "Independent simulated beginner, not a human study",
+  "constraints": {
+    "mouse_only": true,
+    "source_inspected_during_attempt": false,
+    "other_participant_results_seen": false,
+    "audio_monitoring": "Null output; no claim to hear the composition",
+    "vst": "Lab-provided native VST3 polyphonic sine fixture, not third-party compatibility validation",
+    "graphics": "Software OpenGL in isolated X11 session"
+  },
+  "start_utc": "2026-10-31T16:22:57Z",
+  "end_utc": "2026-10-31T16:28:21Z",
+  "elapsed_seconds": 324,
+  "completion": {
+    "goal_met": true,
+    "arrangement_seconds": 30,
+    "wav_seconds": 30,
+    "audio_track": true,
+    "midi_notes": true,
+    "native_vst3_instrument": true,
+    "project_saved": true,
+    "wav_exported": true,
+    "midi_exported": true,
+    "composition": "Eight-note staccato melodic figure repeated across 14 bars over stock Circuit rhythm audio, at 112 BPM"
+  },
+  "ratings_scale": "1 to 5; higher means more of the named category. Higher confusion is worse.",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 3
+  },
+  "rating_reasons": {
+    "easy_to_use": "Empty-area instruction led directly to MIDI creation; assign, pencil, duplicate, fit, save, and export were discoverable. Exact trimming required a correction.",
+    "how_cool_it_looks": "Cohesive dark arrangement, attractive teal waveforms, readable controls and clear selection. Narrow repeated clip titles become New pat... and most piano pitches are unlabeled.",
+    "how_fast_it_is": "Routine edits and duplication responded promptly; reached first export in under four minutes. Native file dialogs briefly appeared blank before drawing; lab rendering may contribute, so this is perceived speed, not a benchmark.",
+    "how_confusing_it_is": "Low overall friction once the clip editor opened. Duration is in beats, timeline in bars and seconds, and export tail can extend advertised arrangement duration.",
+    "feature_completeness": "Audio, native VST MIDI, pencil editing, duplication, trimming, project save, WAV and MIDI export supported the goal. Export dialog exposed only effect tails; sample rate/bit-depth choices were not discoverable. No conclusions about recording, effects, or third-party plugins."
+  },
+  "findings": [
+    {
+      "id": "P3-1",
+      "severity": "medium",
+      "observation": "Piano-roll keys label only C octaves. In-between note pitches require counting semitone rows.",
+      "evidence": [
+        "03-editor.png",
+        "04-melody.png"
+      ],
+      "suggestion": "Show pitch names while hovering and drawing, and offer note labels on keys or notes at suitable zoom."
+    },
+    {
+      "id": "P3-2",
+      "severity": "medium",
+      "observation": "First mouse trim landed at 8.75 beats instead of 8 on the last audio clip. Properties showed beats only; dragging the numeric duration text selected text rather than adjusting it.",
+      "evidence": [
+        "11-properties.png",
+        "12-duration-drag.png",
+        "13-exact.png"
+      ],
+      "suggestion": "Add mouse-operable increment controls and an elapsed-time readout for clip start/end/duration; display a live trim endpoint hint."
+    },
+    {
+      "id": "P3-3",
+      "severity": "medium",
+      "observation": "Export says Arrangement 0:30.000 with Include effect tails enabled by default, but the exported file measured 30.2 seconds. Unchecking tails gave exact 30.0 seconds.",
+      "evidence": [
+        "18-export.png",
+        "25-tail-option.png",
+        "26-tail-save.png",
+        "render-evidence.json"
+      ],
+      "suggestion": "Clarify that tails extend the file duration and label the displayed time as arrangement duration, with an estimate or actual final duration when available."
+    },
+    {
+      "id": "P3-4",
+      "severity": "low",
+      "observation": "After MIDI export the persistent status still read Exported Midnight circuit.wav, leaving no visible confirmation of the MIDI action. The MIDI file did exist.",
+      "evidence": [
+        "24-finished.png",
+        "Midnight circuit.mid"
+      ],
+      "suggestion": "Give consistent success/error status for every save/export operation, including the correct file type and name."
+    },
+    {
+      "id": "P3-5",
+      "severity": "low",
+      "observation": "WAV export presents no visible sample-rate or bit-depth options.",
+      "evidence": [
+        "18-export.png"
+      ],
+      "suggestion": "Provide a compact advanced section or describe the chosen output format."
+    }
+  ],
+  "positive_findings": [
+    "The Drop audio here \u00b7 Double-click for MIDI hint gave a clear first step.",
+    "Assign instrument is explicit and closes the chooser into an editable clip.",
+    "Duplicate tool creates the next adjacent copy in one click.",
+    "Fit keeps the growing arrangement visible.",
+    "Save and export dialogs provide names by default, so the mouse-only constraint did not block file creation.",
+    "Arranger ruler includes seconds, enabling a 30-second target without changing tempo."
+  ],
+  "environment_limitations": [
+    "No audible monitoring; content existence and nonzero render were verified, musical sound quality was not.",
+    "Only the lab VST3 fixture was supplied; Preview Failed appears because it has no custom GUI. This is not treated as a third-party plugin defect.",
+    "Default stock audio supplied material; importing external audio was not exercised."
+  ],
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability/session-3/Midnight circuit.rill",
+    "wav": "/workspace/scratch/rill-usability/session-3/Midnight circuit.wav",
+    "midi": "/workspace/scratch/rill-usability/session-3/Midnight circuit.mid",
+    "mouse_log": "/workspace/scratch/rill-usability/session-3/mouse-actions.jsonl",
+    "reactions": "/workspace/scratch/rill-usability/session-3/reactions.md",
+    "project_evidence": "/workspace/scratch/rill-usability/session-3/project-evidence.json",
+    "render_evidence": "/workspace/scratch/rill-usability/session-3/render-evidence.json"
+  },
+  "mouse_log_entry_count": 94
+}

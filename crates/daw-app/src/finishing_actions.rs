@@ -11,6 +11,27 @@ use std::{
 const MAX_REPEAT_CLIPS: usize = 4096;
 type NamedBuses = Vec<(u64, String)>;
 const MAX_REPEAT_BYTES: usize = 32 * 1024 * 1024;
+const MAX_RECENT_EXPORTS: usize = 5;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum ExportKind {
+    Wav,
+    Midi,
+}
+
+impl ExportKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Wav => "WAV",
+            Self::Midi => "MIDI",
+        }
+    }
+}
+
+struct ExportReceipt {
+    kind: ExportKind,
+    path: PathBuf,
+}
 
 #[derive(Clone)]
 struct ExportTarget {
@@ -23,6 +44,7 @@ pub(crate) struct FinishingActions {
     channels: HashSet<u64>,
     last_export: Option<ExportTarget>,
     pending_export: Option<ExportTarget>,
+    recent_exports: Vec<ExportReceipt>,
 }
 
 impl FinishingActions {
@@ -44,7 +66,25 @@ impl FinishingActions {
             .filter(|target| target.path == path)
         {
             self.last_export = Some(target);
+            self.record_export(ExportKind::Wav, path);
         }
+    }
+
+    pub(crate) fn midi_export_finished(&mut self, path: &Path) {
+        self.record_export(ExportKind::Midi, path);
+    }
+
+    fn record_export(&mut self, kind: ExportKind, path: &Path) {
+        self.recent_exports
+            .retain(|receipt| receipt.kind != kind || receipt.path != path);
+        self.recent_exports.insert(
+            0,
+            ExportReceipt {
+                kind,
+                path: path.to_owned(),
+            },
+        );
+        self.recent_exports.truncate(MAX_RECENT_EXPORTS);
     }
 
     pub(crate) fn export_failed(&mut self) {
@@ -59,7 +99,40 @@ impl DawApp {
             "last_export": self.finishing.last_export.as_ref().map(|target| serde_json::json!({
                 "path": target.path, "include_effect_tails": target.include_effect_tails,
             })),
+            "recent_exports": self.finishing.recent_exports.iter().map(|receipt| serde_json::json!({
+                "kind": receipt.kind.label(), "path": receipt.path,
+            })).collect::<Vec<_>>(),
         })
+    }
+
+    /// Receipts describe completed exports, not the current existence of files.
+    /// FinishingActions resets with the document; copying never changes status.
+    pub(crate) fn recent_exports_menu(&self, ui: &mut egui::Ui) {
+        daw_ui::menu_button(ui, "Recent exports", |ui| {
+            if self.finishing.recent_exports.is_empty() {
+                daw_ui::text::note(ui, "No completed exports in this project");
+            } else {
+                daw_ui::text::note(ui, "Completed exports");
+                for receipt in &self.finishing.recent_exports {
+                    let path = receipt.path.to_string_lossy();
+                    let name = receipt.path.file_name().unwrap_or(receipt.path.as_os_str());
+                    let label = format!("{} · {}", receipt.kind.label(), name.to_string_lossy());
+                    ui.push_id((receipt.kind, &receipt.path), |ui| {
+                        daw_ui::menu_button(ui, label, |ui| {
+                            if daw_ui::button(ui, "Copy path")
+                                .on_hover_text(path.as_ref())
+                                .clicked()
+                            {
+                                ui.ctx().copy_text(path.to_string());
+                                ui.close();
+                            }
+                        })
+                        .response
+                        .on_hover_text(path.as_ref());
+                    });
+                }
+            }
+        });
     }
 
     pub(crate) fn finishing_selected_channels(&self) -> Vec<u64> {
@@ -178,7 +251,7 @@ impl DawApp {
         let can_repeat =
             !selection.is_empty() && span.is_some_and(|(_, end)| self.project.loop_end > end);
         if ui.add_enabled(can_repeat, daw_ui::button_widget("Repeat to loop end"))
-            .on_hover_text("Repeat the selected phrase, including rests, up to the loop end · Independent copies")
+            .on_hover_text("Create independent copies of the selected phrase, including rests, up to the loop end. The last copy is trimmed to fit.")
             .clicked()
         {
             self.repeat_selection_to_loop_end();

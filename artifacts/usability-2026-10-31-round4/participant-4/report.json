@@ -1,0 +1,148 @@
+{
+  "purpose": "Independent simulated beginner observation using the fixed report questions.",
+  "participant": 4,
+  "persona": "Simulated first-time RILL beginner interested in a short ambient soundtrack sketch.",
+  "piece_name": "mist",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Completed the composition, naming, save, and both exports with mouse controls. The empty-space MIDI hint and on-screen naming keyboard helped. Exact durations took many stepper clicks.",
+    "how_cool_it_looks": "The restrained dark theme, teal waveforms, MIDI note previews, and yellow playhead looked clean and readable. The piano roll looked comparatively dense.",
+    "how_fast_it_is": "Most edits and instrument assignment responded promptly, and duplication sped up the arrangement. WAV export displayed elapsed progress and completed within the observed session. Screenshot/tool time is not a performance benchmark.",
+    "how_confusing_it_is": "Most labels were clear. Duplicate in the context menu acted immediately, while the toolbar only selected a tool; clicking it twice did not add clips. Duration is entered in beats, so the seconds readout was needed to reach 30 seconds.",
+    "feature_completeness": "The tested workflow provided audio, MIDI drawing, VST assignment, stretching, trimming, volume, naming, project saving, and WAV/MIDI export. This session used only one simple installed VST and did not establish broader plugin or sound-design capabilities."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round4/session-4/mist.rill",
+    "wav": "/workspace/scratch/rill-usability-round4/session-4/mist.wav",
+    "midi": "/workspace/scratch/rill-usability-round4/session-4/mist.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard button. Clicking its keys entered mist and Apply name changed the visible project title.",
+      "evidence": [
+        "rename-keyboard.png",
+        "midi-created.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "The empty arranger said Double-click for MIDI. Double-clicking it opened the Device library; Assign instrument created a MIDI clip and displayed Rill Lab Sine on the track.",
+      "evidence": [
+        "initial.png",
+        "midi-created.png",
+        "instrument-assigned.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "Pencil drags created visible C4, E4, and G4 notes. The clip properties offered Stretch and an exact elapsed-time readout, enabling a 7.5-second sustained chord clip.",
+      "evidence": [
+        "first-chord.png",
+        "duration-mode.png",
+        "midi-seven-five-seconds.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "Clicking the duration field selected its text but did not expose an on-screen numeric keypad. I used repeated plus/minus clicks to set exact beat durations.",
+      "evidence": [
+        "duration-edit.png",
+        "duration-step.png",
+        "last-audio-properties.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "friction",
+      "observation": "Context-menu Duplicate immediately added a clip. Clicking the toolbar Duplicate twice only highlighted the tool; the total stayed 15 seconds until I clicked a clip, which then made it 22.5 seconds.",
+      "evidence": [
+        "duplicated-midi.png",
+        "thirty-seconds-midi.png",
+        "duplicate-tool-result.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "recovery",
+      "observation": "Using the Duplicate tool on clips made four MIDI clips. Three further audio copies and trimming the final audio clip to 8 beats brought the visible project duration to 0:30.000. The audio track was lowered to -27.6 dB.",
+      "evidence": [
+        "audio-duplicate.png",
+        "audio-trim-30.png",
+        "playback.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "Play became Pause, the playhead advanced from the start, the transport changed to 003.04.65, and both track meters showed activity. Stop returned playback to the beginning.",
+      "evidence": [
+        "playback.png",
+        "playback-later.png",
+        "save-result.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "The native save dialogs automatically proposed mist.rill, mist.wav, and mist.mid in the session-4 directory. Saving the project closed the dialog and removed the dot beside the title.",
+      "evidence": [
+        "save-dialog-ready.png",
+        "save-result.png",
+        "wav-save-dialog.png",
+        "midi-save-dialog.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "positive",
+      "observation": "WAV export showed Arrangement 0:30; I unchecked Include effect tails. It displayed progress, then Exported \u00b7 mist.wav. MIDI export also displayed Exported \u00b7 mist.mid.",
+      "evidence": [
+        "wav-export-options.png",
+        "wav-save-dialog.png",
+        "wav-progress.png",
+        "midi-success.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "friction",
+      "observation": "The first screenshot after opening native save and MIDI export dialogs showed a black rectangle; a later screenshot showed the completed dialog. This was brief and did not block completion in the laboratory desktop.",
+      "evidence": [
+        "save-dialog.png",
+        "save-dialog-ready.png",
+        "midi-export-options.png",
+        "midi-save-dialog.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: named and saved a 30-second arrangement and saw success notices for WAV and MIDI exports; output contents await independent verification.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "Four consecutive 7.5-second MIDI clips containing sustained C4/E4/G4 notes, with the startup Circuit rhythm audio copied across the arrangement and its final copy trimmed to end at 30 seconds. Audio track volume was reduced to -27.6 dB for a quiet rhythmic bed under the chord sketch.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Visible playhead motion, changing transport position, and activity on both audio and instrument track meters; no playback failure observed. Audio was not auditioned.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No output file contents were inspected and no audio capture was auditioned. Audible balance, quality, and final file duration/PCM remain for independent coordinator verification.",
+    "Only the installed laboratory Rill Lab Sine VST3 was tested; results do not establish compatibility with other plugins.",
+    "The environment uses software graphics and a timer-paced virtual audio sink. Observed elapsed time includes tool, screenshot, and reporting overhead and is not a hardware performance benchmark.",
+    "The composition is a simple ambient-oriented chord sketch with a quiet rhythmic bed; its musical sound was not verified by listening."
+  ]
+}

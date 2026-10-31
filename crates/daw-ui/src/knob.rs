@@ -96,6 +96,7 @@ pub struct Knob<'a> {
     clamping: SliderClamping,
     automation: Option<AutomationState>,
     show_automation_label: bool,
+    compact: bool,
 }
 
 pub fn knob<T: egui::emath::Numeric>(value: &mut T, range: RangeInclusive<T>) -> Knob<'_> {
@@ -123,6 +124,7 @@ impl<'a> Knob<'a> {
             clamping: SliderClamping::Edits,
             automation: None,
             show_automation_label: true,
+            compact: false,
         }
     }
 
@@ -146,6 +148,13 @@ impl<'a> Knob<'a> {
         if diameter.is_finite() {
             self.diameter = diameter.clamp(48.0, 180.0);
         }
+        self
+    }
+    /// A dial-only control for compact rows. Endpoint captions stay inside the
+    /// dial; the caller provides a readout and exact-value context action.
+    /// Hidden numeric geometry is `Rect::NOTHING`. The default knob is unchanged.
+    pub fn compact(mut self) -> Self {
+        self.compact = true;
         self
     }
     pub fn min_decimals(mut self, decimals: usize) -> Self {
@@ -209,7 +218,7 @@ impl<'a> Knob<'a> {
 
     fn add_contents(&mut self, ui: &mut Ui, width: f32) -> Response {
         ui.set_width(width);
-        let label = (!self.text.is_empty()).then(|| text::label(ui, &self.text));
+        let label = (!self.compact && !self.text.is_empty()).then(|| text::label(ui, &self.text));
         let (dial, mut response) =
             ui.allocate_exact_size(Vec2::splat(self.diameter), egui::Sense::click_and_drag());
         let valid_range = self.range.start().is_finite()
@@ -231,7 +240,19 @@ impl<'a> Knob<'a> {
             }
         }
         let drag_id = response.id.with("knob_drag");
-        if ui.is_enabled() && valid_range {
+        let pointer_edit = ui.input(|input| {
+            ![egui::PointerButton::Secondary, egui::PointerButton::Middle]
+                .into_iter()
+                .any(|button| {
+                    input.pointer.button_down(button) || input.pointer.button_released(button)
+                })
+        });
+        if !pointer_edit {
+            // Navigation can take over an existing primary drag. Discard its
+            // accumulator so returning to primary cannot publish deferred motion.
+            ui.data_mut(|data| data.remove::<DragState>(drag_id));
+        }
+        if ui.is_enabled() && valid_range && pointer_edit {
             if response.clicked() {
                 response.request_focus();
             }
@@ -251,7 +272,7 @@ impl<'a> Knob<'a> {
                     .data(|data| data.get_temp::<DragState>(drag_id))
                     .unwrap_or(DragState {
                         value: (self.value)(None),
-                        delta: Vec2::ZERO,
+                        delta: response.total_drag_delta().unwrap_or_default(),
                     });
                 let delta = response.total_drag_delta().unwrap_or_default();
                 let movement = delta - drag.delta;
@@ -305,10 +326,18 @@ impl<'a> Knob<'a> {
                 format!("{}{}", self.range.end(), self.suffix),
             ]
         });
-        let (labels_rect, _) = ui.allocate_exact_size(
-            egui::vec2(width, tokens::FONT_SMALL + tokens::SPACE_XS),
-            egui::Sense::hover(),
-        );
+        let labels_rect = if self.compact {
+            Rect::from_min_max(
+                egui::pos2(dial.left() + 1.0, dial.bottom() - tokens::FONT_SCALE - 1.0),
+                dial.right_bottom() - egui::vec2(1.0, 1.0),
+            )
+        } else {
+            ui.allocate_exact_size(
+                egui::vec2(width, tokens::FONT_SMALL + tokens::SPACE_XS),
+                egui::Sense::hover(),
+            )
+            .0
+        };
         let colors = theme::palette(ui.ctx());
         for (position, align, value) in [
             (
@@ -326,51 +355,61 @@ impl<'a> Knob<'a> {
                 position,
                 align,
                 value,
-                egui::FontId::proportional(tokens::FONT_CANVAS),
+                egui::FontId::proportional(if self.compact {
+                    tokens::FONT_SCALE
+                } else {
+                    tokens::FONT_CANVAS
+                }),
                 colors.muted,
             );
         }
 
-        let mut current = (self.value)(None);
-        let current_before_number = current;
-        let minimum_decimals = self.min_decimals;
-        let maximum_decimals = self.max_decimals;
-        let integral = self.integral;
-        let mut number = crate::number(&mut current)
-            .speed(
-                self.step
-                    .unwrap_or((self.range.end() - self.range.start()).abs() / 200.0),
-            )
-            .min_decimals(minimum_decimals)
-            .max_decimals_opt(maximum_decimals.or(integral.then_some(0)))
-            .custom_formatter(move |value, _| {
-                number_text(value, minimum_decimals, maximum_decimals, integral)
-            })
-            .suffix(&self.suffix);
-        if self.clamping != SliderClamping::Never && valid_range {
-            number = number
-                .range(self.range.clone())
-                .clamp_existing_to_range(self.clamping == SliderClamping::Always);
-        }
-        let numeric = ui.add_enabled(valid_range, number);
-        if numeric.changed() && ui.is_enabled() && valid_range && current.is_finite() {
-            let next = self.edited_value(current);
-            if next != current_before_number {
-                (self.value)(Some(next));
-                response.mark_changed();
-            }
-        }
-        if numeric.has_focus() || numeric.gained_focus() || numeric.lost_focus() {
-            response = numeric.clone().union(response);
+        let numeric = if self.compact {
+            None
         } else {
-            response = response.union(numeric.clone());
-        }
+            let mut current = (self.value)(None);
+            let current_before_number = current;
+            let minimum_decimals = self.min_decimals;
+            let maximum_decimals = self.max_decimals;
+            let integral = self.integral;
+            let mut number = crate::number(&mut current)
+                .speed(
+                    self.step
+                        .unwrap_or((self.range.end() - self.range.start()).abs() / 200.0),
+                )
+                .min_decimals(minimum_decimals)
+                .max_decimals_opt(maximum_decimals.or(integral.then_some(0)))
+                .custom_formatter(move |value, _| {
+                    number_text(value, minimum_decimals, maximum_decimals, integral)
+                })
+                .suffix(&self.suffix);
+            if self.clamping != SliderClamping::Never && valid_range {
+                number = number
+                    .range(self.range.clone())
+                    .clamp_existing_to_range(self.clamping == SliderClamping::Always);
+            }
+            let numeric = ui.add_enabled(valid_range, number);
+            if numeric.changed() && ui.is_enabled() && valid_range && current.is_finite() {
+                let next = self.edited_value(current);
+                if next != current_before_number {
+                    (self.value)(Some(next));
+                    response.mark_changed();
+                }
+            }
+            if numeric.has_focus() || numeric.gained_focus() || numeric.lost_focus() {
+                response = numeric.clone().union(response);
+            } else {
+                response = response.union(numeric.clone());
+            }
+            Some(numeric)
+        };
         if let Some(label) = label {
             response = response.labelled_by(label.id);
         }
         let current = (self.value)(None);
         let fraction = self.normalized(current);
-        let radius = (self.diameter * 0.38).min(self.diameter * 0.5 - 9.0);
+        let radius =
+            (self.diameter * 0.38).min(self.diameter * 0.5 - if self.compact { 10.0 } else { 9.0 });
         let center = dial.center();
         let divisions = if self.diameter >= 100.0 {
             10
@@ -389,7 +428,9 @@ impl<'a> Knob<'a> {
         let index_direction = Vec2::angled(START_ANGLE + ARC_ANGLE * fraction);
         let geometry = KnobGeometry {
             dial,
-            number: numeric.rect,
+            number: numeric
+                .as_ref()
+                .map_or(Rect::NOTHING, |numeric| numeric.rect),
             center,
             radius,
             minimum: center + samples[0] * radius,
@@ -435,7 +476,16 @@ impl<'a> Knob<'a> {
                 ui.painter().line_segment(
                     [
                         center + unit * (radius + 3.0),
-                        center + unit * (radius + if major { 8.0 } else { 6.0 }),
+                        center
+                            + unit
+                                * (radius
+                                    + if self.compact {
+                                        if major { 5.0 } else { 4.0 }
+                                    } else if major {
+                                        8.0
+                                    } else {
+                                        6.0
+                                    }),
                     ],
                     Stroke::new(1.0_f32, colors.muted),
                 );
@@ -446,13 +496,15 @@ impl<'a> Knob<'a> {
             );
             ui.painter().circle_filled(center, 2.0, active);
         }
-        if self.show_automation_label
+        if !self.compact
+            && self.show_automation_label
             && let Some(state) = self.automation
         {
             crate::automation_badge(ui, state);
         }
-        if current < self.range.start().min(*self.range.end())
-            || current > self.range.start().max(*self.range.end())
+        if !self.compact
+            && (current < self.range.start().min(*self.range.end())
+                || current > self.range.start().max(*self.range.end()))
         {
             ui.label(
                 text::TextRole::Note
@@ -464,8 +516,15 @@ impl<'a> Knob<'a> {
         ui.ctx().data_mut(|data| {
             data.insert_temp(response.id.with("knob_geometry"), geometry.clone());
             data.insert_temp(dial_response.id.with("knob_geometry"), geometry.clone());
-            data.insert_temp(numeric.id.with("knob_geometry"), geometry);
+            if let Some(numeric) = numeric {
+                data.insert_temp(numeric.id.with("knob_geometry"), geometry);
+            }
         });
+        if self.compact {
+            // Compact hosts supply a caption and their own unit-aware hint.
+            // Avoid stacking a normalized readout or promising a hidden field.
+            return response;
+        }
         crate::hover_text(
             response,
             format!(
@@ -478,26 +537,33 @@ impl<'a> Knob<'a> {
 
 impl Widget for Knob<'_> {
     fn ui(mut self, ui: &mut Ui) -> Response {
-        let current = (self.value)(None);
-        let number = format!(
-            "{}{}",
-            number_text(current, self.min_decimals, self.max_decimals, self.integral),
-            self.suffix
-        );
-        let number_width = ui
-            .painter()
-            .layout_no_wrap(
-                number,
-                ui.style().drag_value_text_style.resolve(ui.style()),
-                theme::palette(ui.ctx()).text,
-            )
-            .size()
-            .x
-            + ui.spacing().button_padding.x * 2.0
-            + 2.0;
-        let width = self.diameter.max(112.0).max(number_width);
+        let width = if self.compact {
+            self.diameter
+        } else {
+            let current = (self.value)(None);
+            let number = format!(
+                "{}{}",
+                number_text(current, self.min_decimals, self.max_decimals, self.integral),
+                self.suffix
+            );
+            let number_width = ui
+                .painter()
+                .layout_no_wrap(
+                    number,
+                    ui.style().drag_value_text_style.resolve(ui.style()),
+                    theme::palette(ui.ctx()).text,
+                )
+                .size()
+                .x
+                + ui.spacing().button_padding.x * 2.0
+                + 2.0;
+            self.diameter.max(112.0).max(number_width)
+        };
         let response = ui.allocate_ui_with_layout(
-            egui::vec2(width, 0.0),
+            // Reserve the dial height before a horizontal host centers this
+            // child. A zero-height child would be centered first, then grow
+            // downward and make a compact parameter row taller than requested.
+            egui::vec2(width, if self.compact { self.diameter } else { 0.0 }),
             egui::Layout::top_down(egui::Align::Center),
             |ui| self.add_contents(ui, width),
         );

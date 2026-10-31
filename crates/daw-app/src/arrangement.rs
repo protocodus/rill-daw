@@ -14,6 +14,7 @@ const COMPACT_ROW: f32 = daw_ui::TRACK_HEADER_COMPACT_HEIGHT;
 
 enum Edit {
     Select(u64, u64, bool, bool),
+    SelectOnly(u64, u64),
     Rename(u64, u64),
     AudioStart(u64, u64, crate::arranger_selection::ArrangeAudioMode, f64),
     AudioMotion(f64),
@@ -21,6 +22,7 @@ enum Edit {
     GroupMove(f64),
     Bounds(u64, u64, std::sync::Arc<Clip>, f64, f64, bool),
     Command(u64, u64, ClipCommand),
+    Erase(u64, u64),
     LoopRange(f64, f64),
     New(u64, f64),
     Mute(u64),
@@ -34,6 +36,27 @@ enum Edit {
     TransferGroup(u64),
     Folder(Option<u64>),
     Parent(u64, Option<u64>),
+}
+
+#[derive(Clone, Copy)]
+struct LoopEndpointDrag {
+    handle: egui::Id,
+    start: bool,
+    original_start: f64,
+    original_end: f64,
+    pointer_start: f32,
+    pixels_per_beat: f32,
+    dragging: bool,
+}
+
+#[derive(Clone, Copy)]
+struct ClipEdgeDrag {
+    handle: egui::Id,
+    clip: u64,
+    pointer_start: f32,
+    pixels_per_beat: f32,
+    moved: bool,
+    frame: u64,
 }
 
 /// A folder cannot be moved into itself or one of its descendants. Filtering
@@ -125,6 +148,61 @@ impl DawApp {
     pub fn arrangement(&mut self, ui: &mut egui::Ui) {
         self.drop_target = None;
         self.sync_arranger_selection();
+        // A popup can dismiss in the menu/toolbar code before clip responses
+        // are read. Keep its entry/previous-frame state so that same pointer
+        // gesture cannot also start a trim on the newly uncovered canvas.
+        let edge_popup_id = egui::Id::new("arrangement_clip_edge_popup_open");
+        let edge_popup_was_open = egui::Popup::is_any_open(ui.ctx())
+            || ui
+                .ctx()
+                .data(|data| data.get_temp::<bool>(edge_popup_id))
+                .unwrap_or(false);
+        // Native event loops may deliver a complete click between two paints.
+        // Egui has already cleared press_origin/button-down by that point, so
+        // retain the actual press event and let its accepted response identify
+        // the target. An initially unfocused window can still receive a valid
+        // pointer click; only an actual focus-loss event cancels this gesture.
+        let primary_press = ui.input(|input| {
+            input.raw.events.iter().find_map(|event| match event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers,
+                } => Some((*pos, *modifiers)),
+                _ => None,
+            })
+        });
+        let cancel_plain_click = ui.input(|input| {
+            input.modifiers != egui::Modifiers::NONE
+                || input.pointer.secondary_down()
+                || input.pointer.button_down(egui::PointerButton::Middle)
+                || input.key_down(egui::Key::Escape)
+                || input.raw.events.iter().any(|event| match event {
+                    egui::Event::WindowFocused(false)
+                    | egui::Event::Key {
+                        key: egui::Key::Escape,
+                        pressed: true,
+                        ..
+                    } => true,
+                    egui::Event::PointerButton {
+                        button, modifiers, ..
+                    } => {
+                        *button != egui::PointerButton::Primary
+                            || *modifiers != egui::Modifiers::NONE
+                    }
+                    _ => false,
+                })
+        });
+        if self.tool != daw_ui::EditorTool::Select
+            || cancel_plain_click
+            || ui.input(|input| {
+                input.pointer.primary_pressed()
+                    || (!input.pointer.primary_down() && !input.pointer.primary_released())
+            })
+        {
+            self.arranger_selection.plain_click_candidate = None;
+        }
         let selected_loop_range = self.loop_selection_range();
         let can_change_loop = !self.recording_busy();
         let viewport_id = egui::Id::new("arrangement_timeline_viewport");
@@ -170,6 +248,11 @@ impl DawApp {
                 .unwrap_or_default()
         });
         let compact_toolbar = ui.available_width() < 1200.0;
+        let snap_width = if compact_toolbar {
+            120.0
+        } else {
+            daw_ui::tokens::SELECT_WIDTH
+        };
         daw_ui::toolbar(ui, |ui| {
             if compact_toolbar {
                 ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
@@ -188,15 +271,23 @@ impl DawApp {
             add_pattern = daw_ui::quiet_button(ui, "Add pattern")
                 .on_hover_text("Add a four-beat MIDI pattern at the cursor; use the selected MIDI track or create one")
                 .clicked();
-            daw_ui::toolbar_trailing(ui, if compact_toolbar { 384.0 } else { 430.0 }, |ui| {
+            let zoom_action =
+                daw_ui::timeline_zoom_controls(ui, !self.arranger_selection_ids().is_empty());
+            if zoom_action != daw_ui::TimelineViewAction::None {
+                view_action = zoom_action;
+                fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
+            }
+            daw_ui::toolbar_trailing(ui, if compact_toolbar { 320.0 } else { 366.0 }, |ui| {
                 daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
-                fit = daw_ui::timeline_fit_button(ui).clicked();
                 daw_ui::quiet_view_menu(ui, "View", |ui| {
-                    view_action = daw_ui::timeline_selection_view_actions(
+                    let action = daw_ui::timeline_selection_view_actions(
                         ui,
                         "arrangement",
                         !self.arranger_selection_ids().is_empty(),
                     );
+                    if action != daw_ui::TimelineViewAction::None {
+                        view_action = action;
+                    }
                     ui.separator();
                     daw_ui::waveform_amplitude_control(ui, &mut waveform_amplitude);
                     crate::spectrogram::view_options(ui);
@@ -211,18 +302,20 @@ impl DawApp {
                     "snap",
                     if self.snap == 0.0 {
                         "Snap off".into()
-                    } else {
+                    } else if self.snap == f64::from(self.project.beats_per_bar) {
+                        "Snap 1 bar".into()
+                    } else if [0.125, 0.25, 0.5, 1.0].contains(&self.snap) {
                         format!("Snap 1/{}", (4.0 / self.snap) as u32)
+                    } else {
+                        format!("Snap {} beats", self.snap)
                     },
                 )
-                .width(if compact_toolbar {
-                    120.0
-                } else {
-                    daw_ui::tokens::SELECT_WIDTH
-                })
+                .width(snap_width)
+                .height(6.0 * (daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_SM))
                 .show_ui(ui, |ui| {
                     for (name, value) in [
                         ("Off", 0.0),
+                        ("1 bar", f64::from(self.project.beats_per_bar)),
                         ("1/4", 1.0),
                         ("1/8", 0.5),
                         ("1/16", 0.25),
@@ -231,6 +324,7 @@ impl DawApp {
                         daw_ui::selectable_value(ui, &mut self.snap, value, name);
                     }
                 });
+                daw_ui::editor_tool_caption(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
             });
         });
         ui.ctx()
@@ -282,12 +376,10 @@ impl DawApp {
             start_row: 0.0,
             end_row: (row_units + folder_footers / viewport.row_height).max(1.0),
         };
+        let ruler_height = daw_ui::duration::loop_ruler_height(ui.ctx());
         let canvas = Rect::from_min_max(
             ui.available_rect_before_wrap().min
-                + Vec2::new(
-                    header_width,
-                    daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT + ui.spacing().item_spacing.y,
-                ),
+                + Vec2::new(header_width, ruler_height + ui.spacing().item_spacing.y),
             ui.available_rect_before_wrap().max - Vec2::new(12.0 + right_inset, 0.0),
         );
         if let Some((track, clip)) = self.arranger_selection.reveal.take() {
@@ -383,6 +475,7 @@ impl DawApp {
         if fit {
             viewport.fit_bounds(canvas, bounds);
         }
+        view_action.apply_zoom(&mut viewport, canvas);
         let navigation = daw_ui::TimelinePane::new("arrangement_pane", canvas)
             .keyboard_active()
             .navigate(ui, &mut viewport, bounds);
@@ -401,6 +494,37 @@ impl DawApp {
         let content_width = (ui.available_width() - 12.0).max(header_width + 1.0);
         let pattern_start = self.snapped(self.cursor).max(0.0);
         let mut edits = Vec::new();
+        let clip_edge_drag_id = egui::Id::new("arrangement_clip_edge_drag");
+        let mut clip_edge_drag = ui
+            .ctx()
+            .data(|data| data.get_temp::<ClipEdgeDrag>(clip_edge_drag_id));
+        let frame = ui.ctx().cumulative_frame_nr();
+        let cancel_clip_edge_drag = self.tool != daw_ui::EditorTool::Select
+            || !ui.is_enabled()
+            || navigation.navigating
+            || edge_popup_was_open
+            || egui::Popup::is_any_open(ui.ctx())
+            || ui.input(|input| {
+                input.key_pressed(egui::Key::Escape)
+                    || input.pointer.secondary_down()
+                    || input.pointer.button_down(egui::PointerButton::Middle)
+                    || input.raw.events.iter().any(|event| {
+                        matches!(event, egui::Event::WindowFocused(false))
+                    })
+                    || (!input.pointer.primary_down() && !input.pointer.primary_released())
+            })
+            || clip_edge_drag.is_some_and(|gesture| {
+                gesture.frame.saturating_add(1) < frame
+                    || !matches!(&self.drag, Some(Drag::Clip { clip, mode: ClipDragMode::TrimStart | ClipDragMode::TrimEnd, .. }) if *clip == gesture.clip)
+            });
+        if cancel_clip_edge_drag && let Some(gesture) = clip_edge_drag.take() {
+            if matches!(&self.drag, Some(Drag::Clip { clip, mode: ClipDragMode::TrimStart | ClipDragMode::TrimEnd, .. }) if *clip == gesture.clip)
+            {
+                self.drag = None;
+            }
+            self.arranger_selection.plain_click_candidate = None;
+            self.arranger_selection.click_tracker.clear();
+        }
         if add_pattern {
             let track = self
                 .selected_track
@@ -466,10 +590,8 @@ impl DawApp {
             .enumerate()
             .map(|(index, id)| (id, index + 1))
             .collect();
-        let (ruler, ruler_response) = ui.allocate_exact_size(
-            Vec2::new(content_width, daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT),
-            Sense::click(),
-        );
+        let (ruler, ruler_response) =
+            ui.allocate_exact_size(Vec2::new(content_width, ruler_height), Sense::click());
         let p = ui.painter_at(ruler);
         p.rect_filled(ruler, 0.0, palette(ui.ctx()).panel);
         let selected_folder = self.selected_track.filter(|id| {
@@ -554,30 +676,194 @@ impl DawApp {
             self.project.tempo,
             self.project.beats_per_bar,
         );
+        let loop_drag_id = egui::Id::new("arrangement_loop_endpoint_drag");
+        let cancel_loop_drag = !self.project.loop_enabled
+            || !can_change_loop
+            || navigation.navigating
+            || egui::Popup::is_any_open(ui.ctx())
+            || ui.input(|input| {
+                input.key_pressed(egui::Key::Escape)
+                    || input.pointer.secondary_down()
+                    || input.pointer.button_down(egui::PointerButton::Middle)
+                    || input
+                        .raw
+                        .events
+                        .iter()
+                        .any(|event| matches!(event, egui::Event::WindowFocused(false)))
+                    || (!input.pointer.primary_down() && !input.pointer.primary_released())
+            });
+        if cancel_loop_drag {
+            ui.ctx()
+                .data_mut(|data| data.remove::<LoopEndpointDrag>(loop_drag_id));
+        }
+        let mut loop_drag = ui
+            .ctx()
+            .data(|data| data.get_temp::<LoopEndpointDrag>(loop_drag_id));
+        if let Some(gesture) = &mut loop_drag {
+            if !gesture.dragging && ui.ctx().is_being_dragged(gesture.handle) {
+                self.history.seal_group();
+                gesture.dragging = true;
+            }
+            if gesture.dragging
+                && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
+            {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                let delta = f64::from(pointer.x - gesture.pointer_start)
+                    / f64::from(gesture.pixels_per_beat);
+                let original = if gesture.start {
+                    gesture.original_start
+                } else {
+                    gesture.original_end
+                };
+                let target = if ui.input(|input| input.modifiers.shift) {
+                    original + delta
+                } else {
+                    self.snapped(original + delta)
+                };
+                let minimum = 0.001_f64.min(gesture.original_end - gesture.original_start);
+                let (start, end) = if gesture.start {
+                    (
+                        target.clamp(0.0, gesture.original_end - minimum),
+                        gesture.original_end,
+                    )
+                } else {
+                    (
+                        gesture.original_start,
+                        target.clamp(gesture.original_start + minimum, MAX_BEAT),
+                    )
+                };
+                if start != self.project.loop_start || end != self.project.loop_end {
+                    self.loop_range(start, end);
+                    self.edit_label = Some("Loop range".into());
+                }
+                if ui.input(|input| input.pointer.primary_down()) {
+                    let endpoint = if gesture.start { start } else { end };
+                    daw_ui::pointer_text(
+                        ui.ctx(),
+                        loop_drag_id.with("feedback"),
+                        pointer,
+                        format!(
+                            "Loop {} · {}\n{} · Duration {}",
+                            if gesture.start { "start" } else { "end" },
+                            daw_ui::duration::musical_position(
+                                endpoint,
+                                self.project.beats_per_bar
+                            ),
+                            daw_ui::duration::format_seconds(endpoint * 60.0 / self.project.tempo),
+                            daw_ui::duration::format_seconds(
+                                (end - start) * 60.0 / self.project.tempo
+                            ),
+                        ),
+                    );
+                }
+            }
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(loop_drag_id, *gesture));
+        }
         let mut loop_indicator = None;
+        let mut loop_handles = [None, None];
+        let mut loop_handle_owns_pointer = loop_drag.is_some();
         if self.project.loop_enabled {
-            let rr = Rect::from_min_max(
+            let region = Rect::from_min_max(
                 Pos2::new(
                     origin + self.project.loop_start as f32 * self.zoom,
-                    ruler.bottom() - daw_ui::tokens::TIMELINE_LOOP_STRIP_HEIGHT,
+                    loop_lane.top() + daw_ui::tokens::SPACE_SM,
                 ),
                 Pos2::new(
                     origin + self.project.loop_end as f32 * self.zoom,
                     loop_lane.bottom(),
                 ),
-            )
-            .intersect(loop_lane);
+            );
+            let rr = region.intersect(loop_lane);
             if rr.is_positive() {
-                p.rect_filled(rr, 2.0, palette(ui.ctx()).accent.gamma_multiply(0.6));
+                daw_ui::duration::paint_loop_region(
+                    &p,
+                    rr,
+                    self.project.loop_start,
+                    self.project.loop_end,
+                    self.project.tempo,
+                    self.project.beats_per_bar,
+                );
+                for (index, start) in [true, false].into_iter().enumerate() {
+                    let handle_id = loop_drag_id.with(start);
+                    if let Some(response) = daw_ui::duration::loop_endpoint_handle(
+                        ui,
+                        handle_id,
+                        region,
+                        loop_lane,
+                        start,
+                        can_change_loop,
+                    ) {
+                        loop_handles[index] = Some(response.rect);
+                        loop_handle_owns_pointer |= response.hovered()
+                            || response.is_pointer_button_down_on()
+                            || response.clicked();
+                        if !cancel_loop_drag
+                            && ui.input(|input| input.pointer.primary_pressed())
+                            && response.is_pointer_button_down_on()
+                            && let Some(pointer) = ui.input(|input| input.pointer.press_origin())
+                        {
+                            ui.ctx().data_mut(|data| {
+                                data.insert_temp(
+                                    loop_drag_id,
+                                    LoopEndpointDrag {
+                                        handle: handle_id,
+                                        start,
+                                        original_start: self.project.loop_start,
+                                        original_end: self.project.loop_end,
+                                        pointer_start: pointer.x,
+                                        pixels_per_beat: self.zoom,
+                                        dragging: false,
+                                    },
+                                )
+                            });
+                        }
+                    }
+                }
+                if ui
+                    .input(|input| input.pointer.hover_pos())
+                    .is_some_and(|point| rr.contains(point))
+                    && !loop_handle_owns_pointer
+                {
+                    daw_ui::hover_text(
+                        ruler_response.clone(),
+                        format!(
+                            "Loop from {} ({}) to {} ({}) · {}",
+                            daw_ui::duration::musical_position(
+                                self.project.loop_start,
+                                self.project.beats_per_bar
+                            ),
+                            daw_ui::duration::format_seconds(
+                                self.project.loop_start * 60.0 / self.project.tempo
+                            ),
+                            daw_ui::duration::musical_position(
+                                self.project.loop_end,
+                                self.project.beats_per_bar
+                            ),
+                            daw_ui::duration::format_seconds(
+                                self.project.loop_end * 60.0 / self.project.tempo
+                            ),
+                            daw_ui::duration::format_seconds(
+                                (self.project.loop_end - self.project.loop_start) * 60.0
+                                    / self.project.tempo
+                            ),
+                        ),
+                    );
+                }
                 loop_indicator = Some(rr);
             }
         }
         if ruler_response.clicked()
+            && !loop_handle_owns_pointer
             && let Some(pos) = ruler_response.interact_pointer_pos()
             && pos.x >= grid_left
             && pos.x <= canvas.right()
         {
             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
+        }
+        if ui.input(|input| input.pointer.primary_released()) {
+            ui.ctx()
+                .data_mut(|data| data.remove::<LoopEndpointDrag>(loop_drag_id));
         }
         // Folder "After" means after its complete subtree, even when the
         // pointer stays over the folder header. Keep that boundary independent
@@ -1108,17 +1394,35 @@ impl DawApp {
                                 }
                             }
                         }
-                        let response =
+                        let response = daw_ui::clip_occurrence_hover(
                             ui.interact(rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom()))),
-                                ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() })
-                                .on_hover_text(if clip.link_group.is_some() { format!("{} · Ghost clip\nEdits and name are shared. Position and trim are independent.", clip.name) } else { clip.name.clone() });
-                        if ui.input(|input| input.pointer.primary_pressed())
-                            && ui.input(|input| input.pointer.press_origin()).is_some_and(|position| visible_clip.contains(position)) {
-                            self.arranger_selection.press_shift = Some((clip.id, ui.input(|input| input.modifiers.shift)));
+                                ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() }),
+                            &clip.name, &track.name, clip.start..clip.end(),
+                            self.project.tempo, self.project.beats_per_bar, clip.link_group.is_some(),
+                        );
+                        let edge_handles = [true, false].map(|start| {
+                            (self.tool == daw_ui::EditorTool::Select && !navigation.navigating)
+                                .then(|| daw_ui::clip_edge_handle(
+                                    ui, ui.id().with((clip.id, start, "trim")), rect, visible_clip, start,
+                                ))
+                                .flatten()
+                        });
+                        if let Some((position, modifiers)) = primary_press
+                            && visible_clip.contains(position) {
+                            self.arranger_selection.press_shift = Some((clip.id, modifiers.shift));
+                            if self.tool == daw_ui::EditorTool::Select && !navigation.navigating
+                                && !egui::Popup::is_any_open(ui.ctx())
+                                && !cancel_plain_click
+                                && modifiers == egui::Modifiers::NONE
+                                && (response.is_pointer_button_down_on()
+                                    || response.clicked_by(egui::PointerButton::Primary)) {
+                                self.arranger_selection.plain_click_candidate = Some(clip.id);
+                            }
                         }
                         let press_shift = self.arranger_selection.press_shift
                             .filter(|(id, _)| *id == clip.id).map_or_else(|| ui.input(|input| input.modifiers.shift), |(_, shift)| shift);
                         let mut editing_fade = false;
+                        let mut pressed_fade = false;
                         if is_selected && self.tool == daw_ui::EditorTool::Select && rect.width() >= 28.0
                             && let ClipContent::Audio { fade_in, fade_out, envelope, .. } = &clip.content
                         {
@@ -1136,6 +1440,7 @@ impl DawApp {
                                 if let Some(diagnostic) = clip_diagnostics.last_mut() {
                                     diagnostic[if incoming { "fade_in_handle" } else { "fade_out_handle" }] = rect_json(handle.rect);
                                 }
+                                pressed_fade |= primary_press.is_some_and(|(position, _)| handle.rect.contains(position));
                                 editing_fade |= handle.drag_started_by(egui::PointerButton::Primary) || handle.dragged_by(egui::PointerButton::Primary);
                                 if !navigation.navigating && handle.drag_started_by(egui::PointerButton::Primary) {
                                     let at = ((center.x - origin) / self.zoom) as f64;
@@ -1160,25 +1465,98 @@ impl DawApp {
                                 edits.push(Edit::AudioMotion(at));
                             }
                         }
-                        if (response.clicked() || response.drag_started()) && self.tool != daw_ui::EditorTool::Cursor {
+                        // Drag-only edge targets capture immediately; retain the
+                        // original bounds but make no edit until horizontal motion.
+                        // Fade handles were registered last and keep precedence.
+                        if !cancel_clip_edge_drag && !editing_fade && !pressed_fade {
+                            for (start, handle) in [true, false].into_iter().zip(&edge_handles) {
+                                if let Some(handle) = handle
+                                    && (handle.drag_started_by(egui::PointerButton::Primary)
+                                        // A complete short gesture may arrive in
+                                        // one paint. Drag-only targets suppress
+                                        // underlying clicks, but egui still marks
+                                        // its accepted topmost drag target as
+                                        // hovered. Require that hit ownership as
+                                        // well as the retained press, never just
+                                        // geometry through an overlaid widget.
+                                        || handle.hovered()
+                                            && ui.input(|input| input.pointer.primary_released())
+                                            && primary_press.is_some_and(|(position, _)| handle.rect.contains(position)))
+                                    && let Some(pressed) = primary_press.map(|(position, _)| position)
+                                        .or_else(|| ui.input(|input| input.pointer.press_origin()))
+                                {
+                                    self.drag = Some(Drag::Clip {
+                                        track: track.id,
+                                        clip: clip.id,
+                                        handle: clip.id,
+                                        original: std::sync::Arc::new(clip.clone()),
+                                        mode: if start { ClipDragMode::TrimStart } else { ClipDragMode::TrimEnd },
+                                    });
+                                    clip_edge_drag = Some(ClipEdgeDrag {
+                                        handle: handle.id,
+                                        clip: clip.id,
+                                        pointer_start: pressed.x,
+                                        pixels_per_beat: self.zoom,
+                                        moved: false,
+                                        frame,
+                                    });
+                                }
+                            }
+                        }
+                        let mut edge_delta = None;
+                        if let Some(gesture) = &mut clip_edge_drag
+                            && gesture.clip == clip.id
+                            && !editing_fade
+                            && (ui.ctx().is_being_dragged(gesture.handle)
+                                || ui.input(|input| input.pointer.primary_released()))
+                            && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
+                        {
+                            gesture.frame = frame;
+                            let delta = f64::from(pointer.x - gesture.pointer_start)
+                                / f64::from(gesture.pixels_per_beat);
+                            if delta != 0.0 && !gesture.moved {
+                                gesture.moved = true;
+                                self.arranger_selection.click_tracker.clear();
+                                edits.push(Edit::Select(track.id, clip.id, press_shift, true));
+                            }
+                            if gesture.moved {
+                                // Release can carry the final pointer position in
+                                // the same frame, after egui stopped its drag.
+                                edge_delta = Some(delta);
+                            }
+                        }
+                        let edge_moved = clip_edge_drag.is_some_and(|gesture| gesture.clip == clip.id && gesture.moved);
+                        if response.drag_started() || editing_fade || edge_moved {
+                            self.arranger_selection.plain_click_candidate = None;
+                        }
+                        let plain_click = response.clicked_by(egui::PointerButton::Primary)
+                            && !edge_moved
+                            && self.tool == daw_ui::EditorTool::Select
+                            && self.arranger_selection.plain_click_candidate == Some(clip.id);
+                        if plain_click {
+                            edits.push(Edit::SelectOnly(track.id, clip.id));
+                        } else if (response.drag_started() || response.clicked()
+                            && (self.tool != daw_ui::EditorTool::Select || press_shift))
+                            && self.tool != daw_ui::EditorTool::Cursor && !edge_moved {
                             edits.push(Edit::Select(track.id, clip.id, press_shift, response.drag_started()));
                         }
-                        if response.clicked() && !navigation.navigating {
+                        if response.clicked() && !navigation.navigating && !edge_moved {
                             let beat = response.interact_pointer_pos().map(|pos| self.snapped(((pos.x - origin) / self.zoom) as f64));
                             match self.tool {
                                 daw_ui::EditorTool::Cut => { if let Some(beat) = beat { edits.push(Edit::Command(track.id, clip.id, ClipCommand::Split(beat))); } }
                                 daw_ui::EditorTool::Duplicate => edits.push(Edit::Command(track.id, clip.id, ClipCommand::Duplicate)),
                                 daw_ui::EditorTool::Ghost => edits.push(Edit::Command(track.id, clip.id, ClipCommand::Ghost)),
                                 daw_ui::EditorTool::Glue => popup = Some(PopupKind::Join),
-                                daw_ui::EditorTool::Erase => edits.push(Edit::Command(track.id, clip.id, ClipCommand::Delete)),
+                                daw_ui::EditorTool::Erase => edits.push(Edit::Erase(track.id, clip.id)),
                                 daw_ui::EditorTool::Cursor => new_cursor = beat,
                                 _ => {}
                             }
                         }
-                        clicked_clip |= response.clicked();
-                        let double = response.clicked() && response.interact_pointer_pos().is_some_and(|position| {
+                        clicked_clip |= response.clicked() || edge_moved;
+                        let double = response.clicked() && !edge_moved && response.interact_pointer_pos().is_some_and(|position| {
                             self.arranger_selection.click_tracker.register(clip.id, position, ui.input(|input| input.time),
-                                !press_shift && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Pencil))
+                                plain_click || self.tool == daw_ui::EditorTool::Pencil && !press_shift
+                                    && ui.input(|input| input.modifiers == egui::Modifiers::NONE))
                         });
                         if double {
                             self.selected_track = Some(track.id);
@@ -1194,15 +1572,9 @@ impl DawApp {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                             }
                         }
-                        if response.drag_started() && !editing_fade && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch) {
-                            let pressed = ui.input(|input| input.pointer.press_origin()).unwrap_or(rect.center());
-                            let edge = 10.0_f32.min(rect.width() / 3.0);
+                        if response.drag_started() && !editing_fade && !edge_moved && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch) {
                             let mode = if self.tool == daw_ui::EditorTool::Stretch {
                                 ClipDragMode::Stretch
-                            } else if pressed.x > rect.right() - edge {
-                                ClipDragMode::TrimEnd
-                            } else if pressed.x < rect.left() + edge {
-                                ClipDragMode::TrimStart
                             } else { ClipDragMode::Move };
                             self.drag = Some(Drag::Clip {
                                 track: track.id,
@@ -1215,7 +1587,7 @@ impl DawApp {
                                 edits.push(Edit::GroupStart(clip.id, press_shift));
                             }
                         }
-                        if response.dragged() && !editing_fade && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch)
+                        if (response.dragged() || edge_delta.is_some()) && !editing_fade && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch)
                             && let Some(Drag::Clip {
                                 track: t,
                                 clip: c,
@@ -1226,8 +1598,8 @@ impl DawApp {
                             && *handle == clip.id
 
                         {
-                            let delta = response.total_drag_delta().unwrap_or_default().x as f64
-                                / self.zoom as f64;
+                            let delta = edge_delta.unwrap_or_else(|| response.total_drag_delta().unwrap_or_default().x as f64
+                                / self.zoom as f64);
                             let snap = |beat| if ui.input(|i| i.modifiers.shift) { beat } else { self.snapped(beat) };
                             let minimum = original.length.min(0.0625);
                             match mode {
@@ -1236,12 +1608,16 @@ impl DawApp {
                                     let earliest = if matches!(original.content, ClipContent::Audio { reverse: true, .. }) {
                                         0.0
                                     } else { (original.start - original.offset / original.source_rate).max(0.0) };
-                                    let start = snap(original.start + delta).clamp(earliest, (original.end() - minimum).max(earliest));
+                                    let start = if delta == 0.0 { original.start } else {
+                                        snap(original.start + delta).clamp(earliest, (original.end() - minimum).max(earliest))
+                                    };
                                     let length = if start == original.start { original.length } else { original.end() - start };
                                     edits.push(Edit::Bounds(*t, *c, std::sync::Arc::clone(original), start, length, false));
                                 }
                                 ClipDragMode::TrimEnd | ClipDragMode::Stretch => {
-                                    let mut length = (snap(original.end() + delta) - original.start).max(minimum);
+                                    let mut length = if delta == 0.0 { original.length } else {
+                                        (snap(original.end() + delta) - original.start).max(minimum)
+                                    };
                                     if *mode == ClipDragMode::Stretch {
                                         length = length.clamp(original.source_length() / 4.0, original.source_length() / 0.25);
                                     } else if matches!(original.content, ClipContent::Audio { reverse: true, .. }) {
@@ -1252,6 +1628,10 @@ impl DawApp {
                             }
                         }
                         response.context_menu(|ui| {
+                            let selected_count = self.arranger_selection.ids.len();
+                            if selected_count > 1 && self.arranger_selection.ids.contains(&clip.id) {
+                                daw_ui::text::note(ui, format!("{selected_count} clips selected"));
+                            }
                             if daw_ui::button(ui, if matches!(clip.content, ClipContent::Midi { .. }) {
                                 "Edit notes"
                             } else {
@@ -1268,21 +1648,16 @@ impl DawApp {
                                 edits.push(Edit::Select(track.id, clip.id, true, false));
                             }
                             if daw_ui::button(ui, "Select only this clip").clicked() {
-                                self.selected_track = Some(track.id);
-                                self.selected_clip = Some(clip.id);
-                                self.arranger_selection.ids.clear();
-                                self.arranger_selection.ids.insert(clip.id);
-                                self.arranger_selection.span = None;
-                                self.selected_notes.clear();
+                                edits.push(Edit::SelectOnly(track.id, clip.id));
                                 ui.close();
                             }
                             if ui.add_enabled(can_change_loop, daw_ui::button_widget(
-                                if member { "Loop selection" } else { "Loop clip" },
+                                if member { "Loop playback over selection" } else { "Loop playback over clip" },
                             ))
                                 .on_hover_text(if member {
-                                    "Repeat the selected clips or time range, including rests"
+                                    "Enable playback looping over the selected clips or time range, including rests. To create copies, set a later loop end, then choose Edit → Repeat to loop end."
                                 } else {
-                                    "Repeat this clip without changing the current selection"
+                                    "Enable playback looping over this clip, preserving the selection. To create copies, select this clip, set a later loop end, then choose Edit → Repeat to loop end."
                                 })
                                 .on_disabled_hover_text("Finish recording before changing the loop range")
                                 .clicked()
@@ -1643,7 +2018,9 @@ impl DawApp {
                 "arrangement",
                 view_before,
                 viewport,
-                fit || navigation.fit || view_action == daw_ui::TimelineViewAction::FitSelection,
+                fit || navigation.fit
+                    || view_action == daw_ui::TimelineViewAction::FitSelection
+                    || view_action.is_zoom(),
             );
         }
         self.zoom = viewport.pixels_per_beat;
@@ -1673,6 +2050,8 @@ impl DawApp {
             diagnostics["ruler"] = rect_json(label_ruler);
             diagnostics["loop_lane"] = rect_json(loop_lane);
             diagnostics["loop_indicator"] = serde_json::json!(loop_indicator.map(rect_json));
+            diagnostics["loop_start_handle"] = serde_json::json!(loop_handles[0].map(rect_json));
+            diagnostics["loop_end_handle"] = serde_json::json!(loop_handles[1].map(rect_json));
             diagnostics["folder_padding"] = serde_json::json!(folder_padding);
             diagnostics["folder_containers"] = serde_json::json!(folder_containers.iter().map(|group| serde_json::json!({
                 "folder":group.folder,"depth":group.depth,"rect":rect_json(group.rect),"visible":rect_json(group.visible),
@@ -1687,6 +2066,9 @@ impl DawApp {
         edits.retain(|edit| {
             if let Edit::Select(track, clip, shift, dragging) = edit {
                 self.arranger_click_clip(*track, *clip, *shift, *dragging);
+                false
+            } else if let Edit::SelectOnly(track, clip) = edit {
+                self.arranger_select_only_clip(*track, *clip);
                 false
             } else {
                 true
@@ -1726,6 +2108,7 @@ impl DawApp {
             if !matches!(
                 edit,
                 Edit::Select(..)
+                    | Edit::SelectOnly(..)
                     | Edit::Rename(..)
                     | Edit::AudioStart(..)
                     | Edit::AudioMotion(..)
@@ -1733,6 +2116,7 @@ impl DawApp {
                     | Edit::GroupMove(..)
                     | Edit::TransferGroup(..)
                     | Edit::LoopRange(..)
+                    | Edit::Erase(..)
             ) {
                 self.begin_edit();
             }
@@ -1753,6 +2137,10 @@ impl DawApp {
                 Edit::Select(track, clip, shift, dragging) => {
                     // Selection is view state and must never enter musical history.
                     self.arranger_click_clip(track, clip, shift, dragging);
+                    continue;
+                }
+                Edit::SelectOnly(track, clip) => {
+                    self.arranger_select_only_clip(track, clip);
                     continue;
                 }
                 Edit::GroupStart(handle, duplicate) => {
@@ -1776,6 +2164,12 @@ impl DawApp {
                         }
                         _ => self.apply_clip_command(t, c, command),
                     }
+                    continue;
+                }
+                Edit::Erase(track, clip) => {
+                    // The Erase tool points at one clip. Explicit selection
+                    // commands retain their separate bulk-delete behavior.
+                    self.apply_clip_command(track, clip, ClipCommand::Delete);
                     continue;
                 }
                 Edit::LoopRange(start, end) => {
@@ -1955,14 +2349,57 @@ impl DawApp {
                 self.message(result, "");
             }
         }
+        // Read the applied clip bounds rather than the pre-edit canvas data:
+        // this feedback must agree with the current drag, including snap and
+        // source limits. Painting creates no hit target or history entry.
+        let trim_feedback = if ui.input(|input| input.pointer.primary_down())
+            && clip_edge_drag.is_some_and(|gesture| gesture.moved)
+            && let Some(Drag::Clip {
+                track,
+                clip,
+                mode: ClipDragMode::TrimStart | ClipDragMode::TrimEnd,
+                ..
+            }) = &self.drag
+            && let Some(clip_data) = self.project.clip(*track, *clip)
+            && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
+        {
+            let end_seconds = clip_data.end() * 60.0 / self.project.tempo;
+            let duration_seconds = clip_data.length * 60.0 / self.project.tempo;
+            let text = format!(
+                "End {end_seconds:.3} s · Beat {:.2}\nDuration {duration_seconds:.3} s · {:.2} beats",
+                clip_data.end() + 1.0,
+                clip_data.length,
+            );
+            let rect = daw_ui::pointer_text(
+                ui.ctx(),
+                ui.id().with("clip_trim_feedback"),
+                pointer,
+                text.clone(),
+            );
+            serde_json::json!({
+                "track": track, "clip": clip, "text": text,
+                "end_seconds": end_seconds, "duration_seconds": duration_seconds,
+                "end_beat": clip_data.end() + 1.0, "duration_beats": clip_data.length,
+                "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
+            })
+        } else {
+            serde_json::Value::Null
+        };
+        ui.ctx().data_mut(|data| {
+            data.get_temp_mut_or_default::<serde_json::Value>(egui::Id::new(
+                "timeline_diagnostics",
+            ))["trim_feedback"] = trim_feedback;
+        });
         self.apply_automation_navigation(automation_navigation);
         if let Some(intent) = track_reorder {
             self.apply_track_reorder(intent);
         }
         if ui.input(|input| input.pointer.primary_released()) {
+            clip_edge_drag = None;
             self.arranger_selection.drag = None;
             self.arranger_selection.audio_drag = None;
             self.arranger_selection.press_shift = None;
+            self.arranger_selection.plain_click_candidate = None;
             if !clicked_clip {
                 self.arranger_selection.click_tracker.clear();
             }
@@ -1970,6 +2407,16 @@ impl DawApp {
                 self.arranger_selection.background_click_tracker.clear();
             }
         }
+        ui.ctx().data_mut(|data| {
+            if let Some(gesture) = clip_edge_drag {
+                data.insert_temp(clip_edge_drag_id, gesture);
+            } else {
+                data.remove::<ClipEdgeDrag>(clip_edge_drag_id);
+            }
+        });
+        let edge_popup_open = egui::Popup::is_any_open(ui.ctx());
+        ui.ctx()
+            .data_mut(|data| data.insert_temp(edge_popup_id, edge_popup_open));
         match empty_action.as_deref() {
             Some("instrument") => self.open_instrument_chooser(false),
             Some("import") => self.import_dialog(),
@@ -2107,11 +2554,12 @@ impl DawApp {
         }
         .unwrap_or_else(|| "Properties".into());
         let mut navigated = false;
+        let mut name_keyboard = None;
         let mut automation_navigation = None;
         daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
             .default_width(540.0)
-            .min_height(daw_ui::popup_body_size(ctx).y.min(420.0))
+            .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 520.0 } else { 420.0 }))
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
@@ -2177,6 +2625,8 @@ impl DawApp {
                                 .count()
                         });
                         let mut make_independent = false;
+                        let timing_tempo = self.project.tempo;
+                        let timing_meter = self.project.beats_per_bar;
                         if let Some(clip) = self.selected_mut() {
                             if let Some(count) = count {
                                 ui.horizontal_wrapped(|ui| {
@@ -2190,7 +2640,13 @@ impl DawApp {
                             }
                             daw_ui::form_grid(ui, "clip_properties", |ui| {
                                 let label = daw_ui::text::label(ui, "Name");
-                                let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 260.0)
+                                let name = ui.horizontal(|ui| {
+                                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 220.0);
+                                    if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this clip with the mouse").clicked() {
+                                        name_keyboard = Some(true);
+                                    }
+                                    name
+                                }).inner
                                     .labelled_by(label.id)
                                     .on_hover_text(if linked.is_some() {
                                         "Shared name · renaming any ghost renames the whole group"
@@ -2206,14 +2662,13 @@ impl DawApp {
                                 let mut duration_mode = ctx.data(|data| data.get_temp::<daw_ui::DurationEditMode>(duration_mode_id)).unwrap_or_default();
                                 timing_edit = daw_ui::clip_timing_fields(ui, daw_ui::ClipTimingValues {
                                     start: clip.start, duration: clip.length, source_offset: clip.offset,
-                                }, &mut duration_mode, MAX_BEAT, maximum_source_offset);
+                                }, &mut duration_mode, MAX_BEAT, maximum_source_offset,
+                                clip.source_length() / MAX_SOURCE_RATE..=clip.source_length() / MIN_SOURCE_RATE);
                                 ctx.data_mut(|data| data.insert_temp(duration_mode_id, duration_mode));
-                                if clip.source_rate != 1.0 {
-                                    daw_ui::text::label(ui, "Stretch");
-                                    daw_ui::text::body(ui, format!("{:.1}%", 100.0 / clip.source_rate))
-                                        .on_hover_text("Duration relative to the source; local to this occurrence");
-                                    ui.end_row();
-                                }
+                                daw_ui::text::label(ui, "Stretch");
+                                daw_ui::text::body(ui, format!("{:.1}%", 100.0 / clip.source_rate))
+                                    .on_hover_text("Duration relative to the source; local to this occurrence");
+                                ui.end_row();
                                 if let ClipContent::Audio {
                                     gain,
                                     processing,
@@ -2260,6 +2715,9 @@ impl DawApp {
                                         ui.end_row();
                                     }
                                 }
+                                daw_ui::duration::timing_summary(
+                                    ui, clip.start, clip.length, timing_tempo, timing_meter,
+                                );
                             });
                         }
                         if timing_edit.new_gesture {
@@ -2289,8 +2747,13 @@ impl DawApp {
                     if let Some(track) = self.project.track_mut(id) {
                         daw_ui::form_grid(ui, "track_properties", |ui| {
                             let label = daw_ui::text::label(ui, "Name");
-                            changed |= daw_ui::text_field(ui, &mut track.name, "Track name", 260.0)
-                                .labelled_by(label.id).changed();
+                            changed |= ui.horizontal(|ui| {
+                                let name = daw_ui::text_field(ui, &mut track.name, "Track name", 220.0).labelled_by(label.id);
+                                if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this track with the mouse").clicked() {
+                                    name_keyboard = Some(false);
+                                }
+                                name.changed()
+                            }).inner;
                             ui.end_row();
                             let label = daw_ui::text::label(ui, "Color");
                             changed |= daw_ui::color_edit(ui, &mut track.color).labelled_by(label.id).changed();
@@ -2347,6 +2810,9 @@ impl DawApp {
             self.inspector_open = open;
         }
         self.apply_automation_navigation(automation_navigation);
+        if let Some(clip) = name_keyboard {
+            self.start_item_name_keyboard(ctx, clip);
+        }
     }
 
     fn channel_properties(

@@ -64,6 +64,7 @@ enum Command {
     },
     MidiError,
     OutputError,
+    OutputXrun,
     FeedInput {
         channels: u16,
         samples: Vec<f32>,
@@ -90,6 +91,10 @@ enum Command {
     CloseWindow,
     Focused {
         focused: bool,
+        /// Model an initial host focus state without synthesizing a transition.
+        /// Normal focus changes emit the same event as the native integration.
+        #[serde(default)]
+        initial: bool,
     },
     SystemTheme {
         dark: bool,
@@ -218,7 +223,10 @@ enum TestClipboardAction {
 enum PointerPhase {
     Click,
     DoubleClick,
+    ClickBatched,
+    DoubleClickBatched,
     Drag,
+    DragBatched,
     Down,
     Move,
     Up,
@@ -604,6 +612,60 @@ impl Harness {
             PointerPhase::Down => send(self, from, Some(true)),
             PointerPhase::Move => send(self, from, None),
             PointerPhase::Up => send(self, from, Some(false)),
+            PointerPhase::DragBatched => {
+                send(self, from, None);
+                self.frame(RawInput {
+                    events: vec![
+                        Event::PointerMoved(from),
+                        Event::PointerButton {
+                            pos: from,
+                            button,
+                            pressed: true,
+                            modifiers,
+                        },
+                        Event::PointerMoved(to),
+                        Event::PointerButton {
+                            pos: to,
+                            button,
+                            pressed: false,
+                            modifiers,
+                        },
+                    ],
+                    modifiers,
+                    ..Default::default()
+                });
+                self.settle();
+            }
+            PointerPhase::ClickBatched | PointerPhase::DoubleClickBatched => {
+                let count = if matches!(phase, PointerPhase::DoubleClickBatched) {
+                    2
+                } else {
+                    1
+                };
+                for _ in 0..count {
+                    send(self, from, None);
+                    self.frame(RawInput {
+                        events: vec![
+                            Event::PointerMoved(from),
+                            Event::PointerButton {
+                                pos: from,
+                                button,
+                                pressed: true,
+                                modifiers,
+                            },
+                            Event::PointerButton {
+                                pos: from,
+                                button,
+                                pressed: false,
+                                modifiers,
+                            },
+                        ],
+                        modifiers,
+                        ..Default::default()
+                    });
+                }
+                self.settle();
+            }
             PointerPhase::Click | PointerPhase::DoubleClick | PointerPhase::Drag => {
                 let count = if matches!(phase, PointerPhase::DoubleClick) {
                     2
@@ -942,6 +1004,18 @@ impl Harness {
                     .fail_virtual_midi()?;
                 self.settle();
             }
+            Command::OutputXrun => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "Output dropout injection requires virtual audio mode"
+                );
+                self.app
+                    .engine
+                    .as_ref()
+                    .context("Audio engine is not ready")?
+                    .xrun_virtual_output()?;
+                self.settle();
+            }
             Command::OutputError => {
                 ensure!(
                     self.app.virtual_audio,
@@ -1027,8 +1101,15 @@ impl Harness {
                 self.inspect_paint = paint;
                 self.settle();
             }
-            Command::Focused { focused } => {
+            Command::Focused { focused, initial } => {
+                let changed = self.focused != focused;
                 self.focused = focused;
+                if changed && !initial {
+                    self.frame(RawInput {
+                        events: vec![Event::WindowFocused(focused)],
+                        ..Default::default()
+                    });
+                }
                 self.settle();
             }
             Command::Click { label, occurrence } => self.click(&label, occurrence)?,
@@ -1045,7 +1126,7 @@ impl Harness {
                 cmd,
             } => {
                 let from = Pos2::new(x, y);
-                let drag = matches!(phase, PointerPhase::Drag);
+                let drag = matches!(phase, PointerPhase::Drag | PointerPhase::DragBatched);
                 let to = if drag {
                     Pos2::new(
                         to_x.context("Drag requires to_x")?,
@@ -1411,6 +1492,8 @@ impl Harness {
                 "position_beats": s.position_beats,
                 "peak_left": s.peak_left, "peak_right": s.peak_right,
                 "underruns": s.underruns, "render_errors": s.render_errors,
+                "output_failed": s.output_failed,
+                "output_dropouts": s.output_dropouts,
                 "requested_revision": s.requested_revision,
                 "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
                 "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,

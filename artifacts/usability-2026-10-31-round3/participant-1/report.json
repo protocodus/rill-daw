@@ -1,0 +1,114 @@
+{
+  "participant": "simulated_newbie_1",
+  "persona": "Independent first-time RILL user and beginner music producer interested in relaxed lo-fi. Agent simulation, not a human participant.",
+  "piece_name": "night drift",
+  "ratings": {
+    "easy_to_use": 3,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 4,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "MIDI creation, note dragging, naming and export were discoverable. Audio fit, duplication and playback required trial and error.",
+    "how_cool_it_looks": "Calm dark palette, clear waveform and note lanes, and readable controls make it feel like a coherent music app.",
+    "how_fast_it_is": "Most pointer edits responded promptly. Tempo needed many clicks, preparation interrupted playback, and WAV export took tens of seconds in this lab.",
+    "how_confusing_it_is": "Tempo changed clip time without fitting the waveform; Duplicate did not behave as my attempted drag suggested; my cut/erase attempt removed the whole third audio region; output selection needed recovery.",
+    "feature_completeness": "Audio plus real VST MIDI, note editing, stretch, trim, track volume, project save and both requested exports were available. This session did not assess broader production capabilities."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round3/session-1/night drift.rill",
+    "wav": "/workspace/scratch/rill-usability-round3/session-1/night drift.wav",
+    "midi": "/workspace/scratch/rill-usability-round3/session-1/night drift.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Empty-lane hint led directly to MIDI instrument assignment; Rill Lab Sine was visible as VST3 and then named on the track.",
+      "evidence": [
+        "06-midi.png",
+        "07-assigned.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Pencil drags created two-beat notes and automatically extended the clip to six seconds.",
+      "evidence": [
+        "09-notes.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Changing tempo to 80 BPM left a long empty waveform tail. Properties allowed trim then stretch, but adding the Stretch row shifted the dialog and caused subsequent clicks to miss.",
+      "evidence": [
+        "10-audio-editor.png",
+        "14-duration-minus.png",
+        "16-arrange-zoom.png",
+        "17-stretched.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "A Duplicate-tool drag showed no visible copy preview; clicking the clip created an adjacent copy.",
+      "evidence": [
+        "19-copy-preview.png",
+        "20-copy-result.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "friction",
+      "observation": "Attempted Cut at 30 seconds then Erase beyond it; the entire third audio region disappeared. I retained the resulting last six seconds as a sparse synth outro. This observation does not establish why the cut did not occur.",
+      "evidence": [
+        "21-expanded.png",
+        "22-thirty-seconds.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "failure_and_recovery",
+      "observation": "First playback showed Audio output stream failed or disconnected. Audio setup linked from the banner let me select Rill lab paced output. After applying and retrying, playhead and both track meters visibly moved.",
+      "evidence": [
+        "25-playback-status.png",
+        "27-output-options.png",
+        "30-play-again.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "Save and export dialogs used the project name automatically. WAV dialog displayed Arrangement 0:30 and an effect-tail toggle; both WAV and MIDI later reported Exported.",
+      "evidence": [
+        "31-save.png",
+        "34-wav-path.png",
+        "37-wav-status.png",
+        "39-midi-result.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through visible UI; independent file-content verification pending.",
+    "visible_project_duration_seconds": 30,
+    "tempo_bpm": 80,
+    "arrangement": "Two 12-second stretched audio drum regions from 0\u201324 seconds, plus five six-second MIDI patterns through Rill Lab Sine from 0\u201330 seconds. Four-note C4/E4/G4/D4 motif; last pattern resolves its final note to C4. Track volumes visibly -12.6 dB drums and -13.2 dB instrument.",
+    "project_saved": true,
+    "wav_export_success_visible": true,
+    "midi_export_success_visible": true,
+    "playback_observed": "Playhead and both track meters moved after selecting the named lab output.",
+    "audio_auditioned": false,
+    "app_left_open": true,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "This is a simulated beginner usability session, not a human study.",
+    "No audio capture was auditioned; no claim about heard audio, sound quality, groove quality or rendered PCM contents.",
+    "Only mouse actions and visible screenshots were used for the app. Project and export files were not inspected; duration and contents require independent verification.",
+    "Virtual lab output uses timer-paced buffering and software graphics; responsiveness observations do not establish physical-hardware latency.",
+    "Only the installed real Rill Lab Sine VST3 instrument was exercised; no claims about other third-party plug-ins.",
+    "The initial provided drum audio was reused and edited; the MIDI motif and arrangement decisions were created during this session."
+  ]
+}

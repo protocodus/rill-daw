@@ -1,0 +1,66 @@
+{
+  "native_input_focus": 1,
+  "focus_name": "PointerRoot",
+  "normal_double_click": "Opened Clip Editor",
+  "coalesced_double_click": "Opened Clip Editor",
+  "app": "/workspace/rill-daw/target/debug/rill",
+  "display": ":293",
+  "plain_click": "Collapsed group to the clicked MIDI clip; screenshot group-collapsed.png",
+  "group_drag": {
+    "all_clips_moved_one_beat": true,
+    "clips": [
+      {
+        "track": "Circuit drums",
+        "clip": 52,
+        "start_before": 0.0,
+        "start_after": 1.0
+      },
+      {
+        "track": "Circuit drums",
+        "clip": 88,
+        "start_before": 16.0,
+        "start_after": 17.0
+      },
+      {
+        "track": "Circuit drums",
+        "clip": 90,
+        "start_before": 32.0,
+        "start_after": 33.0
+      },
+      {
+        "track": "Circuit drums",
+        "clip": 91,
+        "start_before": 48.0,
+        "start_after": 49.0
+      },
+      {
+        "track": "New instrument",
+        "clip": 55,
+        "start_before": 0.0,
+        "start_after": 1.0
+      },
+      {
+        "track": "New instrument",
+        "clip": 78,
+        "start_before": 16.0,
+        "start_after": 17.0
+      },
+      {
+        "track": "New instrument",
+        "clip": 92,
+        "start_before": 32.0,
+        "start_after": 33.0
+      },
+      {
+        "track": "New instrument",
+        "clip": 101,
+        "start_before": 48.0,
+        "start_after": 49.0
+      }
+    ]
+  },
+  "binary_sha256": "d4f6d28694ce11b4f30d467514138ec3880164725e6054a550ea4c3f46cfde3d",
+  "undo": "One Edit > Undo visually restored audio/MIDI starts and 30.000s extent; group-undone.png",
+  "technical_app_stopped": true,
+  "verified_at_utc": "2026-10-31T18:07:21Z"
+}

@@ -3,6 +3,9 @@ use egui::{Align2, FontId, Rect, Sense, Stroke, Ui, pos2, vec2};
 
 pub struct State {
     columns: Vec<WaveformColumn>,
+    loop_start: f64,
+    loop_end: f64,
+    loop_drag: Option<(bool, f64)>,
 }
 
 impl Default for State {
@@ -24,7 +27,12 @@ impl Default for State {
                 });
             }
         }
-        Self { columns }
+        Self {
+            columns,
+            loop_start: 1.0,
+            loop_end: 7.0,
+            loop_drag: None,
+        }
     }
 }
 
@@ -32,13 +40,20 @@ pub fn show(ui: &mut Ui, state: &mut State) {
     text::subtitle(ui, "Waveform, musical time, and clip identity");
     text::note(
         ui,
-        "Musical ruler · waveform · clip edges and selection · high-contrast position cursor",
+        "Musical ruler · draggable loop endpoints · waveform · clip edges and selection",
     );
     ui.add_space(tokens::SPACE_SM);
     let colors = theme::palette(ui.ctx());
-    let (ruler, _) = ui.allocate_exact_size(
-        vec2(ui.available_width(), tokens::TIMELINE_RULER_HEIGHT),
+    let (ruler_bounds, _) = ui.allocate_exact_size(
+        vec2(
+            ui.available_width(),
+            ui::duration::loop_ruler_height(ui.ctx()),
+        ),
         Sense::hover(),
+    );
+    let ruler = Rect::from_min_size(
+        ruler_bounds.min,
+        vec2(ruler_bounds.width(), tokens::TIMELINE_RULER_HEIGHT),
     );
     let view = TimelineViewport {
         start_beat: 0.0,
@@ -47,6 +62,61 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         ..Default::default()
     };
     ui::paint_timeline_ruler(ui.painter(), ruler, view, 120.0, 4);
+    let lane = Rect::from_min_max(
+        pos2(ruler.left(), ruler.bottom() + tokens::SPACE_SM),
+        ruler_bounds.max,
+    );
+    let region = Rect::from_min_max(
+        pos2(view.x_at(lane, state.loop_start), lane.top()),
+        pos2(view.x_at(lane, state.loop_end), lane.bottom()),
+    );
+    ui::duration::paint_loop_region(
+        ui.painter(),
+        region,
+        state.loop_start,
+        state.loop_end,
+        120.0,
+        4,
+    );
+    for start in [true, false] {
+        if let Some(handle) = ui::duration::loop_endpoint_handle(
+            ui,
+            ui.id().with(("gallery_loop", start)),
+            region,
+            lane,
+            start,
+            true,
+        ) {
+            if handle.drag_started_by(egui::PointerButton::Primary) {
+                state.loop_drag = Some((
+                    start,
+                    if start {
+                        state.loop_start
+                    } else {
+                        state.loop_end
+                    },
+                ));
+            }
+            if handle.dragged_by(egui::PointerButton::Primary)
+                && let Some((active, original)) = state.loop_drag
+                && active == start
+            {
+                let next = original
+                    + f64::from(
+                        handle.total_drag_delta().unwrap_or_default().x / view.pixels_per_beat,
+                    );
+                let next = (next * 4.0).round() / 4.0;
+                if start {
+                    state.loop_start = next.clamp(0.0, state.loop_end - 0.25);
+                } else {
+                    state.loop_end = next.clamp(state.loop_start + 0.25, 8.0);
+                }
+            }
+            if handle.drag_stopped() {
+                state.loop_drag = None;
+            }
+        }
+    }
     let (clip, _) = ui.allocate_exact_size(vec2(ui.available_width(), 152.0), Sense::hover());
     ui.painter().rect_filled(clip, tokens::RADIUS, colors.bg);
     let title = Rect::from_min_size(clip.min + vec2(10.0, 4.0), vec2(clip.width() - 20.0, 20.0));

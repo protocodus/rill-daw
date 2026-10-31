@@ -1,0 +1,17 @@
+Participant 2 — independent simulated beginner; electronic dance groove
+Observable action/reaction record (UTC; detailed mouse events are in mouse-actions.jsonl)
+
+20:15:11 Double-clicked the empty lane following “Double-click for MIDI.” Device library appeared with one instrument. Reaction: the hint gave me an immediate starting point. Evidence: 01-midi-created.png.
+20:15:17 Assigned Rill Lab Sine. A new instrument track and one-bar pattern appeared. Evidence: 02-instrument.png.
+20:15:23–37 Opened the pattern and used Pencil drags for C4, E4, G4, E4. Four notes and velocity handles appeared. Reaction: the drag-to-length instruction was useful. Evidence: 03-piano.png, 04-notes.png.
+20:15:47–20:16:20 Zoomed out, chose Duplicate, and copied audio clips. Trimmed the final audio clip, initially landing at 30.134 seconds. Evidence: 05-zoom.png through 08-thirty-seconds.png.
+20:16:28–50 Changed snap to 1 bar. One very small trim gesture did not visibly change the endpoint; a slightly larger held gesture showed End 30.000 s. Reaction: the precise tooltip was reassuring, but the tiny edge target needed care. Evidence: 09-snap-menu.png, 10-four-patterns.png, 11-trim-feedback.png.
+20:16:58–20:17:09 Repeated the MIDI figure until fourteen one-bar clips filled 30 seconds, disabled the short startup loop and pressed Play. An audio output stream failure appeared. Reaction: unexpected interruption after the arrangement had been straightforward. Evidence: 12-playback.png.
+20:17:17–46 Opened Audio setup, changed System default to Rill lab paced output, applied and played. The next observation showed the playhead at 004.03.18 and meters on both tracks. Stopped afterward. Reaction: the visible output choice recovered playback without leaving the app. No audio audition occurred. Evidence: 13-audio-setup.png through 16-playhead.png.
+20:17:58–20:18:23 Used Rename project and its Keyboard button. Clicked Select all and the on-screen letters to name the piece “neon step.” Save proposed neon step.rill in session-2. Reaction: the mouse keyboard made naming possible under the constraint. Evidence: 18-rename.png through 20-save-dialog.png.
+20:18:35 Accepted Save. Returned to the arrangement with neon step and 0:30.000 at the top and no dirty marker. Evidence: 21-saved.png.
+20:18:38–20:19:20 Chose Export WAV, unchecked Include effect tails for the shown 0:30 arrangement, and accepted the default session-2/neon step.wav path. Progress text appeared, then an Exported notice. Reaction: the duration summary and completion notice made the export understandable. Evidence: 22-wav-settings.png, 23-wav-save-dialog.png, 24-wav-export.png, 26-wav-progress.png.
+20:19:25–41 Chose Export MIDI and accepted session-2/neon step.mid. Exported notice appeared. Evidence: 28-midi-save-dialog.png, 29-midi-complete.png.
+At finish: app left open, playback stopped, all buttons released, final.png captured. Project and exports were created only through visible UI. I did not inspect their contents or hear the audio.
+
+Ratings (1–5; higher confusion is worse): easy to use 4; cool appearance 4; speed 4; confusion 2; feature completeness 4. Main positives: clear mouse gestures, quick clip repetition, useful exact trim feedback, mouse naming, explicit export notices. Main difficulties: initial output failure, small trim target, repetitive truncated clip labels when zoomed out. These are simulated session impressions, not human-study or hardware results.

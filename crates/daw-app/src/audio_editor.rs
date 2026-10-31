@@ -870,9 +870,13 @@ impl DawApp {
             if audio_processing_menu(ui, &mut processing) {
                 edit = Some(Edit::Processing(processing));
             }
-            daw_ui::toolbar_trailing(ui, 360.0, |ui| {
+            daw_ui::toolbar_trailing(ui, 530.0, |ui| {
                 daw_ui::editor_tool_help(ui, state.tool, daw_ui::ToolHintContext::Audio);
-                fit = daw_ui::timeline_fit_button(ui).clicked();
+                let zoom_action = daw_ui::timeline_zoom_controls(ui, true);
+                if zoom_action != daw_ui::TimelineViewAction::None {
+                    view_action = zoom_action;
+                    fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
+                }
                 daw_ui::quiet_view_menu(ui, "View", |ui| {
                     self.clip_navigation_controls(ui);
                     ui.separator();
@@ -913,6 +917,7 @@ impl DawApp {
                     .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
                 daw_ui::text::note(ui, "Hold Shift to bypass snapping");
             });
+                daw_ui::editor_tool_caption(ui, state.tool, daw_ui::ToolHintContext::Audio);
             });
         });
         if matches!(state.tool, EditorTool::FadeIn | EditorTool::FadeOut) {
@@ -1185,6 +1190,7 @@ impl DawApp {
                 },
             );
         }
+        view_action.apply_zoom(&mut state.view, canvas);
         let navigation = TimelinePane::new("audio_timeline", canvas)
             .keyboard_active()
             .navigate(ui, &mut state.view, bounds);
@@ -1198,7 +1204,9 @@ impl DawApp {
                 "audio",
                 view_before,
                 state.view,
-                fit || navigation.fit || view_action == daw_ui::TimelineViewAction::FitSelection,
+                fit || navigation.fit
+                    || view_action == daw_ui::TimelineViewAction::FitSelection
+                    || view_action.is_zoom(),
             );
         }
         let headroom = state.amplitude_reference;

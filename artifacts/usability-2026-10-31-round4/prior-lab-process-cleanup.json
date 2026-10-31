@@ -1,0 +1,321 @@
+{
+  "at_utc": "2026-10-31T19:38:37Z",
+  "processes": [
+    {
+      "pid": 942,
+      "start_ticks": "18513",
+      "argv": [
+        "Xvfb",
+        ":181",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 970,
+      "start_ticks": "18669",
+      "argv": [
+        "Xvfb",
+        ":182",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 998,
+      "start_ticks": "18823",
+      "argv": [
+        "Xvfb",
+        ":183",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 1026,
+      "start_ticks": "18976",
+      "argv": [
+        "Xvfb",
+        ":184",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 1054,
+      "start_ticks": "19131",
+      "argv": [
+        "Xvfb",
+        ":185",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 1410,
+      "start_ticks": "26896",
+      "argv": [
+        "Xvfb",
+        ":186",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 13565,
+      "start_ticks": "143672",
+      "argv": [
+        "Xvfb",
+        ":187",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 21369,
+      "start_ticks": "246969",
+      "argv": [
+        "/workspace/.rill-tools/sysroot/usr/bin/pulseaudio",
+        "-n",
+        "--daemonize=no",
+        "--use-pid-file=no",
+        "--exit-idle-time=-1",
+        "--disable-shm=yes",
+        "--log-level=warning",
+        "--dl-search-path=/workspace/.rill-tools/sysroot/usr/lib/pulse-17.0+dfsg1/modules",
+        "--load=module-native-protocol-unix socket=/workspace/scratch/rill-usability-round2/technical/pulse-runtime/native auth-anonymous=1",
+        "--load=module-null-sink sink_name=rill_lab rate=48000 channels=2 sink_properties=device.description=Rill_Lab_Paced_Output"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 35825,
+      "start_ticks": "366567",
+      "argv": [
+        "Xvfb",
+        ":286",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 43926,
+      "start_ticks": "531326",
+      "argv": [
+        "/workspace/.rill-tools/sysroot/usr/bin/pulseaudio",
+        "-n",
+        "--daemonize=no",
+        "--use-pid-file=no",
+        "--exit-idle-time=-1",
+        "--disable-shm=yes",
+        "--log-level=warning",
+        "--dl-search-path=/workspace/.rill-tools/sysroot/usr/lib/pulse-17.0+dfsg1/modules",
+        "--load=module-native-protocol-unix socket=/workspace/scratch/rill-usability-round2/session-1/pulse-runtime/native auth-anonymous=1",
+        "--load=module-null-sink sink_name=rill_lab rate=48000 channels=2 sink_properties=device.description=Rill_Lab_Paced_Output"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 43929,
+      "start_ticks": "531332",
+      "argv": [
+        "Xvfb",
+        ":281",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 43957,
+      "start_ticks": "531571",
+      "argv": [
+        "/workspace/.rill-tools/sysroot/usr/bin/pulseaudio",
+        "-n",
+        "--daemonize=no",
+        "--use-pid-file=no",
+        "--exit-idle-time=-1",
+        "--disable-shm=yes",
+        "--log-level=warning",
+        "--dl-search-path=/workspace/.rill-tools/sysroot/usr/lib/pulse-17.0+dfsg1/modules",
+        "--load=module-native-protocol-unix socket=/workspace/scratch/rill-usability-round2/session-2/pulse-runtime/native auth-anonymous=1",
+        "--load=module-null-sink sink_name=rill_lab rate=48000 channels=2 sink_properties=device.description=Rill_Lab_Paced_Output"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 43960,
+      "start_ticks": "531577",
+      "argv": [
+        "Xvfb",
+        ":282",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 43988,
+      "start_ticks": "531815",
+      "argv": [
+        "/workspace/.rill-tools/sysroot/usr/bin/pulseaudio",
+        "-n",
+        "--daemonize=no",
+        "--use-pid-file=no",
+        "--exit-idle-time=-1",
+        "--disable-shm=yes",
+        "--log-level=warning",
+        "--dl-search-path=/workspace/.rill-tools/sysroot/usr/lib/pulse-17.0+dfsg1/modules",
+        "--load=module-native-protocol-unix socket=/workspace/scratch/rill-usability-round2/session-3/pulse-runtime/native auth-anonymous=1",
+        "--load=module-null-sink sink_name=rill_lab rate=48000 channels=2 sink_properties=device.description=Rill_Lab_Paced_Output"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 43991,
+      "start_ticks": "531820",
+      "argv": [
+        "Xvfb",
+        ":283",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 44019,
+      "start_ticks": "532068",
+      "argv": [
+        "/workspace/.rill-tools/sysroot/usr/bin/pulseaudio",
+        "-n",
+        "--daemonize=no",
+        "--use-pid-file=no",
+        "--exit-idle-time=-1",
+        "--disable-shm=yes",
+        "--log-level=warning",
+        "--dl-search-path=/workspace/.rill-tools/sysroot/usr/lib/pulse-17.0+dfsg1/modules",
+        "--load=module-native-protocol-unix socket=/workspace/scratch/rill-usability-round2/session-4/pulse-runtime/native auth-anonymous=1",
+        "--load=module-null-sink sink_name=rill_lab rate=48000 channels=2 sink_properties=device.description=Rill_Lab_Paced_Output"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 44022,
+      "start_ticks": "532074",
+      "argv": [
+        "Xvfb",
+        ":284",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 44050,
+      "start_ticks": "532324",
+      "argv": [
+        "/workspace/.rill-tools/sysroot/usr/bin/pulseaudio",
+        "-n",
+        "--daemonize=no",
+        "--use-pid-file=no",
+        "--exit-idle-time=-1",
+        "--disable-shm=yes",
+        "--log-level=warning",
+        "--dl-search-path=/workspace/.rill-tools/sysroot/usr/lib/pulse-17.0+dfsg1/modules",
+        "--load=module-native-protocol-unix socket=/workspace/scratch/rill-usability-round2/session-5/pulse-runtime/native auth-anonymous=1",
+        "--load=module-null-sink sink_name=rill_lab rate=48000 channels=2 sink_properties=device.description=Rill_Lab_Paced_Output"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    },
+    {
+      "pid": 44053,
+      "start_ticks": "532329",
+      "argv": [
+        "Xvfb",
+        ":285",
+        "-screen",
+        "0",
+        "1440x1000x24",
+        "-ac",
+        "-nolisten",
+        "tcp"
+      ],
+      "reason": "Previously completed RILL study virtual display or audio server, positively identified by display/path",
+      "result": "SIGTERM sent"
+    }
+  ]
+}

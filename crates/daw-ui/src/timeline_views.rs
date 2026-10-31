@@ -1,13 +1,104 @@
 //! Shared, presentation-only selection fitting and previous-view recall.
 use crate::TimelineViewport;
-use egui::{Context, Id, Ui};
+use egui::{Context, Id, Rect, Ui};
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub enum TimelineViewAction {
     #[default]
     None,
+    ZoomOut,
+    ZoomIn,
+    FitAll,
     FitSelection,
     Previous,
+}
+
+impl TimelineViewAction {
+    pub fn is_zoom(self) -> bool {
+        matches!(self, Self::ZoomOut | Self::ZoomIn)
+    }
+
+    /// Match keyboard zoom factors and bounds, anchored to the visible center.
+    /// The toolbar is outside the canvas, so its pointer position is not an anchor.
+    pub fn apply_zoom(self, view: &mut TimelineViewport, canvas: Rect) {
+        let factor = match self {
+            Self::ZoomOut => 0.8,
+            Self::ZoomIn => 1.25,
+            _ => return,
+        };
+        view.zoom(canvas, canvas.center(), factor, 1.0);
+    }
+}
+
+/// Keep ordinary zoom and selection framing visible without opening a menu.
+/// The family wraps as one unit and never changes width with the selection.
+/// Actions only describe presentation changes; the caller owns the viewport.
+pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> TimelineViewAction {
+    let square = crate::tokens::CONTROL_HEIGHT;
+    let text_width = |label: &str| {
+        ui.painter()
+            .layout_no_wrap(
+                label.into(),
+                egui::TextStyle::Button.resolve(ui.style()),
+                ui.visuals().text_color(),
+            )
+            .size()
+            .x
+    };
+    let fit_width =
+        text_width("Fit") + 18.0 + crate::tokens::SPACE_XS + 2.0 * ui.spacing().button_padding.x;
+    let selection_width = text_width("Fit selection") + 2.0 * ui.spacing().button_padding.x;
+    let width =
+        square * 2.0 + fit_width.ceil() + selection_width.ceil() + 3.0 * crate::tokens::SPACE_XS;
+    crate::tool_group(ui, width, |ui| {
+        let mut action = TimelineViewAction::None;
+        for (symbol, label, hint, value) in [
+            (
+                "−",
+                "Zoom out",
+                "Zoom out around the view center · −",
+                TimelineViewAction::ZoomOut,
+            ),
+            (
+                "+",
+                "Zoom in",
+                "Zoom in around the view center · +",
+                TimelineViewAction::ZoomIn,
+            ),
+        ] {
+            let button = ui
+                .add_sized(
+                    egui::vec2(square, crate::tokens::CONTROL_HEIGHT),
+                    crate::button_widget(symbol).presentation(),
+                )
+                .on_hover_text(hint);
+            button.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+            });
+            if button.clicked() {
+                action = value;
+            }
+        }
+        if crate::timeline_fit_button(ui).clicked() {
+            action = TimelineViewAction::FitAll;
+        }
+        if ui
+            .add_enabled(
+                selection_available,
+                crate::button_widget("Fit selection").presentation(),
+            )
+            .on_hover_text(if selection_available {
+                "Fit the selected clips, notes or time range. Return with View → Previous view."
+            } else {
+                "Select clips, notes or a time range to fit the selection"
+            })
+            .clicked()
+        {
+            action = TimelineViewAction::FitSelection;
+        }
+        action
+    })
+    .inner
 }
 
 #[derive(Clone, Default)]

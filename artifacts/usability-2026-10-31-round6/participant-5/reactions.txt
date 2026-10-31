@@ -1,0 +1,31 @@
+Participant 5 — independent simulated beginner, mouse only
+Chosen title: NIGHT HOP
+
+Observable actions and reactions (UTC, 2026-10-31)
+20:44:02 — Followed the empty-lane Double-click for MIDI hint. The instrument chooser appeared with Rill Lab Sine selected. Clear next action: Assign instrument. Evidence 01–02.
+20:44:15–31 — Opened the new pattern and used Pencil drags to place four notes. The drag-to-set-length instruction was useful. Pitch labels were sparse before notes existed, then the note labels clarified C4, D#4, G4 and F4. Evidence 03–04.
+20:44:39–20:45:12 — Used Duplicate on successive MIDI and audio clips. Each click appended a copy, and Fit exposed the longer arrangement. This felt quick and predictable. Evidence 05–09.
+20:45:20–30 — Trimmed the last audio clip near the 0:30 ruler mark. First result was 0:30.134; one small adjustment produced 0:30.000. Precise edge targeting needed attention. Evidence 10–11.
+20:45:40–47 — Repeated the one-bar MIDI phrase until audio and MIDI both reached the 30-second endpoint. Evidence 12.
+20:45:54–20:46:27 — Found Rename project in File, opened its on-screen Keyboard, cleared the old name and clicked NIGHT HOP, then Apply name. Mouse naming was successfully supported. Evidence 13–16.
+20:46:36–49 — Turned Loop off, clicked Play, observed advancing transport/playhead and lit meters on both tracks, then stopped. No audio was auditioned. Evidence 17–18.
+20:46:51–20:47:04 — Saved the project. The native dialog first appeared black, then rendered. Its default filename was NIGHT HOP.rill in the session-5 folder. OK closed the dialog and the unsaved dot disappeared. Evidence 19–21.
+20:47:11–33 — Export WAV displayed 0:30 plus optional tails. Unchecked effect tails, accepted NIGHT HOP.wav in the same folder. A black intermediate dialog cleared on the next screenshot. The app then displayed Exporting with elapsed seconds. Evidence 22–26. Note: screenshot 26 is named wav-success but actually shows an in-progress status.
+20:47:50–57 — Exported MIDI with the proposed NIGHT HOP.mid name. The Exported banner appeared. Evidence 27–28.
+20:48:05–15 — Opened Recent exports and observed both WAV and MIDI under Completed exports. This supplied the visible WAV completion confirmation. Evidence 29–30.
+20:48:30–31 — Closed the menu and selected the normal Select tool. App left open and stopped; buttons released. Final screenshot saved.
+
+Ratings, 1–5
+Easy to use: 4 — completed the workflow with visible hints; exact trimming needed correction.
+How cool it looks: 4 — coherent dark/teal design and clear waveform/note shapes; clip titles abbreviate when zoomed out.
+How fast it is: 4 — editing responded promptly; native dialogs briefly rendered black; export provided progress.
+How confusing it is: 2 — low overall confusion, with pitch-row labels and fine trimming the main uncertainties.
+Feature completeness: 4 — the requested audio/MIDI/VST/save/export path was present; advanced features were not evaluated.
+
+UI-established artifact paths
+/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.rill
+/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.wav
+/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.mid
+
+Limitations
+Simulated participant, not a human study. No code, project state or output file contents inspected. No heard-audio claim. Musical result is a simple repeated motif over supplied rhythm. The laboratory virtual audio setup and tool overhead prevent performance or physical-audio conclusions. WAV completion was confirmed through Completed exports; MIDI also had a success banner. Independent output verification follows.

@@ -63,7 +63,8 @@ fn minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_pro
 
     let state = options(&mut app);
     assert_eq!(state["export_include_effect_tails"], true);
-    assert!(has(&state, "Arrangement · 1:00"));
+    assert!(has(&state, "Arrangement · 1:00 + tails"));
+    assert!(has(&state, "48 kHz · Stereo · 32-bit float"));
     let full_path = app.directory.path().join("With tails.wav");
     let full = finish(&mut app, &full_path);
     assert_eq!(full.frames(), 48_000 * 60 + 48_000 / 5);
@@ -73,6 +74,8 @@ fn minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_pro
     options(&mut app);
     let state = app.click("Include effect tails");
     assert_eq!(state["export_include_effect_tails"], false);
+    assert!(has(&state, "Arrangement · 1:00"));
+    assert!(!has(&state, "Arrangement · 1:00 + tails"));
     // Background clip shortcuts cannot edit through the export window.
     app.key("Delete");
     app.command(json!({"command":"key", "key":"D", "cmd":true}));

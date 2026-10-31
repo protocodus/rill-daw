@@ -1,0 +1,119 @@
+{
+  "status": "five fresh native sessions ready",
+  "frozen_at_utc": "2026-10-31T18:46:35Z",
+  "baseline_git_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "origin_main_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "working_tree_status": "source-status.txt",
+  "source_diff": "source-diff.patch",
+  "source_hashes": "source-hashes.json",
+  "untracked_source": "untracked-frozen-source.tar.gz",
+  "source_reconstruction": "Checkout baseline_git_sha, apply source-diff.patch, extract untracked-frozen-source.tar.gz; verify source-hashes.json.",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability-round3/baseline/rill",
+      "sha256": "35a1c098fcc2bf79c11e59724df2cf24cf8e4913b221f44a33a83a0f8e5a1933"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability-round3/baseline/daw-plugin-host",
+      "sha256": "b7208dc6654e77ec103fc7f53dee5413b369ec3f4af3a08ddea50c0198113f4c"
+    }
+  },
+  "plugin": {
+    "name": "Rill Lab Sine",
+    "path": "/workspace/scratch/rill-usability-round3/plugins/RillLabSine.vst3",
+    "sha256": "ea9c162882be7efc282dcba683c92010d1804cc3218b37ffa99af7e813d253b8"
+  },
+  "viewport": [
+    1440,
+    1000
+  ],
+  "audio": {
+    "sink_rate_hz": 48000,
+    "application_buffer_request_frames": 1024,
+    "virtual_backend_buffering_ms": 60,
+    "isolation": "Separate timer-paced PulseAudio null sink, ALSA pulse bridge, config and cache per participant"
+  },
+  "protocol_sha256": "c29bf5c320f464fb670db6eb1032ba5e2a8e37108979e68ffa62c7fd9321a12f",
+  "structured_protocol_sha256": "3bf12c1811f6a01640e41b41da29a9135a919563d0fe8e8d0e85638fe47d200d",
+  "lab_script_sha256": {
+    "aggregate_round3.py": "62399f8de277cd6da48e74caeaa241b14f592c948dbbc23d279c83f97f09643d",
+    "audio.py": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a",
+    "cleanup.py": "4397c4b43e83d8b39db1b19a1f6d47cadfddba31bc7ac50356381361ba7da4ee",
+    "component_render.py": "49ebc779022029fd1ccb4c0c3428ae391c8ae563fcc9e5241107c08e57c81090",
+    "evidence_utils.py": "932eb7da6c5d2e1882ce98995be774fbda31457ca460de60be5513905baa80f7",
+    "freeze.py": "b3ef567a74992b6dc78533d13d09a80667614c70b9f23fb985f8360e3874aae5",
+    "launch.py": "7a483639265688271212a4076ffbc2cf362921e47266f784955439e61d5ee1f6",
+    "mouse.py": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+    "verify_isolated_midi.py": "2a26fefeb84f840f52ac312bbec4d2552719e14dc22c654d1c1a67c1b6bf7ca0",
+    "verify_mix_components.py": "0b45b1c35ac68bcd7869a6d85f19d164f023d0dbf9a5981224bbb3aa76be59eb"
+  },
+  "mouse_driver_sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+  "sessions": [
+    {
+      "participant": 1,
+      "directory": "/workspace/scratch/rill-usability-round3/session-1",
+      "display": ":381",
+      "process_start_ticks": {
+        "pulse": "885742",
+        "xvfb": "885748",
+        "app": "885753"
+      },
+      "pulse": 107646,
+      "xvfb": 107649,
+      "app": 107652
+    },
+    {
+      "participant": 2,
+      "directory": "/workspace/scratch/rill-usability-round3/session-2",
+      "display": ":382",
+      "process_start_ticks": {
+        "pulse": "885972",
+        "xvfb": "885978",
+        "app": "885983"
+      },
+      "pulse": 107677,
+      "xvfb": 107680,
+      "app": 107683
+    },
+    {
+      "participant": 3,
+      "directory": "/workspace/scratch/rill-usability-round3/session-3",
+      "display": ":383",
+      "process_start_ticks": {
+        "pulse": "886207",
+        "xvfb": "886212",
+        "app": "886218"
+      },
+      "pulse": 107708,
+      "xvfb": 107711,
+      "app": 107714
+    },
+    {
+      "participant": 4,
+      "directory": "/workspace/scratch/rill-usability-round3/session-4",
+      "display": ":384",
+      "process_start_ticks": {
+        "pulse": "886440",
+        "xvfb": "886446",
+        "app": "886452"
+      },
+      "pulse": 107739,
+      "xvfb": 107742,
+      "app": 107745
+    },
+    {
+      "participant": 5,
+      "directory": "/workspace/scratch/rill-usability-round3/session-5",
+      "display": ":385",
+      "process_start_ticks": {
+        "pulse": "886677",
+        "xvfb": "886683",
+        "app": "886689"
+      },
+      "pulse": 107770,
+      "xvfb": 107773,
+      "app": 107776
+    }
+  ],
+  "launched_at_utc": "2026-10-31T18:46:36Z"
+}

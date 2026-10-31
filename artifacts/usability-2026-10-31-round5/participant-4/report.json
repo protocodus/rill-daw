@@ -1,0 +1,107 @@
+{
+  "purpose": "Fixed-question report for independent simulated participant 4 in the RILL mouse-only usability task.",
+  "participant": 4,
+  "persona": "Simulated beginner, first introduction to RILL music software, interested in a short ambient soundtrack sketch.",
+  "piece_name": "still",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Completed the named 30-second arrangement, VST assignment, save and both exports with visible mouse controls. On-screen text and numeric keyboards helped considerably. Precise note ends needed several corrective drags.",
+    "how_cool_it_looks": "The dark arrangement, teal waveform and clear colored MIDI notes looked coherent and made the two layers easy to distinguish. The native file dialog looked separate and briefly rendered black before becoming usable.",
+    "how_fast_it_is": "Most controls and dialogs responded promptly, and a small arrangement was possible in a few minutes including screenshot overhead. Playback preparation and WAV export showed visible waits. This is a subjective session rating, not a benchmark.",
+    "how_confusing_it_is": "The MIDI creation prompt and instrument assignment were clear. Main confusion was why matching horizontal note drags gave differing lengths, plus converting a 30-second intention into a duration measured in beats. Both were recoverable visibly.",
+    "feature_completeness": "The visible workflow covered audio stretching, levels, MIDI editing, a VST instrument, naming, save and WAV/MIDI export entirely by mouse. Broader production features and other plug-ins were not assessed."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round5/session-4/still.rill",
+    "wav": "/workspace/scratch/rill-usability-round5/session-4/still.wav",
+    "midi": "/workspace/scratch/rill-usability-round5/session-4/still.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "File > Rename project offered Keyboard, Select all, letter keys and Apply name. Mouse clicks successfully named the piece still.",
+      "evidence": ["02-rename.png", "03-keyboard.png", "04-named-zoomed.png"]
+    },
+    {
+      "id": "F2",
+      "kind": "recovery",
+      "observation": "The first audio stretch ended at a displayed 30.402 seconds. Switching Snap to 1 bar and adjusting the edge gave a displayed 30.000 seconds.",
+      "evidence": ["07-instrument-assigned.png", "10-snap-menu.png", "11-piano-roll.png"]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "Double-clicking the area labeled Double-click for MIDI opened the device library. Rill Lab Sine was visibly identified as a VST3 instrument; Assign instrument created the track and showed its name on the track.",
+      "evidence": ["06-midi-created.png", "07-instrument-assigned.png"]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "Clip Properties offered a 123 numeric keypad for duration. Setting 56 beats by mouse produced a MIDI clip whose visible end was 30 seconds.",
+      "evidence": ["12-midi-properties.png", "13-duration-keypad.png", "14-long-midi.png"]
+    },
+    {
+      "id": "F5",
+      "kind": "friction",
+      "observation": "Pencil drags from the same start x to the same endpoint x gave differing visible lengths within the first and second chords. Some notes were one bar shorter. The cause was not established.",
+      "evidence": ["15-first-chord.png", "16-second-chord.png", "mouse-actions.jsonl at 2026-10-31T20:17:34Z through 2026-10-31T20:17:56Z"]
+    },
+    {
+      "id": "F6",
+      "kind": "recovery",
+      "observation": "Switching to Select and dragging the shorter note edges aligned each chord's ends. The final editor showed three sustained triads spanning the clip to 30 seconds.",
+      "evidence": ["16-second-chord.png", "17-third-chord.png"]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "After a Preparing audio status, playback visibly advanced the transport and yellow playhead, with both track meters lit. Playback was then stopped.",
+      "evidence": ["18-playback.png", "19-playback-progress.png"]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "Save defaulted to still.rill in the session folder. After OK, the dialog closed and the modified-dot indicator disappeared.",
+      "evidence": ["20-save-dialog.png", "21-project-saved.png"]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "The WAV file chooser initially appeared as a black rectangle in the screenshot; the subsequent screenshot showed a usable native save dialog without additional corrective input.",
+      "evidence": ["23-wav-file-dialog.png", "24-wav-dialog-ready.png"]
+    },
+    {
+      "id": "F10",
+      "kind": "positive",
+      "observation": "WAV export showed the 30-second arrangement duration and allowed effect tails to be disabled. WAV and MIDI dialogs inherited the chosen project name, and separate Exported notices confirmed both operations in the UI.",
+      "evidence": ["22-wav-settings.png", "24-wav-dialog-ready.png", "27-wav-export-result.png", "28-midi-export.png", "29-midi-success.png"]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: named 30-second arrangement, assigned VST instrument, saved project, and WAV/MIDI export success notices. Export file contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "Startup Circuit rhythm audio stretched across 30 seconds at -25.2 dB, with nine sustained MIDI notes forming C4/E4/G4 from 0 to 15 seconds, F4/A4/C5 from 15 to approximately 25.71 seconds, and C4/E4/G4 to 30 seconds. MIDI track level was -19.8 dB. Intended as an ambient sketch; audible result was not auditioned.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play changed to Pause; after Preparing audio the transport advanced to 002.01.98, yellow playhead moved right, and meters on both tracks lit. Stop returned transport to the beginning. No heard-audio claim.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows.",
+    "Artifact paths are those visibly chosen in native dialogs, accompanied by UI save/export outcomes; no filesystem inspection of composition files was performed.",
+    "Software graphics, virtual audio sink, and screenshot/input overhead limit conclusions about latency and performance on physical hardware.",
+    "Only the laboratory Rill Lab Sine VST3 was exercised; no conclusion about other plug-ins.",
+    "The timing cause of differing note-drag endpoints and the brief black native dialog was not investigated."
+  ]
+}

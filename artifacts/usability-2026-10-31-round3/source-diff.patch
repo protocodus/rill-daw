@@ -1,0 +1,3218 @@
+diff --git a/crates/daw-app/src/app.rs b/crates/daw-app/src/app.rs
+index 9e4a470..f000d70 100644
+--- a/crates/daw-app/src/app.rs
++++ b/crates/daw-app/src/app.rs
+@@ -17,6 +17,28 @@ pub enum WorkspaceView {
+     Mixer,
+ }
+ 
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum ToolWorkspace {
++    Arrangement,
++    Midi,
++}
++
++struct WorkspaceTools {
++    active: Option<ToolWorkspace>,
++    arrangement: Tool,
++    midi: Tool,
++}
++
++impl Default for WorkspaceTools {
++    fn default() -> Self {
++        Self {
++            active: Some(ToolWorkspace::Arrangement),
++            arrangement: Tool::Select,
++            midi: Tool::Select,
++        }
++    }
++}
++
+ #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+ pub enum InspectorPage {
+     Clip,
+@@ -200,6 +222,7 @@ pub struct DawApp {
+     pub root: u8,
+     pub scale: Scale,
+     pub tool: Tool,
++    workspace_tools: WorkspaceTools,
+     pub drag: Option<Drag>,
+     pub waveforms: HashMap<String, AudioData>,
+     pub(crate) waveform_warning: Option<String>,
+@@ -339,6 +362,7 @@ impl DawApp {
+             root: 0,
+             scale: Scale::Minor,
+             tool: Tool::Select,
++            workspace_tools: Default::default(),
+             drag: None,
+             waveforms: HashMap::new(),
+             waveform_warning: None,
+@@ -370,6 +394,41 @@ impl DawApp {
+         app
+     }
+ 
++    /// Arranger and piano-roll tools are independent editing choices. Audio
++    /// already owns its tool in AudioView; utility navigation must not replace
++    /// the caller's choice with the inert arranger behind its backdrop.
++    pub(crate) fn sync_workspace_tool(&mut self) {
++        let FocusedView::Workspace(view) = self.focused_view() else {
++            return;
++        };
++        let next = match view {
++            WorkspaceView::Arrangement => Some(ToolWorkspace::Arrangement),
++            WorkspaceView::Clip
++                if matches!(
++                    self.selected().map(|clip| &clip.content),
++                    Some(ClipContent::Midi { .. })
++                ) =>
++            {
++                Some(ToolWorkspace::Midi)
++            }
++            WorkspaceView::Clip | WorkspaceView::Mixer => None,
++        };
++        if self.workspace_tools.active == next {
++            return;
++        }
++        match self.workspace_tools.active {
++            Some(ToolWorkspace::Arrangement) => self.workspace_tools.arrangement = self.tool,
++            Some(ToolWorkspace::Midi) => self.workspace_tools.midi = self.tool,
++            None => {}
++        }
++        self.workspace_tools.active = next;
++        match next {
++            Some(ToolWorkspace::Arrangement) => self.tool = self.workspace_tools.arrangement,
++            Some(ToolWorkspace::Midi) => self.tool = self.workspace_tools.midi,
++            None => {}
++        }
++    }
++
+     fn focused_view(&self) -> FocusedView {
+         for (open, kind) in [
+             (self.assistant.open, PopupKind::Assistant),
+@@ -430,6 +489,14 @@ impl DawApp {
+         self.effect_editor_target = None;
+         self.popup_backdrop = Default::default();
+         self.backdrop_title.clear();
++        self.sync_workspace_tool();
++    }
++
++    /// Return from nested utilities without leaving the composition workspace.
++    pub(crate) fn close_utility_popups(&mut self) {
++        while matches!(self.focused_view(), FocusedView::Popup(_)) {
++            self.close_popup();
++        }
+     }
+ 
+     /// Dismiss only the focused utility, restoring its caller when still valid.
+@@ -486,12 +553,14 @@ impl DawApp {
+                 FocusedView::Workspace(view) => self.view = view,
+                 FocusedView::Popup(kind) => self.show_popup(kind),
+             }
++            self.sync_workspace_tool();
+             return;
+         }
+         self.selected_notes.clear();
+         self.midi_editor.clear_hidden_selection();
+         self.popup_backdrop = Default::default();
+         self.backdrop_title.clear();
++        self.sync_workspace_tool();
+     }
+ 
+     fn show_popup(&mut self, kind: PopupKind) {
+@@ -743,6 +812,7 @@ impl DawApp {
+         }
+         self.close_popups();
+         self.view = view;
++        self.sync_workspace_tool();
+     }
+ 
+     pub(crate) fn refresh_devices(&mut self) {
+@@ -1776,6 +1846,7 @@ impl DawApp {
+         }
+     }
+     fn keyboard(&mut self, ctx: &egui::Context) {
++        self.sync_workspace_tool();
+         if self.document_guard.is_some()
+             || self.error_details.is_some()
+             || crate::audio_silence::is_open(ctx)
+@@ -1794,6 +1865,11 @@ impl DawApp {
+             }
+         }
+         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
++            if daw_ui::channel_gain_editing(ctx) {
++                // The precise gain field cancels its draft before Escape is
++                // allowed to navigate away from the containing workspace.
++                return;
++            }
+             // Native menus and dropdowns process Escape during their own draw.
+             // Leave the containing workspace intact until that inner popup closes.
+             if !egui::Popup::is_any_open(ctx) {
+@@ -1960,7 +2036,9 @@ impl DawApp {
+         egui::TopBottomPanel::top("transport")
+             .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
+             .show(ctx, |ui| {
+-                let compact = ui.available_width() < 1200.0;
++                // Account for the full mouse targets beside tempo while keeping
++                // complete control groups together at smaller window sizes.
++                let compact = ui.available_width() < 1400.0;
+                 let group_spacing = if compact {
+                     daw_ui::tokens::SPACE_XS
+                 } else {
+@@ -2054,7 +2132,7 @@ impl DawApp {
+                         if self.recording_finalizing() { daw_ui::text::note(ui, "Finishing recording…"); }
+                         if let Some(count_in) = &count_in { daw_ui::text::note(ui, count_in); }
+                     });
+-                    daw_ui::command_group(ui, if compact { 300.0 } else { 320.0 }, |ui| {
++                    daw_ui::command_group(ui, 380.0, |ui| {
+                         let bar = (self.cursor / self.project.beats_per_bar as f64).floor() as u64 + 1;
+                         let beat = (self.cursor % self.project.beats_per_bar as f64).floor() as u64 + 1;
+                         ui.label(
+@@ -2066,17 +2144,21 @@ impl DawApp {
+                             .color(palette(ui.ctx()).text),
+                         );
+                         let mut tempo = self.project.tempo;
+-                        if ui
+-                            .add_enabled(
+-                                !recording_busy, daw_ui::number(&mut tempo)
++                        let tempo_edit = ui.add_enabled_ui(!recording_busy, |ui| {
++                            daw_ui::number_stepper(ui, &mut tempo, 1.0, 20.0..=400.0, "tempo", |ui, value| {
++                                ui.add(daw_ui::number(value)
+                                     .speed(0.1)
+                                     .range(20.0..=400.0)
+-                                    .suffix(" BPM"),
+-                            )
+-                            .changed()
+-                        {
++                                    .suffix(" BPM"))
++                            })
++                        }).inner;
++                        if tempo_edit.response.changed() {
++                            if tempo_edit.stepped {
++                                self.history.seal_group();
++                            }
+                             self.begin_edit();
+                             self.project.tempo = tempo;
++                            self.edit_label = Some("Tempo".into());
+                             self.changed();
+                         }
+                         let mut beats_per_bar = self.project.beats_per_bar;
+@@ -2127,33 +2209,60 @@ impl DawApp {
+                                 }
+                                 ui.close();
+                             }
++                            let arrangement_end = self.project.end_beat();
++                            if ui.add_enabled(arrangement_end > 0.0, daw_ui::button_widget("Loop arrangement"))
++                                .on_hover_text("Loop the complete arrangement from the beginning")
++                                .clicked()
++                            {
++                                let changed = !self.project.loop_enabled || self.project.loop_start != 0.0 || self.project.loop_end != arrangement_end;
++                                self.loop_range(0.0, arrangement_end);
++                                if changed { self.edit_label = Some("Loop arrangement".into()); }
++                                ui.close();
++                            }
+                             ui.separator();
+                             // Display musical beat numbers from one; the project and
+                             // renderer retain their existing zero-based timeline.
++                            let seconds_per_beat = 60.0 / self.project.tempo;
++                            let duration = (self.project.loop_end - self.project.loop_start) * seconds_per_beat;
++                            let maximum_duration = (daw_core::MAX_BEAT - self.project.loop_start) * seconds_per_beat;
++                            if let Some(seconds) = daw_ui::duration::duration_presets(ui, duration, maximum_duration) {
++                                let end = (self.project.loop_start + seconds / seconds_per_beat).min(daw_core::MAX_BEAT);
++                                if end != self.project.loop_end {
++                                    self.begin_edit();
++                                    self.project.loop_end = end;
++                                    self.edit_label = Some("Loop duration".into());
++                                    self.changed();
++                                }
++                                ui.close();
++                            }
+                             let mut start = self.project.loop_start + 1.0;
+                             let mut end = self.project.loop_end + 1.0;
+                             let minimum_length = 0.001_f64.min(end - start);
+-                            let start_changed = ui
+-                                .add(
+-                                    daw_ui::number(&mut start)
++                            let start_edit = daw_ui::number_stepper(
++                                ui, &mut start, 0.25, 1.0..=(end - minimum_length), "loop start", |ui, value| {
++                                    ui.add(daw_ui::number(value)
+                                         .prefix("Start beat ")
+                                         .speed(0.25)
+                                         .range(1.0..=(end - minimum_length))
+                                         .min_decimals(2)
+-                                        .max_decimals(3),
+-                                )
+-                                .on_hover_text("First beat to repeat. Drag or double-click to type; Tab changes field.")
++                                        .max_decimals(3))
++                                },
++                            );
++                            let start_changed = start_edit.response
++                                .on_hover_text("First beat to repeat. Use −/+ for quarter-beat steps, drag for adjustment, or click to type.")
+                                 .changed();
+-                            let end_changed = ui
+-                                .add(
+-                                    daw_ui::number(&mut end)
++                            let end_edit = daw_ui::number_stepper(
++                                ui, &mut end, 0.25, (start + minimum_length)..=(daw_core::MAX_BEAT + 1.0), "loop end", |ui, value| {
++                                    ui.add(daw_ui::number(value)
+                                         .prefix("End beat ")
+                                         .speed(0.25)
+                                         .range((start + minimum_length)..=(daw_core::MAX_BEAT + 1.0))
+                                         .min_decimals(2)
+-                                        .max_decimals(3),
+-                                )
+-                                .on_hover_text("Exclusive end: playback jumps to Start before this beat. Drag or double-click to type.")
++                                        .max_decimals(3))
++                                },
++                            );
++                            let end_changed = end_edit.response
++                                .on_hover_text("Exclusive end: playback jumps to Start before this beat. Use −/+ for quarter-beat steps, or drag for adjustment.")
+                                 .changed();
+                             if (start_changed || end_changed)
+                                 && start.is_finite()
+@@ -2162,11 +2271,21 @@ impl DawApp {
+                                 && end > start
+                                 && end <= daw_core::MAX_BEAT + 1.0
+                             {
++                                if start_edit.stepped || end_edit.stepped { self.history.seal_group(); }
+                                 self.begin_edit();
+                                 self.project.loop_start = start - 1.0;
+                                 self.project.loop_end = end - 1.0;
++                                self.edit_label = Some("Loop range".into());
+                                 self.changed();
+                             }
++                            ui.separator();
++                            daw_ui::form_grid(ui, "loop_time_summary", |ui| {
++                                daw_ui::duration::timing_summary(
++                                    ui, self.project.loop_start,
++                                    self.project.loop_end - self.project.loop_start,
++                                    self.project.tempo, self.project.beats_per_bar,
++                                );
++                            });
+                         });
+                         range.0.on_hover_text(format!("Loop beats {:.2}–{:.2} · Set start and end", self.project.loop_start + 1.0, self.project.loop_end + 1.0));
+                     });
+@@ -2199,6 +2318,12 @@ impl DawApp {
+                             self.save(true);
+                             ui.close();
+                         }
++                        if daw_ui::button(ui, "Rename project…")
++                            .on_hover_text("Change the project name. New projects use it for Save and export filenames; existing files keep their names.")
++                            .clicked() {
++                            self.start_project_rename(ui.ctx());
++                            ui.close();
++                        }
+                         ui.separator();
+                         if daw_ui::button(ui, "Import…").clicked() {
+                             self.import_dialog();
+@@ -2209,7 +2334,9 @@ impl DawApp {
+                             ui.close();
+                         }
+                         self.reexport_menu(ui);
+-                        if daw_ui::button(ui, "Export MIDI…").clicked() {
++                        if ui.add_enabled(self.export_midi_ready(), daw_ui::button_widget("Export MIDI…"))
++                            .on_disabled_hover_text("Wait for the current export or session update to finish.")
++                            .clicked() {
+                             self.export_midi_dialog();
+                             ui.close();
+                         }
+@@ -2480,10 +2607,14 @@ impl DawApp {
+                         egui::vec2(ui.available_width().max(0.0), daw_ui::tokens::CONTROL_HEIGHT),
+                         egui::Layout::right_to_left(egui::Align::Center),
+                         |ui| {
+-                            let title = daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, self.document_title());
+-                            if let Some(path) = &self.project_path {
+-                                title.on_hover_text(path.display().to_string());
++                            let duration = daw_ui::duration::format_seconds(self.project.end_beat() * 60.0 / self.project.tempo);
++                            if ui.available_width() >= 170.0 {
++                                daw_ui::text::note(ui, &duration).on_hover_text("Arrangement duration");
+                             }
++                            let title = daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, self.document_title());
++                            ctx.data_mut(|data| data.insert_temp(egui::Id::new("project_title_rect"), title.rect));
++                            title.on_hover_text(format!("Project: {}\nArrangement duration: {duration}\nRename from File → Rename project…{}", self.project.name,
++                                self.project_path.as_ref().map(|path| format!("\n{}", path.display())).unwrap_or_default()));
+                         },
+                     );
+                 });
+@@ -2946,6 +3077,9 @@ impl DawApp {
+         if self.view == WorkspaceView::Clip && self.selected().is_none() {
+             self.close_popups();
+         }
++        // Also cover workspace changes made by menu/toolbar actions this frame,
++        // and clip-kind changes that keep WorkspaceView::Clip unchanged.
++        self.sync_workspace_tool();
+         let utility_open = self.assistant.open
+             || self.library_open
+             || self.setup_open
+diff --git a/crates/daw-app/src/arrangement.rs b/crates/daw-app/src/arrangement.rs
+index 3b75aa2..19dc67a 100644
+--- a/crates/daw-app/src/arrangement.rs
++++ b/crates/daw-app/src/arrangement.rs
+@@ -14,6 +14,7 @@ const COMPACT_ROW: f32 = daw_ui::TRACK_HEADER_COMPACT_HEIGHT;
+ 
+ enum Edit {
+     Select(u64, u64, bool, bool),
++    SelectOnly(u64, u64),
+     Rename(u64, u64),
+     AudioStart(u64, u64, crate::arranger_selection::ArrangeAudioMode, f64),
+     AudioMotion(f64),
+@@ -125,6 +126,52 @@ impl DawApp {
+     pub fn arrangement(&mut self, ui: &mut egui::Ui) {
+         self.drop_target = None;
+         self.sync_arranger_selection();
++        // Native event loops may deliver a complete click between two paints.
++        // Egui has already cleared press_origin/button-down by that point, so
++        // retain the actual press event and let its accepted response identify
++        // the target. An initially unfocused window can still receive a valid
++        // pointer click; only an actual focus-loss event cancels this gesture.
++        let primary_press = ui.input(|input| {
++            input.raw.events.iter().find_map(|event| match event {
++                egui::Event::PointerButton {
++                    pos,
++                    button: egui::PointerButton::Primary,
++                    pressed: true,
++                    modifiers,
++                } => Some((*pos, *modifiers)),
++                _ => None,
++            })
++        });
++        let cancel_plain_click = ui.input(|input| {
++            input.modifiers != egui::Modifiers::NONE
++                || input.pointer.secondary_down()
++                || input.pointer.button_down(egui::PointerButton::Middle)
++                || input.key_down(egui::Key::Escape)
++                || input.raw.events.iter().any(|event| match event {
++                    egui::Event::WindowFocused(false)
++                    | egui::Event::Key {
++                        key: egui::Key::Escape,
++                        pressed: true,
++                        ..
++                    } => true,
++                    egui::Event::PointerButton {
++                        button, modifiers, ..
++                    } => {
++                        *button != egui::PointerButton::Primary
++                            || *modifiers != egui::Modifiers::NONE
++                    }
++                    _ => false,
++                })
++        });
++        if self.tool != daw_ui::EditorTool::Select
++            || cancel_plain_click
++            || ui.input(|input| {
++                input.pointer.primary_pressed()
++                    || (!input.pointer.primary_down() && !input.pointer.primary_released())
++            })
++        {
++            self.arranger_selection.plain_click_candidate = None;
++        }
+         let selected_loop_range = self.loop_selection_range();
+         let can_change_loop = !self.recording_busy();
+         let viewport_id = egui::Id::new("arrangement_timeline_viewport");
+@@ -170,6 +217,11 @@ impl DawApp {
+                 .unwrap_or_default()
+         });
+         let compact_toolbar = ui.available_width() < 1200.0;
++        let snap_width = if compact_toolbar {
++            120.0
++        } else {
++            daw_ui::tokens::SELECT_WIDTH
++        };
+         daw_ui::toolbar(ui, |ui| {
+             if compact_toolbar {
+                 ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
+@@ -188,15 +240,23 @@ impl DawApp {
+             add_pattern = daw_ui::quiet_button(ui, "Add pattern")
+                 .on_hover_text("Add a four-beat MIDI pattern at the cursor; use the selected MIDI track or create one")
+                 .clicked();
+-            daw_ui::toolbar_trailing(ui, if compact_toolbar { 384.0 } else { 430.0 }, |ui| {
++            let zoom_action =
++                daw_ui::timeline_zoom_controls(ui, !self.arranger_selection_ids().is_empty());
++            if zoom_action != daw_ui::TimelineViewAction::None {
++                view_action = zoom_action;
++                fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
++            }
++            daw_ui::toolbar_trailing(ui, if compact_toolbar { 320.0 } else { 366.0 }, |ui| {
+                 daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
+-                fit = daw_ui::timeline_fit_button(ui).clicked();
+                 daw_ui::quiet_view_menu(ui, "View", |ui| {
+-                    view_action = daw_ui::timeline_selection_view_actions(
++                    let action = daw_ui::timeline_selection_view_actions(
+                         ui,
+                         "arrangement",
+                         !self.arranger_selection_ids().is_empty(),
+                     );
++                    if action != daw_ui::TimelineViewAction::None {
++                        view_action = action;
++                    }
+                     ui.separator();
+                     daw_ui::waveform_amplitude_control(ui, &mut waveform_amplitude);
+                     crate::spectrogram::view_options(ui);
+@@ -211,18 +271,20 @@ impl DawApp {
+                     "snap",
+                     if self.snap == 0.0 {
+                         "Snap off".into()
+-                    } else {
++                    } else if self.snap == f64::from(self.project.beats_per_bar) {
++                        "Snap 1 bar".into()
++                    } else if [0.125, 0.25, 0.5, 1.0].contains(&self.snap) {
+                         format!("Snap 1/{}", (4.0 / self.snap) as u32)
++                    } else {
++                        format!("Snap {} beats", self.snap)
+                     },
+                 )
+-                .width(if compact_toolbar {
+-                    120.0
+-                } else {
+-                    daw_ui::tokens::SELECT_WIDTH
+-                })
++                .width(snap_width)
++                .height(6.0 * (daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_SM))
+                 .show_ui(ui, |ui| {
+                     for (name, value) in [
+                         ("Off", 0.0),
++                        ("1 bar", f64::from(self.project.beats_per_bar)),
+                         ("1/4", 1.0),
+                         ("1/8", 0.5),
+                         ("1/16", 0.25),
+@@ -282,12 +344,10 @@ impl DawApp {
+             start_row: 0.0,
+             end_row: (row_units + folder_footers / viewport.row_height).max(1.0),
+         };
++        let ruler_height = daw_ui::duration::loop_ruler_height(ui.ctx());
+         let canvas = Rect::from_min_max(
+             ui.available_rect_before_wrap().min
+-                + Vec2::new(
+-                    header_width,
+-                    daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT + ui.spacing().item_spacing.y,
+-                ),
++                + Vec2::new(header_width, ruler_height + ui.spacing().item_spacing.y),
+             ui.available_rect_before_wrap().max - Vec2::new(12.0 + right_inset, 0.0),
+         );
+         if let Some((track, clip)) = self.arranger_selection.reveal.take() {
+@@ -383,6 +443,7 @@ impl DawApp {
+         if fit {
+             viewport.fit_bounds(canvas, bounds);
+         }
++        view_action.apply_zoom(&mut viewport, canvas);
+         let navigation = daw_ui::TimelinePane::new("arrangement_pane", canvas)
+             .keyboard_active()
+             .navigate(ui, &mut viewport, bounds);
+@@ -466,10 +527,8 @@ impl DawApp {
+             .enumerate()
+             .map(|(index, id)| (id, index + 1))
+             .collect();
+-        let (ruler, ruler_response) = ui.allocate_exact_size(
+-            Vec2::new(content_width, daw_ui::tokens::TIMELINE_LOOP_RULER_HEIGHT),
+-            Sense::click(),
+-        );
++        let (ruler, ruler_response) =
++            ui.allocate_exact_size(Vec2::new(content_width, ruler_height), Sense::click());
+         let p = ui.painter_at(ruler);
+         p.rect_filled(ruler, 0.0, palette(ui.ctx()).panel);
+         let selected_folder = self.selected_track.filter(|id| {
+@@ -559,7 +618,7 @@ impl DawApp {
+             let rr = Rect::from_min_max(
+                 Pos2::new(
+                     origin + self.project.loop_start as f32 * self.zoom,
+-                    ruler.bottom() - daw_ui::tokens::TIMELINE_LOOP_STRIP_HEIGHT,
++                    loop_lane.top() + daw_ui::tokens::SPACE_SM,
+                 ),
+                 Pos2::new(
+                     origin + self.project.loop_end as f32 * self.zoom,
+@@ -568,7 +627,43 @@ impl DawApp {
+             )
+             .intersect(loop_lane);
+             if rr.is_positive() {
+-                p.rect_filled(rr, 2.0, palette(ui.ctx()).accent.gamma_multiply(0.6));
++                daw_ui::duration::paint_loop_region(
++                    &p,
++                    rr,
++                    self.project.loop_start,
++                    self.project.loop_end,
++                    self.project.tempo,
++                    self.project.beats_per_bar,
++                );
++                if ui
++                    .input(|input| input.pointer.hover_pos())
++                    .is_some_and(|point| rr.contains(point))
++                {
++                    daw_ui::hover_text(
++                        ruler_response.clone(),
++                        format!(
++                            "Loop from {} ({}) to {} ({}) · {}",
++                            daw_ui::duration::musical_position(
++                                self.project.loop_start,
++                                self.project.beats_per_bar
++                            ),
++                            daw_ui::duration::format_seconds(
++                                self.project.loop_start * 60.0 / self.project.tempo
++                            ),
++                            daw_ui::duration::musical_position(
++                                self.project.loop_end,
++                                self.project.beats_per_bar
++                            ),
++                            daw_ui::duration::format_seconds(
++                                self.project.loop_end * 60.0 / self.project.tempo
++                            ),
++                            daw_ui::duration::format_seconds(
++                                (self.project.loop_end - self.project.loop_start) * 60.0
++                                    / self.project.tempo
++                            ),
++                        ),
++                    );
++                }
+                 loop_indicator = Some(rr);
+             }
+         }
+@@ -1112,9 +1207,17 @@ impl DawApp {
+                             ui.interact(rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom()))),
+                                 ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() })
+                                 .on_hover_text(if clip.link_group.is_some() { format!("{} · Ghost clip\nEdits and name are shared. Position and trim are independent.", clip.name) } else { clip.name.clone() });
+-                        if ui.input(|input| input.pointer.primary_pressed())
+-                            && ui.input(|input| input.pointer.press_origin()).is_some_and(|position| visible_clip.contains(position)) {
+-                            self.arranger_selection.press_shift = Some((clip.id, ui.input(|input| input.modifiers.shift)));
++                        if let Some((position, modifiers)) = primary_press
++                            && visible_clip.contains(position) {
++                            self.arranger_selection.press_shift = Some((clip.id, modifiers.shift));
++                            if self.tool == daw_ui::EditorTool::Select && !navigation.navigating
++                                && !egui::Popup::is_any_open(ui.ctx())
++                                && !cancel_plain_click
++                                && modifiers == egui::Modifiers::NONE
++                                && (response.is_pointer_button_down_on()
++                                    || response.clicked_by(egui::PointerButton::Primary)) {
++                                self.arranger_selection.plain_click_candidate = Some(clip.id);
++                            }
+                         }
+                         let press_shift = self.arranger_selection.press_shift
+                             .filter(|(id, _)| *id == clip.id).map_or_else(|| ui.input(|input| input.modifiers.shift), |(_, shift)| shift);
+@@ -1160,7 +1263,17 @@ impl DawApp {
+                                 edits.push(Edit::AudioMotion(at));
+                             }
+                         }
+-                        if (response.clicked() || response.drag_started()) && self.tool != daw_ui::EditorTool::Cursor {
++                        if response.drag_started() || editing_fade {
++                            self.arranger_selection.plain_click_candidate = None;
++                        }
++                        let plain_click = response.clicked_by(egui::PointerButton::Primary)
++                            && self.tool == daw_ui::EditorTool::Select
++                            && self.arranger_selection.plain_click_candidate == Some(clip.id);
++                        if plain_click {
++                            edits.push(Edit::SelectOnly(track.id, clip.id));
++                        } else if (response.drag_started() || response.clicked()
++                            && (self.tool != daw_ui::EditorTool::Select || press_shift))
++                            && self.tool != daw_ui::EditorTool::Cursor {
+                             edits.push(Edit::Select(track.id, clip.id, press_shift, response.drag_started()));
+                         }
+                         if response.clicked() && !navigation.navigating {
+@@ -1178,7 +1291,8 @@ impl DawApp {
+                         clicked_clip |= response.clicked();
+                         let double = response.clicked() && response.interact_pointer_pos().is_some_and(|position| {
+                             self.arranger_selection.click_tracker.register(clip.id, position, ui.input(|input| input.time),
+-                                !press_shift && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Pencil))
++                                plain_click || self.tool == daw_ui::EditorTool::Pencil && !press_shift
++                                    && ui.input(|input| input.modifiers == egui::Modifiers::NONE))
+                         });
+                         if double {
+                             self.selected_track = Some(track.id);
+@@ -1252,6 +1366,10 @@ impl DawApp {
+                             }
+                         }
+                         response.context_menu(|ui| {
++                            let selected_count = self.arranger_selection.ids.len();
++                            if selected_count > 1 && self.arranger_selection.ids.contains(&clip.id) {
++                                daw_ui::text::note(ui, format!("{selected_count} clips selected"));
++                            }
+                             if daw_ui::button(ui, if matches!(clip.content, ClipContent::Midi { .. }) {
+                                 "Edit notes"
+                             } else {
+@@ -1268,12 +1386,7 @@ impl DawApp {
+                                 edits.push(Edit::Select(track.id, clip.id, true, false));
+                             }
+                             if daw_ui::button(ui, "Select only this clip").clicked() {
+-                                self.selected_track = Some(track.id);
+-                                self.selected_clip = Some(clip.id);
+-                                self.arranger_selection.ids.clear();
+-                                self.arranger_selection.ids.insert(clip.id);
+-                                self.arranger_selection.span = None;
+-                                self.selected_notes.clear();
++                                edits.push(Edit::SelectOnly(track.id, clip.id));
+                                 ui.close();
+                             }
+                             if ui.add_enabled(can_change_loop, daw_ui::button_widget(
+@@ -1643,7 +1756,9 @@ impl DawApp {
+                 "arrangement",
+                 view_before,
+                 viewport,
+-                fit || navigation.fit || view_action == daw_ui::TimelineViewAction::FitSelection,
++                fit || navigation.fit
++                    || view_action == daw_ui::TimelineViewAction::FitSelection
++                    || view_action.is_zoom(),
+             );
+         }
+         self.zoom = viewport.pixels_per_beat;
+@@ -1688,6 +1803,9 @@ impl DawApp {
+             if let Edit::Select(track, clip, shift, dragging) = edit {
+                 self.arranger_click_clip(*track, *clip, *shift, *dragging);
+                 false
++            } else if let Edit::SelectOnly(track, clip) = edit {
++                self.arranger_select_only_clip(*track, *clip);
++                false
+             } else {
+                 true
+             }
+@@ -1726,6 +1844,7 @@ impl DawApp {
+             if !matches!(
+                 edit,
+                 Edit::Select(..)
++                    | Edit::SelectOnly(..)
+                     | Edit::Rename(..)
+                     | Edit::AudioStart(..)
+                     | Edit::AudioMotion(..)
+@@ -1755,6 +1874,10 @@ impl DawApp {
+                     self.arranger_click_clip(track, clip, shift, dragging);
+                     continue;
+                 }
++                Edit::SelectOnly(track, clip) => {
++                    self.arranger_select_only_clip(track, clip);
++                    continue;
++                }
+                 Edit::GroupStart(handle, duplicate) => {
+                     self.arranger_start_group_drag(handle, duplicate);
+                     continue;
+@@ -1955,6 +2078,46 @@ impl DawApp {
+                 self.message(result, "");
+             }
+         }
++        // Read the applied clip bounds rather than the pre-edit canvas data:
++        // this feedback must agree with the current drag, including snap and
++        // source limits. Painting creates no hit target or history entry.
++        let trim_feedback = if ui.input(|input| input.pointer.primary_down())
++            && let Some(Drag::Clip {
++                track,
++                clip,
++                mode: ClipDragMode::TrimStart | ClipDragMode::TrimEnd,
++                ..
++            }) = &self.drag
++            && let Some(clip_data) = self.project.clip(*track, *clip)
++            && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
++        {
++            let end_seconds = clip_data.end() * 60.0 / self.project.tempo;
++            let duration_seconds = clip_data.length * 60.0 / self.project.tempo;
++            let text = format!(
++                "End {end_seconds:.3} s · Beat {:.2}\nDuration {duration_seconds:.3} s · {:.2} beats",
++                clip_data.end() + 1.0,
++                clip_data.length,
++            );
++            let rect = daw_ui::pointer_text(
++                ui.ctx(),
++                ui.id().with("clip_trim_feedback"),
++                pointer,
++                text.clone(),
++            );
++            serde_json::json!({
++                "track": track, "clip": clip, "text": text,
++                "end_seconds": end_seconds, "duration_seconds": duration_seconds,
++                "end_beat": clip_data.end() + 1.0, "duration_beats": clip_data.length,
++                "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
++            })
++        } else {
++            serde_json::Value::Null
++        };
++        ui.ctx().data_mut(|data| {
++            data.get_temp_mut_or_default::<serde_json::Value>(egui::Id::new(
++                "timeline_diagnostics",
++            ))["trim_feedback"] = trim_feedback;
++        });
+         self.apply_automation_navigation(automation_navigation);
+         if let Some(intent) = track_reorder {
+             self.apply_track_reorder(intent);
+@@ -1963,6 +2126,7 @@ impl DawApp {
+             self.arranger_selection.drag = None;
+             self.arranger_selection.audio_drag = None;
+             self.arranger_selection.press_shift = None;
++            self.arranger_selection.plain_click_candidate = None;
+             if !clicked_clip {
+                 self.arranger_selection.click_tracker.clear();
+             }
+@@ -2107,11 +2271,12 @@ impl DawApp {
+         }
+         .unwrap_or_else(|| "Properties".into());
+         let mut navigated = false;
++        let mut name_keyboard = None;
+         let mut automation_navigation = None;
+         daw_ui::popup(title, ctx)
+             .id(egui::Id::new("inspector"))
+             .default_width(540.0)
+-            .min_height(daw_ui::popup_body_size(ctx).y.min(420.0))
++            .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 520.0 } else { 420.0 }))
+             .vscroll(false)
+             .open(&mut open)
+             .show(ctx, |ui| {
+@@ -2177,6 +2342,8 @@ impl DawApp {
+                                 .count()
+                         });
+                         let mut make_independent = false;
++                        let timing_tempo = self.project.tempo;
++                        let timing_meter = self.project.beats_per_bar;
+                         if let Some(clip) = self.selected_mut() {
+                             if let Some(count) = count {
+                                 ui.horizontal_wrapped(|ui| {
+@@ -2190,7 +2357,13 @@ impl DawApp {
+                             }
+                             daw_ui::form_grid(ui, "clip_properties", |ui| {
+                                 let label = daw_ui::text::label(ui, "Name");
+-                                let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 260.0)
++                                let name = ui.horizontal(|ui| {
++                                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 220.0);
++                                    if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this clip with the mouse").clicked() {
++                                        name_keyboard = Some(true);
++                                    }
++                                    name
++                                }).inner
+                                     .labelled_by(label.id)
+                                     .on_hover_text(if linked.is_some() {
+                                         "Shared name · renaming any ghost renames the whole group"
+@@ -2260,6 +2433,9 @@ impl DawApp {
+                                         ui.end_row();
+                                     }
+                                 }
++                                daw_ui::duration::timing_summary(
++                                    ui, clip.start, clip.length, timing_tempo, timing_meter,
++                                );
+                             });
+                         }
+                         if timing_edit.new_gesture {
+@@ -2289,8 +2465,13 @@ impl DawApp {
+                     if let Some(track) = self.project.track_mut(id) {
+                         daw_ui::form_grid(ui, "track_properties", |ui| {
+                             let label = daw_ui::text::label(ui, "Name");
+-                            changed |= daw_ui::text_field(ui, &mut track.name, "Track name", 260.0)
+-                                .labelled_by(label.id).changed();
++                            changed |= ui.horizontal(|ui| {
++                                let name = daw_ui::text_field(ui, &mut track.name, "Track name", 220.0).labelled_by(label.id);
++                                if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this track with the mouse").clicked() {
++                                    name_keyboard = Some(false);
++                                }
++                                name.changed()
++                            }).inner;
+                             ui.end_row();
+                             let label = daw_ui::text::label(ui, "Color");
+                             changed |= daw_ui::color_edit(ui, &mut track.color).labelled_by(label.id).changed();
+@@ -2347,6 +2528,9 @@ impl DawApp {
+             self.inspector_open = open;
+         }
+         self.apply_automation_navigation(automation_navigation);
++        if let Some(clip) = name_keyboard {
++            self.start_item_name_keyboard(ctx, clip);
++        }
+     }
+ 
+     fn channel_properties(
+diff --git a/crates/daw-app/src/arranger_selection.rs b/crates/daw-app/src/arranger_selection.rs
+index 748da91..95720ec 100644
+--- a/crates/daw-app/src/arranger_selection.rs
++++ b/crates/daw-app/src/arranger_selection.rs
+@@ -15,6 +15,9 @@ pub(crate) struct ArrangerSelection {
+     pub(crate) drag: Option<GroupDrag>,
+     pub(crate) reveal: Option<(u64, u64)>,
+     pub(crate) press_shift: Option<(u64, bool)>,
++    /// A Select-tool press can collapse a group only after an unmodified click
++    /// release; retaining the group while held keeps group dragging possible.
++    pub(crate) plain_click_candidate: Option<u64>,
+     pub(crate) click_tracker: daw_ui::ItemClickTracker,
+     pub(crate) background_click_tracker: daw_ui::ItemClickTracker,
+     clipboard: Option<ClipClipboard>,
+@@ -193,13 +196,19 @@ impl DawApp {
+         self.arranger_selection.drag = None;
+         self.arranger_selection.audio_drag = None;
+         self.arranger_selection.press_shift = None;
++        self.arranger_selection.plain_click_candidate = None;
+         self.arranger_selection.reveal = None;
+         self.arranger_selection.click_tracker.clear();
+         self.arranger_selection.background_click_tracker.clear();
+         self.drag = None;
+     }
+ 
+-    /// A click retains a selected group for dragging; Shift-click toggles membership.
++    pub(crate) fn arranger_select_only_clip(&mut self, track: u64, clip: u64) {
++        self.arranger_select_clips([(track, clip)], None);
++    }
++
++    /// Drag starts and command-tool clicks retain a selected group; Shift-click
++    /// toggles membership. Plain Select-tool releases use select-only instead.
+     pub(crate) fn arranger_click_clip(
+         &mut self,
+         track: u64,
+diff --git a/crates/daw-app/src/audio_editor.rs b/crates/daw-app/src/audio_editor.rs
+index 9883493..33a683a 100644
+--- a/crates/daw-app/src/audio_editor.rs
++++ b/crates/daw-app/src/audio_editor.rs
+@@ -870,9 +870,13 @@ impl DawApp {
+             if audio_processing_menu(ui, &mut processing) {
+                 edit = Some(Edit::Processing(processing));
+             }
+-            daw_ui::toolbar_trailing(ui, 360.0, |ui| {
++            daw_ui::toolbar_trailing(ui, 530.0, |ui| {
+                 daw_ui::editor_tool_help(ui, state.tool, daw_ui::ToolHintContext::Audio);
+-                fit = daw_ui::timeline_fit_button(ui).clicked();
++                let zoom_action = daw_ui::timeline_zoom_controls(ui, true);
++                if zoom_action != daw_ui::TimelineViewAction::None {
++                    view_action = zoom_action;
++                    fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
++                }
+                 daw_ui::quiet_view_menu(ui, "View", |ui| {
+                     self.clip_navigation_controls(ui);
+                     ui.separator();
+@@ -1185,6 +1189,7 @@ impl DawApp {
+                 },
+             );
+         }
++        view_action.apply_zoom(&mut state.view, canvas);
+         let navigation = TimelinePane::new("audio_timeline", canvas)
+             .keyboard_active()
+             .navigate(ui, &mut state.view, bounds);
+@@ -1198,7 +1203,9 @@ impl DawApp {
+                 "audio",
+                 view_before,
+                 state.view,
+-                fit || navigation.fit || view_action == daw_ui::TimelineViewAction::FitSelection,
++                fit || navigation.fit
++                    || view_action == daw_ui::TimelineViewAction::FitSelection
++                    || view_action.is_zoom(),
+             );
+         }
+         let headroom = state.amplitude_reference;
+diff --git a/crates/daw-app/src/automation.rs b/crates/daw-app/src/automation.rs
+index 0e5aea2..6503b9f 100644
+--- a/crates/daw-app/src/automation.rs
++++ b/crates/daw-app/src/automation.rs
+@@ -90,6 +90,10 @@ enum Command {
+     CloseWindow,
+     Focused {
+         focused: bool,
++        /// Model an initial host focus state without synthesizing a transition.
++        /// Normal focus changes emit the same event as the native integration.
++        #[serde(default)]
++        initial: bool,
+     },
+     SystemTheme {
+         dark: bool,
+@@ -218,6 +222,8 @@ enum TestClipboardAction {
+ enum PointerPhase {
+     Click,
+     DoubleClick,
++    ClickBatched,
++    DoubleClickBatched,
+     Drag,
+     Down,
+     Move,
+@@ -604,6 +610,36 @@ impl Harness {
+             PointerPhase::Down => send(self, from, Some(true)),
+             PointerPhase::Move => send(self, from, None),
+             PointerPhase::Up => send(self, from, Some(false)),
++            PointerPhase::ClickBatched | PointerPhase::DoubleClickBatched => {
++                let count = if matches!(phase, PointerPhase::DoubleClickBatched) {
++                    2
++                } else {
++                    1
++                };
++                for _ in 0..count {
++                    send(self, from, None);
++                    self.frame(RawInput {
++                        events: vec![
++                            Event::PointerMoved(from),
++                            Event::PointerButton {
++                                pos: from,
++                                button,
++                                pressed: true,
++                                modifiers,
++                            },
++                            Event::PointerButton {
++                                pos: from,
++                                button,
++                                pressed: false,
++                                modifiers,
++                            },
++                        ],
++                        modifiers,
++                        ..Default::default()
++                    });
++                }
++                self.settle();
++            }
+             PointerPhase::Click | PointerPhase::DoubleClick | PointerPhase::Drag => {
+                 let count = if matches!(phase, PointerPhase::DoubleClick) {
+                     2
+@@ -1027,8 +1063,15 @@ impl Harness {
+                 self.inspect_paint = paint;
+                 self.settle();
+             }
+-            Command::Focused { focused } => {
++            Command::Focused { focused, initial } => {
++                let changed = self.focused != focused;
+                 self.focused = focused;
++                if changed && !initial {
++                    self.frame(RawInput {
++                        events: vec![Event::WindowFocused(focused)],
++                        ..Default::default()
++                    });
++                }
+                 self.settle();
+             }
+             Command::Click { label, occurrence } => self.click(&label, occurrence)?,
+@@ -1411,6 +1454,7 @@ impl Harness {
+                 "position_beats": s.position_beats,
+                 "peak_left": s.peak_left, "peak_right": s.peak_right,
+                 "underruns": s.underruns, "render_errors": s.render_errors,
++                "output_failed": s.output_failed,
+                 "requested_revision": s.requested_revision,
+                 "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
+                 "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,
+diff --git a/crates/daw-app/src/clip_navigation.rs b/crates/daw-app/src/clip_navigation.rs
+index ce6f875..9e81edb 100644
+--- a/crates/daw-app/src/clip_navigation.rs
++++ b/crates/daw-app/src/clip_navigation.rs
+@@ -77,6 +77,7 @@ impl DawApp {
+             self.midi_editor.select_clip_preserving_view(clip);
+         }
+         self.last_editor_clip = Some(clip);
++        self.sync_workspace_tool();
+     }
+ 
+     pub(crate) fn clip_navigation_shortcuts(&mut self, ctx: &egui::Context) -> bool {
+diff --git a/crates/daw-app/src/editor.rs b/crates/daw-app/src/editor.rs
+index 8eaed56..e411a48 100644
+--- a/crates/daw-app/src/editor.rs
++++ b/crates/daw-app/src/editor.rs
+@@ -283,6 +283,7 @@ impl DawApp {
+                     let destination = track.output_bus.and_then(|id| names.get(&id))
+                         .map(String::as_str).unwrap_or("Master");
+                     let route = format!("Ch {} > {}", channel_numbers[&track.id], destination);
++                    let channel_peaks = self.engine.as_ref().map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
+                     let strip = daw_ui::mixer_strip(ui, track.id, strip_size,
+                         Some(color(track.color)), selected_channels.contains(&track.id), |ui| {
+                         ui.spacing_mut().item_spacing.y = spacing;
+@@ -399,8 +400,7 @@ impl DawApp {
+                                 if let Some(value) = exact { gain = daw_ui::channel_gain_from_db(value as f32); }
+                                 if (response.changed() || exact.is_some()) && !panning { track.gain = gain; changed = true;
+                                     automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(gain))); }
+-                                let peaks = self.engine.as_ref().map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
+-                                daw_ui::stereo_meter(ui, peaks, Vec2::new(14.0, fader_height))
++                                daw_ui::stereo_meter(ui, channel_peaks, Vec2::new(14.0, fader_height))
+                                     .on_hover_text("Channel output level · post-fader");
+                                 (response.rect, scale)
+                             }).inner;
+@@ -444,7 +444,7 @@ impl DawApp {
+                         }).collect();
+                         let sends = daw_ui::mixer_sends_button(ui, content_width, &send_details);
+                         if sends.clicked() { self.selected_track = Some(track.id); popup = Some(PopupKind::Routing); }
+-                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"name":rect_json(name.rect),"reorder_source":rect_json(name.rect),"source":rect_json(source.response.rect),
++                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":rect_json(name.rect),"source":rect_json(source.response.rect),
+                             "source_kind":source_kind,"source_menu":rect_json(source.inner.0),"source_label":rect_json(source.inner.1),
+                             "automation_state":channel_state.map(daw_ui::automation_state_label),
+                             "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
+@@ -555,7 +555,7 @@ impl DawApp {
+         ui.ctx().data_mut(|data| {
+             data.insert_temp(preview_id, (generation, frame, self.selected_track, flow_source));
+             data.insert_temp(egui::Id::new("mixer_diagnostics"),
+-                serde_json::json!({"channels":diagnostics,"master_strip":master_diagnostics,"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport}));
++                serde_json::json!({"channels":diagnostics,"master_strip":master_diagnostics,"master_peaks":[meter.peak_left,meter.peak_right],"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport}));
+         });
+         for (target, value) in automation_overrides {
+             self.override_automated_parameter(target, value);
+diff --git a/crates/daw-app/src/error_ui.rs b/crates/daw-app/src/error_ui.rs
+index 5b93778..3658687 100644
+--- a/crates/daw-app/src/error_ui.rs
++++ b/crates/daw-app/src/error_ui.rs
+@@ -24,6 +24,7 @@ impl DawApp {
+         let audio_setup = [
+             "audio device",
+             "audio output device",
++            "audio output stream",
+             "output device '",
+             "device does not support the requested sample rate",
+             "device buffer size",
+diff --git a/crates/daw-app/src/export_ui.rs b/crates/daw-app/src/export_ui.rs
+index 9418df6..4a29066 100644
+--- a/crates/daw-app/src/export_ui.rs
++++ b/crates/daw-app/src/export_ui.rs
+@@ -167,9 +167,17 @@ impl DawApp {
+             .collect()
+     }
+ 
++    pub(crate) fn export_midi_ready(&self) -> bool {
++        self.export_job.is_none() && !self.state_sync_pending() && !self.project_io_pending()
++    }
++
+     pub(crate) fn export_midi_dialog(&mut self) {
++        // A native picker blocks polling. Let an earlier mixdown finish before
++        // starting another export so its result cannot replace this MIDI result.
++        if !self.export_midi_ready() {
++            return;
++        }
+         if let Some(path) = self.pick_document_path(DocumentDialog::ExportMidi) {
+-            self.exported_file = None;
+             let result = self.project.export_midi(&path);
+             match result {
+                 Ok(()) => {
+@@ -199,7 +207,15 @@ impl DawApp {
+             return;
+         }
+         let duration = self.project.end_beat() * 60.0 / self.project.tempo;
+-        let duration = format!("Arrangement · {}", daw_ui::format_clock_time(duration, 3));
++        let duration = format!(
++            "Arrangement · {}{}",
++            daw_ui::format_clock_time(duration, 3),
++            if self.export_include_effect_tails {
++                " + tails"
++            } else {
++                ""
++            },
++        );
+         let mut export = false;
+         let mut cancel = false;
+         let missing_instruments = self.export_missing_instruments().join(", ");
+@@ -209,7 +225,17 @@ impl DawApp {
+             .vscroll(false)
+             .open(&mut open)
+             .show(ctx, |ui| {
+-                daw_ui::text::body(ui, duration);
++                daw_ui::text::body(ui, duration).on_hover_text(
++                    if self.export_include_effect_tails {
++                        "The file includes releases and effect tails beyond this arrangement duration."
++                    } else {
++                        "The file ends exactly at this arrangement duration."
++                    }
++                );
++                daw_ui::text::note(ui, format!(
++                    "{} kHz · Stereo · 32-bit float",
++                    f64::from(self.settings.sample_rate) / 1000.0,
++                )).on_hover_text("Change the sample rate in Window → Setup → Audio.");
+                 if !missing_instruments.is_empty() {
+                     ui.add_space(daw_ui::tokens::SPACE_MD);
+                     daw_ui::notice(ui, daw_ui::NoticeKind::Warning, "MIDI notes need an instrument", |_| {});
+diff --git a/crates/daw-app/src/library.rs b/crates/daw-app/src/library.rs
+index 0d7814f..9f23203 100644
+--- a/crates/daw-app/src/library.rs
++++ b/crates/daw-app/src/library.rs
+@@ -20,6 +20,7 @@ const DETAILS_WIDTH: f32 = 300.0;
+ /// Two card columns and the grid's scrollbar gutter.
+ const CATALOG_MIN_WIDTH: f32 = 2.0 * daw_ui::DEVICE_CARD_MIN_WIDTH + SPACE_MD + 16.0;
+ const PANE_GAP: f32 = daw_ui::tokens::SPACE_LG;
++const PREVIEW_IMAGE_HELP: &str = "An optional image of the plug-in editor. Image capture does not verify whether the plug-in can load or play; assignment remains available.";
+ 
+ #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+ pub(crate) enum LibraryTarget {
+@@ -45,7 +46,7 @@ enum Collection {
+     All,
+     Favorites,
+     WithPreview,
+-    PreviewFailed,
++    WithoutPreview,
+ }
+ 
+ impl Collection {
+@@ -53,7 +54,7 @@ impl Collection {
+         Self::All,
+         Self::Favorites,
+         Self::WithPreview,
+-        Self::PreviewFailed,
++        Self::WithoutPreview,
+     ];
+ 
+     fn label(self) -> &'static str {
+@@ -61,7 +62,7 @@ impl Collection {
+             Self::All => "All plug-ins",
+             Self::Favorites => "Favorites",
+             Self::WithPreview => "With preview",
+-            Self::PreviewFailed => "Preview failed",
++            Self::WithoutPreview => "Without preview",
+         }
+     }
+ 
+@@ -70,7 +71,7 @@ impl Collection {
+             Self::All => true,
+             Self::Favorites => item.favorite,
+             Self::WithPreview => item.entry.status == ThumbnailStatus::Ready,
+-            Self::PreviewFailed => matches!(item.entry.status, ThumbnailStatus::Failed { .. }),
++            Self::WithoutPreview => item.entry.status != ThumbnailStatus::Ready,
+         }
+     }
+ }
+@@ -686,7 +687,13 @@ impl DawApp {
+                             daw_ui::theme::label(ui, "LIBRARY");
+                             for collection in Collection::ALL {
+                                 let count = kind_items.iter().filter(|item| collection.accepts(item)).count();
+-                                if daw_ui::count_item(ui, state.collection == collection, collection.label(), count).clicked() {
++                                let response = daw_ui::count_item(ui, state.collection == collection, collection.label(), count);
++                                let response = if matches!(collection, Collection::WithPreview | Collection::WithoutPreview) {
++                                    response.on_hover_text(PREVIEW_IMAGE_HELP)
++                                } else {
++                                    response
++                                };
++                                if response.clicked() {
+                                     state.collection = collection;
+                                 }
+                             }
+@@ -877,14 +884,17 @@ impl DawApp {
+                                 row("Kind", kind_label(&entry.plugin).into());
+                                 row("Version", if entry.plugin.version.is_empty() { "Unknown".into() } else { entry.plugin.version.clone() });
+                                 row("Architecture", if entry.plugin.architectures.is_empty() { "Unknown".into() } else { entry.plugin.architectures.join(", ") });
+-                                row("Preview", match &entry.status {
++                                row("Preview image", match &entry.status {
+                                     ThumbnailStatus::Ready => "Captured".into(),
+                                     ThumbnailStatus::Missing => "Not captured".into(),
+-                                    ThumbnailStatus::Failed { .. } => "Failed".into(),
++                                    ThumbnailStatus::Failed { .. } => "Unavailable".into(),
+                                 });
+                             });
+                             if let ThumbnailStatus::Failed { message } = &entry.status {
+-                                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, message, 3);
++                                daw_ui::text::note(ui, "Optional image; assignment remains available.")
++                                    .on_hover_text(PREVIEW_IMAGE_HELP);
++                                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, message, 3)
++                                    .on_hover_text(format!("Preview image capture: {message}"));
+                             }
+                         });
+                     }
+@@ -936,17 +946,20 @@ impl DawApp {
+                                 edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), !item.favorite));
+                                 ui.close();
+                             }
+-                            if daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" }).clicked() {
++                            if daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" })
++                                .on_hover_text("Capture an optional image of the plug-in editor. This does not assign or replace the plug-in.")
++                                .clicked() {
+                                 retry = Some(entry.plugin.clone());
+                                 ui.close();
+                             }
++                            if let ThumbnailStatus::Failed { message } = &entry.status {
++                                daw_ui::text::note(ui, "Image unavailable")
++                                    .on_hover_text(format!("{PREVIEW_IMAGE_HELP}\n\nPreview image capture: {message}"));
++                            }
+                             if details == 0.0 {
+                                 // Without room for the detail pane, keep its facts reachable.
+                                 ui.separator();
+                                 daw_ui::text::note(ui, if entry.plugin.category.is_empty() { "Unverified VST3".to_owned() } else { format!("VST3 · {}", entry.plugin.category.replace('|', " · ")) });
+-                                if let ThumbnailStatus::Failed { message } = &entry.status {
+-                                    daw_ui::text::note(ui, "Preview unavailable").on_hover_text(message);
+-                                }
+                                 daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
+                             }
+                         });
+diff --git a/crates/daw-app/src/midi_editor.rs b/crates/daw-app/src/midi_editor.rs
+index 881a2a0..31f1af5 100644
+--- a/crates/daw-app/src/midi_editor.rs
++++ b/crates/daw-app/src/midi_editor.rs
+@@ -896,10 +896,15 @@ impl DawApp {
+                     );
+                 }
+                 let view_controls_id = ui.make_persistent_id("midi_view_controls");
+-                daw_ui::toolbar_trailing(ui, 270.0, |ui| {
++                daw_ui::toolbar_trailing(ui, 440.0, |ui| {
+                     ui.scope_builder(egui::UiBuilder::new().id(view_controls_id), |ui| {
+                         daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Midi);
+-                        fit = daw_ui::timeline_fit_button(ui).clicked();
++                        let zoom_action =
++                            daw_ui::timeline_zoom_controls(ui, !self.selected_notes.is_empty());
++                        if zoom_action != daw_ui::TimelineViewAction::None {
++                            view_action = zoom_action;
++                            fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
++                        }
+                         daw_ui::quiet_view_menu(ui, "View", |ui| {
+                             self.clip_navigation_controls(ui);
+                             ui.separator();
+@@ -1352,6 +1357,7 @@ impl DawApp {
+         } else if view_action == daw_ui::TimelineViewAction::Previous {
+             daw_ui::restore_previous_timeline_view(ui.ctx(), "midi", &mut state.viewport);
+         }
++        view_action.apply_zoom(&mut state.viewport, plot);
+         let fit_key = !ui.ctx().wants_keyboard_input()
+             && !egui::Popup::is_any_open(ui.ctx())
+             && ui.input(|input| input.key_pressed(egui::Key::F));
+@@ -1498,7 +1504,9 @@ impl DawApp {
+                 "midi",
+                 previous_view,
+                 state.viewport,
+-                fit || fit_key || view_action == daw_ui::TimelineViewAction::FitSelection,
++                fit || fit_key
++                    || view_action == daw_ui::TimelineViewAction::FitSelection
++                    || view_action.is_zoom(),
+             );
+         }
+         let view = state.viewport;
+@@ -1598,7 +1606,17 @@ impl DawApp {
+             let active = down
+                 && !navigation.navigating
+                 && pointer.is_some_and(|p| keys.contains(p) && key.contains(p));
+-            let label = if state.only_scale_keys || pitch % 12 == 0 || pitch % 12 == self.root {
++            let reveal_pitch = owns_pointer
++                && pointer.is_some_and(|pos| {
++                    keys.contains(pos) || plot.contains(pos) && row.contains(pos)
++                });
++            let label = if state.only_scale_keys
++                || pitch % 12 == 0
++                || pitch % 12 == self.root
++                || reveal_pitch
++                || active
++                || state.keyboard_focus && state.keyboard_pitch == Some(pitch)
++            {
+                 daw_core::note_name(pitch)
+             } else {
+                 String::new()
+diff --git a/crates/daw-app/src/recording_ui.rs b/crates/daw-app/src/recording_ui.rs
+index 9742e86..28531f1 100644
+--- a/crates/daw-app/src/recording_ui.rs
++++ b/crates/daw-app/src/recording_ui.rs
+@@ -274,6 +274,19 @@ impl DawApp {
+         if self.recording_busy() {
+             return;
+         }
++        if self
++            .engine
++            .as_ref()
++            .is_some_and(|engine| engine.snapshot().output_failed)
++        {
++            self.message(
++                Err(anyhow::anyhow!(
++                    "Audio output stream failed; press Stop and Play to reconnect before recording"
++                )),
++                "",
++            );
++            return;
++        }
+         if self.project_io_pending() || self.state_sync_pending() || self.document_guard.is_some() {
+             self.message(
+                 Err(anyhow::anyhow!(
+diff --git a/crates/daw-app/src/rename.rs b/crates/daw-app/src/rename.rs
+index 37a30c5..491eca2 100644
+--- a/crates/daw-app/src/rename.rs
++++ b/crates/daw-app/src/rename.rs
+@@ -4,6 +4,7 @@ use eframe::egui;
+ 
+ #[derive(Clone, Copy)]
+ enum RenameTarget {
++    Project,
+     Clip(u64, u64),
+     Track(u64),
+ }
+@@ -24,6 +25,7 @@ fn state_id() -> egui::Id {
+ pub(crate) fn reset(ctx: &egui::Context) {
+     ctx.data_mut(|data| data.remove::<RenameDraft>(state_id()));
+     ctx.memory_mut(|memory| memory.surrender_focus(state_id().with("field")));
++    daw_ui::set_name_keyboard_open(ctx, state_id().with("field"), false);
+ }
+ 
+ fn rect(value: &serde_json::Value) -> Option<egui::Rect> {
+@@ -134,6 +136,7 @@ impl DawApp {
+         }
+         self.flush_pending_edit();
+         let unchanged = match draft.target {
++            RenameTarget::Project => self.project.name == draft.text,
+             RenameTarget::Clip(track, clip) => self
+                 .project
+                 .clip(track, clip)
+@@ -148,6 +151,10 @@ impl DawApp {
+         }
+         let mut candidate = self.project.clone();
+         let (result, label) = match draft.target {
++            RenameTarget::Project => {
++                candidate.name = draft.text;
++                (Ok(()), "Rename project")
++            }
+             RenameTarget::Clip(track, clip) => {
+                 candidate.clip_mut(track, clip).unwrap().name = draft.text;
+                 (
+@@ -203,19 +210,60 @@ impl DawApp {
+             })
+         });
+         if let Some((target, text)) = target {
+-            let document = crate::spectrogram::waveform_generation(ctx);
+-            ctx.data_mut(|data| {
+-                data.insert_temp(
+-                    state_id(),
+-                    RenameDraft {
+-                        target,
+-                        text,
+-                        view: self.view,
+-                        document,
+-                        initial_focus: true,
+-                    },
+-                )
+-            });
++            self.start_name_draft(ctx, target, text, false);
++        }
++    }
++
++    fn start_name_draft(
++        &mut self,
++        ctx: &egui::Context,
++        target: RenameTarget,
++        text: String,
++        keyboard: bool,
++    ) {
++        // Restore a utility's caller without dismissing the Clip Editor or
++        // Mixer workspace whose item is being named.
++        self.close_utility_popups();
++        daw_ui::set_name_keyboard_open(ctx, state_id().with("field"), keyboard);
++        let document = crate::spectrogram::waveform_generation(ctx);
++        ctx.data_mut(|data| {
++            data.insert_temp(
++                state_id(),
++                RenameDraft {
++                    target,
++                    text,
++                    view: self.view,
++                    document,
++                    initial_focus: true,
++                },
++            )
++        });
++    }
++
++    pub(crate) fn start_project_rename(&mut self, ctx: &egui::Context) {
++        self.start_name_draft(ctx, RenameTarget::Project, self.project.name.clone(), false);
++    }
++
++    /// Properties can open the same draft with mouse text entry already visible.
++    pub(crate) fn start_item_name_keyboard(&mut self, ctx: &egui::Context, clip: bool) {
++        let target = if clip {
++            self.selected_track
++                .zip(self.selected_clip)
++                .and_then(|(track, clip)| {
++                    self.project
++                        .clip(track, clip)
++                        .filter(|clip| !clip.is_take_source())
++                        .map(|item| (RenameTarget::Clip(track, clip), item.name.clone()))
++                })
++        } else {
++            self.selected_track.and_then(|track| {
++                self.project
++                    .track(track)
++                    .map(|item| (RenameTarget::Track(track), item.name.clone()))
++            })
++        };
++        if let Some((target, text)) = target {
++            self.start_name_draft(ctx, target, text, true);
+         }
+     }
+ 
+@@ -249,6 +297,7 @@ impl DawApp {
+             return;
+         }
+         let name = match draft.target {
++            RenameTarget::Project => Some(&self.project.name),
+             RenameTarget::Clip(track, clip) => {
+                 self.project.clip(track, clip).map(|clip| &clip.name)
+             }
+@@ -258,10 +307,14 @@ impl DawApp {
+             return;
+         }
+         let anchor = match (draft.view, draft.target) {
++            (_, RenameTarget::Project) => {
++                ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("project_title_rect")))
++            }
+             (WorkspaceView::Arrangement, target) => ctx.data(|data| {
+                 let timeline =
+                     data.get_temp::<serde_json::Value>(egui::Id::new("timeline_diagnostics"))?;
+                 match target {
++                    RenameTarget::Project => unreachable!(),
+                     RenameTarget::Clip(_, id) => timeline["clips"]
+                         .as_array()?
+                         .iter()
+@@ -296,16 +349,25 @@ impl DawApp {
+         let Some(anchor) = anchor.filter(|anchor| anchor.is_positive()) else {
+             return;
+         };
+-        let width = anchor.width().clamp(120.0, 360.0);
+         let content = ctx.content_rect().shrink(4.0);
++        let width = anchor
++            .width()
++            .clamp(120.0, 320.0)
++            .min((content.width() - 300.0).max(120.0));
++        let keyboard_open = daw_ui::name_keyboard_open(ctx, state_id().with("field"));
++        let height = if keyboard_open {
++            340.0
++        } else {
++            daw_ui::tokens::CONTROL_HEIGHT
++        };
+         let position = egui::pos2(
+             anchor.left().clamp(
+                 content.left(),
+-                (content.right() - width - 172.0).max(content.left()),
++                (content.right() - width - 300.0).max(content.left()),
+             ),
+             (anchor.center().y - daw_ui::tokens::CONTROL_HEIGHT * 0.5).clamp(
+                 content.top(),
+-                content.bottom() - daw_ui::tokens::CONTROL_HEIGHT,
++                (content.bottom() - height).max(content.top()),
+             ),
+         );
+         let field_id = state_id().with("field");
+@@ -317,10 +379,10 @@ impl DawApp {
+                     ui,
+                     field_id,
+                     &mut draft.text,
+-                    if matches!(draft.target, RenameTarget::Clip(..)) {
+-                        "Clip name"
+-                    } else {
+-                        "Track name"
++                    match draft.target {
++                        RenameTarget::Project => "Project name",
++                        RenameTarget::Clip(..) => "Clip name",
++                        RenameTarget::Track(..) => "Track name",
+                     },
+                     width,
+                     draft.initial_focus,
+diff --git a/crates/daw-app/tests/arranger_layout_e2e.rs b/crates/daw-app/tests/arranger_layout_e2e.rs
+index 4c0b1cd..70819b1 100644
+--- a/crates/daw-app/tests/arranger_layout_e2e.rs
++++ b/crates/daw-app/tests/arranger_layout_e2e.rs
+@@ -114,10 +114,41 @@ fn label_and_all_row_sizes_resize_without_edits_and_loop_range_has_its_own_lane(
+         }
+         let state = app.command(json!({"command":"inspect","paint":true}));
+         let indicator = &state["timeline"]["loop_indicator"];
++        let lane = &state["timeline"]["loop_lane"];
+         assert!(
+             indicator["min"][1].as_f64().unwrap()
+-                >= state["timeline"]["ruler"]["max"][1].as_f64().unwrap() + 2.
++                >= state["timeline"]["ruler"]["max"][1].as_f64().unwrap()
++                    + f64::from(daw_ui::tokens::SPACE_SM),
++            "Labelled loop strip must retain the clear gap below the ruler"
+         );
++        for axis in 0..2 {
++            assert!(
++                indicator["min"][axis].as_f64().unwrap() >= lane["min"][axis].as_f64().unwrap()
++            );
++            assert!(
++                indicator["max"][axis].as_f64().unwrap() <= lane["max"][axis].as_f64().unwrap()
++            );
++        }
++        let loop_label = state["label_rects"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .find(|label| {
++                label["text"]
++                    .as_str()
++                    .is_some_and(|text| text.starts_with("Loop 1:1.25–1:4.75"))
++            })
++            .expect("Loop timing remains visible inside its separated lane");
++        for axis in 0..2 {
++            assert!(
++                loop_label["min"][axis].as_f64().unwrap()
++                    >= indicator["min"][axis].as_f64().unwrap()
++            );
++            assert!(
++                loop_label["max"][axis].as_f64().unwrap()
++                    <= indicator["max"][axis].as_f64().unwrap()
++            );
++        }
+         assert!(
+             state["painted_rects"]
+                 .as_array()
+diff --git a/crates/daw-app/tests/arranger_tools_e2e.rs b/crates/daw-app/tests/arranger_tools_e2e.rs
+index 6ccf079..1aad0c9 100644
+--- a/crates/daw-app/tests/arranger_tools_e2e.rs
++++ b/crates/daw-app/tests/arranger_tools_e2e.rs
+@@ -553,24 +553,42 @@ fn ghost_stretch_is_local_survives_portable_recall_and_join_preserves_rendered_t
+ }
+ 
+ #[test]
+-fn switching_editors_resets_unsupported_tools_without_editing_the_project() {
++fn switching_editors_retains_each_supported_tool_without_editing_the_project() {
+     let (mut app, id, _) = fixture(Kind::Midi);
+-    let original = app.inspect()["project"].clone();
++    let original = app.inspect();
+     menu(&mut app, "Window", "Clip Editor");
+     let multi = app.key("U");
+     assert_eq!(multi["midi_editor"]["tool"], "MultiDraw");
+     let arranger = menu(&mut app, "Window", "Arrangement");
+-    assert_eq!(arranger["timeline"]["tool"], "Select");
+-    assert_eq!(arranger["project"], original);
++    assert_eq!(
++        arranger["timeline"]["tool"], "Select",
++        "MIDI-only MultiDraw must not enter the arranger"
++    );
+     let state = app.key("S");
+     assert_eq!(state["timeline"]["tool"], "Stretch");
+     let editor = menu(&mut app, "Window", "Clip Editor");
+-    assert_eq!(editor["midi_editor"]["tool"], "Select");
+-    assert_eq!(editor["project"], original);
++    assert_eq!(
++        editor["midi_editor"]["tool"], "MultiDraw",
++        "Arranger-only Stretch must not replace the piano roll's choice"
++    );
+     let state = menu(&mut app, "Window", "Arrangement");
++    assert_eq!(state["timeline"]["tool"], "Stretch");
+     let selected = pointer(&mut app, "click", center(&state, id));
+-    assert_eq!(selected["project"], original);
+     assert_eq!(selected["selected_clip"], id);
++    for state in [&multi, &arranger, &editor, &state, &selected] {
++        for field in [
++            "project",
++            "history",
++            "modified",
++            "selected_track",
++            "selected_clip",
++        ] {
++            assert_eq!(
++                state[field], original[field],
++                "Workspace tools changed {field}"
++            );
++        }
++    }
+     app.quit();
+ }
+ 
+diff --git a/crates/daw-app/tests/automation_color_e2e.rs b/crates/daw-app/tests/automation_color_e2e.rs
+index 17c3248..a7189c3 100644
+--- a/crates/daw-app/tests/automation_color_e2e.rs
++++ b/crates/daw-app/tests/automation_color_e2e.rs
+@@ -199,6 +199,7 @@ fn assert_arranger(state: &Value, id: u64, colors: Palette, overridden: bool) {
+ 
+ fn open_editor(app: &mut Harness, name: &str) {
+     app.click("Arranger");
++    app.click("Fit");
+     app.click(name);
+     menu(app, "Window", "Automation");
+ }
+@@ -265,6 +266,8 @@ fn automation_and_override_colors_follow_state_across_workspaces_and_themes() {
+             }
+ 
+             app.click("Arranger");
++            // Keep every lane visible when wrapped mouse controls reduce canvas height.
++            app.click("Fit");
+             let state = paint(&mut app, &baseline);
+             for id in &lanes {
+                 assert_arranger(&state, *id, colors, overridden);
+diff --git a/crates/daw-app/tests/automation_curves_e2e.rs b/crates/daw-app/tests/automation_curves_e2e.rs
+index b726628..5aeee1e 100644
+--- a/crates/daw-app/tests/automation_curves_e2e.rs
++++ b/crates/daw-app/tests/automation_curves_e2e.rs
+@@ -374,13 +374,7 @@ fn manual_gain_override_is_visible_saved_and_resumable_without_changing_curve_po
+         // stored manual value (0.9), even before the first point is reached.
+         assert!(visible(&original, "Automated"));
+         assert!(
+-            original["visible_labels"]
+-                .as_array()
+-                .unwrap()
+-                .iter()
+-                .filter_map(Value::as_str)
+-                .filter_map(|label| label.strip_suffix(" dB")?.parse::<f64>().ok())
+-                .any(|db| (db - 20.0 * 0.3_f64.log10()).abs() < 0.0001),
++            visible(&original, "-10.5 dB"),
+             "{}",
+             original["visible_labels"]
+         );
+diff --git a/crates/daw-app/tests/export_options_e2e.rs b/crates/daw-app/tests/export_options_e2e.rs
+index 5121f43..b8696ca 100644
+--- a/crates/daw-app/tests/export_options_e2e.rs
++++ b/crates/daw-app/tests/export_options_e2e.rs
+@@ -63,7 +63,8 @@ fn minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_pro
+ 
+     let state = options(&mut app);
+     assert_eq!(state["export_include_effect_tails"], true);
+-    assert!(has(&state, "Arrangement · 1:00"));
++    assert!(has(&state, "Arrangement · 1:00 + tails"));
++    assert!(has(&state, "48 kHz · Stereo · 32-bit float"));
+     let full_path = app.directory.path().join("With tails.wav");
+     let full = finish(&mut app, &full_path);
+     assert_eq!(full.frames(), 48_000 * 60 + 48_000 / 5);
+@@ -73,6 +74,8 @@ fn minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_pro
+     options(&mut app);
+     let state = app.click("Include effect tails");
+     assert_eq!(state["export_include_effect_tails"], false);
++    assert!(has(&state, "Arrangement · 1:00"));
++    assert!(!has(&state, "Arrangement · 1:00 + tails"));
+     // Background clip shortcuts cannot edit through the export window.
+     app.key("Delete");
+     app.command(json!({"command":"key", "key":"D", "cmd":true}));
+diff --git a/crates/daw-app/tests/header_channel_controls_e2e.rs b/crates/daw-app/tests/header_channel_controls_e2e.rs
+index 2629e87..097a556 100644
+--- a/crates/daw-app/tests/header_channel_controls_e2e.rs
++++ b/crates/daw-app/tests/header_channel_controls_e2e.rs
+@@ -96,19 +96,29 @@ fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep
+     );
+     let mixer = menu(&mut app, "Window", "Mixer");
+     assert_eq!(mixer["project"], panned["project"]);
+-    let expected_db = 20.0 * gain.log10();
++    let expected_db = daw_ui::channel_gain_to_db(gain as f32);
++    let caption = format!("{expected_db:.1} dB");
+     assert!(
+         mixer["visible_labels"]
+             .as_array()
+             .unwrap()
+             .iter()
+-            .filter_map(Value::as_str)
+-            .filter_map(|label| label.strip_suffix(" dB"))
+-            .filter_map(|value| value.parse::<f64>().ok())
+-            .any(|db| (db - expected_db).abs() < 0.0001),
+-        "The precise mixer field must reflect the edited header gain: {}",
++            .any(|label| label == &caption),
++        "The idle mixer caption must reflect the edited header gain: {}",
+         mixer["visible_labels"]
+     );
++    let focused = app.click(&caption);
++    assert!(
++        focused["visible_labels"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .any(|label| label == &expected_db.to_string()),
++        "Focused entry must retain the complete edited header gain: {}",
++        focused["visible_labels"]
++    );
++    assert_eq!(focused["project"], mixer["project"]);
++    assert_eq!(focused["history"], mixer["history"]);
+     menu(&mut app, "Window", "Arrangement");
+     app.click("Audio");
+     menu(&mut app, "Window", "Properties");
+diff --git a/crates/daw-app/tests/header_readability_e2e.rs b/crates/daw-app/tests/header_readability_e2e.rs
+index 97b4af5..6075ceb 100644
+--- a/crates/daw-app/tests/header_readability_e2e.rs
++++ b/crates/daw-app/tests/header_readability_e2e.rs
+@@ -105,8 +105,15 @@ fn header_captions_stay_bounded_and_exact_popup_dismissal_preserves_precision()
+                 app.command(json!({"command":"text", "text":"-24.12345"}));
+                 // Outside dismissal cancels a draft, including for stored
+                 // gain values outside the ordinary editing range.
+-                app.command(json!({"command":"pointer", "phase":"click", "x":180, "y":880}));
+-                unchanged(&app.inspect(), &original);
++                // Row heights can move a channel beneath fixed coordinates.
++                // Dismiss in the live timeline canvas, away from track actions.
++                let canvas = &state["timeline"]["canvas"];
++                let dismissed = app.command(json!({"command":"pointer", "phase":"click",
++                    "x":canvas["max"][0].as_f64().unwrap()-12.0,
++                    "y":canvas["max"][1].as_f64().unwrap()-12.0}));
++                unchanged(&dismissed, &original);
++                assert_eq!(dismissed["view"], "Arrangement");
++                assert_eq!(dismissed["popups"]["properties"], false);
+                 click_label(&mut app, pan_label, false);
+                 unchanged(&app.click("Apply value"), &original);
+                 click_label(&mut app, pan_label, false);
+diff --git a/crates/daw-app/tests/loop_e2e.rs b/crates/daw-app/tests/loop_e2e.rs
+index 63b492a..505aced 100644
+--- a/crates/daw-app/tests/loop_e2e.rs
++++ b/crates/daw-app/tests/loop_e2e.rs
+@@ -182,3 +182,68 @@ fn loop_range_drag_is_one_undo_step_and_invalid_text_stays_bounded() {
+     project.validate().unwrap();
+     app.quit();
+ }
++
++#[test]
++fn loop_endpoint_text_entry_keeps_step_buttons_still_and_never_steps_on_a_double_click() {
++    for (width, density, dark) in [(800, 1.0, false), (1440, 2.0, true)] {
++        let mut app = Harness::new();
++        app.command(
++            json!({"command":"viewport","width":width,"height":900,"pixels_per_point":density}),
++        );
++        app.command(json!({"command":"system_theme","dark":dark}));
++        app.click("Range");
++        for (prefix, replacement, expected_start, expected_end) in [
++            ("Start beat ", "3.25", 2.25, 16.0),
++            ("End beat ", "6.5", 2.25, 5.5),
++        ] {
++            let before = app.inspect();
++            let (x, y) = field_center(&before, prefix);
++            let buttons = |state: &Value| {
++                ["−", "+"].map(|symbol| {
++                    let button = state["menu_label_rects"]
++                        .as_array()
++                        .unwrap()
++                        .iter()
++                        .find(|label| {
++                            label["text"] == symbol
++                                && ((label["min"][1].as_f64().unwrap()
++                                    + label["max"][1].as_f64().unwrap())
++                                    * 0.5
++                                    - y)
++                                    .abs()
++                                    < 1.0
++                        })
++                        .expect("endpoint step button");
++                    (button["min"][0].as_f64().unwrap() + button["max"][0].as_f64().unwrap()) * 0.5
++                })
++            };
++            let original_buttons = buttons(&before);
++            for _ in 0..2 {
++                let focused = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
++                assert_eq!(
++                    focused["project"], before["project"],
++                    "Focusing {prefix} must not step it"
++                );
++                assert_eq!(focused["history"], before["history"]);
++                for (original, actual) in original_buttons.into_iter().zip(buttons(&focused)) {
++                    assert!(
++                        (original - actual).abs() < 0.01,
++                        "{prefix} step button moved during text entry: {original} -> {actual} at {width}px/{density}x"
++                    );
++                }
++            }
++            // Numeric multi-click selects the complete value without a select-all shortcut.
++            app.command(json!({"command":"text","text":replacement}));
++            let edited = app.key("Enter");
++            assert_range(&edited, expected_start, expected_end, false);
++            assert_eq!(
++                edited["history"]["undo"].as_array().unwrap().len(),
++                before["history"]["undo"].as_array().unwrap().len() + 1
++            );
++        }
++        app.key("Escape");
++        assert_range(&edit(&mut app, "Undo"), 2.25, 16.0, false);
++        assert_range(&edit(&mut app, "Undo"), 0.0, 16.0, false);
++        app.quit();
++    }
++}
+diff --git a/crates/daw-app/tests/loop_selection_e2e.rs b/crates/daw-app/tests/loop_selection_e2e.rs
+index 85def7a..c4afa9b 100644
+--- a/crates/daw-app/tests/loop_selection_e2e.rs
++++ b/crates/daw-app/tests/loop_selection_e2e.rs
+@@ -194,6 +194,10 @@ fn loop_selection_is_disabled_without_selection_and_while_recording() {
+     app.click("Record");
+     let recording = wait_recording(&mut app, "recording");
+     app.click("Range");
++    let disabled = app.click("Loop arrangement");
++    assert_eq!(disabled["project"], recording["project"]);
++    assert_eq!(disabled["history"], recording["history"]);
++    assert_eq!(disabled["recording"]["phase"], "recording");
+     let disabled = app.click("Loop selection");
+     assert_eq!(disabled["project"], recording["project"]);
+     assert_eq!(disabled["history"], recording["history"]);
+diff --git a/crates/daw-app/tests/main_toolbar_roles_e2e.rs b/crates/daw-app/tests/main_toolbar_roles_e2e.rs
+index f63031b..4f8f149 100644
+--- a/crates/daw-app/tests/main_toolbar_roles_e2e.rs
++++ b/crates/daw-app/tests/main_toolbar_roles_e2e.rs
+@@ -89,7 +89,7 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
+     let before = app.inspect();
+     for (dark, density) in [(false, 1.0), (true, 2.0)] {
+         app.command(json!({"command":"system_theme", "dark":dark}));
+-        for width in [800, 1100, 1480, 1600] {
++        for width in [800, 1100, 1280, 1440, 1480, 1600] {
+             app.command(json!({"command":"viewport", "width":width,
+                 "height":900, "pixels_per_point":density}));
+             app.command(json!({"command":"pointer", "phase":"move", "x":780.0, "y":880.0}));
+@@ -104,7 +104,9 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
+             same_row(&state, &["Start", "Play", "Stop", "Record"]);
+             same_row(&state, &["001 . 01 . 00", "120.0 BPM", "4/4"]);
+             same_row(&state, &["Click", "Loop", "Range"]);
+-            if width >= 1100 {
++            // Visible tempo steps add two full mouse targets. Below 1280 the
++            // complete guide group may wrap; common laptop widths keep one row.
++            if width >= 1280 {
+                 same_row(
+                     &state,
+                     &["Arranger", "Start", "120.0 BPM", "Click", "Range"],
+diff --git a/crates/daw-app/tests/midi_editor_e2e.rs b/crates/daw-app/tests/midi_editor_e2e.rs
+index fda8c99..6df9cdc 100644
+--- a/crates/daw-app/tests/midi_editor_e2e.rs
++++ b/crates/daw-app/tests/midi_editor_e2e.rs
+@@ -470,30 +470,38 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
+     app.key("Q");
+     let before = app.inspect();
+     let labels = before["label_rects"].as_array().unwrap();
+-    let transport_y = labels.iter().find(|label| label["text"] == "Play").unwrap()["min"][1]
+-        .as_f64()
+-        .unwrap();
+-    for text in [
+-        "Arranger",
+-        "Mixer",
+-        "Start",
+-        "Play",
+-        "Stop",
+-        "Record",
+-        "Click",
+-        "Loop",
+-        "Range",
+-        "120.0 BPM",
++    // Tempo's visible mouse steps allow complete control groups to wrap at
++    // this width. Keep each family together and all labels above the editor.
++    for group in [
++        &["Arranger", "Mixer"][..],
++        &["Start", "Play", "Stop", "Record"][..],
++        &["Click", "Loop", "Range"][..],
++        &["120.0 BPM", "4/4"][..],
+     ] {
+-        let label = labels.iter().find(|label| label["text"] == text).unwrap();
+-        assert!(
+-            (label["min"][1].as_f64().unwrap() - transport_y).abs() < 2.0,
+-            "The full labeled transport must fit one row at 1100 points: {label}"
+-        );
+-        assert!(
+-            label["max"][1].as_f64().unwrap() - label["min"][1].as_f64().unwrap() >= 18.0,
+-            "Compact transport must retain readable text: {label}"
+-        );
++        let row_y = center(
++            labels
++                .iter()
++                .find(|label| label["text"] == group[0])
++                .unwrap(),
++        )
++        .1;
++        for text in group {
++            let label = labels.iter().find(|label| label["text"] == *text).unwrap();
++            assert!(
++                (center(label).1 - row_y).abs() <= 2.0,
++                "Related transport controls must wrap together: {group:?}: {label}"
++            );
++            assert!(
++                label["min"][0].as_f64().unwrap() >= 0.0
++                    && label["max"][0].as_f64().unwrap() <= 1100.0
++                    && label["max"][1].as_f64().unwrap() < 240.0,
++                "Compact transport must remain visible: {label}"
++            );
++            assert!(
++                label["max"][1].as_f64().unwrap() - label["min"][1].as_f64().unwrap() >= 18.0,
++                "Compact transport must retain readable text: {label}"
++            );
++        }
+     }
+     let visible = |state: &Value, label: &str| {
+         state["visible_labels"]
+diff --git a/crates/daw-app/tests/mixer_e2e.rs b/crates/daw-app/tests/mixer_e2e.rs
+index 84f51ba..99875bc 100644
+--- a/crates/daw-app/tests/mixer_e2e.rs
++++ b/crates/daw-app/tests/mixer_e2e.rs
+@@ -178,15 +178,10 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
+     let state = menu(&mut app, "Window", "Mixer");
+     assert!(visible(&state, "Ch 1 > New bus"));
+     assert!(visible(&state, "Ch 2 > Master"));
+-    let expected_db = 20.0 * gain.log10();
++    let expected_db = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain as f32));
+     assert!(
+-        state["visible_labels"]
+-            .as_array()
+-            .unwrap()
+-            .iter()
+-            .filter_map(|label| label.as_str()?.strip_suffix(" dB")?.parse::<f64>().ok())
+-            .any(|value| (value - expected_db).abs() < 1e-4),
+-        "Mixer must display the actual channel gain in dB"
++        visible(&state, &expected_db),
++        "Mixer must display the channel gain as a concise dB caption"
+     );
+     let saved = app.directory.path().join("mix.daw.json");
+     app.command(json!({"command":"save","path":saved}));
+diff --git a/crates/daw-app/tests/mixer_gain_entry_e2e.rs b/crates/daw-app/tests/mixer_gain_entry_e2e.rs
+index 3e06889..e9033da 100644
+--- a/crates/daw-app/tests/mixer_gain_entry_e2e.rs
++++ b/crates/daw-app/tests/mixer_gain_entry_e2e.rs
+@@ -8,21 +8,15 @@ use serde_json::{Value, json};
+ const RATE: usize = 48_000;
+ 
+ fn gain_rect(state: &Value, gain: f64) -> &Value {
+-    let expected_db = 20.0 * gain.log10();
++    let expected_db = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain as f32));
+     state["label_rects"]
+         .as_array()
+         .unwrap()
+         .iter()
+-        .find(|rect| {
+-            rect["text"]
+-                .as_str()
+-                .and_then(|text| text.strip_suffix(" dB"))
+-                .and_then(|text| text.parse::<f64>().ok())
+-                .is_some_and(|db| (db - expected_db).abs() < 1e-5)
+-        })
++        .find(|rect| rect["text"] == expected_db)
+         .unwrap_or_else(|| {
+             panic!(
+-                "Missing precise {expected_db} dB readout: {}",
++                "Missing concise {expected_db} readout: {}",
+                 state["visible_labels"]
+             )
+         })
+@@ -39,7 +33,6 @@ fn type_gain(app: &mut Harness, current_gain: f64, db: &str) -> Value {
+     let state = app.inspect();
+     let (x, y) = center(gain_rect(&state, current_gain));
+     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
+-    app.command(json!({"command":"key","key":"A","cmd":true}));
+     app.command(json!({"command":"text","text":db}));
+     app.key("Enter")
+ }
+diff --git a/crates/daw-app/tests/mixer_height_e2e.rs b/crates/daw-app/tests/mixer_height_e2e.rs
+index fa292b6..04761c7 100644
+--- a/crates/daw-app/tests/mixer_height_e2e.rs
++++ b/crates/daw-app/tests/mixer_height_e2e.rs
+@@ -187,36 +187,40 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
+         project.save(&path).unwrap();
+         app.command(json!({"command":"open", "path":path}));
+         app.command(json!({"command":"system_theme", "dark":dark}));
++        // The shared control rows need more than 720 px before every channel
++        // action and the routing lanes fit without vertical scrolling.
+         app.command(
+-            json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
++            json!({"command":"viewport", "width":1100, "height":900, "pixels_per_point":density}),
+         );
+         app.click("Mixer");
+         let initial = painted(&mut app);
+-        let initial_height = assert_layout(&initial, 720.0);
++        let initial_height = assert_layout(&initial, 900.0);
+         let original_project = initial["project"].clone();
+ 
+-        app.command(json!({"command":"viewport", "width":1440, "height":1100}));
++        app.command(json!({"command":"viewport", "width":1440, "height":1300}));
+         let tall = painted(&mut app);
+-        let tall_height = assert_layout(&tall, 1100.0);
++        let tall_height = assert_layout(&tall, 1300.0);
+         assert!(
+             tall_height > initial_height + 300.0,
+             "extra window height must extend faders and meters, not create empty space"
+         );
+ 
+         // Short windows may scroll once the minimum usable fader size is reached.
+-        app.command(json!({"command":"viewport", "width":800, "height":600}));
+-        let before_scroll = painted(&mut app);
+-        let back = labels(&before_scroll, "Back")[0];
+-        app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":-1000.0}));
+-        for _ in 0..20 {
+-            app.inspect();
+-        }
+-        let compact = painted(&mut app);
+-        assert_aligned_targets(&compact, 600.0);
+-        assert!((labels(&compact, "Back")[0].top - back.top).abs() < 0.1);
+-        app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":1000.0}));
+-        for _ in 0..20 {
+-            app.inspect();
++        for height in [720.0, 600.0] {
++            app.command(json!({"command":"viewport", "width":800, "height":height}));
++            let before_scroll = painted(&mut app);
++            let back = labels(&before_scroll, "Back")[0];
++            app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":-1000.0}));
++            for _ in 0..20 {
++                app.inspect();
++            }
++            let compact = painted(&mut app);
++            assert_aligned_targets(&compact, height);
++            assert!((labels(&compact, "Back")[0].top - back.top).abs() < 0.1);
++            app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":1000.0}));
++            for _ in 0..20 {
++                app.inspect();
++            }
+         }
+         app.click("Channel");
+         let effects = app.click("Effects");
+@@ -224,9 +228,9 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
+         assert_eq!(effects["selected_track"], project.tracks[0].id);
+         app.key("Escape");
+ 
+-        app.command(json!({"command":"viewport", "width":1100, "height":720}));
++        app.command(json!({"command":"viewport", "width":1100, "height":900}));
+         let resized = painted(&mut app);
+-        assert!((assert_layout(&resized, 720.0) - initial_height).abs() < 1.0);
++        assert!((assert_layout(&resized, 900.0) - initial_height).abs() < 1.0);
+         assert_eq!(resized["project"], original_project);
+         let fader = rails(&resized, mixer_strips(&resized)[0])[0];
+         let x = (fader.left + fader.right) * 0.5;
+diff --git a/crates/daw-app/tests/properties_e2e.rs b/crates/daw-app/tests/properties_e2e.rs
+index 3b6e0f6..620e154 100644
+--- a/crates/daw-app/tests/properties_e2e.rs
++++ b/crates/daw-app/tests/properties_e2e.rs
+@@ -366,7 +366,7 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
+     assert_eq!(properties["project"], opened["project"]);
+     assert_eq!(properties["modified"], false);
+     let track = front(&mut app, "Channel");
+-    assert!(visible(&track, "6.0206 dB"));
++    assert!(visible(&track, "6.0 dB"));
+     assert!(visible(&track, "220000 samples"));
+     assert_eq!(track["project"], opened["project"]);
+     assert_eq!(track["modified"], false);
+@@ -382,7 +382,7 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
+     window(&mut app, "Properties");
+     let track = front(&mut app, "Channel");
+     let right =
+-        rect(&track, "6.0206 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
++        rect(&track, "6.0 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
+     let y = center(rect(&track, "Gain")).1;
+     let edited = app.command(json!({"command":"pointer", "phase":"click",
+         "x":right - 60.0, "y":y}));
+diff --git a/crates/daw-app/tests/slider_scale_e2e.rs b/crates/daw-app/tests/slider_scale_e2e.rs
+index 938a256..14b3d60 100644
+--- a/crates/daw-app/tests/slider_scale_e2e.rs
++++ b/crates/daw-app/tests/slider_scale_e2e.rs
+@@ -290,9 +290,11 @@ fn mixer_ranges_ticks_and_handle_indices_match_mouse_edits_at_multiple_sizes() {
+             );
+         }
+         let mut lengths = Vec::new();
++        // At 600 px the larger shared control rows hold the fader at its
++        // usable minimum. Give the tall case room beyond those fixed rows.
+         for (height, fractions) in [
+             (600, vec![0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0]),
+-            (1100, (0..=10).map(|i| f64::from(i) / 10.0).collect()),
++            (1300, (0..=10).map(|i| f64::from(i) / 10.0).collect()),
+         ] {
+             app.command(json!({"command":"viewport", "width":1100, "height":height}));
+             let state = painted(&mut app);
+diff --git a/crates/daw-app/tests/track_color_picker_e2e.rs b/crates/daw-app/tests/track_color_picker_e2e.rs
+index 8685a6b..91876eb 100644
+--- a/crates/daw-app/tests/track_color_picker_e2e.rs
++++ b/crates/daw-app/tests/track_color_picker_e2e.rs
+@@ -239,9 +239,18 @@ fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
+ }
+ 
+ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
++    let before = app.inspect();
++    let viewport = before["viewport"].clone();
++    // This check inspects the full painted strip. The larger shared control
++    // rows scroll at 720 px, so give Mixer enough height, then restore the
++    // caller's original compact Arranger viewport below.
++    let height = viewport[1].as_f64().unwrap().max(900.0);
++    app.command(json!({"command":"viewport", "width":viewport[0], "height":height}));
+     app.click("Mixer");
+     let state = painted(app);
+     assert_eq!(state["view"], "Mixer");
++    assert_eq!(state["project"], before["project"]);
++    assert_eq!(state["history"], before["history"]);
+     let palette = if state["effective_theme"] == "Dark" {
+         daw_ui::theme::DARK
+     } else {
+@@ -330,6 +339,11 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
+     );
+     let fill = mixer_body(&state, track(&state, id)["name"].as_str().unwrap())["fill"].clone();
+     app.click("Arranger");
++    let restored =
++        app.command(json!({"command":"viewport", "width":viewport[0], "height":viewport[1]}));
++    assert_eq!(restored["viewport"], viewport);
++    assert_eq!(restored["project"], before["project"]);
++    assert_eq!(restored["history"], before["history"]);
+     fill
+ }
+ 
+diff --git a/crates/daw-engine/src/device.rs b/crates/daw-engine/src/device.rs
+index 79f8a5e..11503f3 100644
+--- a/crates/daw-engine/src/device.rs
++++ b/crates/daw-engine/src/device.rs
+@@ -1,4 +1,4 @@
+-use crate::meter::ChannelMeters;
++use crate::meter::{ChannelMeter, ChannelMeters, release_factor};
+ use crate::render::{BLOCK, Renderer};
+ #[path = "input.rs"]
+ mod input;
+@@ -24,6 +24,12 @@ pub use timing::{RecordingTiming, RecordingTimingSnapshot};
+ #[cfg(test)]
+ #[path = "live_device_tests.rs"]
+ mod live_device_tests;
++#[cfg(test)]
++#[path = "output_failure_tests.rs"]
++mod output_failure_tests;
++#[cfg(test)]
++#[path = "output_meter_tests.rs"]
++mod output_meter_tests;
+ use anyhow::{Context, Result, ensure};
+ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+ use daw_core::Project;
+@@ -43,6 +49,10 @@ thread_local! {
+     // readiness is visible, so an initial seek can race the startup handoff.
+     static RENDER_READY_TEST_GATE: std::cell::RefCell<Option<mpsc::Receiver<()>>> =
+         const { std::cell::RefCell::new(None) };
++    // Pause transport publication after its initial terminal-state check so a
++    // test can deliver a real output-error callback at that exact boundary.
++    static PLAYING_PUBLICATION_TEST_GATE: std::cell::RefCell<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>> =
++        const { std::cell::RefCell::new(None) };
+ }
+ 
+ #[derive(Clone, Debug)]
+@@ -75,9 +85,14 @@ pub struct DeviceInfo {
+ pub struct EngineSnapshot {
+     pub playing: bool,
+     pub position_beats: f64,
++    /// Output PCM peaks with instant attack and 24 dB/second release. Published
++    /// after monitoring, metronome and clipping, as a coherent stereo pair.
+     pub peak_left: f32,
+     pub peak_right: f32,
+     pub underruns: u64,
++    /// A fatal output-device fault, separate from render/plugin failures.
++    /// Latched until this engine (and its stream) is replaced.
++    pub output_failed: bool,
+     pub render_errors: u64,
+     pub engine_id: u64,
+     pub generation: u64,
+@@ -143,9 +158,9 @@ struct Controls {
+     generation: AtomicU64,
+     seek_beat: AtomicU64,
+     position: AtomicU64,
+-    peak_left: AtomicU32,
+-    peak_right: AtomicU32,
++    output_meter: ChannelMeter,
+     underruns: AtomicU64,
++    output_failed: AtomicBool,
+     render_errors: AtomicU64,
+     render_error: Mutex<Option<String>>,
+     finished_generation: AtomicU64,
+@@ -167,9 +182,9 @@ impl Controls {
+             generation: AtomicU64::new(0),
+             seek_beat: AtomicU64::new(0),
+             position: AtomicU64::new(0),
+-            peak_left: AtomicU32::new(0),
+-            peak_right: AtomicU32::new(0),
++            output_meter: ChannelMeter::default(),
+             underruns: AtomicU64::new(0),
++            output_failed: AtomicBool::new(false),
+             render_errors: AtomicU64::new(0),
+             render_error: Mutex::new(None),
+             finished_generation: AtomicU64::new(u64::MAX),
+@@ -818,6 +833,9 @@ impl AudioEngine {
+                     !self.controls.shutdown.load(Ordering::Acquire),
+                     "Audio engine has stopped"
+                 );
++                if self.controls.output_failed.load(Ordering::Acquire) {
++                    break;
++                }
+                 let holding = self.controls.timing.holds_transport();
+                 let preview = self.controls.render_preview.load(Ordering::Acquire);
+                 let monitoring = self.controls.midi.monitoring_requested()
+@@ -869,6 +887,7 @@ impl AudioEngine {
+     /// the render worker; neither the UI nor the device callback touches plugins.
+     pub fn audition_note(&self, note: Option<(u64, u8, u8)>) -> Result<()> {
+         if let Some((_, pitch, velocity)) = note {
++            self.ensure_output_ready()?;
+             ensure!(
+                 pitch < 128 && velocity > 0 && velocity < 128,
+                 "Invalid audition note"
+@@ -888,8 +907,20 @@ impl AudioEngine {
+         Ok(())
+     }
+ 
++    fn ensure_output_ready(&self) -> Result<()> {
++        ensure!(
++            !self.controls.output_failed.load(Ordering::Acquire),
++            "Audio output stream failed; press Stop and Play to reconnect before recording or auditioning"
++        );
++        Ok(())
++    }
++
+     pub fn set_playing(&self, playing: bool) {
++        // A failed device needs a fresh stream; toggling transport alone must
++        // not make the stopped stream appear to be running again.
++        let playing = playing && !self.controls.output_failed.load(Ordering::Acquire);
+         if !playing {
++            self.controls.output_meter.clear();
+             if self.controls.input.capture_requested() {
+                 self.controls.input.request_stop();
+             }
+@@ -905,7 +936,19 @@ impl AudioEngine {
+         {
+             self.seek(0.0);
+         }
++        #[cfg(test)]
++        if let Some((entered, released)) =
++            PLAYING_PUBLICATION_TEST_GATE.with(|gate| gate.borrow_mut().take())
++        {
++            entered.send(()).unwrap();
++            released.recv_timeout(Duration::from_secs(5)).unwrap();
++        }
+         self.controls.playing.store(playing, Ordering::Release);
++        // A callback can fail between the first check and this publication.
++        // A second check prevents that stale request resurrecting the stream.
++        if self.controls.output_failed.load(Ordering::Acquire) {
++            self.controls.playing.store(false, Ordering::Release);
++        }
+     }
+     pub fn seek(&self, beat: f64) {
+         self.request_stop_midi_recording();
+@@ -927,6 +970,7 @@ impl AudioEngine {
+             .position
+             .store(beat.to_bits(), Ordering::Release);
+         self.controls.generation.fetch_add(1, Ordering::AcqRel);
++        self.controls.output_meter.clear();
+     }
+     pub fn position_beats(&self) -> f64 {
+         f64::from_bits(self.controls.position.load(Ordering::Relaxed))
+@@ -998,12 +1042,19 @@ impl AudioEngine {
+         Ok(())
+     }
+     pub fn snapshot(&self) -> EngineSnapshot {
++        let output_failed = self.controls.output_failed.load(Ordering::Acquire);
++        let [peak_left, peak_right] = if output_failed {
++            [0.0; 2]
++        } else {
++            self.controls.output_meter.peaks()
++        };
+         EngineSnapshot {
+-            playing: self.controls.playing.load(Ordering::Relaxed),
++            playing: !output_failed && self.controls.playing.load(Ordering::Relaxed),
+             position_beats: self.position_beats(),
+-            peak_left: f32::from_bits(self.controls.peak_left.load(Ordering::Relaxed)),
+-            peak_right: f32::from_bits(self.controls.peak_right.load(Ordering::Relaxed)),
++            peak_left,
++            peak_right,
+             underruns: self.controls.underruns.load(Ordering::Relaxed),
++            output_failed,
+             render_errors: self.controls.render_errors.load(Ordering::Relaxed),
+             engine_id: self.controls.engine_id,
+             generation: self.controls.generation.load(Ordering::Relaxed),
+@@ -1031,8 +1082,9 @@ impl AudioEngine {
+     /// as silence. The render queue can lead the audible output by its bounded
+     /// prebuffer, just as other transport telemetry can.
+     pub fn channel_peaks(&self, track: u64) -> [f32; 2] {
+-        if !self.controls.playing.load(Ordering::Relaxed)
+-            && !self.controls.auditioning.load(Ordering::Relaxed)
++        if self.controls.output_failed.load(Ordering::Acquire)
++            || (!self.controls.playing.load(Ordering::Relaxed)
++                && !self.controls.auditioning.load(Ordering::Relaxed))
+         {
+             [0.0; 2]
+         } else {
+@@ -1047,6 +1099,7 @@ impl AudioEngine {
+         self.controls.auditioning.store(false, Ordering::Release);
+         self.controls.shutdown.store(true, Ordering::Release);
+         self.stream.take();
++        self.controls.output_meter.clear();
+         if let Some(worker) = self.worker.take() {
+             let _ = worker.join();
+         }
+@@ -1092,12 +1145,18 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
+ }
+ 
+ fn output_stream_failed(controls: &Controls, error: &cpal::Error) {
+-    if !controls.input.device_failed(6, error, None) {
++    if controls.output_failed.load(Ordering::Acquire)
++        || !controls.input.device_failed(6, error, None)
++        || controls.output_failed.swap(true, Ordering::AcqRel)
++    {
+         return;
+     }
++    // The bounded device diagnostic is reported by take_input_error, including
++    // during ordinary playback. Counting it as a render failure would overwrite
++    // that backend cause with a misleading plugin error in the same UI frame.
+     controls.midi.output_failed();
+-    controls.render_errors.fetch_add(1, Ordering::Relaxed);
+     controls.playing.store(false, Ordering::Release);
++    controls.output_meter.clear();
+ }
+ 
+ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
+@@ -1107,6 +1166,16 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
+     controls: &Controls,
+     info: Option<&cpal::OutputCallbackInfo>,
+ ) {
++    // The fault latch is authoritative even if a capture/count-in request was
++    // already in flight when the stream failed. No preview, monitoring or click
++    // may restart output on that failed stream.
++    if controls.output_failed.load(Ordering::Acquire) {
++        data.fill(T::from_sample(0.0_f32));
++        controls.playing.store(false, Ordering::Release);
++        controls.auditioning.store(false, Ordering::Release);
++        controls.output_meter.clear();
++        return;
++    }
+     let output_time = controls.input.output_time(info);
+     let sample_rate = controls.input_sample_rate.load(Ordering::Relaxed);
+     let capturing = controls.input.active();
+@@ -1210,12 +1279,12 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
+     controls
+         .consumed_frames
+         .fetch_add(consumed, Ordering::Relaxed);
++    // A callback is usually much shorter than a UI frame. Retain transients
++    // through following silent callbacks instead of making the master meter
++    // depend on which individual buffer the UI happened to sample.
+     controls
+-        .peak_left
+-        .store(peak[0].to_bits(), Ordering::Relaxed);
+-    controls
+-        .peak_right
+-        .store(peak[1].to_bits(), Ordering::Relaxed);
++        .output_meter
++        .publish(peak, release_factor(data.len() / channels, sample_rate));
+     if underrun {
+         controls.underruns.fetch_add(1, Ordering::Relaxed);
+     }
+diff --git a/crates/daw-engine/src/input.rs b/crates/daw-engine/src/input.rs
+index 8f8b473..5000c21 100644
+--- a/crates/daw-engine/src/input.rs
++++ b/crates/daw-engine/src/input.rs
+@@ -674,7 +674,9 @@ impl InputShared {
+             ),
+             4 => Some("Audio input stream failed or disconnected"),
+             5 => Some("Audio input produced non-finite samples"),
+-            6 => Some("Audio output stream failed or disconnected"),
++            6 => Some(
++                "Audio output stream failed or disconnected\n\nCheck the output device in Audio setup, then press Stop and Play to reconnect.",
++            ),
+             7 => Some(
+                 "Audio output ran out of playback samples; recording stopped to preserve overdub alignment",
+             ),
+@@ -1179,6 +1181,7 @@ impl AudioEngine {
+         }
+     }
+     pub fn start_recording(&mut self, config: RecordingConfig) -> Result<()> {
++        self.ensure_output_ready()?;
+         self.input.poll();
+         let shared = &self.controls.input;
+         ensure!(
+@@ -1256,6 +1259,11 @@ impl AudioEngine {
+             }
+         };
+         self.input.recording = Some(RecordingJob { receiver, worker });
++        if let Err(error) = self.ensure_output_ready() {
++            // A device fault can race preparation after the entry check.
++            self.controls.input.request_stop();
++            return Err(error);
++        }
+         Ok(())
+     }
+     pub fn request_stop_recording(&self) {
+diff --git a/crates/daw-engine/src/meter.rs b/crates/daw-engine/src/meter.rs
+index 07996f1..4ed2bb7 100644
+--- a/crates/daw-engine/src/meter.rs
++++ b/crates/daw-engine/src/meter.rs
+@@ -6,6 +6,11 @@ use std::sync::{
+     atomic::{AtomicU64, Ordering},
+ };
+ 
++/// Instant attack and 24 dB/second release, independent of callback/block size.
++pub(crate) fn release_factor(frames: usize, sample_rate: u32) -> f32 {
++    (-std::f32::consts::LN_10 * 1.2 * frames as f32 / sample_rate as f32).exp()
++}
++
+ #[derive(Default)]
+ pub(crate) struct ChannelMeter {
+     stereo: AtomicU64,
+diff --git a/crates/daw-engine/src/midi.rs b/crates/daw-engine/src/midi.rs
+index de0a9f8..411c262 100644
+--- a/crates/daw-engine/src/midi.rs
++++ b/crates/daw-engine/src/midi.rs
+@@ -287,7 +287,14 @@ impl MidiShared {
+         self.reset.fetch_add(1, Ordering::AcqRel);
+     }
+     pub(super) fn output_failed(&self) {
+-        self.fail(5);
++        if self.capture_requested() {
++            self.fail(5);
++        } else {
++            // Stop monitoring without inventing a MIDI-recording failure when
++            // the output device fails during ordinary playback.
++            self.ready.store(false, Ordering::Release);
++            self.reset.fetch_add(1, Ordering::AcqRel);
++        }
+     }
+     fn fault_text(&self) -> Option<String> {
+         match self.fault.load(Ordering::Acquire) {
+@@ -910,6 +917,7 @@ impl AudioEngine {
+         }
+     }
+     pub fn start_midi_recording(&mut self, tracks: Vec<u64>) -> Result<()> {
++        self.ensure_output_ready()?;
+         self.midi.poll();
+         let shared = &self.controls.midi;
+         ensure!(
+@@ -959,6 +967,10 @@ impl AudioEngine {
+         self.controls
+             .finished_generation
+             .store(u64::MAX, Ordering::Release);
++        if let Err(error) = self.ensure_output_ready() {
++            self.controls.midi.output_failed();
++            return Err(error);
++        }
+         Ok(())
+     }
+     /// Close capture at consumed output; monitoring keeps its independent voices.
+diff --git a/crates/daw-engine/src/render.rs b/crates/daw-engine/src/render.rs
+index 7953b50..f688ccf 100644
+--- a/crates/daw-engine/src/render.rs
++++ b/crates/daw-engine/src/render.rs
+@@ -1,4 +1,4 @@
+-use crate::meter::{ChannelMeter, ChannelMeters};
++use crate::meter::{ChannelMeter, ChannelMeters, release_factor};
+ use crate::quality::{self, RenderOptions};
+ use anyhow::{Context, Result, bail, ensure};
+ use daw_core::{
+@@ -1732,9 +1732,7 @@ impl Renderer {
+             timeline: !self.preview,
+             live_input,
+             meter_decay: if self.metering {
+-                // Instant attack, 24 dB/second release, independent of block size.
+-                (-std::f32::consts::LN_10 * 1.2 * output.len() as f32 / self.sample_rate as f32)
+-                    .exp()
++                release_factor(output.len(), self.sample_rate)
+             } else {
+                 0.0
+             },
+diff --git a/crates/daw-ui/examples/component_gallery/inputs.rs b/crates/daw-ui/examples/component_gallery/inputs.rs
+index 0468a4b..eff57b3 100644
+--- a/crates/daw-ui/examples/component_gallery/inputs.rs
++++ b/crates/daw-ui/examples/component_gallery/inputs.rs
+@@ -15,6 +15,8 @@ pub struct State {
+     mode: u8,
+     rate: u32,
+     buffer: u32,
++    naming_draft: Option<String>,
++    naming_focus: bool,
+ }
+ impl Default for State {
+     fn default() -> Self {
+@@ -32,6 +34,8 @@ impl Default for State {
+             mode: 0,
+             rate: 48000,
+             buffer: 256,
++            naming_draft: None,
++            naming_focus: false,
+         }
+     }
+ }
+@@ -54,11 +58,20 @@ pub fn show(ui: &mut Ui, state: &mut State) {
+                 );
+                 ui.end_row();
+                 text::label(ui, "Duration");
+-                ui.add(
+-                    controls::number(&mut state.duration)
+-                        .suffix(" beats")
+-                        .speed(0.01)
+-                        .range(0.001..=128.0),
++                controls::number_stepper(
++                    ui,
++                    &mut state.duration,
++                    1.0,
++                    0.001..=128.0,
++                    "duration",
++                    |ui, value| {
++                        ui.add(
++                            controls::number(value)
++                                .suffix(" beats")
++                                .speed(0.01)
++                                .range(0.001..=128.0),
++                        )
++                    },
+                 );
+                 ui.end_row();
+                 text::label(ui, "API key");
+@@ -73,22 +86,33 @@ pub fn show(ui: &mut Ui, state: &mut State) {
+         text::subtitle(left, "Paths and rotary values");
+         controls::card(left.ctx()).show(left, |ui| {
+             ui.horizontal_top(|ui| {
+-                ui.allocate_ui_with_layout(egui::vec2(300.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+-                    controls::path_row(
+-                        ui,
+-                        std::path::Path::new("Music / Rill / Glass Current / Recordings"),
+-                        |ui| { controls::small_button(ui, "Choose…"); },
+-                    );
+-                    text::note(ui, "Long paths truncate while their actions remain reachable.");
+-                    ui.add_space(controls::tokens::SPACE_MD);
+-                    text::body(ui, "Drag the dial or click its number to type.");
+-                    text::note(ui, "The arc and written state identify automation. Shift makes a drag finer.");
+-                });
+-                ui.add(controls::knob(&mut state.rotary, 0.0..=100.0)
+-                    .text("Normalized")
+-                    .suffix(" %")
+-                    .diameter(72.0)
+-                    .automation(Some(controls::AutomationState::Read)));
++                ui.allocate_ui_with_layout(
++                    egui::vec2(300.0, 0.0),
++                    egui::Layout::top_down(egui::Align::Min),
++                    |ui| {
++                        controls::path_row(
++                            ui,
++                            std::path::Path::new("Music / Rill / Glass Current / Recordings"),
++                            |ui| {
++                                controls::small_button(ui, "Choose…");
++                            },
++                        );
++                        ui.add_space(controls::tokens::SPACE_MD);
++                        text::note(
++                            ui,
++                            "Drag the dial or click its value. Shift adjusts finely.",
++                        );
++                        ui.add_space(controls::tokens::SPACE_SM);
++                        mouse_naming(ui, state);
++                    },
++                );
++                ui.add(
++                    controls::knob(&mut state.rotary, 0.0..=100.0)
++                        .text("Normalized")
++                        .suffix(" %")
++                        .diameter(72.0)
++                        .automation(Some(controls::AutomationState::Read)),
++                );
+             });
+         });
+         let right = &mut columns[1];
+@@ -133,11 +157,25 @@ pub fn show(ui: &mut Ui, state: &mut State) {
+             ui.add(controls::slider(&mut state.pan, -1.0..=1.0).text("L / R"));
+             ui.add_space(controls::tokens::SPACE_MD);
+             ui.columns(4, |columns| {
+-                for (index, (column, label)) in columns.iter_mut().zip(["Minimum", "Maximum", "Center", "Zero"]).enumerate() {
++                for (index, (column, label)) in columns
++                    .iter_mut()
++                    .zip(["Minimum", "Maximum", "Center", "Zero"])
++                    .enumerate()
++                {
+                     text::label(column, label);
+                     column.spacing_mut().slider_width = column.available_width();
+-                    column.add(controls::slider(&mut state.slider_landmarks[index], if index == 3 { -100.0..=100.0 } else { 0.0..=100.0 })
+-                        .show_value(false).scale_labels(false));
++                    column.add(
++                        controls::slider(
++                            &mut state.slider_landmarks[index],
++                            if index == 3 {
++                                -100.0..=100.0
++                            } else {
++                                0.0..=100.0
++                            },
++                        )
++                        .show_value(false)
++                        .scale_labels(false),
++                    );
+                 }
+             });
+             text::note(ui, "Down / up at limits · dot at midpoint · circle at zero");
+@@ -153,3 +191,33 @@ pub fn show(ui: &mut Ui, state: &mut State) {
+         });
+     });
+ }
++
++fn mouse_naming(ui: &mut Ui, state: &mut State) {
++    text::subtitle(ui, "Mouse naming");
++    let field = egui::Id::new("gallery_mouse_name");
++    if let Some(draft) = &mut state.naming_draft {
++        let response = controls::inline_name_editor(
++            ui,
++            field,
++            draft,
++            "Project name",
++            260.0,
++            state.naming_focus,
++        );
++        state.naming_focus = false;
++        match response.action {
++            controls::InlineNameAction::Commit => {
++                if !draft.trim().is_empty() {
++                    state.name = draft.clone();
++                }
++                state.naming_draft = None;
++            }
++            controls::InlineNameAction::Cancel => state.naming_draft = None,
++            controls::InlineNameAction::Editing => {}
++        }
++    } else if controls::button(ui, "Name with mouse…").clicked() {
++        state.naming_draft = Some(state.name.clone());
++        state.naming_focus = true;
++        controls::set_name_keyboard_open(ui.ctx(), field, true);
++    }
++}
+diff --git a/crates/daw-ui/examples/component_gallery/navigation.rs b/crates/daw-ui/examples/component_gallery/navigation.rs
+index 59905ea..51b5853 100644
+--- a/crates/daw-ui/examples/component_gallery/navigation.rs
++++ b/crates/daw-ui/examples/component_gallery/navigation.rs
+@@ -10,6 +10,7 @@ pub struct State {
+     clip: String,
+     start: f64,
+     length: f64,
++    duration_seconds: f64,
+ }
+ impl Default for State {
+     fn default() -> Self {
+@@ -22,6 +23,7 @@ impl Default for State {
+             clip: "Verse · Glass arpeggio".into(),
+             start: 9.0,
+             length: 16.0,
++            duration_seconds: 30.0,
+         }
+     }
+ }
+@@ -93,12 +95,17 @@ pub fn show(ui: &mut Ui, state: &mut State) {
+         controls::quiet_view_menu(ui, "View", |ui| {
+             controls::checkbox(ui, &mut state.highlight, "Highlight scale");
+         });
+-        controls::timeline_fit_button(ui);
++        controls::timeline_zoom_controls(ui, true);
+         controls::editor_tool_help(
+             ui,
+             controls::EditorTool::Select,
+             controls::ToolHintContext::Midi,
+         );
++        if let Some(seconds) =
++            controls::duration::duration_presets(ui, state.duration_seconds, 120.0)
++        {
++            state.duration_seconds = seconds;
++        }
+     });
+     ui.add_space(controls::tokens::SPACE_LG);
+     if !state.capture {
+@@ -161,6 +168,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
+                 text::label(ui, "Duration");
+                 ui.add(controls::number(&mut state.length).suffix(" beats"));
+                 ui.end_row();
++                controls::duration::timing_summary(ui, state.start - 1.0, state.length, 112.0, 4);
+             });
+             ui.add_space(controls::tokens::SPACE_MD);
+             controls::action_row(
+diff --git a/crates/daw-ui/src/channel_controls.rs b/crates/daw-ui/src/channel_controls.rs
+index 55df589..3cef3e8 100644
+--- a/crates/daw-ui/src/channel_controls.rs
++++ b/crates/daw-ui/src/channel_controls.rs
+@@ -40,16 +40,78 @@ pub fn channel_pan_label(pan: f32) -> String {
+     }
+ }
+ 
+-/// The precise channel-level field used in Mixer and channel properties.
+-/// Values outside the editing range remain intact until an intentional edit.
+-pub fn channel_gain_number(db: &mut f32) -> crate::Number<'_> {
+-    crate::number(db)
+-        .range(-60.0..=20.0 * 1.5_f32.log10())
+-        .clamp_existing_to_range(false)
+-        .speed(0.1)
+-        .min_decimals(1)
+-        .max_decimals(6)
+-        .suffix(" dB")
++/// Let a focused gain draft handle Escape before workspace navigation does.
++/// Native focus must belong to it or have been lost in the current frame:
++/// egui clears focus for Escape before the app or numeric field handles it.
++pub fn channel_gain_editing(ctx: &egui::Context) -> bool {
++    let focused = ctx.data(|data| data.get_temp::<egui::Id>(egui::Id::new("channel_gain_editing")));
++    focused.is_some_and(|id| {
++        ctx.memory(|memory| memory.has_focus(id) || memory.had_focus_last_frame(id))
++    })
++}
++
++/// A concise channel-level readout with precise entry in Mixer and Properties.
++/// Formatting never rounds the stored value. An unchanged draft is not an edit,
++/// including when an existing gain lies outside the ordinary editing limits.
++pub fn channel_gain_number(db: &mut f32) -> impl egui::Widget + '_ {
++    move |ui: &mut Ui| {
++        let id = ui.next_auto_id();
++        let initial_id = id.with("channel_gain_initial_text");
++        let focused = ui.memory(|memory| memory.has_focus(id));
++        let before = *db;
++        let exact = db.to_string();
++        let initial = ui
++            .data(|data| data.get_temp::<String>(initial_id))
++            .unwrap_or_else(|| exact.clone());
++        let mut response = ui.add(
++            crate::number(db)
++                .range(-60.0..=20.0 * 1.5_f32.log10())
++                .clamp_existing_to_range(false)
++                .speed(0.1)
++                .min_decimals(1)
++                .max_decimals(6)
++                .suffix(" dB")
++                .update_while_editing(false)
++                .custom_formatter(move |value, _| {
++                    if focused {
++                        (value as f32).to_string()
++                    } else {
++                        format!("{value:.1}")
++                    }
++                })
++                .custom_parser(move |text| {
++                    let text: String = text
++                        .chars()
++                        .filter(|character| !character.is_whitespace())
++                        .map(|character| if character == '−' { '-' } else { character })
++                        .collect();
++                    // Native numeric fields parse again on blur. Rejecting the
++                    // untouched initial text avoids treating viewing as a user
++                    // edit, which would otherwise clamp an out-of-range gain.
++                    (text != initial).then(|| text.parse().ok()).flatten()
++                }),
++        );
++        // TextEdit marks draft changes too. The app should only create an Undo
++        // entry or automation override after the numeric value is committed.
++        if *db == before {
++            response.flags.remove(egui::response::Flags::CHANGED);
++        }
++        let has_focus = response.has_focus();
++        if response.gained_focus() {
++            ui.data_mut(|data| data.insert_temp(initial_id, exact));
++        } else if !has_focus {
++            ui.data_mut(|data| data.remove::<String>(initial_id));
++        }
++        let focus_key = egui::Id::new("channel_gain_editing");
++        ui.data_mut(|data| {
++            if has_focus {
++                data.insert_temp(focus_key, id);
++            } else if data.get_temp::<egui::Id>(focus_key) == Some(id) {
++                data.remove::<egui::Id>(focus_key);
++            }
++        });
++        response
++    }
+ }
+ 
+ pub struct ChannelControlsResponse {
+diff --git a/crates/daw-ui/src/clip_editing.rs b/crates/daw-ui/src/clip_editing.rs
+index 3eca373..851ef9a 100644
+--- a/crates/daw-ui/src/clip_editing.rs
++++ b/crates/daw-ui/src/clip_editing.rs
+@@ -44,40 +44,66 @@ pub fn clip_timing_fields(
+     let mut edit = ClipTimingEdit::default();
+     let label = crate::text::label(ui, "Start");
+     let mut start = values.start + 1.0;
+-    let response = ui
+-        .add(
+-            crate::number(&mut start)
+-                .range(1.0..=(maximum_beat - values.duration + 1.0).max(1.0))
+-                .clamp_existing_to_range(false)
+-                .speed(0.01)
+-                .min_decimals(2)
+-                .max_decimals(9)
+-                .prefix("Beat "),
+-        )
++    let start_range = 1.0..=(maximum_beat - values.duration + 1.0).max(1.0);
++    let stepper = crate::number_stepper(
++        ui,
++        &mut start,
++        1.0,
++        start_range.clone(),
++        "start beat",
++        |ui, value| {
++            ui.add(
++                crate::number(value)
++                    .range(start_range)
++                    .clamp_existing_to_range(false)
++                    .speed(0.01)
++                    .min_decimals(2)
++                    .max_decimals(9)
++                    .prefix("Beat "),
++            )
++        },
++    );
++    let response = stepper
++        .response
+         .labelled_by(label.id)
+         .on_hover_text("Move the clip to an exact beat without changing its source window");
+-    edit.new_gesture |=
+-        response.gained_focus() || response.double_clicked() || response.drag_started();
++    edit.new_gesture |= stepper.stepped
++        || response.gained_focus()
++        || response.double_clicked()
++        || response.drag_started();
+     if response.changed() {
+         edit.start = Some(start - 1.0);
+     }
+     ui.end_row();
+     let label = crate::text::label(ui, "Duration");
+     ui.horizontal(|ui| {
+-        let response = ui
+-            .add(
+-                crate::number(&mut values.duration)
+-                    .range(0.000_000_001..=(maximum_beat - values.start).max(0.000_000_001))
+-                    .clamp_existing_to_range(false)
+-                    .speed(0.01)
+-                    .min_decimals(2)
+-                    .max_decimals(9)
+-                    .suffix(" beats"),
+-            )
++        let duration_range = 0.000_000_001..=(maximum_beat - values.start).max(0.000_000_001);
++        let stepper = crate::number_stepper(
++            ui,
++            &mut values.duration,
++            1.0,
++            duration_range.clone(),
++            "duration",
++            |ui, value| {
++                ui.add(
++                    crate::number(value)
++                        .range(duration_range)
++                        .clamp_existing_to_range(false)
++                        .speed(0.01)
++                        .min_decimals(2)
++                        .max_decimals(9)
++                        .suffix(" beats"),
++                )
++            },
++        );
++        let response = stepper
++            .response
+             .labelled_by(label.id)
+             .on_hover_text("Trim changes the clip boundary; Stretch changes playback timing");
+-        edit.new_gesture |=
+-            response.gained_focus() || response.double_clicked() || response.drag_started();
++        edit.new_gesture |= stepper.stepped
++            || response.gained_focus()
++            || response.double_clicked()
++            || response.drag_started();
+         if response.changed() {
+             edit.duration = Some((values.duration, *mode));
+         }
+@@ -101,20 +127,33 @@ pub fn clip_timing_fields(
+     });
+     ui.end_row();
+     let label = crate::text::label(ui, "Source offset");
+-    let response = ui
+-        .add(
+-            crate::number(&mut values.source_offset)
+-                .range(0.0..=maximum_offset.max(0.0))
+-                .clamp_existing_to_range(false)
+-                .speed(0.01)
+-                .min_decimals(2)
+-                .max_decimals(9)
+-                .suffix(" beats"),
+-        )
++    let offset_range = 0.0..=maximum_offset.max(0.0);
++    let stepper = crate::number_stepper(
++        ui,
++        &mut values.source_offset,
++        1.0,
++        offset_range.clone(),
++        "source offset",
++        |ui, value| {
++            ui.add(
++                crate::number(value)
++                    .range(offset_range)
++                    .clamp_existing_to_range(false)
++                    .speed(0.01)
++                    .min_decimals(2)
++                    .max_decimals(9)
++                    .suffix(" beats"),
++            )
++        },
++    );
++    let response = stepper
++        .response
+         .labelled_by(label.id)
+         .on_hover_text("Slip the source window while keeping the clip's position and duration");
+-    edit.new_gesture |=
+-        response.gained_focus() || response.double_clicked() || response.drag_started();
++    edit.new_gesture |= stepper.stepped
++        || response.gained_focus()
++        || response.double_clicked()
++        || response.drag_started();
+     if response.changed() {
+         edit.source_offset = Some(values.source_offset);
+     }
+@@ -150,6 +189,7 @@ pub fn inline_name_editor(
+             let output = egui::TextEdit::singleline(value)
+                 .id(id)
+                 .hint_text(hint)
++                .char_limit(crate::NAME_MAX_CHARS)
+                 .desired_width(width.max(32.0))
+                 .margin(egui::vec2(
+                     crate::tokens::BUTTON_PADDING_X,
+@@ -157,15 +197,22 @@ pub fn inline_name_editor(
+                 ))
+                 .min_size(egui::vec2(0.0, crate::tokens::CONTROL_HEIGHT))
+                 .show(ui);
++            let keyboard =
++                crate::small_button(ui, "Keyboard").on_hover_text("Enter this name with the mouse");
++            if keyboard.clicked() {
++                let open = crate::name_keyboard_open(ui.ctx(), id);
++                crate::set_name_keyboard_open(ui.ctx(), id, !open);
++            }
++            let keyboard_pressed = keyboard.clicked() || keyboard.is_pointer_button_down_on();
+             let apply = crate::small_button(ui, "Apply name").clicked();
+             let cancel = crate::small_button(ui, "Cancel");
+             // Text input can lose focus on pointer-down, before a button's
+             // release click. Cancel must win over that ordinary blur commit.
+             let cancel = cancel.clicked() || cancel.is_pointer_button_down_on();
+-            (output, apply, cancel)
++            (output, apply, cancel, keyboard_pressed)
+         })
+         .inner;
+-    let (mut output, apply, cancel_clicked) = row;
++    let (mut output, apply, cancel_clicked, keyboard_pressed) = row;
+     if initial_focus {
+         output.response.request_focus();
+         output.state.clear_undoer();
+@@ -178,10 +225,17 @@ pub fn inline_name_editor(
+             )));
+         output.state.store(ui.ctx(), id);
+     }
++    crate::name_keyboard(ui, id, value);
+     let enter = ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+     let action = if cancel || cancel_clicked {
+         InlineNameAction::Cancel
+-    } else if apply || enter || (!initial_focus && output.response.lost_focus()) {
++    } else if apply
++        || enter
++        || (!initial_focus
++            && output.response.lost_focus()
++            && !keyboard_pressed
++            && !crate::name_keyboard_open(ui.ctx(), id))
++    {
+         InlineNameAction::Commit
+     } else {
+         InlineNameAction::Editing
+diff --git a/crates/daw-ui/src/lib.rs b/crates/daw-ui/src/lib.rs
+index 459015e..29d669b 100644
+--- a/crates/daw-ui/src/lib.rs
++++ b/crates/daw-ui/src/lib.rs
+@@ -20,6 +20,7 @@ pub mod color;
+ pub mod crossfade;
+ pub mod curve;
+ pub mod device_cards;
++pub mod duration;
+ pub mod effect_chain;
+ pub mod empty_workspace;
+ pub mod error_details;
+@@ -31,11 +32,13 @@ pub mod layout;
+ pub mod mixer;
+ pub mod mixer_routing;
+ pub mod modal;
++pub mod name_keyboard;
+ pub mod native_context_menu;
+ pub mod native_dialog;
+ pub mod navigation;
+ pub mod note_length;
+ pub mod notice;
++pub mod number_stepper;
+ pub mod parameter_browser;
+ pub mod piano;
+ pub mod popup_backdrop;
+@@ -90,11 +93,13 @@ pub use layout::*;
+ pub use mixer::*;
+ pub use mixer_routing::*;
+ pub use modal::*;
++pub use name_keyboard::*;
+ pub use native_context_menu::*;
+ pub use native_dialog::*;
+ pub use navigation::*;
+ pub use note_length::*;
+ pub use notice::*;
++pub use number_stepper::*;
+ pub use parameter_browser::*;
+ pub use piano::*;
+ pub use popup_backdrop::*;
+diff --git a/crates/daw-ui/src/timeline_views.rs b/crates/daw-ui/src/timeline_views.rs
+index 2667129..8389206 100644
+--- a/crates/daw-ui/src/timeline_views.rs
++++ b/crates/daw-ui/src/timeline_views.rs
+@@ -1,15 +1,106 @@
+ //! Shared, presentation-only selection fitting and previous-view recall.
+ use crate::TimelineViewport;
+-use egui::{Context, Id, Ui};
++use egui::{Context, Id, Rect, Ui};
+ 
+ #[derive(Clone, Copy, Default, PartialEq, Eq)]
+ pub enum TimelineViewAction {
+     #[default]
+     None,
++    ZoomOut,
++    ZoomIn,
++    FitAll,
+     FitSelection,
+     Previous,
+ }
+ 
++impl TimelineViewAction {
++    pub fn is_zoom(self) -> bool {
++        matches!(self, Self::ZoomOut | Self::ZoomIn)
++    }
++
++    /// Match keyboard zoom factors and bounds, anchored to the visible center.
++    /// The toolbar is outside the canvas, so its pointer position is not an anchor.
++    pub fn apply_zoom(self, view: &mut TimelineViewport, canvas: Rect) {
++        let factor = match self {
++            Self::ZoomOut => 0.8,
++            Self::ZoomIn => 1.25,
++            _ => return,
++        };
++        view.zoom(canvas, canvas.center(), factor, 1.0);
++    }
++}
++
++/// Keep ordinary zoom and selection framing visible without opening a menu.
++/// The family wraps as one unit and never changes width with the selection.
++/// Actions only describe presentation changes; the caller owns the viewport.
++pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> TimelineViewAction {
++    let square = crate::tokens::CONTROL_HEIGHT;
++    let text_width = |label: &str| {
++        ui.painter()
++            .layout_no_wrap(
++                label.into(),
++                egui::TextStyle::Button.resolve(ui.style()),
++                ui.visuals().text_color(),
++            )
++            .size()
++            .x
++    };
++    let fit_width =
++        text_width("Fit") + 18.0 + crate::tokens::SPACE_XS + 2.0 * ui.spacing().button_padding.x;
++    let selection_width = text_width("Fit selection") + 2.0 * ui.spacing().button_padding.x;
++    let width =
++        square * 2.0 + fit_width.ceil() + selection_width.ceil() + 3.0 * crate::tokens::SPACE_XS;
++    crate::tool_group(ui, width, |ui| {
++        let mut action = TimelineViewAction::None;
++        for (symbol, label, hint, value) in [
++            (
++                "−",
++                "Zoom out",
++                "Zoom out around the view center · −",
++                TimelineViewAction::ZoomOut,
++            ),
++            (
++                "+",
++                "Zoom in",
++                "Zoom in around the view center · +",
++                TimelineViewAction::ZoomIn,
++            ),
++        ] {
++            let button = ui
++                .add_sized(
++                    egui::vec2(square, crate::tokens::CONTROL_HEIGHT),
++                    crate::button_widget(symbol).presentation(),
++                )
++                .on_hover_text(hint);
++            button.widget_info(|| {
++                egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
++            });
++            if button.clicked() {
++                action = value;
++            }
++        }
++        if crate::timeline_fit_button(ui).clicked() {
++            action = TimelineViewAction::FitAll;
++        }
++        if ui
++            .add_enabled(
++                selection_available,
++                crate::button_widget("Fit selection").presentation(),
++            )
++            .on_hover_text(if selection_available {
++                "Fit the selected clips, notes or time range. Return with View → Previous view."
++            } else {
++                "Select clips, notes or a time range to fit the selection"
++            })
++            .clicked()
++        {
++            action = TimelineViewAction::FitSelection;
++        }
++        action
++    })
++    .inner
++}
++
+ #[derive(Clone, Default)]
+ struct ViewHistory {
+     previous: Option<TimelineViewport>,
+diff --git a/crates/daw-ui/src/tooltip.rs b/crates/daw-ui/src/tooltip.rs
+index 73db251..d946e6e 100644
+--- a/crates/daw-ui/src/tooltip.rs
++++ b/crates/daw-ui/src/tooltip.rs
+@@ -1,5 +1,7 @@
+ //! Read-only tooltips that never intercept a click on the workspace below.
+-use egui::{Frame, LayerId, Order, PopupAnchor, Rect, RectAlign, Response, WidgetText};
++use egui::{
++    Context, Frame, Id, LayerId, Order, PopupAnchor, Pos2, Rect, RectAlign, Response, WidgetText,
++};
+ 
+ /// Add a native-styled, delayed text hint without creating a pointer-blocking
+ /// overlay. Repeated hints for one response stack in call order. Use native
+@@ -28,21 +30,48 @@ pub fn hover_text(response: Response, text: impl Into<WidgetText>) -> Response {
+                 0,
+             )
+         });
++    let rect = paint_read_only_text(
++        ctx,
++        response.id.with(("read_only_tooltip", count)),
++        bounds,
++        text.into(),
++    );
++    ctx.data_mut(|data| {
++        data.insert_temp(stack_id, (pass, bounds.union(rect), count + 1));
++    });
++    response
++}
++
++/// Immediate, noninteractive feedback for an active pointer gesture. Call only
++/// while the gesture is held; no hover delay, persistent state, or input target
++/// is created. The returned bounds and painting stay within the viewport.
++pub fn pointer_text(ctx: &Context, id: Id, pointer: Pos2, text: impl Into<WidgetText>) -> Rect {
++    let anchor = Rect::from_center_size(
++        pointer,
++        egui::vec2(crate::tokens::SPACE_XL, crate::tokens::SPACE_XL),
++    );
++    paint_read_only_text(ctx, id, anchor, text.into())
++}
++
++fn paint_read_only_text(ctx: &Context, id: Id, bounds: Rect, text: WidgetText) -> Rect {
+     let style = ctx.style();
+-    let galley = text.into().into_galley_impl(
++    let frame = Frame::popup(&style);
++    let screen = ctx.content_rect();
++    let galley = text.into_galley_impl(
+         ctx,
+         &style,
+         egui::text::TextWrapping {
+-            max_width: style.spacing.tooltip_width,
++            max_width: style
++                .spacing
++                .tooltip_width
++                .min((screen.width() - frame.total_margin().sum().x).max(1.0)),
+             ..Default::default()
+         },
+         egui::TextStyle::Body.into(),
+         egui::Align::Min,
+     );
+-    let frame = Frame::popup(&style);
+     let size = galley.size() + frame.total_margin().sum();
+     let gap = crate::tokens::SPACE_XS;
+-    let screen = ctx.content_rect();
+     let align = RectAlign::find_best_align(
+         std::iter::once(RectAlign::BOTTOM_START)
+             .chain(RectAlign::BOTTOM_START.symmetries())
+@@ -66,16 +95,10 @@ pub fn hover_text(response: Response, text: impl Into<WidgetText>) -> Response {
+     );
+     rect = rect.translate(shift);
+     let content = rect - frame.total_margin();
+-    let layer = LayerId::new(
+-        Order::Tooltip,
+-        response.id.with(("read_only_tooltip", count)),
+-    );
++    let layer = LayerId::new(Order::Tooltip, id);
+     ctx.move_to_top(layer);
+     let painter = ctx.layer_painter(layer).with_clip_rect(screen);
+     painter.add(frame.paint(content));
+     painter.galley(content.min, galley, style.visuals.text_color());
+-    ctx.data_mut(|data| {
+-        data.insert_temp(stack_id, (pass, bounds.union(rect), count + 1));
+-    });
+-    response
++    rect.intersect(screen)
+ }
+diff --git a/crates/daw-ui/tests/tooltip.rs b/crates/daw-ui/tests/tooltip.rs
+index d852396..d1ec816 100644
+--- a/crates/daw-ui/tests/tooltip.rs
++++ b/crates/daw-ui/tests/tooltip.rs
+@@ -1,5 +1,54 @@
+ use egui::{Context, Event, PointerButton, Pos2, RawInput, Rect, Vec2};
+ 
++#[test]
++fn pointer_feedback_is_immediate_and_keeps_its_text_inside_the_viewport() {
++    for dark in [false, true] {
++        let ctx = Context::default();
++        daw_ui::theme::apply(&ctx);
++        ctx.set_visuals(if dark {
++            egui::Visuals::dark()
++        } else {
++            egui::Visuals::light()
++        });
++        for width in [320.0, 800.0, 1440.0] {
++            let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(width, 600.0));
++            for pointer in [
++                Pos2::new(1.0, 1.0),
++                Pos2::new(width - 1.0, 1.0),
++                Pos2::new(width - 1.0, 599.0),
++                Pos2::new(1.0, 599.0),
++            ] {
++                let id = egui::Id::new("pointer feedback");
++                let text = "End 30.000 s · Beat 57.00\nDuration 4.286 s · 8.00 beats";
++                let mut bounds = Rect::NOTHING;
++                let output = ctx.run(
++                    RawInput {
++                        screen_rect: Some(screen),
++                        ..Default::default()
++                    },
++                    |ctx| bounds = daw_ui::pointer_text(ctx, id, pointer, text),
++                );
++                assert!(screen.contains_rect(bounds));
++                let painted = output
++                    .shapes
++                    .iter()
++                    .find_map(|shape| {
++                        if let egui::Shape::Text(painted) = &shape.shape {
++                            (painted.galley.text() == text).then_some((shape, painted))
++                        } else {
++                            None
++                        }
++                    })
++                    .expect("Text is painted on its first frame without a hover delay");
++                let text_bounds = painted.1.galley.rect.translate(painted.1.pos.to_vec2());
++                assert!(screen.contains_rect(text_bounds));
++                assert!(painted.0.clip_rect.contains_rect(text_bounds));
++                assert!(egui::AreaState::load(&ctx, id).is_none());
++            }
++        }
++    }
++}
++
+ #[test]
+ fn stacked_text_hints_allow_an_immediate_click_on_the_control_beneath_them() {
+     let ctx = Context::default();

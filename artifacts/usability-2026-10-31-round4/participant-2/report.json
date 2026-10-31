@@ -1,0 +1,148 @@
+{
+  "purpose": "Fixed report fields for independent simulated participant 2; observations are limited to the visible application.",
+  "participant": 2,
+  "persona": "Independent simulated beginner, first introduction to RILL, interested in a small electronic dance groove.",
+  "piece_name": "neon pulse",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The empty-lane hint led directly to MIDI and instrument assignment. Notes, group copies, naming, saving, and both exports were achievable with the mouse. Duplicate and precise trimming required extra discovery.",
+    "how_cool_it_looks": "The dark arrangement, teal waveforms, visible note thumbnails, and restrained transport looked cohesive and readable. The very large empty lower area and dense tool row felt utilitarian.",
+    "how_fast_it_is": "Most note edits and copies responded promptly. Native save dialogs sometimes appeared only after another screenshot, and WAV export had a noticeable wait with a useful elapsed-time indicator. No hardware-performance inference is intended.",
+    "how_confusing_it_is": "Low overall confusion after the initial hints. I first dragged with Duplicate and got no copy; Tool help clarified that clicking was required. Fine trimming at the zoomed-out scale also took a snap change.",
+    "feature_completeness": "The visible app supported audio arrangement, a native VST3 instrument, piano-roll editing, mouse-only names, project saving, and WAV/MIDI exports. I only exercised this small workflow; the WAV dialog exposed limited format choices."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.rill",
+    "wav": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.wav",
+    "midi": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "The visible Double-click for MIDI hint opened the device library; Assign instrument produced a MIDI track visibly assigned to Rill Lab Sine.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Pencil drags produced four labeled short notes in the piano roll, which also appeared as arrangement thumbnails.",
+      "evidence": [
+        "04-drawn-notes.png",
+        "06-rename.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "Rename controls supplied an on-screen keyboard, enabling the pattern name pulse and project title neon pulse using mouse clicks. Save and export pickers then reused the project title.",
+      "evidence": [
+        "07-keyboard.png",
+        "22-project-keyboard.png",
+        "24-save-dialog.png",
+        "28-wav-dialog.png",
+        "33-midi-dialog.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "Dragging a clip with Duplicate active produced no visible copy. The expected gesture was not obvious from the tool name alone.",
+      "evidence": [
+        "08-duplicate-tool.png",
+        "09-first-copy.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "recovery",
+      "observation": "Tool help explicitly said to click a clip; a click then made an adjacent copy, and box-selection allowed several MIDI clips to be duplicated together.",
+      "evidence": [
+        "10-duplicate-help.png",
+        "11-copy-click.png",
+        "13-select-patterns.png",
+        "15-fourteen-midi-bars.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "friction",
+      "observation": "The first audio-edge trim left the arrangement at 30.134 seconds while the loop read 30.000. A small corrective drag did not visibly change it.",
+      "evidence": [
+        "16-thirty-seconds.png",
+        "17-playback-start.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "recovery",
+      "observation": "Switching snap from 1/16 to 1 bar and dragging the audio edge aligned the final audio and MIDI ends; the saved arrangement title read 0:30.000.",
+      "evidence": [
+        "19-snap.png",
+        "25-saved.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "During playback the button read Pause, both track meters lit, and a subsequent screenshot showed the playhead at 006.01.92.",
+      "evidence": [
+        "17-playback-start.png",
+        "18-playback-progress.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "positive",
+      "observation": "WAV export showed the arrangement duration and an effect-tail checkbox; turning tails off displayed 0:30. Completion notices were displayed for both neon pulse.wav and neon pulse.mid.",
+      "evidence": [
+        "26-export-wav.png",
+        "27-wav-save.png",
+        "31-wav-result.png",
+        "34-midi-result.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "friction",
+      "observation": "Some native dialogs appeared after the initial screenshot, and the first MIDI-export screenshot briefly showed a black dialog-sized area before the picker rendered.",
+      "evidence": [
+        "23-save.png",
+        "24-save-dialog.png",
+        "32-midi-export.png",
+        "33-midi-dialog.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: a named 30-second arrangement was saved and both exports showed success notices. Output contents and durations await independent verification.",
+    "visible_arrangement_duration_seconds": 30.0,
+    "composition": "112 BPM, 4/4. Fourteen one-bar MIDI clips repeating short C4, C4, G4, E4 notes through Rill Lab Sine, over three full copies and a final two-bar portion of the startup Circuit rhythm audio. Loop spans 1:1.00 to 15:1.00, visibly 0:00.000 to 0:30.000.",
+    "instrument": "Rill Lab Sine (visible VST3 instrument)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play changed to Pause, both track meters lit, and the playhead advanced from the start to 006.01.92. Stop returned the transport to the beginning. No audio was auditioned.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No output file contents or heard audio were verified; independent coordinator verification follows.",
+    "Only the visible application was used for composition and output. No keyboard events, shortcuts, APIs, implementation inspection, or other participant records were used.",
+    "Software graphics and a virtual audio backend were laboratory conditions; timing impressions do not establish physical-device latency or audio quality.",
+    "Only the installed Rill Lab Sine instrument was used; this does not establish compatibility with other third-party plug-ins.",
+    "The arrangement is deliberately simple and repetitive; its musical balance and audible result were not evaluated by listening.",
+    "Session elapsed time includes tool, screenshot, and reporting overhead and is not a performance benchmark."
+  ]
+}

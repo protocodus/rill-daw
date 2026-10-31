@@ -470,30 +470,38 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     app.key("Q");
     let before = app.inspect();
     let labels = before["label_rects"].as_array().unwrap();
-    let transport_y = labels.iter().find(|label| label["text"] == "Play").unwrap()["min"][1]
-        .as_f64()
-        .unwrap();
-    for text in [
-        "Arranger",
-        "Mixer",
-        "Start",
-        "Play",
-        "Stop",
-        "Record",
-        "Click",
-        "Loop",
-        "Range",
-        "120.0 BPM",
+    // Tempo's visible mouse steps allow complete control groups to wrap at
+    // this width. Keep each family together and all labels above the editor.
+    for group in [
+        &["Arranger", "Mixer"][..],
+        &["Start", "Play", "Stop", "Record"][..],
+        &["Click", "Loop", "Range"][..],
+        &["120.0 BPM", "4/4"][..],
     ] {
-        let label = labels.iter().find(|label| label["text"] == text).unwrap();
-        assert!(
-            (label["min"][1].as_f64().unwrap() - transport_y).abs() < 2.0,
-            "The full labeled transport must fit one row at 1100 points: {label}"
-        );
-        assert!(
-            label["max"][1].as_f64().unwrap() - label["min"][1].as_f64().unwrap() >= 18.0,
-            "Compact transport must retain readable text: {label}"
-        );
+        let row_y = center(
+            labels
+                .iter()
+                .find(|label| label["text"] == group[0])
+                .unwrap(),
+        )
+        .1;
+        for text in group {
+            let label = labels.iter().find(|label| label["text"] == *text).unwrap();
+            assert!(
+                (center(label).1 - row_y).abs() <= 2.0,
+                "Related transport controls must wrap together: {group:?}: {label}"
+            );
+            assert!(
+                label["min"][0].as_f64().unwrap() >= 0.0
+                    && label["max"][0].as_f64().unwrap() <= 1100.0
+                    && label["max"][1].as_f64().unwrap() < 240.0,
+                "Compact transport must remain visible: {label}"
+            );
+            assert!(
+                label["max"][1].as_f64().unwrap() - label["min"][1].as_f64().unwrap() >= 18.0,
+                "Compact transport must retain readable text: {label}"
+            );
+        }
     }
     let visible = |state: &Value, label: &str| {
         state["visible_labels"]

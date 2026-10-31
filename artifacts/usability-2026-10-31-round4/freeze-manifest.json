@@ -1,0 +1,59 @@
+{
+  "status": "frozen; not launched",
+  "frozen_at_utc": "2026-10-31T19:38:40Z",
+  "baseline_git_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "origin_main_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "working_tree_status": "source-status.txt",
+  "source_diff": "source-diff.patch",
+  "source_hashes": "source-hashes.json",
+  "source_file_count": 926,
+  "source_scope": "All existing Git-tracked and untracked non-ignored files under crates plus Cargo.toml and Cargo.lock, without extension filtering.",
+  "untracked_source": "untracked-frozen-source.tar.gz",
+  "source_reconstruction": "Checkout baseline_git_sha, apply source-diff.patch, extract untracked-frozen-source.tar.gz; verify source-hashes.json.",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability-round4/baseline/rill",
+      "sha256": "98c127f14209e7eaaa0b26dfecc1ec1e0fdf81145f0812584d993a3a560ef24e",
+      "storage": "hard link to immutable content-addressed copy; never linked to Cargo output",
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/98c127f14209e7eaaa0b26dfecc1ec1e0fdf81145f0812584d993a3a560ef24e/rill"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability-round4/baseline/daw-plugin-host",
+      "sha256": "98357c49fddfb1dd28aa8c6dd3fbc994ea352a3cd1af12bb946b567f3ece8a26",
+      "storage": "hard link to immutable content-addressed copy; never linked to Cargo output",
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/98357c49fddfb1dd28aa8c6dd3fbc994ea352a3cd1af12bb946b567f3ece8a26/daw-plugin-host"
+    }
+  },
+  "plugin": {
+    "name": "Rill Lab Sine",
+    "path": "/workspace/scratch/rill-usability-round4/plugins/RillLabSine.vst3",
+    "sha256": "ea9c162882be7efc282dcba683c92010d1804cc3218b37ffa99af7e813d253b8"
+  },
+  "viewport": [
+    1440,
+    1000
+  ],
+  "audio": {
+    "sink_rate_hz": 48000,
+    "application_buffer_request_frames": 1024,
+    "virtual_backend_buffering_ms": 60,
+    "isolation": "Separate timer-paced PulseAudio null sink, ALSA pulse bridge, config and cache per participant"
+  },
+  "protocol_sha256": "f4dea2b7c717b95fd572a8f0ededc3128cfc3501a7922da53ed46ea07f6f11a6",
+  "structured_protocol_sha256": "fe825914b878f364dc6f3b598f787fd8d05bc9023943cf09797fe26df66e98b2",
+  "report_schema_sha256": "03e61074f5dd247c12e1943fb6569fb143d7dcd6f72b80c900344dec23a8814d",
+  "lab_script_sha256": {
+    "aggregate.py": "c06e1f471a0592617b08df7c43e936501b8ba79240d7074ae97fe364d376ced3",
+    "audio.py": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a",
+    "cleanup.py": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12",
+    "component_render.py": "4a516ebb58372a88c3cd61cab1cb4a21e526d6207ffffd3633f4900eae9e3b45",
+    "evidence_utils.py": "932eb7da6c5d2e1882ce98995be774fbda31457ca460de60be5513905baa80f7",
+    "freeze.py": "0678d656b729196c4e32a160e9a44419a88b0c7e67cd92daabd3d7a62f399dd1",
+    "launch.py": "6a656043b477e2bf7fb504ddfd8580977e3f53ebbf800ce059dbcf7d2d45a2a4",
+    "mouse.py": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+    "verify_isolated_midi.py": "2a26fefeb84f840f52ac312bbec4d2552719e14dc22c654d1c1a67c1b6bf7ca0",
+    "verify_mix_components.py": "0b45b1c35ac68bcd7869a6d85f19d164f023d0dbf9a5981224bbb3aa76be59eb"
+  },
+  "mouse_driver_sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+  "sessions": []
+}

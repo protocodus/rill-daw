@@ -114,10 +114,41 @@ fn label_and_all_row_sizes_resize_without_edits_and_loop_range_has_its_own_lane(
         }
         let state = app.command(json!({"command":"inspect","paint":true}));
         let indicator = &state["timeline"]["loop_indicator"];
+        let lane = &state["timeline"]["loop_lane"];
         assert!(
             indicator["min"][1].as_f64().unwrap()
-                >= state["timeline"]["ruler"]["max"][1].as_f64().unwrap() + 2.
+                >= state["timeline"]["ruler"]["max"][1].as_f64().unwrap()
+                    + f64::from(daw_ui::tokens::SPACE_SM),
+            "Labelled loop strip must retain the clear gap below the ruler"
         );
+        for axis in 0..2 {
+            assert!(
+                indicator["min"][axis].as_f64().unwrap() >= lane["min"][axis].as_f64().unwrap()
+            );
+            assert!(
+                indicator["max"][axis].as_f64().unwrap() <= lane["max"][axis].as_f64().unwrap()
+            );
+        }
+        let loop_label = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| {
+                label["text"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("Loop 1:1.25–1:4.75"))
+            })
+            .expect("Loop timing remains visible inside its separated lane");
+        for axis in 0..2 {
+            assert!(
+                loop_label["min"][axis].as_f64().unwrap()
+                    >= indicator["min"][axis].as_f64().unwrap()
+            );
+            assert!(
+                loop_label["max"][axis].as_f64().unwrap()
+                    <= indicator["max"][axis].as_f64().unwrap()
+            );
+        }
         assert!(
             state["painted_rects"]
                 .as_array()

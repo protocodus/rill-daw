@@ -1,0 +1,134 @@
+{
+  "status": "five fresh native sessions ready",
+  "frozen_at_utc": "2026-10-31T20:14:07Z",
+  "baseline_git_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "origin_main_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "working_tree_status": "source-status.txt",
+  "source_diff": "source-diff.patch",
+  "source_hashes": "source-hashes.json",
+  "source_file_count": 927,
+  "source_scope": "All existing Git-tracked and untracked non-ignored files under crates plus Cargo.toml and Cargo.lock, without extension filtering.",
+  "untracked_source": "untracked-frozen-source.tar.gz",
+  "source_reconstruction": "Checkout baseline_git_sha, apply source-diff.patch, extract untracked-frozen-source.tar.gz; verify source-hashes.json.",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability-round5/baseline/rill",
+      "sha256": "0e5493fe8389670bc9c96c9f9f9ce99bc0095c564f3cf08145ebecb2b1f42e58",
+      "storage": "hard link to immutable content-addressed copy; never linked to Cargo output",
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/0e5493fe8389670bc9c96c9f9f9ce99bc0095c564f3cf08145ebecb2b1f42e58/rill"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability-round5/baseline/daw-plugin-host",
+      "sha256": "2c669184f0d87ec464523702209afc69854ac2a0a2a90f0b002f78c651350595",
+      "storage": "hard link to immutable content-addressed copy; never linked to Cargo output",
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/2c669184f0d87ec464523702209afc69854ac2a0a2a90f0b002f78c651350595/daw-plugin-host"
+    }
+  },
+  "plugin": {
+    "name": "Rill Lab Sine",
+    "path": "/workspace/scratch/rill-usability-round5/plugins/RillLabSine.vst3",
+    "sha256": "ea9c162882be7efc282dcba683c92010d1804cc3218b37ffa99af7e813d253b8"
+  },
+  "viewport": [
+    1440,
+    1000
+  ],
+  "audio": {
+    "sink_rate_hz": 48000,
+    "application_buffer_request_frames": 1024,
+    "virtual_backend_buffering_ms": 60,
+    "isolation": "Separate timer-paced PulseAudio null sink, ALSA pulse bridge, config and cache per participant"
+  },
+  "protocol_sha256": "c0e7185ca13dc2b200f4abc072596bf30f5cc871f95742671fc2ecb543a0ad3f",
+  "structured_protocol_sha256": "14db46021daa5edc6bd744f644e470b1873633233c5fbb3117bc50db7b8112a0",
+  "report_schema_sha256": "03e61074f5dd247c12e1943fb6569fb143d7dcd6f72b80c900344dec23a8814d",
+  "participant_prompt_hashes": {
+    "participant-1-prompt.txt": "eb5bf0e45e4567e791015f384c87e0fc295ac2163b18f450e6d53ccf2aab16f0",
+    "participant-2-prompt.txt": "d947b206aec00efd972331190427dad93fb141fdbb6ca13dac84fefc5f8d60d2",
+    "participant-3-prompt.txt": "aaedc2f0ef651b332baf1d3ca4b1aef52236e1a79b5415ef9ddc5ca6b64fed77",
+    "participant-4-prompt.txt": "a64e9f879c45e014314ef7bf09e1424d1b23490c573f68323fcd2466cecba888",
+    "participant-5-prompt.txt": "d3107d52b16317c7a05cf6f7a497c24e2c715c930745eca613de6b3880e02e47",
+    "participant-prompts.json": "04348d42de7500cc145e4fd81b377f1b41c6f0384e27f0815c8384f19edec59b"
+  },
+  "lab_script_sha256": {
+    "aggregate.py": "c06e1f471a0592617b08df7c43e936501b8ba79240d7074ae97fe364d376ced3",
+    "audio.py": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a",
+    "cleanup.py": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12",
+    "component_render.py": "4a516ebb58372a88c3cd61cab1cb4a21e526d6207ffffd3633f4900eae9e3b45",
+    "evidence_utils.py": "932eb7da6c5d2e1882ce98995be774fbda31457ca460de60be5513905baa80f7",
+    "freeze.py": "c103a2c80917168669b54c039c2a6c3c5608e7f119a69fe3733c557281d54ba3",
+    "launch.py": "91da5dd393e20251bf1bc8d87e1bb03928e8d35bf48a5b7b8888eb941798bdd4",
+    "mouse.py": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+    "verify_isolated_midi.py": "2a26fefeb84f840f52ac312bbec4d2552719e14dc22c654d1c1a67c1b6bf7ca0",
+    "verify_mix_components.py": "0b45b1c35ac68bcd7869a6d85f19d164f023d0dbf9a5981224bbb3aa76be59eb"
+  },
+  "mouse_driver_sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+  "sessions": [
+    {
+      "participant": 1,
+      "directory": "/workspace/scratch/rill-usability-round5/session-1",
+      "display": ":581",
+      "process_start_ticks": {
+        "pulse": "1410946",
+        "xvfb": "1410951",
+        "app": "1410957"
+      },
+      "pulse": 150890,
+      "xvfb": 150893,
+      "app": 150896
+    },
+    {
+      "participant": 2,
+      "directory": "/workspace/scratch/rill-usability-round5/session-2",
+      "display": ":582",
+      "process_start_ticks": {
+        "pulse": "1411176",
+        "xvfb": "1411181",
+        "app": "1411187"
+      },
+      "pulse": 150921,
+      "xvfb": 150924,
+      "app": 150927
+    },
+    {
+      "participant": 3,
+      "directory": "/workspace/scratch/rill-usability-round5/session-3",
+      "display": ":583",
+      "process_start_ticks": {
+        "pulse": "1411408",
+        "xvfb": "1411414",
+        "app": "1411419"
+      },
+      "pulse": 150952,
+      "xvfb": 150955,
+      "app": 150958
+    },
+    {
+      "participant": 4,
+      "directory": "/workspace/scratch/rill-usability-round5/session-4",
+      "display": ":584",
+      "process_start_ticks": {
+        "pulse": "1411643",
+        "xvfb": "1411649",
+        "app": "1411654"
+      },
+      "pulse": 150983,
+      "xvfb": 150986,
+      "app": 150989
+    },
+    {
+      "participant": 5,
+      "directory": "/workspace/scratch/rill-usability-round5/session-5",
+      "display": ":585",
+      "process_start_ticks": {
+        "pulse": "1411884",
+        "xvfb": "1411890",
+        "app": "1411895"
+      },
+      "pulse": 151022,
+      "xvfb": 151025,
+      "app": 151028
+    }
+  ],
+  "launched_at_utc": "2026-10-31T20:14:08Z"
+}

@@ -406,3 +406,162 @@ fn automation_has_wording_and_color_and_outside_values_stay_exact() {
         );
     }
 }
+
+fn compact_frame(
+    ctx: &Context,
+    value: &mut f64,
+    compact: bool,
+    events: Vec<Event>,
+) -> (Response, KnobGeometry, egui::FullOutput) {
+    let mut result = None;
+    let output = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(440.0, 420.0))),
+            time: Some(ctx.cumulative_frame_nr() as f64 * 0.2),
+            events,
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let mut knob = daw_ui::knob(value, 0.0..=100.0)
+                    .text("Normalized value")
+                    .diameter(48.0)
+                    .endpoint_labels("L", "R")
+                    .automation(Some(AutomationState::Read));
+                if compact {
+                    knob = knob.compact();
+                }
+                let response = ui.add(knob);
+                let geometry = daw_ui::knob_geometry(ctx, response.id).unwrap();
+                result = Some((response, geometry));
+            });
+        },
+    );
+    let (response, geometry) = result.unwrap();
+    (response, geometry, output)
+}
+
+#[test]
+fn compact_knob_fits_the_dial_without_removing_the_default_numeric_editor() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let mut value = 140.123_456_789;
+    let (full_before, geometry_before, _) = compact_frame(&ctx, &mut value, false, vec![]);
+    assert!(geometry_before.number.is_positive());
+    assert!(full_before.rect.width() >= 112.0);
+    assert!(full_before.rect.height() > 48.0);
+    let (compact, geometry, output) = compact_frame(&ctx, &mut value, true, vec![]);
+    assert_eq!(compact.rect.size(), vec2(48.0, 48.0));
+    assert_eq!(geometry.dial, compact.rect);
+    assert_eq!(geometry.number, Rect::NOTHING);
+    assert_eq!(geometry.value, 140.123_456_789);
+    assert_eq!(value, 140.123_456_789);
+    assert!(geometry.index.distance(geometry.maximum) < 0.001);
+    let rendered = labels(&output);
+    assert!(rendered.contains(&"L") && rendered.contains(&"R"));
+    for omitted in [
+        "Normalized value",
+        AutomationState::Read.label(),
+        "Outside range",
+    ] {
+        assert!(
+            !rendered.contains(&omitted),
+            "compact presentation must not add {omitted} rows"
+        );
+    }
+    let (full_after, geometry_after, output) = compact_frame(&ctx, &mut value, false, vec![]);
+    assert_eq!(full_after.rect.size(), full_before.rect.size());
+    assert_eq!(geometry_after.number.size(), geometry_before.number.size());
+    let rendered = labels(&output);
+    assert!(rendered.contains(&"Normalized value"));
+    assert!(rendered.contains(&AutomationState::Read.label()));
+    assert!(rendered.contains(&"Outside range"));
+    assert!(rendered.iter().any(|label| label.contains("140.123456789")));
+}
+
+#[test]
+fn compact_knob_leaves_unit_aware_hints_to_its_host() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    ctx.style_mut(|style| {
+        style.interaction.tooltip_delay = 0.0;
+        style.interaction.show_tooltips_only_when_still = false;
+    });
+    let mut value = 37.125;
+    let (_, geometry, _) = compact_frame(&ctx, &mut value, true, vec![]);
+    compact_frame(
+        &ctx,
+        &mut value,
+        true,
+        vec![Event::PointerMoved(geometry.center)],
+    );
+    compact_frame(&ctx, &mut value, true, vec![]);
+    let (_, _, output) = compact_frame(&ctx, &mut value, true, vec![]);
+    let rendered = labels(&output);
+    assert!(!rendered.iter().any(|text| text.contains("Drag up/right")));
+    assert!(
+        !rendered
+            .iter()
+            .any(|text| text.contains("Click the number"))
+    );
+    assert!(
+        !rendered.iter().any(|text| text.contains("37.125")),
+        "a generic normalized readout must not compete with the host's units"
+    );
+    assert_eq!(value, 37.125);
+}
+
+#[test]
+fn secondary_or_middle_buttons_block_concurrent_primary_drag_through_release() {
+    for compact in [false, true] {
+        for button in [PointerButton::Secondary, PointerButton::Middle] {
+            for concurrent_start in [false, true] {
+                let ctx = Context::default();
+                daw_ui::theme::apply(&ctx);
+                let mut value = 50.0;
+                let (_, geometry, _) = compact_frame(&ctx, &mut value, compact, vec![]);
+                let origin = geometry.center;
+                let mut events = pointer(origin, PointerButton::Primary, true, Modifiers::NONE);
+                if concurrent_start {
+                    events.extend(pointer(origin, button, true, Modifiers::NONE));
+                }
+                compact_frame(&ctx, &mut value, compact, events);
+                let moved = origin + vec2(20.0, 0.0);
+                compact_frame(&ctx, &mut value, compact, vec![Event::PointerMoved(moved)]);
+                if concurrent_start {
+                    assert_eq!(value, 50.0);
+                } else {
+                    assert_eq!(value, 60.0);
+                    compact_frame(
+                        &ctx,
+                        &mut value,
+                        compact,
+                        pointer(moved, button, true, Modifiers::NONE),
+                    );
+                }
+                let before = value;
+                let held = moved + vec2(10.0, -10.0);
+                let (response, _, _) =
+                    compact_frame(&ctx, &mut value, compact, vec![Event::PointerMoved(held)]);
+                assert_eq!(value, before);
+                assert!(!response.changed());
+                let released = held + vec2(10.0, -10.0);
+                let (response, _, _) = compact_frame(
+                    &ctx,
+                    &mut value,
+                    compact,
+                    pointer(released, button, false, Modifiers::NONE),
+                );
+                assert_eq!(value, before, "the release frame must remain protected");
+                assert!(!response.changed());
+                compact_frame(
+                    &ctx,
+                    &mut value,
+                    compact,
+                    pointer(released, PointerButton::Primary, false, Modifiers::NONE),
+                );
+                assert_eq!(value, before);
+            }
+        }
+    }
+}

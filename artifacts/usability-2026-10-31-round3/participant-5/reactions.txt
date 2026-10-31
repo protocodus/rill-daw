@@ -1,0 +1,22 @@
+Simulated beginner participant 5 — songwriter making a melodic hip-hop sketch.
+This is simulated usability research, not a human participant session.
+
+18:48 — First view: the supplied drum waveform and large transport are inviting. The hint saying double-click for MIDI gives me a clear first action. Double-clicked below the audio track; Device library opened with Rill Lab Sine selected. Clicked Assign instrument and a new MIDI pattern appeared. Evidence: 01-midi-created.png, 02-instrument.png.
+
+18:48 — Double-clicked the pattern and chose Pencil. Drew a two-bar phrase using C4, G4, D#4, G#4, G4, D#4. Notes appeared and the clip end moved to bar 3 as I drew beyond its initial one-bar length. That feels helpful and immediate. Evidence: 03-piano.png, 04-melody.png.
+
+18:49 — Zoomed out using the minus button so I could see a 30-second endpoint. Selected Duplicate, then tried dragging a pattern; nothing copied. Tool help explained that Duplicate works by clicking a clip. Clicked the first pattern and saw a copy appended, then repeated the last pattern to build seven two-bar phrases. Once understood, this was quick. Evidence: 07-duplicate-held.png, 09-tool-help.png, 10-click-duplicate.png, 11-extended.png.
+
+18:49–18:50 — Duplicated the drum clip to extend the arrangement. Tried Cut near 30 seconds then Erase on the far-right portion; the visible result removed the last copied drum region, leaving drums through about 25.7 seconds. I kept that result as a two-bar melodic outro. Tried dragging the loop bar endpoint, but its visible range stayed at the original four bars. Turned Loop off instead. The project duration now read 0:30.000. Evidence: 12-thirty-seconds.png.
+
+18:50 — Opened the last MIDI pattern, selected its final D#4 note, and dragged it down to C4 for a resolving ending. The last arrangement pattern visibly differed from the earlier copies. Evidence: 13-outro-editor.png, 14-playing.png.
+
+18:50–18:51 — Pressed Play. An Audio output stream failed or disconnected banner appeared. Audio setup offered System default and Rill lab paced output. Selected the latter, applied, and tried Play again; the playhead appeared stationary. This interrupts confidence in the sketch. I did not hear or audition a capture. Evidence: 14-playing.png, 15-audio-setup.png, 16-output-menu.png, 18-play-status.png.
+
+18:51–18:52 — File > Rename project exposed a Keyboard button. Used its on-screen mouse keys to enter velvet steps, then Apply name. File > Save opened a native dialog already in session-5 with velvet steps.rill. Clicked OK. The on-screen keyboard solved naming without typing. Evidence: 20-name-dialog.png, 21-keyboard.png, 22-save-dialog.png.
+
+18:52 — File > Export WAV showed Arrangement 0:30 and an effect-tails checkbox. Turned tails off, clicked Export, accepted velvet steps.wav in session-5. A progress banner showed elapsed time. Opened Export MIDI, accepted velvet steps.mid, and saw Exported · velvet steps.mid. Evidence: 24-wav-export.png, 25-wav-location.png, 27-export-status.png, 29-midi-dialog.png, 30-export-complete.png.
+
+18:53 — Opened Mixer and tried playback again; the same output error returned. Details said Backend: A buffer underrun or overrun occurred and instructed Stop then Play to reconnect. Followed that instruction. Pause briefly appeared and the position advanced to 001.03.42, then another output failure appeared. Audio setup's buffer choices topped out at the already-selected 1024 samples, so I canceled without changing it. Evidence: 31-mixer-play.png, 32-output-error-details.png, 33-reconnect.png, 34-playing-arrangement.png, 35-buffer-options.png.
+
+18:54–18:55 — Stopped playback, dismissed notices, and used Re-export last WAV (replace) to obtain a clear WAV completion result separately from the MIDI result. The banner eventually read Exported · velvet steps.wav. Evidence: 37-wav-complete.png. No composition data was edited outside the app. All editing, naming, saving and exporting used visible mouse input. Application left open and mouse buttons released.

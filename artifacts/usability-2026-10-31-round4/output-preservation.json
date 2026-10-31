@@ -1,0 +1,181 @@
+{
+  "checked_files": 35,
+  "all_current_round_originals_unchanged": true,
+  "files": [
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/reactions.txt",
+      "sha256": "0a79a0bda1ae2303c1ef4e12ce5b847c60965147284098e17eca7be300a82e62",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/mouse-actions.jsonl",
+      "sha256": "39326f4570145256eea4fc9e096aef6fb10a40d9cdf3a7307c7437bdcf0b01d1",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.rill",
+      "sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/report.json",
+      "sha256": "7d3126bd1d987865f465b9bf13369ef75c544828e55cb85c8809a72b561c2eea",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.wav",
+      "sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.mid",
+      "sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-1/final.png",
+      "sha256": "3a8ca1fce80a9876e9ed7734eeb89c162b457f56dc57d1c5d8b4fdbe59609f6c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.wav",
+      "sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.mid",
+      "sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/reactions.txt",
+      "sha256": "9c52d19f625dd1ff36f7224c7a040005ac10ade1083e5754e8b3a1709360c836",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/mouse-actions.jsonl",
+      "sha256": "51d2ebc3b4cb79cce5b3307abf0e85e25f0f11c63556bdaf43a468fb3114bf17",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/report.json",
+      "sha256": "6a8a52b55b1a89d39163f33328743ae794aad0a9836ea28e000d19653ccfdc4c",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.rill",
+      "sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-2/final.png",
+      "sha256": "7f0e7a85b24e6c66c25635f76d6d43c58f1009964280874650f470203fe017cb",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/reactions.txt",
+      "sha256": "7e37c4fadcd570f6e957742529b7f0379169953fa07d34b6c5ba2933ccb414df",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.rill",
+      "sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.mid",
+      "sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/mouse-actions.jsonl",
+      "sha256": "9a5175a52ade7690e76b2bc8ed9d30cd49d3f16b29a410e38260229cb31e1e91",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/report.json",
+      "sha256": "d8e0255ff89ef1d0071727a8a0c06e07c7f679ebb990230dabe6ca6c3b7eb291",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.wav",
+      "sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-3/final.png",
+      "sha256": "d56da9ef680c1ef5907fed63609fec3b30e6747662e363b549a48a135cbd0f09",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/reactions.txt",
+      "sha256": "7215f0e7f32c0dbd98cef4a658f4eb22a21edac984adf6c903a2940658eb9229",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mouse-actions.jsonl",
+      "sha256": "7a42a01a09152c4cae20fcadc0afcd25baf02152af427670dcb61c22502deabf",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/report.json",
+      "sha256": "b6a43531a829aba5f55733d5da9cb98aa5722c1753295e89f5426971c5d9334d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.rill",
+      "sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.mid",
+      "sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/final.png",
+      "sha256": "b514b8c12a9966679c48e9aca0ebffcaaf5b8c6831eb8ede2663cc9a27b1de58",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.wav",
+      "sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/reactions.txt",
+      "sha256": "666caf51422c428bc99cb02654dbcd8a772d469037e57b8dcabdfcb7a8bf829e",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/mouse-actions.jsonl",
+      "sha256": "9fe9d2dcf361df8f677b89b965bf4d5afc4db84eeb516a631ade3e716b29359d",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/report.json",
+      "sha256": "3c728e275efcedf52a359c182a9689baf58c948f53a7b568b2fc1775afd49219",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.mid",
+      "sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.wav",
+      "sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.rill",
+      "sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "unchanged": true
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round4/session-5/final.png",
+      "sha256": "2f547f290fd67d8dc236251352ed32882dc9cfbeda19656f0cc5d32a57037613",
+      "unchanged": true
+    }
+  ]
+}

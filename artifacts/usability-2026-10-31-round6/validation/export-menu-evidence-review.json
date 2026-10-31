@@ -1,0 +1,12 @@
+{
+  "reviewer": "/root/round6_beginner_2",
+  "method": "Read-only screenshots, mouse action logs, source and existing test/validation evidence. No new native reproduction.",
+  "observations": [
+    "Round6P4 File20:47:19 then expectedMIDIrow20:47:20 then screenshot24; no capture afterFilealone. Exportstillrunning12seconds.",
+    "Round4P3 same two-click sequence and nointermediateFilecapture.",
+    "ProductionFilebar disablesfor document_guard only; MIDIentry explicitlydisabled duringpendingWAV.",
+    "Existingpending_wav export_sequence E2E verifiesFileopenswhileWAVpending; disabled-rowclickdismissesmenu."
+  ],
+  "conclusion": "Reported File blocking is not established. The sequence is consistent with an open File menu followed by disabled MIDI entry dismissing it. Keep original reports and do not claim a native causal reproduction or unsupported menu-enabling fix.",
+  "format_reservation": "Exportpanel tooltip points toAudioSetupfor samplerate;stereo32bitfloat isfixed. BroaderPCMformat supportnotclaimed."
+}

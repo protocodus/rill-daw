@@ -1,0 +1,15 @@
+Participant 1 — independent simulated beginner; observable action/reaction record
+
+20:43:33–20:43:41 — Clicked tempo and scrolled; 112 BPM stayed displayed. Briefly tried a right click in the empty area with no visible result. Continued at the current tempo.
+20:43:46–20:43:59 — Followed the visible double-click-for-MIDI hint. Device library appeared; Assign instrument created Rill Lab Sine track and a pattern. Double-clicking that pattern opened the piano roll. Reaction: clear path from visible instruction to instrument.
+20:44:06–20:44:30 — Selected Pencil and dragged six notes. Their lengths appeared immediately, and drawing farther extended the clip. Returned to the arranger and zoomed out. Reaction: direct drawing felt easy.
+20:44:37–20:44:56 — Selected Duplicate. It showed Click a clip to duplicate, then clicking clips created adjacent copies. Duplicated audio and MIDI to four sections. Reaction: initially expected an immediate duplicate, but the tool hint explained it.
+20:45:04–20:45:14 — Trimmed last audio and MIDI sections. Title showed 0:30.134; a small correction to the MIDI edge produced 0:30.000. Reaction: useful duration display, slightly fiddly trim at this zoom.
+20:45:15–20:45:27 — Disabled Loop and pressed Play. Later screenshot showed moving playhead, 004.02.26 transport and active meters on both tracks. Pressed Stop. Audio was not auditioned.
+20:45:34–20:46:36 — Opened Rename project and its on-screen keyboard. Mistyped sodt rain; Save dialog inherited the typo. Cancelled and corrected with clickable Clear and letters, then applied soft rain. Reaction: grateful mouse-only naming exists; the typo was my pointer targeting error.
+20:46:44 — Confirmed native Save dialog for /workspace/scratch/rill-usability-round6/session-1/soft rain.rill. Returned to arrangement with soft rain and 0:30.000 visible. No independent file inspection.
+20:46:47–20:47:21 — Opened Export WAV, unchecked effect tails to keep displayed 0:30, confirmed soft rain.wav in session-1. Export showed elapsed seconds then Exported soft rain.wav. Reaction: clear scope and completion feedback.
+20:47:28–20:47:36 — Export MIDI, accepted soft rain.mid in session-1. Exported soft rain.mid notice appeared. Reaction: easy second export with inherited name.
+Final — App left open, stopped at start, no buttons held; final.png captured. Thirty seconds is established by the visible title/export dialog, not measured file contents. The lo-fi musical result was not auditioned.
+
+Ratings (1–5): ease 4; looks 4; speed 4; confusion 2 (higher is worse); completeness 4. Detailed reasons and screenshot evidence are in report.json. Full pointer log is mouse-actions.jsonl. No private reasoning transcript is included.

@@ -1,0 +1,39 @@
+{
+  "created_utc": "2026-10-31T19:34:20.577085+00:00",
+  "base_git_sha": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "evaluated_binary_sha256": "35a1c098fcc2bf79c11e59724df2cf24cf8e4913b221f44a33a83a0f8e5a1933",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/rill-daw/target/debug/rill",
+      "sha256": "98c127f14209e7eaaa0b26dfecc1ec1e0fdf81145f0812584d993a3a560ef24e"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/rill-daw/target/debug/daw-plugin-host",
+      "sha256": "98357c49fddfb1dd28aa8c6dd3fbc994ea352a3cd1af12bb946b567f3ece8a26"
+    }
+  },
+  "source_files": 926,
+  "files_changed_since_study": [
+    "crates/daw-app/src/app.rs",
+    "crates/daw-app/src/arrangement.rs",
+    "crates/daw-app/src/automation.rs",
+    "crates/daw-app/src/error_ui.rs",
+    "crates/daw-app/tests/beat_ruler_e2e.rs",
+    "crates/daw-app/tests/eraser_scope_e2e.rs",
+    "crates/daw-app/tests/loop_e2e.rs",
+    "crates/daw-app/tests/output_error_e2e.rs",
+    "crates/daw-app/tests/properties_stability_e2e.rs",
+    "crates/daw-app/tests/tool_hints_e2e.rs",
+    "crates/daw-engine/src/device.rs",
+    "crates/daw-engine/src/input.rs",
+    "crates/daw-engine/src/output_failure_tests.rs",
+    "crates/daw-ui/examples/component_gallery/timeline.rs",
+    "crates/daw-ui/src/duration.rs",
+    "crates/daw-ui/src/tool_hint.rs"
+  ],
+  "reconstruction": "Checkout base_git_sha, apply source-diff.patch and extract untracked-source.tar.gz. Verify source-hashes.json.",
+  "validation": "../validation/verified-final-results.json",
+  "rated_by_fresh_agents": false,
+  "reason": "The frozen participant reports preceded the targeted fixes discovered by that study; no ratings were altered.",
+  "source_scope": "All existing Git-tracked and untracked non-ignored files under crates plus Cargo.toml and Cargo.lock, without an extension filter."
+}

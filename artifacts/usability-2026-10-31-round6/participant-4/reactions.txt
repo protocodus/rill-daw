@@ -1,0 +1,18 @@
+Participant 4: independent simulated beginner; ambient soundtrack sketch.
+Observable action/reaction record, not a private reasoning transcript.
+
+20:43:49 UTC - Followed the visible Double-click for MIDI hint. Device library appeared with Rill Lab Sine. Assign instrument created a track and pattern. Reaction: a clear and useful starting hint. Evidence: 01-midi-created.png, 02-instrument-assigned.png.
+20:44:03-17 - Opened the pattern, selected Pencil, and dragged three long note bars. Properties offered duration and a numerical mouse keypad. Reaction: drawing a chord was straightforward. Evidence: 03-piano-roll.png, 04-notes-properties.png.
+20:44:27-48 - Selected Stretch and tried 56 beats. A bottom message rejected it because stretch must stay between 25% and 400%. Reaction: the valid timing range was less obvious than the keypad suggested. Evidence: 05-duration-mode.png, 06-duration-keypad.png, 07-expanded-arrangement.png.
+20:45:00-40 - Retried 16 beats successfully, zoomed out, duplicated MIDI and audio clips three times, and trimmed both last clips to the 30-second marker. Lowered drum volume to -27.6 dB and disabled looping. Reaction: repeated clicking on clips with Duplicate was fast; exact end time was visible. Evidence: 09-duplicate-tool.png, 10-duplicates.png, 11-trim-to-30.png.
+20:45:48-20:46:16 - Used File > Rename project, on-screen Keyboard, Clear, letter buttons, Done and Apply name to enter mist. Reaction: mouse-only naming was supported. Evidence: 12-file-menu.png through 15-playback.png.
+20:46:16 - Play failed with Audio output stream failed or disconnected. Reaction: disappointing interruption, but Retry playback was immediately available. Evidence: 15-playback.png.
+20:46:23-33 - Retry playback changed the transport to Pause. Later the playhead was beyond bar 3 and both meters were active. Stopped playback. Reaction: visible recovery worked. No heard-audio claim. Evidence: 16-retry-playback.png, 17-playback-progress.png.
+20:46:35-44 - Save proposed mist.rill. Clicked the session-4 bookmark and OK; dialog closed and the unsaved dot disappeared. Evidence: 18-save.png, 19-saved.png.
+20:46:52-20:47:08 - WAV dialog stated Arrangement 0:30 + tails. Unchecked effect tails and accepted mist.wav in session-4. Export spinner displayed elapsed seconds. Attempts at the File/MIDI menu during export had no visible result. Evidence: 20-export-wav.png through 24-export-midi.png.
+20:47:38 approx - Observed Exported mist.wav. Reaction: clear completion notice. Evidence: 25-wav-completion.png. Screenshot 23-wav-success.png actually shows export still in progress despite its filename.
+20:47:45-53 - File > Export MIDI proposed mist.mid in the same directory. OK produced Exported mist.mid. Reaction: simple final export. Evidence: 26-midi-dialog.png, 27-midi-completion.png.
+20:48:09-10 - Dismissed the notice, moved pointer clear of clips, captured final.png. App left open and stopped; all driver actions show no held mouse button.
+
+Ratings (1-5): easy to use 4; cool appearance 4; speed 4; confusion 3 (higher is worse); feature completeness 4. Reasons are recorded in report.json.
+Outputs selected via UI: /workspace/scratch/rill-usability-round6/session-4/mist.rill, mist.wav, mist.mid. Visible arrangement duration: 30.000 seconds. File contents and actual audio are not independently verified here.

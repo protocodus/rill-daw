@@ -1,0 +1,24 @@
+[
+  {
+    "target": "gesture_release_e2e",
+    "frozen_binary": "/workspace/scratch/rill-usability-round5/baseline/rill",
+    "returncode": 101,
+    "log": "artifacts/usability-2026-10-31-round5/validation/gesture_release_e2e-frozen-baseline.log",
+    "purpose": "Expected failing regression proof against the unchanged round5 study build; excluded from corrected-target totals."
+  },
+  {
+    "target": "precise_trim_e2e",
+    "frozen_binary": "/workspace/scratch/rill-usability-round5/baseline/rill",
+    "returncode": 101,
+    "log": "artifacts/usability-2026-10-31-round5/validation/precise_trim_e2e-frozen-baseline.log",
+    "purpose": "Expected failing regression proof against the unchanged round5 study build; excluded from corrected-target totals."
+  },
+  {
+    "target": "precise_trim_e2e",
+    "frozen_binary": "/workspace/scratch/rill-usability-round5/baseline/rill",
+    "returncode": 101,
+    "log": "artifacts/usability-2026-10-31-round5/validation/precise_trim_e2e-frozen-baseline-final.log",
+    "test_source_sha256": "a776321601832bc7b331505a1f4ffa11d4c752faa560162999208e6c8621d28e",
+    "purpose": "Final same-source regression proof after strengthening ordinary outward and nearby-click coverage; expected failures excluded from corrected totals."
+  }
+]

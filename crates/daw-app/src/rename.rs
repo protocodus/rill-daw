@@ -4,6 +4,7 @@ use eframe::egui;
 
 #[derive(Clone, Copy)]
 enum RenameTarget {
+    Project,
     Clip(u64, u64),
     Track(u64),
 }
@@ -24,6 +25,7 @@ fn state_id() -> egui::Id {
 pub(crate) fn reset(ctx: &egui::Context) {
     ctx.data_mut(|data| data.remove::<RenameDraft>(state_id()));
     ctx.memory_mut(|memory| memory.surrender_focus(state_id().with("field")));
+    daw_ui::set_name_keyboard_open(ctx, state_id().with("field"), false);
 }
 
 fn rect(value: &serde_json::Value) -> Option<egui::Rect> {
@@ -134,6 +136,7 @@ impl DawApp {
         }
         self.flush_pending_edit();
         let unchanged = match draft.target {
+            RenameTarget::Project => self.project.name == draft.text,
             RenameTarget::Clip(track, clip) => self
                 .project
                 .clip(track, clip)
@@ -148,6 +151,10 @@ impl DawApp {
         }
         let mut candidate = self.project.clone();
         let (result, label) = match draft.target {
+            RenameTarget::Project => {
+                candidate.name = draft.text;
+                (Ok(()), "Rename project")
+            }
             RenameTarget::Clip(track, clip) => {
                 candidate.clip_mut(track, clip).unwrap().name = draft.text;
                 (
@@ -203,19 +210,60 @@ impl DawApp {
             })
         });
         if let Some((target, text)) = target {
-            let document = crate::spectrogram::waveform_generation(ctx);
-            ctx.data_mut(|data| {
-                data.insert_temp(
-                    state_id(),
-                    RenameDraft {
-                        target,
-                        text,
-                        view: self.view,
-                        document,
-                        initial_focus: true,
-                    },
-                )
-            });
+            self.start_name_draft(ctx, target, text, false);
+        }
+    }
+
+    fn start_name_draft(
+        &mut self,
+        ctx: &egui::Context,
+        target: RenameTarget,
+        text: String,
+        keyboard: bool,
+    ) {
+        // Restore a utility's caller without dismissing the Clip Editor or
+        // Mixer workspace whose item is being named.
+        self.close_utility_popups();
+        daw_ui::set_name_keyboard_open(ctx, state_id().with("field"), keyboard);
+        let document = crate::spectrogram::waveform_generation(ctx);
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                state_id(),
+                RenameDraft {
+                    target,
+                    text,
+                    view: self.view,
+                    document,
+                    initial_focus: true,
+                },
+            )
+        });
+    }
+
+    pub(crate) fn start_project_rename(&mut self, ctx: &egui::Context) {
+        self.start_name_draft(ctx, RenameTarget::Project, self.project.name.clone(), false);
+    }
+
+    /// Properties can open the same draft with mouse text entry already visible.
+    pub(crate) fn start_item_name_keyboard(&mut self, ctx: &egui::Context, clip: bool) {
+        let target = if clip {
+            self.selected_track
+                .zip(self.selected_clip)
+                .and_then(|(track, clip)| {
+                    self.project
+                        .clip(track, clip)
+                        .filter(|clip| !clip.is_take_source())
+                        .map(|item| (RenameTarget::Clip(track, clip), item.name.clone()))
+                })
+        } else {
+            self.selected_track.and_then(|track| {
+                self.project
+                    .track(track)
+                    .map(|item| (RenameTarget::Track(track), item.name.clone()))
+            })
+        };
+        if let Some((target, text)) = target {
+            self.start_name_draft(ctx, target, text, true);
         }
     }
 
@@ -249,6 +297,7 @@ impl DawApp {
             return;
         }
         let name = match draft.target {
+            RenameTarget::Project => Some(&self.project.name),
             RenameTarget::Clip(track, clip) => {
                 self.project.clip(track, clip).map(|clip| &clip.name)
             }
@@ -258,10 +307,14 @@ impl DawApp {
             return;
         }
         let anchor = match (draft.view, draft.target) {
+            (_, RenameTarget::Project) => {
+                ctx.data(|data| data.get_temp::<egui::Rect>(egui::Id::new("project_title_rect")))
+            }
             (WorkspaceView::Arrangement, target) => ctx.data(|data| {
                 let timeline =
                     data.get_temp::<serde_json::Value>(egui::Id::new("timeline_diagnostics"))?;
                 match target {
+                    RenameTarget::Project => unreachable!(),
                     RenameTarget::Clip(_, id) => timeline["clips"]
                         .as_array()?
                         .iter()
@@ -296,16 +349,25 @@ impl DawApp {
         let Some(anchor) = anchor.filter(|anchor| anchor.is_positive()) else {
             return;
         };
-        let width = anchor.width().clamp(120.0, 360.0);
         let content = ctx.content_rect().shrink(4.0);
+        let width = anchor
+            .width()
+            .clamp(120.0, 320.0)
+            .min((content.width() - 300.0).max(120.0));
+        let keyboard_open = daw_ui::name_keyboard_open(ctx, state_id().with("field"));
+        let height = if keyboard_open {
+            340.0
+        } else {
+            daw_ui::tokens::CONTROL_HEIGHT
+        };
         let position = egui::pos2(
             anchor.left().clamp(
                 content.left(),
-                (content.right() - width - 172.0).max(content.left()),
+                (content.right() - width - 300.0).max(content.left()),
             ),
             (anchor.center().y - daw_ui::tokens::CONTROL_HEIGHT * 0.5).clamp(
                 content.top(),
-                content.bottom() - daw_ui::tokens::CONTROL_HEIGHT,
+                (content.bottom() - height).max(content.top()),
             ),
         );
         let field_id = state_id().with("field");
@@ -317,10 +379,10 @@ impl DawApp {
                     ui,
                     field_id,
                     &mut draft.text,
-                    if matches!(draft.target, RenameTarget::Clip(..)) {
-                        "Clip name"
-                    } else {
-                        "Track name"
+                    match draft.target {
+                        RenameTarget::Project => "Project name",
+                        RenameTarget::Clip(..) => "Clip name",
+                        RenameTarget::Track(..) => "Track name",
                     },
                     width,
                     draft.initial_focus,

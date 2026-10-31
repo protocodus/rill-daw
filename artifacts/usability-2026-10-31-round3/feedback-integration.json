@@ -1,0 +1,136 @@
+{
+  "base": "b6910155f17e3dfbf1cbb84dcafeb0366e6e7253",
+  "baseline_findings": "../usability-2026-10-31-round2/feedback-resolution.json",
+  "original_findings_implemented": 25,
+  "validation": "../usability-2026-10-31-round2/validation/rebased-verified-results.json",
+  "additional_corrections": [
+    {
+      "finding": "Native double-click could be discarded without window-manager focus or when press/release arrived in one frame",
+      "response": "Accept delivered clicks, keep actual focus-loss cancellation, preserve group dragging and Undo",
+      "tests": [
+        "selection_click_e2e",
+        "focus_e2e",
+        "arranger_selection_e2e"
+      ]
+    },
+    {
+      "finding": "Output-device failures inflated plugin counts and could race with transport or reuse a failed stream for recording",
+      "response": "Preserve device cause once, terminal output latch, silent callback, reject capture/audition until reconnect, visible Stop/Play recovery",
+      "tests": [
+        "output_failure_tests",
+        "output_error_e2e",
+        "recording_e2e",
+        "midi_recording_e2e"
+      ]
+    },
+    {
+      "finding": "Persistent uppercase was called Shift",
+      "response": "Caps toggle and explanatory tooltip",
+      "tests": [
+        "mouse_naming_e2e"
+      ]
+    },
+    {
+      "finding": "Combining loop timing text with main ruler layout crowded clock labels",
+      "response": "Measure label height, reserve stable loop lane, retain main gap",
+      "tests": [
+        "arranger_layout_e2e",
+        "loop_e2e",
+        "timing_discovery_e2e"
+      ]
+    },
+    {
+      "finding": "Prefixed numeric fields shrank on focus, moving step buttons under a double-click",
+      "response": "Keep each field width during text entry using its own widget ID",
+      "tests": [
+        "loop_e2e",
+        "number_stepper_e2e",
+        "numeric_replacement_e2e",
+        "row_alignment_e2e"
+      ]
+    },
+    {
+      "finding": "Adding one-bar snap hid sixth option below the short dropdown viewport",
+      "response": "Size the six-item dropdown to show all options when space permits",
+      "tests": [
+        "popup_backdrop_e2e",
+        "zoom_controls_e2e"
+      ]
+    }
+  ],
+  "main_ui_preserved": [
+    "contextual direct editing tools",
+    "Notes and Draw settings menus",
+    "quiet navigation and grouped transport surfaces",
+    "shared typography and material tokens",
+    "track/header visual polish",
+    "small-window scrolling and full control targets"
+  ],
+  "evaluated_source_snapshot_verified_before_poststudy_changes": true,
+  "post_study_changes_not_rescored": [
+    {
+      "finding": "Typed recoverable output Xrun was latched as a dead device",
+      "response": "Ordinary playback continues on same stream, tracks dropouts, coalesces warning; capture/count-in still stop conservatively; EIO and real fatal faults unchanged",
+      "tests": [
+        "output_failure_tests",
+        "output_error_e2e",
+        "recording_e2e",
+        "midi_recording_e2e"
+      ]
+    },
+    {
+      "finding": "Play reused a terminally failed stream after unchanged Audio setup Apply",
+      "response": "Explicit Play opens a fresh stream at the current cursor; project, history and selection remain unchanged. Does not clear the old fault latch or automatically recover EIO.",
+      "tests": [
+        "output_error_e2e",
+        "output_failure_tests"
+      ]
+    },
+    {
+      "finding": "Users tried dragging the loop strip endpoints",
+      "response": "Shared visible endpoint grips with live timing, snap/off, one Undo, actual-visible-edge and recording guards",
+      "tests": [
+        "loop_e2e",
+        "arranger_layout_e2e",
+        "timing_discovery_e2e",
+        "beat_ruler_e2e"
+      ]
+    },
+    {
+      "finding": "Cut then Erase unexpectedly deleted both selected split pieces",
+      "response": "Erase deletes pointed clip only; explicit bulk Delete unchanged; Tool help matches scope",
+      "tests": [
+        "eraser_scope_e2e",
+        "arranger_selection_e2e",
+        "arranger_tools_e2e",
+        "tool_hints_e2e"
+      ]
+    },
+    {
+      "finding": "First Stretch introduced a row and moved Properties controls",
+      "response": "Always show Stretch readout initially100.0%, with stable edit positions through first/repeated steps",
+      "tests": [
+        "properties_stability_e2e",
+        "properties_e2e",
+        "precise_clip_editing_e2e"
+      ]
+    },
+    {
+      "finding": "Duplicate tool versus immediate command was unclear",
+      "response": "Existing full Tool help explains clicking a clip and enabled all five participants to proceed. Shared short summary now also says Click; persistent tool and direct menu operations remain. Discoverability friction is retained in the report.",
+      "tests": [
+        "tool_hints_e2e"
+      ]
+    }
+  ],
+  "final_validation": "validation/verified-final-results.json",
+  "native_xrun_evidence": "technical/xrun-replay/final-comparison.json",
+  "final_build": "final-build/manifest.json",
+  "final_summary": {
+    "passed": 1061,
+    "failed": 0,
+    "ignored": 18,
+    "targets": 211,
+    "method": "Full baseline plus latest affected-target reruns, each target counted once."
+  }
+}

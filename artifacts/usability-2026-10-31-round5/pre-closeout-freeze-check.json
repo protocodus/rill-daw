@@ -1,0 +1,15 @@
+{
+  "at_utc": "2026-10-31T20:22:17Z",
+  "source_files_checked": 927,
+  "source_mismatches": [],
+  "binaries": {
+    "rill": {
+      "frozen_matches": true,
+      "current_build_matches": true
+    },
+    "daw-plugin-host": {
+      "frozen_matches": true,
+      "current_build_matches": true
+    }
+  }
+}

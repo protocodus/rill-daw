@@ -1,0 +1,313 @@
+{
+  "baseline_explicit_findings": 25,
+  "resolution": "All explicit baseline findings have an implemented response; exact test outcomes are recorded in validation/results.json and any subsequent rerun logs.",
+  "findings": [
+    {
+      "finding_id": "P1-F1",
+      "participant": 1,
+      "original_observation": "Duration and loop-end numeric editors expose text editing but no visible +/- or mouse adjustment affordance.",
+      "category": "Mouse timing and exact values",
+      "response": "Shared visible \u2212/+ controls for tempo, clip timing and loop endpoints; exact duration presets; live trim end/duration feedback; Properties shows musical position and elapsed seconds without changing precision.",
+      "validation_targets": [
+        "number_stepper_e2e",
+        "loop_duration_e2e",
+        "timing_discovery_e2e",
+        "trim_feedback_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-1/report.json"
+    },
+    {
+      "finding_id": "P1-F2",
+      "participant": 1,
+      "original_observation": "Tool mode persists from piano-roll note drawing into arranger unexpectedly.",
+      "category": "Independent editor tools",
+      "response": "Arranger, MIDI and audio workspaces retain their own edit tools through navigation.",
+      "validation_targets": [
+        "workspace_tool_memory_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-1/report.json"
+    },
+    {
+      "finding_id": "P1-F3",
+      "participant": 1,
+      "original_observation": "Clicking a selected clip retains a multiple-clip selection, so Fit selection zoomed all clips when one was intended.",
+      "category": "Single click versus group drag",
+      "response": "Plain Select click collapses selection on release; dragging preserves the selected group. Group context menus show the selection count.",
+      "validation_targets": [
+        "selection_click_e2e",
+        "arranger_selection_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-1/report.json"
+    },
+    {
+      "finding_id": "P1-F4",
+      "participant": 1,
+      "original_observation": "Precise snap timing is difficult when a beat occupies only a few pixels; the initial 30-second trim landed at30.134s.",
+      "category": "Precise trimming and snapping",
+      "response": "Live trim feedback, visible zoom and Fit selection, exact range durations, and a meter-aware 1 bar snap choice.",
+      "validation_targets": [
+        "trim_feedback_e2e",
+        "zoom_controls_e2e",
+        "loop_duration_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-1/report.json"
+    },
+    {
+      "finding_id": "P2-01",
+      "participant": 2,
+      "original_observation": "Tool selection rearranges controls and causes misclicks",
+      "category": "Stable piano toolbar",
+      "response": "Shared note controls retain their positions between Select/Pencil and when selection changes.",
+      "validation_targets": [
+        "midi_toolbar_stability_e2e",
+        "main_toolbar_roles_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-2/report.json"
+    },
+    {
+      "finding_id": "P2-02",
+      "participant": 2,
+      "original_observation": "Tempo has no discoverable mouse adjustment",
+      "category": "Mouse timing and exact values",
+      "response": "Shared visible \u2212/+ controls for tempo, clip timing and loop endpoints; exact duration presets; live trim end/duration feedback; Properties shows musical position and elapsed seconds without changing precision.",
+      "validation_targets": [
+        "number_stepper_e2e",
+        "loop_duration_e2e",
+        "timing_discovery_e2e",
+        "trim_feedback_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-2/report.json"
+    },
+    {
+      "finding_id": "P2-03",
+      "participant": 2,
+      "original_observation": "Exact duration requires export-dialog checking and tiny edge corrections",
+      "category": "Precise trimming and snapping",
+      "response": "Live trim feedback, visible zoom and Fit selection, exact range durations, and a meter-aware 1 bar snap choice.",
+      "validation_targets": [
+        "trim_feedback_e2e",
+        "zoom_controls_e2e",
+        "loop_duration_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-2/report.json"
+    },
+    {
+      "finding_id": "P2-04",
+      "participant": 2,
+      "original_observation": "Zoom out was not discoverable",
+      "category": "Discoverable zoom",
+      "response": "Visible \u2212/+ and Fit selection beside Fit in all three music editors, with existing viewport limits and Previous view.",
+      "validation_targets": [
+        "zoom_controls_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-2/report.json"
+    },
+    {
+      "finding_id": "P2-05",
+      "participant": 2,
+      "original_observation": "Preview failure is easy to confuse with plugin failure",
+      "category": "Optional plugin artwork",
+      "response": "Without preview and Preview image / Unavailable distinguish an optional image from instrument loading and preserve diagnostic details/retry.",
+      "validation_targets": [
+        "library_preview_status_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-2/report.json"
+    },
+    {
+      "finding_id": "P3-1",
+      "participant": 3,
+      "original_observation": "Piano-roll keys label only C octaves. In-between note pitches require counting semitone rows.",
+      "category": "Pitch names",
+      "response": "Hovering the keyboard or piano row reveals pitch names without filling the grid with permanent text.",
+      "validation_targets": [
+        "daw-ui tooltip"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-3/report.json"
+    },
+    {
+      "finding_id": "P3-2",
+      "participant": 3,
+      "original_observation": "First mouse trim landed at 8.75 beats instead of 8 on the last audio clip. Properties showed beats only; dragging the numeric duration text selected text rather than adjusting it.",
+      "category": "Mouse timing and exact values",
+      "response": "Shared visible \u2212/+ controls for tempo, clip timing and loop endpoints; exact duration presets; live trim end/duration feedback; Properties shows musical position and elapsed seconds without changing precision.",
+      "validation_targets": [
+        "number_stepper_e2e",
+        "loop_duration_e2e",
+        "timing_discovery_e2e",
+        "trim_feedback_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-3/report.json"
+    },
+    {
+      "finding_id": "P3-3",
+      "participant": 3,
+      "original_observation": "Export says Arrangement 0:30.000 with Include effect tails enabled by default, but the exported file measured 30.2 seconds. Unchecking tails gave exact 30.0 seconds.",
+      "category": "Effect tails and duration",
+      "response": "Export labels the arrangement duration plus tails explicitly; disabling tails gives the exact arrangement length.",
+      "validation_targets": [
+        "export_options_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-3/report.json"
+    },
+    {
+      "finding_id": "P3-4",
+      "participant": 3,
+      "original_observation": "After MIDI export the persistent status still read Exported Midnight circuit.wav, leaving no visible confirmation of the MIDI action. The MIDI file did exist.",
+      "category": "MIDI export confirmation",
+      "response": "Export status owns the successful MIDI filename and path; MIDI waits for pending WAV export and failures preserve the previous success and retry.",
+      "validation_targets": [
+        "export_sequence_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-3/report.json"
+    },
+    {
+      "finding_id": "P3-5",
+      "participant": 3,
+      "original_observation": "WAV export presents no visible sample-rate or bit-depth options.",
+      "category": "Visible output format",
+      "response": "Export displays the actual sample rate, stereo channels and 32-bit float encoding.",
+      "validation_targets": [
+        "export_options_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-3/report.json"
+    },
+    {
+      "finding_id": "P4-1",
+      "participant": 4,
+      "original_observation": "Toolbar controls jump when changing edit tools",
+      "category": "Stable piano toolbar",
+      "response": "Shared note controls retain their positions between Select/Pencil and when selection changes.",
+      "validation_targets": [
+        "midi_toolbar_stability_e2e",
+        "main_toolbar_roles_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-4/report.json"
+    },
+    {
+      "finding_id": "P4-2",
+      "participant": 4,
+      "original_observation": "Exact mouse-only duration is hard to inspect and adjust",
+      "category": "Mouse timing and exact values",
+      "response": "Shared visible \u2212/+ controls for tempo, clip timing and loop endpoints; exact duration presets; live trim end/duration feedback; Properties shows musical position and elapsed seconds without changing precision.",
+      "validation_targets": [
+        "number_stepper_e2e",
+        "loop_duration_e2e",
+        "timing_discovery_e2e",
+        "trim_feedback_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-4/report.json"
+    },
+    {
+      "finding_id": "P4-3",
+      "participant": 4,
+      "original_observation": "Loop and timeline units need clearer relationship",
+      "category": "Timing units and loop scope",
+      "response": "Loop region shows musical and elapsed timing with a full hover label; Range includes Loop arrangement and endpoint steps; clip Properties and project title reveal elapsed duration before export.",
+      "validation_targets": [
+        "timing_discovery_e2e",
+        "loop_selection_e2e",
+        "mouse_naming_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-4/report.json"
+    },
+    {
+      "finding_id": "P4-4",
+      "participant": 4,
+      "original_observation": "Mixer displays excessive decimal precision",
+      "category": "Readable gain precision",
+      "response": "Idle gain is one decimal; focused entry retains full f32 dB precision. Viewing, cancelling and unchanged blur do not change stored gain or history.",
+      "validation_targets": [
+        "mixer_gain_precision_e2e",
+        "mixer_gain_entry_e2e",
+        "automation_curves_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-4/report.json"
+    },
+    {
+      "finding_id": "P4-5",
+      "participant": 4,
+      "original_observation": "Master meter was silent while track meters moved",
+      "category": "Master meter transient loss",
+      "response": "Reproduced with actual output PCM and zero underruns. Master now uses coherent stereo peaks and the same 24 dB/s release as channel meters; output PCM is unchanged and pause/seek clear stale peaks.",
+      "validation_targets": [
+        "daw-engine output_meter_tests",
+        "master_meter_e2e",
+        "channel_meter_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-4/report.json"
+    },
+    {
+      "finding_id": "P5-1",
+      "participant": 5,
+      "original_observation": "Exact numeric properties are keyboard dependent",
+      "category": "Mouse timing and exact values",
+      "response": "Shared visible \u2212/+ controls for tempo, clip timing and loop endpoints; exact duration presets; live trim end/duration feedback; Properties shows musical position and elapsed seconds without changing precision.",
+      "validation_targets": [
+        "number_stepper_e2e",
+        "loop_duration_e2e",
+        "timing_discovery_e2e",
+        "trim_feedback_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-5/report.json"
+    },
+    {
+      "finding_id": "P5-2",
+      "participant": 5,
+      "original_observation": "Tool switching reflows the note toolbar",
+      "category": "Stable piano toolbar",
+      "response": "Shared note controls retain their positions between Select/Pencil and when selection changes.",
+      "validation_targets": [
+        "midi_toolbar_stability_e2e",
+        "main_toolbar_roles_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-5/report.json"
+    },
+    {
+      "finding_id": "P5-3",
+      "participant": 5,
+      "original_observation": "Active tools change across editors",
+      "category": "Independent editor tools",
+      "response": "Arranger, MIDI and audio workspaces retain their own edit tools through navigation.",
+      "validation_targets": [
+        "workspace_tool_memory_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-5/report.json"
+    },
+    {
+      "finding_id": "P5-4",
+      "participant": 5,
+      "original_observation": "VST preview failure looks like instrument failure",
+      "category": "Optional plugin artwork",
+      "response": "Without preview and Preview image / Unavailable distinguish an optional image from instrument loading and preserve diagnostic details/retry.",
+      "validation_targets": [
+        "library_preview_status_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-5/report.json"
+    },
+    {
+      "finding_id": "P5-5",
+      "participant": 5,
+      "original_observation": "Mouse-only project naming lacks an option",
+      "category": "Mouse-only naming",
+      "response": "On-demand shared name keyboard for project, clip and track names, with selection/backspace/clear/shift and explicit Apply/Cancel. Unsaved project names supply Save/WAV/MIDI defaults.",
+      "validation_targets": [
+        "mouse_naming_e2e",
+        "precise_clip_editing_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-5/report.json"
+    },
+    {
+      "finding_id": "P5-6",
+      "participant": 5,
+      "original_observation": "Musical timing uses multiple units without conversion in properties",
+      "category": "Timing units and loop scope",
+      "response": "Loop region shows musical and elapsed timing with a full hover label; Range includes Loop arrangement and endpoint steps; clip Properties and project title reveal elapsed duration before export.",
+      "validation_targets": [
+        "timing_discovery_e2e",
+        "loop_selection_e2e",
+        "mouse_naming_e2e"
+      ],
+      "original_report": "artifacts/usability-2026-10-31/participant-5/report.json"
+    }
+  ]
+}

@@ -199,6 +199,7 @@ fn assert_arranger(state: &Value, id: u64, colors: Palette, overridden: bool) {
 
 fn open_editor(app: &mut Harness, name: &str) {
     app.click("Arranger");
+    app.click("Fit");
     app.click(name);
     menu(app, "Window", "Automation");
 }
@@ -265,6 +266,8 @@ fn automation_and_override_colors_follow_state_across_workspaces_and_themes() {
             }
 
             app.click("Arranger");
+            // Keep every lane visible when wrapped mouse controls reduce canvas height.
+            app.click("Fit");
             let state = paint(&mut app, &baseline);
             for id in &lanes {
                 assert_arranger(&state, *id, colors, overridden);

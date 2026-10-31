@@ -1,0 +1,17 @@
+Participant 4: casual video creator making an ambient soundtrack. These are concise participant reactions and observable actions, not a private reasoning transcript.
+
+16:23:05 — Double-clicked the visible empty-lane MIDI hint. Device library appeared. Reaction: “That hint gives me a clear starting point.”
+16:23:12 — Assigned Rill Lab Sine; a MIDI track and blank pattern appeared. Reaction: “The instrument is attached; now I need notes.”
+16:23:18–16:24:03 — Opened pattern, selected Pencil, accidentally opened Grid scale because toolbar controls moved, then dragged two sustained triads. Reaction: “The controls jumped when I changed tools; dragging notes itself is straightforward.”
+16:24:11–16:24:59 — Found Duplicate in clip context menu, duplicated MIDI and drums, marquee-selected four clips, duplicated the block and used Fit. Reaction: “Repeating both layers is quick once I find the context menu.”
+16:25:11–16:25:39 — Trimmed both final clips near the 30-second ruler mark, chose quarter-note snap and pressed Play. Track meters moved. Reaction: “I can see both tracks running, but exact ending time is hard to tell.” No sound was heard because output is null.
+16:25:51–16:26:08 — Disabled stock Loop, opened Mixer, lowered drums and instrument levels, stopped. Reaction: “I want the drums behind the sustained notes. These gain numbers show more decimals than I need.”
+16:26:19–16:26:41 — Saved the project with the default filename. Opened WAV export; it reported 30.134 seconds. Reaction: “The export confirms I missed the target slightly.”
+16:27:12–16:27:28 — Exported the preliminary WAV with tails disabled using mouse-only native dialogs. Reaction: “The default filename makes saving possible without typing.”
+16:27:38–16:28:03 — Opened clip Properties, found 8.25-beat duration, tried small drag and scroll; field became text input but value stayed unchanged. Reaction: “I can inspect the exact number, but I cannot see mouse controls to nudge it.”
+16:28:22–16:28:41 — Shortened then extended the final clips with larger drag gestures under quarter-note snap. WAV export reported 30.000 seconds. Reaction: “Now the length is right; a live duration label would have saved these checks.”
+16:28:52–16:29:33 — Re-exported the final WAV, accepted overwrite, saved the final project and exported MIDI. Reaction: “The piece is saved in all the formats I need. The status messages make completion clear.”
+
+Outcome: completed a structurally valid 30.000-second audio-plus-native-VST-MIDI composition using only mouse gestures. Saved project, WAV, and MIDI. No auditory quality claim. Read-only artifact checks confirm 56 beats at 112 BPM, 4 audio clips, 4 VST MIDI clips, 1,440,000 WAV frames at 48kHz stereo float, nonzero samples.
+
+Ratings (1–5; high confusion is bad): easy to use 3; looks 4; speed 4; confusion 3; feature completeness 4.

@@ -1,0 +1,15 @@
+{
+  "study_type": "Five fresh independent simulated beginners, not a human user study",
+  "round": 2,
+  "agent_context": "Fresh fork_turns=none tasks; no baseline results, source code or peer sessions provided",
+  "task": "Compose a 30-second piece using audio plus MIDI through a VST instrument, save the project and export WAV and MIDI using only a mouse. Give the piece a chosen name if possible.",
+  "comparison_note": "Core task matches baseline. Personalized naming is explicitly encouraged in round 2 to exercise the resolved mouse-only naming gap. Elapsed session time includes screenshots and reporting pauses and is not a human performance benchmark.",
+  "inputs": "Only screenshots plus logged click, double-click, drag, scroll and pointer move. No keyboard input, project injection or source inspection during attempt.",
+  "reset": "Five new native windows, fresh caches and working directories, no projects from round1. Configuration is fresh except a documented1024-frame lab output buffer. Unchanged stock starter audio and same native Rill Lab Sine VST3.",
+  "rating_scale": "1\u20135; higher means more of named quality. Higher confusion is worse.",
+  "audio": "Per-session timer-paced PulseAudio virtual sink via ALSA bridge at48kHz. Lab configuration: Rill requested1024 output frames and PULSE_LATENCY_MSEC=60. No physical hardware or listening claims; this is not a latency benchmark.",
+  "validation": "Independent read-only verification of saved project ZIP, embedded audio, native VST identity, MIDI events and all exported WAV samples.",
+  "reporting": "Observable action/reaction summaries, screenshots and timestamped mouse logs, not private reasoning transcripts.",
+  "frozen_build": "Native executable and adjacent plugin helper snapshotted only after regression verification; source file hashes and binary SHA-256 recorded.",
+  "audio_setup_correction": "A blocking-writer test did not predict CPAL callback bursts. A60ms Pulse override with the256-frame app buffer underrun the queue; ordinary negotiation also produced ALSA startup errors. Actual-app checks accepted1024 requested frames plus60ms Pulse buffering: ~48,068 frames/s, zero device/render errors, no additional queue underruns after one startup underrun. No production queue tuning."
+}

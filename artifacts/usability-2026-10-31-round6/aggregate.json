@@ -1,0 +1,1584 @@
+{
+  "study": "Five fresh independent simulated beginner mouse-only RILL composition attempts after latest-main rebase",
+  "round": 6,
+  "sample_size": 5,
+  "protocol": {
+    "study_type": "Five fresh independent simulated beginners, not a human user study",
+    "round": 6,
+    "agent_context": "Fresh fork_turns=none tasks; no previous feedback, source code or peer sessions provided",
+    "task": "Compose a 30-second piece using audio plus MIDI through a VST instrument, save the project and export WAV and MIDI using only a mouse. Give the piece a chosen name if possible.",
+    "comparison_note": "Core task and mouse driver match round3. Personalized naming remains encouraged. Elapsed time includes screenshots, tool overhead and reporting pauses; it is not a human performance or hardware latency benchmark. Each cycle uses a separately frozen validated build.",
+    "inputs": "Only screenshots plus logged click, double-click, drag, drag_hold, down, up, scroll and pointer move. No keyboard input, project injection or source inspection during attempt.",
+    "reset": "Five new native windows on :681\u2013:685, empty caches and fresh working directories. No projects or preferences from prior participants. Settings seed only 48 kHz / 1024 frames. Unmodified production starter audio and byte-identical native Rill Lab Sine VST3.",
+    "viewport": [
+      1440,
+      1000
+    ],
+    "rating_scale": "1\u20135; higher means more of the named quality. Higher confusion is worse.",
+    "rating_keys": [
+      "easy_to_use",
+      "how_cool_it_looks",
+      "how_fast_it_is",
+      "how_confusing_it_is",
+      "feature_completeness"
+    ],
+    "audio": "Per-session timer-paced PulseAudio virtual sink via ALSA bridge at48kHz, Rill requested1024 output frames and PULSE_LATENCY_MSEC=60. No physical hardware or listening claims. Shared host, software graphics and virtual backend can affect responsiveness; this is not a latency benchmark.",
+    "validation": "Independent read-only verification of saved project ZIP, embedded audio, native VST assignment, MIDI events and WAV samples; isolated analysis copies rendered with frozen binary to check actual audio and VST mix contributions. Original outputs remain unmodified.",
+    "reporting": "Observable action/reaction summaries, screenshots and timestamped mouse logs, not private reasoning transcripts.",
+    "frozen_build": "Native executable and adjacent plugin helper frozen only after coordinator confirms validation; git HEAD/main, staged+unstaged source diff, untracked source archive, full source hashes and executable hashes recorded.",
+    "limitations": [
+      "Simulated participants, not human research.",
+      "No window manager; native dialog placement may differ from desktop installations.",
+      "Only the native laboratory sine VST is included; no third-party compatibility claims.",
+      "Audible quality is not assessed unless explicitly auditioned and documented."
+    ],
+    "fixed_questions": [
+      "Did you complete and save the requested piece?",
+      "Did WAV and MIDI export show success?",
+      "What actions were easy or difficult, and what visible evidence supports each observation?",
+      "Rate ease, appearance, speed, confusion and feature completeness from1to5, explaining each rating.",
+      "What remains unverified, including heard audio and file contents?"
+    ]
+  },
+  "setup_manifest": "/workspace/scratch/rill-usability-round6/setup-manifest.json",
+  "participants": [
+    {
+      "participant": 1,
+      "persona": "Independent simulated beginner, first introduction to RILL, interested in a short relaxed lo-fi sketch.",
+      "piece_name": "soft rain",
+      "report": "/workspace/scratch/rill-usability-round6/session-1/report.json",
+      "report_sha256": "2db8dd30e97370c547f77d641f2a9f216c6ad618407a9769e3e68ba4ce6438c5",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 2,
+        "feature_completeness": 4
+      },
+      "mouse_log": "/workspace/scratch/rill-usability-round6/session-1/mouse-actions.jsonl",
+      "mouse_log_sha256": "c72584a5a5b7348cf7104da62c267fe1972ef3a6e3ff0c18554530c073f982a9",
+      "first_input_utc": "2026-10-31T20:43:33Z",
+      "last_input_utc": "2026-10-31T20:47:36Z",
+      "elapsed_seconds_first_to_last_input": 243.0,
+      "mouse_input_events": 80,
+      "screenshots": 30,
+      "input_event_counts": {
+        "click": 67,
+        "scroll": 1,
+        "double": 2,
+        "drag": 9,
+        "move": 1
+      },
+      "unexpected_input_actions": [],
+      "held_button_at_end": null,
+      "project": {
+        "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.rill",
+        "bytes": 3292583,
+        "sha256": "781ce35bc761cc10ada8dab926e964998682b13dcc0da2eabe6be1c10c7ba122",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 4,
+        "stored_note_count": 24,
+        "notes_overlapping_clip_source_window": 21,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 4,
+            "stored_note_count": 24,
+            "notes_overlapping_clip_source_window": 21,
+            "pitch_set": [
+              60,
+              62,
+              63,
+              64,
+              65,
+              67
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.wav",
+        "bytes": 11520068,
+        "sha256": "88c4490f9e0742ba9be8a8cb7acac4b07fb562f88e627b915c9009583637401c",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2879966,
+        "peak": 0.452997624874115,
+        "rms": 0.0606049810627981
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.mid",
+        "bytes": 260,
+        "sha256": "ff383d1ef9464218f180092b15f220ff75ab6850e81782f343e89b29755f41fc",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 21,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 21,
+            "note_off_count": 21,
+            "last_event_tick": 53760,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              62,
+              63,
+              64,
+              65,
+              67
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "evidence_errors": [],
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      },
+      "wav_audio_and_vst_components_verified": true
+    },
+    {
+      "participant": 2,
+      "persona": "Independent simulated first-time RILL beginner interested in a small electronic dance groove; not a human participant.",
+      "piece_name": "neon pulse",
+      "report": "/workspace/scratch/rill-usability-round6/session-2/report.json",
+      "report_sha256": "5bcb504663b05f31833e8dfdd2da5601dadd5e2832a9b6f477567a36265f8c52",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 2,
+        "feature_completeness": 4
+      },
+      "mouse_log": "/workspace/scratch/rill-usability-round6/session-2/mouse-actions.jsonl",
+      "mouse_log_sha256": "f241e4840ccd1972212f2c2694d331fc1c12540a58fd448760d3c3d18f14c6a1",
+      "first_input_utc": "2026-10-31T20:43:39Z",
+      "last_input_utc": "2026-10-31T20:47:52Z",
+      "elapsed_seconds_first_to_last_input": 253.0,
+      "mouse_input_events": 65,
+      "screenshots": 28,
+      "input_event_counts": {
+        "double": 2,
+        "click": 56,
+        "drag": 5,
+        "up": 1,
+        "move": 1
+      },
+      "unexpected_input_actions": [],
+      "held_button_at_end": null,
+      "project": {
+        "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.rill",
+        "bytes": 3292734,
+        "sha256": "a51b72246479951093d98f1fd61dcad33f8ee8c18d3da14bab4cc3c63e37cc1d",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 14,
+        "stored_note_count": 56,
+        "notes_overlapping_clip_source_window": 56,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 14,
+            "stored_note_count": 56,
+            "notes_overlapping_clip_source_window": 56,
+            "pitch_set": [
+              60,
+              64,
+              67
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.wav",
+        "bytes": 11520068,
+        "sha256": "2f87df4f7c092113fb5072fa9754f51faca9fb858914cad0d5e78983c7aa6549",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2038756,
+        "peak": 0.4422664940357208,
+        "rms": 0.057972730745999165
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.mid",
+        "bytes": 630,
+        "sha256": "27104f997525fc21be1f53d63920b3770beae09f140a0c5ad86c1d83ab2bfc25",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 56,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 56,
+            "note_off_count": 56,
+            "last_event_tick": 53280,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              64,
+              67
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "evidence_errors": [],
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      },
+      "wav_audio_and_vst_components_verified": true
+    },
+    {
+      "participant": 3,
+      "persona": "Independent simulated beginner, first introduction to RILL, interested in a short melodic instrumental.",
+      "piece_name": "soft circuit",
+      "report": "/workspace/scratch/rill-usability-round6/session-3/report.json",
+      "report_sha256": "712aef6b0b37b6bbc0ccb7ab3c3314050def30e0433c703b7afa653a7f29fe6e",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 2,
+        "feature_completeness": 5
+      },
+      "mouse_log": "/workspace/scratch/rill-usability-round6/session-3/mouse-actions.jsonl",
+      "mouse_log_sha256": "d024ffa10fb988a52db6686cbe0d8a96b26e3b3943149815775e33a59815232e",
+      "first_input_utc": "2026-10-31T20:43:43Z",
+      "last_input_utc": "2026-10-31T20:48:33Z",
+      "elapsed_seconds_first_to_last_input": 290.0,
+      "mouse_input_events": 70,
+      "screenshots": 26,
+      "input_event_counts": {
+        "double": 2,
+        "click": 48,
+        "drag": 18,
+        "up": 1,
+        "move": 1
+      },
+      "unexpected_input_actions": [],
+      "held_button_at_end": null,
+      "project": {
+        "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.rill",
+        "bytes": 3292787,
+        "sha256": "6a80b616f3897316075bfcc929a5196c9b4364ebb5cc7dbe15485a9a815df22c",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 4,
+        "stored_note_count": 64,
+        "notes_overlapping_clip_source_window": 56,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 4,
+            "stored_note_count": 64,
+            "notes_overlapping_clip_source_window": 56,
+            "pitch_set": [
+              60,
+              62,
+              64,
+              65,
+              67,
+              69,
+              71,
+              72
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.wav",
+        "bytes": 11520068,
+        "sha256": "98c065b3a941b5d2b9dc75aff5327cda761041238b5df3038229037a65ff1197",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2879904,
+        "peak": 0.4422664940357208,
+        "rms": 0.06061288028630839
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.mid",
+        "bytes": 575,
+        "sha256": "6db2fdc1007c7ec250bf3023f5efec6f28dababe2729eb6126c4c351e244cfec",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 56,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 56,
+            "note_off_count": 56,
+            "last_event_tick": 53760,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              62,
+              64,
+              65,
+              67,
+              69,
+              71,
+              72
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "evidence_errors": [],
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      },
+      "wav_audio_and_vst_components_verified": true
+    },
+    {
+      "participant": 4,
+      "persona": "Simulated first-time RILL beginner interested in a short ambient soundtrack sketch.",
+      "piece_name": "mist",
+      "report": "/workspace/scratch/rill-usability-round6/session-4/report.json",
+      "report_sha256": "90be33e80387881ca2436aec7c699d9eb4cc841f20ef9bc21a5bd07a3c325acb",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 3,
+        "feature_completeness": 4
+      },
+      "mouse_log": "/workspace/scratch/rill-usability-round6/session-4/mouse-actions.jsonl",
+      "mouse_log_sha256": "1d2fbbb5af2685e763cbf0021c553d85683240339a4bdeb761ab4124a42f8a07",
+      "first_input_utc": "2026-10-31T20:43:49Z",
+      "last_input_utc": "2026-10-31T20:48:10Z",
+      "elapsed_seconds_first_to_last_input": 261.0,
+      "mouse_input_events": 71,
+      "screenshots": 29,
+      "input_event_counts": {
+        "double": 3,
+        "click": 61,
+        "drag": 6,
+        "move": 1
+      },
+      "unexpected_input_actions": [],
+      "held_button_at_end": null,
+      "project": {
+        "path": "/workspace/scratch/rill-usability-round6/session-4/mist.rill",
+        "bytes": 3292518,
+        "sha256": "bb163b29fbefb5e4bf66b708df6cba1ff2629b6d4969f1de98294dae268eb3f6",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 4,
+        "stored_note_count": 12,
+        "notes_overlapping_clip_source_window": 12,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 4,
+            "stored_note_count": 12,
+            "notes_overlapping_clip_source_window": 12,
+            "pitch_set": [
+              60,
+              64,
+              67
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round6/session-4/mist.wav",
+        "bytes": 11520068,
+        "sha256": "075fe49a6d701ec39eb31eddf89e5f99cdb14966ab2cbd9514f4d2e39879f0cc",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2879992,
+        "peak": 0.125194251537323,
+        "rms": 0.04362493090042999
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability-round6/session-4/mist.mid",
+        "bytes": 155,
+        "sha256": "53fe994e7c972403c131d65e2c0605bc2db811b78bf07c770311595dad14c4a0",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 12,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 12,
+            "note_off_count": 12,
+            "last_event_tick": 53760,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              64,
+              67
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "evidence_errors": [],
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      },
+      "wav_audio_and_vst_components_verified": true
+    },
+    {
+      "participant": 5,
+      "persona": "Simulated first-time RILL beginner interested in a short hip-hop beat with a simple synth part.",
+      "piece_name": "NIGHT HOP",
+      "report": "/workspace/scratch/rill-usability-round6/session-5/report.json",
+      "report_sha256": "86875a4822beb1b013e40c24980ecff636520379f3a02f61569d0b3bb67a425e",
+      "ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 4,
+        "how_confusing_it_is": 2,
+        "feature_completeness": 4
+      },
+      "mouse_log": "/workspace/scratch/rill-usability-round6/session-5/mouse-actions.jsonl",
+      "mouse_log_sha256": "22a7240f20f8552aea21fdec9d0f80dddac0e3c3fc1acaf94a2ebbc989328b6b",
+      "first_input_utc": "2026-10-31T20:44:02Z",
+      "last_input_utc": "2026-10-31T20:48:31Z",
+      "elapsed_seconds_first_to_last_input": 269.0,
+      "mouse_input_events": 67,
+      "screenshots": 32,
+      "input_event_counts": {
+        "double": 2,
+        "click": 57,
+        "drag": 6,
+        "move": 2
+      },
+      "unexpected_input_actions": [],
+      "held_button_at_end": null,
+      "project": {
+        "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.rill",
+        "bytes": 3292741,
+        "sha256": "99c1e43432f55d30454f1186b1044b8a7604cd60b46451b6daecef13eb984e9c",
+        "manifest_version": 4,
+        "tempo_bpm": 112.0,
+        "beats_per_bar": 4,
+        "arrangement_end_beat": 56.0,
+        "arrangement_seconds": 30.0,
+        "loop_enabled": false,
+        "loop_start": 0.0,
+        "loop_end": 16.0,
+        "audio_clip_count": 4,
+        "midi_clip_count": 14,
+        "stored_note_count": 56,
+        "notes_overlapping_clip_source_window": 56,
+        "actual_vst3_assignments": [
+          {
+            "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+            "class_id": "11111111111111111111111111111111"
+          }
+        ],
+        "tracks": [
+          {
+            "name": "Circuit drums",
+            "kind": "Audio",
+            "audio_clip_count": 4,
+            "midi_clip_count": 0,
+            "stored_note_count": 0,
+            "notes_overlapping_clip_source_window": 0,
+            "pitch_set": [],
+            "instrument": "None",
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          },
+          {
+            "name": "New instrument",
+            "kind": "Midi",
+            "audio_clip_count": 0,
+            "midi_clip_count": 14,
+            "stored_note_count": 56,
+            "notes_overlapping_clip_source_window": 56,
+            "pitch_set": [
+              60,
+              63,
+              65,
+              67
+            ],
+            "instrument": {
+              "Vst3": {
+                "path": "/workspace/scratch/rill-usability-round6/plugins/RillLabSine.vst3",
+                "class_id": "11111111111111111111111111111111"
+              }
+            },
+            "end_beat_zero_based": 56.0,
+            "audio_assets_present": true
+          }
+        ]
+      },
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.wav",
+        "bytes": 11520068,
+        "sha256": "0886e38cf740f52022f6232e171962c06c8b977480fe82d92518f458920fc422",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1440000,
+        "duration_seconds": 30.0,
+        "all_samples_finite": true,
+        "nonzero_samples": 2879904,
+        "peak": 0.4422664940357208,
+        "rms": 0.06059708311936068
+      },
+      "midi": {
+        "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.mid",
+        "bytes": 575,
+        "sha256": "e03d38dc674eb5c83cc43a436d3d7ed82c4fdb6115d3faf1f62a1d825afff724",
+        "format": 1,
+        "track_count": 2,
+        "ticks_per_quarter": 960,
+        "note_on_count": 56,
+        "tracks": [
+          {
+            "track": 0,
+            "note_on_count": 0,
+            "note_off_count": 0,
+            "last_event_tick": 0,
+            "tempos": [
+              {
+                "tick": 0,
+                "microseconds_per_quarter": 535714
+              }
+            ],
+            "pitch_set": []
+          },
+          {
+            "track": 1,
+            "note_on_count": 56,
+            "note_off_count": 56,
+            "last_event_tick": 53760,
+            "tempos": [],
+            "pitch_set": [
+              60,
+              63,
+              65,
+              67
+            ]
+          }
+        ],
+        "parse_complete": true
+      },
+      "evidence_errors": [],
+      "factual_success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      },
+      "wav_audio_and_vst_components_verified": true
+    }
+  ],
+  "mean_ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2.2,
+    "feature_completeness": 4.2
+  },
+  "previous_mean_ratings": {
+    "round1": {
+      "easy_to_use": 3.6,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 4.2,
+      "how_confusing_it_is": 2.8,
+      "feature_completeness": 3.4
+    },
+    "round2": {
+      "easy_to_use": 3.4,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 3.2,
+      "how_confusing_it_is": 2.8,
+      "feature_completeness": 3.6
+    },
+    "round3": {
+      "easy_to_use": 3.4,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 3.4,
+      "how_confusing_it_is": 2.8,
+      "feature_completeness": 4
+    },
+    "round4": {
+      "easy_to_use": 3.8,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 3.6,
+      "how_confusing_it_is": 2.4,
+      "feature_completeness": 4
+    },
+    "round5": {
+      "easy_to_use": 4,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 4,
+      "how_confusing_it_is": 2,
+      "feature_completeness": 4
+    }
+  },
+  "rating_changes_vs_previous_rounds": {
+    "round1": {
+      "easy_to_use": 0.3999999999999999,
+      "how_cool_it_looks": 0,
+      "how_fast_it_is": -0.20000000000000018,
+      "how_confusing_it_is": -0.5999999999999996,
+      "feature_completeness": 0.8000000000000003
+    },
+    "round2": {
+      "easy_to_use": 0.6000000000000001,
+      "how_cool_it_looks": 0,
+      "how_fast_it_is": 0.7999999999999998,
+      "how_confusing_it_is": -0.5999999999999996,
+      "feature_completeness": 0.6000000000000001
+    },
+    "round3": {
+      "easy_to_use": 0.6000000000000001,
+      "how_cool_it_looks": 0,
+      "how_fast_it_is": 0.6000000000000001,
+      "how_confusing_it_is": -0.5999999999999996,
+      "feature_completeness": 0.20000000000000018
+    },
+    "round4": {
+      "easy_to_use": 0.20000000000000018,
+      "how_cool_it_looks": 0,
+      "how_fast_it_is": 0.3999999999999999,
+      "how_confusing_it_is": -0.19999999999999973,
+      "feature_completeness": 0.20000000000000018
+    },
+    "round5": {
+      "easy_to_use": 0,
+      "how_cool_it_looks": 0,
+      "how_fast_it_is": 0,
+      "how_confusing_it_is": 0.20000000000000018,
+      "feature_completeness": 0.20000000000000018
+    }
+  },
+  "summary": {
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "saved_project_wav_and_midi": 5,
+    "wav_within_half_second_of_30": 5,
+    "wav_audio_and_vst_components_verified": 5,
+    "elapsed_seconds_mean": 263.2,
+    "total_mouse_input_events": 353,
+    "total_screenshots": 145,
+    "prior_pieces_checked": 75,
+    "all_prior_pieces_unchanged": true,
+    "assembled_and_exported_exact_30_second_outputs": 5
+  },
+  "original_piece_preservation": [
+    {
+      "round": "round1",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.rill",
+      "expected_sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+      "current_sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.wav",
+      "expected_sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+      "current_sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.mid",
+      "expected_sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+      "current_sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.rill",
+      "expected_sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+      "current_sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.wav",
+      "expected_sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+      "current_sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.mid",
+      "expected_sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+      "current_sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.rill",
+      "expected_sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+      "current_sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.wav",
+      "expected_sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+      "current_sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.mid",
+      "expected_sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+      "current_sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.rill",
+      "expected_sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+      "current_sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.wav",
+      "expected_sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+      "current_sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.mid",
+      "expected_sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+      "current_sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.rill",
+      "expected_sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+      "current_sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.wav",
+      "expected_sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+      "current_sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.mid",
+      "expected_sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+      "current_sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.rill",
+      "expected_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+      "current_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.wav",
+      "expected_sha256": "e295d5e1f30e7f6c71b515d00bd7feef549eaedebd3dd7d0de7498043c970651",
+      "current_sha256": "e295d5e1f30e7f6c71b515d00bd7feef549eaedebd3dd7d0de7498043c970651",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.mid",
+      "expected_sha256": "1c9f6b1dc57eda8ebb3a5f2790e7f04240eb3e2aa505555ace727466ab2498d9",
+      "current_sha256": "1c9f6b1dc57eda8ebb3a5f2790e7f04240eb3e2aa505555ace727466ab2498d9",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.rill",
+      "expected_sha256": "33e8ee2cd69e9734c3b401a50e0c8f8708e1e4fe18b0121448b963ec0963d6b2",
+      "current_sha256": "33e8ee2cd69e9734c3b401a50e0c8f8708e1e4fe18b0121448b963ec0963d6b2",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.wav",
+      "expected_sha256": "3f2359948ce2d5edeef07af308f0a36dafc3e3a61f2bdd46c90d1bb1330781a8",
+      "current_sha256": "3f2359948ce2d5edeef07af308f0a36dafc3e3a61f2bdd46c90d1bb1330781a8",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.mid",
+      "expected_sha256": "d14eebccea8c8aa495f740bb422bafa2d878c43973ff8084b052d03affc4a5a6",
+      "current_sha256": "d14eebccea8c8aa495f740bb422bafa2d878c43973ff8084b052d03affc4a5a6",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.rill",
+      "expected_sha256": "5d798540668e2d75879b6e821e72d67c931659f44c7d75a04f9d8474dcad0986",
+      "current_sha256": "5d798540668e2d75879b6e821e72d67c931659f44c7d75a04f9d8474dcad0986",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.wav",
+      "expected_sha256": "60430c296811d2b7199a21e2c9cff7406e05f56d3dca8099c16bf795956112df",
+      "current_sha256": "60430c296811d2b7199a21e2c9cff7406e05f56d3dca8099c16bf795956112df",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.mid",
+      "expected_sha256": "4c21a8a8bc45cf961d736807b2484c293861dc1b75a7c89d0011ef2774e12d48",
+      "current_sha256": "4c21a8a8bc45cf961d736807b2484c293861dc1b75a7c89d0011ef2774e12d48",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.rill",
+      "expected_sha256": "ea0835f0ca05e37b8e15d15a2a713a63433e7562c01f80ef2c9cbdc38e5fa4de",
+      "current_sha256": "ea0835f0ca05e37b8e15d15a2a713a63433e7562c01f80ef2c9cbdc38e5fa4de",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.wav",
+      "expected_sha256": "1fe461c26ccfe60180236298e5e5484cdb7bd76ae4b80aacdc57ce5fcd5b899d",
+      "current_sha256": "1fe461c26ccfe60180236298e5e5484cdb7bd76ae4b80aacdc57ce5fcd5b899d",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.mid",
+      "expected_sha256": "4e519661a1090709eb6b0ccd7d79b9fb99bb9f6cf8c0fd11e7def0dde7bcd8b1",
+      "current_sha256": "4e519661a1090709eb6b0ccd7d79b9fb99bb9f6cf8c0fd11e7def0dde7bcd8b1",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.rill",
+      "expected_sha256": "e8b72c7d33107163ee4df687c0ca5202135a77ad43bc708fe0588a1abb94eeea",
+      "current_sha256": "e8b72c7d33107163ee4df687c0ca5202135a77ad43bc708fe0588a1abb94eeea",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.wav",
+      "expected_sha256": "881818b6961674103ce8f69297a65fd9269559569695fe1b46a95ad1a36cc7df",
+      "current_sha256": "881818b6961674103ce8f69297a65fd9269559569695fe1b46a95ad1a36cc7df",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.mid",
+      "expected_sha256": "b4d9521015ca42d04191a7a3d9ed9bb339b0d8f70036d8a4da6f514ddb0cf991",
+      "current_sha256": "b4d9521015ca42d04191a7a3d9ed9bb339b0d8f70036d8a4da6f514ddb0cf991",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.rill",
+      "expected_sha256": "f80d60a6c3823fa41ec8ca64db38444e7e7e3110adc5d36ee6148f0593b194c7",
+      "current_sha256": "f80d60a6c3823fa41ec8ca64db38444e7e7e3110adc5d36ee6148f0593b194c7",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.wav",
+      "expected_sha256": "87df71c9a8e665d9a650c1c76c058c28c2e8bfee52311ca89a80e34285e766f7",
+      "current_sha256": "87df71c9a8e665d9a650c1c76c058c28c2e8bfee52311ca89a80e34285e766f7",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.mid",
+      "expected_sha256": "96290c235c50e6baf9710383b69b9797d63b3071acaf403f90be2da7013fcdd6",
+      "current_sha256": "96290c235c50e6baf9710383b69b9797d63b3071acaf403f90be2da7013fcdd6",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.rill",
+      "expected_sha256": "a0e82e548c110b45deb50d24513170d96954d32fa09e26ad434512764d1b0b16",
+      "current_sha256": "a0e82e548c110b45deb50d24513170d96954d32fa09e26ad434512764d1b0b16",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.wav",
+      "expected_sha256": "63ea1c39adfe42f1f38d6ee077fa37d19f5fa333a2bdb4bc23fbe7f761d37fd4",
+      "current_sha256": "63ea1c39adfe42f1f38d6ee077fa37d19f5fa333a2bdb4bc23fbe7f761d37fd4",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.mid",
+      "expected_sha256": "5a601b19830863da1ec3f5b64365909c9796ff0a72553453fcb7cf5691f1bc6b",
+      "current_sha256": "5a601b19830863da1ec3f5b64365909c9796ff0a72553453fcb7cf5691f1bc6b",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.rill",
+      "expected_sha256": "745ef703a9e71ebc29e00b17c03d851c33a9c6a0a8a03c3a966bbb21af3668ec",
+      "current_sha256": "745ef703a9e71ebc29e00b17c03d851c33a9c6a0a8a03c3a966bbb21af3668ec",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.wav",
+      "expected_sha256": "829fe9089ea4f443825294ffca7d8768fd05345623ffff5329a2df6f15703f85",
+      "current_sha256": "829fe9089ea4f443825294ffca7d8768fd05345623ffff5329a2df6f15703f85",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.mid",
+      "expected_sha256": "1f5baec3dca939f909dbad5dbe67837f64436e29a7b8cc5eb17b6748a9b96c10",
+      "current_sha256": "1f5baec3dca939f909dbad5dbe67837f64436e29a7b8cc5eb17b6748a9b96c10",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.rill",
+      "expected_sha256": "11b62bc209b8866e2e38f1282fce50edbf5be46dfe8ed119c57a441e05f68781",
+      "current_sha256": "11b62bc209b8866e2e38f1282fce50edbf5be46dfe8ed119c57a441e05f68781",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.wav",
+      "expected_sha256": "805d9ab42a3119e15bcd6814a6e0dfc6f6d6f54dadca60f73ca9de47bfb0a4b7",
+      "current_sha256": "805d9ab42a3119e15bcd6814a6e0dfc6f6d6f54dadca60f73ca9de47bfb0a4b7",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.mid",
+      "expected_sha256": "6637f6ca6c27f61e685addfce7f18785ff8bc911d54287d53aed9b1984b684c3",
+      "current_sha256": "6637f6ca6c27f61e685addfce7f18785ff8bc911d54287d53aed9b1984b684c3",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.rill",
+      "expected_sha256": "2a406e38224ed0ed879b4bb165978aa5a8cf1410d843869dc90f6cae80ebb4e4",
+      "current_sha256": "2a406e38224ed0ed879b4bb165978aa5a8cf1410d843869dc90f6cae80ebb4e4",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.wav",
+      "expected_sha256": "6c52d8f972697c467020e7fdb25dbcf844034dbf0a3cd47209befc48903d2aff",
+      "current_sha256": "6c52d8f972697c467020e7fdb25dbcf844034dbf0a3cd47209befc48903d2aff",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.mid",
+      "expected_sha256": "a73fb8b4a1cd1cd9f9045eed1fc624fdebfc756a48bd3322efe821ee106cc555",
+      "current_sha256": "a73fb8b4a1cd1cd9f9045eed1fc624fdebfc756a48bd3322efe821ee106cc555",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.rill",
+      "expected_sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "current_sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.wav",
+      "expected_sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "current_sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.mid",
+      "expected_sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "current_sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.rill",
+      "expected_sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "current_sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.wav",
+      "expected_sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "current_sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.mid",
+      "expected_sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "current_sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.rill",
+      "expected_sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "current_sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.wav",
+      "expected_sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "current_sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.mid",
+      "expected_sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "current_sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.rill",
+      "expected_sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "current_sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.wav",
+      "expected_sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "current_sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.mid",
+      "expected_sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "current_sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.rill",
+      "expected_sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "current_sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.wav",
+      "expected_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "current_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.mid",
+      "expected_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "current_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.rill",
+      "expected_sha256": "835fbd4964a02aff848de3992ab715b7524e7859546e58dd0829c0073c169447",
+      "current_sha256": "835fbd4964a02aff848de3992ab715b7524e7859546e58dd0829c0073c169447",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.wav",
+      "expected_sha256": "cf9a477c5bb358c8701f2e561444e3ecae4d35fc91422fc0497409b23313f1ce",
+      "current_sha256": "cf9a477c5bb358c8701f2e561444e3ecae4d35fc91422fc0497409b23313f1ce",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.mid",
+      "expected_sha256": "1856e5d9b757ee95e2d1560fa93a20e7a815863465438ef4f95962f58c769e6b",
+      "current_sha256": "1856e5d9b757ee95e2d1560fa93a20e7a815863465438ef4f95962f58c769e6b",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.rill",
+      "expected_sha256": "6a89339238ad09248db6d6ec029aaaa96e9d2c54326abc1d61dad8ea7d4675b3",
+      "current_sha256": "6a89339238ad09248db6d6ec029aaaa96e9d2c54326abc1d61dad8ea7d4675b3",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.wav",
+      "expected_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "current_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.mid",
+      "expected_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "current_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.rill",
+      "expected_sha256": "14d4c9d1ab22d8f016e809ef47b64992bd942d2a07287c5b86e8305cb6551e8d",
+      "current_sha256": "14d4c9d1ab22d8f016e809ef47b64992bd942d2a07287c5b86e8305cb6551e8d",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.wav",
+      "expected_sha256": "dd4cef52d27c01fa894c9acb951e3d8a6f84c376327d18d31230953e4f95f493",
+      "current_sha256": "dd4cef52d27c01fa894c9acb951e3d8a6f84c376327d18d31230953e4f95f493",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.mid",
+      "expected_sha256": "31ee17c156fc500999e28f8321f207c2a93ca51bd4e800f8ab1cef5cb62a296b",
+      "current_sha256": "31ee17c156fc500999e28f8321f207c2a93ca51bd4e800f8ab1cef5cb62a296b",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.rill",
+      "expected_sha256": "70421fe61d45a4595ce0f9791eb60ebe0d6cbff40490217ac5bba5d48377878a",
+      "current_sha256": "70421fe61d45a4595ce0f9791eb60ebe0d6cbff40490217ac5bba5d48377878a",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.wav",
+      "expected_sha256": "4b78f2490f4cfe573c33762daf1ba8c494b94716a550cf46036bb86a8870f7b5",
+      "current_sha256": "4b78f2490f4cfe573c33762daf1ba8c494b94716a550cf46036bb86a8870f7b5",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.mid",
+      "expected_sha256": "04d58c5a8964f2b9ab89d303bc4d0df536cdd8ef87bff286f979484b97f2798d",
+      "current_sha256": "04d58c5a8964f2b9ab89d303bc4d0df536cdd8ef87bff286f979484b97f2798d",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.rill",
+      "expected_sha256": "3e01a576c900598ed5595ab291111b98bf19cfe41bedda5a4416c7c438136833",
+      "current_sha256": "3e01a576c900598ed5595ab291111b98bf19cfe41bedda5a4416c7c438136833",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.wav",
+      "expected_sha256": "05bf2a2d5a57ed7df04f7c10d8c287153834d16e72b1aff2ae0cadb8ce2c5759",
+      "current_sha256": "05bf2a2d5a57ed7df04f7c10d8c287153834d16e72b1aff2ae0cadb8ce2c5759",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.mid",
+      "expected_sha256": "6b264f42152f9999a8dc6c56be0590b53cab01f8ef85d1fd55a6bc5737ae1845",
+      "current_sha256": "6b264f42152f9999a8dc6c56be0590b53cab01f8ef85d1fd55a6bc5737ae1845",
+      "unchanged": true
+    }
+  ],
+  "comparison_limits": [
+    "Simulated participants, not human research.",
+    "Elapsed time includes screenshots and reporting; input events include new held-gesture actions and are not equivalent to physical gesture counts.",
+    "Round1 did not explicitly encourage a chosen project name; later rounds did.",
+    "Each round evaluates its frozen build; ratings are never retroactively applied to later fixes."
+  ],
+  "evidence_completion_rule": "Audio-plus-VST task success requires exact30s, saved project/WAV/MIDI, valid note windows/assets and independently verified nonzero contributions from both source classes. An inconclusive proof is an evidence limitation, not automatically an application failure."
+}

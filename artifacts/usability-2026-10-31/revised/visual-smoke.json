@@ -1,0 +1,237 @@
+{
+  "review": "Independent native visual smoke of revised RILL",
+  "session": 7,
+  "display": ":187",
+  "viewports": [
+    [
+      1440,
+      1000
+    ],
+    [
+      800,
+      600
+    ],
+    [
+      1280,
+      800
+    ]
+  ],
+  "binary": "/workspace/rill-daw/target/debug/rill",
+  "binary_sha256_at_finish": "d9acacea489c6232013d006a48e6f441a14ec1abc0c9329cd3e716e09d88fe14",
+  "review_type": "Technical smoke only; no baseline rerating or claims of first-time use.",
+  "method": "Isolated config/cache/native X11 app; opened a filesystem copy of participant4 project. Visible mouse gestures and native window resizing. A held XTest drag captured live feedback before releasing. No source changes, cargo invocation, original project writes, or composition state injection.",
+  "checks": [
+    {
+      "id": "tempo_stepper",
+      "observation": "Visible plus changed112.0BPM to113.0BPM; minus restored112.0. Both targets fit at both viewport sizes.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/02-tempo-step-1440.png",
+        "/workspace/scratch/rill-usability/session-7/06-properties-800.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "stable_midi_toolbar",
+      "observation": "Length, Grid scale, View and Fit retain their positions when switching Select/Pencil; no clipping at800\u00d7600.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/03-midi-select-1440.png",
+        "/workspace/scratch/rill-usability/session-7/04-midi-pencil-pitch-1440.png",
+        "/workspace/scratch/rill-usability/session-7/09-midi-select-800.png",
+        "/workspace/scratch/rill-usability/session-7/10-midi-pencil-fit-800.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "hovered_pitch",
+      "observation": "Hovering the E4 row reveals E4 on the piano key without inserting a note.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/04-midi-pencil-pitch-1440.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "clip_timing_steppers",
+      "observation": "Start, Duration and Source offset steppers fit. Clicking Duration plus changed16.00 to17.00beats; minus restored16.00.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/05-timing-properties-1440.png",
+        "/workspace/scratch/rill-usability/session-7/06-properties-800.png",
+        "/workspace/scratch/rill-usability/session-7/07-duration-step-800.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "duration_presets",
+      "observation": "Range submenu opens leftward inside800px viewport; all six presets visible. Clicking30seconds changed Duration8.571s to30.000s and exclusive End beat17.00 to57.00.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/11-range-menu-800.png",
+        "/workspace/scratch/rill-usability/session-7/12-duration-presets-800.png",
+        "/workspace/scratch/rill-usability/session-7/13-range-30s-800.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "export_duration_format",
+      "observation": "WAV dialog fits at800\u00d7600 and explicitly displays Arrangement0:30.000 +tails and48kHz Stereo32-bit float.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/14-export-800.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "preview_image_status",
+      "observation": "Without preview collection label, Image unavailable narrow More fallback, and Preview image Unavailable with optional-image explanation remain accessible. Tall detail pane scrolls to the explanation.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/16-library-800.png",
+        "/workspace/scratch/rill-usability/session-7/17-library-image-message-800.png",
+        "/workspace/scratch/rill-usability/session-7/25-library-full-1440.png",
+        "/workspace/scratch/rill-usability/session-7/26-library-image-help-1440.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "final_transport_layout",
+      "observation": "After root final binary rebuild, transport steppers plus Click/Loop/Range fit one row at1440px.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/22-final-arranger-1440.png",
+        "/workspace/scratch/rill-usability/session-7/23-final-fit-1440.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "live_trim_feedback",
+      "observation": "Held mouse edge drag displays End29.196s /Beat55.50 and Duration3.482s /6.50beats in a readable in-bounds tooltip.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/24-held-trim-feedback-1440.png"
+      ],
+      "pass": true
+    },
+    {
+      "id": "final_transport_1280",
+      "observation": "Restarted with the final binary and resized the native window to 1280 \u00d7 800. Arranger/Mixer, transport, tempo steppers, time signature, Click, Loop and Range all fit in one row without clipping.",
+      "screenshots": [
+        "/workspace/scratch/rill-usability/session-7/27-final-arranger-1280.png"
+      ],
+      "pass": true
+    }
+  ],
+  "actionable_visual_defects": [],
+  "notes": [
+    "Initial1440 transport wrapped to two rows; root fixed the optional summary threshold during review, and final rebuilt binary was restarted and verified in22-final-arranger-1440.png. Earlier feature screenshots precede that transport-only fix.",
+    "800\u00d7600 screenshots capture the full1440\u00d71000 X display; the app itself occupies the top-left800\u00d7600 region. Black outside it is desktop, not app clipping.",
+    "At800\u00d7600 piano roll has limited vertical space; Fit restored note visibility after resize. Controls stayed accessible.",
+    "Library retains its previously constrained dialog size after expanding the native window; restarting at1440 restored full details. No new regression established from this observation.",
+    "Baseline original project/WAV/MIDI SHA-256 hashes all remain unchanged.",
+    "The final compact-padding refinement also passed native review at 1280 \u00d7 800. Screenshot 27 captures this final binary; the earlier 1440 and 800 feature checks remain applicable."
+  ],
+  "baseline_hash_verification": [
+    {
+      "participant": 1,
+      "kind": "project",
+      "unchanged": true
+    },
+    {
+      "participant": 1,
+      "kind": "wav",
+      "unchanged": true
+    },
+    {
+      "participant": 1,
+      "kind": "midi",
+      "unchanged": true
+    },
+    {
+      "participant": 2,
+      "kind": "project",
+      "unchanged": true
+    },
+    {
+      "participant": 2,
+      "kind": "wav",
+      "unchanged": true
+    },
+    {
+      "participant": 2,
+      "kind": "midi",
+      "unchanged": true
+    },
+    {
+      "participant": 3,
+      "kind": "project",
+      "unchanged": true
+    },
+    {
+      "participant": 3,
+      "kind": "wav",
+      "unchanged": true
+    },
+    {
+      "participant": 3,
+      "kind": "midi",
+      "unchanged": true
+    },
+    {
+      "participant": 4,
+      "kind": "project",
+      "unchanged": true
+    },
+    {
+      "participant": 4,
+      "kind": "wav",
+      "unchanged": true
+    },
+    {
+      "participant": 4,
+      "kind": "midi",
+      "unchanged": true
+    },
+    {
+      "participant": 5,
+      "kind": "project",
+      "unchanged": true
+    },
+    {
+      "participant": 5,
+      "kind": "wav",
+      "unchanged": true
+    },
+    {
+      "participant": 5,
+      "kind": "midi",
+      "unchanged": true
+    }
+  ],
+  "mouse_log": "/workspace/scratch/rill-usability/session-7/mouse-actions.jsonl",
+  "durable_selected_screenshots": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/revised/22-final-arranger-1440.png",
+      "source": "/workspace/scratch/rill-usability/session-7/22-final-arranger-1440.png",
+      "sha256": "158c203edee2e2c2729073829a6a55d42f78424c929e7f3f5456e3ebce9458ac"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/revised/24-held-trim-feedback-1440.png",
+      "source": "/workspace/scratch/rill-usability/session-7/24-held-trim-feedback-1440.png",
+      "sha256": "77f1ef475eeacc189caeeebe9ca59c741aff97f9ac42cce85b79fdaa48b7c387"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/revised/06-properties-800.png",
+      "source": "/workspace/scratch/rill-usability/session-7/06-properties-800.png",
+      "sha256": "2c323b650391aea9b7c9ee564c1a9e03632810f1d09c24702fe6fb6543d4136a"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/revised/14-export-800.png",
+      "source": "/workspace/scratch/rill-usability/session-7/14-export-800.png",
+      "sha256": "b3d3036c5e78d82355079bfc3f4c01d0226c43a7a2d4cbb17c65d702d52e32d6"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/revised/26-library-image-help-1440.png",
+      "source": "/workspace/scratch/rill-usability/session-7/26-library-image-help-1440.png",
+      "sha256": "69e69e5456a29432d8f57fb90d1446a39c93bb958581f428effb8f5b42cea84b"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-10-31/revised/27-final-arranger-1280.png",
+      "source": "/workspace/scratch/rill-usability/session-7/27-final-arranger-1280.png",
+      "sha256": "2316b6d6a71dcb3cda633ce162b5a3b8ceab4d2f0efe598eafc826b6130f504d"
+    }
+  ],
+  "baseline_artifact_hashes_rechecked_at_finish": true
+}

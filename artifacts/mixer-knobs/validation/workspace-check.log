@@ -1,0 +1,17 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+    Checking daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+    Checking daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+    Checking daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+    Checking daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.19s

@@ -83,24 +83,6 @@ fn mixer_strips(state: &Value) -> Vec<Bounds> {
     strips
 }
 
-fn rails(state: &Value, strip: Bounds) -> Vec<Bounds> {
-    let mut rails: Vec<_> = state["painted_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|shape| Bounds::from(&shape["rect"]))
-        .filter(|rect| {
-            rect.left > strip.left
-                && rect.right < strip.right
-                && rect.width() >= 3.0
-                && rect.width() <= 30.0
-                && rect.height() >= 80.0
-        })
-        .collect();
-    rails.sort_by(|a, b| a.left.total_cmp(&b.left));
-    rails
-}
-
 fn assert_layout(state: &Value, height: f64) -> f64 {
     assert_eq!(state["view"], "Mixer");
     let strips = mixer_strips(state);
@@ -120,19 +102,34 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         assert!((strip.top - strips[0].top).abs() < 0.1);
         assert!((strip.bottom - strips[0].bottom).abs() < 0.1);
     }
-    let mut all_rails = Vec::new();
-    for (index, strip) in strips.into_iter().enumerate() {
-        let channel_rails = rails(state, strip);
-        assert_eq!(
-            channel_rails.len(),
-            if index == 3 { 2 } else { 3 },
-            "each channel has its fader and stereo meter; Master has a stereo meter"
+    let channels = state["mixer"]["channels"].as_array().unwrap();
+    let faders: Vec<_> = channels
+        .iter()
+        .map(|channel| Bounds::from(&channel["fader_scale"]["rail"]))
+        .collect();
+    for (channel, fader) in channels.iter().zip(&faders) {
+        let strip = Bounds::from(&channel["strip"]);
+        let pan = Bounds::from(&channel["pan"]);
+        let mute_solo = Bounds::from(&channel["mute_solo"]);
+        let meter = Bounds::from(&channel["meter"]);
+        let target = Bounds::from(&channel["target"]);
+        assert!(
+            fader.height() >= 80.0,
+            "A fader must retain usable travel: {fader:?}"
         );
-        all_rails.extend(channel_rails);
-    }
-    for rail in &all_rails {
-        assert!((rail.top - all_rails[0].top).abs() < 1.0);
-        assert!((rail.bottom - all_rails[0].bottom).abs() < 1.0);
+        assert!((fader.top - faders[0].top).abs() < 1.0);
+        assert!((fader.bottom - faders[0].bottom).abs() < 1.0);
+        assert!(fader.bottom <= pan.top && pan.bottom <= mute_solo.top);
+        assert!(
+            mute_solo.bottom <= meter.top && meter.bottom <= target.top,
+            "Metering follows processing and precedes output: {channel}"
+        );
+        assert!(
+            meter.width() > meter.height() * 2.0,
+            "The compact stereo meter must use horizontal rails: {meter:?}"
+        );
+        assert!(meter.left > strip.left && meter.right < strip.right);
+        assert!(meter.bottom <= height && target.bottom <= height);
     }
     for (label, minimum_height) in [
         ("Pan C", 12.0),
@@ -153,11 +150,11 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
     }
     assert_aligned_targets(state, height);
     assert_eq!(labels(state, "Back").len(), 1);
-    all_rails[0].height()
+    faders[0].height()
 }
 
 fn assert_aligned_targets(state: &Value, height: f64) {
-    let targets = labels(state, "Target");
+    let targets = labels(state, "Output");
     assert_eq!(
         targets.len(),
         4,
@@ -166,7 +163,7 @@ fn assert_aligned_targets(state: &Value, height: f64) {
     for target in &targets {
         assert!(
             target.bottom <= height && target.height() >= f64::from(daw_ui::tokens::FONT_CAPTION),
-            "Target captions must remain readable and visible: {targets:?}"
+            "Output captions must remain readable and visible: {targets:?}"
         );
         assert!(
             (target.top - targets[0].top).abs() < 1.0,
@@ -187,36 +184,40 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
         project.save(&path).unwrap();
         app.command(json!({"command":"open", "path":path}));
         app.command(json!({"command":"system_theme", "dark":dark}));
+        // The shared control rows need more than 720 px before every channel
+        // action and the routing lanes fit without vertical scrolling.
         app.command(
-            json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
+            json!({"command":"viewport", "width":1100, "height":900, "pixels_per_point":density}),
         );
         app.click("Mixer");
         let initial = painted(&mut app);
-        let initial_height = assert_layout(&initial, 720.0);
+        let initial_height = assert_layout(&initial, 900.0);
         let original_project = initial["project"].clone();
 
-        app.command(json!({"command":"viewport", "width":1440, "height":1100}));
+        app.command(json!({"command":"viewport", "width":1440, "height":1300}));
         let tall = painted(&mut app);
-        let tall_height = assert_layout(&tall, 1100.0);
+        let tall_height = assert_layout(&tall, 1300.0);
         assert!(
             tall_height > initial_height + 300.0,
             "extra window height must extend faders and meters, not create empty space"
         );
 
         // Short windows may scroll once the minimum usable fader size is reached.
-        app.command(json!({"command":"viewport", "width":800, "height":600}));
-        let before_scroll = painted(&mut app);
-        let back = labels(&before_scroll, "Back")[0];
-        app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":-1000.0}));
-        for _ in 0..20 {
-            app.inspect();
-        }
-        let compact = painted(&mut app);
-        assert_aligned_targets(&compact, 600.0);
-        assert!((labels(&compact, "Back")[0].top - back.top).abs() < 0.1);
-        app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":1000.0}));
-        for _ in 0..20 {
-            app.inspect();
+        for height in [720.0, 600.0] {
+            app.command(json!({"command":"viewport", "width":800, "height":height}));
+            let before_scroll = painted(&mut app);
+            let back = labels(&before_scroll, "Back")[0];
+            app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":-1000.0}));
+            for _ in 0..20 {
+                app.inspect();
+            }
+            let compact = painted(&mut app);
+            assert_aligned_targets(&compact, height);
+            assert!((labels(&compact, "Back")[0].top - back.top).abs() < 0.1);
+            app.command(json!({"command":"scroll", "x":90.0, "y":350.0, "delta":1000.0}));
+            for _ in 0..20 {
+                app.inspect();
+            }
         }
         app.click("Channel");
         let effects = app.click("Effects");
@@ -224,11 +225,11 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
         assert_eq!(effects["selected_track"], project.tracks[0].id);
         app.key("Escape");
 
-        app.command(json!({"command":"viewport", "width":1100, "height":720}));
+        app.command(json!({"command":"viewport", "width":1100, "height":900}));
         let resized = painted(&mut app);
-        assert!((assert_layout(&resized, 720.0) - initial_height).abs() < 1.0);
+        assert!((assert_layout(&resized, 900.0) - initial_height).abs() < 1.0);
         assert_eq!(resized["project"], original_project);
-        let fader = rails(&resized, mixer_strips(&resized)[0])[0];
+        let fader = Bounds::from(&resized["mixer"]["channels"][0]["fader_scale"]["rail"]);
         let x = (fader.left + fader.right) * 0.5;
         let edited = app.command(json!({"command":"pointer", "phase":"drag",
             "x":x, "y":fader.top + fader.height() * 0.5,

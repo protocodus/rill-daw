@@ -37,7 +37,8 @@ impl GenerationBarRangeResponse {
 
 /// One-based start and duration in whole bars. The end shown below is inclusive.
 /// Zero length represents a viewport with no complete bars, awaiting a range edit.
-/// Native numeric fields support dragging, keyboard focus and typed values.
+/// Native fields retain dragging and typing; visible steps and the shared value
+/// keypad also allow precise entry using only the mouse.
 pub fn generation_bar_range(
     ui: &mut Ui,
     start_bar: &mut u32,
@@ -47,25 +48,59 @@ pub fn generation_bar_range(
     *length_bars = (*length_bars).min(1024);
     let response = crate::form_grid(ui, "generation_bar_range", |ui| {
         let label = text::label(ui, "Start bar");
+        let mut start_value = f64::from(*start_bar);
         let start = ui
             .push_id("generation_start", |ui| {
-                ui.add(crate::number(start_bar).range(1..=1_000_000).speed(0.1))
+                crate::number_stepper_integer(
+                    ui,
+                    &mut start_value,
+                    1.0,
+                    1.0..=1_000_000.0,
+                    "Start bar",
+                    |ui, value| {
+                        ui.add(
+                            crate::number(value)
+                                .range(1.0..=1_000_000.0)
+                                .speed(0.1)
+                                .max_decimals(0),
+                        )
+                    },
+                )
+                .response
             })
             .inner
             .labelled_by(label.id);
+        if start.changed() {
+            *start_bar = start_value.round().clamp(1.0, 1_000_000.0) as u32;
+        }
         ui.end_row();
         let label = text::label(ui, "Length");
+        let mut length_value = f64::from(*length_bars);
         let length = ui
             .push_id("generation_length", |ui| {
-                ui.add(
-                    crate::number(length_bars)
-                        .range(0..=1024)
-                        .speed(0.1)
-                        .suffix(" bars"),
+                crate::number_stepper_integer(
+                    ui,
+                    &mut length_value,
+                    1.0,
+                    0.0..=1024.0,
+                    "Length",
+                    |ui, value| {
+                        ui.add(
+                            crate::number(value)
+                                .range(0.0..=1024.0)
+                                .speed(0.1)
+                                .max_decimals(0)
+                                .suffix(" bars"),
+                        )
+                    },
                 )
+                .response
             })
             .inner
             .labelled_by(label.id);
+        if length.changed() {
+            *length_bars = length_value.round().clamp(0.0, 1024.0) as u32;
+        }
         ui.end_row();
         GenerationBarRangeResponse { start, length }
     })
@@ -79,6 +114,61 @@ pub fn generation_bar_range(
         );
     }
     response
+}
+
+pub struct GenerationFooterResponse {
+    pub status: Rect,
+    pub add: Response,
+    pub next: Response,
+    pub close: Response,
+}
+
+/// Reserve feedback space before the first addition, so errors, successful
+/// additions and subsequent drafts never move the repeatable action targets.
+/// Feedback stays bounded to two lines, with its full text available on hover.
+pub fn generation_footer(
+    ui: &mut Ui,
+    status: &str,
+    can_add: bool,
+    can_advance: bool,
+    has_added: bool,
+) -> GenerationFooterResponse {
+    let status_size = egui::vec2(ui.available_width(), crate::tokens::CONTROL_HEIGHT);
+    let status = ui.allocate_ui_with_layout(
+        status_size,
+        egui::Layout::top_down(egui::Align::Min),
+        |ui| {
+            ui.set_min_size(status_size);
+            text::bounded_block(ui, text::TextRole::Note, status, 2)
+        },
+    );
+    let (add, next, close) = ui
+        .allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), crate::tokens::CONTROL_HEIGHT),
+            egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+            |ui| {
+                let add = ui.add_enabled(can_add, crate::primary_button_widget(ui, "Add notes"));
+                let next = ui
+                    .add_enabled(can_advance, crate::button_widget("Next range"))
+                    .on_hover_text("Move forward by this range's length, keeping your settings");
+                let close = ui.add(
+                    crate::button_widget(if has_added { "Done" } else { "Cancel" }).min_size(
+                        egui::vec2(
+                            crate::tokens::CONTROL_HEIGHT * 3.0,
+                            crate::tokens::CONTROL_HEIGHT,
+                        ),
+                    ),
+                );
+                (add, next, close)
+            },
+        )
+        .inner;
+    GenerationFooterResponse {
+        status: status.response.rect,
+        add,
+        next,
+        close,
+    }
 }
 
 /// Violet is reserved here for draft notes, separate from blue committed notes

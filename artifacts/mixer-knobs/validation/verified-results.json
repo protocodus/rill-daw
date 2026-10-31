@@ -1,0 +1,637 @@
+{
+  "task": "Use a knob for the cramped Mixer Pan control",
+  "verified_at": "2026-10-31T21:29:18.017882+00:00",
+  "behavior": [
+    "Pan uses the shared48px rotary control in its55px row, with L/R and current-value caption.",
+    "Relative drag prevents click jumps; exact percentage context, automation, Undo and middle-button navigation retained.",
+    "Full-size volume fader retained.",
+    "Default full plug-in knob retains its numeric editor."
+  ],
+  "validation": {
+    "shared_ui_passed": 247,
+    "app_e2e_passed": 31,
+    "total_passed": 278,
+    "failed": 0,
+    "targets": [
+      {
+        "suite": "daw-ui",
+        "target": "unittests src/lib.rs",
+        "status": "ok",
+        "passed": 30,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/assistant.rs",
+        "status": "ok",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/assistant_readiness.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/backdrop_blur.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/beat_ruler.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/bounded_panes.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/channel_controls.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/channel_readouts.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/clips.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/color.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/compact_tools.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/component_materials.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/control_roles.rs",
+        "status": "ok",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/crossfade.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/curve_segments.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/curves.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/empty_workspace.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/error_details.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/forms.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/icons.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/input_materials.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/interactions.rs",
+        "status": "ok",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/knob.rs",
+        "status": "ok",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/layout.rs",
+        "status": "ok",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/menu_roles.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/menus.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/mixer_controls.rs",
+        "status": "ok",
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/mixer_flow.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/modals.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/navigation.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/notices.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/numeric_entry.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/parameter_browser.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/popup_backdrop.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/popup_close.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/selection_glow.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/selection_navigation.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/slider_markers.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/slider_scale.rs",
+        "status": "ok",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/surfaces.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/theme.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/timeline.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/timeline_views.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/tool_hint.rs",
+        "status": "ok",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/tooltip.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/track_header.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/track_layout.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/track_mix.rs",
+        "status": "ok",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/track_reorder.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/typography.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/value_entry.rs",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "tests/waveform_refinement.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-ui",
+        "target": "doc-tests daw_ui",
+        "status": "ok",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0,
+        "log": "shared-final.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/automation_color_e2e.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_height_e2e.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_navigation_e2e.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_pan_knob_e2e.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "mixer-final.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_signal_flow_e2e.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/parameter_search_e2e.rs",
+        "status": "ok",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/practical_controls_e2e.rs",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "log": "caption-context-app.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/slider_automation_e2e.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "caption-context-app.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/slider_markers_e2e.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/slider_scale_e2e.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "app-controls.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_e2e.rs",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log": "mixer-final.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_flow_e2e.rs",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "log": "mixer-final.log"
+      },
+      {
+        "suite": "daw-app",
+        "target": "tests/mixer_readability_e2e.rs",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "log": "mixer-final.log"
+      }
+    ],
+    "method": "Latest per-target result. Earlier failures are retained and superseded by verified fixes for row height and caption click interception.",
+    "workspace_check": "passed",
+    "format": "passed",
+    "diff_check": "passed",
+    "visual_review": "Native dark/light Mixer previews and refreshed component-gallery images inspected."
+  },
+  "sha256": {
+    "crates/daw-ui/src/knob.rs": "8396585c824098a4e939d7538b94d7792fcd7fe7a32769478899555e81bda275",
+    "crates/daw-ui/src/mixer_controls.rs": "bccf2c28836cc1b7bf535367638f82688df605f3d9c48e357318b72714860b92",
+    "crates/daw-ui/tests/knob.rs": "af6e3e9c483d0e0ba4c23bd94ed0ef569ef78bee3c9ef934341270b4b8cb0ce9",
+    "crates/daw-ui/tests/mixer_controls.rs": "d982d12a4e9af8ab3e796bf156dbcb4cb114d29c50b66d31d4273ef3ad664623",
+    "crates/daw-app/src/editor.rs": "ed966d0fe35604952f3c773ff93e8da44b2ae7ddfedf271b7a2ded711eed5e33",
+    "crates/daw-app/tests/mixer_pan_knob_e2e.rs": "07f0c5e9077c320aae777c8e371d58c1e93a247f4b67e145b14df500e2f7dbde",
+    "crates/daw-app/tests/mixer_navigation_e2e.rs": "947909bcb57917ff95b03d6b39eacf6292379a69f65271f8249b5a6c9e151b7d",
+    "crates/daw-app/tests/practical_controls_e2e.rs": "ac270ca713e17b7f8ae18fe34ae4ef57efc3dc03e8f3d7f4a8eef3d4260cf97a",
+    "crates/daw-app/tests/slider_scale_e2e.rs": "9dce088c3a61254e461125aecf9f69180f675f1910634fab8efe863be8e3a8d8",
+    "crates/daw-app/tests/slider_markers_e2e.rs": "c3ecc3f3489eb691040cf2727666327f5837642510f49530b8110e0958756705",
+    "docs/UI.md": "167c550dfe16c7e6a6691aad5eacfeb4bbd8874381f68463af44ab4395431338",
+    "docs/USER_GUIDE.md": "995a441b220e28a757df4da95de6ae8f3401a0f0cfc14618d7def8b5de4dbb38",
+    "docs/E2E.md": "e841defdedf0038a6cd9d75c6abb51907e7cdc5906817b3d0e045f20fc4ec24e",
+    "docs/assets/ui-gallery/mixer-dark.png": "257037260aec053f4d0f4eef273941fc7b83f990355f7f7e8e8464213decb845",
+    "docs/assets/ui-gallery/mixer-light.png": "bad28a5763a7e2f59532a83d2ecfde6ee7fb75836df4c55e8d98bac80f99628d",
+    "artifacts/mixer-knobs/before-dark.png": "5fad96f861265babb6942d88eb33ea188d9912c6e776fa53aa3b2ec72cfb5650",
+    "artifacts/mixer-knobs/after-dark.png": "119aaa0a51493064a216446d9e1e8c97f239fc0c6beeace05fcc9d886b28f54d",
+    "artifacts/mixer-knobs/after-light.png": "cc8d3a33c5557e2c4af00bb822439d9f0cd9a99832d8ee1f2048f981c1fd88d0"
+  }
+}

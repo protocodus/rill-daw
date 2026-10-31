@@ -274,6 +274,19 @@ impl DawApp {
         if self.recording_busy() {
             return;
         }
+        if self
+            .engine
+            .as_ref()
+            .is_some_and(|engine| engine.snapshot().output_failed)
+        {
+            self.message(
+                Err(anyhow::anyhow!(
+                    "Audio output stream failed; choose Retry playback or press Play to reconnect before recording"
+                )),
+                "",
+            );
+            return;
+        }
         if self.project_io_pending() || self.state_sync_pending() || self.document_guard.is_some() {
             self.message(
                 Err(anyhow::anyhow!(
@@ -1172,6 +1185,51 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("Virtual graph preparation must finish");
         result.unwrap()
+    }
+
+    #[test]
+    fn output_retry_waits_for_capture_finalization_and_preserves_recorded_notes() {
+        let (context, mut app, _directory) = midi_app(0);
+        app.begin_recording();
+        app.poll_recording(&context);
+        let engine = app.engine.as_mut().unwrap();
+        engine.inject_virtual_midi(&[0x90, 60, 100], 0).unwrap();
+        engine.pump_virtual(512).unwrap();
+        let identity = engine.snapshot().engine_id;
+        engine.fail_virtual_output().unwrap();
+        let diagnostic = engine.take_input_error().unwrap();
+        app.message(Err(anyhow::anyhow!(diagnostic)), "");
+        assert!(app.recording_busy());
+        assert!(app.has_failed_output_notice());
+        assert!(!app.can_retry_playback());
+        app.retry_failed_playback();
+        assert_eq!(app.engine.as_ref().unwrap().snapshot().engine_id, identity);
+        assert!(app.loading.is_none());
+
+        app.finish_recording(AfterRecording::Pause);
+        assert!(app.recording_finalizing());
+        app.retry_failed_playback();
+        assert_eq!(app.engine.as_ref().unwrap().snapshot().engine_id, identity);
+        assert!(app.loading.is_none());
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while app.recording_busy() {
+            app.poll_recording(&context);
+            assert!(std::time::Instant::now() < deadline);
+        }
+        assert_eq!(app.recording.last_commit["midi_clips"], 1);
+        let daw_core::ClipContent::Midi { notes } = &app.project.tracks[0].clips[0].content else {
+            panic!("Captured MIDI prefix was lost");
+        };
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].pitch, 60);
+        assert!((notes[0].length - 512.0 / 48_000.0 * 2.0).abs() < 1e-9);
+        assert!(app.can_retry_playback());
+        let project = app.project.clone();
+        app.retry_failed_playback();
+        let replacement = prepared_replacement(&mut app);
+        assert_ne!(replacement.snapshot().engine_id, identity);
+        assert_eq!(app.project, project);
+        assert!(!app.recording_busy());
     }
 
     #[test]

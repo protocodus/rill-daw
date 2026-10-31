@@ -1,0 +1,148 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.41s
+     Running tests/automation_color_e2e.rs (target/debug/deps/automation_color_e2e-7f7fa65060c605a5)
+
+running 1 test
+test automation_and_override_colors_follow_state_across_workspaces_and_themes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.24s
+
+     Running tests/channel_meter_e2e.rs (target/debug/deps/channel_meter_e2e-d0cfde8d3d58cd64)
+
+running 1 test
+test live_arranger_meters_show_channel_audio_pan_and_bus_levels_then_stop ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/master_meter_e2e.rs (target/debug/deps/master_meter_e2e-1b44896d2eafe6f7)
+
+running 2 tests
+test master_and_channel_meters_match_actual_bus_send_and_muted_mix_pcm ... ok
+test master_keeps_a_short_transient_visible_after_the_next_silent_callback ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/mixer_e2e.rs (target/debug/deps/mixer_e2e-99eea96e537fe291)
+
+running 3 tests
+test aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand ... FAILED
+test output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks ... ok
+test sequencer_mixer_controls_route_undo_persist_and_change_exported_audio ... ok
+
+failures:
+
+---- aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand stdout ----
+
+thread 'aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand' (192137) panicked at crates/daw-app/tests/mixer_e2e.rs:246:5:
+assertion `left == right` failed
+  left: 0
+ right: 3
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_e2e`
+     Running tests/mixer_flow_e2e.rs (target/debug/deps/mixer_flow_e2e-67c18b430cc541f4)
+
+running 2 tests
+test mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback ... ok
+test mixer_orders_signal_stages_and_separates_primary_and_send_arrows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.63s
+
+     Running tests/mixer_gain_entry_e2e.rs (target/debug/deps/mixer_gain_entry_e2e-314f086773f76cba)
+
+running 2 tests
+test precise_gain_entry_undo_recall_and_export_use_the_same_channel_value ... ok
+test viewing_extreme_values_and_middle_dragging_readout_or_fader_do_not_edit ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.57s
+
+     Running tests/mixer_gain_precision_e2e.rs (target/debug/deps/mixer_gain_precision_e2e-5cb66dff8f0d142c)
+
+running 2 tests
+test fractional_and_out_of_range_gains_survive_focus_blur_and_cancel_exactly ... ok
+test precise_commits_mouse_drags_limits_and_recall_preserve_gain_automation ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.56s
+
+     Running tests/mixer_height_e2e.rs (target/debug/deps/mixer_height_e2e-8f976ce45df53c0e)
+
+running 1 test
+test mixer_fills_height_and_resizes_faders_without_losing_channel_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.54s
+
+     Running tests/mixer_navigation_e2e.rs (target/debug/deps/mixer_navigation_e2e-00382c0c63177ceb)
+
+running 1 test
+test middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s
+
+     Running tests/mixer_readability_e2e.rs (target/debug/deps/mixer_readability_e2e-785f83a47e1714e5)
+
+running 1 test
+test mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+     Running tests/mixer_signal_flow_e2e.rs (target/debug/deps/mixer_signal_flow_e2e-7e23b614678f43ff)
+
+running 2 tests
+test adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channel ... ok
+test mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+     Running tests/slider_automation_e2e.rs (target/debug/deps/slider_automation_e2e-7fc63b9676e9a417)
+
+running 1 test
+test native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_resume ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.81s
+
+     Running tests/slider_markers_e2e.rs (target/debug/deps/slider_markers_e2e-29a7df8c69d8970a)
+
+running 2 tests
+test arranger_markers_distinguish_unity_gain_from_midpoint_in_standard_and_compact_rows ... ok
+test slider_markers_follow_mouse_edits_and_undo_without_changing_stored_values ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.39s
+
+     Running tests/slider_scale_e2e.rs (target/debug/deps/slider_scale_e2e-d888238374771cea)
+
+running 2 tests
+test arrangement_controls_keep_current_values_and_native_endpoint_mapping_without_micro_scales ... ok
+test mixer_ranges_ticks_and_handle_indices_match_mouse_edits_at_multiple_sizes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.11s
+
+     Running tests/track_reorder_e2e.rs (target/debug/deps/track_reorder_e2e-6919d0dc4639f816)
+
+running 4 tests
+test compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations ... ok
+test every_arranger_track_kind_reorders_by_mouse_with_one_history_entry_and_portable_recall ... ok
+test folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles ... ok
+test mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing_sound_data ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.92s
+
+error: 1 target failed:
+    `-p daw-app --test mixer_e2e`

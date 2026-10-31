@@ -1,4 +1,4 @@
-use crate::meter::ChannelMeters;
+use crate::meter::{ChannelMeter, ChannelMeters, release_factor};
 use crate::render::{BLOCK, Renderer};
 #[path = "input.rs"]
 mod input;
@@ -24,6 +24,12 @@ pub use timing::{RecordingTiming, RecordingTimingSnapshot};
 #[cfg(test)]
 #[path = "live_device_tests.rs"]
 mod live_device_tests;
+#[cfg(test)]
+#[path = "output_failure_tests.rs"]
+mod output_failure_tests;
+#[cfg(test)]
+#[path = "output_meter_tests.rs"]
+mod output_meter_tests;
 use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use daw_core::Project;
@@ -42,6 +48,10 @@ thread_local! {
     // Per-test-thread scheduling seam: hold the render worker immediately after
     // readiness is visible, so an initial seek can race the startup handoff.
     static RENDER_READY_TEST_GATE: std::cell::RefCell<Option<mpsc::Receiver<()>>> =
+        const { std::cell::RefCell::new(None) };
+    // Pause transport publication after its initial terminal-state check so a
+    // test can deliver a real output-error callback at that exact boundary.
+    static PLAYING_PUBLICATION_TEST_GATE: std::cell::RefCell<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -75,9 +85,16 @@ pub struct DeviceInfo {
 pub struct EngineSnapshot {
     pub playing: bool,
     pub position_beats: f64,
+    /// Output PCM peaks with instant attack and 24 dB/second release. Published
+    /// after monitoring, metronome and clipping, as a coherent stereo pair.
     pub peak_left: f32,
     pub peak_right: f32,
     pub underruns: u64,
+    /// A fatal output-device fault, separate from render/plugin failures.
+    /// Latched until this engine (and its stream) is replaced.
+    pub output_failed: bool,
+    /// Output-backend xruns, distinct from render-queue underruns and plugin errors.
+    pub output_dropouts: u64,
     pub render_errors: u64,
     pub engine_id: u64,
     pub generation: u64,
@@ -143,9 +160,11 @@ struct Controls {
     generation: AtomicU64,
     seek_beat: AtomicU64,
     position: AtomicU64,
-    peak_left: AtomicU32,
-    peak_right: AtomicU32,
+    output_meter: ChannelMeter,
     underruns: AtomicU64,
+    output_failed: AtomicBool,
+    output_dropouts: AtomicU64,
+    output_dropout_reported: AtomicBool,
     render_errors: AtomicU64,
     render_error: Mutex<Option<String>>,
     finished_generation: AtomicU64,
@@ -167,9 +186,11 @@ impl Controls {
             generation: AtomicU64::new(0),
             seek_beat: AtomicU64::new(0),
             position: AtomicU64::new(0),
-            peak_left: AtomicU32::new(0),
-            peak_right: AtomicU32::new(0),
+            output_meter: ChannelMeter::default(),
             underruns: AtomicU64::new(0),
+            output_failed: AtomicBool::new(false),
+            output_dropouts: AtomicU64::new(0),
+            output_dropout_reported: AtomicBool::new(false),
             render_errors: AtomicU64::new(0),
             render_error: Mutex::new(None),
             finished_generation: AtomicU64::new(u64::MAX),
@@ -792,6 +813,23 @@ impl AudioEngine {
         self.controls.take_render_error()
     }
 
+    /// Coalesce the nonfatal notice once per stream. The snapshot keeps the
+    /// current count, including additional dropouts after notice dismissal.
+    pub fn take_output_dropout_notice(&self) -> Option<u64> {
+        let count = self.controls.output_dropouts.load(Ordering::Acquire);
+        if count == 0
+            || self.controls.output_failed.load(Ordering::Acquire)
+            || self
+                .controls
+                .output_dropout_reported
+                .swap(true, Ordering::AcqRel)
+        {
+            None
+        } else {
+            Some(count)
+        }
+    }
+
     /// Consume the production output queue without physical audio hardware.
     /// Waiting for each bounded chunk makes this a sample-continuity oracle,
     /// rather than an assertion about hardware scheduling or driver deadlines.
@@ -818,6 +856,9 @@ impl AudioEngine {
                     !self.controls.shutdown.load(Ordering::Acquire),
                     "Audio engine has stopped"
                 );
+                if self.controls.output_failed.load(Ordering::Acquire) {
+                    break;
+                }
                 let holding = self.controls.timing.holds_transport();
                 let preview = self.controls.render_preview.load(Ordering::Acquire);
                 let monitoring = self.controls.midi.monitoring_requested()
@@ -869,6 +910,7 @@ impl AudioEngine {
     /// the render worker; neither the UI nor the device callback touches plugins.
     pub fn audition_note(&self, note: Option<(u64, u8, u8)>) -> Result<()> {
         if let Some((_, pitch, velocity)) = note {
+            self.ensure_output_ready()?;
             ensure!(
                 pitch < 128 && velocity > 0 && velocity < 128,
                 "Invalid audition note"
@@ -888,8 +930,20 @@ impl AudioEngine {
         Ok(())
     }
 
+    fn ensure_output_ready(&self) -> Result<()> {
+        ensure!(
+            !self.controls.output_failed.load(Ordering::Acquire),
+            "Audio output stream failed; press Play to reconnect before recording or auditioning"
+        );
+        Ok(())
+    }
+
     pub fn set_playing(&self, playing: bool) {
+        // A failed device needs a fresh stream; toggling transport alone must
+        // not make the stopped stream appear to be running again.
+        let playing = playing && !self.controls.output_failed.load(Ordering::Acquire);
         if !playing {
+            self.controls.output_meter.clear();
             if self.controls.input.capture_requested() {
                 self.controls.input.request_stop();
             }
@@ -905,7 +959,19 @@ impl AudioEngine {
         {
             self.seek(0.0);
         }
+        #[cfg(test)]
+        if let Some((entered, released)) =
+            PLAYING_PUBLICATION_TEST_GATE.with(|gate| gate.borrow_mut().take())
+        {
+            entered.send(()).unwrap();
+            released.recv_timeout(Duration::from_secs(5)).unwrap();
+        }
         self.controls.playing.store(playing, Ordering::Release);
+        // A callback can fail between the first check and this publication.
+        // A second check prevents that stale request resurrecting the stream.
+        if self.controls.output_failed.load(Ordering::Acquire) {
+            self.controls.playing.store(false, Ordering::Release);
+        }
     }
     pub fn seek(&self, beat: f64) {
         self.request_stop_midi_recording();
@@ -927,6 +993,7 @@ impl AudioEngine {
             .position
             .store(beat.to_bits(), Ordering::Release);
         self.controls.generation.fetch_add(1, Ordering::AcqRel);
+        self.controls.output_meter.clear();
     }
     pub fn position_beats(&self) -> f64 {
         f64::from_bits(self.controls.position.load(Ordering::Relaxed))
@@ -998,12 +1065,20 @@ impl AudioEngine {
         Ok(())
     }
     pub fn snapshot(&self) -> EngineSnapshot {
+        let output_failed = self.controls.output_failed.load(Ordering::Acquire);
+        let [peak_left, peak_right] = if output_failed {
+            [0.0; 2]
+        } else {
+            self.controls.output_meter.peaks()
+        };
         EngineSnapshot {
-            playing: self.controls.playing.load(Ordering::Relaxed),
+            playing: !output_failed && self.controls.playing.load(Ordering::Relaxed),
             position_beats: self.position_beats(),
-            peak_left: f32::from_bits(self.controls.peak_left.load(Ordering::Relaxed)),
-            peak_right: f32::from_bits(self.controls.peak_right.load(Ordering::Relaxed)),
+            peak_left,
+            peak_right,
             underruns: self.controls.underruns.load(Ordering::Relaxed),
+            output_failed,
+            output_dropouts: self.controls.output_dropouts.load(Ordering::Relaxed),
             render_errors: self.controls.render_errors.load(Ordering::Relaxed),
             engine_id: self.controls.engine_id,
             generation: self.controls.generation.load(Ordering::Relaxed),
@@ -1031,8 +1106,9 @@ impl AudioEngine {
     /// as silence. The render queue can lead the audible output by its bounded
     /// prebuffer, just as other transport telemetry can.
     pub fn channel_peaks(&self, track: u64) -> [f32; 2] {
-        if !self.controls.playing.load(Ordering::Relaxed)
-            && !self.controls.auditioning.load(Ordering::Relaxed)
+        if self.controls.output_failed.load(Ordering::Acquire)
+            || (!self.controls.playing.load(Ordering::Relaxed)
+                && !self.controls.auditioning.load(Ordering::Relaxed))
         {
             [0.0; 2]
         } else {
@@ -1047,6 +1123,7 @@ impl AudioEngine {
         self.controls.auditioning.store(false, Ordering::Release);
         self.controls.shutdown.store(true, Ordering::Release);
         self.stream.take();
+        self.controls.output_meter.clear();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -1092,12 +1169,36 @@ fn fill_output<T: cpal::Sample + cpal::FromSample<f32>>(
 }
 
 fn output_stream_failed(controls: &Controls, error: &cpal::Error) {
-    if !controls.input.device_failed(6, error, None) {
+    if controls.output_failed.load(Ordering::Acquire) {
         return;
     }
+    let xrun = error.kind() == cpal::ErrorKind::Xrun;
+    if xrun {
+        controls.output_dropouts.fetch_add(1, Ordering::Release);
+        // CPAL recovers this stream after notifying us (ALSA prepares and
+        // automatically restarts it). Keep ordinary playback/monitoring alive.
+        // Armed/count-in/active capture remains conservative: its sample-clock
+        // alignment is no longer trustworthy, so retain the prefix and stop.
+        if !controls.input.capture_requested()
+            && !controls.midi.capture_requested()
+            && !controls.timing.busy()
+        {
+            return;
+        }
+    }
+    if !controls
+        .input
+        .device_failed(if xrun { 9 } else { 6 }, error, None)
+        || controls.output_failed.swap(true, Ordering::AcqRel)
+    {
+        return;
+    }
+    // The bounded device diagnostic is reported by take_input_error, including
+    // during ordinary playback. Counting it as a render failure would overwrite
+    // that backend cause with a misleading plugin error in the same UI frame.
     controls.midi.output_failed();
-    controls.render_errors.fetch_add(1, Ordering::Relaxed);
     controls.playing.store(false, Ordering::Release);
+    controls.output_meter.clear();
 }
 
 fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
@@ -1107,6 +1208,16 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
     controls: &Controls,
     info: Option<&cpal::OutputCallbackInfo>,
 ) {
+    // The fault latch is authoritative even if a capture/count-in request was
+    // already in flight when the stream failed. No preview, monitoring or click
+    // may restart output on that failed stream.
+    if controls.output_failed.load(Ordering::Acquire) {
+        data.fill(T::from_sample(0.0_f32));
+        controls.playing.store(false, Ordering::Release);
+        controls.auditioning.store(false, Ordering::Release);
+        controls.output_meter.clear();
+        return;
+    }
     let output_time = controls.input.output_time(info);
     let sample_rate = controls.input_sample_rate.load(Ordering::Relaxed);
     let capturing = controls.input.active();
@@ -1210,12 +1321,12 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
     controls
         .consumed_frames
         .fetch_add(consumed, Ordering::Relaxed);
+    // A callback is usually much shorter than a UI frame. Retain transients
+    // through following silent callbacks instead of making the master meter
+    // depend on which individual buffer the UI happened to sample.
     controls
-        .peak_left
-        .store(peak[0].to_bits(), Ordering::Relaxed);
-    controls
-        .peak_right
-        .store(peak[1].to_bits(), Ordering::Relaxed);
+        .output_meter
+        .publish(peak, release_factor(data.len() / channels, sample_rate));
     if underrun {
         controls.underruns.fetch_add(1, Ordering::Relaxed);
     }

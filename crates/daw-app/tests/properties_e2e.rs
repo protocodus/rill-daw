@@ -366,7 +366,7 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     assert_eq!(properties["project"], opened["project"]);
     assert_eq!(properties["modified"], false);
     let track = front(&mut app, "Channel");
-    assert!(visible(&track, "6.0206 dB"));
+    assert!(visible(&track, "6.0 dB"));
     assert!(visible(&track, "220000 samples"));
     assert_eq!(track["project"], opened["project"]);
     assert_eq!(track["modified"], false);
@@ -382,7 +382,7 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     window(&mut app, "Properties");
     let track = front(&mut app, "Channel");
     let right =
-        rect(&track, "6.0206 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
+        rect(&track, "6.0 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
     let y = center(rect(&track, "Gain")).1;
     let edited = app.command(json!({"command":"pointer", "phase":"click",
         "x":right - 60.0, "y":y}));

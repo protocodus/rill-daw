@@ -1,0 +1,28 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.18s
+     Running tests/stretch_duration_range_e2e.rs (target/debug/deps/stretch_duration_range_e2e-1c6a7b31de895ee2)
+
+running 5 tests
+test drag_text_and_steps_share_the_stretch_limits ... ok
+test inspecting_precise_already_stretched_values_never_rounds_or_creates_history ... ok
+test invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once ... ok
+test mode_switch_preserves_trim_and_stretch_respects_the_timeline_end ... ok
+test stretched_trimmed_ghost_uses_its_current_window_without_changing_its_peer ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.38s
+

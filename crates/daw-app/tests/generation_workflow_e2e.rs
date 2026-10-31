@@ -76,6 +76,7 @@ fn notes(state: &Value, id: u64) -> &[Value] {
 }
 
 fn control(app: &mut Harness, field: &str) -> Value {
+    let mut scroll_positions = Vec::new();
     for _ in 0..16 {
         let state = app.inspect();
         let controls = &generator(&state)["controls"];
@@ -88,15 +89,19 @@ fn control(app: &mut Harness, field: &str) -> Value {
         let (_, y) = center(rect);
         let top = options["min"][1].as_f64().unwrap();
         let bottom = options["max"][1].as_f64().unwrap();
+        scroll_positions.push(json!({"control":rect,"options":options}));
         if y >= top + 2.0 && y <= bottom - 2.0 {
             return rect.clone();
         }
         let (x, y_anchor) = center(options);
-        app.command(
-            json!({"command":"scroll","x":x,"y":y_anchor,"delta":if y < top {160.0} else {-160.0}}),
-        );
+        // Fixed 160-point wheel jumps can skip a whole control in a compact
+        // viewport and oscillate forever. Approach its center by at most half
+        // the visible height, as a user can with smaller wheel movements.
+        let limit = ((bottom - top) * 0.5).max(1.0);
+        let delta = (y_anchor - y).clamp(-limit, limit);
+        app.command(json!({"command":"scroll","x":x,"y":y_anchor,"delta":delta}));
     }
-    panic!("Could not reveal {field}");
+    panic!("Could not reveal {field}: {scroll_positions:?}");
 }
 
 fn number(app: &mut Harness, field: &str, value: &str) -> Value {
@@ -135,6 +140,160 @@ fn choice(app: &mut Harness, field: &str, name: &str) -> Value {
 
 fn undo(app: &mut Harness, redo: bool) -> Value {
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":redo}))
+}
+
+fn footer_rects(state: &Value) -> Vec<Value> {
+    ["status", "add_notes", "next_range", "close"]
+        .into_iter()
+        .map(|name| generator(state)["controls"][name].clone())
+        .collect()
+}
+
+fn assert_footer_stable(state: &Value, expected: &[Value], width: u32, height: u32) {
+    for (actual, expected) in footer_rects(state).iter().zip(expected) {
+        for edge in ["min", "max"] {
+            for axis in [0, 1] {
+                assert!(
+                    (actual[edge][axis].as_f64().unwrap() - expected[edge][axis].as_f64().unwrap())
+                        .abs()
+                        < 0.1,
+                    "Generator footer moved at {width}×{height}: {actual} versus {expected}"
+                );
+            }
+        }
+        assert!(actual["min"][0].as_f64().unwrap() >= 0.0);
+        assert!(actual["min"][1].as_f64().unwrap() >= 0.0);
+        assert!(actual["max"][0].as_f64().unwrap() <= f64::from(width));
+        assert!(actual["max"][1].as_f64().unwrap() <= f64::from(height));
+    }
+}
+
+fn keypad_click(app: &mut Harness, label: &str) -> Value {
+    let state = app.inspect();
+    let rect = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|rect| rect["text"] == label)
+        .unwrap_or_else(|| panic!("Missing keypad key {label}: {}", state["visible_labels"]));
+    click_rect(app, rect)
+}
+
+#[test]
+fn generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole_bars() {
+    for dark in [false, true] {
+        let (mut app, _, id) = fixture(0.0, 0.0, 1.0, false);
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.command(json!({"command":"viewport","width":1100,"height":720}));
+        let original = app.inspect();
+        let ready = app.click("Generate…");
+        let initial_length = generator(&ready)["length_bars"].clone();
+        let (_, field_y) = center(&generator(&ready)["controls"]["length_bars"]);
+        let keypad = ready["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rect| rect["text"] == "123" && (center(rect).1 - field_y).abs() < 1.0)
+            .expect("Length has a visible mouse keypad action");
+        click_rect(&mut app, keypad);
+        for label in ["Clear", "2", ".", "5"] {
+            keypad_click(&mut app, label);
+        }
+        let invalid = keypad_click(&mut app, "Apply value");
+        assert!(
+            invalid["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label == "Enter a whole number.")
+        );
+        assert_eq!(generator(&invalid)["length_bars"], initial_length);
+        assert_eq!(invalid["project"], original["project"]);
+        assert_eq!(invalid["history"], original["history"]);
+        for label in ["Clear", "2"] {
+            keypad_click(&mut app, label);
+        }
+        let applied = keypad_click(&mut app, "Apply value");
+        assert_eq!(generator(&applied)["length_bars"], 2);
+        assert_eq!(applied["project"], original["project"]);
+        assert_eq!(applied["history"], original["history"]);
+        let added = app.click("Add notes");
+        assert_eq!(notes(&added, id).len(), 3);
+        assert!(notes(&added, id).iter().all(|note| note["length"] == 8.0));
+        app.click("Done");
+        app.click("Edit");
+        assert_eq!(app.click("Undo")["project"], original["project"]);
+        app.quit();
+    }
+}
+
+#[test]
+fn generator_add_and_next_targets_stay_fixed_through_feedback_and_repeated_mouse_additions() {
+    for dark in [false, true] {
+        for (width, height) in [(800, 640), (1100, 720), (1440, 1000)] {
+            let (mut app, _, id) = fixture(0.0, 0.0, 1.0, false);
+            app.command(json!({"command":"system_theme","dark":dark}));
+            app.command(json!({"command":"viewport","width":width,"height":height}));
+            let original = app.inspect();
+            app.click("Generate…");
+            number(&mut app, "start_bar", "1");
+            let ready = number(&mut app, "length_bars", "2");
+            let targets = footer_rects(&ready);
+            let add = targets[1].clone();
+            let next = targets[2].clone();
+            assert_footer_stable(&ready, &targets, width, height);
+            assert_eq!(generator(&ready)["notes"].as_array().unwrap().len(), 3);
+
+            // Keep the initial screen coordinates: looking up each label again
+            // would hide the button movement reported by the mouse-only study.
+            let first = click_rect(&mut app, &add);
+            assert_eq!(notes(&first, id).len(), 3);
+            assert_footer_stable(&first, &targets, width, height);
+            let duplicate = click_rect(&mut app, &add);
+            assert_eq!(duplicate["project"], first["project"]);
+            assert_eq!(duplicate["history"], first["history"]);
+
+            let invalid = number(&mut app, "length_bars", "0");
+            assert!(!generator(&invalid)["error"].is_null());
+            assert_footer_stable(&invalid, &targets, width, height);
+            assert_eq!(click_rect(&mut app, &add)["project"], first["project"]);
+            let restored = number(&mut app, "length_bars", "2");
+            assert_footer_stable(&restored, &targets, width, height);
+
+            let advanced = click_rect(&mut app, &next);
+            assert_eq!(generator(&advanced)["start_bar"], 3);
+            assert_eq!(generator(&advanced)["preview_visible"], true);
+            assert_footer_stable(&advanced, &targets, width, height);
+            let second = click_rect(&mut app, &add);
+            assert_eq!(notes(&second, id).len(), 6);
+            assert_eq!(clip(&second, id)["length"], 16.0);
+            assert_footer_stable(&second, &targets, width, height);
+            assert_eq!(&notes(&second, id)[..3], notes(&first, id));
+            assert!(
+                notes(&second, id)[3..]
+                    .iter()
+                    .all(|note| note["start"] == 8.0)
+            );
+
+            let advanced = click_rect(&mut app, &next);
+            assert_eq!(generator(&advanced)["start_bar"], 5);
+            assert_footer_stable(&advanced, &targets, width, height);
+            let third = click_rect(&mut app, &add);
+            assert_eq!(notes(&third, id).len(), 9);
+            assert_footer_stable(&third, &targets, width, height);
+            let done = click_rect(&mut app, &targets[3]);
+            assert!(done["midi_editor"]["generate"].is_null());
+            assert_eq!(done["project"], third["project"]);
+            app.click("Edit");
+            assert_eq!(app.click("Undo")["project"], second["project"]);
+            app.click("Edit");
+            assert_eq!(app.click("Undo")["project"], first["project"]);
+            app.click("Edit");
+            assert_eq!(app.click("Undo")["project"], original["project"]);
+            app.quit();
+        }
+    }
 }
 
 #[test]
@@ -261,11 +420,13 @@ fn requested_ranges_respect_both_timeline_and_stretched_source_limits() {
         number(&mut app, "start_bar", "1");
         number(&mut app, "length_bars", "1");
         let valid = app.click("Add notes");
+        let targets = footer_rects(&valid);
         assert_eq!(clip(&valid, id)["length"], 4.0);
         let advanced = app.click("Next range");
         assert_eq!(generator(&advanced)["start_bar"], 1);
         let invalid = number(&mut app, "length_bars", "2");
         assert!(!generator(&invalid)["error"].is_null());
+        assert_footer_stable(&invalid, &targets, 1440, 1000);
         assert!(generator(&invalid)["notes"].as_array().unwrap().is_empty());
         let blocked = app.click("Add notes");
         assert_eq!(blocked["project"], valid["project"]);
