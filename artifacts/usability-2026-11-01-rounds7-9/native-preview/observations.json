@@ -1,0 +1,74 @@
+{
+  "reviewed_at_utc": "2026-11-01T00:30:55Z",
+  "scope": "Native visual review only, excluded from participant studies and rating claims",
+  "binary": {
+    "path": "/workspace/rill-daw/target/debug/rill",
+    "sha256": "1e453fc421ab4947ed28a48cc018b4b2c2e0cc5c13f8c0cd86a55bef6fcd9a88"
+  },
+  "plugin_host": {
+    "path": "/workspace/rill-daw/target/debug/daw-plugin-host",
+    "sha256": "6a16fbeaa3857f173f4f0318d7009053464cbc6976bdefc45638fdb30c6dcdf2"
+  },
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "input": "Unmodified round7 mouse.py via native X11 mouse events",
+  "playback_requested": false,
+  "project_save_requested": false,
+  "blockers": [],
+  "findings": [
+    "Dark and Light native mixer controls are readable. Add bus and Add send are adjacent in the toolbar; channel gain, pan, Mute, Solo, meter, output and send controls occupy separate visible rows.",
+    "Right-clicking the visible first-channel Pan knob opens compact exact-value entry. Clicking its visible 123 control expands the keypad, which shifts upward to remain inside the viewport. Digits, sign, decimal, Backspace, Clear, Apply value, Cancel and Create automation are visible and readable in both themes.",
+    "Opening and expanding exact entry retains the stored Pan value (-10.99999940395355); Cancel returns to the mixer without applying a draft.",
+    "Opening the New instrument channel and returning focuses its output and post-send route visualization. Actual wheel scrolling exposes both complete labeled paths, Output to Master and Post send to New bus. Native scrolling clips the top at the workspace boundary normally; fader lengths and control spacing remain unchanged.",
+    "No visible overlap, unreachable action, or clipped keypad/footer was observed in these native captures."
+  ],
+  "screenshots": [
+    {
+      "theme": "Dark",
+      "mixer": "/workspace/scratch/rill-iteration-preview/session-1/mixer.png",
+      "compact_pan": "/workspace/scratch/rill-iteration-preview/session-1/pan-compact.png",
+      "expanded_keypad": "/workspace/scratch/rill-iteration-preview/session-1/keypad-expanded.png",
+      "send_routes_after_mouse_scroll": "/workspace/scratch/rill-iteration-preview/session-1/mixer-send-routes-visible.png",
+      "mouse_actions": "/workspace/scratch/rill-iteration-preview/session-1/mouse-actions.jsonl"
+    },
+    {
+      "theme": "Light",
+      "mixer": "/workspace/scratch/rill-iteration-preview/session-2/mixer.png",
+      "compact_pan": "/workspace/scratch/rill-iteration-preview/session-2/pan-compact.png",
+      "expanded_keypad": "/workspace/scratch/rill-iteration-preview/session-2/keypad-expanded.png",
+      "send_routes_after_mouse_scroll": "/workspace/scratch/rill-iteration-preview/session-2/mixer-send-routes-visible.png",
+      "mouse_actions": "/workspace/scratch/rill-iteration-preview/session-2/mouse-actions.jsonl"
+    }
+  ],
+  "project_hashes": [
+    {
+      "path": "/workspace/scratch/rill-usability-round7/session-1/rain.rill",
+      "role": "original participant project",
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b"
+    },
+    {
+      "path": "/workspace/scratch/rill-iteration-preview/session-1/rain-preview.rill",
+      "role": "Dark preview copy",
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b"
+    },
+    {
+      "path": "/workspace/scratch/rill-iteration-preview/session-2/rain-preview.rill",
+      "role": "Light preview copy",
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b"
+    }
+  ],
+  "all_project_hashes_unchanged": true,
+  "limitations": [
+    "Visual checks use the 1440x1000 study viewport; automated layout tests cover smaller viewport constraints.",
+    "No audio playback, rendering, performance timing or usability ratings were collected in this preview.",
+    "Intermediate mixer-send-routes.png captures show the Channel dialog opened by the track title. The actual final route captures are mixer-send-routes-visible.png."
+  ],
+  "cleanup": {
+    "record": "/workspace/scratch/rill-iteration-preview/cleanup-1793493056103468903.json",
+    "all_six_recorded_processes_exited": true,
+    "private_display_sockets_gone": true,
+    "project_hashes_rechecked_after_cleanup": true
+  }
+}

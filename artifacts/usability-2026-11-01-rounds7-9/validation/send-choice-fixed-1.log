@@ -1,0 +1,203 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 11.78s
+     Running unittests src/main.rs (target/debug/deps/rill-43a8062c2bab1cf7)
+
+running 141 tests
+test app::engine_lifecycle_tests::retiring_superseded_preparations_keeps_every_owner_in_the_chain ... ok
+test app::engine_lifecycle_tests::stale_paused_completion_prepares_current_graph_and_cancel_prevents_device_open ... ok
+test app::engine_lifecycle_tests::transport_stop_retains_pending_initialization_until_it_has_retired ... ok
+test app::engine_lifecycle_tests::workspace_track_order_is_audio_equivalent_but_owned_audio_changes_are_not ... ok
+test app::export_feedback_tests::completed_export_preserves_an_unrelated_error_and_pending_feedback ... ok
+test audio_editor::tests::completed_transient_preview_is_discarded_after_tempo_changes ... ok
+test audio_editor::tests::fit_reference_uses_visible_window_envelope_channels_and_silence ... ok
+test audio_editor::tests::linked_fade_pointer_edits_use_source_coordinates_and_preserve_opposite_fade ... ok
+test audio_editor::tests::magnetic_snap_is_measured_in_pixels_and_aligns_either_move_edge ... ok
+test audio_editor::tests::native_clipboard_events_publish_paste_marker_and_cut_only_once ... ok
+test audio_editor::tests::stretched_fit_measures_the_same_source_window_and_fade_envelope ... ok
+test audio_editor::tests::viewing_independent_copies_preserves_long_source_fades ... ok
+test audio_editor::tests::viewing_trimmed_linked_fades_does_not_clamp_shared_source_values ... ok
+test audio_editor::tests::waveform_fit_matches_fractional_edges_and_reverse_source_mapping ... ok
+test audio_takes_ui::tests::delayed_take_import_does_not_resurrect_a_dismissed_or_changed_context ... ok
+test audio_takes_ui::tests::take_import_with_full_preview_cache_still_imports_audio_and_honors_cancel ... ok
+test automation::label_geometry_tests::right_aligned_labels_keep_their_full_visible_hit_rectangle ... ok
+test automation_editor::tests::creation_popup_hugs_short_content_and_aligns_its_footer ... ok
+test automation_editor::tests::manual_parameter_add_stays_clickable_when_metadata_finishes_mid_click ... ok
+test automation_editor::tests::parameter_search_never_activates_a_hidden_selection_and_reuses_an_existing_lane ... ok
+test automation_editor::tests::vst_creation_waits_for_metadata_then_uses_parameter_name_and_current_value ... ok
+test automation_state::tests::bypass_and_empty_overrides_report_the_value_the_renderer_uses ... ok
+test automation_state::tests::explicit_takeover_tracks_a_drag_back_to_the_stored_value_and_resume_keeps_points ... ok
+test automation_state::tests::pending_parameter_changes_override_but_curve_and_unrelated_edits_do_not ... ok
+test automation_state::tests::stopped_controls_read_held_endpoints_without_editing_the_manual_value ... ok
+test document_ui::tests::cancel_input_wins_over_a_save_completion_in_the_same_frame ... ok
+test document_ui::tests::changes_after_saved_snapshot_require_another_decision ... ok
+test document_ui::tests::dangling_symlinks_are_existing_destinations_for_normalization_confirmation ... ok
+test document_ui::tests::final_native_snapshot_can_cancel_a_previously_clean_transition ... ok
+test document_ui::tests::modal_drops_never_import_audio_and_request_releases_audition ... ok
+test document_ui::tests::normalized_destination_confirmation_receives_the_actual_changed_path_only ... ok
+test document_ui::tests::normalized_directory_entries_require_replacement_confirmation ... ok
+test document_ui::tests::picker_uses_existing_current_parent_then_remembered_folder_and_accepts_relative_files ... ok
+test engine_lifecycle::tests::replacement_waits_for_active_pending_and_retiring_devices_to_close ... ok
+test error_ui::tests::closing_the_app_from_details_preserves_the_unsaved_project_guard ... ok
+test error_ui::tests::raw_audio_drop_behind_error_details_cannot_change_the_project ... ok
+test error_ui::tests::report_preserves_all_causes_and_freezes_context ... ok
+test error_ui::tests::retry_revalidates_the_current_notice_and_never_pauses_a_healthy_engine ... ok
+test error_ui::tests::retry_waits_for_audio_preparation_export_and_queued_document_work ... ok
+test finishing_actions::tests::dense_midi_repeat_is_bounded_even_when_the_clip_count_is_small ... ok
+test finishing_actions::tests::final_repeat_trim_keeps_reversed_source_mapping_and_the_original_envelope ... ok
+test finishing_actions::tests::invalid_batch_route_keeps_the_entire_document_and_history_unchanged ... ok
+test finishing_actions::tests::repeat_limit_fails_before_allocating_or_changing_a_clip ... ok
+test history_ui::tests::returning_a_gesture_to_its_original_value_keeps_saved_state_and_history ... ok
+test instrument_tools::tests::composition_and_instrument_are_one_commit_without_editor_side_effects ... ok
+test instrument_tools::tests::generates_into_existing_track_and_preserves_same_instrument_state ... ok
+test instrument_tools::tests::invalid_plugin_notes_or_revision_leave_no_partial_track ... ok
+test instrument_tools::tests::refuses_known_effect_instrument_assignment_atomically ... ok
+test join_tools::tests::cancellation_keeps_the_worker_slot_until_its_thread_exits ... ok
+test join_tools::tests::renderer_failure_cleans_host_scratch_and_redacts_asset_paths ... ok
+test join_tools::tests::stale_and_cancelled_queued_or_late_sources_are_cleaned_without_commits ... ok
+test join_ui::tests::cancelled_join_cleans_queued_and_late_results_without_changing_project ... ok
+test join_ui::tests::cancelled_join_retains_single_worker_slot_until_the_thread_has_exited ... ok
+test join_ui::tests::dropping_join_ui_cancels_worker_token_and_disposes_late_result ... ok
+test join_ui::tests::stale_join_results_and_worker_disconnect_never_replace_current_clips ... ok
+test join_ui::tests::successful_join_commits_one_undo_and_retains_wav_through_undo_and_redo ... ok
+test library::tests::categories_come_from_vst3_metadata_until_the_user_names_their_own ... ok
+test library::tests::preview_completion_preserves_the_assign_action_and_track_count ... ok
+test library_preview::tests::cache_evicts_one_old_entry_and_keeps_recent_visible_textures ... ok
+test library_preview::tests::clones_share_two_job_limit_and_refresh_discards_old_completions ... ok
+test library_preview::tests::decodes_card_sized_images_and_memoizes_failure_until_refresh ... ok
+test midi_editor::tests::copying_between_stretch_rates_preserves_audible_note_spacing_and_duration ... ok
+test midi_editor::tests::invalid_note_drag_frame_keeps_last_valid_source_and_original_undo_checkpoint ... ok
+test midi_editor::tests::keyboard_key_cursor_auditions_while_enter_is_held_and_stops_on_focus_loss ... ok
+test midi_editor::tests::note_add_move_resize_and_duplicate_reject_bounds_atomically_across_links ... ok
+test midi_editor::tests::note_transform_rolls_back_when_clip_extension_exceeds_project_bounds ... ok
+test midi_editor::tests::quantize_in_a_stretched_trimmed_clip_aligns_to_arrangement_grid ... ok
+test midi_editor::tests::stretched_ghost_edits_use_audible_beats_and_extend_only_that_instance ... ok
+test midi_editor::tests::transforming_selected_notes_preserves_other_source_notes_exactly ... ok
+test plugin_ui::tests::automatic_snapshots_preserve_parameter_undo_without_extra_steps ... ok
+test plugin_ui::tests::disconnected_editor_startup_cancels_quit_instead_of_hanging_or_losing_recovery ... ok
+test plugin_ui::tests::failed_editor_save_keeps_document_unsaved_and_writes_last_known_recovery ... ok
+test plugin_ui::tests::first_native_capture_stays_dirty_without_an_artificial_undo_step ... ok
+test plugin_ui::tests::late_parameter_metadata_keeps_automation_actions_visible_and_clickable ... ok
+test plugin_ui::tests::native_automation_rejects_invalid_metadata_stale_owners_and_document_transitions ... ok
+test plugin_ui::tests::native_automation_uses_owner_zero_id_and_reuses_without_history_or_value_changes ... ok
+test plugin_ui::tests::native_effect_automation_uses_slot_identity_and_channel_context ... ok
+test plugin_ui::tests::native_parameter_change_follows_an_unflushed_ui_edit_in_history ... ok
+test plugin_ui::tests::opaque_preset_follows_an_unflushed_ui_edit_without_duplicate_steps ... ok
+test plugin_ui::tests::parameter_controls_wait_for_start_close_and_state_barriers ... ok
+test plugin_ui::tests::pending_document_action_requires_its_snapshot_and_successful_close ... ok
+test plugin_ui::tests::quitting_after_reassignment_does_not_wait_for_the_obsolete_editor_startup ... ok
+test plugin_ui::tests::reported_editor_initialization_failure_allows_pending_quit_with_recovery ... ok
+test plugin_ui::tests::switching_documents_discards_editor_metadata_and_pending_autolaunch ... ok
+test project_io::tests::completion_after_cosmetic_edit_marks_only_the_saved_history_checkpoint ... ok
+test project_io::tests::failed_worker_cancels_queued_document_replacement_and_quit ... ok
+test recording_ui::tests::cancelling_count_in_does_not_resume_playback_on_a_later_rebuild ... ok
+test recording_ui::tests::finishing_an_active_take_keeps_playback_running ... ok
+test recording_ui::tests::output_retry_waits_for_capture_finalization_and_preserves_recorded_notes ... ok
+test recording_ui::tests::rebuild_during_recording_preparation_is_not_lost ... ok
+test recording_ui::tests::successful_recording_commit_preserves_an_unrelated_active_error_and_its_details ... ok
+test settings::tests::concurrent_saves_use_independent_temporary_files ... ok
+test settings::tests::failed_atomic_replace_cleans_its_temporary_file ... ok
+test settings::tests::failed_save_preserves_existing_settings ... ok
+test settings::tests::invalid_saved_settings_fall_back_before_reaching_the_ui ... ok
+test spectrogram::tests::admission_blocked_sources_use_metadata_checks_without_redecoding ... ok
+test spectrogram::tests::cache_is_bounded_and_visible_entries_survive_lru_eviction ... ok
+test spectrogram::tests::dropping_the_window_does_not_leave_a_two_stage_completion_cycle ... ok
+test spectrogram::tests::empty_source_failure_does_not_kill_the_worker_for_the_next_valid_source ... ok
+test spectrogram::tests::external_file_replacement_cannot_mix_new_peaks_with_old_ui_pcm ... ok
+test spectrogram::tests::late_peak_publication_is_rejected_after_reload ... ok
+test spectrogram::tests::progressive_peaks_publish_before_spectrum_without_finishing_the_job ... ok
+test spectrogram::tests::rejected_peaks_stay_blocked_after_smaller_spectrum_is_admitted ... ok
+test spectrogram::tests::reload_rejects_late_completion_even_when_the_same_source_is_visible_again ... ok
+test spectrogram::tests::source_hint_change_cancels_and_rejects_an_older_revision ... ok
+test spectrogram::tests::vertically_clipped_waveforms_preserve_their_original_frequency_axis ... ok
+test tool_jobs::tests::analysis_refuses_expensive_ranges_before_rendering ... ok
+test tool_jobs::tests::analyze_selected_track_preserves_downstream_bus_and_excludes_other_sources ... ok
+test tool_jobs::tests::clip_analysis_maps_reversed_onsets_and_supplies_valid_alternative_edits ... ok
+test tool_jobs::tests::clip_analysis_rejects_file_arguments_and_redacts_source_failures ... ok
+test tool_jobs::tests::measurement_detects_rms_full_scale_and_opposite_phase ... ok
+test tool_jobs::tests::parameter_paging_filters_and_never_exposes_plugin_paths_or_state ... ok
+test tool_jobs::tests::silence_and_cancellation_do_not_report_nonfinite_metrics ... ok
+test ui_tests::arrangement_clip_drag_accumulates_movement_and_preserves_source_offset ... ok
+test ui_tests::canceling_setup_discards_a_buffer_dropdown_change_without_touching_active_settings ... ok
+test ui_tests::command_d_rejects_linked_note_duplication_past_timeline_end_without_changing_selection ... ok
+test ui_tests::cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input ... ok
+test ui_tests::detaching_a_midi_instance_keeps_audio_equivalent_and_does_not_rebuild_graph ... ok
+test ui_tests::document_changes_and_explicit_arrangement_clear_utility_return_paths ... ok
+test ui_tests::double_clicking_a_clip_opens_the_focused_editor_without_changing_the_project ... ok
+test ui_tests::dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat ... ok
+test ui_tests::dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_edit ... ok
+test ui_tests::duplicating_the_final_note_extends_the_clip_and_renders_both_notes ... ok
+test ui_tests::escape_dismisses_the_scale_dropdown_before_the_clip_editor ... ok
+test ui_tests::escape_from_the_clip_editor_clears_note_selection_before_arrangement_edits ... ok
+test ui_tests::failed_midi_paste_rolls_back_every_linked_instance_and_creates_no_history ... ok
+test ui_tests::folder_header_toggles_child_visibility_without_removing_clips ... ok
+test ui_tests::leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the_clip ... ok
+test ui_tests::linked_midi_note_drag_updates_every_instance_on_each_frame_and_undoes_once ... ok
+test ui_tests::linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_instance ... ok
+test ui_tests::native_setup_filters_sample_rates_to_the_selected_device_capabilities ... ok
+test ui_tests::nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll ... ALSA lib seq_hw.c:540:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+ok
+test ui_tests::offline_setup_discards_device_inventory_and_keeps_portable_export_rates ... ok
+test ui_tests::pencil_click_creates_a_snapped_note_at_the_selected_pitch ... ok
+test ui_tests::piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin ... ok
+test ui_tests::piano_roll_drag_uses_total_displacement_across_multiple_frames ... ok
+test ui_tests::properties_follows_selection_and_never_leaves_an_unavailable_clip_page ... ok
+test ui_tests::returning_from_an_effect_utility_restores_its_slot_and_mixer_context ... ok
+test ui_tests::tool_popups_are_exclusive_and_escape_returns_to_the_arrangement ... ok
+test ui_tests::track_context_menu_compacts_its_row_while_keeping_the_clip_visible ... ok
+test ui_tests::unassigned_instrument_popup_opens_library_without_changing_the_session ... ok
+
+test result: ok. 141 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.63s
+
+     Running tests/mixer_e2e.rs (target/debug/deps/mixer_e2e-2929a87f82b43d8c)
+
+running 3 tests
+test aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand ... ok
+test output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks ... ok
+test sequencer_mixer_controls_route_undo_persist_and_change_exported_audio ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.19s
+
+     Running tests/mixer_flow_e2e.rs (target/debug/deps/mixer_flow_e2e-bebb2209dd15a6d0)
+
+running 2 tests
+test mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback ... ok
+test mixer_orders_signal_stages_and_separates_primary_and_send_arrows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.23s
+
+     Running tests/mixer_height_e2e.rs (target/debug/deps/mixer_height_e2e-d750f3337414fd2e)
+
+running 1 test
+test mixer_fills_height_and_resizes_faders_without_losing_channel_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.19s
+
+     Running tests/mixer_navigation_e2e.rs (target/debug/deps/mixer_navigation_e2e-292902ba20a7027e)
+
+running 1 test
+test middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.95s
+
+     Running tests/mixer_readability_e2e.rs (target/debug/deps/mixer_readability_e2e-5e2ba4bcb18aad74)
+
+running 1 test
+test mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse ... FAILED
+
+failures:
+
+---- mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse stdout ----
+
+thread 'mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse' (312745) panicked at crates/daw-app/tests/mixer_readability_e2e.rs:250:9:
+assertion `left == right` failed
+  left: String("Arrangement")
+ right: "Mixer"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_readability_e2e`

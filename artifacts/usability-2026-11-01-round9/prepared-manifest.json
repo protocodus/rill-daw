@@ -1,0 +1,13 @@
+{
+  "status": "prepared; waiting for root build-ready signal, freeze and launch",
+  "round": 9,
+  "root": "/workspace/scratch/rill-usability-round9",
+  "evidence_destination": "/workspace/rill-daw/artifacts/usability-2026-11-01-round9",
+  "display_base": 980,
+  "created_utc": "2026-11-01T00:46:21Z",
+  "mouse_driver_byte_identical_to_round6": true,
+  "plugin_byte_identical_to_round6": true,
+  "previous_studies_modified": false,
+  "scripts_syntax_checked": true,
+  "new_mixer_task": "Before exporting, use the Mixer to balance the audio and MIDI track volumes and pan, try mute and solo, and create a bus and send if you can discover how."
+}

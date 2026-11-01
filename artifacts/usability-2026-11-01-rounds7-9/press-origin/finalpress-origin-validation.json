@@ -1,0 +1,130 @@
+{
+  "status": "implemented and validated",
+  "validated_at_utc": "2026-11-01T01:00:47Z",
+  "finding": "Round8 P4-F4 staggered Pencil onsets",
+  "original_review": {
+    "path": "/workspace/scratch/rill-study-iteration/press-origin-review.json",
+    "sha256": "5cd652044867d2133fa1789745c7f16c111fd4fbdbeff77f554c44a6fed67900"
+  },
+  "original_review_unchanged": true,
+  "original_participant_files_rechecked_unchanged": [
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/mist.rill",
+      "sha256": "6b1b6de22dffa687dfd7005de6b1c93f18fff2aea6207cf3cfe1265dc3a3687c"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/mouse-actions.jsonl",
+      "sha256": "ddf2161ddd4e8c9cd1df9637e991e6da4e4a7a3b28ca726ffff62b244be96588"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/09-long-midi.png",
+      "sha256": "87ea63ff53fc247d4bbe032c7c0303c946d702684d681bcc87158ca9c9d989e0"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/10-notes.png",
+      "sha256": "4f1954df7e92b77d529edeb6ef37cce99e0b520f7424d3d11f565a6608ed811b"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/report.json",
+      "sha256": "83d3e43d9d494043581c549caf06d968f231e5c1b2c840d5cae7fb9db23200b2"
+    }
+  ],
+  "correction": "Initial keyboard focus, note/velocity hit, onset, pitch and gesture origin use the raw primary press event position and Shift state. Latest pointer coordinates still supply movement and release endpoints. Existing layer/modal/navigation guards remain; a fresh press must originate inside the canvas.",
+  "baseline": {
+    "unit_failures": 1,
+    "new_app_e2e_failures": 3,
+    "logs": [
+      {
+        "path": "/workspace/scratch/rill-iteration-validation/round8-midi-press-unit-baseline.log",
+        "sha256": "93f39ab2a73c733730c5b5d15721a1c1e46ea1b2a4d54f369d4eabf7c5d83f7a"
+      },
+      {
+        "path": "/workspace/scratch/rill-iteration-validation/round8-midi-press-app-baseline.log",
+        "sha256": "ed673e6a263e39ef17c91427dc58e63fd2bcb39191f72796fcb9dbf8b42d5ade"
+      }
+    ],
+    "tests_unchanged_between_baseline_and_fix": true
+  },
+  "focused": {
+    "app_unit_passed": 141,
+    "new_app_e2e_passed": 3,
+    "failed": 0,
+    "log": {
+      "path": "/workspace/scratch/rill-iteration-validation/midi-press-fixed-1.log",
+      "sha256": "df39a85b82eb9f0e70ba156ed776f4a5ee2ea717e2183a96c3cfaf499f68c9b8"
+    }
+  },
+  "full_workspace": {
+    "command": "cargo +1.99.1 test --locked --workspace --no-fail-fast -- --test-threads=1",
+    "profile": {
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_PROFILE_TEST_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0"
+    },
+    "exit_code": 0,
+    "completed_targets_including_doc_tests": 261,
+    "passed": 1447,
+    "failed": 0,
+    "ignored": 25,
+    "log": "/workspace/scratch/rill-iteration-validation/workspace-final-1.log",
+    "log_sha256": "7ec2f866229dad32d1903b051635517c9084e4ff57088439a18b1c5409408f8c"
+  },
+  "full_workspace_summary": {
+    "path": "/workspace/scratch/rill-iteration-validation/workspace-final-summary.json",
+    "sha256": "e3480b7eb1c472e9d2b90a6cdf9c4f75f9952e0476842b09ec81597b662267dd"
+  },
+  "explicit_workspace_build": {
+    "status": "passed",
+    "log": {
+      "path": "/workspace/scratch/rill-iteration-validation/workspace-build-round9.log",
+      "sha256": "59e339d2aa27cd2222fead9549dbc67b0a6e0d10e368fb0ddf49b9c9ba0ac0a3"
+    }
+  },
+  "strict_clippy": {
+    "status": "passed",
+    "log": {
+      "path": "/workspace/scratch/rill-iteration-validation/clippy-round9.log",
+      "sha256": "4b5f67d66093926dba6043599c78165d4eb6d8417a5e8f41c77567849c79e4a0"
+    }
+  },
+  "format_check": {
+    "status": "passed",
+    "log": {
+      "path": "/workspace/scratch/rill-iteration-validation/format-round9.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "diff_whitespace_check": {
+    "status": "passed",
+    "log": {
+      "path": "/workspace/scratch/rill-iteration-validation/diff-round9.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "command_completion_provenance": "Coordinator reported the serial set-e validation sequence exited 0. Build/Clippy logs show successful completion; format and diff checks have empty success logs.",
+  "independent_read_only_review": "No blockers found in initial pointer ownership, note/velocity targeting, Shift semantics, latest-pointer update/release behavior or one-Undo path. No apps or builds were run by the reviewer.",
+  "validated_source_files": [
+    {
+      "path": "/workspace/rill-daw/crates/daw-app/src/midi_editor.rs",
+      "sha256": "e0def03aa7b6619d29ab1a444e68ae6f593a6c73e5a65a5123b31158fdc07392"
+    },
+    {
+      "path": "/workspace/rill-daw/crates/daw-app/src/ui_tests.rs",
+      "sha256": "9def4ac1096f21b19faff3c2f825623abefaabd92f63b53d5355b751dd56bfeb"
+    },
+    {
+      "path": "/workspace/rill-daw/crates/daw-app/tests/midi_press_origin_e2e.rs",
+      "sha256": "cd679043cc907ae285b2e878a6c55f4675c44c1ccad9efa1ff6cfe19c473e0f9"
+    }
+  ],
+  "limits": [
+    "The30.134-second extension is not automatically attributed to the onset bug; release endpoint snapping and initial note-length extension require separate evidence.",
+    "Existing conservative behavior when latest pointer is outside canvas is retained; this is not universal cross-widget pointer capture.",
+    "Multiple complete primary gestures within a single input frame are not newly supported.",
+    "Round8 ratings precede this correction and must remain unchanged."
+  ],
+  "round8_scores_preserved": true,
+  "new_round9_scores_claimed": false,
+  "all_original_reports_unchanged": true,
+  "note": "This artifact supplements the original press-origin-review.json; it does not replace or modify that baseline review."
+}

@@ -1,0 +1,26 @@
+{
+  "created_utc": "2026-11-01T01:28:46Z",
+  "scope": "Separate source/native press-origin evidence and validation. Participant reports and ratings are unchanged.",
+  "file_count": 3,
+  "total_bytes": 25693,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-study-iteration/finalpress-origin-validation.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/press-origin/finalpress-origin-validation.json",
+      "bytes": 5888,
+      "sha256": "6dfc4e1e340d3dc129de65b7afbc899ec5094456663aa48ed700677a75093235"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/press-origin-review.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/press-origin/press-origin-review.json",
+      "bytes": 6965,
+      "sha256": "5cd652044867d2133fa1789745c7f16c111fd4fbdbeff77f554c44a6fed67900"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/round9-note-origin-audit.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/press-origin/round9-note-origin-audit.json",
+      "bytes": 12840,
+      "sha256": "81cbc1f9d05e1fc958cc7e51210cb997a2ca8a4025899ef9a70a875a764c153c"
+    }
+  ]
+}

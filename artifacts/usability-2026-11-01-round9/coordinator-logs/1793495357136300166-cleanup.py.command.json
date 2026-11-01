@@ -1,0 +1,12 @@
+{
+  "started_utc": "2026-11-01T01:09:17Z",
+  "command": [
+    "python3",
+    "/workspace/scratch/rill-usability-round9/cleanup.py"
+  ],
+  "cwd": "/workspace",
+  "output_log": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495357136300166-cleanup.py.log",
+  "finished_utc": "2026-11-01T01:09:17Z",
+  "elapsed_seconds": 0.174,
+  "exit_code": 0
+}

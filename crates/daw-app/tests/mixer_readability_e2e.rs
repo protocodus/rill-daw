@@ -236,16 +236,45 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
             assert_eq!(restored["popups"]["routing"], false);
             unchanged(&restored, &original);
         }
-        // The no-send state has a visible action too; it opens the right
-        // channel's existing routing editor without creating a send implicitly.
+        // An empty channel asks for its destination immediately, without
+        // changing selection, opening another workspace, or creating a send.
         let current = app.inspect();
-        let routing = click_bounds(&mut app, &channel(&current, bass)["sends"]);
-        assert_eq!(routing["selected_track"], bass);
-        label(&routing, "Routing of Bass");
-        label(&routing, "+ Send");
-        unchanged(&routing, &original);
-        let restored = close_window(&mut app, &routing, "Routing of Bass");
+        let choices = click_bounds(&mut app, &channel(&current, bass)["sends"]);
+        assert_eq!(choices["selected_track"], current["selected_track"]);
+        assert_eq!(choices["popups"]["routing"], false);
+        label(&choices, "Send from Bass");
+        label(&choices, "New bus and send");
+        unchanged(&choices, &original);
+        // Cancel from empty mixer body beside the master, rather than from
+        // an assumed header coordinate that may activate workspace navigation.
+        let viewport = Bounds::from(&choices["mixer"]["reorder_viewport"]);
+        let master = Bounds::from(&choices["mixer"]["master_strip"]);
+        assert!(viewport.right - master.right > 8.0);
+        let x = (master.right + viewport.right) * 0.5;
+        let (_, y) = viewport.center();
+        for area in choices["native_menu"]["foreground_areas"]
+            .as_array()
+            .unwrap()
+        {
+            assert!(
+                x < area[0].as_f64().unwrap()
+                    || x > area[2].as_f64().unwrap()
+                    || y < area[1].as_f64().unwrap()
+                    || y > area[3].as_f64().unwrap(),
+                "Cancellation point ({x}, {y}) is inside the menu {area}"
+            );
+        }
+        let restored = app.command(json!({"command":"pointer", "phase":"click",
+            "x":x, "y":y}));
         assert_eq!(restored["view"], "Mixer");
+        assert_eq!(restored["selected_track"], current["selected_track"]);
+        assert!(
+            !restored["menu_label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label["text"] == "New bus and send")
+        );
         unchanged(&restored, &original);
 
         let effects = click_bounds(&mut app, &channel(&restored, drums)["effects"]);

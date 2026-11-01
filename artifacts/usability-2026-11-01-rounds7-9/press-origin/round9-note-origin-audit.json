@@ -1,0 +1,415 @@
+{
+  "status": "Read-only review complete; no onset defect established in round9 participant5 evidence",
+  "purpose": "Reconcile R9P5-F4 first-note placement impression with original native screenshots, input and saved project; independently cross-check a completed native session.",
+  "method": "Read original reports/mouse logs, inspect original PNGs, read saved ZIP manifest without extracting or altering it, and compare recorded coordinates with visible grid and final note source values. No app, probe, build, input replay or screenshot editing.",
+  "round9_build": {
+    "path": "/workspace/scratch/rill-usability-round9/freeze-manifest.json",
+    "sha256": "9e2c567839e0852832dafcf818bfb07a042e65b39ee8eca42fbe233d76f13867",
+    "bytes": 4524
+  },
+  "viewport_mapping": {
+    "viewport_pixels": [
+      1440,
+      1000
+    ],
+    "piano_plot_left_x": 61,
+    "first_two_bar_grid_x": [
+      61,
+      373
+    ],
+    "pixels_per_bar": 312,
+    "beats_per_bar": 4,
+    "pixels_per_beat": 78,
+    "mapping_basis": "Visible ruler/grid in the original piano-roll captures; numeric grid inference, not a captured internal frame/diagnostic state. Quarter-beat rounding matches the shown minor grid and saved notes."
+  },
+  "participant5": {
+    "finding_id": "P5-F4",
+    "source_refs": [
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/report.json",
+        "sha256": "e28ea8fa3b5b4df658d2e2316e52ed1de1663d1fa114f6e914dcf7cee9958584",
+        "bytes": 8693
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/mouse-actions.jsonl",
+        "sha256": "4a6e5c7374706ac11b640ec27880cf7a342217675008e1b7b5867c9fd866bcd0",
+        "bytes": 19359
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/06-piano-roll.png",
+        "sha256": "e80b3e3a28ad80100ef5676adfd26ea2a8ecb5576279597a46441cc7c2125da7",
+        "bytes": 114103
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/07-notes-drawn.png",
+        "sha256": "b0e8a78e2640806ca9d07dfc33f50504d4a96e8a3620c7205d9176baf587eea6",
+        "bytes": 115853
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/09-midi-repeats.png",
+        "sha256": "8324fcfe85d9070d0e23c197a4a2a9038548ac7d74d95ee31b143f23919112f7",
+        "bytes": 193405
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/27-full-arrangement.png",
+        "sha256": "37c801106b683ace4f7c27f75a5b0bc753558ff3215362d09f201281b8c5c1f5",
+        "bytes": 222143
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-5/Night hop.rill",
+        "sha256": "53e4f1bb55cec242ab04af55539db421ab07168ef466a38b7503c6088414e9ab",
+        "bytes": 3292807
+      }
+    ],
+    "original_finding": {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "Pencil drags produced four visible notes, but the first C4 appeared later than intended. A subsequent Select drag moved it toward the start, and the resulting four-note pattern was duplicated across the arrangement.",
+      "evidence": [
+        "07-notes-drawn.png",
+        "09-midi-repeats.png",
+        "27-full-arrangement.png"
+      ]
+    },
+    "original_drawing_drags": [
+      {
+        "time": "2026-11-01T01:01:45Z",
+        "started_unix": 1793494904.55869,
+        "action": "drag",
+        "args": [
+          "65",
+          "684",
+          "122",
+          "684"
+        ],
+        "held_button_after": null
+      },
+      {
+        "time": "2026-11-01T01:01:46Z",
+        "started_unix": 1793494905.9542553,
+        "action": "drag",
+        "args": [
+          "143",
+          "630",
+          "199",
+          "630"
+        ],
+        "held_button_after": null
+      },
+      {
+        "time": "2026-11-01T01:01:48Z",
+        "started_unix": 1793494907.3509178,
+        "action": "drag",
+        "args": [
+          "221",
+          "558",
+          "277",
+          "558"
+        ],
+        "held_button_after": null
+      },
+      {
+        "time": "2026-11-01T01:01:49Z",
+        "started_unix": 1793494908.725431,
+        "action": "drag",
+        "args": [
+          "299",
+          "630",
+          "354",
+          "630"
+        ],
+        "held_button_after": null
+      }
+    ],
+    "coordinate_mapping": [
+      {
+        "press": [
+          65.0,
+          684.0
+        ],
+        "release": [
+          122.0,
+          684.0
+        ],
+        "raw_start_beats_from_visible_grid": 0.05128205128205128,
+        "nearest_quarter_beat_start": 0.0,
+        "raw_end_beats_from_visible_grid": 0.782051282051282,
+        "nearest_quarter_beat_end": 0.75
+      },
+      {
+        "press": [
+          143.0,
+          630.0
+        ],
+        "release": [
+          199.0,
+          630.0
+        ],
+        "raw_start_beats_from_visible_grid": 1.0512820512820513,
+        "nearest_quarter_beat_start": 1.0,
+        "raw_end_beats_from_visible_grid": 1.7692307692307692,
+        "nearest_quarter_beat_end": 1.75
+      },
+      {
+        "press": [
+          221.0,
+          558.0
+        ],
+        "release": [
+          277.0,
+          558.0
+        ],
+        "raw_start_beats_from_visible_grid": 2.051282051282051,
+        "nearest_quarter_beat_start": 2.0,
+        "raw_end_beats_from_visible_grid": 2.769230769230769,
+        "nearest_quarter_beat_end": 2.75
+      },
+      {
+        "press": [
+          299.0,
+          630.0
+        ],
+        "release": [
+          354.0,
+          630.0
+        ],
+        "raw_start_beats_from_visible_grid": 3.051282051282051,
+        "nearest_quarter_beat_start": 3.0,
+        "raw_end_beats_from_visible_grid": 3.7564102564102564,
+        "nearest_quarter_beat_end": 3.75
+      }
+    ],
+    "saved_first_midi_clip": {
+      "clip_start": 0.0,
+      "clip_length": 4.0,
+      "clip_offset": 0.0,
+      "source_rate": 1.0,
+      "notes": [
+        {
+          "pitch": 60,
+          "start": 0.0,
+          "length": 0.75
+        },
+        {
+          "pitch": 63,
+          "start": 1.0,
+          "length": 0.75
+        },
+        {
+          "pitch": 67,
+          "start": 2.0,
+          "length": 0.75
+        },
+        {
+          "pitch": 63,
+          "start": 3.0,
+          "length": 0.75
+        }
+      ]
+    },
+    "pre_correction_capture": {
+      "path": "/workspace/scratch/rill-usability-round9/session-5/07-notes-drawn.png",
+      "captured_utc": "2026-11-01T01:01:50Z",
+      "C4_painted_blue_x_interval": [
+        64,
+        118
+      ],
+      "other_note_left_grid_positions": [
+        139,
+        217,
+        295
+      ],
+      "zero_time_cursor": "Cursor occupies the leftmost zero-time pixels around 61\u201363; visible C4 fill starts immediately after it, not a later beat."
+    },
+    "claimed_correction_input": {
+      "time": "2026-11-01T01:02:05Z",
+      "started_unix": 1793494924.6615283,
+      "action": "drag",
+      "args": [
+        "143",
+        "684",
+        "85",
+        "684"
+      ],
+      "held_button_after": null
+    },
+    "reconciliation": "Before the claimed correction, screenshot 07 already shows C4 at the zero-time edge. All four recorded presses map to beats 0/1/2/3 and the saved notes retain precisely those starts, each 0.75 beat long. The later Select drag starts at x=143 on the C4 row, outside the already-painted C4 ending around 119, and moves left across it; this is consistent with marquee selection rather than moving that note. The report records a real placement impression, but available evidence does not demonstrate delayed onset or recurrence of the round8 press-origin defect.",
+    "original_ratings_retained": {
+      "easy_to_use": 4,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 3,
+      "how_confusing_it_is": 3,
+      "feature_completeness": 4
+    }
+  },
+  "participant1_independent_crosscheck": {
+    "source_refs": [
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+        "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779",
+        "bytes": 7152
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-1/mouse-actions.jsonl",
+        "sha256": "1de30b828fc7bc9b1996481fd69f2cd0f843585efdce94236ceb2444ce3d6de8",
+        "bytes": 18813
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-1/04-notes.png",
+        "sha256": "bd9f026a4375960f69081ddd3b94c5ec47216e8b6124d609aeb5d4465e1828ee",
+        "bytes": 115518
+      },
+      {
+        "path": "/workspace/scratch/rill-usability-round9/session-1/dusk.rill",
+        "sha256": "3cb92027a6bee6c57af00851efb727440ba598f1befa61b021d253b712c6220c",
+        "bytes": 3292802
+      }
+    ],
+    "original_drawing_drags": [
+      {
+        "time": "2026-11-01T01:00:35Z",
+        "started_unix": 1793494834.8349352,
+        "action": "drag",
+        "args": [
+          "65",
+          "684",
+          "140",
+          "684"
+        ],
+        "held_button_after": null
+      },
+      {
+        "time": "2026-11-01T01:00:37Z",
+        "started_unix": 1793494836.113663,
+        "action": "drag",
+        "args": [
+          "143",
+          "611",
+          "218",
+          "611"
+        ],
+        "held_button_after": null
+      },
+      {
+        "time": "2026-11-01T01:00:38Z",
+        "started_unix": 1793494837.3693812,
+        "action": "drag",
+        "args": [
+          "221",
+          "559",
+          "294",
+          "559"
+        ],
+        "held_button_after": null
+      },
+      {
+        "time": "2026-11-01T01:00:39Z",
+        "started_unix": 1793494838.8459454,
+        "action": "drag",
+        "args": [
+          "299",
+          "594",
+          "371",
+          "594"
+        ],
+        "held_button_after": null
+      }
+    ],
+    "coordinate_mapping": [
+      {
+        "press": [
+          65.0,
+          684.0
+        ],
+        "release": [
+          140.0,
+          684.0
+        ],
+        "raw_start_beats_from_visible_grid": 0.05128205128205128,
+        "nearest_quarter_beat_start": 0.0,
+        "raw_end_beats_from_visible_grid": 1.0128205128205128,
+        "nearest_quarter_beat_end": 1.0
+      },
+      {
+        "press": [
+          143.0,
+          611.0
+        ],
+        "release": [
+          218.0,
+          611.0
+        ],
+        "raw_start_beats_from_visible_grid": 1.0512820512820513,
+        "nearest_quarter_beat_start": 1.0,
+        "raw_end_beats_from_visible_grid": 2.0128205128205128,
+        "nearest_quarter_beat_end": 2.0
+      },
+      {
+        "press": [
+          221.0,
+          559.0
+        ],
+        "release": [
+          294.0,
+          559.0
+        ],
+        "raw_start_beats_from_visible_grid": 2.051282051282051,
+        "nearest_quarter_beat_start": 2.0,
+        "raw_end_beats_from_visible_grid": 2.9871794871794872,
+        "nearest_quarter_beat_end": 3.0
+      },
+      {
+        "press": [
+          299.0,
+          594.0
+        ],
+        "release": [
+          371.0,
+          594.0
+        ],
+        "raw_start_beats_from_visible_grid": 3.051282051282051,
+        "nearest_quarter_beat_start": 3.0,
+        "raw_end_beats_from_visible_grid": 3.9743589743589745,
+        "nearest_quarter_beat_end": 4.0
+      }
+    ],
+    "saved_first_midi_clip": {
+      "clip_start": 0.0,
+      "clip_length": 4.0,
+      "clip_offset": 0.0,
+      "source_rate": 1.0,
+      "notes": [
+        {
+          "pitch": 60,
+          "start": 0.0,
+          "length": 1.0
+        },
+        {
+          "pitch": 64,
+          "start": 1.0,
+          "length": 1.0
+        },
+        {
+          "pitch": 67,
+          "start": 2.0,
+          "length": 1.0
+        },
+        {
+          "pitch": 65,
+          "start": 3.0,
+          "length": 1.0
+        }
+      ]
+    },
+    "observation": "The native screenshot and saved notes agree with recorded press positions: C4/E4/G4/F4 start at beats 0/1/2/3 and each lasts 1 beat. This supplies one additional observed successful native sequence, not a universal reliability claim."
+  },
+  "limits": [
+    "No internal event-queue/frame trace was recorded; this review does not claim what any unseen intermediate frame displayed or how its input was batched.",
+    "Participant intent and subjective confusion are retained verbatim. No original finding or rating was rewritten.",
+    "The saved project is after the attempted correction; the original screenshot 07 is the separate evidence that C4 was already at the start beforehand.",
+    "No new product correction is justified solely by this observation. This result does not imply all native pointer delivery patterns are supported.",
+    "Only completed participants 1/5 were inspected; no active participant session was queried or manipulated."
+  ],
+  "original_files_modified": false,
+  "apps_builds_or_probes_run": false
+}

@@ -1,0 +1,267 @@
+[
+  {
+    "participant": 1,
+    "tracks": [
+      {
+        "id": 51,
+        "name": "Circuit drums",
+        "kind": "Audio",
+        "mute": false,
+        "solo": false,
+        "gain": 0.39,
+        "pan": -0.15,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [
+          {
+            "target_bus": 133,
+            "gain": 0.25,
+            "pre_fader": false
+          }
+        ],
+        "automation": null
+      },
+      {
+        "id": 54,
+        "name": "New instrument",
+        "kind": "Midi",
+        "mute": false,
+        "solo": false,
+        "gain": 0.47,
+        "pan": 0.14,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      },
+      {
+        "id": 133,
+        "name": "New bus",
+        "kind": "Bus",
+        "mute": false,
+        "solo": false,
+        "gain": 1.0,
+        "pan": 0.0,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      }
+    ]
+  },
+  {
+    "participant": 2,
+    "tracks": [
+      {
+        "id": 51,
+        "name": "Circuit drums",
+        "kind": "Audio",
+        "mute": false,
+        "solo": false,
+        "gain": 0.4,
+        "pan": -0.15,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      },
+      {
+        "id": 54,
+        "name": "New instrument",
+        "kind": "Midi",
+        "mute": false,
+        "solo": false,
+        "gain": 0.36,
+        "pan": 0.19,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [
+          {
+            "target_bus": 190,
+            "gain": 0.25,
+            "pre_fader": false
+          }
+        ],
+        "automation": null
+      },
+      {
+        "id": 190,
+        "name": "New bus",
+        "kind": "Bus",
+        "mute": false,
+        "solo": false,
+        "gain": 1.0,
+        "pan": 0.0,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      }
+    ]
+  },
+  {
+    "participant": 3,
+    "tracks": [
+      {
+        "id": 51,
+        "name": "Circuit drums",
+        "kind": "Audio",
+        "mute": false,
+        "solo": false,
+        "gain": 0.38,
+        "pan": -0.15,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      },
+      {
+        "id": 54,
+        "name": "New instrument",
+        "kind": "Midi",
+        "mute": false,
+        "solo": false,
+        "gain": 0.51,
+        "pan": 0.16,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [
+          {
+            "target_bus": 159,
+            "gain": 0.25,
+            "pre_fader": false
+          }
+        ],
+        "automation": null
+      },
+      {
+        "id": 159,
+        "name": "New bus",
+        "kind": "Bus",
+        "mute": false,
+        "solo": false,
+        "gain": 1.0,
+        "pan": 0.0,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      }
+    ]
+  },
+  {
+    "participant": 4,
+    "tracks": [
+      {
+        "id": 51,
+        "name": "Circuit drums",
+        "kind": "Audio",
+        "mute": false,
+        "solo": false,
+        "gain": 0.25,
+        "pan": -0.14,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      },
+      {
+        "id": 54,
+        "name": "New instrument",
+        "kind": "Midi",
+        "mute": false,
+        "solo": false,
+        "gain": 0.5,
+        "pan": 0.21,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [
+          {
+            "target_bus": 77,
+            "gain": 0.25,
+            "pre_fader": false
+          }
+        ],
+        "automation": null
+      },
+      {
+        "id": 77,
+        "name": "New bus",
+        "kind": "Bus",
+        "mute": false,
+        "solo": false,
+        "gain": 1.0,
+        "pan": 0.0,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      }
+    ]
+  },
+  {
+    "participant": 5,
+    "tracks": [
+      {
+        "id": 51,
+        "name": "Circuit drums",
+        "kind": "Audio",
+        "mute": false,
+        "solo": false,
+        "gain": 0.42,
+        "pan": -0.25,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [
+          {
+            "target_bus": 134,
+            "gain": 0.25,
+            "pre_fader": false
+          }
+        ],
+        "automation": null
+      },
+      {
+        "id": 58,
+        "name": "New instrument",
+        "kind": "Midi",
+        "mute": false,
+        "solo": false,
+        "gain": 0.33,
+        "pan": 0.28,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      },
+      {
+        "id": 134,
+        "name": "New bus",
+        "kind": "Bus",
+        "mute": false,
+        "solo": false,
+        "gain": 1.0,
+        "pan": 0.0,
+        "output_bus": null,
+        "parent_folder": null,
+        "inserts": [],
+        "sends": [],
+        "automation": null
+      }
+    ]
+  }
+]

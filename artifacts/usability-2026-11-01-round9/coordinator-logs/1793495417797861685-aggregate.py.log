@@ -1,0 +1,92 @@
+{
+  "mean_ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3.2,
+    "how_confusing_it_is": 2.4,
+    "feature_completeness": 4
+  },
+  "summary": {
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "saved_project_wav_and_midi": 5,
+    "wav_within_half_second_of_30": 5,
+    "wav_audio_and_vst_components_verified": 5,
+    "elapsed_seconds_mean": 341.8,
+    "total_mouse_input_events": 424,
+    "total_screenshots": 174,
+    "prior_pieces_checked": 120,
+    "all_prior_pieces_unchanged": true
+  },
+  "participants": [
+    {
+      "id": 1,
+      "seconds": 311.0,
+      "actions": 83,
+      "wav_duration": 30.0,
+      "success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      }
+    },
+    {
+      "id": 2,
+      "seconds": 350.0,
+      "actions": 97,
+      "wav_duration": 30.0,
+      "success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      }
+    },
+    {
+      "id": 3,
+      "seconds": 282.0,
+      "actions": 71,
+      "wav_duration": 30.0,
+      "success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      }
+    },
+    {
+      "id": 4,
+      "seconds": 384.0,
+      "actions": 80,
+      "wav_duration": 30.0,
+      "success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      }
+    },
+    {
+      "id": 5,
+      "seconds": 382.0,
+      "actions": 93,
+      "wav_duration": 30.0,
+      "success": {
+        "exact_30_second_wav": true,
+        "nonzero_finite_wav": true,
+        "has_audio_assets": true,
+        "has_midi_with_vst3_assignment": true,
+        "saved_project_wav_and_midi": true,
+        "midi_notes_match_project_window": true
+      }
+    }
+  ]
+}

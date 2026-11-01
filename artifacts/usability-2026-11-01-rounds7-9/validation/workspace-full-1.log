@@ -1,0 +1,3048 @@
+   Compiling x11rb-protocol v0.13.2
+   Compiling daw-ai v0.1.0 (/workspace/rill-daw/crates/daw-ai)
+   Compiling daw-mcp v0.1.0 (/workspace/rill-daw/crates/daw-mcp)
+   Compiling daw-tools v0.1.0 (/workspace/rill-daw/crates/daw-tools)
+   Compiling daw-composer v0.1.0 (/workspace/rill-daw/crates/daw-composer)
+   Compiling daw-core v0.1.0 (/workspace/rill-daw/crates/daw-core)
+   Compiling x11rb v0.13.2
+   Compiling winit v0.30.13
+   Compiling arboard v3.7.0
+   Compiling egui-winit v0.33.3
+   Compiling glutin-winit v0.5.0
+   Compiling eframe v0.33.3
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 1m 02s
+     Running unittests src/lib.rs (target/debug/deps/daw_ai-e60b693ae7f7544a)
+
+running 18 tests
+test provider::tests::anthropic_groups_parallel_tool_results_into_one_user_message ... ok
+test provider::tests::both_adapters_keep_tool_ids_arguments_results_and_error_state ... ok
+test provider::tests::both_adapters_preserve_dialogue_roles_before_fresh_song_context ... ok
+test provider::tests::parses_provider_tool_requests_and_rejects_truncation ... ok
+test secret::tests::authenticated_randomized_roundtrip_and_redacted_debug ... ok
+test secret::tests::rejects_wrong_version_and_modified_ciphertext ... ok
+test tests::bounds_configuration_without_starting_network ... ok
+test tests::cancellation_interrupts_pending_tool_without_followup ... ok
+test tests::canonical_catalog_fits_both_provider_limits ... ok
+test tests::conversation_limits_count_unicode_characters_and_bound_message_count ... ok
+test tests::dialogue_precedes_fresh_context_without_replaying_old_tools ... ok
+test tests::every_registered_tool_has_a_human_activity_description ... ok
+test tests::late_backend_response_after_cancellation_never_dispatches_tools ... ok
+test tests::prompt_limit_matches_shared_unicode_composer ... ok
+test tests::rejects_entire_response_before_any_malformed_call_executes ... ok
+test tests::scoped_host_context_preserves_full_user_prompt_budget ... ok
+test tests::scripted_agent_waits_for_host_and_finishes ... ok
+test tests::unavailable_tools_never_reach_host ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running unittests src/main.rs (target/debug/deps/rill-4e2f4ac4aa9d374f)
+
+running 140 tests
+test app::engine_lifecycle_tests::retiring_superseded_preparations_keeps_every_owner_in_the_chain ... ok
+test app::engine_lifecycle_tests::stale_paused_completion_prepares_current_graph_and_cancel_prevents_device_open ... ok
+test app::engine_lifecycle_tests::transport_stop_retains_pending_initialization_until_it_has_retired ... ok
+test app::engine_lifecycle_tests::workspace_track_order_is_audio_equivalent_but_owned_audio_changes_are_not ... ok
+test app::export_feedback_tests::completed_export_preserves_an_unrelated_error_and_pending_feedback ... ok
+test audio_editor::tests::completed_transient_preview_is_discarded_after_tempo_changes ... ok
+test audio_editor::tests::fit_reference_uses_visible_window_envelope_channels_and_silence ... ok
+test audio_editor::tests::linked_fade_pointer_edits_use_source_coordinates_and_preserve_opposite_fade ... ok
+test audio_editor::tests::magnetic_snap_is_measured_in_pixels_and_aligns_either_move_edge ... ok
+test audio_editor::tests::native_clipboard_events_publish_paste_marker_and_cut_only_once ... ok
+test audio_editor::tests::stretched_fit_measures_the_same_source_window_and_fade_envelope ... ok
+test audio_editor::tests::viewing_independent_copies_preserves_long_source_fades ... ok
+test audio_editor::tests::viewing_trimmed_linked_fades_does_not_clamp_shared_source_values ... ok
+test audio_editor::tests::waveform_fit_matches_fractional_edges_and_reverse_source_mapping ... ok
+test audio_takes_ui::tests::delayed_take_import_does_not_resurrect_a_dismissed_or_changed_context ... ok
+test audio_takes_ui::tests::take_import_with_full_preview_cache_still_imports_audio_and_honors_cancel ... ok
+test automation::label_geometry_tests::right_aligned_labels_keep_their_full_visible_hit_rectangle ... ok
+test automation_editor::tests::creation_popup_hugs_short_content_and_aligns_its_footer ... ok
+test automation_editor::tests::manual_parameter_add_stays_clickable_when_metadata_finishes_mid_click ... ok
+test automation_editor::tests::parameter_search_never_activates_a_hidden_selection_and_reuses_an_existing_lane ... ok
+test automation_editor::tests::vst_creation_waits_for_metadata_then_uses_parameter_name_and_current_value ... ok
+test automation_state::tests::bypass_and_empty_overrides_report_the_value_the_renderer_uses ... ok
+test automation_state::tests::explicit_takeover_tracks_a_drag_back_to_the_stored_value_and_resume_keeps_points ... ok
+test automation_state::tests::pending_parameter_changes_override_but_curve_and_unrelated_edits_do_not ... ok
+test automation_state::tests::stopped_controls_read_held_endpoints_without_editing_the_manual_value ... ok
+test document_ui::tests::cancel_input_wins_over_a_save_completion_in_the_same_frame ... ok
+test document_ui::tests::changes_after_saved_snapshot_require_another_decision ... ok
+test document_ui::tests::dangling_symlinks_are_existing_destinations_for_normalization_confirmation ... ok
+test document_ui::tests::final_native_snapshot_can_cancel_a_previously_clean_transition ... ok
+test document_ui::tests::modal_drops_never_import_audio_and_request_releases_audition ... ok
+test document_ui::tests::normalized_destination_confirmation_receives_the_actual_changed_path_only ... ok
+test document_ui::tests::normalized_directory_entries_require_replacement_confirmation ... ok
+test document_ui::tests::picker_uses_existing_current_parent_then_remembered_folder_and_accepts_relative_files ... ok
+test engine_lifecycle::tests::replacement_waits_for_active_pending_and_retiring_devices_to_close ... ok
+test error_ui::tests::closing_the_app_from_details_preserves_the_unsaved_project_guard ... ok
+test error_ui::tests::raw_audio_drop_behind_error_details_cannot_change_the_project ... ok
+test error_ui::tests::report_preserves_all_causes_and_freezes_context ... ok
+test error_ui::tests::retry_revalidates_the_current_notice_and_never_pauses_a_healthy_engine ... ok
+test error_ui::tests::retry_waits_for_audio_preparation_export_and_queued_document_work ... ok
+test finishing_actions::tests::dense_midi_repeat_is_bounded_even_when_the_clip_count_is_small ... ok
+test finishing_actions::tests::final_repeat_trim_keeps_reversed_source_mapping_and_the_original_envelope ... ok
+test finishing_actions::tests::invalid_batch_route_keeps_the_entire_document_and_history_unchanged ... ok
+test finishing_actions::tests::repeat_limit_fails_before_allocating_or_changing_a_clip ... ok
+test history_ui::tests::returning_a_gesture_to_its_original_value_keeps_saved_state_and_history ... ok
+test instrument_tools::tests::composition_and_instrument_are_one_commit_without_editor_side_effects ... ok
+test instrument_tools::tests::generates_into_existing_track_and_preserves_same_instrument_state ... ok
+test instrument_tools::tests::invalid_plugin_notes_or_revision_leave_no_partial_track ... ok
+test instrument_tools::tests::refuses_known_effect_instrument_assignment_atomically ... ok
+test join_tools::tests::cancellation_keeps_the_worker_slot_until_its_thread_exits ... ok
+test join_tools::tests::renderer_failure_cleans_host_scratch_and_redacts_asset_paths ... ok
+test join_tools::tests::stale_and_cancelled_queued_or_late_sources_are_cleaned_without_commits ... ok
+test join_ui::tests::cancelled_join_cleans_queued_and_late_results_without_changing_project ... ok
+test join_ui::tests::cancelled_join_retains_single_worker_slot_until_the_thread_has_exited ... ok
+test join_ui::tests::dropping_join_ui_cancels_worker_token_and_disposes_late_result ... ok
+test join_ui::tests::stale_join_results_and_worker_disconnect_never_replace_current_clips ... ok
+test join_ui::tests::successful_join_commits_one_undo_and_retains_wav_through_undo_and_redo ... ok
+test library::tests::categories_come_from_vst3_metadata_until_the_user_names_their_own ... ok
+test library::tests::preview_completion_preserves_the_assign_action_and_track_count ... ok
+test library_preview::tests::cache_evicts_one_old_entry_and_keeps_recent_visible_textures ... ok
+test library_preview::tests::clones_share_two_job_limit_and_refresh_discards_old_completions ... ok
+test library_preview::tests::decodes_card_sized_images_and_memoizes_failure_until_refresh ... ok
+test midi_editor::tests::copying_between_stretch_rates_preserves_audible_note_spacing_and_duration ... ok
+test midi_editor::tests::invalid_note_drag_frame_keeps_last_valid_source_and_original_undo_checkpoint ... ok
+test midi_editor::tests::keyboard_key_cursor_auditions_while_enter_is_held_and_stops_on_focus_loss ... ok
+test midi_editor::tests::note_add_move_resize_and_duplicate_reject_bounds_atomically_across_links ... ok
+test midi_editor::tests::note_transform_rolls_back_when_clip_extension_exceeds_project_bounds ... ok
+test midi_editor::tests::quantize_in_a_stretched_trimmed_clip_aligns_to_arrangement_grid ... ok
+test midi_editor::tests::stretched_ghost_edits_use_audible_beats_and_extend_only_that_instance ... ok
+test midi_editor::tests::transforming_selected_notes_preserves_other_source_notes_exactly ... ok
+test plugin_ui::tests::automatic_snapshots_preserve_parameter_undo_without_extra_steps ... ok
+test plugin_ui::tests::disconnected_editor_startup_cancels_quit_instead_of_hanging_or_losing_recovery ... ok
+test plugin_ui::tests::failed_editor_save_keeps_document_unsaved_and_writes_last_known_recovery ... ok
+test plugin_ui::tests::first_native_capture_stays_dirty_without_an_artificial_undo_step ... ok
+test plugin_ui::tests::late_parameter_metadata_keeps_automation_actions_visible_and_clickable ... ok
+test plugin_ui::tests::native_automation_rejects_invalid_metadata_stale_owners_and_document_transitions ... ok
+test plugin_ui::tests::native_automation_uses_owner_zero_id_and_reuses_without_history_or_value_changes ... ok
+test plugin_ui::tests::native_effect_automation_uses_slot_identity_and_channel_context ... ok
+test plugin_ui::tests::native_parameter_change_follows_an_unflushed_ui_edit_in_history ... ok
+test plugin_ui::tests::opaque_preset_follows_an_unflushed_ui_edit_without_duplicate_steps ... ok
+test plugin_ui::tests::parameter_controls_wait_for_start_close_and_state_barriers ... ok
+test plugin_ui::tests::pending_document_action_requires_its_snapshot_and_successful_close ... ok
+test plugin_ui::tests::quitting_after_reassignment_does_not_wait_for_the_obsolete_editor_startup ... ok
+test plugin_ui::tests::reported_editor_initialization_failure_allows_pending_quit_with_recovery ... ok
+test plugin_ui::tests::switching_documents_discards_editor_metadata_and_pending_autolaunch ... ok
+test project_io::tests::completion_after_cosmetic_edit_marks_only_the_saved_history_checkpoint ... ok
+test project_io::tests::failed_worker_cancels_queued_document_replacement_and_quit ... ok
+test recording_ui::tests::cancelling_count_in_does_not_resume_playback_on_a_later_rebuild ... ok
+test recording_ui::tests::finishing_an_active_take_keeps_playback_running ... ok
+test recording_ui::tests::output_retry_waits_for_capture_finalization_and_preserves_recorded_notes ... ok
+test recording_ui::tests::rebuild_during_recording_preparation_is_not_lost ... ok
+test recording_ui::tests::successful_recording_commit_preserves_an_unrelated_active_error_and_its_details ... ok
+test settings::tests::concurrent_saves_use_independent_temporary_files ... ok
+test settings::tests::failed_atomic_replace_cleans_its_temporary_file ... ok
+test settings::tests::failed_save_preserves_existing_settings ... ok
+test settings::tests::invalid_saved_settings_fall_back_before_reaching_the_ui ... ok
+test spectrogram::tests::admission_blocked_sources_use_metadata_checks_without_redecoding ... ok
+test spectrogram::tests::cache_is_bounded_and_visible_entries_survive_lru_eviction ... ok
+test spectrogram::tests::dropping_the_window_does_not_leave_a_two_stage_completion_cycle ... ok
+test spectrogram::tests::empty_source_failure_does_not_kill_the_worker_for_the_next_valid_source ... ok
+test spectrogram::tests::external_file_replacement_cannot_mix_new_peaks_with_old_ui_pcm ... ok
+test spectrogram::tests::late_peak_publication_is_rejected_after_reload ... ok
+test spectrogram::tests::progressive_peaks_publish_before_spectrum_without_finishing_the_job ... ok
+test spectrogram::tests::rejected_peaks_stay_blocked_after_smaller_spectrum_is_admitted ... ok
+test spectrogram::tests::reload_rejects_late_completion_even_when_the_same_source_is_visible_again ... ok
+test spectrogram::tests::source_hint_change_cancels_and_rejects_an_older_revision ... ok
+test spectrogram::tests::vertically_clipped_waveforms_preserve_their_original_frequency_axis ... ok
+test tool_jobs::tests::analysis_refuses_expensive_ranges_before_rendering ... ok
+test tool_jobs::tests::analyze_selected_track_preserves_downstream_bus_and_excludes_other_sources ... ok
+test tool_jobs::tests::clip_analysis_maps_reversed_onsets_and_supplies_valid_alternative_edits ... ok
+test tool_jobs::tests::clip_analysis_rejects_file_arguments_and_redacts_source_failures ... ok
+test tool_jobs::tests::measurement_detects_rms_full_scale_and_opposite_phase ... ok
+test tool_jobs::tests::parameter_paging_filters_and_never_exposes_plugin_paths_or_state ... ok
+test tool_jobs::tests::silence_and_cancellation_do_not_report_nonfinite_metrics ... ok
+test ui_tests::arrangement_clip_drag_accumulates_movement_and_preserves_source_offset ... ok
+test ui_tests::canceling_setup_discards_a_buffer_dropdown_change_without_touching_active_settings ... ok
+test ui_tests::command_d_rejects_linked_note_duplication_past_timeline_end_without_changing_selection ... ok
+test ui_tests::cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input ... ok
+test ui_tests::detaching_a_midi_instance_keeps_audio_equivalent_and_does_not_rebuild_graph ... ok
+test ui_tests::document_changes_and_explicit_arrangement_clear_utility_return_paths ... ok
+test ui_tests::double_clicking_a_clip_opens_the_focused_editor_without_changing_the_project ... ok
+test ui_tests::dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat ... ok
+test ui_tests::dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_edit ... ok
+test ui_tests::duplicating_the_final_note_extends_the_clip_and_renders_both_notes ... ok
+test ui_tests::escape_dismisses_the_scale_dropdown_before_the_clip_editor ... ok
+test ui_tests::escape_from_the_clip_editor_clears_note_selection_before_arrangement_edits ... ok
+test ui_tests::failed_midi_paste_rolls_back_every_linked_instance_and_creates_no_history ... ok
+test ui_tests::folder_header_toggles_child_visibility_without_removing_clips ... ok
+test ui_tests::leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the_clip ... ok
+test ui_tests::linked_midi_note_drag_updates_every_instance_on_each_frame_and_undoes_once ... ok
+test ui_tests::linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_instance ... ok
+test ui_tests::native_setup_filters_sample_rates_to_the_selected_device_capabilities ... ok
+test ui_tests::nested_utilities_restore_the_clip_selection_and_scrolled_piano_roll ... ALSA lib seq_hw.c:540:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+ok
+test ui_tests::offline_setup_discards_device_inventory_and_keeps_portable_export_rates ... ok
+test ui_tests::pencil_click_creates_a_snapped_note_at_the_selected_pitch ... ok
+test ui_tests::piano_roll_drag_uses_total_displacement_across_multiple_frames ... ok
+test ui_tests::properties_follows_selection_and_never_leaves_an_unavailable_clip_page ... ok
+test ui_tests::returning_from_an_effect_utility_restores_its_slot_and_mixer_context ... ok
+test ui_tests::tool_popups_are_exclusive_and_escape_returns_to_the_arrangement ... ok
+test ui_tests::track_context_menu_compacts_its_row_while_keeping_the_clip_visible ... ok
+test ui_tests::unassigned_instrument_popup_opens_library_without_changing_the_session ... ok
+
+test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.17s
+
+     Running tests/appearance_e2e.rs (target/debug/deps/appearance_e2e-cdc1ce09f7830128)
+
+running 2 tests
+test appearance_applies_cancels_persists_and_system_follows_live_os_events ... ok
+test piano_rows_preserve_subtle_key_contrast_with_green_harmony_guides_in_both_modes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/application_tools_e2e.rs (target/debug/deps/application_tools_e2e-4b4b0f85e478bec2)
+
+running 3 tests
+test privileged_documents_import_save_export_and_open_without_weakening_song_tools ... ok
+test privileged_setup_encrypts_keys_redacts_reads_and_revokes_keys_on_provider_switch ... ok
+test setup_discovers_devices_without_opening_streams_or_editing_the_song ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/arranger_layout_e2e.rs (target/debug/deps/arranger_layout_e2e-641d0de1cc15e148)
+
+running 4 tests
+test buses_keep_a_distinct_shared_identity_at_narrow_and_compact_sizes_without_changing_channels ... ok
+test label_and_all_row_sizes_resize_without_edits_and_loop_range_has_its_own_lane ... ok
+test recursive_folder_borders_enclose_descendant_lanes_with_common_grid_and_clipped_scroll_edges ... ok
+test tracks_menu_creates_subfolders_and_moves_tracks_with_cycle_safe_choices_and_recall ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.88s
+
+     Running tests/arranger_selection_e2e.rs (target/debug/deps/arranger_selection_e2e-b254ad7353b2f2e4)
+
+running 12 tests
+test additive_marquee_keeps_offscreen_clips_and_empty_viewport_clicks_clear_or_seek ... ok
+test arranger_slip_and_fade_handles_edit_sources_non_destructively_and_fit_selection_recalls_view ... ok
+test compatible_group_track_transfer_and_retained_take_sources_survive_duplicate_and_delete ... ok
+test header_resize_stays_on_labels_and_a_near_zero_cursor_drag_selects_audio ... ok
+test leading_rests_stop_at_zero_and_undo_abandons_a_held_audio_gesture ... ok
+test marquee_group_move_shift_copy_and_arrow_selection_preserve_relative_placement ... ok
+test moving_or_copying_a_time_phrase_preserves_its_leading_and_trailing_rests ... ok
+test native_mixed_clipboard_pastes_once_and_a_fresh_editor_copy_replaces_it ... ok
+test nested_folder_selection_fit_accounts_for_fixed_closing_strips_at_each_density ... ok
+test noncontiguous_selection_and_group_duplicate_are_mouse_accessible_and_one_undo ... ok
+test phrase_cut_keeps_outside_material_and_original_sources_and_undo_restores_selection ... ok
+test time_block_duplicate_preserves_rests_and_clips_partial_source_windows ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.64s
+
+     Running tests/arranger_tools_e2e.rs (target/debug/deps/arranger_tools_e2e-41fe4ae0d2ececae)
+
+running 10 tests
+test both_edge_trims_shift_snap_bypass_and_stretch_are_distinct_single_undo_gestures ... ok
+test common_duplicate_cut_ghost_and_join_tools_select_the_result_for_audio_and_midi ... ok
+test ghost_stretch_is_local_survives_portable_recall_and_join_preserves_rendered_timing ... ok
+test join_tool_prepares_the_clicked_track_before_opening_its_context ... ok
+test rejected_shift_duplicate_cannot_turn_into_a_move_of_the_original_while_held ... ok
+test shift_body_drag_duplicates_once_and_keeps_the_entire_gesture_in_one_undo_step ... ok
+test stretching_and_undo_keep_the_running_audio_graph_and_continuous_pcm ... ok
+test switching_editors_retains_each_supported_tool_without_editing_the_project ... ok
+test toolbar_keeps_every_tool_directly_accessible_at_compact_and_wide_sizes ... ok
+test trimming_very_short_audio_and_midi_clips_keeps_the_app_and_source_window_valid ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.98s
+
+     Running tests/assistant_e2e.rs (target/debug/deps/assistant_e2e-c4237bc6b6fdf373)
+
+running 7 tests
+test assistant_blocks_background_edit_shortcuts_with_and_without_prompt_focus ... ok
+test audio_tool_measures_the_rendered_song_and_observes_shared_mix_edits ... ok
+test closing_assistant_utility_keeps_its_current_run_working ... ok
+test delayed_history_mutations_cannot_undo_a_newer_manual_edit ... ok
+test mcp_and_manual_edits_share_state_and_reject_failed_stale_or_file_operations ... ok
+test prompt_creates_a_complete_phrase_and_gui_undo_redo_reverses_one_edit ... ok
+test song_query_during_a_manual_fader_drag_does_not_split_its_undo_step ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+
+     Running tests/assistant_guidance_e2e.rs (target/debug/deps/assistant_guidance_e2e-f6435c4c8ac277e3)
+
+running 5 tests
+test ai_settings_returns_to_the_draft_and_context_reflects_actual_selected_music ... ok
+test conversation_starters_preserve_drafts_and_never_send_in_both_themes ... ok
+test editable_composition_example_and_follow_up_share_normal_song_undo ... ok
+test examples_and_tips_preserve_drafts_and_keep_actions_visible_in_both_themes ... ok
+test failed_prompt_can_be_edited_and_new_chat_preserves_the_unsent_draft_and_song ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.84s
+
+     Running tests/assistant_readiness_e2e.rs (target/debug/deps/assistant_readiness_e2e-7ac218a9be06c1a0)
+
+running 6 tests
+test a_missing_pinned_clip_explains_why_send_is_blocked_without_broadening_scope ... ok
+test changing_scope_or_song_clears_stale_failure_and_recovery ... ok
+test connect_ai_returns_to_the_same_scoped_draft_without_sending_or_editing ... ok
+test failed_requests_offer_editable_recovery_and_keep_any_committed_music ... ok
+test recording_explains_the_block_and_keeps_the_draft_ready_for_afterward ... ok
+test stopping_a_run_offers_editing_without_repeating_already_committed_work ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.43s
+
+     Running tests/assistant_scope_e2e.rs (target/debug/deps/assistant_scope_e2e-85f8af168e4e7055)
+
+running 9 tests
+test audio_clip_scope_normalizes_only_the_open_occurrence_and_rejects_foreign_edits ... ok
+test changing_documents_cancels_pending_contextual_plugin_work ... ok
+test composition_dialog_ai_uses_the_same_clip_boundary_in_both_appearances ... ok
+test deleting_the_pinned_target_cancels_pending_parameter_work_without_widening_scope ... ok
+test instrument_effect_and_chain_tools_are_limited_to_the_open_processor_context ... The parameter E2E fixture has no native editor
+ok
+test linked_midi_edits_cannot_change_other_occurrences_without_explicit_independence ... ok
+test mixer_routing_and_automation_headers_pin_their_own_edit_boundaries ... ok
+test piano_roll_scope_filters_tools_edits_one_clip_and_global_ai_resets_the_boundary ... ok
+test replacing_an_instrument_requires_reopening_its_context_and_clears_old_conversation ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.45s
+
+     Running tests/assistant_settings_e2e.rs (target/debug/deps/assistant_settings_e2e-b76d8a4d56ddcdac)
+
+running 2 tests
+test applying_ai_configuration_preserves_live_audio_project_and_history ... ok
+test setup_encrypts_credentials_restarts_and_discards_cancelled_replacements ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+
+     Running tests/audio_common_e2e.rs (target/debug/deps/audio_common_e2e-bfc28ac516f200cf)
+
+running 9 tests
+test duplicate_menu_names_the_active_audio_scope_and_matches_the_rendered_result ... ok
+test exposed_tools_and_common_controls_work_in_narrow_and_wide_audio_editors ... ok
+test nudge_uses_shared_sample_millisecond_and_grid_steps_in_both_workspaces ... ok
+test range_copy_paste_and_duplicate_preserve_samples_and_project_recall ... ok
+test range_cut_and_delete_leave_silent_gaps_and_undo_in_one_step ... ok
+test ripple_delete_closes_time_on_one_track_and_moves_later_audio_with_one_undo ... ok
+test slip_drag_moves_audio_inside_fixed_edges_and_retains_reverse_stereo_mapping ... ok
+test whole_clip_cut_can_paste_back_after_returning_to_arranger ... ok
+test zero_crossing_snap_changes_cursor_cut_and_trim_together_and_shift_bypasses ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.06s
+
+     Running tests/audio_editor_e2e.rs (target/debug/deps/audio_editor_e2e-5ee6637bd0b846ea)
+
+running 6 tests
+test audio_pan_zoom_and_fit_reset_both_axes_without_changing_clip ... ok
+test audio_parameter_groups_wrap_together_and_keep_precise_edits_undoable ... ok
+test audio_secondary_actions_and_fade_controls_appear_only_on_demand ... ok
+test cursor_clip_bounds_snap_cut_copy_paste_duplicate_and_undo ... ok
+test fades_curves_reverse_gain_normalize_and_export_match_source ... ok
+test transient_algorithm_sensitivity_preview_and_split_are_undoable_and_preserve_audio ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.53s
+
+     Running tests/audio_gestures_e2e.rs (target/debug/deps/audio_gestures_e2e-af7c96362ca19be9)
+
+running 7 tests
+test audio_cursor_drag_selects_a_range_and_splits_or_trims_without_modifying_source ... ok
+test audio_edge_magnets_and_view_options_are_independent_of_grid_and_document ... ok
+test audio_select_moves_trims_both_edges_and_shift_copies_with_single_gesture_undo ... ok
+test audio_stretch_tool_changes_duration_and_keeps_pitch_in_export ... ok
+test split_pieces_remain_visible_and_selectable_in_the_audio_workspace ... ok
+test transient_markers_navigate_snap_with_shift_bypass_and_split_only_selected_time ... ok
+test trimming_back_and_forth_uses_original_source_and_shift_bypasses_grid ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.46s
+
+     Running tests/audio_pitch_e2e.rs (target/debug/deps/audio_pitch_e2e-9d1159bbafe36524)
+
+running 3 tests
+test arranger_stretch_and_audio_pitch_use_the_same_selected_engine_in_export ... ok
+test both_algorithms_transpose_up_down_and_fine_tune_without_changing_duration_or_source ... ok
+test properties_pitch_updates_ghosts_supports_undo_and_recalls_from_a_portable_project ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.43s
+
+     Running tests/audio_playback_edit_e2e.rs (target/debug/deps/audio_playback_edit_e2e-c20c4e54bb847546)
+
+running 1 test
+test selecting_copying_and_cutting_future_audio_preserve_running_transport_and_exact_pcm ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+
+     Running tests/audio_setup_e2e.rs (target/debug/deps/audio_setup_e2e-ecb9c2ec3c1b20ce)
+
+running 1 test
+test quality_and_sample_rate_switches_preserve_project_and_affect_real_exports ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+     Running tests/audio_silence_e2e.rs (target/debug/deps/audio_silence_e2e-53ed1ec73ee1cd54)
+
+running 4 tests
+test preview_apply_keeps_ghost_and_source_audio_with_one_undo_and_portable_recall ... ok
+test reversed_source_preview_and_retained_audio_follow_playback_order ... ok
+test settings_reanalyze_and_cancel_blocks_background_keyboard_edits ... ok
+test stripping_the_whole_clip_returns_to_arranger_and_undo_restores_it ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.87s
+
+     Running tests/audio_takes_e2e.rs (target/debug/deps/audio_takes_e2e-0621b26ec2ff53bb)
+
+running 11 tests
+test cancelled_and_invalid_imports_leave_project_and_history_unchanged ... ok
+test comp_time_selection_keeps_outer_audio_and_smooths_both_boundaries ... ok
+test escape_and_back_after_import_restore_the_editor_without_selecting_retained_sources ... ok
+test group_overlapping_clips_keeps_selected_take_and_back_returns_to_audible_comp ... ok
+test import_select_whole_take_undo_archive_and_restore ... ok
+test keep_comp_only_preserves_rendered_audio_and_undo_restores_alternatives ... ok
+test layer_overdub_creates_independent_colored_channel_with_same_output ... ok
+test shorter_take_requires_fitting_the_selection_before_comping ... ok
+test take_change_keeps_running_transport_and_callback_audio ... ok
+test take_group_picker_and_waveform_rows_choose_only_the_requested_group ... ok
+test track_menu_recovers_retained_takes_after_last_comp_is_deleted ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.32s
+
+     Running tests/audio_tools_e2e.rs (target/debug/deps/audio_tools_e2e-c585ded00dd048ba)
+
+running 3 tests
+test analysis_backed_clip_cuts_are_each_one_undoable_action ... ok
+test invalid_or_stale_audio_process_requests_leave_project_and_history_unchanged ... ok
+test normalize_tool_changes_actual_output_and_undo_restores_audio_in_one_step ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+
+     Running tests/automation_color_e2e.rs (target/debug/deps/automation_color_e2e-c5dca1a09d66b0fe)
+
+running 1 test
+test automation_and_override_colors_follow_state_across_workspaces_and_themes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.86s
+
+     Running tests/automation_curves_e2e.rs (target/debug/deps/automation_curves_e2e-ae4a956e54f1abef)
+
+running 4 tests
+test compact_automation_keeps_slope_and_resume_controls_visible ... ok
+test explicit_override_resume_and_curve_edits_keep_live_engine_and_audio ... ok
+test manual_gain_override_is_visible_saved_and_resumable_without_changing_curve_points ... ok
+test segment_shapes_and_mouse_handles_preserve_neighbors_and_hold_song_endpoints ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.13s
+
+     Running tests/automation_e2e.rs (target/debug/deps/automation_e2e-ec462f9c8f91d2b3)
+
+running 7 tests
+test automated_volume_changes_export_and_bypass_restores_manual_level ... ok
+test automation_navigation_fit_and_musical_beat_editing_share_editor_controls ... ok
+test automation_points_interpolation_undo_and_session_recovery ... ok
+test installed_vst_parameter_discovery_creates_named_lane_with_current_value ... ignored, requires an installed instrument via RILL_TEST_VST_INSTRUMENT
+test parameter_chooser_returns_to_its_curve_without_losing_selection_or_zoom ... ok
+test parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_targets ... ok
+test reopening_same_lane_id_refits_changed_points_and_restores_a_valid_selection ... ok
+
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.86s
+
+     Running tests/automation_indicators_e2e.rs (target/debug/deps/automation_indicators_e2e-81ee9dd88e526829)
+
+running 1 test
+test native_pan_send_and_arranger_indicate_override_and_resume_from_visible_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running tests/automation_tools_e2e.rs (target/debug/deps/automation_tools_e2e-394680aa542b8056)
+
+running 1 test
+test tool_mix_edits_take_over_preserve_curves_and_respect_explicit_resume_and_bypass ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/batch_audio_fades_e2e.rs (target/debug/deps/batch_audio_fades_e2e-1cb7f9c2e8cf05e9)
+
+running 2 tests
+test configured_fades_cancel_cleanly_apply_once_and_survive_portable_recall ... ok
+test mixed_selection_smooths_cut_audio_in_one_undo_and_preserves_other_sources_and_fades ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.72s
+
+     Running tests/beat_ruler_e2e.rs (target/debug/deps/beat_ruler_e2e-3a70edc47d6dd90c)
+
+running 2 tests
+test close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors ... ok
+test elapsed_clock_labels_omit_empty_hours_but_keep_real_hour_and_second_values ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s
+
+     Running tests/branding_e2e.rs (target/debug/deps/branding_e2e-1851a2a07c5c606f)
+
+running 1 test
+test identity_and_about_work_in_both_themes_and_return_to_the_previous_workspace ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
+
+     Running tests/channel_layout_e2e.rs (target/debug/deps/channel_layout_e2e-19d7d052d2b9d53f)
+
+running 2 tests
+test long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable ... ok
+test long_insert_chain_scrolls_to_actions_and_shrinks_after_removal ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.62s
+
+     Running tests/channel_meter_e2e.rs (target/debug/deps/channel_meter_e2e-da612052d21a7d52)
+
+running 1 test
+test live_arranger_meters_show_channel_audio_pan_and_bus_levels_then_stop ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/channel_properties_e2e.rs (target/debug/deps/channel_properties_e2e-0162462666cb4502)
+
+running 2 tests
+test clips_and_channels_have_separate_control_scopes_and_edits ... ok
+test mixer_names_open_the_correct_channel_and_connect_to_related_views ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.88s
+
+     Running tests/clip_identity_e2e.rs (target/debug/deps/clip_identity_e2e-a91ffd403fb23820)
+
+running 1 test
+test identical_clip_names_reveal_track_position_and_link_scope_without_editing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.90s
+
+     Running tests/clip_instrument_navigation_e2e.rs (target/debug/deps/clip_instrument_navigation_e2e-3ec776b015885f1e)
+
+running 1 test
+test clip_instrument_action_survives_assignment_and_restores_notes_and_view_on_return ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+     Running tests/clip_surface_e2e.rs (target/debug/deps/clip_surface_e2e-7fd51e8d04dc82f3)
+
+running 1 test
+test audio_and_midi_clips_keep_titles_and_previews_separate_in_both_appearances ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/clones_e2e.rs (target/debug/deps/clones_e2e-c0c024e58f1078c1)
+
+running 3 tests
+test audio_clones_share_processing_and_render_identically_after_portable_recall ... ok
+test linked_clip_move_trim_and_split_are_local_while_note_edits_reach_every_instance ... ok
+test midi_linked_clones_share_notes_and_name_but_duplicate_and_unlink_are_independent ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.54s
+
+     Running tests/compact_tools_e2e.rs (target/debug/deps/compact_tools_e2e-b8656de987079ec9)
+
+running 1 test
+test individual_arranger_tools_keep_full_targets_mouse_access_and_shortcut_parity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.65s
+
+     Running tests/components_e2e.rs (target/debug/deps/components_e2e-28cf93452ed8dc97)
+
+running 3 tests
+test long_library_catalog_scrolls_without_moving_search_or_device_actions ... ok
+test properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_and_densities ... ok
+test setup_tabs_selects_and_folder_input_stay_accessible_and_cancel_discards_drafts ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.32s
+
+     Running tests/composer_e2e.rs (target/debug/deps/composer_e2e-71bcde28756cd32c)
+
+running 4 tests
+test assistant_creates_three_complete_parts_in_one_mouse_undoable_operation ... ok
+test existing_instrument_target_retains_its_notes_mix_and_bus_when_adding_a_part ... ok
+test mcp_discovers_native_theory_and_reads_spelled_pitches_without_editing_the_song ... ok
+test stale_sessions_invalid_targets_and_oversized_drafts_never_partially_commit ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/control_roles_e2e.rs (target/debug/deps/control_roles_e2e-579bc6fb4b73b95b)
+
+running 2 tests
+test tool_families_wrap_together_and_every_mode_remains_mouse_accessible ... ok
+test tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_roles ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.79s
+
+     Running tests/crossfade_e2e.rs (target/debug/deps/crossfade_e2e-aacd29ff8de9f1da)
+
+running 2 tests
+test crossfade_popup_duration_presets_spline_drag_undo_and_archive_render ... ok
+test latest_start_and_later_storage_tie_win_with_older_clips_resuming ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.99s
+
+     Running tests/cue_editor_flow_e2e.rs (target/debug/deps/cue_editor_flow_e2e-0d84aa61a9dab2f2)
+
+running 5 tests
+test audio_to_midi_and_distant_pitch_cues_reveal_content_without_resetting_scale ... ok
+test cancelling_grid_preview_makes_no_edit_and_short_selection_limits_cuts ... ok
+test grid_slice_preview_is_read_only_then_all_cues_duplicate_as_one_phrase ... ok
+test next_previous_and_arrow_selection_keep_tool_scale_project_and_history ... ok
+test single_clip_header_keeps_actions_without_empty_navigation_controls ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.47s
+
+     Running tests/cursor_visibility_e2e.rs (target/debug/deps/cursor_visibility_e2e-508db5c8af4de12e)
+
+running 1 test
+test cursor_is_visible_over_clips_and_empty_space_in_each_editor_without_editing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.89s
+
+     Running tests/cut_current_e2e.rs (target/debug/deps/cut_current_e2e-fb6d47495c7514fc)
+
+running 1 test
+test four_loops_become_individual_hits_and_rearranged_cues_without_changing_sources ... ignored, musical dogfooding; set RILL_FOUR_LOOP_SOURCES to the four original loops
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/device_cards_e2e.rs (target/debug/deps/device_cards_e2e-8b7eadf8eeec42f8)
+
+running 3 tests
+test card_clicks_select_while_double_click_creates_or_assigns_the_chosen_instrument ... ok
+test card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe ... ok
+test cards_paint_cached_previews_name_and_producer_and_reflow_at_both_densities ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+     Running tests/document_context_e2e.rs (target/debug/deps/document_context_e2e-a70a9c4056ac5b4c)
+
+running 3 tests
+test export_diagnostics_name_the_saved_file_and_keep_the_musical_title_secondary ... ok
+test failed_saves_do_not_replace_the_working_folder_and_deleted_folders_are_ignored ... ok
+test new_song_remembers_the_successful_save_folder_across_cancel_and_restart ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+
+     Running tests/document_guard_e2e.rs (target/debug/deps/document_guard_e2e-e936d9973d60cda8)
+
+running 6 tests
+test completed_and_cancelled_pickers_preserve_text_shortcuts_and_unicode_names ... ok
+test failed_save_keeps_the_document_and_can_be_cancelled_or_retried ... ok
+test native_close_and_menu_quit_wait_for_a_choice_and_save_before_exit ... ok
+test new_confirmation_is_bounded_blocks_background_edits_and_cancel_restores_context ... ok
+test save_and_open_shortcuts_work_from_properties_without_losing_cancelled_context ... ok
+test save_before_new_waits_for_the_real_archive_and_picker_cancel_retains_the_choice ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.12s
+
+     Running tests/e2e.rs (target/debug/deps/e2e-8f288be744bea9b9)
+
+running 6 tests
+test dropping_into_empty_arrangement_creates_audio_tracks ... ok
+test file_menu_quit_closes_the_application ... ok
+test five_audio_tracks_drop_export_stereo_song_and_exit ... ok
+test launch_and_quit_without_a_display_or_audio_device ... ok
+test native_window_renders_and_exits_after_screenshot ... ignored, requires a native desktop or xvfb-run with OpenGL
+test portable_project_survives_moving_the_bundle_and_removing_original_audio ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+     Running tests/editor_unavailable_e2e.rs (target/debug/deps/editor_unavailable_e2e-614c743a63b7c05b)
+
+running 2 tests
+test running_editor_capture_failure_still_cancels_save_and_preserves_known_changes ... ok
+test unavailable_native_views_resume_pending_save_and_export_with_real_audible_dsp ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.93s
+
+     Running tests/effect_chain_layout_e2e.rs (target/debug/deps/effect_chain_layout_e2e-7cf95cd7bac27457)
+
+running 2 tests
+test long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes ... ok
+test mixer_scale_marks_match_native_fader_gain_and_empty_chains_offer_insertion ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s
+
+     Running tests/empty_workspace_e2e.rs (target/debug/deps/empty_workspace_e2e-45c256ea0ccebf79)
+
+running 4 tests
+test empty_canvas_still_accepts_file_drop_and_direct_pattern_creation ... ok
+test native_import_action_cancels_cleanly_and_imports_audio_and_midi_with_undo ... ok
+test removing_the_open_clip_channel_returns_to_the_empty_arranger_without_extra_edits ... ok
+test starting_actions_fit_and_browsing_keeps_song_and_ai_draft_unchanged ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests/eraser_scope_e2e.rs (target/debug/deps/eraser_scope_e2e-12e8dd61d4274149)
+
+running 2 tests
+test erase_after_audio_cut_removes_only_the_pointed_piece_and_context_delete_keeps_group_scope ... ok
+test erase_after_midi_cut_removes_only_the_pointed_piece_and_context_delete_keeps_group_scope ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s
+
+     Running tests/error_details_e2e.rs (target/debug/deps/error_details_e2e-3aefe66bc8163b6e)
+
+running 2 tests
+test editor_crash_details_identify_effect_channel_path_and_exit_code ... ok
+test export_error_details_preserve_causes_copy_and_block_background_edits ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+     Running tests/export_feedback_e2e.rs (target/debug/deps/export_feedback_e2e-37375dc08a29c8a9)
+
+running 2 tests
+test export_notice_stays_visible_copies_full_path_and_dismisses_without_editing ... ok
+test failed_export_replaces_old_completion_and_retry_shows_the_new_file ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+     Running tests/export_options_e2e.rs (target/debug/deps/export_options_e2e-0e7c388c010d71c2)
+
+running 2 tests
+test minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_project ... ok
+test native_instrument_export_choice_keeps_or_trims_the_real_plugin_tail ... ignored, requires a real instrument with a reported tail in RILL_TEST_VST_INSTRUMENT (Surge XT)
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.77s
+
+     Running tests/export_retry_e2e.rs (target/debug/deps/export_retry_e2e-8b8464cb62752cae)
+
+running 3 tests
+test failed_export_stops_a_queued_document_switch_and_can_return_to_retry ... ok
+test new_session_waits_for_export_completion_and_shows_the_file_being_rendered ... ok
+test retry_uses_the_failed_mix_destination_and_options_after_later_edits ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.28s
+
+     Running tests/export_sequence_e2e.rs (target/debug/deps/export_sequence_e2e-4708e0f5ba01ce9e)
+
+running 4 tests
+test midi_results_replace_wav_feedback_without_losing_previous_success_on_failure ... ok
+test pending_wav_disables_midi_picker_and_reexport_without_consuming_the_next_destination ... ok
+test recent_exports_keep_five_completed_outputs_and_move_repeated_paths_to_the_front ... ok
+test tail_summary_changes_with_the_checkbox_and_matches_the_rendered_boundary ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.66s
+
+     Running tests/features_e2e.rs (target/debug/deps/features_e2e-93c84d6b6c06ea8b)
+
+running 12 tests
+test adding_midi_track_immediately_assigns_instrument_and_cancel_keeps_ready_pattern ... ok
+test custom_plugin_folders_scan_search_and_preserve_multiclass_metadata ... ok
+test effects_routing_and_mixer_controls_update_the_same_channel_graph ... ok
+test escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_paths ... ok
+test installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit ... ignored, requires an installed instrument and desktop via RILL_TEST_VST_INSTRUMENT
+test instrument_and_library_selection_are_undoable_and_escape_closes_the_popup ... ok
+test instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign_preserves_them ... ok
+test midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_tracks ... ok
+test nested_utilities_return_to_the_selected_notes_and_scroll_position ... ok
+test properties_assign_folder_membership_and_compact_tracks_without_losing_channels ... ok
+test setup_cancel_preserves_active_settings_and_apply_persists_in_the_isolated_config ... ok
+test track_menu_creates_each_track_type_and_edit_menu_undoes_and_redoes_creation ... ok
+
+test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.31s
+
+     Running tests/finishing_actions_e2e.rs (target/debug/deps/finishing_actions_e2e-91de4f28314e8eb5)
+
+running 4 tests
+test mixer_arrows_select_and_extend_across_tracks_and_buses_without_editing ... ok
+test mouse_only_channel_selection_routes_and_sends_as_one_undoable_batch ... ok
+test reexport_reuses_only_successful_destination_and_tail_choice_then_resets_on_open ... ok
+test repeat_to_loop_end_keeps_phrase_rests_and_trims_the_last_source_window ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.83s
+
+     Running tests/focus_e2e.rs (target/debug/deps/focus_e2e-240e288a63612e6b)
+
+running 1 test
+test one_workspace_at_a_time_and_back_preserve_the_project_and_editor_view ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+     Running tests/foreground_shortcuts_e2e.rs (target/debug/deps/foreground_shortcuts_e2e-aa1270fb9873207c)
+
+running 2 tests
+test fit_and_zoom_work_from_toolbar_in_every_foreground_music_editor ... ok
+test text_entry_menus_utilities_and_document_modal_keep_view_shortcuts ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.43s
+
+     Running tests/generation_workflow_e2e.rs (target/debug/deps/generation_workflow_e2e-5f66473519c5d651)
+
+running 6 tests
+test all_roots_are_visible_and_scale_sync_is_explicit_and_view_only ... ok
+test full_requested_range_extends_only_the_trimmed_stretched_ghost_occurrence ... ok
+test generator_add_and_next_targets_stay_fixed_through_feedback_and_repeated_mouse_additions ... ok
+test generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole_bars ... ok
+test requested_ranges_respect_both_timeline_and_stretched_source_limits ... ok
+test short_arpeggio_notes_keep_whole_bars_and_next_range_adds_without_reopening ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.98s
+
+     Running tests/gesture_release_e2e.rs (target/debug/deps/gesture_release_e2e-b9041d53187c3157)
+
+running 3 tests
+test moving_and_both_resize_edges_apply_motion_delivered_with_release ... ok
+test release_length_merges_covered_notes_once_and_tool_changes_do_not_replay_it ... ok
+test repeated_chords_use_the_release_endpoint_snap_and_remembered_length ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+     Running tests/header_channel_controls_e2e.rs (target/debug/deps/header_channel_controls_e2e-5825df881cc057f0)
+
+running 1 test
+test header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+     Running tests/header_readability_e2e.rs (target/debug/deps/header_readability_e2e-9b75cf774d38d73a)
+
+running 2 tests
+test concise_header_fields_still_accept_precise_values_and_undo_them ... ok
+test header_captions_stay_bounded_and_exact_popup_dismissal_preserves_precision ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.26s
+
+     Running tests/history_e2e.rs (target/debug/deps/history_e2e-69be48e22527040b)
+
+running 3 tests
+test a_multi_frame_note_resize_is_one_reversible_step_and_navigation_is_not_an_edit ... ok
+test labelled_icon_tools_remain_clickable_in_arranger_and_note_editor ... ok
+test named_history_jumps_saved_checkpoint_and_branching_work_through_ui ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.05s
+
+     Running tests/instrument_context_e2e.rs (target/debug/deps/instrument_context_e2e-6e664c5863a7c726)
+
+running 1 test
+test plugin_overview_hides_parameters_until_requested_and_retains_channel_context ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running tests/instrument_targets_e2e.rs (target/debug/deps/instrument_targets_e2e-97c641a6dcd7ea13)
+
+running 4 tests
+test assigning_from_clip_editor_returns_to_the_same_phrase_without_opening_an_editor ... ok
+test explicit_add_instrument_keeps_an_intentionally_empty_track ... ok
+test initial_midi_assignment_and_replacement_keep_the_same_track_and_pattern ... ok
+test pencil_double_click_and_context_actions_open_existing_clips_without_drawing ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.04s
+
+     Running tests/instrument_tools_e2e.rs (target/debug/deps/instrument_tools_e2e-e63bbc481110c415)
+
+running 3 tests
+test explicit_assignment_uses_catalog_roles_and_never_opens_an_editor ... ok
+test instrument_generator_uses_shared_tool_and_unknown_catalog_ids_never_commit ... ok
+test one_assistant_tool_creates_notes_and_instrument_with_one_gui_undo ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests/join_tools_e2e.rs (target/debug/deps/join_tools_e2e-ac2ed1b50ddd4d2f)
+
+running 3 tests
+test audio_join_tool_preserves_pcm_single_undo_and_portable_project ... ok
+test cancelled_or_stale_assistant_audio_join_cleans_derived_sources ... ok
+test midi_join_tool_preserves_visible_note_windows_and_rejects_bad_or_stale_requests ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/joins_e2e.rs (target/debug/deps/joins_e2e-723c61f81db11921)
+
+running 6 tests
+test audio_join_bakes_edits_and_crossfade_once_and_reopens_without_scratch_source ... ok
+test audio_join_requires_overlapping_regions_and_cancel_leaves_document_untouched ... ok
+test cancel_running_audio_join_retires_worker_cleans_output_and_allows_next_join ... ok
+test join_identifies_linked_instances_by_visible_one_based_beat_ranges ... ok
+test joining_split_loop_recordings_keeps_alternate_takes_undo_and_portable_audio ... ok
+test midi_join_clips_visible_note_windows_undo_redo_and_portable_recall ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.92s
+
+     Running tests/library_e2e.rs (target/debug/deps/library_e2e-80ee382302992a69)
+
+running 5 tests
+test effect_insertion_send_returns_drag_reorder_and_archive_recall_preserve_identity ... ok
+test headless_scan_keeps_previews_missing_until_capture_is_explicitly_requested ... ok
+test library_filters_names_categories_and_developers_and_creates_or_assigns_instruments ... ok
+test library_reuses_cached_native_preview_records_for_instruments_and_effects ... ok
+test send_browser_has_one_contextual_action_and_library_management_is_on_demand ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.87s
+
+     Running tests/library_preview_status_e2e.rs (target/debug/deps/library_preview_status_e2e-913b012a8061c8fd)
+
+running 1 test
+test unavailable_images_keep_details_retry_and_the_original_assignment_identity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/live_edit_e2e.rs (target/debug/deps/live_edit_e2e-e2f4ff38d3b09860)
+
+running 7 tests
+test audio_pitch_and_algorithm_edits_keep_running_plugins_queue_and_audible_output ... ok
+test generation_preview_commit_and_undo_keep_running_plugins_and_continuous_pcm ... ok
+test mixer_and_midi_note_edits_keep_sandboxes_sustained_notes_and_continuous_pcm ... ok
+test moving_trimming_and_removing_a_sounding_midi_clip_reconciles_only_its_voices ... ok
+test moving_trimming_splitting_duplicating_and_importing_clips_keep_live_dsp ... ok
+test rapid_edits_and_failed_source_preparation_keep_old_audio_then_recover ... ok
+test stretching_midi_and_audio_preserves_running_plugins_sustain_and_output ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.37s
+
+     Running tests/loop_duration_e2e.rs (target/debug/deps/loop_duration_e2e-61875984732a23ac)
+
+running 2 tests
+test time_target_preserves_fractional_start_at_narrow_widths_and_both_appearances ... ok
+test time_target_repeats_audio_and_midi_to_an_exact_thirty_second_export ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.98s
+
+     Running tests/loop_e2e.rs (target/debug/deps/loop_e2e-890ffdfd9cd73c53)
+
+running 7 tests
+test loop_endpoint_text_entry_keeps_step_buttons_still_and_never_steps_on_a_double_click ... ok
+test loop_indicator_clears_ruler_labels_without_shifting_the_canvas_when_toggled ... ok
+test loop_range_drag_is_one_undo_step_and_invalid_text_stays_bounded ... ok
+test loop_range_toggle_undo_archive_reopen_and_full_song_export ... ok
+test loop_strip_endpoint_drag_is_disabled_during_recording ... ok
+test loop_strip_endpoints_drag_live_with_snap_and_separate_undo_without_editing_music ... ok
+test loop_strip_handles_keep_a_positive_range_and_never_appear_at_clipped_edges ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.37s
+
+     Running tests/loop_selection_e2e.rs (target/debug/deps/loop_selection_e2e-d66fa80dc2fe8bfe)
+
+running 4 tests
+test clip_editor_range_loops_only_the_open_clip_instead_of_the_retained_arranger_group ... ok
+test context_loop_selection_keeps_phrase_rests_and_loop_clip_keeps_existing_selection ... ok
+test loop_selection_is_disabled_without_selection_and_while_recording ... ok
+test range_loops_discontiguous_clips_exactly_in_one_undo_and_preserves_context ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+
+     Running tests/main_toolbar_roles_e2e.rs (target/debug/deps/main_toolbar_roles_e2e-512932b898f26ca1)
+
+running 2 tests
+test main_bar_groups_full_size_targets_and_gives_play_visual_priority ... ok
+test view_navigation_and_playback_guides_preserve_their_existing_transport_and_edit_semantics ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.88s
+
+     Running tests/master_meter_e2e.rs (target/debug/deps/master_meter_e2e-70edbd6a3cff1eb8)
+
+running 2 tests
+test master_and_channel_meters_match_actual_bus_send_and_muted_mix_pcm ... ok
+test master_keeps_a_short_transient_visible_after_the_next_silent_callback ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+     Running tests/midi_clipboard_e2e.rs (target/debug/deps/midi_clipboard_e2e-00cae163c7f7f138)
+
+running 4 tests
+test copy_notes_menu_publishes_native_marker_and_text_fields_keep_native_paste ... ok
+test native_copy_paste_and_cut_preserve_notes_velocities_and_one_step_history ... ok
+test shift_click_toggles_selection_without_edits_and_shift_drag_still_duplicates ... ok
+test shift_selection_remembers_press_modifiers_when_shift_is_released_before_the_mouse ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+     Running tests/midi_editor_e2e.rs (target/debug/deps/midi_editor_e2e-28998d75e3db5c2b)
+
+running 16 tests
+test anchored_zoom_pan_fit_both_axes_and_held_key_audition_release ... ok
+test chord_and_scale_stacks_highlight_keys_and_velocity_lane_edits_multiple_notes ... ok
+test draw_resize_both_edges_double_click_and_history_use_real_pointer_gestures ... ok
+test drawn_note_length_group_move_and_pencil_double_delete_are_undoable ... ok
+test folded_fit_and_root_changes_handle_hidden_only_clips_without_edits ... ok
+test folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes ... ok
+test held_audition_changes_pitch_and_stops_on_focus_loss_and_view_dismissal ... ok
+test legato_preserves_chords_and_transpose_and_nudge_preserve_group_spacing ... ok
+test pitch_and_selection_controls_are_disclosed_without_changing_notes ... ok
+test quantize_preview_strength_swing_ends_apply_cancel_and_history ... ok
+test scale_view_highlights_fold_and_hidden_selection_never_change_source_notes ... ok
+test selected_note_clipboard_pastes_at_cursor_with_new_ids_and_relative_spacing ... ok
+test shared_tools_split_glue_duplicate_erase_cursor_and_keyboard_shortcuts ... ok
+test shift_drag_duplicates_once_and_shift_edge_resize_temporarily_bypasses_snap ... ok
+test short_notes_move_from_center_and_fast_copy_paste_keeps_audible_lengths ... ok
+test unfolding_never_restores_selection_after_deselect_replace_select_all_or_navigation ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.40s
+
+     Running tests/midi_generate_e2e.rs (target/debug/deps/midi_generate_e2e-301e596d0319072e)
+
+running 8 tests
+test arpeggio_direction_speed_octaves_and_seeded_variations_match_added_notes ... ok
+test generate_action_and_multi_draw_options_wrap_without_expanding_the_note_canvas ... ok
+test generated_chord_commits_exact_preview_to_stretched_ghost_once_and_recalls ... ok
+test generation_preview_never_promotes_folded_notes_into_the_editing_selection ... ok
+test harmony_root_and_chord_choices_control_preview_pitches_without_changing_editor_scale ... ok
+test melody_algorithms_default_to_editor_scale_and_offer_counterpoint_and_tintinnabuli ... ok
+test no_complete_bar_requires_an_explicit_range_before_adding_notes ... ok
+test visible_complete_bars_preview_toggle_numeric_range_and_cancel_are_non_destructive ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.21s
+
+     Running tests/midi_generation_memory_e2e.rs (target/debug/deps/midi_generation_memory_e2e-d3b5db9d7e9d46d0)
+
+running 2 tests
+test generator_remembers_each_clips_choices_after_cancel_and_add_without_editing_on_reopen ... ok
+test next_range_rejects_zero_length_and_ranges_past_the_supported_timeline ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.78s
+
+     Running tests/midi_note_entry_e2e.rs (target/debug/deps/midi_note_entry_e2e-5c3bd5058fde01e3)
+
+running 2 tests
+test clicks_drags_and_double_clicks_extend_only_the_selected_stretched_ghost_bounds ... ok
+test mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests/midi_overlap_merge_e2e.rs (target/debug/deps/midi_overlap_merge_e2e-272e90fa039a7a10)
+
+running 9 tests
+test covered_paste_outside_a_trimmed_ghost_keeps_its_intended_extension ... ok
+test drawing_outside_then_back_inside_reverses_only_the_temporary_extension ... ok
+test generated_chord_merges_its_covered_tone_without_rewriting_existing_velocity ... ok
+test imported_duplicates_survive_selection_velocity_and_an_out_and_back_drag ... ok
+test move_shift_copy_and_native_paste_merge_full_coverage_but_keep_partial_overlap_and_chords ... ok
+test multidraw_selects_the_existing_chord_tone_and_keyboard_transpose_merges_immediately ... ok
+test pencil_containment_waits_for_release_and_keeps_existing_identity_velocity_and_one_undo ... ok
+test saving_during_a_held_draw_ends_the_gesture_before_merging_its_ids ... ok
+test stretched_ghost_move_merges_source_notes_and_survives_reopen ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.39s
+
+     Running tests/midi_recording_e2e.rs (target/debug/deps/midi_recording_e2e-44169af41fefb233)
+
+running 19 tests
+test an_unselected_midi_channel_records_no_empty_clip ... ok
+test arming_without_a_midi_port_is_quiet_until_a_port_is_selected ... ok
+test live_midi_chord_keeps_its_voices_and_audio_through_recording_loop_wraps ... ok
+test live_midi_monitor_plays_filtered_chords_and_sustain_through_the_isolated_instrument ... ok
+test loop_recording_splits_held_notes_and_overdubs_without_changing_existing_notes ... ok
+test metronome_toggles_during_playback_keep_plugin_instances_and_never_change_export ... ok
+test midi_capture_is_one_undo_transaction_and_archive_recall_preserves_routes_without_arming ... ok
+test midi_disconnect_retains_held_notes_releases_the_instrument_and_allows_retry ... ok
+test midi_save_new_cancel_and_sample_rate_change_finalize_notes_before_the_action ... ok
+test no_precount_records_audio_and_midi_from_the_first_frame ... ok
+test one_bar_precount_holds_the_cursor_accents_clicks_and_excludes_early_audio_and_midi ... ok
+test recording_while_playing_skips_precount_and_stopping_capture_keeps_the_instrument_running ... ok
+test retrigger_sustain_zero_velocity_and_held_stop_produce_precise_note_lengths ... ok
+test selected_midi_channel_records_exact_chords_and_velocities_and_exports_the_instrument ... ok
+test stop_retains_callbacks_delivered_after_the_last_audio_pump_at_their_original_timestamps ... ok
+test stopping_audio_only_capture_preserves_held_midi_monitoring_until_the_key_is_released ... ok
+test stopping_during_precount_creates_no_audio_or_midi_clip_and_leaves_the_project_usable ... ok
+test stopping_midi_capture_preserves_held_on_monitoring_until_the_key_is_released ... ok
+test two_bar_precount_holds_the_cursor_accents_clicks_and_excludes_early_audio_and_midi ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.84s
+
+     Running tests/midi_toolbar_stability_e2e.rs (target/debug/deps/midi_toolbar_stability_e2e-92c7af50bc0bf116)
+
+running 3 tests
+test drawing_controls_keep_their_positions_across_mouse_tools_and_selection ... ok
+test hovering_the_keyboard_or_a_note_row_reveals_pitch_names_without_editing ... ok
+test selection_commands_still_preview_apply_and_undo_from_the_pencil_tool ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.30s
+
+     Running tests/mixer_e2e.rs (target/debug/deps/mixer_e2e-17b01eb79eea9ed0)
+
+running 3 tests
+test aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand ... ok
+test output_header_picker_excludes_feedback_and_remains_available_on_compact_tracks ... ok
+test sequencer_mixer_controls_route_undo_persist_and_change_exported_audio ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.89s
+
+     Running tests/mixer_flow_e2e.rs (target/debug/deps/mixer_flow_e2e-880a6c057a727239)
+
+running 2 tests
+test mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback ... ok
+test mixer_orders_signal_stages_and_separates_primary_and_send_arrows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.79s
+
+     Running tests/mixer_gain_entry_e2e.rs (target/debug/deps/mixer_gain_entry_e2e-259407601578a4b1)
+
+running 2 tests
+test precise_gain_entry_undo_recall_and_export_use_the_same_channel_value ... ok
+test viewing_extreme_values_and_middle_dragging_readout_or_fader_do_not_edit ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+
+     Running tests/mixer_gain_precision_e2e.rs (target/debug/deps/mixer_gain_precision_e2e-11c58d6c9361fc54)
+
+running 2 tests
+test fractional_and_out_of_range_gains_survive_focus_blur_and_cancel_exactly ... ok
+test precise_commits_mouse_drags_limits_and_recall_preserve_gain_automation ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.81s
+
+     Running tests/mixer_height_e2e.rs (target/debug/deps/mixer_height_e2e-6b5fba31eb71ce66)
+
+running 1 test
+test mixer_fills_height_and_resizes_faders_without_losing_channel_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.89s
+
+     Running tests/mixer_navigation_e2e.rs (target/debug/deps/mixer_navigation_e2e-01a39b28e6fd812f)
+
+running 1 test
+test middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.78s
+
+     Running tests/mixer_pan_knob_e2e.rs (target/debug/deps/mixer_pan_knob_e2e-b33087f988cdb971)
+
+running 4 tests
+test mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling ... ok
+test mixer_pan_knob_arc_and_relative_drags_preserve_click_values_and_undo ... ok
+test mixer_pan_knob_drag_and_exact_entry_override_automation_without_rewriting_the_curve ... ok
+test mixer_pan_release_overrides_the_effective_value_without_rewriting_automation ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.20s
+
+     Running tests/mixer_readability_e2e.rs (target/debug/deps/mixer_readability_e2e-f43148c8cc74ed6d)
+
+running 1 test
+test mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+     Running tests/mixer_signal_flow_e2e.rs (target/debug/deps/mixer_signal_flow_e2e-9b5bf6d381b8f5f0)
+
+running 2 tests
+test adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channel ... ok
+test mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.21s
+
+     Running tests/mixer_stability_e2e.rs (target/debug/deps/mixer_stability_e2e-e30092ad306bd8d0)
+
+running 4 tests
+test mixer_controls_stay_under_the_pointer_during_output_failure_and_recovery ... ok
+test mixer_export_completion_preserves_control_geometry_and_mouse_target ... ok
+test mixer_notice_changes_keep_an_existing_short_window_scroll_position ... ok
+test mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.09s
+
+     Running tests/mouse_naming_e2e.rs (target/debug/deps/mouse_naming_e2e-94d87b5795e60372)
+
+running 4 tests
+test caps_stays_uppercase_until_toggled_off_without_editing_the_project ... ok
+test existing_long_unicode_names_survive_open_apply_cancel_and_can_be_replaced ... ok
+test mouse_name_limit_and_blank_apply_do_not_damage_the_original_name ... ok
+test project_clip_and_track_names_use_pointer_text_and_supply_personalized_save_exports ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.84s
+
+     Running tests/native_parameter_automation_e2e.rs (target/debug/deps/native_parameter_automation_e2e-2345ab5c8b288e1a)
+
+running 6 tests
+test delayed_browser_parameter_acknowledgement_does_not_retake_resumed_automation ... ok
+test invalid_native_requests_and_document_confirmation_do_not_create_lanes ... ok
+test native_effect_action_keeps_instance_channel_context_and_state ... ok
+test native_instrument_action_targets_its_owner_reuses_undoes_and_recalls ... ok
+test native_parameter_gestures_override_owned_automation_and_preserve_it_after_snapshot ... ok
+test opaque_native_preset_is_captured_before_lane_undo_and_recalled ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.71s
+
+     Running tests/native_picker_arguments.rs (target/debug/deps/native_picker_arguments-9bce6990b6564c63)
+
+running 2 tests
+test zenity_filename::tests::preserves_initial_directory_and_basename ... ok
+test zenity_filename::tests::preserves_non_utf8_directories ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/navigation_selection_e2e.rs (target/debug/deps/navigation_selection_e2e-321f16120dc317ab)
+
+running 5 tests
+test arrows_select_notes_and_shift_extends_while_modified_arrows_edit ... ok
+test automation_arrows_select_and_extend_points_with_one_undo_for_group_delete ... ok
+test fit_selected_notes_and_previous_view_preserve_selection_and_audio ... ok
+test note_context_menu_toggles_scattered_selection_with_mouse_only ... ok
+test piano_keys_have_a_cursor_and_enter_audition_releases_without_editing ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+     Running tests/normalized_destination_e2e.rs (target/debug/deps/normalized_destination_e2e-17fb5cb24eff94ae)
+
+running 5 tests
+test declining_normalized_replacement_keeps_the_unsaved_document_guard_and_current_song ... ok
+test midi_normalized_existing_destination_requires_affirmative_replacement ... ok
+test raw_and_normalized_source_aliases_are_rejected_before_replacement_approval ... ok
+test save_normalized_existing_destination_requires_affirmative_replacement ... ok
+test wav_normalized_existing_destination_requires_affirmative_replacement ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.97s
+
+     Running tests/novice_clip_e2e.rs (target/debug/deps/novice_clip_e2e-fbbf7d95c09739e8)
+
+running 4 tests
+test add_pattern_uses_the_selected_midi_lane_and_cursor_and_can_create_a_track ... ok
+test automatic_arranger_fit_keeps_sparse_tracks_readable_and_still_reveals_every_row ... ok
+test midi_timing_controls_move_trim_validate_and_recall_without_changing_ghost_peers ... ok
+test reversed_audio_duration_uses_trim_source_mapping_and_preserves_its_ghost_peer ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
+
+     Running tests/novice_documents_e2e.rs (target/debug/deps/novice_documents_e2e-b31e9f06f3575547)
+
+running 5 tests
+test missing_instrument_warning_follows_track_folder_and_solo_bus_eligibility ... ok
+test ordinary_audio_export_has_no_instrument_warning_and_midi_completion_names_the_file ... ok
+test save_as_and_reopen_show_the_saved_filename_and_seed_export_destinations ... ok
+test save_picker_normalizes_missing_extensions_and_preserves_recognized_extensions ... ok
+test wav_export_warns_for_visible_unassigned_notes_and_allows_cancel_or_explicit_export ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.76s
+
+     Running tests/novice_library_e2e.rs (target/debug/deps/novice_library_e2e-2f17e268ca390e70)
+
+running 3 tests
+test empty_and_effect_only_libraries_offer_plugin_setup_and_restore_the_assignment_caller ... ok
+test silent_instrument_overview_opens_assignment_and_restores_the_clip_editor ... ok
+test unmatched_searches_clear_both_search_and_developer_without_assigning_a_stale_device ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+     Running tests/novice_recovery_e2e.rs (target/debug/deps/novice_recovery_e2e-b5781a473a0e4b6a)
+
+running 3 tests
+test disconnected_output_links_to_audio_setup_and_offline_export_still_works ... ALSA lib seq.c:1011:(snd_seq_open_noupdate) Unknown SEQ default
+ok
+test unassigned_clip_offers_instrument_setup_without_leaving_the_editor_first ... ok
+test unrelated_export_error_does_not_offer_audio_setup_from_report_metadata ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/number_stepper_e2e.rs (target/debug/deps/number_stepper_e2e-32d4b7645150f93d)
+
+running 3 tests
+test boundary_buttons_do_not_round_clamp_or_create_history ... ok
+test clip_timing_steps_remain_visible_and_preserve_source_notes_and_fractional_values ... ok
+test tempo_steps_preserve_fractions_and_each_click_has_its_own_undo ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.13s
+
+     Running tests/numeric_keypad_e2e.rs (target/debug/deps/numeric_keypad_e2e-d3873024a211577b)
+
+running 4 tests
+test clip_duration_and_nested_loop_keypads_commit_exact_values_with_independent_undo ... ok
+test existing_step_drag_and_keyboard_entry_still_work_after_keypad_cancel ... ok
+test invalid_cancelled_and_dismissed_keypad_drafts_never_clamp_or_create_history ... ok
+test tempo_keypad_preserves_precision_and_commits_once_in_both_themes_and_widths ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.99s
+
+     Running tests/numeric_replacement_e2e.rs (target/debug/deps/numeric_replacement_e2e-c4eadfe9e06240b1)
+
+running 1 test
+test mouse_multiclick_replaces_tempo_gain_and_generator_length_without_keyboard_selection ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running tests/offline_processing_e2e.rs (target/debug/deps/offline_processing_e2e-ad085fa563ba9aec)
+
+running 4 tests
+test local_audio_analysis_uses_offline_processing_without_changing_the_song ... ok
+test offline_export_accepts_a_slow_first_block_and_advertises_offline_processing ... ok
+test offline_hung_block_still_fails_with_a_bounded_deadline_and_preserves_the_old_wav ... ok
+test stopping_a_local_analysis_job_keeps_notes_and_ignores_its_late_result ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.82s
+
+     Running tests/output_error_e2e.rs (target/debug/deps/output_error_e2e-2f3f7232a159622b)
+
+running 4 tests
+test explicit_retry_reopens_failed_output_at_the_same_position_and_play_still_recovers_after_setup ... ok
+test input_and_unrelated_failures_do_not_reuse_the_output_retry_action ... ok
+test playback_device_failure_keeps_backend_details_and_recovers_with_stop_and_play ... ok
+test recovered_output_xrun_keeps_playback_and_shows_one_nonfatal_notice_per_stream ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s
+
+     Running tests/parameter_mouse_entry_e2e.rs (target/debug/deps/parameter_mouse_entry_e2e-835dc14ab5a7b01f)
+
+running 4 tests
+test automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve ... ok
+test compact_header_and_channel_properties_keep_the_same_mouse_entry ... ok
+test mixer_gain_pan_and_send_accept_precise_mouse_only_drafts ... ok
+test plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_units ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.35s
+
+     Running tests/parameter_search_e2e.rs (target/debug/deps/parameter_search_e2e-5122e9bf22251061)
+
+running 8 tests
+test add_automation_parameter_search_uses_saved_instance_values_and_reuses_existing_lane ... ok
+test insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_touched ... ok
+test instrument_search_handles_empty_results_keyboard_activation_reuse_and_recall ... ok
+test knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_shortcuts ... ok
+test modified_result_navigation_does_not_change_selection_or_create_automation ... ok
+test parameter_controls_show_automation_and_manual_override_with_resume_undo_and_recall ... ok
+test parameter_metadata_error_stays_in_the_browser_without_creating_a_lane ... ok
+test stepped_knob_quantizes_edits_only_and_read_only_parameters_cannot_be_edited ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.73s
+
+     Running tests/piano_roll_refinement_e2e.rs (target/debug/deps/piano_roll_refinement_e2e-7a863b7a549c1f88)
+
+running 8 tests
+test editing_folded_notes_does_not_restore_the_hidden_old_selection_when_unfolding ... ok
+test final_note_transform_previews_grow_the_original_clip_only_when_applied ... ok
+test quantize_overlap_keeps_the_existing_note_identity_and_velocity_in_one_undo ... ok
+test randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic_tool ... ok
+test top_to_bottom_legato_connects_voice_ranks_across_missing_chord_tones ... ok
+test velocity_color_scale_warning_and_quiet_rows_remain_independent_visual_aids ... ok
+test velocity_only_randomize_preserves_an_existing_trimmed_note_tail ... ok
+test visible_quantize_and_legato_preserve_scope_chords_and_source_mapping ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.84s
+
+     Running tests/piano_toolbar_e2e.rs (target/debug/deps/piano_toolbar_e2e-f4e01aca199d4bea)
+
+running 1 test
+test exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.27s
+
+     Running tests/plugin_catalog_e2e.rs (target/debug/deps/plugin_catalog_e2e-00c32598b586a079)
+
+running 2 tests
+test catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_request ... ok
+test favorites_categories_filters_and_list_view_work_by_mouse_and_persist ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+     Running tests/plugin_loading_e2e.rs (target/debug/deps/plugin_loading_e2e-98c0a65d899d365c)
+
+running 1 test
+test native_instrument_metadata_parameter_edit_export_and_recall_never_construct_an_editor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.53s
+
+     Running tests/plugin_recall_e2e.rs (target/debug/deps/plugin_recall_e2e-a7ab1f54613b46bf)
+
+running 2 tests
+test effect_editor_failure_preserves_insert_and_returns_to_its_chain ... ok
+test native_effect_edit_autosnapshot_automation_archive_recall_and_crash_recovery ... ignored, requires installed CHOWTapeModel and a desktop via RILL_TEST_VST_EFFECT
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/plugin_tools_e2e.rs (target/debug/deps/plugin_tools_e2e-338e5a17c928c0b1)
+
+running 2 tests
+test insert_discovery_is_scoped_and_bulk_parameter_automation_edits_commit_once ... ok
+test instrument_controls_and_automation_require_discovery_and_refresh_after_gui_undo ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests/popup_backdrop_e2e.rs (target/debug/deps/popup_backdrop_e2e-c99a1ef3a6928653)
+
+running 3 tests
+test menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally ... ok
+test save_confirmation_uses_one_dim_layer_and_restores_the_utility_on_cancel ... ok
+test utility_backdrops_preserve_context_and_clear_after_nested_navigation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.44s
+
+     Running tests/popup_close_e2e.rs (target/debug/deps/popup_close_e2e-48919c9a86d178a1)
+
+running 1 test
+test close_buttons_and_menus_work_after_typing_and_restore_the_editor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests/practical_controls_e2e.rs (target/debug/deps/practical_controls_e2e-43853a2179b7af07)
+
+running 5 tests
+test channel_properties_volume_readout_is_directly_editable_to_fractional_db ... ok
+test compact_header_gain_and_pan_have_exact_entry_without_expanding_the_track ... ok
+test exact_automated_pan_entry_and_explicit_override_preserve_the_curve_and_resume ... ok
+test mixer_pan_exact_entry_shows_range_defers_commit_and_rejects_invalid_values ... ok
+test routing_send_exact_entry_exposes_full_range_and_recalls_the_fraction ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.37s
+
+     Running tests/precise_clip_editing_e2e.rs (target/debug/deps/precise_clip_editing_e2e-7bdb29b8e53e3b43)
+
+running 4 tests
+test comp_timing_retains_archived_takes_and_f2_respects_text_and_menu_focus ... ok
+test exact_fields_move_trim_stretch_and_slip_reversed_ghosts_without_changing_sources ... ok
+test exact_midi_window_and_stretch_keep_all_source_notes_recoverable ... ok
+test inline_rename_has_mouse_actions_f2_cancel_ghost_sync_and_one_undo ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.33s
+
+     Running tests/precise_trim_batched_e2e.rs (target/debug/deps/precise_trim_batched_e2e-09be3abd99814402)
+
+running 3 tests
+test batched_zero_motion_fade_overlap_and_popup_presses_cannot_trim ... ok
+test complete_outward_batch_without_an_accepted_edge_hit_is_left_unchanged_limitation ... ok
+test complete_short_audio_and_midi_edge_drags_in_one_frame_are_not_clicks ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+     Running tests/precise_trim_e2e.rs (target/debug/deps/precise_trim_e2e-c047449c9c6f3736)
+
+running 7 tests
+test a_short_edge_trim_after_a_nearby_body_click_does_not_open_the_editor ... ok
+test canceled_edge_captures_do_not_resume_on_further_held_motion ... ok
+test fade_handles_win_over_edges_and_body_selection_move_copy_and_double_click_still_work ... ok
+test off_grid_edge_presses_and_return_to_origin_do_not_change_the_document ... ok
+test popups_middle_pan_and_clipped_viewport_edges_cannot_start_a_trim ... ok
+test shift_and_snap_off_trims_apply_the_final_release_position ... ok
+test two_to_five_pixel_audio_and_midi_trims_preserve_group_and_single_undo ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.09s
+
+     Running tests/project_io_e2e.rs (target/debug/deps/project_io_e2e-e4faa0eb4c1e46b3)
+
+running 5 tests
+test background_save_preserves_snapshot_and_keeps_later_cosmetic_edits_dirty ... ok
+test blocked_load_keeps_ui_responsive_and_serializes_following_save_and_new ... ok
+test declared_huge_waveform_is_skipped_without_allocating_it_or_losing_the_clip ... ok
+test failed_save_and_failed_open_preserve_document_and_existing_bundle ... ok
+test quit_waits_for_background_bundle_save_and_open_prepares_waveforms ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+     Running tests/properties_e2e.rs (target/debug/deps/properties_e2e-48558e8f73e6b9b2)
+
+running 4 tests
+test clip_gain_and_fades_edit_linked_instances_and_support_undo_then_independence ... ok
+test compact_properties_keep_scoped_ai_and_clip_controls_reachable ... ok
+test inspecting_existing_high_gain_does_not_change_or_dirty_the_project ... ok
+test properties_pages_fit_and_expose_only_controls_for_the_selected_item ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.55s
+
+     Running tests/properties_stability_e2e.rs (target/debug/deps/properties_stability_e2e-4b72b664b80cd157)
+
+running 2 tests
+test audio_properties_keep_first_and_repeated_stretch_steps_stable_at_small_and_large_sizes ... ok
+test midi_properties_keep_first_and_repeated_stretch_steps_stable_at_small_and_large_sizes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.98s
+
+     Running tests/quiet_current_e2e.rs (target/debug/deps/quiet_current_e2e-d0396960ca4453a4)
+
+running 1 test
+test waltz_range_variation_and_fades_survive_portable_recall_and_exact_export ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.43s
+
+     Running tests/recording_e2e.rs (target/debug/deps/recording_e2e-d9ce04eeb81b784f)
+
+running 19 tests
+test auto_monitor_switches_between_stopped_playback_and_recording_without_recording_the_mix ... ok
+test device_selection_persists_and_rate_change_finalizes_before_reinitializing ... ok
+test dummy_device_latency_is_compensated_before_loop_splitting_and_final_tail_is_retained ... ok
+test dummy_input_and_output_clocks_are_independent_and_four_channel_selection_is_exact ... ok
+test dummy_input_overflow_reports_details_preserves_audio_and_allows_recording_again ... ok
+test dummy_output_disconnect_preserves_audio_and_allows_recording_again ... ok
+test export_and_save_requests_include_capture_finalized_by_the_document_guard ... ok
+test input_selection_can_be_cleared_without_mutating_existing_recordings ... ok
+test loop_recording_creates_distinct_complete_and_partial_takes_in_the_take_editor ... ok
+test monitoring_follows_channel_and_bus_controls_but_recorded_audio_stays_raw ... ok
+test mono_input_recording_keeps_exact_raw_samples_beyond_empty_project_end_and_is_undoable ... ok
+test new_project_finalizes_recording_before_the_unsaved_choice_and_cancel_keeps_it ... ok
+test overdub_layer_preserves_existing_playback_and_routes_new_audio_independently ... ok
+test recorded_c3_d3_takes_comp_in_four_sections_with_exact_export_and_spline_crossfades ... ok
+test recording_output_prepare_failure_returns_to_idle_and_recovers_after_restoring_the_source ... ok
+test recording_pause_finalizes_once_and_input_failure_recovers_the_captured_audio ... ok
+test stereo_recording_survives_archive_restart_without_arming_or_monitoring ... ok
+test stopping_capture_keeps_backing_instrument_effect_and_transport_running ... ok
+test two_armed_inputs_record_in_sync_with_independent_channel_selection ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.85s
+
+     Running tests/recording_tools_e2e.rs (target/debug/deps/recording_tools_e2e-c04264b366558343)
+
+running 2 tests
+test bulk_configure_capture_two_tracks_stop_and_undo_without_opening_recording ... ok
+test invalid_bulk_configuration_is_atomic_and_stale_configuration_is_rejected ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests/render_error_e2e.rs (target/debug/deps/render_error_e2e-65a318061bd43e20)
+
+running 1 test
+test native_render_failure_details_are_copyable_while_healthy_audio_keeps_playing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+     Running tests/routing_layout_e2e.rs (target/debug/deps/routing_layout_e2e-7a59dc9f0545cbe1)
+
+running 1 test
+test routing_from_properties_keeps_sends_and_output_reachable_across_live_display_changes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.18s
+
+     Running tests/row_alignment_e2e.rs (target/debug/deps/row_alignment_e2e-f34fd0ba1a6328a0)
+
+running 1 test
+test quantize_rows_keep_controls_centered_when_wrapping_and_editing_values ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+     Running tests/selection_click_e2e.rs (target/debug/deps/selection_click_e2e-1ae60ac86cd2281d)
+
+running 5 tests
+test batched_modifier_clicks_keep_explicit_group_membership_semantics ... ok
+test context_modifiers_cancel_and_pan_do_not_accidentally_collapse_a_group ... ok
+test initially_unfocused_and_batched_clicks_select_and_open_audio_and_midi ... ok
+test mixed_group_transfer_and_double_click_keep_the_intended_target ... ok
+test selected_audio_and_midi_collapse_on_click_release_but_move_together_when_dragged ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.69s
+
+     Running tests/setup_layout_e2e.rs (target/debug/deps/setup_layout_e2e-af0dc308c9aeeb51)
+
+running 2 tests
+test long_unicode_scan_paths_keep_tabs_actions_and_aligned_audio_settings_in_view ... ok
+test many_long_scan_folders_keep_apply_and_cancel_visible_without_scrolling ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/shared_theory_e2e.rs (target/debug/deps/shared_theory_e2e-9866452b0c4af40f)
+
+running 2 tests
+test deep_scale_picker_highlights_filters_draws_and_generates_the_composer_scale ... ok
+test extended_chord_lookup_grid_stack_and_both_generators_share_pitch_classes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.32s
+
+     Running tests/shortcut_e2e.rs (target/debug/deps/shortcut_e2e-e72b1721e1c85bcc)
+
+running 5 tests
+test fast_select_all_targets_midi_notes_then_duplicates_the_complete_phrase ... ok
+test released_shortcut_modifiers_still_duplicate_audio_and_undo_redo ... ok
+test repeated_fast_undo_and_redo_process_each_key_press ... ok
+test several_duplicate_presses_between_repaints_are_not_collapsed ... ok
+test text_focus_and_unsaved_document_modal_keep_shortcuts_in_their_context ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests/slider_automation_e2e.rs (target/debug/deps/slider_automation_e2e-732875fc158cecca)
+
+running 1 test
+test native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_resume ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
+
+     Running tests/slider_markers_e2e.rs (target/debug/deps/slider_markers_e2e-0827c72f6522b7d9)
+
+running 2 tests
+test arranger_markers_distinguish_unity_gain_from_midpoint_in_standard_and_compact_rows ... ok
+test mixer_fader_markers_follow_mouse_edits_and_undo_without_changing_stored_values ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.02s
+
+     Running tests/slider_scale_e2e.rs (target/debug/deps/slider_scale_e2e-5c0b7ddbf4e3680d)
+
+running 2 tests
+test arrangement_controls_keep_current_values_and_native_endpoint_mapping_without_micro_scales ... ok
+test mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.11s
+
+     Running tests/song_workflow_e2e.rs (target/debug/deps/song_workflow_e2e-8725e610faaba5e8)
+
+running 1 test
+test eight_bar_song_can_be_arranged_varied_balanced_and_recalled_without_source_files ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.74s
+
+     Running tests/source_preservation_e2e.rs (target/debug/deps/source_preservation_e2e-2883744228893eea)
+
+running 3 tests
+test batch_render_wav_and_midi_exports_cannot_replace_source_audio ... ok
+test export_picker_rejects_source_aliases_including_inactive_takes_and_allows_a_new_mix ... ok
+test save_as_preserves_imported_and_bundled_sources_and_portable_save_keeps_complete_audio ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+     Running tests/spectrum_e2e.rs (target/debug/deps/spectrum_e2e-d4e907a86f591c0c)
+
+running 3 tests
+test async_spectral_underlays_cover_arranger_editor_neighbours_takes_and_both_themes ... ok
+test background_previews_preserve_playback_export_history_and_drop_old_project_results ... ok
+test reverse_trim_and_stretch_map_one_cached_source_into_the_correct_timeline_spans ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.68s
+
+     Running tests/spectrum_view_e2e.rs (target/debug/deps/spectrum_view_e2e-0357467f604acb67)
+
+running 3 tests
+test opacity_and_palette_reuse_cached_textures_across_arranger_editor_and_takes ... ok
+test precise_intensity_is_clamped_and_view_controls_remain_inside_narrow_windows ... ok
+test spectrum_settings_leave_the_active_playback_generation_and_samples_unchanged ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.41s
+
+     Running tests/stretch_duration_range_e2e.rs (target/debug/deps/stretch_duration_range_e2e-47ba5ba72e6e4122)
+
+running 5 tests
+test drag_text_and_steps_share_the_stretch_limits ... ok
+test inspecting_precise_already_stretched_values_never_rounds_or_creates_history ... ok
+test invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once ... ok
+test mode_switch_preserves_trim_and_stretch_respects_the_timeline_end ... ok
+test stretched_trimmed_ghost_uses_its_current_window_without_changing_its_peer ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.85s
+
+     Running tests/studio_windows_e2e.rs (target/debug/deps/studio_windows_e2e-6c93aa5199bd3386)
+
+running 1 test
+test utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+
+     Running tests/time_signature_e2e.rs (target/debug/deps/time_signature_e2e-56f84c18884d872d)
+
+running 2 tests
+test meter_choice_stays_disabled_during_audio_capture ... ok
+test mouse_meter_choice_is_one_undoable_edit_and_portable_save_recalls_it ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+     Running tests/timeline_e2e.rs (target/debug/deps/timeline_e2e-b162204bbe4183c5)
+
+running 3 tests
+test arranger_common_tool_shortcuts_draw_cut_duplicate_erase_and_seek ... ok
+test arranger_fit_button_and_shortcut_reveal_late_content_and_all_tracks ... ok
+test arranger_pan_zoom_and_keyboard_navigation_leave_clips_unchanged ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+     Running tests/timing_discovery_e2e.rs (target/debug/deps/timing_discovery_e2e-92b418abc8c88ed5)
+
+running 2 tests
+test clip_and_loop_time_readouts_fit_both_appearances_and_do_not_edit_values ... ok
+test loop_arrangement_and_endpoint_steps_preserve_selection_cursor_and_have_separate_undo ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+     Running tests/tool_document_export_e2e.rs (target/debug/deps/tool_document_export_e2e-e0ace28b952f6fdb)
+
+running 1 test
+test failed_export_aborts_tool_owned_new_and_open_without_a_gui_guard_or_lost_error_causes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.06s
+
+     Running tests/tool_hints_e2e.rs (target/debug/deps/tool_hints_e2e-bc9f9e6b6f0e4ad8)
+
+running 4 tests
+test active_tool_captions_preserve_toolbar_and_canvas_geometry_in_each_editor ... ok
+test compact_help_preserves_canvas_space_and_toggles_with_the_mouse ... ok
+test duplicate_caption_leads_to_a_canvas_gesture_without_changing_the_command ... ok
+test tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.99s
+
+     Running tests/track_color_picker_e2e.rs (target/debug/deps/track_color_picker_e2e-64c809ed41c981ed)
+
+running 2 tests
+test arranger_color_picker_updates_clip_and_mixer_paint_with_undo_and_recall ... ok
+test compact_and_folder_color_strips_do_not_select_tracks_or_collapse_folders ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.81s
+
+     Running tests/track_colors_e2e.rs (target/debug/deps/track_colors_e2e-da8325ab221d91ee)
+
+running 2 tests
+test arranger_additions_advance_colors_and_survive_undo_redo_and_project_reopen ... ok
+test audio_drops_and_instrument_creation_advance_colors_but_existing_tracks_keep_theirs ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+
+     Running tests/track_header_sections_e2e.rs (target/debug/deps/track_header_sections_e2e-0bb077de060f68bf)
+
+running 3 tests
+test channel_sections_route_actions_to_the_correct_track_and_preserve_undo ... ok
+test section_bounds_stay_separate_and_compact_headers_keep_channel_access ... ok
+test short_track_rows_keep_exact_mix_entry_deliberate_and_undoable ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.81s
+
+     Running tests/track_reorder_e2e.rs (target/debug/deps/track_reorder_e2e-49b6d1a1ef1a9135)
+
+running 4 tests
+test compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations ... ok
+test every_arranger_track_kind_reorders_by_mouse_with_one_history_entry_and_portable_recall ... ok
+test folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles ... ok
+test mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing_sound_data ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.47s
+
+     Running tests/track_reorder_playback_e2e.rs (target/debug/deps/track_reorder_playback_e2e-6dc185f45502ad4d)
+
+running 1 test
+test mixer_reorder_and_following_gain_edit_preserve_plugin_instances_and_live_audio ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s
+
+     Running tests/trim_feedback_e2e.rs (target/debug/deps/trim_feedback_e2e-2d2579998f73f2b9)
+
+running 2 tests
+test held_audio_and_midi_trims_report_applied_bounds_without_changing_selection_or_undo ... ok
+test trim_feedback_stays_inside_the_viewport_at_pointer_edges_and_does_not_block_release ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.86s
+
+     Running tests/typography_e2e.rs (target/debug/deps/typography_e2e-c3108c4fd9bc9f56)
+
+running 2 tests
+test long_device_name_wraps_on_card_and_actions_stay_accessible_in_small_window ... ok
+test unicode_emoji_names_edit_display_and_recall_at_both_densities_and_appearances ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+     Running tests/visual_polish_e2e.rs (target/debug/deps/visual_polish_e2e-0b256cabe3a306d2)
+
+running 4 tests
+test inactive_context_requests_one_bounded_blur_and_preserves_foreground_input ... ok
+test native_utility_blurs_background_detail_in_both_themes ... ignored, requires a native desktop or xvfb-run with OpenGL
+test routing_gradients_connect_both_directions_and_master_without_gaps ... ok
+test selected_clips_and_channels_gain_a_bounded_halo_without_editing_content ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.91s
+
+     Running tests/waveform_refinement_e2e.rs (target/debug/deps/waveform_refinement_e2e-1cdc35f388f48afc)
+
+running 4 tests
+test raw_previews_refine_to_real_aa_meshes_with_exact_transients_and_shared_source_caches ... ok
+test refined_columns_keep_gain_and_reverse_trim_stretch_source_mapping_when_zoomed ... ok
+test refinement_preserves_playing_samples_and_new_documents_discard_previous_source_geometry ... ok
+test trimmed_forward_and_reverse_previews_exclude_impulses_just_outside_the_source_window ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.15s
+
+     Running tests/waveform_scale_e2e.rs (target/debug/deps/waveform_scale_e2e-1c4fea453631b44f)
+
+running 4 tests
+test a_cut_heavy_arrangement_keeps_hundreds_of_small_waveforms_warm ... ok
+test fit_fills_each_clip_independently_preserves_stereo_and_changes_only_presentation ... ok
+test fit_includes_overlapping_fades_and_preserves_extremely_quiet_gains ... ok
+test fit_reference_stays_fixed_while_navigating_and_view_controls_fit_compact_windows ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.30s
+
+     Running tests/workspace_switch_e2e.rs (target/debug/deps/workspace_switch_e2e-1c7d6df83b9fa2ba)
+
+running 1 test
+test arranger_mixer_toolbar_switches_from_editors_and_utilities_without_editing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+
+     Running tests/workspace_tool_memory_e2e.rs (target/debug/deps/workspace_tool_memory_e2e-72498c464fbee81f)
+
+running 2 tests
+test arranger_midi_and_audio_keep_distinct_tools_through_navigation_and_popups ... ok
+test drawing_notes_then_back_restores_select_and_allows_immediate_mouse_trim ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.49s
+
+     Running tests/zoom_controls_e2e.rs (target/debug/deps/zoom_controls_e2e-5155bd425d62d32f)
+
+running 4 tests
+test one_bar_snap_uses_the_current_meter_and_keeps_old_beat_steps_honestly_labelled ... ok
+test visible_fit_selection_frames_fractional_clips_notes_and_audio_ranges_without_editing ... ok
+test visible_zoom_controls_wrap_together_and_preserve_music_in_every_editor ... ok
+test zoom_buttons_respect_viewport_limits_and_origin_without_touching_selection ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.32s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_composer-185eec72aa484770)
+
+running 11 tests
+test accompany::tests::bass_octave_follows_the_spelled_letter_at_enharmonic_boundaries ... ok
+test accompany::tests::fractional_step_roundoff_stays_inside_each_chord_and_the_full_span ... ok
+test accompany::tests::held_root_bass_works_for_short_chords_without_a_matching_step_grid ... ok
+test accompany::tests::inversion_does_not_change_the_bass_root_or_its_actual_diminished_fifth ... ok
+test accompany::tests::limits_apply_across_parts_and_never_truncate_or_create_invalid_notes ... ok
+test accompany::tests::parts_keep_the_full_timeline_and_distinct_accompaniment_rules ... ok
+test progression::tests::bounds_and_unsupported_grammar_fail_explicitly ... ok
+test progression::tests::major_minor_and_sevenths_keep_scale_spelling_and_harmonic_roots ... ok
+test progression::tests::smoothing_preserves_spelling_and_chooses_nearby_inversions ... ok
+test rhythm::tests::every_bounded_pattern_preserves_onset_count_and_one_accent ... ok
+test rhythm::tests::tresillo_and_signed_rotation_follow_upstream_grouping ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+     Running tests/upstream_golden.rs (target/debug/deps/upstream_golden-7b63c8bf0cff5b14)
+
+running 5 tests
+test aliases_and_enharmonic_spelling_keep_the_reference_pitches ... ok
+test diatonic_progressions_and_smooth_voicings_match_the_reference ... ok
+test euclidean_patterns_match_the_reference_including_rotation_and_edge_cases ... ok
+test every_scale_and_chord_matches_the_pinned_octave_aware_reference ... ok
+test matching_accompaniment_patterns_preserve_pitch_timing_gate_and_velocity ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_core-6a40eb33099e9c19)
+
+running 78 tests
+test audio::tests::declared_sample_limit_is_checked_before_allocation_or_decode ... ok
+test audio::tests::exact_decoded_limit_accepts_finite_audio_and_lower_limit_rejects_it ... ok
+test audio_edit::tests::audio_operations_roundtrip_undo_and_reject_invalid_splits_without_edits ... ok
+test audio_edit::tests::curves_are_bounded_monotone_and_have_distinct_shapes ... ok
+test audio_edit::tests::normalization_uses_selected_multichannel_source_window_and_absolute_target ... ok
+test audio_edit::tests::onset_algorithms_sensitivity_and_reverse_find_source_attacks ... ok
+test audio_overlap::tests::crossfades_end_before_takeover_and_never_add_a_third_source_or_fade_resumed_takes ... ok
+test audio_overlap::tests::curve_validation_endpoints_and_serialized_model_are_backwards_compatible ... ok
+test audio_overlap::tests::entry_candidates_exist_without_configuration_and_clip_ends_bound_the_fade ... ok
+test audio_overlap::tests::latest_start_wins_equal_starts_use_vector_order_and_older_takes_resume ... ok
+test audio_overlap::tests::split_creates_a_new_priority_boundary_and_retains_entry_config_only_on_left ... ok
+test audio_silence::tests::apply_preserves_ghosts_source_mapping_envelopes_and_atomicity ... ok
+test audio_silence::tests::comp_cuts_keep_retained_take_alternatives ... ok
+test audio_silence::tests::finds_antiphase_stereo_islands_and_keeps_padding_in_playback_time ... ok
+test audio_silence::tests::reversed_stretched_selection_maps_to_correct_source_frames ... ok
+test audio_silence::tests::short_silence_is_kept_and_all_silence_can_be_removed ... ok
+test boundary_fades::tests::boundary_anchor_overflow_rejects_transient_batch_before_any_split ... ok
+test boundary_fades::tests::existing_musical_fades_at_current_edges_are_exactly_unchanged ... ok
+test boundary_fades::tests::ghost_source_edits_preserve_local_boundaries_without_changing_other_occurrences ... ok
+test boundary_fades::tests::inherited_musical_envelopes_and_middle_samples_survive_boundary_smoothing ... ok
+test boundary_fades::tests::smoothing_after_a_trim_preserves_the_longer_fade_at_the_untouched_edge ... ok
+test boundary_fades::tests::splitting_trimming_and_stretching_keep_the_boundary_anchor ... ok
+test boundary_fades::tests::take_selection_preserves_boundary_origins_and_retained_sources ... ok
+test boundary_fades::tests::tiny_clips_are_bounded_invalid_batches_are_atomic_and_legacy_json_roundtrips ... ok
+test chords::tests::all_chords_have_unique_valid_intervals_and_transpose_without_overflow ... ok
+test chords::tests::compound_intervals_and_folded_drawing_share_one_definition ... ok
+test chords::tests::every_scale_and_chord_has_one_shared_definition_and_alias_binding ... ok
+test chords::tests::legacy_identifiers_and_case_sensitive_chord_suffixes_still_resolve ... ok
+test chords::tests::stacks_stay_in_the_clicked_octave_and_respect_midi_bounds ... ok
+test history::tests::branching_and_saved_checkpoints_survive_undo_redo ... ok
+test history::tests::grouped_changes_end_at_save_and_do_not_merge_unrelated_controls ... ok
+test history::tests::step_and_memory_limits_include_plugin_states_in_both_directions ... ok
+test join::tests::audio_join_preserves_tie_order_and_rejects_unselected_overlap_without_mutation ... ok
+test join::tests::invalid_selection_never_mutates_the_document ... ok
+test join::tests::midi_join_clips_source_windows_preserves_absolute_timing_and_refreshes_every_id ... ok
+test midi_edit::tests::affected_merge_cascades_flatten_selection_ids_without_joining_partial_neighbors ... ok
+test midi_edit::tests::containment_merge_keeps_existing_identity_velocity_and_unrelated_overlaps ... ok
+test midi_edit::tests::existing_interval_candidates_skip_disjoint_notes_and_follow_expanded_owners ... ok
+test midi_edit::tests::group_bounds_clipboard_ids_and_invalid_paste_are_atomic ... ok
+test midi_edit::tests::legato_preserves_chords_and_last_onset_lengths ... ok
+test midi_edit::tests::merge_prefers_exact_existing_source_bits_and_accepts_stretch_roundoff_only ... ok
+test midi_edit::tests::merge_validation_is_atomic_and_large_pasted_batches_do_not_retain_duplicates ... ok
+test midi_edit::tests::quantize_strength_swing_and_source_offsets_preserve_unselected_notes_and_durations ... ok
+test midi_edit::tests::randomize_enforces_amount_selection_and_midi_time_bounds ... ok
+test midi_edit::tests::randomize_is_repeatable_per_note_and_preserves_other_fields ... ok
+test midi_edit::tests::top_to_bottom_legato_connects_ranks_skips_missing_voices_and_keeps_selection ... ok
+test midi_generate::tests::arp_patterns_are_distinct_and_speed_and_gate_keep_the_exact_bounds ... ok
+test midi_generate::tests::complete_bars_round_strictly_inward_and_reject_empty_views ... ok
+test midi_generate::tests::counterpoint_prefers_consonant_contrary_motion_when_available ... ok
+test midi_generate::tests::euclidean_rhythm_distributes_a_chosen_number_of_pulses_per_phrase ... ok
+test midi_generate::tests::hidden_melody_parameters_do_not_change_random_arpeggios ... ok
+test midi_generate::tests::invalid_ranges_and_extreme_workloads_fail_without_partial_drafts ... ok
+test midi_generate::tests::melodic_algorithms_are_deterministic_bounded_and_harmonic ... ok
+test midi_generate::tests::seed_changes_melody_and_density_controls_rests ... ok
+test midi_generate::tests::sustained_chords_span_the_exact_window_and_invert_by_degrees ... ok
+test midi_generate::tests::tintinnabuli_voices_use_nearest_tonic_triad_tones_without_duplicates ... ok
+test midi_generate::tests::valid_harmonies_and_registers_never_escape_midi_limits ... ok
+test music_theory::catalog::tests::chord_aliases_do_not_guess_across_major_and_minor ... ok
+test music_theory::catalog::tests::editor_ids_and_labels_share_the_public_query_interpretation ... ok
+test music_theory::catalog::tests::editor_pitch_classes_are_cached_without_losing_extended_composition_tones ... ok
+test music_theory::catalog::tests::spelling_and_extensions_match_the_source_vocabulary ... ok
+test music_theory::catalog::tests::vocabulary_is_complete_and_all_names_and_aliases_resolve ... ok
+test music_theory::notes::tests::parsing_preserves_letter_octaves_and_normalizes_unicode ... ok
+test music_theory::notes::tests::spelling_uses_diatonic_letters_and_safe_practical_fallback ... ok
+test spectrogram::tests::antiphase_channels_combine_power_without_cancelling ... ok
+test spectrogram::tests::cancelled_work_returns_without_a_partial_success ... ok
+test spectrogram::tests::invalid_assets_fail_without_allocating_unbounded_buffers ... ok
+test spectrogram::tests::localized_burst_does_not_light_the_rest_of_the_file ... ok
+test spectrogram::tests::long_source_keeps_a_burst_between_coarse_column_centers ... ok
+test spectrogram::tests::quiet_signal_is_not_normalized_to_full_brightness ... ok
+test spectrogram::tests::silence_empty_and_short_sources_are_bounded_and_finite ... ok
+test spectrogram::tests::tones_stay_in_their_frequency_and_time_regions ... ok
+test track_colors::tests::all_track_creation_paths_share_the_palette_without_recoloring_existing_tracks ... ok
+test track_colors::tests::colors_cycle_evenly_and_do_not_depend_on_note_clip_or_process_ids ... ok
+test track_colors::tests::midi_batch_import_assigns_colors_against_the_destination_project ... ok
+test waveform::tests::empty_and_short_sources_have_valid_bounded_queries ... ok
+test waveform::tests::exact_ranges_match_every_sample_across_unaligned_edges_and_pyramid_levels ... ok
+test waveform::tests::isolated_impulses_and_antiphase_channels_survive_whole_source_overview ... ok
+
+test result: ok. 78 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.37s
+
+     Running tests/archive.rs (target/debug/deps/archive-ba3f1387e1c8c5f2)
+
+running 6 tests
+test corrupt_asset_removes_partial_extraction_and_does_not_touch_existing_scratch ... ok
+test missing_media_preserves_existing_bundle_and_cleans_temporary_files ... ok
+test portable_bundle_preserves_audio_and_presets_after_originals_are_removed ... ok
+test rejects_decompression_beyond_declared_size_and_excess_entry_count ... ok
+test rejects_symlinks_duplicate_headers_and_oversized_declarations ... ok
+test rejects_traversal_absolute_and_unbundled_manifest_media_before_extraction ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/audio_common.rs (target/debug/deps/audio_common-307abadfe5c10f03)
+
+running 8 tests
+test audio_range_copy_and_gap_delete_preserve_stretched_reverse_sources_and_envelopes ... ok
+test deletion_is_atomic_and_keeps_ghosts_and_retained_takes ... ok
+test ripple_closes_selected_track_time_and_keeps_alternate_takes_aligned ... ok
+test ripple_keeps_latest_start_winner_when_overlaps_collapse_to_same_boundary ... ok
+test ripple_preserves_moved_slipped_stretched_and_reversed_comp_take_mapping ... ok
+test ripple_retains_alternates_that_cannot_conform_to_the_current_stretch_rate ... ok
+test slip_respects_reverse_stretch_source_bounds_and_ghost_locality ... ok
+test zero_crossings_use_one_multichannel_source_frame_and_bounded_search ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audio_processing.rs (target/debug/deps/audio_processing-5e81ea7c033bdfa4)
+
+running 4 tests
+test invalid_pitch_and_non_audio_targets_are_rejected_without_mutation ... ok
+test legacy_projects_default_to_original_pitch_and_unknown_algorithms_are_rejected ... ok
+test portable_project_keeps_original_audio_and_recalls_processing_and_local_stretch ... ok
+test transposition_and_engine_are_shared_by_ghosts_without_changing_instance_timing ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audio_takes.rs (target/debug/deps/audio_takes-92ed74c69de6c715)
+
+running 12 tests
+test adding_and_detaching_takes_preserves_audio_and_undo_restores_candidates ... ok
+test comp_edits_use_source_coordinate_handles_after_reversing_and_stretching_the_audible_region ... ok
+test comp_join_ignores_archived_candidates_and_keeps_them_available ... ok
+test comp_tools_remain_editable_while_copies_detach_and_sources_remain_safe ... ok
+test grouping_retains_originals_and_first_argument_wins_without_extra_audio_or_export_tail ... ok
+test loading_reserves_take_group_ids_and_untrusted_group_collisions_are_rejected ... ok
+test malformed_groups_ranges_and_references_are_rejected_atomically ... ok
+test missing_or_short_source_handles_clamp_crossfades_without_gaps_or_extra_duration ... ok
+test overlapping_comp_gestures_keep_exact_primary_source_mapping_and_never_sum_extra_takes ... ok
+test portable_archive_preserves_inactive_sources_and_legacy_projects_have_no_takes ... ok
+test range_selection_preserves_outside_source_and_adds_smooth_crossfades_at_both_edges ... ok
+test reverse_stretch_and_fade_origins_survive_slicing_and_source_handle_extension ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/automation.rs (target/debug/deps/automation-81c6fa4d06755e00)
+
+running 16 tests
+test automation_roundtrips_reserves_ids_and_legacy_tracks_need_no_new_field ... ok
+test deleting_bus_removes_its_send_automation_but_keeps_source_gain ... ok
+test deleting_sources_sends_and_inserts_removes_only_dependent_lanes ... ok
+test lanes_are_control_only_and_do_not_extend_audio_exports ... ok
+test legacy_automation_defaults_new_fields_without_changing_its_sound ... ok
+test overrides_hold_everywhere_without_changing_curves_and_resume_exactly ... ok
+test parameter_conversion_covers_full_native_ranges ... ok
+test point_edits_preserve_ids_sort_and_roll_back_invalid_positions ... ok
+test replacing_vst_instrument_discards_old_parameter_ids_and_is_undoable ... ok
+test smooth_has_a_continuous_bounded_peak_and_differs_from_linear ... ok
+test smooth_preserves_monotonicity_and_flat_segments_at_uneven_spacing ... ok
+test spline_override_semantic_edits_roundtrip_undo_and_reject_invalid_batches ... ok
+test spline_segments_move_continuously_between_logarithmic_linear_and_exponential ... ok
+test spline_shapes_follow_point_identity_and_survive_value_replacement ... ok
+test step_linear_and_smooth_hold_endpoints_and_handle_empty_lanes ... ok
+test target_uniqueness_type_and_global_point_ids_are_validated ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/clip_links.rs (target/debug/deps/clip_links-6c9c06671c20a05b)
+
+running 11 tests
+test audio_copy_paste_and_join_create_independent_sources ... ok
+test audio_gain_fades_reverse_are_shared_but_trim_envelope_and_crossfade_stay_local ... ok
+test groups_survive_parent_deletion_and_movement_between_tracks ... ok
+test independent_duplicate_and_detach_preserve_values_without_sharing_ids_or_edits ... ok
+test legacy_projects_default_to_independent_and_link_creation_rejects_overflow_without_mutation ... ok
+test links_and_independent_sources_roundtrip_through_archive_and_history ... ok
+test loading_reserves_group_ids_even_when_no_object_uses_the_same_high_id ... ok
+test malformed_link_groups_and_cross_object_id_collisions_are_rejected ... ok
+test midi_clones_share_names_notes_and_stable_event_ids_from_any_instance ... ok
+test movement_trimming_and_splitting_are_local_and_source_edits_still_propagate ... ok
+test simultaneous_conflicting_edits_are_rejected_atomically_and_explicit_gestures_are_live ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/commands.rs (target/debug/deps/commands-7a45c031af198941)
+
+running 13 tests
+test bulk_mix_can_set_exact_silence_and_rejects_ambiguous_gain_atomically ... ok
+test composition_uses_host_ids_and_batch_references_in_one_history_step ... ok
+test editing_nonselected_ghost_updates_all_peers_but_keeps_placements ... ok
+test malformed_fields_and_unbounded_notes_cannot_enter_commands ... ok
+test moving_a_comp_to_another_track_detaches_only_the_audible_region ... ok
+test quantize_preserves_unselected_sources_and_zero_strength_is_a_noop ... ok
+test randomize_defaults_noop_and_invalid_settings_are_atomic ... ok
+test randomize_stretched_linked_source_matches_preview_and_is_one_undoable_edit ... ok
+test rejected_later_edit_leaves_every_part_of_song_unchanged ... ok
+test relative_track_commands_use_batch_references_and_reject_cycles_atomically ... ok
+test routing_cycles_are_rejected_atomically ... ok
+test session_revision_advances_and_reset_revokes_earlier_session ... ok
+test trusted_source_durations_override_forged_slip_bounds_and_follow_tempo_edits ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/core.rs (target/debug/deps/core-a3bd8a9c12028679)
+
+running 14 tests
+test corrupt_project_is_rejected_without_overwriting_saved_file ... ok
+test duplicate_move_delete_and_undo_are_reversible ... ok
+test excessive_timeline_values_are_rejected_before_sample_conversion ... ok
+test generated_demo_audio_is_real_deterministic_and_matches_clip_length ... ok
+test glue_overlapping_notes_spans_the_union_without_adding_durations ... ok
+test midi_export_clips_source_notes_to_visible_range ... ok
+test midi_rejects_tempo_maps_and_accepts_velocity_zero_note_off ... ok
+test note_cut_duplicate_and_glue_preserve_pitch_and_timing ... ok
+test pcm_wav_normalizes_correctly ... ok
+test project_roundtrip_and_future_ids_are_safe ... ok
+test relative_media_paths_resolve_against_project_directory ... ok
+test scales_transpose_and_wrap_without_u8_overflow ... ok
+test split_and_trim_preserve_source_notes_and_offsets ... ok
+test wav_roundtrip_preserves_interleaving_and_headroom ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/effect_state.rs (target/debug/deps/effect_state-802dd082bfcef866)
+
+running 3 tests
+test effect_replacement_preserves_slot_identity_and_invalidates_only_its_state_and_lanes ... ok
+test effect_state_roundtrips_and_legacy_slots_default_empty ... ok
+test effect_state_validates_normalized_unique_parameters_even_when_bypassed ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/instrument_state.rs (target/debug/deps/instrument_state-f17a7c9cb8f19956)
+
+running 4 tests
+test instrument_state_persists_and_identical_assignment_preserves_it ... ok
+test instrument_state_rejects_oversize_duplicate_nonfinite_and_wrong_track_data ... ok
+test missing_state_fields_default_empty_and_removed_builtins_fail_explicitly ... ok
+test processor_class_is_persistent_and_changing_class_clears_obsolete_state ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/midi_recording.rs (target/debug/deps/midi_recording-a195bb37fd26722a)
+
+running 2 tests
+test midi_routes_and_recording_timing_round_trip_and_legacy_defaults_are_quiet ... ok
+test recorded_midi_adds_independent_layer_and_invalid_publication_is_atomic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/recording.rs (target/debug/deps/recording-b43e778a586c5023)
+
+running 8 tests
+test incomplete_only_loop_uses_longest_coverage_and_latest_tie_without_losing_short_pass ... ok
+test input_channels_are_validated_against_real_devices_and_round_trip_without_arming ... ok
+test invalid_recording_batches_roll_back_the_entire_transaction_including_new_layers ... ok
+test loop_passes_keep_partial_alternatives_and_choose_the_latest_complete_recording ... ok
+test nonloop_recording_is_an_independent_clip_with_exact_timing_and_preserves_existing_audio ... ok
+test overdub_layer_keeps_original_arrangement_routes_and_folder_and_uses_distinct_color ... ok
+test recorded_complete_and_partial_assets_survive_portable_save_and_undo_without_file_deletion ... ok
+test repeated_recordings_preserve_old_comp_edits_as_a_separate_recoverable_group ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/routing.rs (target/debug/deps/routing-9956bcf5ec1d5af7)
+
+running 14 tests
+test a_new_bus_has_unity_gain_for_transparent_routing ... ok
+test batch_bus_choices_exclude_every_reverse_path_into_the_selection ... ok
+test batch_bus_choices_validate_sources_and_accept_duplicate_selected_ids ... ok
+test deleting_a_bus_restores_main_outputs_and_removes_incoming_sends ... ok
+test deleting_a_folder_promotes_direct_children_and_preserves_nested_groups ... ok
+test deleting_a_track_rolls_back_when_the_candidate_is_invalid ... ok
+test invalid_destinations_and_folder_cycles_leave_project_unchanged ... ok
+test legacy_tracks_load_without_routing_fields ... ok
+test malformed_signal_graph_and_effect_parameters_are_rejected ... ok
+test output_and_send_cycles_are_rejected_atomically ... ok
+test output_choices_accept_signal_tracks_and_reject_non_signal_sources ... ok
+test output_choices_exclude_feedback_through_main_and_send_paths ... ok
+test routing_and_hierarchy_survive_project_save_load ... ok
+test routing_order_is_source_before_bus_and_preserves_parallel_paths ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/stretch.rs (target/debug/deps/stretch-aa82bb68ca84d516)
+
+running 7 tests
+test duplicate_at_validates_atomically_and_can_copy_left_from_the_timeline_limit ... ok
+test invalid_stretch_is_atomic_and_audio_normalization_uses_the_original_window ... ok
+test joining_scaled_midi_bakes_visible_timing_into_an_independent_clip ... ok
+test scaled_audio_split_and_trim_preserve_reverse_and_fade_coordinates ... ok
+test stretching_ghost_timing_keeps_shared_notes_and_source_windows ... ok
+test transient_detection_keeps_narrow_source_attacks_at_compressed_rates ... ok
+test versioned_projects_round_trip_rates_and_version_one_defaults_to_unstretched ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/track_order.rs (target/debug/deps/track_order-0d2a8c6a13f8a1f5)
+
+running 6 tests
+test before_after_and_inside_follow_destination_hierarchy_without_reordering_other_siblings ... ok
+test canonical_order_includes_collapsed_nested_descendants_without_mutating_the_song ... ok
+test collapsed_folders_move_as_complete_blocks_and_into_folder_changes_only_the_root_parent ... ok
+test every_track_kind_can_move_before_and_after_while_preserving_exact_contents ... ok
+test no_ops_and_invalid_targets_leave_even_noncanonical_saved_order_untouched ... ok
+test ordering_is_bounded_for_incomplete_editor_hierarchies_and_reordering_rejects_them ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_engine-27a919b75936099f)
+
+running 144 tests
+test device::input::tests::blank_project_records_past_end_and_raw_channels_ignore_monitor_fader ... ok
+test device::input::tests::callback_capture_monitor_and_overflow_paths_allocate_nothing ... ok
+test device::input::tests::cancelling_native_preparation_is_quiet_and_needs_no_hardware ... ok
+test device::input::tests::cpal_advisories_are_not_fatal_and_backend_errors_retain_unicode_details_without_allocating ... ok
+test device::input::tests::disconnect_recovers_recorded_prefix_and_input_can_be_reopened ... ok
+test device::input::tests::dry_monitor_obeys_live_channel_bus_pan_mute_solo_and_smoothing ... ok
+test device::input::tests::independent_dummy_feeds_use_one_contiguous_clock_and_configurable_channels ... ok
+test device::input::tests::output_disconnect_and_input_overflow_recover_playable_prefixes ... ok
+test device::input::tests::partial_first_loop_pass_is_not_marked_complete_and_capture_retains_seek_offset ... ok
+test device::input::tests::recording_uses_consumed_clock_and_exact_loop_files_including_partial ... ok
+test device::input::tests::timestamp_rounding_after_nonzero_playback_does_not_discard_first_sample ... ok
+test device::input::tests::two_armed_tracks_stay_sample_aligned_and_stereo_order_is_preserved ... ok
+test device::input::tests::unavailable_input_and_unwritable_directory_fail_without_starting_capture ... ok
+test device::input::tests::virtual_capture_compensates_input_and_output_latency_before_loop_splitting ... ok
+test device::live_device_tests::accepted_timeline_update_survives_later_parameter_acknowledgement ... ok
+test device::live_device_tests::blocked_preparation_keeps_callback_fed_and_a_superseding_edit_wins ... ok
+test device::live_device_tests::failed_live_asset_preparation_preserves_audio_and_next_valid_edit_recovers ... ok
+test device::live_device_tests::progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_edit ... ok
+test device::live_device_tests::render_worker_exposes_parameter_failure_once_while_healthy_audio_continues ... ok
+test device::live_device_tests::stopping_cancels_a_pending_preparation_without_waiting_for_its_gate ... ok
+test device::live_device_tests::virtual_callback_keeps_generation_and_audio_during_coalesced_edits ... ok
+test device::midi::tests::callback_after_stop_retains_a_delayed_note_off_without_extending_capture ... ok
+test device::midi::tests::callback_capture_and_overflow_paths_allocate_nothing ... ok
+test device::midi::tests::callback_clock_records_chords_velocity_zero_retrigger_sustain_and_channel_filters ... ok
+test device::midi::tests::count_in_notes_are_excluded_and_exact_first_recording_frame_is_included ... ok
+test device::midi::tests::disabled_input_observer_is_idle_and_output_failure_preserves_capture ... ok
+test device::midi::tests::driver_timestamps_preserve_intervals_through_callback_jitter_and_recover_clock_resets ... ok
+test device::midi::tests::held_notes_split_at_loop_boundaries_and_every_pass_is_retained ... ok
+test device::midi::tests::late_callback_delivery_preserves_event_timestamps_and_stop_closes_held_notes ... ok
+test device::midi::tests::stop_consumer_handoff_never_waits_or_pops_concurrently_with_a_callback ... ok
+test device::midi::tests::stop_drains_late_input_without_another_output_callback_and_excludes_the_boundary ... ok
+test device::midi::tests::stop_retains_delayed_events_behind_a_future_event_without_reordering_monitor_input ... ok
+test device::midi::tests::unsupported_messages_do_not_turn_into_notes_and_epoch_discards_retired_device_events ... ok
+test device::output_failure_tests::failed_output_rejects_audio_midi_and_audition_without_clearing_its_cause ... ok
+test device::output_failure_tests::output_advisory_does_not_latch_or_stop_playback_but_a_real_fault_does ... ok
+test device::output_failure_tests::output_device_failure_retains_backend_cause_once_without_plugin_or_midi_recording_errors ... ok
+test device::output_failure_tests::output_failure_between_transport_check_and_publication_cannot_resurrect_playback ... ok
+test device::output_failure_tests::output_xrun_during_armed_precount_remains_a_capture_failure ... ok
+test device::output_failure_tests::output_xrun_stops_audio_and_midi_capture_and_preserves_the_exact_recorded_prefix ... ok
+test device::output_failure_tests::output_xruns_keep_real_pcm_playing_and_count_once_per_callback_without_allocating ... ok
+test device::output_failure_tests::terminal_callback_cannot_emit_queued_preview_or_stale_play_requests ... ok
+test device::output_failure_tests::unclassified_backend_and_other_errors_remain_fatal ... ok
+test device::output_meter_tests::master_measures_finite_clipped_output_and_releases_at_the_same_rate_for_each_buffer_size ... ok
+test device::output_meter_tests::master_retains_short_transients_across_silent_callbacks_without_changing_pcm ... ok
+test device::tests::audition_callback_plays_without_moving_the_transport_and_stops_on_release ... ok
+test device::tests::callback_silences_nonfinite_and_extra_channels ... ok
+test device::tests::cancelled_or_timed_out_initialization_keeps_ownership_until_worker_cleanup ... ok
+test device::tests::channel_peak_reads_are_nonblocking_and_silent_when_transport_is_stopped ... ok
+test device::tests::engine_can_be_initialized_on_a_background_thread ... ok
+test device::tests::fatal_graph_error_is_not_retried_until_an_explicit_transport_reset ... ok
+test device::tests::hardware_callback_allocates_nothing ... ok
+test device::tests::live_parameter_queue_keeps_instruments_and_stable_effect_slots_separate ... ok
+test device::tests::queue_wrap_and_generation_flush ... ok
+test device::tests::releasing_keyboard_audition_keeps_ready_midi_monitor_audio_consuming ... ok
+test device::tests::render_error_slot_is_bounded_unicode_safe_and_does_not_wait_for_the_worker ... ok
+test device::timing::tests::audio_count_in_holds_cursor_clicks_with_toggle_off_and_excludes_preroll ... ok
+test device::timing::tests::empty_project_click_keeps_its_clock_until_disabled ... ok
+test device::timing::tests::metronome_toggle_is_live_preserves_engine_and_is_absent_from_export ... ok
+test device::timing::tests::mixed_count_prepares_timeline_before_count_and_captures_auto_midi_first_frame ... ok
+test device::timing::tests::record_while_playing_skips_count_and_preserves_backing_position ... ok
+test device::timing::tests::saved_metronome_is_ready_for_the_first_playback_callback ... ok
+test device::timing::tests::two_bar_count_and_click_callback_are_allocation_free_and_cancel_quietly ... ok
+test join::tests::failed_or_oversized_join_preserves_destination_and_document ... ok
+test join::tests::join_bakes_source_edits_priority_and_crossfade_at_exact_absolute_sample_boundaries ... ok
+test join::tests::joining_split_comp_regions_preserves_source_windows_and_retained_takes ... ok
+test meter::tests::stereo_peaks_are_nonconsuming_finite_and_release_at_block_rate ... ok
+test quality::tests::cancellable_chunks_match_whole_source_reference_including_short_tails ... ok
+test quality::tests::high_quality_rejects_out_of_band_aliases_and_preserves_passband ... ok
+test quality::tests::latency_is_trimmed_and_short_stereo_tails_are_not_lost ... ok
+test quality::tests::native_rate_is_bit_exact_and_empty_sources_are_supported ... ok
+test quality::tests::preparation_rejects_unbounded_ratios_and_output_before_allocation ... ok
+test quality::tests::preparation_throughput ... ignored, manual release-mode source preparation throughput measurement
+test render::audio_overlap_tests::cancelled_wav_render_stops_between_blocks_and_preserves_existing_file ... ok
+test render::audio_overlap_tests::exclusive_takes_crossfades_and_resumed_audio_match_sample_oracle_and_wav_export ... ok
+test render::audio_overlap_tests::overlap_seek_loop_pdc_and_prepared_render_are_consistent_and_allocation_free ... ok
+test render::audio_overlap_tests::seek_and_audio_boundaries_use_identical_half_sample_rounding ... ok
+test render::audio_schedule::tests::compiled_curves_match_exact_splines_including_steep_and_reversed_y_handles ... ok
+test render::audition_tests::native_held_note_audition_is_audible_and_releases_without_transport ... ignored, requires installed VST instrument via RILL_TEST_VST_INSTRUMENT
+test render::audition_tests::paused_audition_holds_gain_pan_and_send_automation_at_the_cursor ... ok
+test render::audition_tests::paused_preview_does_not_render_timeline_audio_or_advance_transport ... ok
+test render::automation_render_tests::live_override_resume_and_slope_edits_preserve_graph_audio_and_allocate_nothing ... ok
+test render::automation_render_tests::native_splines_and_overrides_render_before_first_and_after_last_nodes ... ok
+test render::automation_render_tests::plugin_curves_emit_held_endpoints_and_override_resume_values_without_allocating ... ok
+test render::automation_render_tests::queued_plugin_overrides_and_prepared_resumes_follow_ui_action_order ... ok
+test render::automation_render_tests::spline_holds_survive_seeking_loop_wrap_and_streaming_export ... ok
+test render::effect_state_tests::bypassed_effect_presets_roundtrip_without_loading_and_preserve_audio ... ok
+test render::effect_state_tests::native_effect_state_recall_overrides_and_live_slot_updates_change_audio ... ignored, requires CHOWTapeModel in DAW_TEST_VST3_EFFECT
+test render::live_edit_tests::accepted_live_parameters_are_part_of_compatibility_but_undo_is_not_ignored ... ok
+test render::live_edit_tests::audio_edit_bridge_is_allocation_free_and_continuous_through_repeated_changes ... ok
+test render::live_edit_tests::automation_row_order_does_not_change_compiled_plugin_parameter_order ... ok
+test render::live_edit_tests::deleting_last_clip_delivers_note_off_and_runs_out_tail_before_finishing ... ok
+test render::live_edit_tests::dense_live_note_edits_preserve_pitch_counts_and_apply_without_allocating ... ok
+test render::live_edit_tests::dense_pitch_replacement_keeps_note_off_and_note_on_bookkeeping_allocation_free ... ok
+test render::live_edit_tests::live_audio_edits_use_cached_sources_and_new_assets_without_restarting_the_timeline ... ok
+test render::live_edit_tests::live_boundary_fades_reuse_decoded_pcm_and_preserve_running_position ... ok
+test render::live_edit_tests::live_clip_edit_keeps_loop_timing_and_compensated_audio_running ... ok
+test render::live_edit_tests::live_mixer_edit_preserves_parallel_graph_delay_buffers_and_position_without_allocating ... ok
+test render::live_edit_tests::live_notes_keep_sustain_across_length_and_split_edits_and_reconcile_pending_changes ... ok
+test render::live_edit_tests::live_preview_refines_from_original_and_export_cannot_reuse_preview_assets ... ok
+test render::live_edit_tests::live_update_reverts_superseded_preparations_and_rejects_foreign_graph_before_mutation ... ok
+test render::live_edit_tests::removing_last_audio_clip_finishes_its_bridge_and_seek_clears_stale_correction ... ok
+test render::live_edit_tests::reordered_tracks_keep_compiled_graph_order_and_later_edits_target_stable_ids ... ok
+test render::live_edit_tests::retained_take_sources_are_silent_and_comp_crossfades_use_compact_source_indices ... ok
+test render::meter_tests::channel_meter_uses_automated_fader_and_respects_solo_selection ... ok
+test render::meter_tests::channel_meters_follow_own_fader_pan_bus_and_send_without_changing_audio ... ok
+test render::meter_tests::failed_channel_clears_meter_before_subsequent_blocks ... ok
+test render::midi_loop_tests::internal_loop_wrap_keeps_live_chord_at_midblock_and_block_start ... ok
+test render::midi_loop_tests::live_midi_edges_beyond_a_short_loop_segment_keep_their_exact_offsets ... ok
+test render::midi_loop_tests::loop_wrap_releases_only_sequencer_voices_and_defers_live_edges_during_priming ... ok
+test render::parallel_tests::dependency_levels_mix_every_parent_before_processing_a_bus ... ok
+test render::parallel_tests::disconnected_worker_restores_dispatched_and_unsent_nodes_without_drop_deadlock ... ok
+test render::parallel_tests::independent_sources_actually_overlap_on_multiple_persistent_workers ... ok
+test render::parallel_tests::live_worker_panic_silences_only_its_path_and_keeps_the_pool_running ... ok
+test render::parallel_tests::native_first_beat_notes_survive_initial_latency_prefill ... ignored, requires Surge XT and CHOWTapeModel in DAW_TEST_VST3 and DAW_TEST_VST3_EFFECT
+test render::parallel_tests::native_helper_crash_restores_parallel_nodes_and_contains_the_failed_live_path ... ignored, kills only owned native helpers; requires DAW_TEST_VST3 and DAW_TEST_VST3_EFFECT
+test render::parallel_tests::native_prepared_graph_uses_automatic_workers_and_reports_throughput ... ignored, requires native plug-ins in DAW_TEST_VST3 and DAW_TEST_VST3_EFFECT
+test render::parallel_tests::parallel_graph_is_sample_identical_with_pdc_sends_automation_and_seek ... ok
+test render::parallel_tests::parallel_graph_preserves_repeated_loop_positions_and_sample_values ... ok
+test render::parallel_tests::prepared_parallel_dispatch_reuses_its_buffers_without_allocating ... ok
+test render::parallel_tests::silent_and_muted_nodes_do_not_stall_the_dependency_graph ... ok
+test render::parallel_tests::worker_panic_restores_all_nodes_before_returning_an_offline_error ... ok
+test render::quality_tests::cancelled_preparation_stops_before_opening_assets ... ok
+test render::quality_tests::f64_accumulates_bus_inputs_pre_fader_sends_and_master ... ok
+test render::quality_tests::source_conversion_is_shared_and_processing_remains_allocation_free ... ok
+test render::stretch_render_tests::live_pitch_and_algorithm_edits_key_the_cache_and_restore_the_original ... ok
+test render::stretch_render_tests::live_stretch_reuses_original_audio_and_shares_prepared_data_after_split ... ok
+test render::stretch_render_tests::midi_stretch_compiles_source_time_into_arrangement_time ... ok
+test render::stretch_render_tests::stretched_audio_split_join_reverse_and_fades_preserve_rendered_samples ... ok
+test render::stretch_render_tests::transposed_stretched_audio_split_and_join_bake_processing_exactly_once ... ok
+test render::tests::automation_follows_seek_and_loop_positions_without_allocating ... ok
+test render::tests::live_midi_merge_preserves_equal_offset_edges_without_allocating ... ok
+test render::tests::midi_source_offset_crops_notes_before_plugin_scheduling ... ok
+test render::tests::prepared_audio_render_including_loop_wrap_allocates_nothing ... ok
+test render::tests::prepared_bus_graph_allocates_nothing ... ok
+test render::tests::range_render_checks_cancellation_between_processing_blocks ... ok
+test render::tests::range_render_matches_full_render_and_retains_only_selected_samples ... ok
+test render::tests::seeking_audio_uses_selected_sample_rate ... ok
+test stretch::tests::bandlimited_preview_keeps_selected_pitch_duration_and_stereo_without_aliases ... ok
+test stretch::tests::compare_bandlimited_preview_preparation_cost ... ignored, manual performance comparison
+test stretch::tests::native_stretch_compensates_transient_position_and_cancels_ongoing_preparation ... ok
+test stretch::tests::native_stretch_handles_short_silent_and_boundary_sources_with_bounded_errors ... ok
+test stretch::tests::native_stretch_preserves_pitch_duration_stereo_and_determinism ... ok
+test stretch::tests::odd_mono_lengths_and_rates_are_exact_without_losing_stereo_separation ... ok
+test stretch::tests::time_and_pitch_are_independent_for_every_backend_including_fine_transposition ... ok
+
+test result: ok. 137 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 11.05s
+
+     Running tests/audio_edits.rs (target/debug/deps/audio_edits-0f52f4b322f67083)
+
+running 1 test
+test reverse_curves_and_nondestructive_split_trim_preserve_stereo_samples ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/boundary_fades.rs (target/debug/deps/boundary_fades-3b6bca6621bd851b)
+
+running 2 tests
+test boundary_smoothing_changes_only_cut_edges_in_forward_reverse_and_stretched_audio ... ok
+test existing_long_musical_fades_export_identically_after_smoothing ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/export_options.rs (target/debug/deps/export_options-16681c02844320a4)
+
+running 2 tests
+test exact_project_export_ends_at_the_last_clip_and_retains_compensated_audio ... ok
+test exact_project_export_failure_preserves_the_existing_destination ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/isolated_graph.rs (target/debug/deps/isolated_graph-55bf38fc05a8202a)
+
+running 4 tests
+test isolated_instrument_export_can_trim_its_reported_tail_at_the_arrangement_end ... ignored, requires an instrument with a reported release tail in DAW_TEST_VST3 (Surge XT)
+test isolated_instrument_insert_and_parallel_buses_render_aligned_audio ... ignored, requires installed instrument/effect in DAW_TEST_VST3 and DAW_TEST_VST3_EFFECT
+test isolated_vst_effect_parameter_automation_changes_rendered_audio ... ignored, requires CHOWTapeModel in DAW_TEST_VST3_EFFECT
+test isolated_vst_instrument_automation_changes_audio_without_shifting_midi ... ignored, requires Surge XT in DAW_TEST_VST3
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rendering.rs (target/debug/deps/rendering-809e41a98325c09d)
+
+running 19 tests
+test audio_resamples_and_applies_clip_fades ... ok
+test automated_sends_and_bus_faders_follow_compensated_musical_time ... ok
+test bus_sums_inputs_and_applies_its_fader ... ok
+test bypassed_inserts_leave_audio_unchanged ... ok
+test compensation_aligns_paths_and_removes_export_preroll ... ok
+test delay_line_has_exact_sample_latency ... ok
+test failed_export_preserves_the_existing_destination ... ok
+test gain_and_pan_automation_are_sample_accurate ... ok
+test invalid_render_arguments_fail_without_panicking ... ok
+test mute_solo_and_pan_are_applied ... ok
+test muted_empty_and_folder_muted_lanes_restore_manual_values ... ok
+test nle_audio_offset_is_used_and_source_is_not_modified ... ok
+test routing_compensates_bus_inputs_and_parallel_master_sends ... ok
+test sends_use_the_correct_pre_or_post_fader_tap ... ok
+test solo_bus_includes_upstream_feeds_and_folder_mute_takes_priority ... ok
+test solo_source_preserves_bus_path_and_excludes_other_sources ... ok
+test step_and_smooth_automation_render_the_requested_curve ... ok
+test streaming_wav_export_matches_offline_render ... ok
+test unassigned_midi_track_is_silent_without_an_integrated_instrument ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_mcp-e1f3c9e1e6d07ca9)
+
+running 7 tests
+test tests::application_tools_require_host_capability_before_execution ... ok
+test tests::delegates_arguments_and_returns_structured_success_and_execution_errors ... ok
+test tests::negotiates_protocol_and_publishes_exact_canonical_schemas ... ok
+test tests::real_song_dispatch_creates_a_phrase_in_one_undoable_call ... ok
+test tests::stdio_recovers_from_parse_errors_and_never_replies_to_notifications ... ok
+test tests::stdio_rejects_oversized_frames ... ok
+test tests::validates_handshake_and_rejects_malformed_requests_without_execution ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_plugins-0d9cd69a29a472e4)
+
+running 37 tests
+test catalog::tests::capture_persists_validated_png_and_uses_safe_filenames ... ok
+test catalog::tests::corrupt_records_images_and_updates_during_capture_are_not_reused ... ok
+test catalog::tests::errors_are_persistent_retryable_and_never_publish_fake_images ... ok
+test catalog::tests::scan_retains_instruments_effects_and_unknown_metadata_without_initializing ... ok
+test catalog::tests::updates_and_processor_classes_invalidate_independently ... ok
+test editor::tests::a_failed_snapshot_cannot_be_followed_by_successful_close ... ok
+test editor::tests::editor_session_is_send ... ok
+test editor::tests::native_editor_closed_pipe_does_not_block_waiting_for_a_live_helper ... ok
+test editor::tests::native_editor_crash_is_contained ... ok
+test editor::tests::native_editor_hang_is_terminated_at_deadline ... ok
+test editor::tests::native_editor_reported_error_retains_its_cause_and_plugin_identity ... ok
+test editor::tests::native_editor_runtime_exit_reports_last_request_and_exit_code ... ok
+test editor::tests::native_editor_startup_exit_reports_status_and_plugin_identity ... ok
+test editor::tests::native_editor_startup_hang_is_bounded ... ok
+test editor::tests::opaque_effect_preset_without_notifications_is_automatically_saved ... ignored, Requires installed CHOWTapeModel in RILL_TEST_VST_EFFECT and a desktop
+test editor::tests::snapshots_and_close_keep_distinct_request_ids ... ok
+test editor_context_menu::tests::holding_menu_never_blocks_poll_and_drop_kills_and_reaps_live_worker ... ok
+test editor_context_menu::tests::process_completion_cancellation_invalid_selection_and_crash_are_bounded ... ok
+test editor_context_menu::tests::vst_groups_keep_actions_checks_disabled_state_and_zero_id ... ok
+test editor_native::tests::automatic_snapshots_debounce_gestures_and_limit_save_frequency ... ok
+test editor_native::tests::fallback_detects_opaque_changes_without_callbacks_and_suppresses_identical_bytes ... ok
+test editor_platform::tests::captures_real_x11_window_pixels ... ignored, requires an X11 display; run under xvfb-run
+test editor_platform::tests::visual_components_support_565_and_10_bit_color ... ok
+test helper::tests::commands_before_loading_return_error ... ok
+test sync::tests::index_never_references_files_outside_the_preview_cache ... ok
+test sync::tests::restarted_sync_shows_the_index_and_resync_tracks_installs_and_removals ... ok
+test sync::tests::sync_indexes_metadata_and_captures_only_verified_missing_previews ... ok
+test tests::audio_bus_input_routes_stereo_and_downmixes_mono ... ok
+test tests::installed_effect_processes_input_and_roundtrips_state ... ignored, requires a user-installed effect in DAW_TEST_VST3_EFFECT
+test tests::installed_instrument_produces_audio_and_roundtrips_state ... ignored, requires a user-installed VST3 instrument in DAW_TEST_VST3
+test tests::instrument_is_send_without_an_unsafe_wrapper ... ok
+test tests::module_metadata_preserves_processor_classes ... ok
+test tests::overlapping_notes_preserve_release_counts_and_bound_reset_queue ... ok
+test tests::rejects_bad_blocks_before_the_plugin_sees_events ... ok
+test tests::scans_nested_bundles_and_direct_paths_without_loading_code ... ok
+test tests::symlink_loops_and_duplicate_bundles_terminate ... ok
+test tests::zero_velocity_note_on_is_a_note_off ... ok
+
+test result: ok. 33 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running unittests src/bin/daw-plugin-host.rs (target/debug/deps/daw_plugin_host-aa4ca32e773a8668)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/isolation.rs (target/debug/deps/isolation-1836f863d88eb98d)
+
+running 4 tests
+test a_hung_worker_is_killed_at_the_response_deadline ... ok
+test a_killed_worker_returns_an_error_and_parent_survives ... ok
+test helper_reports_errors_without_exiting ... ok
+test native_editor_exits_when_owner_pipe_closes_before_initialization ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/native_context_menu.rs (target/debug/deps/native_context_menu-d859ec8e13495b3e)
+
+running 1 test
+test real_menu_worker_selects_zero_id_honors_disabled_actions_and_cancels ... ignored, Creates a private Xvfb display; requires Xvfb and Mesa in a Linux container
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/native_dsp_load.rs (target/debug/deps/native_dsp_load-1767090aad0643c6)
+
+running 5 tests
+test native_audio_processing_keeps_the_short_deadline ... ok
+test native_editor_capability_queries_do_not_construct_a_view ... 
+running 1 test
+test native_editor_capability_queries_do_not_construct_a_view ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+ok
+test native_lifecycle_operations_still_have_a_bounded_deadline ... ok
+test native_plugin_load_process_parameters_and_recall_never_construct_an_editor ... ok
+test slow_native_activation_and_reconfiguration_preserve_the_worker ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.84s
+
+     Running tests/native_editor.rs (target/debug/deps/native_editor-3a5a7bd664e5c81b)
+
+running 2 tests
+test chow_native_editor_capture_parameter_and_state_round_trip ... ignored, Requires installed CHOWTapeModel and a desktop session
+test surge_native_editor_capture_parameter_and_state_round_trip ... ignored, Requires installed Surge XT and a desktop session
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_tools-a4b2006b6ad1e39b)
+
+running 8 tests
+test scope::tests::audio_scope_excludes_structural_work_and_source_replacement ... ok
+test scope::tests::candidates_preserve_unrelated_fields_and_stable_identity ... ok
+test scope::tests::chain_and_routing_allow_only_own_pruned_automation ... ok
+test scope::tests::final_candidate_rejects_ghost_propagation_and_allows_explicit_detach ... ok
+test scope::tests::matching_automation_creation_keys_overrides_and_paging_stay_local ... ok
+test scope::tests::plugin_scopes_separate_instrument_effect_and_chain ... ok
+test scope::tests::schemas_and_metadata_match_context_capabilities ... ok
+test scope::tests::typed_calls_reject_outside_ids_aliases_and_global_noops ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/composer.rs (target/debug/deps/composer-e317c8366d0dcf8b)
+
+running 6 tests
+test every_piano_roll_harmony_matches_composer_lookup_and_legacy_generation ... ok
+test exact_note_budget_succeeds_and_an_extra_part_fails_atomically ... ok
+test generator_schema_uses_the_piano_rolls_complete_catalogue ... ok
+test invalid_ranges_parameters_and_stale_requests_leave_the_song_intact ... ok
+test published_parameter_bounds_execute_with_matching_part_grids ... ok
+test theory_tools_are_discovered_read_only_and_reject_unrelated_authority ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/tools.rs (target/debug/deps/tools-98b95d1802cb163e)
+
+running 12 tests
+test application_capabilities_are_separate_from_canonical_availability ... ok
+test automation_spline_and_override_commands_match_the_shared_model_and_queries ... ok
+test complete_part_is_one_call_and_one_undoable_operation ... ok
+test core_queries_hide_paths_and_opaque_state_and_are_bounded ... ok
+test every_published_edit_shape_deserializes_to_the_real_command_contract ... ok
+test generator_is_reproducible_and_phrase_transform_uses_stable_ids ... ok
+test phrase_legato_exposes_rank_mode_and_preserves_the_default_next_onset ... ok
+test published_edit_schema_only_contains_supported_operations ... ok
+test randomize_tool_defaults_match_typed_edits_and_keep_one_undoable_commit ... ok
+test randomize_tool_respects_subset_noop_conflicts_and_atomic_failure ... ok
+test relative_track_move_tools_preserve_folder_contents_and_share_one_undo ... ok
+test stale_session_and_revision_reject_mutation ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/daw_ui-84fb8f23cd387d4b)
+
+running 30 tests
+test brand::tests::artwork_and_wordmark_follow_theme_and_cache_textures_per_context ... ok
+test brand::tests::embedded_native_icon_is_visible_transparent_and_decoded_once ... ok
+test device_cards::tests::card_activation_requires_consecutive_clicks_on_same_stable_identity ... ok
+test device_cards::tests::favorite_toggle_count_items_and_filter_chips_report_their_actions ... ok
+test device_cards::tests::keyboard_scroll_reveals_the_entire_selected_card_in_short_viewports ... ok
+test device_cards::tests::list_rows_virtualize_keep_text_inside_and_double_click_activates ... ok
+test device_cards::tests::preview_arrival_preserves_card_geometry_and_full_unicode_text ... ok
+test device_cards::tests::requested_card_focus_wins_over_automatic_spatial_navigation ... ok
+test device_cards::tests::responsive_grid_fits_columns_without_clipping_or_building_hidden_cards ... ok
+test generation::tests::bar_fields_are_independent_native_drag_targets_with_bounded_values ... ok
+test generation::tests::preview_painters_clip_ranges_and_notes_in_both_themes ... ok
+test native_context_menu::tests::malformed_and_excessive_menus_are_rejected_before_rendering ... ok
+test native_context_menu::tests::menu_body_activates_zero_id_and_respects_disabled_actions_without_a_window ... ok
+test native_context_menu::tests::zero_id_unicode_and_nested_enabled_actions_are_preserved ... ok
+test parameter_browser::tests::cached_search_tracks_metadata_order_and_dynamic_scope_changes ... ok
+test parameter_browser::tests::unchanged_large_search_reuses_results_while_parameter_values_remain_live ... ok
+test piano::tests::folded_pitch_mapping_is_reversible_and_group_moves_keep_boundaries ... ok
+test piano::tests::short_notes_keep_a_move_target_between_both_resize_edges ... ok
+test recording::tests::record_arm_preserves_canvas_layout_and_clicks_only_its_control ... ok
+test spectrogram::tests::crop_reverse_and_pitch_shift_use_one_clipped_texture_quad ... ok
+test spectrogram::tests::image_has_quiet_transparent_low_bands_at_bottom_and_bounded_alpha ... ok
+test spectrogram::tests::palette_images_share_level_alpha_but_distinguish_blue_and_yellow ... ok
+test theme::tests::piano_rows_keep_close_neutral_bases_and_quiet_green_highlights ... ok
+test theme::tests::piano_velocity_shades_and_warning_hue_keep_neutral_selection_readable ... ok
+test theme::tests::selected_note_outlines_preserve_fill_in_dense_rows_and_short_notes ... ok
+test timeline::tests::fit_contains_late_content_and_all_rows_on_both_axes ... ok
+test timeline::tests::zoom_keeps_the_musical_point_and_row_under_the_pointer ... ok
+test value_entry::tests::numeric_pointer_keys_respect_selection_caret_sign_and_unicode ... ok
+test value_entry::tests::opening_precise_and_scientific_values_round_trips_without_rounding ... ok
+test waveform::tests::clipping_hides_offscreen_handles_without_losing_visible_selection ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/assistant.rs (target/debug/deps/assistant-a87fa980cc203a59)
+
+running 11 tests
+test all_guidance_pages_keep_composer_and_actions_inside_compact_viewport ... ok
+test browsing_and_inserting_an_example_preserves_draft_and_requires_send ... ok
+test enter_edits_multiline_prompt_and_blank_prompt_cannot_submit ... ok
+test long_history_and_unicode_prompt_keep_actions_in_viewport ... ok
+test oversized_example_never_replaces_or_truncates_an_existing_draft ... ok
+test oversized_tool_prompt_never_clobbers_a_draft ... ok
+test popup_browsing_actions_fit_below_reserved_transport_at_minimum_app_size ... ok
+test scoped_tool_browser_selects_a_tool_and_preserves_an_unsent_draft ... ok
+test secret_field_paints_masked_text_only ... ok
+test submit_shortcut_requires_prompt_focus_and_respects_busy_state ... ok
+test tool_search_filters_supplied_tools_and_clears_stale_selection ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/assistant_readiness.rs (target/debug/deps/assistant_readiness-e4cbbc814feed1fe)
+
+running 4 tests
+test connect_is_actionable_without_a_draft_and_blocked_shortcut_cannot_send ... ok
+test long_failure_details_leave_prompt_and_recovery_visible_in_both_themes ... ok
+test new_failure_reveals_once_and_manual_scrolling_survives_until_another_attempt ... ok
+test recovery_only_requests_editing_and_never_replaces_a_draft_or_stops_a_run ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/backdrop_blur.rs (target/debug/deps/backdrop_blur-a2e7880071a5ac36)
+
+running 3 tests
+test blur_targets_remain_bounded_at_high_density_and_wide_viewports ... ok
+test modal_blurs_once_before_its_foreground_instead_of_stacking_utility_blur ... ok
+test utility_blur_uses_frozen_workspace_and_closing_clears_the_request ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/beat_ruler.rs (target/debug/deps/beat_ruler-0af46b3aac55b1be)
+
+running 4 tests
+test a_view_between_whole_beats_keeps_musical_and_clock_anchors_aligned ... ok
+test elapsed_clock_carries_rounded_seconds_and_keeps_only_useful_precision ... ok
+test invalid_viewports_cannot_submit_nonfinite_labels_or_ticks ... ok
+test zoom_levels_add_useful_detail_without_overlapping_or_partial_labels ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/bounded_panes.rs (target/debug/deps/bounded_panes-8ec5ea95ba99a02f)
+
+running 3 tests
+test bounded_context_titles_wrap_and_keep_full_source_within_row_limit ... ok
+test bounded_panes_keep_headers_fixed_and_scrolling_independent ... ok
+test utility_scroll_body_hugs_short_content_and_bounds_growth_without_moving_menu_controls ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/channel_controls.rs (target/debug/deps/channel_controls-f5308d6a039270b6)
+
+running 2 tests
+test compact_and_regular_sliders_drag_independently_and_respect_disabled_state ... ok
+test inspecting_out_of_range_channel_values_never_changes_them ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/channel_readouts.rs (target/debug/deps/channel_readouts-369a228fedb95eb5)
+
+running 2 tests
+test dismissing_an_untouched_or_changed_draft_never_overwrites_external_channel_updates ... ok
+test precise_popup_scrolls_to_keep_home_and_end_carets_inside_the_input ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/clips.rs (target/debug/deps/clips-3ebbacd7c14fb517)
+
+running 4 tests
+test clip_titles_reserve_chain_space_and_elide_names_in_both_themes ... ok
+test linked_clone_and_independent_copy_actions_have_distinct_vector_icons ... ok
+test properties_clip_label_preserves_unicode_name_and_clear_icon_spacing ... ok
+test standalone_clip_names_keep_full_width_and_painting_respects_parent_clip ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/color.rs (target/debug/deps/color-dfbb6a6a8ea8012a)
+
+running 2 tests
+test strip_has_a_generous_hit_area_and_opening_does_not_change_saved_rgb ... ok
+test strip_supports_keyboard_activation_and_disabled_parent_blocks_opening ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/compact_tools.rs (target/debug/deps/compact_tools-3221520aa24d7709)
+
+running 3 tests
+test every_tool_is_visible_and_one_click_away_without_moving_adjacent_controls ... ok
+test individual_tools_keep_keyboard_radio_semantics_and_disabled_state ... ok
+test separators_only_divide_adjacent_families_on_the_same_row ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/component_materials.rs (target/debug/deps/component_materials-d7c7dfd26b8d1856)
+
+running 3 tests
+test material_emphasis_is_bounded_and_keeps_the_callers_clip ... ok
+test rounded_material_reuses_its_texture_across_control_sizes_and_frames ... ok
+test unavailable_materials_skip_texture_allocation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/control_roles.rs (target/debug/deps/control_roles-561130ca2cfa32e4)
+
+running 7 tests
+test named_tool_families_keep_their_label_and_target_and_announce_the_active_mode ... ok
+test outlined_view_toggles_keep_native_keyboard_and_disabled_behavior ... ok
+test quiet_commands_and_guides_keep_native_activation_and_disabled_guards ... ok
+test quiet_tabs_keep_full_targets_selection_and_native_activation ... ok
+test role_styles_do_not_leak_and_active_tools_keep_a_palette_indicator_at_both_densities ... ok
+test tool_values_support_pointer_and_keyboard_without_reselect_changes_or_disabled_edits ... ok
+test tools_emit_one_labelled_radio_event_with_the_supplied_selected_state ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/crossfade.rs (target/debug/deps/crossfade-30453e6851373e58)
+
+running 4 tests
+test focused_handles_support_keyboard_fine_adjustment_accessibility_and_disabled_state ... ok
+test handle_drag_uses_total_displacement_and_keeps_normalized_ordered_time ... ok
+test rendered_spline_gains_are_complementary_in_both_themes ... ok
+test timeline_overlay_preserves_layout_and_clips_to_the_supplied_bounds ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/curve_segments.rs (target/debug/deps/curve_segments-71f740323d78079a)
+
+running 2 tests
+test navigation_gestures_starting_on_spline_handles_never_change_the_curve ... ok
+test spline_handle_selects_one_segment_and_drag_uses_total_distance_without_moving_points ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/curves.rs (target/debug/deps/curves-3fe2b34b861582ee)
+
+running 5 tests
+test click_adds_snapped_normalized_point ... ok
+test dragging_uses_original_point_and_total_pointer_distance_then_delete_uses_focus ... ok
+test singleton_timeline_fit_leaves_one_bar_to_draw_with_the_full_parameter_range ... ok
+test timeline_pan_and_zoom_starting_on_points_never_edit_or_open_context_menus ... ok
+test timeline_wheel_preserves_anchor_full_value_range_and_focused_fit_then_point_editing ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/empty_workspace.rs (target/debug/deps/empty_workspace-5e8f0b0b7dc36efd)
+
+running 3 tests
+test actions_fit_narrow_and_wide_workspaces_in_both_appearances ... ok
+test an_empty_workspace_does_not_take_keyboard_focus_while_it_is_drawn ... ok
+test mouse_activates_only_the_chosen_action_and_disabled_workspace_stays_inert ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/error_details.rs (target/debug/deps/error_details-0905a2c0a7af1716)
+
+running 2 tests
+test copy_preserves_the_full_snapshot_and_close_retains_keyboard_behavior ... ok
+test long_unicode_diagnostics_scroll_without_hiding_actions_or_eliding_details ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/forms.rs (target/debug/deps/forms-25b82d0ab04ff92c)
+
+running 2 tests
+test form_grid_keeps_labels_single_line_and_controls_in_a_shared_column ... ok
+test long_path_row_keeps_actions_in_bounds_and_keyboard_accessible ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/icons.rs (target/debug/deps/icons-90bf6ad8ead57040)
+
+running 3 tests
+test editor_actions_use_a_window_icon_and_prefixed_actions_keep_one_plus ... ok
+test icon_only_buttons_keep_native_keyboard_activation_and_accessible_names ... ok
+test reorder_grip_is_six_vector_dots_and_does_not_depend_on_a_symbol_font ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/input_materials.rs (target/debug/deps/input_materials-8aa27ade4a358d39)
+
+running 1 test
+test input_materials_preserve_native_geometry_glyphs_and_selected_text ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/interactions.rs (target/debug/deps/interactions-24b306ace82c6906)
+
+running 11 tests
+test application_palette_follows_system_appearance_without_losing_shared_style ... ok
+test boolean_controls_support_keyboard_activation_and_respect_disabled_state ... ok
+test canvas_button_truncates_without_expanding_or_clicking_its_row ... ok
+test canvas_control_preserves_parent_layout_and_fits_compact_bounds ... ok
+test canvas_picker_supports_keyboard_selection_and_escape_without_expanding_rows ... ok
+test clicking_a_switch_label_updates_value_and_accessibility_metadata ... ok
+test closed_popup_does_not_render_contents ... ok
+test disabled_canvas_picker_ignores_pointer_and_keyboard_input ... ok
+test radio_and_selectable_choices_report_only_actual_value_changes ... ok
+test select_builder_opens_choices_and_selects_a_value ... ok
+test text_field_accepts_unicode_keyboard_text ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/knob.rs (target/debug/deps/knob-c5af9654ef554691)
+
+running 10 tests
+test arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density ... ok
+test automation_has_wording_and_color_and_outside_values_stay_exact ... ok
+test compact_knob_fits_the_dial_without_removing_the_default_numeric_editor ... ok
+test compact_knob_leaves_unit_aware_hints_to_its_host ... ok
+test exact_number_can_be_typed_and_committed_with_a_mouse_click ... ok
+test owned_release_motion_reaches_the_same_value_between_held_frames ... ok
+test precision_changes_on_release_apply_only_the_remaining_relative_motion ... ok
+test relative_drag_has_no_click_jump_and_fine_adjustment_does_not_rebase ... ok
+test secondary_or_middle_buttons_block_concurrent_primary_drag_through_release ... ok
+test steps_disabled_controls_and_secondary_clicks_preserve_expected_values ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/layout.rs (target/debug/deps/layout-37fec26bde727de8)
+
+running 11 tests
+test command_families_wrap_together_without_shrinking_targets_or_leaking_styles ... ok
+test mixed_control_rows_keep_targets_and_text_centered_during_numeric_entry ... ok
+test mixer_strips_stack_their_contents_and_meter_rejects_nonfinite_readings ... ok
+test parameter_rows_align_slider_rails_with_fields_labels_and_actions ... ok
+test sized_toolbar_choices_use_remaining_row_space_and_wrap_as_one_group ... ok
+test thumbnail_arrival_keeps_catalog_text_position_and_row_height_stable ... ok
+test toolbar_wraps_complete_native_controls_without_eating_the_canvas ... ok
+test trailing_toolbar_group_uses_current_row_and_wraps_only_when_needed ... ok
+test utility_popup_can_reach_actions_after_asynchronous_body_growth ... ok
+test utility_popup_is_centered_bounded_and_scrolls_long_content ... ok
+test workspace_header_stays_at_the_top_and_back_keeps_native_keyboard_accessibility ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/menu_roles.rs (target/debug/deps/menu_roles-915f85ebe4e2ecb1)
+
+running 5 tests
+test actions_choices_and_views_stay_visually_distinct_and_wrap_in_both_themes ... ok
+test disabled_settings_menus_ignore_pointer_and_keyboard ... ok
+test nested_choice_menus_preserve_parent_and_accept_selection ... ok
+test quiet_action_menu_opens_by_mouse_runs_once_and_dismisses_without_losing_its_target ... ok
+test settings_menus_keep_toggles_open_support_keyboard_and_dismiss_on_accept_or_escape ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/menus.rs (target/debug/deps/menus-763dbc7d361bb192)
+
+running 2 tests
+test fast_nested_menu_click_survives_provisional_area_and_leaf_still_closes ... ok
+test nested_menus_keep_keyboard_activation_escape_and_outside_click_dismissal ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/mixer_controls.rs (target/debug/deps/mixer_controls-2b53b2e4ec188e74)
+
+running 11 tests
+test compact_pan_context_clicks_cover_the_caption_and_disabled_input_cannot_edit ... ok
+test compact_pan_hint_uses_pan_units_and_only_offers_visible_edit_paths ... ok
+test compact_pan_is_relative_with_no_click_jump_fine_drag_and_keyboard_steps ... ok
+test compact_pan_preserves_values_and_paints_its_real_index_in_a_bounded_row ... ok
+test level_meter_has_a_bounded_captioned_footprint_and_sanitizes_nonfinite_input ... ok
+test level_meter_uses_decibel_travel_and_never_fabricates_or_overflows_signal ... ok
+test mixer_fader_pointer_and_keyboard_edits_follow_native_handle_travel ... ok
+test mixer_fader_preserves_precise_and_out_of_range_values_when_inspected ... ok
+test mixer_fader_secondary_middle_and_disabled_input_never_edit_values ... ok
+test mixer_skin_does_not_change_neighboring_shared_slider_geometry ... ok
+test mute_and_solo_are_equal_sized_independent_native_buttons ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/mixer_flow.rs (target/debug/deps/mixer_flow-88e435f9335d50b9)
+
+running 4 tests
+test clipped_routes_keep_their_true_endpoints_and_reject_invalid_geometry ... ok
+test compact_channel_actions_leave_readable_source_kinds_without_smaller_tap_targets ... ok
+test route_lanes_connect_channels_with_bounded_gradient_ribbons_in_both_directions ... ok
+test scrolling_route_lanes_keeps_stems_attached_to_channel_bottoms ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/modals.rs (target/debug/deps/modals-55da9b9da94ae299)
+
+running 2 tests
+test decision_dialog_keeps_long_unicode_context_and_actions_inside_viewport ... ok
+test modal_buttons_keep_keyboard_activation_and_block_background_clicks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/native_dialog_menu.rs (target/debug/deps/native_dialog_menu-84c28ca29e5f2085)
+     Running tests/navigation.rs (target/debug/deps/navigation-afb01f041ea6a231)
+
+running 5 tests
+test active_view_link_can_be_reselected_to_dismiss_an_overlay ... ok
+test dialog_context_keeps_parent_modal_without_live_controls_or_a_second_scrim ... ok
+test related_view_buttons_wrap_as_whole_controls_at_narrow_widths ... ok
+test retained_view_keeps_preview_texture_alive_until_last_snapshot_is_dropped ... ok
+test retained_view_paints_without_recreating_text_controls_or_handling_clicks ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/notices.rs (target/debug/deps/notices-d0c8edad8e9a1f80)
+
+running 1 test
+test long_notice_text_keeps_actions_and_readable_text_inside_a_small_viewport ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/numeric_entry.rs (target/debug/deps/numeric_entry-88b90c011eb8982d)
+
+running 5 tests
+test disabled_number_cannot_take_focus_or_change_value_from_mouse_and_text ... ok
+test numeric_double_click_and_typing_in_one_frame_preserve_following_characters ... ok
+test numeric_multiclick_replaces_sign_and_fraction_without_select_all_shortcut ... ok
+test shared_number_keeps_native_dragging_and_delayed_commit ... ok
+test tab_focus_still_selects_the_complete_next_number ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/parameter_browser.rs (target/debug/deps/parameter_browser-f8c7da5299d1b9ea)
+
+running 5 tests
+test disabled_browser_and_an_open_native_popup_do_not_activate_parameters ... ok
+test focused_search_ranks_tokens_and_keyboard_activates_only_visible_selection ... ok
+test large_catalog_virtualizes_rows_and_stays_bounded_in_both_themes_and_densities ... ok
+test modified_navigation_keys_preserve_selection_and_never_activate_a_parameter ... ok
+test scope_clicks_and_rows_update_the_detail_pane_immediately_and_activate_with_enter ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/popup_backdrop.rs (target/debug/deps/popup_backdrop-a283f06bf0616475)
+
+running 3 tests
+test native_confirmation_uses_the_shared_dim_color_and_keeps_its_buttons_active ... ok
+test native_menu_hierarchy_stays_above_one_backdrop_and_accepts_clicks ... ok
+test utility_dimming_preserves_foreground_and_never_enters_retained_snapshots ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/popup_close.rs (target/debug/deps/popup_close-b54e2e4da98b59c7)
+
+running 1 test
+test popup_close_target_is_clickable_after_text_edit_in_both_themes_and_sizes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/selection_glow.rs (target/debug/deps/selection_glow-7ce32579d5214d94)
+
+running 3 tests
+test clip_and_channel_selection_add_halos_without_changing_geometry_or_controls ... ok
+test hidden_or_invalid_halos_submit_no_geometry_and_visible_halos_keep_parent_clip ... ok
+test selection_halo_has_constant_geometry_transparent_edges_and_no_texture ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/selection_navigation.rs (target/debug/deps/selection_navigation-95ba296f855cd158)
+
+running 2 tests
+test edges_do_not_wrap_and_invalid_geometry_never_captures_selection ... ok
+test time_navigation_and_vertical_overlap_are_deterministic_for_chords_and_tracks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/slider_markers.rs (target/debug/deps/slider_markers-fa020bf02f84dd76)
+
+running 4 tests
+test arranger_mix_rails_reuse_landmarks_without_changing_channel_values ... ok
+test gain_sliders_mark_unity_as_zero_while_preserving_the_native_range ... ok
+test landmarks_resolve_overlap_and_preserve_numeric_meaning ... ok
+test native_sliders_paint_distinct_bounded_landmarks_at_every_size_and_density ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/slider_scale.rs (target/debug/deps/slider_scale-1da38f063bc036b2)
+
+running 9 tests
+test adaptive_scale_uses_native_handle_centers_and_keeps_midpoint_at_every_density ... ok
+test compact_captions_fit_and_the_entire_caption_is_a_mouse_target ... ok
+test endpoint_precision_trims_only_unnecessary_zeros ... ok
+test exact_number_entry_rounds_once_before_updating_the_model ... ok
+test exact_tick_clicks_track_actual_values_and_secondary_buttons_do_not_edit ... ok
+test keyboard_and_out_of_range_readouts_keep_native_parameter_semantics ... ok
+test out_of_range_values_have_visible_direction_markers_and_remain_unchanged ... ok
+test slider_automation_glyphs_are_distinct_without_covering_handle_index_or_captions ... ok
+test tiny_ranges_keep_distinct_readable_endpoints_without_changing_values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/surfaces.rs (target/debug/deps/surfaces-73cd7a98a50ae6e7)
+
+running 4 tests
+test ambient_wash_is_clipped_transparent_at_edges_and_has_bounded_geometry ... ok
+test ambient_wash_lifts_dark_surfaces_and_gently_tints_light_surfaces ... ok
+test ambient_wash_skips_tiny_offscreen_invisible_and_nonfinite_surfaces ... ok
+test soft_surface_preserves_native_frame_layout_focus_and_pointer_input ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/theme.rs (target/debug/deps/theme-20d98cc729864dc3)
+
+running 4 tests
+test both_palettes_keep_text_readable_and_every_black_pitch_row_darker ... ok
+test calm_controls_keep_readable_hints_focus_and_window_depth_separate_from_flat_panels ... ok
+test explicit_appearance_ignores_os_changes_and_system_resumes_following ... ok
+test generous_popup_frames_fit_small_viewports_even_with_a_large_minimum_body ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/timeline.rs (target/debug/deps/timeline-99864a167a1545a4)
+
+running 5 tests
+test disabled_background_pane_does_not_consume_active_editor_shortcuts ... ok
+test foreground_keyboard_routing_is_explicit_and_respects_input_guards ... ok
+test horizontal_canvas_leaves_vertical_wheel_to_its_scrollable_parent ... ok
+test pan_press_has_no_jump_and_motion_is_incremental_until_release ... ok
+test text_field_focus_prevents_fit_and_zoom_keyboard_shortcuts ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/timeline_views.rs (target/debug/deps/timeline_views-1eaecdbf9c58ffd3)
+
+running 3 tests
+test a_held_pan_keeps_its_origin_even_when_the_user_pauses_mid_drag ... ok
+test explicit_fit_has_its_own_return_view_and_document_reset_discards_it ... ok
+test previous_view_returns_before_a_complete_wheel_burst_and_toggles_back ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/tool_hint.rs (target/debug/deps/tool_hint-82d3f3a82d9173d2)
+
+running 6 tests
+test compact_hints_keep_one_row_and_full_help_wraps_in_both_themes_and_densities ... ok
+test disclosure_is_context_specific_and_retains_help_when_the_tool_changes ... ok
+test help_stays_reachable_when_a_previous_control_widens_the_parent ... ok
+test tool_help_is_keyboard_accessible_without_stealing_focus_or_consuming_tool_keys ... ok
+test toolbar_caption_uses_only_remaining_space_without_moving_controls_or_canvas ... ok
+test toolbar_help_has_a_full_target_and_native_keyboard_open_and_dismiss ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/tooltip.rs (target/debug/deps/tooltip-3dbe4d8f4a217035)
+
+running 2 tests
+test pointer_feedback_is_immediate_and_keeps_its_text_inside_the_viewport ... ok
+test stacked_text_hints_allow_an_immediate_click_on_the_control_beneath_them ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/track_header.rs (target/debug/deps/track_header-00ef15e9c9559768)
+
+running 4 tests
+test connection_and_details_controls_keep_keyboard_mouse_and_disabled_semantics ... ok
+test header_sections_stay_separate_across_normal_compact_and_nested_geometry ... ok
+test invalid_or_empty_headers_do_not_allocate_interactive_sections ... ok
+test nested_identity_indents_without_moving_channel_controls_or_hiding_the_title ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/track_layout.rs (target/debug/deps/track_layout-2bccfd2065e7b9c4)
+
+running 5 tests
+test deep_folder_names_retain_readable_space_inside_a_narrow_header ... ok
+test deep_narrow_containers_keep_content_inside_and_do_not_invent_scrolled_caps ... ok
+test middle_drag_and_disabled_gutters_do_not_resize ... ok
+test recursive_containers_enclose_whole_lanes_and_keep_each_bottom_separate ... ok
+test resize_uses_the_original_value_as_its_gutter_moves_and_clamps_the_view ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/track_mix.rs (target/debug/deps/track_mix-8dc74c2eed1a3d7b)
+
+running 6 tests
+test caption_editor_preserves_out_of_range_values_on_open_and_cancel_then_applies_exactly ... ok
+test compact_fields_drag_relatively_and_keep_native_keys_and_disabled_state ... ok
+test compact_value_click_opens_explicit_entry_without_clamping_stored_gain ... ok
+test mute_and_solo_expose_native_checkbox_commands_without_owning_channel_state ... ok
+test native_rails_keep_endpoint_keyboard_and_disabled_behavior_with_exact_geometry ... ok
+test track_mix_is_bounded_without_tiny_scale_labels_at_supported_sizes_and_densities ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/track_reorder.rs (target/debug/deps/track_reorder-81da2c944dc07c36)
+
+running 4 tests
+test edge_scrolling_requires_a_primary_track_drag_and_stops_on_release ... ok
+test escape_invalid_disabled_and_navigation_gestures_never_commit ... ok
+test folders_offer_explicit_middle_drop_and_after_uses_the_full_subtree_boundary ... ok
+test native_title_drag_previews_before_after_and_commits_only_on_primary_release ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/typography.rs (target/debug/deps/typography-bf1441c2b0b3313c)
+
+running 5 tests
+test all_text_roles_wrap_with_full_height_at_standard_and_retina_density ... ok
+test embedded_fonts_cover_names_and_emoji_in_every_text_role_and_numeric_digits_align ... ok
+test fixed_catalog_names_use_ellipsis_and_dense_piano_rows_hide_labels ... ok
+test timeline_bar_and_clock_labels_have_separate_readable_rows ... ok
+test timeline_ruler_omits_partial_edge_labels_after_panning_and_in_narrow_views ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/value_entry.rs (target/debug/deps/value_entry-91dff9fdddeb2a64)
+
+running 5 tests
+test exact_entry_selects_current_value_keeps_draft_and_only_commits_on_apply ... ok
+test exact_value_formatting_round_trips_extreme_and_fractional_values ... ok
+test focused_enter_applies_escape_discards_and_automation_actions_share_the_menu ... ok
+test invalid_values_never_clamp_or_commit_and_cancel_reopens_fresh ... ok
+test short_parameter_menu_scrolls_only_keys_and_keeps_apply_and_automation_reachable ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/waveform_refinement.rs (target/debug/deps/waveform_refinement-4082b0f824933439)
+
+running 3 tests
+test a_single_column_remains_visible_and_invalid_geometry_is_rejected ... ok
+test envelope_is_one_bounded_stereo_mesh_with_physical_pixel_edge_coverage ... ok
+test repaint_reuses_mesh_storage_and_retains_the_parent_clip ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_ai
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_composer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_engine
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_mcp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_plugins
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_tools
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests daw_ui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -78,7 +78,7 @@ pub fn knob_geometry(ctx: &egui::Context, id: Id) -> Option<KnobGeometry> {
 #[derive(Clone, Copy, Default)]
 struct DragState {
     value: f64,
-    delta: Vec2,
+    position: Option<Pos2>,
 }
 
 #[must_use = "Add the knob to a Ui"]
@@ -257,25 +257,42 @@ impl<'a> Knob<'a> {
                 response.request_focus();
             }
             if response.drag_started_by(egui::PointerButton::Primary) {
+                // Include the movement that first established drag ownership,
+                // in the response's local coordinates.
+                let position = response
+                    .interact_pointer_pos()
+                    .map(|position| position - response.total_drag_delta().unwrap_or_default());
                 ui.data_mut(|data| {
                     data.insert_temp(
                         drag_id,
                         DragState {
                             value: (self.value)(None),
-                            delta: Vec2::ZERO,
+                            position,
                         },
                     )
                 });
             }
-            if response.dragged_by(egui::PointerButton::Primary) {
-                let mut drag = ui
-                    .data(|data| data.get_temp::<DragState>(drag_id))
-                    .unwrap_or(DragState {
-                        value: (self.value)(None),
-                        delta: response.total_drag_delta().unwrap_or_default(),
-                    });
-                let delta = response.total_drag_delta().unwrap_or_default();
-                let movement = delta - drag.delta;
+            let dragging = response.dragged_by(egui::PointerButton::Primary);
+            let releasing = response.drag_stopped_by(egui::PointerButton::Primary);
+            if (dragging || releasing)
+                && let Some(mut drag) =
+                    ui.data(|data| data.get_temp::<DragState>(drag_id))
+                        .or_else(|| {
+                            // A blocked drag may resume while Primary stays held,
+                            // without replaying its suppressed displacement. Release
+                            // alone must never create new ownership or an accumulator.
+                            dragging.then(|| DragState {
+                                value: (self.value)(None),
+                                position: response.interact_pointer_pos(),
+                            })
+                        })
+            {
+                // egui clears `dragged` and total_drag_delta on release, but
+                // retains the final interact_pointer_pos for the owned target.
+                let position = response.interact_pointer_pos();
+                let movement = position
+                    .zip(drag.position)
+                    .map_or(Vec2::ZERO, |(position, previous)| position - previous);
                 let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
                 let span = self.range.end() - self.range.start();
                 drag.value += f64::from(movement.x - movement.y) * span / 200.0 * fine;
@@ -290,7 +307,7 @@ impl<'a> Knob<'a> {
                     (self.value)(Some(value));
                     response.mark_changed();
                 }
-                drag.delta = delta;
+                drag.position = position;
                 ui.data_mut(|data| data.insert_temp(drag_id, drag));
             }
             if response.has_focus() {

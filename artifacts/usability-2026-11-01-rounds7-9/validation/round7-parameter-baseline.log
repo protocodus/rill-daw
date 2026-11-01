@@ -1,0 +1,68 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 0.77s
+     Running tests/mixer_pan_knob_e2e.rs (target/debug/deps/mixer_pan_knob_e2e-1cc742931d4b8725)
+
+running 4 tests
+test mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling ... FAILED
+test mixer_pan_knob_arc_and_relative_drags_preserve_click_values_and_undo ... ok
+test mixer_pan_knob_drag_and_exact_entry_override_automation_without_rewriting_the_curve ... ok
+test mixer_pan_release_overrides_the_effective_value_without_rewriting_automation ... FAILED
+
+failures:
+
+---- mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling stdout ----
+
+thread 'mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling' (269211) panicked at crates/daw-app/tests/mixer_pan_knob_e2e.rs:17:5:
+-0.119999997317791 != -0.6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- mixer_pan_release_overrides_the_effective_value_without_rewriting_automation stdout ----
+
+thread 'mixer_pan_release_overrides_the_effective_value_without_rewriting_automation' (269245) panicked at crates/daw-app/tests/mixer_pan_knob_e2e.rs:17:5:
+-0.30000001192092896 != -0.1
+
+
+failures:
+    mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling
+    mixer_pan_release_overrides_the_effective_value_without_rewriting_automation
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.38s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_pan_knob_e2e`
+     Running tests/parameter_mouse_entry_e2e.rs (target/debug/deps/parameter_mouse_entry_e2e-24939a943b293daa)
+
+running 3 tests
+test automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve ... FAILED
+test compact_header_and_channel_properties_keep_the_same_mouse_entry ... FAILED
+test mixer_gain_pan_and_send_accept_precise_mouse_only_drafts ... FAILED
+
+failures:
+
+---- automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve stdout ----
+
+thread 'automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve' (269254) panicked at crates/daw-app/tests/parameter_mouse_entry_e2e.rs:22:28:
+Missing "7": ["RILL","File","Edit","Track","Window","Help","AI","0:00.000","mouse-parameters","Arranger","Mixer","Start","Play","Stop","Record","001 . 01 . 00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Select","Pencil","Cursor","Cut","Join","Erase","Duplicate","Ghost copy","Stretch","Slip","Nudge","Add pattern","−","+","Fit","Fit selection","Tool help","View","Snap 1/16","Select clips · Drag to move or trim","Tracks","1","0:00","2","0:02","3","0:04","Mouse channel","Volume","-2.5 dB","Pan","L50","M","S","A","Other channel","Routing","Master","Input","Mono 1","Volume","-2.5 dB","Pan","C","M","S","Value","Range: -100 to 100 %","-50","Apply value","Cancel","Automated","Edit automation","Override automation"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- compact_header_and_channel_properties_keep_the_same_mouse_entry stdout ----
+
+thread 'compact_header_and_channel_properties_keep_the_same_mouse_entry' (269262) panicked at crates/daw-app/tests/parameter_mouse_entry_e2e.rs:22:28:
+Missing "7": ["RILL","File","Edit","Track","Window","Help","AI","0:00.000","mouse-parameters","Arranger","Mixer","Start","Play","Stop","Record","001 . 01 . 00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Select","Pencil","Cursor","Cut","Join","Erase","Duplicate","Ghost copy","Stretch","Slip","Nudge","Add pattern","−","+","Fit","Fit selection","Tool help","View","Snap 1/16","Select clips · Drag to move or trim","Tracks","1","0:00","2","0:02","3","0:04","4","0:06","5","Mouse channel","Volume","-2.5 dB","Pan","R17","M","S","Other channel","Routing","Master","Input","Mono 1","Volume","-2.5 dB","Pan","C","M","S","BUS","Room","Routing","Master","Channel","Effects & sends","Volume","0.0 dB","Pan","C","M","S","Value","Range: -100 to 100 %","17.345599830150604","Apply value","Cancel","Create automation"]
+
+---- mixer_gain_pan_and_send_accept_precise_mouse_only_drafts stdout ----
+
+thread 'mixer_gain_pan_and_send_accept_precise_mouse_only_drafts' (269270) panicked at crates/daw-app/tests/parameter_mouse_entry_e2e.rs:22:28:
+Missing "7": ["RILL","File","Edit","Track","Window","Help","AI","0:00.000","mouse-parameters","Arranger","Mixer","Start","Play","Stop","Record","001 . 01 . 00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","AI for this context","Add send…","Add bus","Back","Mixer","Tracks","Buses","Master","Mouse channel","Channel","Audio","Effects","0","No inserts","-2.5 dB","+3.5 dB","0","−6","−12","−∞","L","R","Pan R17.346","Mute","Solo","Level","dBFS","L","R","−60","−30","0","Output","Ch 1 > Master","Other channel","Channel","Audio","Effects","0","No inserts","-2.5 dB","+3.5 dB","0","−6","−12","−∞","L","R","Pan C","Mute","Solo","Level","dBFS","L","R","−60","−30","0","Output","Ch 2 > Master","Room","BUS","Channel","Bus","1 in","Effects","0","No inserts","0.0 dB","+3.5 dB","0","−6","−12","−∞","L","R","Pan C","Mute","Solo","Level","dBFS","L","R","−60","−30","0","Output","Ch 3 > Master","Master","Stereo mix","−∞ dB","Output","Stereo output","Value","Range: -60 to 3.521825075149536 dB","-2.498774766921997","Apply value","Cancel","Create automation"]
+
+
+failures:
+    automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve
+    compact_header_and_channel_properties_keep_the_same_mouse_entry
+    mixer_gain_pan_and_send_accept_precise_mouse_only_drafts
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+error: test failed, to rerun pass `-p daw-app --test parameter_mouse_entry_e2e`
+error: 2 targets failed:
+    `-p daw-app --test mixer_pan_knob_e2e`
+    `-p daw-app --test parameter_mouse_entry_e2e`

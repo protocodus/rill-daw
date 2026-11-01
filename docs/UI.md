@@ -356,7 +356,10 @@ same native rail and handle positions for such scales and diagnostics.
 inside a parameter menu. It displays the current value and range, selects the
 initial text, and returns a changed value only on **Apply value**. Invalid or
 non-finite text keeps the editor open; **Cancel**, Escape, and outside dismissal
-leave the value untouched. Use `automatable_parameter_value_context` for channel
+leave the value untouched. **123** beside the field opens the shared mouse
+keypad without changing the draft or its precision. On short screens only the
+keys scroll; Apply/Cancel and the caller's automation actions remain reachable.
+Use `automatable_parameter_value_context` for channel
 controls so exact entry and Create/Edit/Override/Resume automation share one
 menu. Such menus close only on outside clicks or explicit actions, allowing
 normal text selection and correction. `value_entry_rect` exposes the active
@@ -372,6 +375,8 @@ and a muted dash for Bypassed, without covering the center index or captions.
 minimum/maximum captions, a visible value index and, by default, a shared
 numeric editor. Dragging is relative: up or right increases, down or left
 decreases, and pressing a different part of the dial never jumps the value.
+An owned drag includes movement delivered with the final button release, so
+its result does not depend on the last held-pointer sample.
 Shift makes a drag ten times finer; the numeric field provides the same precision
 without a modifier. Click the number to type and click elsewhere to commit.
 `step_by` quantizes intentional edits, while `.clamping(SliderClamping::Edits)`
@@ -690,6 +695,10 @@ and automation actions. Its 48-point dial shows L/R and a fixed center tick;
 the adjacent caption shows **Pan C**, **Pan L…** or **Pan R…**. The complete row
 is an exact-entry context target, and `knob_geometry` returns the actual dial
 geometry through its response ID. The full-height volume fader remains separate.
+Strip height follows the window rather than transient notices or the number of
+sends. Notices and added routing lanes keep existing controls in place; extra
+lanes remain accessible by scrolling below the strips. The viewport still clamps
+scroll offsets at the content boundaries when its visible area changes.
 `mixer_mute_solo` gives the two independent switches equal-width, full-height
 buttons with explicit selected states. `mixer_level_meter` shows separate L/R
 peaks on a fixed −60..0 dBFS scale after all processing controls; it reads engine
@@ -702,8 +711,11 @@ both in one Undo step. New sends start post-fader at gain 0.25. Without an eligi
 selected channel, the send action is disabled.
 The output control carries the destination's color. Each strip's separate send
 action names a single destination or shows the send count; hover lists every
-destination, pre/post position and level. The strip's **Add send…** opens Routing
-for an empty send list. Pre-fader sends tap after inserts and before volume/pan;
+destination, pre/post position and level. An empty strip's **Add send…** opens
+the same destination choices directly, with a caption naming that strip's source.
+Opening or cancelling preserves selection, workspace and project state; a choice
+creates one undoable send. Existing send summaries open Routing for editing.
+Pre-fader sends tap after inserts and before volume/pan;
 post-fader sends include both, and all sends respect channel mute.
 Selecting or hovering a channel previews its output and
 pre/post sends in separate routing lanes below the controls. `mixer_route_lane` connects actual `MixerRouteEndpoint` positions with a continuous three-point-wide U-shaped ribbon, including the arrowhead touching the destination. Vertex colors blend smoothly from source to destination along the path; Master uses the theme accent. Each route uses eleven vertices, with no textures or repaint requests. Offscreen endpoints retain their true coordinates and remain named. The model validates every routing change too.
@@ -995,6 +1007,12 @@ Call `editor_tool_shortcuts` separately to route supported keys through the same
 mode state. Native controls retain keyboard focus and disabled behavior.
 
 Audio and MIDI clips share Select/move, either-edge trim, Cut, Join, Duplicate, Ghost copy, Stretch, Erase and Cursor. Pencil creates MIDI clips. Shift-body-drag duplicates once; Shift-edge-drag bypasses snap. Stretch is distinct from trim and preserves the source window. During playback, prepared edits use the existing live-edit path and remain one Undo step per gesture. Menu/context/tool commands share result selection and history labels. Joining retains its focused chooser for selecting clips. Arrangement supports groups of selected clips and time selections that retain rests. Erase targets the pointed clip only, even if several clips are selected after a cut. Edit/context Delete retains its bulk-selection behavior; Undo restores the erased clip and its selection state.
+
+Piano-roll gesture initialization uses the primary press event's position and
+modifiers, even when later motion arrives in the same frame. The press owns
+the initial note/velocity target, onset and pitch; the current pointer supplies
+subsequent movement and release. A press outside the canvas cannot start an edit
+by moving inside. Existing modal, popup, layer and canvas ownership gates remain.
 
 Transport **Range → Loop playback over selection** and the clip context menu share one range
 action. A selected time span takes precedence over the enclosing bounds of

@@ -1,0 +1,16 @@
+{"time": "2026-11-01T00:29:17Z", "started_unix": 1793492957.1060052, "action": "shot", "args": ["/workspace/scratch/rill-iteration-preview/session-2/mixer.png"], "held_button_after": null}
+{"time": "2026-11-01T00:29:30Z", "started_unix": 1793492969.6998298, "action": "click", "args": ["38", "726", "3"], "held_button_after": null}
+{"time": "2026-11-01T00:29:30Z", "started_unix": 1793492970.1575577, "action": "shot", "args": ["/workspace/scratch/rill-iteration-preview/session-2/pan-compact.png"], "held_button_after": null}
+{"time": "2026-11-01T00:29:42Z", "started_unix": 1793492981.9289331, "action": "click", "args": ["257", "804"], "held_button_after": null}
+{"time": "2026-11-01T00:29:42Z", "started_unix": 1793492982.4039166, "action": "move", "args": ["317", "707"], "held_button_after": null}
+{"time": "2026-11-01T00:29:42Z", "started_unix": 1793492982.7495503, "action": "shot", "args": ["/workspace/scratch/rill-iteration-preview/session-2/keypad-expanded.png"], "held_button_after": null}
+{"time": "2026-11-01T00:29:58Z", "started_unix": 1793492997.8482864, "action": "click", "args": ["178", "645"], "held_button_after": null}
+{"time": "2026-11-01T00:29:58Z", "started_unix": 1793492998.2358031, "action": "click", "args": ["270", "218"], "held_button_after": null}
+{"time": "2026-11-01T00:29:59Z", "started_unix": 1793492998.6027129, "action": "scroll", "args": ["1064", "909", "-5"], "held_button_after": null}
+{"time": "2026-11-01T00:29:59Z", "started_unix": 1793492999.0699239, "action": "move", "args": ["1064", "765"], "held_button_after": null}
+{"time": "2026-11-01T00:29:59Z", "started_unix": 1793492999.311279, "action": "shot", "args": ["/workspace/scratch/rill-iteration-preview/session-2/mixer-send-routes.png"], "held_button_after": null}
+{"time": "2026-11-01T00:30:16Z", "started_unix": 1793493015.9307244, "action": "click", "args": ["986", "347"], "held_button_after": null}
+{"time": "2026-11-01T00:30:16Z", "started_unix": 1793493016.301025, "action": "click", "args": ["338", "679"], "held_button_after": null}
+{"time": "2026-11-01T00:30:17Z", "started_unix": 1793493016.6728644, "action": "scroll", "args": ["1064", "909", "-5"], "held_button_after": null}
+{"time": "2026-11-01T00:30:17Z", "started_unix": 1793493017.137715, "action": "move", "args": ["1064", "765"], "held_button_after": null}
+{"time": "2026-11-01T00:30:17Z", "started_unix": 1793493017.3929727, "action": "shot", "args": ["/workspace/scratch/rill-iteration-preview/session-2/mixer-send-routes-visible.png"], "held_button_after": null}

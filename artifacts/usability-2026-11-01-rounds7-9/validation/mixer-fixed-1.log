@@ -1,0 +1,86 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 8.53s
+     Running tests/mixer_flow_e2e.rs (target/debug/deps/mixer_flow_e2e-bebb2209dd15a6d0)
+
+running 2 tests
+test mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback ... ok
+test mixer_orders_signal_stages_and_separates_primary_and_send_arrows ... FAILED
+
+failures:
+
+---- mixer_orders_signal_stages_and_separates_primary_and_send_arrows stdout ----
+
+thread 'mixer_orders_signal_stages_and_separates_primary_and_send_arrows' (271253) panicked at crates/daw-app/tests/mixer_flow_e2e.rs:200:9:
+assertion `left == right` failed
+  left: 0
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mixer_orders_signal_stages_and_separates_primary_and_send_arrows
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_flow_e2e`
+     Running tests/mixer_height_e2e.rs (target/debug/deps/mixer_height_e2e-d750f3337414fd2e)
+
+running 1 test
+test mixer_fills_height_and_resizes_faders_without_losing_channel_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.87s
+
+     Running tests/mixer_pan_knob_e2e.rs (target/debug/deps/mixer_pan_knob_e2e-1cc742931d4b8725)
+
+running 4 tests
+test mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling ... ok
+test mixer_pan_knob_arc_and_relative_drags_preserve_click_values_and_undo ... ok
+test mixer_pan_knob_drag_and_exact_entry_override_automation_without_rewriting_the_curve ... ok
+test mixer_pan_release_overrides_the_effective_value_without_rewriting_automation ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.35s
+
+     Running tests/mixer_signal_flow_e2e.rs (target/debug/deps/mixer_signal_flow_e2e-12020c133c808f8a)
+
+running 2 tests
+test adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channel ... ok
+test mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+
+     Running tests/mixer_stability_e2e.rs (target/debug/deps/mixer_stability_e2e-06152a3dcaf5c68c)
+
+running 4 tests
+test mixer_controls_stay_under_the_pointer_during_output_failure_and_recovery ... ok
+test mixer_export_completion_preserves_control_geometry_and_mouse_target ... ok
+test mixer_notice_changes_keep_an_existing_short_window_scroll_position ... ok
+test mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable ... FAILED
+
+failures:
+
+---- mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable stdout ----
+
+thread 'mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable' (271468) panicked at crates/daw-app/tests/mixer_stability_e2e.rs:228:9:
+assertion failed: visible(&scrolled, "Post send → Delay")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.95s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_stability_e2e`
+     Running tests/track_reorder_e2e.rs (target/debug/deps/track_reorder_e2e-a086d2cef46b483c)
+
+running 4 tests
+test compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations ... ok
+test every_arranger_track_kind_reorders_by_mouse_with_one_history_entry_and_portable_recall ... ok
+test folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles ... ok
+test mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing_sound_data ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.70s
+
+error: 2 targets failed:
+    `-p daw-app --test mixer_flow_e2e`
+    `-p daw-app --test mixer_stability_e2e`

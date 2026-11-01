@@ -1,0 +1,13 @@
+{
+  "started_utc": "2026-11-01T00:32:33Z",
+  "command": [
+    "python3",
+    "/workspace/scratch/rill-usability-round8/launch.py",
+    "--launch-frozen-build"
+  ],
+  "cwd": "/workspace",
+  "output_log": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493153390540682-launch.py.log",
+  "finished_utc": "2026-11-01T00:32:45Z",
+  "elapsed_seconds": 11.933,
+  "exit_code": 0
+}

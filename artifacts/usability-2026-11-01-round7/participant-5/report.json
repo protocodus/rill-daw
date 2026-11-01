@@ -1,0 +1,157 @@
+{
+  "purpose": "Independent simulated beginner mouse-only RILL usability report, based only on assigned native session and screenshots.",
+  "participant": 5,
+  "persona": "Simulated beginner, first introduction to RILL, interested in a short hip-hop beat with a simple synth part.",
+  "piece_name": "night drive",
+  "ratings": {
+    "easy_to_use": 3,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The empty-lane instruction, instrument assignment, duplication and on-screen keyboard made composition possible with only the mouse. Exact trimming needed a second adjustment, and Mixer controls moved vertically when banners or sends appeared.",
+    "how_cool_it_looks": "The dark interface, teal waveform and note clips, and colored routing arrows looked cohesive and made the finished arrangement easy to scan.",
+    "how_fast_it_is": "Most edits visibly responded promptly. WAV export showed an elapsed-time indicator; playback required a retry and failed again. This is an interaction impression, not a hardware benchmark.",
+    "how_confusing_it_is": "Duplicate first selected a tool rather than immediately copying; its instruction resolved this. Mixer layout shifts made several attempted pan or solo clicks miss. Playback could briefly resume after a control change despite the preceding failure notice.",
+    "feature_completeness": "Audio, MIDI note drawing, a real installed VST3 assignment, bus/send routing, title entry, project save and both exports were discoverable. Reliable playback was not established in this laboratory session."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round7/session-5/night drive.rill",
+    "wav": "/workspace/scratch/rill-usability-round7/session-5/night drive.wav",
+    "midi": "/workspace/scratch/rill-usability-round7/session-5/night drive.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "recovery",
+      "observation": "Clicking Duplicate highlighted the tool and displayed Click a clip to duplicate. Clicking the audio clip then created an adjacent copy; Fit made the extended arrangement visible.",
+      "evidence": [
+        "01-duplicate.png",
+        "02-two-clips.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "recovery",
+      "observation": "Four audio repetitions initially reached 34.286 seconds. Dragging the last edge first produced 30.134 seconds, and a second small adjustment produced the visible 30.000-second duration.",
+      "evidence": [
+        "04-four-clips.png",
+        "05-midi-added.png",
+        "07-piano.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "Double-clicking the empty lane opened Device library. Selecting Assign instrument created a track showing Rill Lab Sine. Four drawn notes and duplicate clips produced a repeated synth phrase across the arrangement.",
+      "evidence": [
+        "05-midi-added.png",
+        "06-instrument.png",
+        "08-notes.png",
+        "11-arrangement.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "Mixer faders displayed drums at -7.5 dB and instrument at -8.4 dB after dragging. Pan labels ultimately showed L10 and R21. Mute and Solo each had a visible active highlight and were turned off afterward.",
+      "evidence": [
+        "14-retry.png",
+        "15-mute.png",
+        "22-solo-active.png",
+        "27-project-saved.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "friction",
+      "observation": "The error banner and the new send changed the vertical positions of the Mixer controls. Some attempted pan and solo gestures landed at the former positions and did not change the intended control; inspecting the new layout allowed correction.",
+      "evidence": [
+        "13-mix-playback.png",
+        "14-retry.png",
+        "16-solo.png",
+        "21-solo-active.png",
+        "22-solo-active.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "Add bus created New bus. The instrument Add send button opened Routing; + Send offered New bus. Choosing it showed a 0.25x Post send, and the Mixer showed Bus 1 in plus a Post send to New bus routing arrow.",
+      "evidence": [
+        "17-bus.png",
+        "18-send-menu.png",
+        "19-send-add.png",
+        "20-send-created.png",
+        "21-solo-active.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "failure",
+      "observation": "Play produced Audio output stream failed or disconnected. Retry playback briefly displayed Pause; the transport advanced from 001.01.00 to 003.01.30 before the same error returned. Subsequent control changes briefly showed Pause again. Sustained playback and audible balance were not established.",
+      "evidence": [
+        "13-mix-playback.png",
+        "14-retry.png",
+        "15-mute.png",
+        "16-solo.png",
+        "17-bus.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard button. Mouse clicks on its on-screen keys entered night drive. Save opened a native dialog already in session-5, using night drive.rill; OK closed it and the title no longer showed the modified dot.",
+      "evidence": [
+        "24-rename.png",
+        "25-keyboard.png",
+        "26-save-dialog.png",
+        "27-project-saved.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "positive",
+      "observation": "WAV export showed Arrangement 0:30 and an effect-tails checkbox, which was disabled for the requested length. The native dialog used night drive.wav. MIDI export used night drive.mid and displayed Exported. Recent exports explicitly listed both files under Completed exports. The WAV completion evidence is that listing, not an observed WAV success toast.",
+      "evidence": [
+        "30-wav-save-ready.png",
+        "31-wav-export.png",
+        "34-midi-ready.png",
+        "35-midi-success.png",
+        "36-recent-exports.png",
+        "37-wav-completed.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: 30-second audio/MIDI arrangement, VST assignment, Mixer actions, named project save, and both files listed as completed exports. Playback remained unreliable; file contents require independent verification.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "112 BPM, 4/4. Four copies of the startup Circuit rhythm audio, with the final copy trimmed to a total of 30 seconds. A one-bar four-note MIDI phrase using C4, D#4 and G4 was duplicated to fill 14 bars. New bus received a post send from the instrument.",
+    "instrument": "Rill Lab Sine (Device library identified VST3 Instrument)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Transport visibly advanced from 001.01.00 to 003.01.30 after Retry playback, and later briefly showed 003.04.72. Audio output stream failed or disconnected appeared twice. Screenshots did not establish active meter levels or uninterrupted playback. Stop returned to 001.01.00.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "Only the assigned session, screenshots and supplied mouse driver were used for composition. No keyboard events, source inspection, project parsing or other participant records were used.",
+    "No file contents or heard audio claim; independent coordinator verification follows. Output paths are those selected in visible save dialogs.",
+    "WAV success was observed in the Completed exports listing; its transient success toast was not observed while the MIDI dialog was open.",
+    "Volume balance and panning were set numerically and visually, not judged by listening. The bus has no inserted effects.",
+    "The laboratory uses software graphics and a timer-paced virtual audio sink, with no physical audio/MIDI hardware. Playback failure does not establish behavior on physical hardware.",
+    "Elapsed session time includes screenshot, tool and reporting overhead and is not a speed benchmark."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged both faders: Circuit drums changed from -6.0 to -7.5 dB; New instrument changed from -2.5 to -8.4 dB. Values remained visible in final arrangement. No audible balance claim.",
+    "pan": "Dragged pan knobs; final labels were drums L10 and instrument R21. First drum attempt did not visibly change the value; a later horizontal drag did.",
+    "mute": "Clicked Circuit drums Mute, observed its orange active highlight, then clicked it again. Final Mixer and arrangement showed it off.",
+    "solo": "Early clicks missed after layout shifts. A corrected click at the visible New instrument Solo button produced a teal active highlight in 22-solo-active.png; clicked again to leave it off.",
+    "bus": "Clicked Mixer Add bus; New bus appeared with 0.0 dB, centered pan and output to Master.",
+    "send": "New instrument Add send > + Send > New bus created a visible 0.25x Post send. Mixer showed Send \u00b7 New bus, Bus 1 in and Post send -> New bus routing arrow."
+  }
+}

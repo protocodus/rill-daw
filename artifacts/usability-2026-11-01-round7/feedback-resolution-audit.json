@@ -1,0 +1,125 @@
+{
+  "audited_at_utc": "2026-11-01T00:38:48Z",
+  "matrix": {
+    "path": "/workspace/scratch/rill-usability-round7/feedback-resolution.json",
+    "sha256": "10e031793d9ef92e752658c5ac603eacfef098053916e518cca62f780793597a"
+  },
+  "draft": {
+    "path": "/workspace/scratch/rill-usability-round7/feedback-resolution-draft.json",
+    "sha256_before": "cf492cbf654418bf6928133594e3958b907ee351e4306d73002929060e6f7840",
+    "sha256_after": "cf492cbf654418bf6928133594e3958b907ee351e4306d73002929060e6f7840",
+    "unchanged": true
+  },
+  "source_reports": [
+    {
+      "participant": 1,
+      "findings": 12,
+      "rating_reasons": 5,
+      "report_sha256": "a0495a1617330c7dbd11b17fa023c7914d1458bb3f55ddd6105297afb6245fa4",
+      "all_original_fields_match": true
+    },
+    {
+      "participant": 2,
+      "findings": 10,
+      "rating_reasons": 5,
+      "report_sha256": "ddf7ebba9b7a3796e24e9ee1fdad3cdf3c135ef2a5d81979b30ed71822511880",
+      "all_original_fields_match": true
+    },
+    {
+      "participant": 3,
+      "findings": 10,
+      "rating_reasons": 5,
+      "report_sha256": "97dc737513d73ec18f4ef9d0d1824c07412e21aa801ef48b83f832786726b56e",
+      "all_original_fields_match": true
+    },
+    {
+      "participant": 4,
+      "findings": 8,
+      "rating_reasons": 5,
+      "report_sha256": "5509b085c1e4fe2b7dcf706f3b2e0aa662d8898c700dd5ad4aff0b5abc2e0693",
+      "all_original_fields_match": true
+    },
+    {
+      "participant": 5,
+      "findings": 9,
+      "rating_reasons": 5,
+      "report_sha256": "a44d54d4aa2b02814e99a6c30ba88f237f94113ec9cf8778c7e5151fecdc89f3",
+      "all_original_fields_match": true
+    }
+  ],
+  "coverage": {
+    "original_findings": 49,
+    "matrix_findings": 49,
+    "original_rating_reasons": 25,
+    "matrix_rating_reasons": 25,
+    "unique_matrix_ids": 74,
+    "missing": [],
+    "extra_original_rows": [],
+    "all_finding_rows_equal_to_draft": true,
+    "all_rating_rows_equal_to_draft": true,
+    "all_original_observations_kinds_evidence_ids_scores_reasons_exact": true,
+    "all_source_limitations_and_mixer_outcomes_exact": true,
+    "finding_kinds": {
+      "positive": 28,
+      "friction": 9,
+      "recovery": 7,
+      "failure": 5
+    },
+    "evidence_references_checked": 181,
+    "all_evidence_paths_resolve": true,
+    "all_rows_have_valid_response_links": true,
+    "all_response_groups_have_explicit_reasoned_disposition": true
+  },
+  "supplemental_coverage": [
+    {
+      "matrix_id": "P2-rating-how_confusing_it_is",
+      "issue_responses": [
+        "send_routing_steps"
+      ],
+      "reason": "Explicitly covers the preserved sentence about needing a routing panel and another menu."
+    },
+    {
+      "matrix_id": "P5-rating-how_confusing_it_is",
+      "issue_responses": [
+        "audio_recovery"
+      ],
+      "reason": "Explicitly covers the preserved observation of brief resumed playback after a control change."
+    }
+  ],
+  "attribution": {
+    "mixer_geometry": "Participant feedback; three baseline geometry failures and four current stability E2Es, route assertions and native previews validate implementation.",
+    "knob_release_and_exact_value_keypad": "Independent review improvements; no participant-specific causal attribution or score claim.",
+    "audio": "Independent CPAL-only reproduction; original participant stall cause unknown and no product fix claimed."
+  },
+  "validation_counts": {
+    "workspace_passed": 1443,
+    "workspace_failed": 0,
+    "workspace_ignored": 25,
+    "workspace_targets_including_doc_tests": 260,
+    "current_shared_ui_passed": 250
+  },
+  "evidence_qualifications": [
+    "The initial stability baseline logged four test failures; only three are demonstrated geometry regressions. The short-window fixture failed on a missing transient Dismiss label.",
+    "The earlier focused shared-UI log contains 249 passes; current full-workspace shared-UI target totals are 250.",
+    "The format result is coordinator-attested; all other cited technical results have preserved file evidence.",
+    "Native previews are separate from participant reports and scores; project hashes and process cleanup are recorded."
+  ],
+  "unresolved_or_retained_groups": [
+    "audio_failure",
+    "audio_recovery",
+    "precise_trim",
+    "loop_scope",
+    "duplicate_tool",
+    "native_dialog",
+    "name_key_confusion",
+    "pan_diagonal",
+    "sparse_mixer_space",
+    "export_wait",
+    "untested_scope",
+    "send_routing_steps"
+  ],
+  "root_judgment_needed": [],
+  "original_reports_and_draft_modified": false,
+  "product_source_modified": false,
+  "new_cargo_apps_or_audio_probes_run": false
+}

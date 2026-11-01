@@ -1,0 +1,765 @@
+diff --git a/crates/daw-app/src/editor.rs b/crates/daw-app/src/editor.rs
+index ea0fba1..8758b8b 100644
+--- a/crates/daw-app/src/editor.rs
++++ b/crates/daw-app/src/editor.rs
+@@ -299,6 +299,17 @@ impl DawApp {
+             + daw_ui::MIXER_LEVEL_METER_HEIGHT
+             + 18.0
+             + 11.0 * spacing;
++        // Size controls against the unobscured workspace, before scrolling.
++        // A transient bottom notice changes the visible clip, not the fader's
++        // travel or the position of Pan/Mute/Solo. Extra send lanes grow below
++        // the strips and remain reachable through the existing scroll pane.
++        let workspace_height = ui.ctx().content_rect().bottom()
++            - daw_ui::tokens::BORDER_WIDTH
++            - ui.available_rect_before_wrap().top();
++        let output_route_height =
++            daw_ui::tokens::MIXER_ROUTE_LANE_HEIGHT + daw_ui::tokens::SPACE_SM;
++        let strip_height = (workspace_height - output_route_height - group_header_height)
++            .max(fixed_height + 120.0);
+         let scroll = daw_ui::scroll_area(ui, "mixer_scroll", [true, true]);
+         let panning = daw_ui::scroll_area_is_panning(ui, "mixer_scroll");
+         let mut diagnostics = Vec::new();
+@@ -331,11 +342,10 @@ impl DawApp {
+                 })
+             })
+         };
+-        scroll.auto_shrink([false, false]).show_viewport(ui, |ui, viewport| {
++        scroll.auto_shrink([false, false]).show_viewport(ui, |ui, _viewport| {
+             let reorder_rect = ui.clip_rect();
+             reorder_viewport = Some(rect_json(reorder_rect));
+             let scroll_delta = daw_ui::track_reorder_scroll_delta(ui, reorder_rect, daw_ui::TrackReorderAxis::Horizontal);
+-            let strip_height = (viewport.height() - route_height - group_header_height).max(fixed_height + 120.0);
+             let strip_size = Vec2::new(strip_width, strip_height);
+             let fader_height = strip_height - fixed_height;
+             let mut anchors = std::collections::HashMap::new();
+@@ -595,6 +605,10 @@ impl DawApp {
+             let connection_clip = ui.clip_rect();
+             daw_ui::scroll_area(ui, "mixer_route_lanes", [false, true])
+                 .max_width(mixer_width).max_height(route_height)
++                // Nested panes otherwise shrink to the height remaining below
++                // the strips. Reserve every visible lane in the outer pane;
++                // the inner scroll still handles more than four routes.
++                .min_scrolled_height(route_height)
+                 .auto_shrink([false, false]).show(ui, |ui| {
+                 ui.set_min_width(mixer_width);
+                 if let Some(track) = flow_source.and_then(|id| self.project.track(id)) {
+diff --git a/crates/daw-app/tests/mixer_flow_e2e.rs b/crates/daw-app/tests/mixer_flow_e2e.rs
+index 4ad338d..65feeee 100644
+--- a/crates/daw-app/tests/mixer_flow_e2e.rs
++++ b/crates/daw-app/tests/mixer_flow_e2e.rs
+@@ -196,6 +196,13 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
+                 assert_eq!(header["fill"], json!([140, 160, 180, 255]));
+             }
+         }
++        // Send lanes extend below the stable channel controls. Reveal them
++        // with the same mouse scroll used in a short mixer workspace.
++        app.command(json!({"command":"scroll","x":100,"y":400,"delta":-180}));
++        for _ in 0..10 {
++            app.inspect();
++        }
++        let state = paint(&mut app);
+         let routes = state["mixer"]["routes"].as_array().unwrap();
+         assert_eq!(routes.len(), 2);
+         assert_eq!(routes[0]["target"], bus_a);
+@@ -217,6 +224,10 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
+         assert_eq!(state["project"], before["project"]);
+         assert_eq!(state["history"], before["history"]);
+         assert!(visible(&state, "Send · Room"));
++        app.command(json!({"command":"scroll","x":100,"y":400,"delta":1000}));
++        for _ in 0..10 {
++            app.inspect();
++        }
+         app.click("Effects");
+         assert_eq!(app.inspect()["popups"]["effects"], true);
+         app.key("Escape");
+@@ -278,6 +289,20 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
+         app.click("Ch 2 > Master");
+         app.key("Escape");
+         let current = app.inspect();
++        let selected_channel = current["mixer"]["channels"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .find(|channel| channel["track"] == bus_a)
++            .unwrap();
++        let x = (selected_channel["strip"]["min"][0].as_f64().unwrap()
++            + selected_channel["strip"]["max"][0].as_f64().unwrap())
++            * 0.5;
++        app.command(json!({"command":"scroll","x":x,"y":400,"delta":-180}));
++        for _ in 0..10 {
++            app.inspect();
++        }
++        let current = paint(&mut app);
+         let lane_y = top(&current["mixer"]["routes"][0]["lane"]) + 8.0;
+         let selected = app.command(json!({"command":"pointer","phase":"move","x":100,"y":lane_y}));
+         assert_eq!(selected["selected_track"], bus_a);
+diff --git a/crates/daw-app/tests/mixer_pan_knob_e2e.rs b/crates/daw-app/tests/mixer_pan_knob_e2e.rs
+index b19731b..7d0ccf4 100644
+--- a/crates/daw-app/tests/mixer_pan_knob_e2e.rs
++++ b/crates/daw-app/tests/mixer_pan_knob_e2e.rs
+@@ -350,3 +350,117 @@ fn mixer_pan_knob_drag_and_exact_entry_override_automation_without_rewriting_the
+     assert_eq!(undo(&mut app)["project"], baseline["project"]);
+     app.quit();
+ }
++
++#[test]
++fn mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling() {
++    for (dark, density) in [(false, 1.0), (true, 2.0)] {
++        let mut app = Harness::new();
++        let mut project = Project::new();
++        let id = project.add_audio_track("Release position");
++        let path = app.directory.path().join("pan-release.rill");
++        project.save(&path).unwrap();
++        app.command(json!({"command":"open", "path":path}));
++        app.command(json!({"command":"system_theme", "dark":dark}));
++        app.command(json!({"command":"viewport", "width":1100, "height":900,
++            "pixels_per_point":density}));
++        let baseline = app.click("Mixer");
++
++        for (sampled, held_fine, released_fine, expected) in [
++            (12.0, false, false, 0.6),
++            (28.0, false, false, 0.6),
++            (44.0, false, false, 0.6),
++            (20.0, true, true, 0.06),
++            (20.0, false, true, 0.24),
++        ] {
++            let state = app.inspect();
++            let [x, y] = point(&channel(&state, id)["pan_knob"]["center"]);
++            let dial_bottom = channel(&state, id)["pan_knob"]["dial"]["max"][1]
++                .as_f64()
++                .unwrap();
++            assert!(y + 60.0 > dial_bottom, "release leaves the dial's hit area");
++            let down = app.command(json!({"command":"pointer", "phase":"down",
++                "x":x, "y":y, "shift":held_fine}));
++            unchanged(&down, &state);
++            // A downward drag decreases pan. Its last movement is delivered
++            // together with release, without the endpoint frame used by `drag`.
++            let held = app.command(json!({"command":"pointer", "phase":"move",
++                "x":x, "y":y+sampled, "shift":held_fine}));
++            near(
++                track(&held, id)["pan"].as_f64().unwrap(),
++                -sampled * if held_fine { 0.001 } else { 0.01 },
++            );
++            assert_eq!(held["history"], state["history"]);
++            let released = app.command(json!({"command":"pointer", "phase":"up",
++                "x":x, "y":y+60.0, "shift":released_fine}));
++            near(track(&released, id)["pan"].as_f64().unwrap(), -expected);
++            assert_eq!(
++                released["history"]["undo"].as_array().unwrap().len(),
++                baseline["history"]["undo"].as_array().unwrap().len() + 1,
++                "held and released movement form one Undo operation"
++            );
++            assert_knob_paint(&painted(&mut app), id, -expected);
++            let hovered = app.command(json!({"command":"pointer", "phase":"move",
++                "x":x+10.0, "y":y+65.0}));
++            unchanged(&hovered, &released);
++            assert_eq!(undo(&mut app)["project"], baseline["project"]);
++        }
++        app.quit();
++    }
++}
++
++#[test]
++fn mixer_pan_release_overrides_the_effective_value_without_rewriting_automation() {
++    let mut app = Harness::new();
++    let mut project = Project::new();
++    let id = project.add_audio_track("Automated release position");
++    project.track_mut(id).unwrap().pan = 0.173456;
++    let lane = project
++        .add_automation_track(
++            "Pan movement",
++            AutomationTarget {
++                track: id,
++                parameter: AutomationParameter::TrackPan,
++            },
++        )
++        .unwrap();
++    project.automation_lane_mut(lane).unwrap().points = vec![
++        AutomationPoint::new(0.0, 0.25),
++        AutomationPoint::new(8.0, 0.75),
++    ];
++    let path = app.directory.path().join("automated-pan-release.rill");
++    project.save(&path).unwrap();
++    app.command(json!({"command":"open", "path":path}));
++    app.command(json!({"command":"viewport", "width":1100, "height":900}));
++    let baseline = app.click("Mixer");
++    let curve = track(&baseline, lane)["automation"]["points"].clone();
++    let [x, y] = point(&channel(&baseline, id)["pan_knob"]["center"]);
++    near(
++        channel(&baseline, id)["pan_knob"]["value"]
++            .as_f64()
++            .unwrap(),
++        -0.5,
++    );
++    near(track(&baseline, id)["pan"].as_f64().unwrap(), 0.173456);
++    app.command(json!({"command":"pointer", "phase":"down", "x":x, "y":y}));
++    let held = app.command(json!({"command":"pointer", "phase":"move",
++        "x":x+20.0, "y":y}));
++    near(track(&held, id)["pan"].as_f64().unwrap(), -0.3);
++    assert_eq!(held["history"], baseline["history"]);
++    let released = app.command(json!({"command":"pointer", "phase":"up",
++        "x":x+40.0, "y":y}));
++    near(track(&released, id)["pan"].as_f64().unwrap(), -0.1);
++    near(
++        track(&released, lane)["automation"]["override_value"]
++            .as_f64()
++            .unwrap(),
++        0.45,
++    );
++    assert_eq!(track(&released, lane)["automation"]["points"], curve);
++    assert_eq!(channel(&released, id)["automation_state"], "Overridden");
++    assert_eq!(
++        released["history"]["undo"].as_array().unwrap().len(),
++        baseline["history"]["undo"].as_array().unwrap().len() + 1
++    );
++    assert_eq!(undo(&mut app)["project"], baseline["project"]);
++    app.quit();
++}
+diff --git a/crates/daw-ui/src/automation_navigation.rs b/crates/daw-ui/src/automation_navigation.rs
+index 6bdc987..6c98919 100644
+--- a/crates/daw-ui/src/automation_navigation.rs
++++ b/crates/daw-ui/src/automation_navigation.rs
+@@ -92,7 +92,27 @@ pub fn automatable_parameter_value_context(
+     egui::Popup::context_menu(response)
+         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+         .show(|ui| {
+-            value = crate::value_entry(ui, response.id, current, range, unit);
++            let spacing = ui.spacing().item_spacing.y;
++            let action_height = crate::tokens::CONTROL_HEIGHT + spacing;
++            let trailing_height = crate::tokens::SPACE_SM * 2.0
++                + automation.map_or(action_height, |(_, state)| {
++                    ui.text_style_height(&egui::TextStyle::Body)
++                        + spacing
++                        + action_height
++                            * if state == AutomationState::Bypassed {
++                                1.0
++                            } else {
++                                2.0
++                            }
++                });
++            value = crate::value_entry::value_entry_with_footer(
++                ui,
++                response.id,
++                current,
++                range,
++                unit,
++                trailing_height,
++            );
+             ui.separator();
+             action = automatable_menu_contents(ui, control, automation);
+             if action.is_some() {
+diff --git a/crates/daw-ui/src/knob.rs b/crates/daw-ui/src/knob.rs
+index 8d03bd5..02ce8b2 100644
+--- a/crates/daw-ui/src/knob.rs
++++ b/crates/daw-ui/src/knob.rs
+@@ -78,7 +78,7 @@ pub fn knob_geometry(ctx: &egui::Context, id: Id) -> Option<KnobGeometry> {
+ #[derive(Clone, Copy, Default)]
+ struct DragState {
+     value: f64,
+-    delta: Vec2,
++    position: Option<Pos2>,
+ }
+ 
+ #[must_use = "Add the knob to a Ui"]
+@@ -257,25 +257,42 @@ impl<'a> Knob<'a> {
+                 response.request_focus();
+             }
+             if response.drag_started_by(egui::PointerButton::Primary) {
++                // Include the movement that first established drag ownership,
++                // in the response's local coordinates.
++                let position = response
++                    .interact_pointer_pos()
++                    .map(|position| position - response.total_drag_delta().unwrap_or_default());
+                 ui.data_mut(|data| {
+                     data.insert_temp(
+                         drag_id,
+                         DragState {
+                             value: (self.value)(None),
+-                            delta: Vec2::ZERO,
++                            position,
+                         },
+                     )
+                 });
+             }
+-            if response.dragged_by(egui::PointerButton::Primary) {
+-                let mut drag = ui
+-                    .data(|data| data.get_temp::<DragState>(drag_id))
+-                    .unwrap_or(DragState {
+-                        value: (self.value)(None),
+-                        delta: response.total_drag_delta().unwrap_or_default(),
+-                    });
+-                let delta = response.total_drag_delta().unwrap_or_default();
+-                let movement = delta - drag.delta;
++            let dragging = response.dragged_by(egui::PointerButton::Primary);
++            let releasing = response.drag_stopped_by(egui::PointerButton::Primary);
++            if (dragging || releasing)
++                && let Some(mut drag) =
++                    ui.data(|data| data.get_temp::<DragState>(drag_id))
++                        .or_else(|| {
++                            // A blocked drag may resume while Primary stays held,
++                            // without replaying its suppressed displacement. Release
++                            // alone must never create new ownership or an accumulator.
++                            dragging.then(|| DragState {
++                                value: (self.value)(None),
++                                position: response.interact_pointer_pos(),
++                            })
++                        })
++            {
++                // egui clears `dragged` and total_drag_delta on release, but
++                // retains the final interact_pointer_pos for the owned target.
++                let position = response.interact_pointer_pos();
++                let movement = position
++                    .zip(drag.position)
++                    .map_or(Vec2::ZERO, |(position, previous)| position - previous);
+                 let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+                 let span = self.range.end() - self.range.start();
+                 drag.value += f64::from(movement.x - movement.y) * span / 200.0 * fine;
+@@ -290,7 +307,7 @@ impl<'a> Knob<'a> {
+                     (self.value)(Some(value));
+                     response.mark_changed();
+                 }
+-                drag.delta = delta;
++                drag.position = position;
+                 ui.data_mut(|data| data.insert_temp(drag_id, drag));
+             }
+             if response.has_focus() {
+diff --git a/crates/daw-ui/src/value_entry.rs b/crates/daw-ui/src/value_entry.rs
+index 6e16d5e..e333431 100644
+--- a/crates/daw-ui/src/value_entry.rs
++++ b/crates/daw-ui/src/value_entry.rs
+@@ -10,6 +10,7 @@ struct ValueDraft {
+     last_frame: u64,
+     field: Rect,
+     focus_pending: bool,
++    keypad_visible: bool,
+ }
+ 
+ fn draft_id(ui: &Ui, id_salt: impl Hash) -> Id {
+@@ -41,12 +42,27 @@ pub fn value_entry_rect(ctx: &Context) -> Option<Rect> {
+ /// Draw inside a control's existing context menu. A changed finite value is
+ /// returned only after Apply value (or Enter while the field owns focus).
+ /// Cancel/Escape and outside dismissal leave the caller's parameter untouched.
++/// The visible 123 action opens the same mouse keypad used by timing fields.
+ pub fn value_entry(
+     ui: &mut Ui,
+     id_salt: impl Hash,
+     current: f64,
+     range: RangeInclusive<f64>,
+     unit: &str,
++) -> Option<f64> {
++    value_entry_with_footer(ui, id_salt, current, range, unit, 0.0)
++}
++
++/// Reserve the caller's trailing menu actions when limiting the keypad's height.
++/// Only the keys scroll; the exact field, Apply/Cancel and caller actions remain
++/// visible, including when an automation menu has additional controls.
++pub(crate) fn value_entry_with_footer(
++    ui: &mut Ui,
++    id_salt: impl Hash,
++    current: f64,
++    range: RangeInclusive<f64>,
++    unit: &str,
++    trailing_height: f32,
+ ) -> Option<f64> {
+     value_entry_contents(
+         ui,
+@@ -58,6 +74,7 @@ pub fn value_entry(
+             name: "Value",
+             keypad: false,
+             whole_numbers: false,
++            trailing_height,
+         },
+     )
+ }
+@@ -93,6 +110,7 @@ pub(crate) fn numeric_value_entry(
+             name,
+             keypad: true,
+             whole_numbers,
++            trailing_height: 0.0,
+         },
+     )
+ }
+@@ -102,6 +120,7 @@ struct ValueEntryOptions<'a> {
+     name: &'a str,
+     keypad: bool,
+     whole_numbers: bool,
++    trailing_height: f32,
+ }
+ 
+ fn value_entry_contents(
+@@ -116,11 +135,11 @@ fn value_entry_contents(
+         name,
+         keypad,
+         whole_numbers,
++        trailing_height,
+     } = options;
+-    if keypad {
+-        ui.set_min_width(220.0);
+-        ui.set_max_width(220.0);
+-    }
++    ui.set_min_width(220.0);
++    ui.set_max_width(220.0);
++    let top = ui.cursor().top();
+     let id = draft_id(ui, id_salt);
+     let frame = ui.ctx().cumulative_frame_nr();
+     let previous = ui.data_mut(|data| {
+@@ -144,6 +163,7 @@ fn value_entry_contents(
+             last_frame: frame,
+             field: Rect::NOTHING,
+             focus_pending: true,
++            keypad_visible: keypad,
+         }
+     } else {
+         previous.expect("an existing draft is present")
+@@ -167,18 +187,48 @@ fn value_entry_contents(
+         ),
+     );
+     let response = ui
+-        .add(
+-            egui::TextEdit::singleline(&mut draft.text)
+-                .id(input_id)
+-                .desired_width(220.0_f32.min(ui.available_width()))
+-                .char_limit(128)
+-                .margin(egui::vec2(
+-                    tokens::BUTTON_PADDING_X,
+-                    tokens::BUTTON_PADDING_Y,
+-                ))
+-                .vertical_align(egui::Align::Center)
+-                .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
+-        )
++        .horizontal(|ui| {
++            let toggle_width = if keypad {
++                0.0
++            } else {
++                ui.painter()
++                    .layout_no_wrap(
++                        "123".into(),
++                        egui::FontId::proportional(tokens::FONT_BUTTON),
++                        ui.visuals().text_color(),
++                    )
++                    .size()
++                    .x
++                    + 2.0 * tokens::BUTTON_PADDING_X
++                    + ui.spacing().item_spacing.x
++            };
++            let input_width = (ui.available_width() - toggle_width).max(tokens::CONTROL_HEIGHT);
++            let response = ui.add(
++                egui::TextEdit::singleline(&mut draft.text)
++                    .id(input_id)
++                    .desired_width(input_width)
++                    .char_limit(128)
++                    .margin(egui::vec2(
++                        tokens::BUTTON_PADDING_X,
++                        tokens::BUTTON_PADDING_Y,
++                    ))
++                    .vertical_align(egui::Align::Center)
++                    .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
++            );
++            if !keypad
++                && crate::button(ui, "123")
++                    .on_hover_text(if draft.keypad_visible {
++                        "Hide mouse keypad"
++                    } else {
++                        "Show mouse keypad"
++                    })
++                    .clicked()
++            {
++                draft.keypad_visible = !draft.keypad_visible;
++            }
++            response
++        })
++        .inner
+         .labelled_by(label.id);
+     draft.field = response.rect;
+     draft.last_frame = frame;
+@@ -198,8 +248,25 @@ fn value_entry_contents(
+         draft.focus_pending = false;
+     }
+     ui.data_mut(|data| data.insert_temp(Id::new("exact_value_input_rect"), (frame, response.rect)));
+-    if keypad {
+-        numeric_keypad(ui, input_id, &mut draft.text);
++    if draft.keypad_visible {
++        let spacing = ui.spacing().item_spacing.y;
++        let footer_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0
++            + tokens::CONTROL_HEIGHT
++            + 3.0 * spacing;
++        let frame_margin = egui::Frame::popup(ui.style()).total_margin().sum().y;
++        let maximum = (ui.ctx().content_rect().height()
++            - (ui.cursor().top() - top)
++            - footer_height
++            - trailing_height
++            - frame_margin
++            - 2.0 * tokens::SPACE_SM)
++            .max(tokens::CONTROL_HEIGHT);
++        egui::ScrollArea::vertical()
++            .id_salt(id.with("keypad"))
++            .max_height(maximum)
++            .min_scrolled_height(tokens::CONTROL_HEIGHT)
++            .auto_shrink([false, true])
++            .show(ui, |ui| numeric_keypad(ui, input_id, &mut draft.text));
+     }
+     let parsed = draft
+         .text
+@@ -220,7 +287,7 @@ fn value_entry_contents(
+     } else {
+         ""
+     };
+-    if keypad {
++    if draft.keypad_visible {
+         let feedback_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0;
+         ui.allocate_ui_with_layout(
+             egui::vec2(220.0, feedback_height),
+@@ -269,13 +336,15 @@ enum NumericKey {
+ fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) {
+     let mut pressed = None;
+     ui.add_space(tokens::SPACE_XS);
++    let key_width =
++        ((ui.available_width() - 2.0 * tokens::SPACE_XS) / 3.0).max(tokens::CONTROL_HEIGHT);
+     for row in ["789", "456", "123", "±0."] {
+         ui.horizontal(|ui| {
+             ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+             for character in row.chars() {
+                 if ui
+                     .add_sized(
+-                        egui::vec2(70.0, tokens::CONTROL_HEIGHT),
++                        egui::vec2(key_width, tokens::CONTROL_HEIGHT),
+                         crate::button_widget(character.to_string()),
+                     )
+                     .clicked()
+diff --git a/crates/daw-ui/tests/knob.rs b/crates/daw-ui/tests/knob.rs
+index 415d83b..6fa71de 100644
+--- a/crates/daw-ui/tests/knob.rs
++++ b/crates/daw-ui/tests/knob.rs
+@@ -227,6 +227,98 @@ fn relative_drag_has_no_click_jump_and_fine_adjustment_does_not_rebase() {
+     assert!((value - 61.0).abs() < 1e-8);
+ }
+ 
++#[test]
++fn owned_release_motion_reaches_the_same_value_between_held_frames() {
++    for compact in [false, true] {
++        for sampled_distance in [8.0, 24.0, 44.0] {
++            let ctx = Context::default();
++            daw_ui::theme::apply(&ctx);
++            let mut value = 50.0;
++            let (_, geometry, _) = compact_frame(&ctx, &mut value, compact, vec![]);
++            let origin = geometry.center;
++            compact_frame(
++                &ctx,
++                &mut value,
++                compact,
++                pointer(origin, PointerButton::Primary, true, Modifiers::NONE),
++            );
++            assert_eq!(value, 50.0, "pressing the dial must not jump its value");
++            compact_frame(
++                &ctx,
++                &mut value,
++                compact,
++                vec![Event::PointerMoved(origin + vec2(sampled_distance, 0.0))],
++            );
++            assert_eq!(value, 50.0 + f64::from(sampled_distance) * 0.5);
++
++            let released = origin + vec2(60.0, 0.0);
++            assert!(!geometry.dial.contains(released));
++            let (response, _, _) = compact_frame(
++                &ctx,
++                &mut value,
++                compact,
++                pointer(released, PointerButton::Primary, false, Modifiers::NONE),
++            );
++            assert_eq!(value, 80.0, "the final owned position must win");
++            assert!(response.changed());
++            let (response, _, _) = compact_frame(
++                &ctx,
++                &mut value,
++                compact,
++                vec![Event::PointerMoved(released + vec2(10.0, 0.0))],
++            );
++            assert_eq!(value, 80.0, "released motion must never be replayed");
++            assert!(!response.changed());
++        }
++    }
++}
++
++#[test]
++fn precision_changes_on_release_apply_only_the_remaining_relative_motion() {
++    let ctx = Context::default();
++    daw_ui::theme::apply(&ctx);
++    let options = Options::default();
++    let mut value = 50.0;
++    let (_, geometry, _) = frame(&ctx, &mut value, options, Modifiers::NONE, vec![]);
++    let origin = geometry.center;
++    frame(
++        &ctx,
++        &mut value,
++        options,
++        Modifiers::NONE,
++        pointer(origin, PointerButton::Primary, true, Modifiers::NONE),
++    );
++    frame(
++        &ctx,
++        &mut value,
++        options,
++        Modifiers::NONE,
++        vec![Event::PointerMoved(origin + vec2(20.0, 0.0))],
++    );
++    assert_eq!(value, 60.0);
++    let fine = Modifiers {
++        shift: true,
++        ..Modifiers::NONE
++    };
++    let (response, _, _) = frame(
++        &ctx,
++        &mut value,
++        options,
++        fine,
++        pointer(
++            origin + vec2(60.0, 0.0),
++            PointerButton::Primary,
++            false,
++            fine,
++        ),
++    );
++    assert_eq!(
++        value, 62.0,
++        "fine precision must not rebase the held motion"
++    );
++    assert!(response.changed());
++}
++
+ #[test]
+ fn exact_number_can_be_typed_and_committed_with_a_mouse_click() {
+     let ctx = Context::default();
+@@ -558,7 +650,12 @@ fn secondary_or_middle_buttons_block_concurrent_primary_drag_through_release() {
+                     &ctx,
+                     &mut value,
+                     compact,
+-                    pointer(released, PointerButton::Primary, false, Modifiers::NONE),
++                    pointer(
++                        released + vec2(15.0, -10.0),
++                        PointerButton::Primary,
++                        false,
++                        Modifiers::NONE,
++                    ),
+                 );
+                 assert_eq!(value, before);
+             }
+diff --git a/crates/daw-ui/tests/value_entry.rs b/crates/daw-ui/tests/value_entry.rs
+index 22bfdcc..b7898f0 100644
+--- a/crates/daw-ui/tests/value_entry.rs
++++ b/crates/daw-ui/tests/value_entry.rs
+@@ -7,6 +7,7 @@ struct Harness {
+     control: Rect,
+     automation: Option<(u64, AutomationState)>,
+     action: Option<daw_ui::AutomationNavigation>,
++    height: f32,
+ }
+ 
+ impl Harness {
+@@ -19,6 +20,7 @@ impl Harness {
+             control: Rect::NOTHING,
+             automation: None,
+             action: None,
++            height: 480.0,
+         }
+     }
+ 
+@@ -26,7 +28,10 @@ impl Harness {
+         let mut selected = None;
+         let output = self.ctx.run(
+             RawInput {
+-                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 480.0))),
++                screen_rect: Some(Rect::from_min_size(
++                    pos2(0.0, 0.0),
++                    vec2(640.0, self.height),
++                )),
+                 events,
+                 ..Default::default()
+             },
+@@ -240,3 +245,86 @@ fn exact_value_formatting_round_trips_extreme_and_fractional_values() {
+         assert_eq!(text.parse::<f64>().unwrap().to_bits(), value.to_bits());
+     }
+ }
++
++fn visible_text(output: &FullOutput, label: &str) -> Option<Rect> {
++    output.shapes.iter().find_map(|shape| match &shape.shape {
++        egui::Shape::Text(text) if text.galley.text() == label => {
++            let rect = text.galley.rect.translate(text.pos.to_vec2());
++            shape.clip_rect.contains_rect(rect).then_some(rect)
++        }
++        _ => None,
++    })
++}
++
++#[test]
++fn short_parameter_menu_scrolls_only_keys_and_keeps_apply_and_automation_reachable() {
++    let mut app = Harness::new();
++    app.height = 420.0;
++    app.automation = Some((9, AutomationState::Read));
++    let compact = app.open();
++    assert!(contains(&compact, "123"));
++    assert!(!contains(&compact, "Clear"));
++    app.click(&compact, "123");
++    let mut expanded = app.frame(vec![]);
++    let actions = [
++        "Apply value",
++        "Cancel",
++        "Edit automation",
++        "Override automation",
++    ];
++    let positions = actions.map(|name| {
++        let rect =
++            visible_text(&expanded, name).unwrap_or_else(|| panic!("Missing visible {name}"));
++        assert!(rect.center().y - daw_ui::tokens::CONTROL_HEIGHT * 0.5 >= 0.0);
++        assert!(rect.center().y + daw_ui::tokens::CONTROL_HEIGHT * 0.5 <= app.height);
++        rect.center()
++    });
++    let keys = visible_text(&expanded, "7")
++        .expect("first row of keypad")
++        .center();
++    for _ in 0..8 {
++        if visible_text(&expanded, "Clear").is_some() {
++            break;
++        }
++        expanded = app.frame(vec![
++            Event::PointerMoved(keys),
++            Event::MouseWheel {
++                unit: egui::MouseWheelUnit::Point,
++                delta: vec2(0.0, -40.0),
++                modifiers: Modifiers::NONE,
++            },
++        ]);
++        for (name, position) in actions.into_iter().zip(positions) {
++            assert!(
++                visible_text(&expanded, name)
++                    .unwrap()
++                    .center()
++                    .distance(position)
++                    < 0.1
++            );
++        }
++    }
++    assert!(
++        visible_text(&expanded, "Clear").is_some(),
++        "mouse scrolling must reveal lower keypad rows"
++    );
++    let cleared = app.click(&expanded, "Clear");
++    assert_eq!(
++        app.value, 1.25,
++        "keypad drafting must not edit the parameter"
++    );
++    for (name, position) in actions.into_iter().zip(positions) {
++        assert!(
++            visible_text(&cleared, name)
++                .unwrap()
++                .center()
++                .distance(position)
++                < 0.1
++        );
++    }
++    app.click(&cleared, "Cancel");
++    let reopened = app.open();
++    assert!(contains(&reopened, "1.25"));
++    assert!(!contains(&reopened, "Clear"), "a new editor starts compact");
++    assert_eq!(app.value, 1.25);
++}

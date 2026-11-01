@@ -1,0 +1,110 @@
+{
+  "purpose": "Fixed report fields for independent simulated participant; outcomes limited to visible UI evidence.",
+  "participant": 3,
+  "persona": "Independent simulated beginner, first introduction to RILL, interested in a short melodic instrumental.",
+  "piece_name": "Moon drift",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Visible hints, Pencil, Mixer labels, and an on-screen naming keyboard allowed the entire requested workflow with a mouse. Exact trimming and the initial Duplicate tool behavior required adjustment.",
+    "how_cool_it_looks": "Restrained dark theme, distinct track colors, waveform and note previews, and visible routing lines looked organized and appealing.",
+    "how_fast_it_is": "Most edits gave immediate visible feedback and repeats were quick to build. WAV export showed an elapsed status; playback needed one recovery. This is an interaction impression under laboratory conditions, not a benchmark.",
+    "how_confusing_it_is": "The Duplicate button became a tool before copying, and initially dark meters followed by an audio stream error were confusing. Clear hints and Retry playback resolved these obstacles.",
+    "feature_completeness": "The observed UI covered audio, MIDI, the assigned VST3 instrument, mixing, buses, sends, naming, saving, and both exports. I did not evaluate broader production features or other plug-ins."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round8/session-3/Moon drift.rill",
+    "wav": "/workspace/scratch/rill-usability-round8/session-3/Moon drift.wav",
+    "midi": "/workspace/scratch/rill-usability-round8/session-3/Moon drift.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the visible MIDI creation area opened the Device library; assigning Rill Lab Sine created a MIDI track and editable pattern.",
+      "evidence": ["01-midi-created.png", "02-instrument.png", "03-note-editor.png"]
+    },
+    {
+      "id": "F2",
+      "kind": "friction",
+      "observation": "Drawing notes beyond the initial clip extended it to 8.705 seconds, slightly longer than the 8.571-second audio. Trimming the MIDI edge corrected the mismatch.",
+      "evidence": ["07-phrase-arrangement.png", "08-duplicate.png"]
+    },
+    {
+      "id": "F3",
+      "kind": "recovery",
+      "observation": "Duplicate selected a tool rather than copying immediately. The visible Click a clip to duplicate hint led to successful adjacent repeats; edge trims then produced a displayed duration of 0:30.000.",
+      "evidence": ["08-duplicate.png", "09-copies.png", "10-four-repeats.png", "11-mixer.png", "final.png"]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "Mixer drags visibly changed audio and MIDI faders to -8.4 and -7.3 dB and pans to L15 and R17. Mute and Solo visibly highlighted when clicked.",
+      "evidence": ["12-mute-playback.png", "13-solo-playback.png", "34-mixer-active.png", "35-mute-active.png", "36-solo-active.png"]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "Add bus created New bus. MIDI Add send > + Send > New bus created a visible 0.25x Post send; the Mixer showed Bus 1 in and Send · New bus.",
+      "evidence": ["14-bus.png", "16-send-added.png", "17-send-controls.png", "19-project-name.png"]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "The project Rename command exposed an on-screen keyboard. Mouse clicks named the project Moon drift, and Save supplied the matching filename in the native dialog.",
+      "evidence": ["20-name-keyboard.png", "21-save-dialog.png", "22-project-saved.png"]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "WAV export displayed a 30-second arrangement and optional effect tails. After exporting without tails and exporting MIDI, Recent exports listed both under Completed exports; the MIDI Exported banner was also seen.",
+      "evidence": ["23-wav-options.png", "24-wav-dialog.png", "28-midi-success.png", "29-recent-exports.png"]
+    },
+    {
+      "id": "F8",
+      "kind": "failure",
+      "observation": "A Play attempt after export showed Audio output stream failed or disconnected. Earlier playback screenshots had advancing position but dark meters.",
+      "evidence": ["12-mute-playback.png", "13-solo-playback.png", "31-arranger-playing.png"]
+    },
+    {
+      "id": "F9",
+      "kind": "recovery",
+      "observation": "Retry playback returned the UI to Pause; subsequent screenshots showed an advancing playhead and lit audio, MIDI, bus, and master meters.",
+      "evidence": ["32-retry-playback.png", "33-retry-observed.png", "34-mixer-active.png"]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: a named 30-second arrangement with audio and MIDI/VST, adjusted Mixer settings, bus/send, saved project, and both files listed as completed exports. Exported file contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "Startup Circuit rhythm audio repeated across 14 bars at 112 BPM; a manually drawn 16-note melodic MIDI phrase repeated alongside it, with the final audio and MIDI repeats trimmed to 30 seconds. One bus receives a post-fader MIDI-track send.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Initial playback position advanced with dark meters. A later attempt showed an audio output stream failure/disconnection banner. Retry playback recovered visible playhead movement and lit audio/MIDI/bus/master meters; screenshots reached 003.04.19 and 008.01.53. Playback stopped at completion. No heard audio claim.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No exported file contents or heard audio claim; independent coordinator verification follows.",
+    "Artifact paths come from visible native save/export dialogs and their filenames, without filesystem inspection.",
+    "WAV completion was observed in the Completed exports list; its transient success banner was not captured before the MIDI status replaced it.",
+    "Mixer balance was set using displayed values, not by listening. Mute/solo button state was observed, not their audible effect.",
+    "Laboratory software graphics and timer-paced virtual audio sink with 60 ms buffering and a 1024-frame request at 48 kHz do not establish real hardware latency or audible quality.",
+    "Only the installed Rill Lab Sine VST3 was used. Elapsed session time includes tool, screenshot, and reporting overhead."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged audio fader from -6.0 to -8.4 dB and MIDI fader from -2.5 to -7.3 dB; both values remained visible in the final arrangement. No listening-based balance claim.",
+    "pan": "Horizontal knob drags changed audio from C to L15 and MIDI from C to R17; final arrangement retained those values.",
+    "mute": "Clicked audio Mute on and off twice; orange highlighting appeared when on. Restored off before final save. Audible behavior not auditioned.",
+    "solo": "Clicked MIDI Solo on and off twice; highlighting appeared when on. Restored off before final save. Audible behavior not auditioned.",
+    "bus": "Clicked Mixer Add bus, which created New bus at 0.0 dB routed to Master; after adding the send it displayed Bus 1 in. Bus meter later lit during recovered playback.",
+    "send": "Clicked MIDI-track Add send, + Send, then New bus. Routing showed New bus at 0.25x with Post selected, and the Mixer displayed Send · New bus."
+  }
+}

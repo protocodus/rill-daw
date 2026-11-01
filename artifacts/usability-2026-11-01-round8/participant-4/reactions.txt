@@ -1,0 +1,21 @@
+Participant 4: independent simulated first-time beginner, ambient soundtrack sketch.
+Only the assigned visible session and supplied mouse driver were used for composition. This is an observable action/reaction record, not a private reasoning transcript.
+
+00:35:29-00:35:54 UTC: Opened File, Rename project, and Keyboard. Clicked the letters for mist and Apply name. Positive reaction: the on-screen keyboard made a chosen title possible with the mouse. Double-clicked the visible MIDI creation area; the instrument library opened.
+00:36:00-00:36:32: Assigned Rill Lab Sine, opened the pattern editor and Properties, entered 56 beats with the numeric keypad, then used Fit and Pencil. The header showed 0:30.000. The seconds display helped confirm the duration, although entry itself used beats.
+00:36:47-00:37:13: Drew twelve long MIDI notes. The screenshot showed uneven note starts and a new total of 0:30.134. Friction: the resulting starts did not all match the intended common drag positions. No claim is made about why.
+00:37:25-00:38:18: Opened the audio editor, found Properties, chose Stretch, and entered 56 beats. The dialog confirmed 350% stretch, ending at 0:30.000. The original rhythm now covered the whole visible piece.
+00:38:26-00:38:44: Reopened MIDI Properties and reset duration from 56.25 to 56 beats. Header returned to 0:30.000. Opened Mixer.
+00:38:55-00:39:01: Dragged audio and MIDI faders and pan knobs. Labels showed -14.0 dB/L20 and -9.1 dB/R20. Positive reaction: the values made these adjustments easy to verify.
+00:39:06-00:39:24: Toggled audio Mute and MIDI Solo on and off during playback. Highlights showed each state. Transport numbers advanced, but captured meters were initially dark. Stopped playback and clicked Add bus; New bus appeared immediately.
+00:39:30-00:39:46: MIDI Add send opened Routing. + Send offered the existing New bus. Selecting it created a visible 0.25x Post send. Positive reaction: bus and send controls were discoverable from the Mixer.
+00:39:55-00:40:08: Disabled the original short loop and tried arrangement playback. A later screenshot showed Audio output stream failed or disconnected. This was an observed playback failure; no sound was auditioned.
+00:40:09-00:40:26: Chose File > Save. The native picker initially looked black, then rendered with mist.rill and the session-4 folder. Clicked OK. The app returned without the unsaved dot in the project title.
+00:40:33-00:41:08: Chose Export WAV, turned off Include effect tails, accepted mist.wav in session-4. UI showed Arrangement 0:30 and export progress. The file picker again initially rendered black before becoming usable.
+00:41:16-00:41:34: Chose Export MIDI and accepted mist.mid. Saw Exported - mist.mid. Recent exports listed both MIDI - mist.mid and WAV - mist.wav under Completed exports. I did not see a transient WAV success toast and did not inspect either file.
+00:42:03-00:42:17: Retried Play in Mixer. The later screenshot showed transport 004.03.23, green MIDI/bus/master meters, and master -17.5 dB. Positive recovery: playback visibly progressed and produced meter activity this time. No audio listening claim.
+00:42:23-00:42:25: Stopped playback, returned to Arranger, explicitly released the mouse button, and captured final.png. App remains open.
+
+Ratings, 1-5: easy_to_use 3; how_cool_it_looks 4; how_fast_it_is 3; how_confusing_it_is 3 (higher is worse); feature_completeness 4. Reasons and evidence appear in report.json.
+Visible output destinations: /workspace/scratch/rill-usability-round8/session-4/mist.rill, mist.wav, and mist.mid.
+Limitations: simulated beginner; virtual audio/software graphics; no heard audio or file-content verification; elapsed time includes tool and screenshot overhead.

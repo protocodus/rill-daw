@@ -1,0 +1,15 @@
+Server String: unix:/workspace/scratch/rill-audio-diagnostics/default-1024-1/pulse-runtime/native
+Library Protocol Version: 35
+Server Protocol Version: 35
+Is Local: yes
+Client Index: 0
+Tile Size: 65472
+User Name: agent
+Host Name: bc287a2cd81d
+Server Name: pulseaudio
+Server Version: 17.0
+Default Sample Specification: s16le 2ch 44100Hz
+Default Channel Map: front-left,front-right
+Default Sink: rill_lab
+Default Source: rill_lab.monitor
+Cookie: 7e68:4ae0

@@ -1,0 +1,48 @@
+{
+  "at_utc": "2026-11-01T00:30:56Z",
+  "apps_only": false,
+  "processes": [
+    {
+      "participant": 1,
+      "process": "app",
+      "pid": 290249,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 1,
+      "process": "pulse",
+      "pid": 290235,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 1,
+      "process": "xvfb",
+      "pid": 290243,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 2,
+      "process": "app",
+      "pid": 290337,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 2,
+      "process": "pulse",
+      "pid": 290323,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 2,
+      "process": "xvfb",
+      "pid": 290330,
+      "result": "SIGTERM sent",
+      "exited": true
+    }
+  ]
+}

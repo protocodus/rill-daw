@@ -1,0 +1,45 @@
+selection=default device=DeviceDescription { name: "Default Audio Device", manufacturer: None, driver: Some("default"), device_type: Unknown, interface_type: Unknown, direction: Unknown, address: None, extended: ["Default Audio Device"] }
+supported=SupportedStreamConfigRange { channels: 2, min_sample_rate: 1, max_sample_rate: 384000, buffer_size: Range { min: 16, max: 174763 }, sample_format: F32 }
+config=StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(4096) }
+first_callback_samples=5460 elapsed=0.001412
+tick=1 elapsed=1.001430 callbacks=1 errors=0
+tick=2 elapsed=2.001588 callbacks=2 errors=0
+error elapsed=2.005572 count=1 kind=Xrun raw=A buffer underrun or overrun occurred.
+error elapsed=2.006083 count=2 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006093 count=3 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006100 count=4 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006107 count=5 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006113 count=6 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006119 count=7 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006125 count=8 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006133 count=9 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006140 count=10 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006145 count=11 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006152 count=12 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006157 count=13 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006163 count=14 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006170 count=15 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006176 count=16 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006182 count=17 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006189 count=18 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006194 count=19 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.006200 count=20 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+tick=3 elapsed=3.001716 callbacks=3 errors=3826
+tick=4 elapsed=4.002039 callbacks=3 errors=3826
+tick=5 elapsed=5.003279 callbacks=5 errors=3828
+tick=6 elapsed=6.003401 callbacks=5 errors=3828
+tick=7 elapsed=7.003541 callbacks=7 errors=3837
+tick=8 elapsed=8.003667 callbacks=7 errors=3837
+tick=9 elapsed=9.003801 callbacks=10 errors=3841
+tick=10 elapsed=10.003947 callbacks=10 errors=3841
+tick=11 elapsed=11.004070 callbacks=13 errors=3843
+tick=12 elapsed=12.004190 callbacks=13 errors=3843
+tick=13 elapsed=13.004308 callbacks=16 errors=4894
+tick=14 elapsed=14.004461 callbacks=16 errors=4894
+tick=15 elapsed=15.005405 callbacks=18 errors=4896
+tick=16 elapsed=16.005608 callbacks=18 errors=4896
+tick=17 elapsed=17.005731 callbacks=21 errors=4898
+tick=18 elapsed=18.005853 callbacks=21 errors=4898
+tick=19 elapsed=19.005983 callbacks=23 errors=4900
+tick=20 elapsed=20.006101 callbacks=23 errors=4900
+done callbacks=23 errors=4900

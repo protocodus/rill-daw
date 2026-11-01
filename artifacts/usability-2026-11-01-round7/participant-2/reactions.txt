@@ -1,0 +1,21 @@
+Participant 2 — independent simulated beginner, mouse-only session
+Chosen title: pulse
+
+23:53 — The starter drum loop was easy to see. The blank lane explicitly invited a double-click for MIDI. That opened the instrument library, and Assign instrument created Rill Lab Sine. Opening the pattern and drawing four notes with Pencil worked as expected. Evidence: 01–04.
+23:54 — Right-click Duplicate and then the toolbar Duplicate tool extended the drums. The toolbar explained that I should click a clip. Fit kept the arrangement visible. Evidence: 05–09.
+23:54–23:55 — Trimming to the 30-second mark first gave 30.134 seconds. A tiny second drag corrected this to 30.000. Repeating the MIDI required thirteen successive duplicate clicks, but the result stayed visually clear. Evidence: 10–12.
+23:55 — First Play failed with an audio-output warning. Retry playback recovered: the button changed to Pause, the transport advanced, and the first Mixer view showed active meters. I did not hear or audition audio. Evidence: 12–14.
+23:55–23:56 — Mixer faders and pan knobs gave clear numeric feedback: drums -7.5 dB/L16, instrument -8.6 dB/R21. Mute and solo visibly toggled and were turned back off. The sampled mute/solo screenshots had empty meters, so I cannot confirm the audible effect. Evidence: 15–17.
+23:56 — Add bus was direct. Adding the MIDI send involved the routing panel, + Send, and choosing New bus. The resulting 0.25x Post send and routing line were visible. Evidence: 17–20 and 26.
+23:56–23:57 — Rename project supplied an on-screen Keyboard. Clear and the letter buttons let me enter pulse without physical typing. The project save dialog already used that name and the session folder. Evidence: 22–26.
+23:57–23:58 — WAV export clearly showed the 30-second arrangement. I unchecked effect tails and accepted pulse.wav. The native picker briefly appeared black before drawing. Export progress showed elapsed seconds, then success. MIDI export also showed success. Evidence: 27–34.
+23:58 — Returned to the arranger, released buttons, and captured final.png. The app remains open and stopped, with 0:30.000 visible, the two musical tracks, and New bus.
+
+Ratings (1–5): ease 4; looks 4; speed 4; confusion 2 (higher is worse); completeness 4. The task was mostly direct and the controls were clearly labeled. Playback recovery and exact trimming caused the main friction. Native dialogs looked separate from the otherwise consistent dark UI.
+
+Reported outputs selected through visible dialogs:
+/workspace/scratch/rill-usability-round7/session-2/pulse.rill
+/workspace/scratch/rill-usability-round7/session-2/pulse.wav
+/workspace/scratch/rill-usability-round7/session-2/pulse.mid
+
+These are simulated observations, not human research. I inspected no source, project contents, or other participant records, and made no heard-audio claim. Independent output verification remains with the coordinator.

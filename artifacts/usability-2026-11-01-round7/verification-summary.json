@@ -1,0 +1,839 @@
+{
+  "verified_at_utc": "2026-11-01T00:04:24Z",
+  "mean_ratings": {
+    "easy_to_use": 3.8,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3.4,
+    "how_confusing_it_is": 2.6,
+    "feature_completeness": 4
+  },
+  "summary": {
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "saved_project_wav_and_midi": 5,
+    "wav_within_half_second_of_30": 5,
+    "wav_audio_and_vst_components_verified": 5,
+    "elapsed_seconds_mean": 362.8,
+    "total_mouse_input_events": 468,
+    "total_screenshots": 203,
+    "prior_pieces_checked": 90,
+    "all_prior_pieces_unchanged": true
+  },
+  "audio_and_vst_proofs": 5,
+  "largest_full_render_difference": 0.0,
+  "original_current_evidence_files_checked": 233,
+  "all_current_evidence_unchanged": true,
+  "frozen_helpers_unchanged": true,
+  "original_piece_preservation": [
+    {
+      "round": "round1",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.rill",
+      "expected_sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+      "current_sha256": "d048d1211d87cd63fcceebded60eca377afdbbd2f32add034267e3cff7b8d605",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.wav",
+      "expected_sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+      "current_sha256": "532012a9abcb87a625e4e03da963584d7b04925f4421903075f72a12f36398d9",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-1/Midnight circuit.mid",
+      "expected_sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+      "current_sha256": "60b2d55a63be57e2f416bcf8761d70476238639926e022ce1d2b2e626b393bcc",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.rill",
+      "expected_sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+      "current_sha256": "a2ce102aeec57bcf155d07a87f010b267f59ad8065e1322f7c65e8cd60a13cdd",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.wav",
+      "expected_sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+      "current_sha256": "74586e9d7ac5132b1200b89000ed157d4e9b8dae7b3e2603c3334c17f07d8f93",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-2/Midnight circuit.mid",
+      "expected_sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+      "current_sha256": "606b3fcc63b2838e242f047c0691b79c5d13277a2e3b0830ac6030f2a8d3f9b1",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.rill",
+      "expected_sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+      "current_sha256": "275777647dd7e0c5d8d74cb9ac2e386ba4e59034f890e34318ce1511f7c8cfd5",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.wav",
+      "expected_sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+      "current_sha256": "c46fe49cc56ba9ecac5d274644935649f32517e5043c38388501290fbffd4115",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-3/Midnight circuit.mid",
+      "expected_sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+      "current_sha256": "d46f8ed6f9feb13d7baed7579ab27a106987e8903d6357417d495ddd050f923f",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.rill",
+      "expected_sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+      "current_sha256": "a5f730b7c0f4c4fa618ae6382d7c796620845196ad41769ba2cc3cb058190f28",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.wav",
+      "expected_sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+      "current_sha256": "83902e92ef3609421f1cf144b88e085c9b15f60eb9515fd4e9c33e7239acea9e",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-4/Midnight circuit.mid",
+      "expected_sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+      "current_sha256": "5bad87ea6378f98bf8411345251a51c90c1501a465c783c8dcc290d8643c7460",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.rill",
+      "expected_sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+      "current_sha256": "173028dd1d9733d90329ebdab65850ffd60fb7881c85cc575a68f324a6a74801",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.wav",
+      "expected_sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+      "current_sha256": "9ab65dc5d402eea4d56335979417c2aa7a73770047537a352c6a5274a16552bf",
+      "unchanged": true
+    },
+    {
+      "round": "round1",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability/session-5/Midnight circuit.mid",
+      "expected_sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+      "current_sha256": "ae7d6e1cab2e49633b628155a83a0c3cf84c5435efbadc115ec4d8c50d112bf9",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.rill",
+      "expected_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+      "current_sha256": "f59e8f59d90c6ca167ac4d19ff32aecc73801785eff2c2d69e359a62682fb107",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.wav",
+      "expected_sha256": "e295d5e1f30e7f6c71b515d00bd7feef549eaedebd3dd7d0de7498043c970651",
+      "current_sha256": "e295d5e1f30e7f6c71b515d00bd7feef549eaedebd3dd7d0de7498043c970651",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-1/rain tea.mid",
+      "expected_sha256": "1c9f6b1dc57eda8ebb3a5f2790e7f04240eb3e2aa505555ace727466ab2498d9",
+      "current_sha256": "1c9f6b1dc57eda8ebb3a5f2790e7f04240eb3e2aa505555ace727466ab2498d9",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.rill",
+      "expected_sha256": "33e8ee2cd69e9734c3b401a50e0c8f8708e1e4fe18b0121448b963ec0963d6b2",
+      "current_sha256": "33e8ee2cd69e9734c3b401a50e0c8f8708e1e4fe18b0121448b963ec0963d6b2",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.wav",
+      "expected_sha256": "3f2359948ce2d5edeef07af308f0a36dafc3e3a61f2bdd46c90d1bb1330781a8",
+      "current_sha256": "3f2359948ce2d5edeef07af308f0a36dafc3e3a61f2bdd46c90d1bb1330781a8",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-2/NEON PULSE.mid",
+      "expected_sha256": "d14eebccea8c8aa495f740bb422bafa2d878c43973ff8084b052d03affc4a5a6",
+      "current_sha256": "d14eebccea8c8aa495f740bb422bafa2d878c43973ff8084b052d03affc4a5a6",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.rill",
+      "expected_sha256": "5d798540668e2d75879b6e821e72d67c931659f44c7d75a04f9d8474dcad0986",
+      "current_sha256": "5d798540668e2d75879b6e821e72d67c931659f44c7d75a04f9d8474dcad0986",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.wav",
+      "expected_sha256": "60430c296811d2b7199a21e2c9cff7406e05f56d3dca8099c16bf795956112df",
+      "current_sha256": "60430c296811d2b7199a21e2c9cff7406e05f56d3dca8099c16bf795956112df",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-3/minor tide.mid",
+      "expected_sha256": "4c21a8a8bc45cf961d736807b2484c293861dc1b75a7c89d0011ef2774e12d48",
+      "current_sha256": "4c21a8a8bc45cf961d736807b2484c293861dc1b75a7c89d0011ef2774e12d48",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.rill",
+      "expected_sha256": "ea0835f0ca05e37b8e15d15a2a713a63433e7562c01f80ef2c9cbdc38e5fa4de",
+      "current_sha256": "ea0835f0ca05e37b8e15d15a2a713a63433e7562c01f80ef2c9cbdc38e5fa4de",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.wav",
+      "expected_sha256": "1fe461c26ccfe60180236298e5e5484cdb7bd76ae4b80aacdc57ce5fcd5b899d",
+      "current_sha256": "1fe461c26ccfe60180236298e5e5484cdb7bd76ae4b80aacdc57ce5fcd5b899d",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-4/DUSK.mid",
+      "expected_sha256": "4e519661a1090709eb6b0ccd7d79b9fb99bb9f6cf8c0fd11e7def0dde7bcd8b1",
+      "current_sha256": "4e519661a1090709eb6b0ccd7d79b9fb99bb9f6cf8c0fd11e7def0dde7bcd8b1",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.rill",
+      "expected_sha256": "e8b72c7d33107163ee4df687c0ca5202135a77ad43bc708fe0588a1abb94eeea",
+      "current_sha256": "e8b72c7d33107163ee4df687c0ca5202135a77ad43bc708fe0588a1abb94eeea",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.wav",
+      "expected_sha256": "881818b6961674103ce8f69297a65fd9269559569695fe1b46a95ad1a36cc7df",
+      "current_sha256": "881818b6961674103ce8f69297a65fd9269559569695fe1b46a95ad1a36cc7df",
+      "unchanged": true
+    },
+    {
+      "round": "round2",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round2/session-5/cinder swing.mid",
+      "expected_sha256": "b4d9521015ca42d04191a7a3d9ed9bb339b0d8f70036d8a4da6f514ddb0cf991",
+      "current_sha256": "b4d9521015ca42d04191a7a3d9ed9bb339b0d8f70036d8a4da6f514ddb0cf991",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.rill",
+      "expected_sha256": "f80d60a6c3823fa41ec8ca64db38444e7e7e3110adc5d36ee6148f0593b194c7",
+      "current_sha256": "f80d60a6c3823fa41ec8ca64db38444e7e7e3110adc5d36ee6148f0593b194c7",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.wav",
+      "expected_sha256": "87df71c9a8e665d9a650c1c76c058c28c2e8bfee52311ca89a80e34285e766f7",
+      "current_sha256": "87df71c9a8e665d9a650c1c76c058c28c2e8bfee52311ca89a80e34285e766f7",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-1/night drift.mid",
+      "expected_sha256": "96290c235c50e6baf9710383b69b9797d63b3071acaf403f90be2da7013fcdd6",
+      "current_sha256": "96290c235c50e6baf9710383b69b9797d63b3071acaf403f90be2da7013fcdd6",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.rill",
+      "expected_sha256": "a0e82e548c110b45deb50d24513170d96954d32fa09e26ad434512764d1b0b16",
+      "current_sha256": "a0e82e548c110b45deb50d24513170d96954d32fa09e26ad434512764d1b0b16",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.wav",
+      "expected_sha256": "63ea1c39adfe42f1f38d6ee077fa37d19f5fa333a2bdb4bc23fbe7f761d37fd4",
+      "current_sha256": "63ea1c39adfe42f1f38d6ee077fa37d19f5fa333a2bdb4bc23fbe7f761d37fd4",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-2/Neon Pocket.mid",
+      "expected_sha256": "5a601b19830863da1ec3f5b64365909c9796ff0a72553453fcb7cf5691f1bc6b",
+      "current_sha256": "5a601b19830863da1ec3f5b64365909c9796ff0a72553453fcb7cf5691f1bc6b",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.rill",
+      "expected_sha256": "745ef703a9e71ebc29e00b17c03d851c33a9c6a0a8a03c3a966bbb21af3668ec",
+      "current_sha256": "745ef703a9e71ebc29e00b17c03d851c33a9c6a0a8a03c3a966bbb21af3668ec",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.wav",
+      "expected_sha256": "829fe9089ea4f443825294ffca7d8768fd05345623ffff5329a2df6f15703f85",
+      "current_sha256": "829fe9089ea4f443825294ffca7d8768fd05345623ffff5329a2df6f15703f85",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-3/moon glass.mid",
+      "expected_sha256": "1f5baec3dca939f909dbad5dbe67837f64436e29a7b8cc5eb17b6748a9b96c10",
+      "current_sha256": "1f5baec3dca939f909dbad5dbe67837f64436e29a7b8cc5eb17b6748a9b96c10",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.rill",
+      "expected_sha256": "11b62bc209b8866e2e38f1282fce50edbf5be46dfe8ed119c57a441e05f68781",
+      "current_sha256": "11b62bc209b8866e2e38f1282fce50edbf5be46dfe8ed119c57a441e05f68781",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.wav",
+      "expected_sha256": "805d9ab42a3119e15bcd6814a6e0dfc6f6d6f54dadca60f73ca9de47bfb0a4b7",
+      "current_sha256": "805d9ab42a3119e15bcd6814a6e0dfc6f6d6f54dadca60f73ca9de47bfb0a4b7",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-4/ember rise.mid",
+      "expected_sha256": "6637f6ca6c27f61e685addfce7f18785ff8bc911d54287d53aed9b1984b684c3",
+      "current_sha256": "6637f6ca6c27f61e685addfce7f18785ff8bc911d54287d53aed9b1984b684c3",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.rill",
+      "expected_sha256": "2a406e38224ed0ed879b4bb165978aa5a8cf1410d843869dc90f6cae80ebb4e4",
+      "current_sha256": "2a406e38224ed0ed879b4bb165978aa5a8cf1410d843869dc90f6cae80ebb4e4",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.wav",
+      "expected_sha256": "6c52d8f972697c467020e7fdb25dbcf844034dbf0a3cd47209befc48903d2aff",
+      "current_sha256": "6c52d8f972697c467020e7fdb25dbcf844034dbf0a3cd47209befc48903d2aff",
+      "unchanged": true
+    },
+    {
+      "round": "round3",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round3/session-5/velvet steps.mid",
+      "expected_sha256": "a73fb8b4a1cd1cd9f9045eed1fc624fdebfc756a48bd3322efe821ee106cc555",
+      "current_sha256": "a73fb8b4a1cd1cd9f9045eed1fc624fdebfc756a48bd3322efe821ee106cc555",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.rill",
+      "expected_sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "current_sha256": "334e098d8708d09fa0685dab8320f4eb11e9513e532c49c9348c65607c421f3b",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.wav",
+      "expected_sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "current_sha256": "053b7f5963aff86faee05bb2b7b8b8af93331799f01ef6ec64aebd790e42db2d",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-1/rain room.mid",
+      "expected_sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "current_sha256": "60fdbb512f3b7aedc9415279740a313c721a63035271d66150254893292bb2fc",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.rill",
+      "expected_sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "current_sha256": "faa98d21cb252de43d5dee836438615fd1ca5731f18e86e1fcb1e2f36de63359",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.wav",
+      "expected_sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "current_sha256": "81289085fb3afaac605d1ababda36f41e77082bd13be5a47833f5a4acf08b5e9",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-2/neon pulse.mid",
+      "expected_sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "current_sha256": "e3f44b1aa78a8471e97c7287a9c167da4c779a8e81a2c36b10d01a67a5f815da",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.rill",
+      "expected_sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "current_sha256": "c7a459eb1951df3d3890313bb84c113d84177fc8bdeefad4e457eeb67c9c41f5",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.wav",
+      "expected_sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "current_sha256": "770be2a7992cdd8c0dd4ec2f3b65c7aac8ad39cf534256df3b38f49394d47679",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-3/luna loop.mid",
+      "expected_sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "current_sha256": "51fa1d82d3ac451703db193bed8c6bfa9e3035d0720a39ebaf9625d506769241",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.rill",
+      "expected_sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "current_sha256": "93e52bafd0299168664662b4b8bd493f8005e439e71c3eaf15d27408fc6f28e3",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.wav",
+      "expected_sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "current_sha256": "e174938d0deda81b4468ff165304cf942889b003453ebac019935cefa34d53e6",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-4/mist.mid",
+      "expected_sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "current_sha256": "c5c26970135c54d70001759737396a0223557d02d46ed8f32a9a9bf77d1710a8",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.rill",
+      "expected_sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "current_sha256": "7bdf82a84f9a61188c26db7d23ff2e2b280cd36ed76bdd2fdefc86d01a50eae4",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.wav",
+      "expected_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "current_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "round": "round4",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round4/session-5/Night pocket.mid",
+      "expected_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "current_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.rill",
+      "expected_sha256": "835fbd4964a02aff848de3992ab715b7524e7859546e58dd0829c0073c169447",
+      "current_sha256": "835fbd4964a02aff848de3992ab715b7524e7859546e58dd0829c0073c169447",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.wav",
+      "expected_sha256": "cf9a477c5bb358c8701f2e561444e3ecae4d35fc91422fc0497409b23313f1ce",
+      "current_sha256": "cf9a477c5bb358c8701f2e561444e3ecae4d35fc91422fc0497409b23313f1ce",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-1/soft rain.mid",
+      "expected_sha256": "1856e5d9b757ee95e2d1560fa93a20e7a815863465438ef4f95962f58c769e6b",
+      "current_sha256": "1856e5d9b757ee95e2d1560fa93a20e7a815863465438ef4f95962f58c769e6b",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.rill",
+      "expected_sha256": "6a89339238ad09248db6d6ec029aaaa96e9d2c54326abc1d61dad8ea7d4675b3",
+      "current_sha256": "6a89339238ad09248db6d6ec029aaaa96e9d2c54326abc1d61dad8ea7d4675b3",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.wav",
+      "expected_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "current_sha256": "1234d53fd11b3d1c84ced9197d62bff7fe73f823728b502bac232941cb9d360b",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-2/neon step.mid",
+      "expected_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "current_sha256": "a4549a60e438c5431ed3c7166ba813fb494d11553e60a2504d4f5dd0b7f1045a",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.rill",
+      "expected_sha256": "14d4c9d1ab22d8f016e809ef47b64992bd942d2a07287c5b86e8305cb6551e8d",
+      "current_sha256": "14d4c9d1ab22d8f016e809ef47b64992bd942d2a07287c5b86e8305cb6551e8d",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.wav",
+      "expected_sha256": "dd4cef52d27c01fa894c9acb951e3d8a6f84c376327d18d31230953e4f95f493",
+      "current_sha256": "dd4cef52d27c01fa894c9acb951e3d8a6f84c376327d18d31230953e4f95f493",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-3/Moonlit.mid",
+      "expected_sha256": "31ee17c156fc500999e28f8321f207c2a93ca51bd4e800f8ab1cef5cb62a296b",
+      "current_sha256": "31ee17c156fc500999e28f8321f207c2a93ca51bd4e800f8ab1cef5cb62a296b",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.rill",
+      "expected_sha256": "70421fe61d45a4595ce0f9791eb60ebe0d6cbff40490217ac5bba5d48377878a",
+      "current_sha256": "70421fe61d45a4595ce0f9791eb60ebe0d6cbff40490217ac5bba5d48377878a",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.wav",
+      "expected_sha256": "4b78f2490f4cfe573c33762daf1ba8c494b94716a550cf46036bb86a8870f7b5",
+      "current_sha256": "4b78f2490f4cfe573c33762daf1ba8c494b94716a550cf46036bb86a8870f7b5",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-4/still.mid",
+      "expected_sha256": "04d58c5a8964f2b9ab89d303bc4d0df536cdd8ef87bff286f979484b97f2798d",
+      "current_sha256": "04d58c5a8964f2b9ab89d303bc4d0df536cdd8ef87bff286f979484b97f2798d",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.rill",
+      "expected_sha256": "3e01a576c900598ed5595ab291111b98bf19cfe41bedda5a4416c7c438136833",
+      "current_sha256": "3e01a576c900598ed5595ab291111b98bf19cfe41bedda5a4416c7c438136833",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.wav",
+      "expected_sha256": "05bf2a2d5a57ed7df04f7c10d8c287153834d16e72b1aff2ae0cadb8ce2c5759",
+      "current_sha256": "05bf2a2d5a57ed7df04f7c10d8c287153834d16e72b1aff2ae0cadb8ce2c5759",
+      "unchanged": true
+    },
+    {
+      "round": "round5",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round5/session-5/night hop.mid",
+      "expected_sha256": "6b264f42152f9999a8dc6c56be0590b53cab01f8ef85d1fd55a6bc5737ae1845",
+      "current_sha256": "6b264f42152f9999a8dc6c56be0590b53cab01f8ef85d1fd55a6bc5737ae1845",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 1,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.rill",
+      "expected_sha256": "781ce35bc761cc10ada8dab926e964998682b13dcc0da2eabe6be1c10c7ba122",
+      "current_sha256": "781ce35bc761cc10ada8dab926e964998682b13dcc0da2eabe6be1c10c7ba122",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 1,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.wav",
+      "expected_sha256": "88c4490f9e0742ba9be8a8cb7acac4b07fb562f88e627b915c9009583637401c",
+      "current_sha256": "88c4490f9e0742ba9be8a8cb7acac4b07fb562f88e627b915c9009583637401c",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 1,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round6/session-1/soft rain.mid",
+      "expected_sha256": "ff383d1ef9464218f180092b15f220ff75ab6850e81782f343e89b29755f41fc",
+      "current_sha256": "ff383d1ef9464218f180092b15f220ff75ab6850e81782f343e89b29755f41fc",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 2,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.rill",
+      "expected_sha256": "a51b72246479951093d98f1fd61dcad33f8ee8c18d3da14bab4cc3c63e37cc1d",
+      "current_sha256": "a51b72246479951093d98f1fd61dcad33f8ee8c18d3da14bab4cc3c63e37cc1d",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 2,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.wav",
+      "expected_sha256": "2f87df4f7c092113fb5072fa9754f51faca9fb858914cad0d5e78983c7aa6549",
+      "current_sha256": "2f87df4f7c092113fb5072fa9754f51faca9fb858914cad0d5e78983c7aa6549",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 2,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round6/session-2/neon pulse.mid",
+      "expected_sha256": "27104f997525fc21be1f53d63920b3770beae09f140a0c5ad86c1d83ab2bfc25",
+      "current_sha256": "27104f997525fc21be1f53d63920b3770beae09f140a0c5ad86c1d83ab2bfc25",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 3,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.rill",
+      "expected_sha256": "6a80b616f3897316075bfcc929a5196c9b4364ebb5cc7dbe15485a9a815df22c",
+      "current_sha256": "6a80b616f3897316075bfcc929a5196c9b4364ebb5cc7dbe15485a9a815df22c",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 3,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.wav",
+      "expected_sha256": "98c065b3a941b5d2b9dc75aff5327cda761041238b5df3038229037a65ff1197",
+      "current_sha256": "98c065b3a941b5d2b9dc75aff5327cda761041238b5df3038229037a65ff1197",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 3,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round6/session-3/soft circuit.mid",
+      "expected_sha256": "6db2fdc1007c7ec250bf3023f5efec6f28dababe2729eb6126c4c351e244cfec",
+      "current_sha256": "6db2fdc1007c7ec250bf3023f5efec6f28dababe2729eb6126c4c351e244cfec",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 4,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mist.rill",
+      "expected_sha256": "bb163b29fbefb5e4bf66b708df6cba1ff2629b6d4969f1de98294dae268eb3f6",
+      "current_sha256": "bb163b29fbefb5e4bf66b708df6cba1ff2629b6d4969f1de98294dae268eb3f6",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 4,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mist.wav",
+      "expected_sha256": "075fe49a6d701ec39eb31eddf89e5f99cdb14966ab2cbd9514f4d2e39879f0cc",
+      "current_sha256": "075fe49a6d701ec39eb31eddf89e5f99cdb14966ab2cbd9514f4d2e39879f0cc",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 4,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round6/session-4/mist.mid",
+      "expected_sha256": "53fe994e7c972403c131d65e2c0605bc2db811b78bf07c770311595dad14c4a0",
+      "current_sha256": "53fe994e7c972403c131d65e2c0605bc2db811b78bf07c770311595dad14c4a0",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 5,
+      "type": "project",
+      "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.rill",
+      "expected_sha256": "99c1e43432f55d30454f1186b1044b8a7604cd60b46451b6daecef13eb984e9c",
+      "current_sha256": "99c1e43432f55d30454f1186b1044b8a7604cd60b46451b6daecef13eb984e9c",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 5,
+      "type": "wav",
+      "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.wav",
+      "expected_sha256": "0886e38cf740f52022f6232e171962c06c8b977480fe82d92518f458920fc422",
+      "current_sha256": "0886e38cf740f52022f6232e171962c06c8b977480fe82d92518f458920fc422",
+      "unchanged": true
+    },
+    {
+      "round": "round6",
+      "participant": 5,
+      "type": "midi",
+      "path": "/workspace/scratch/rill-usability-round6/session-5/NIGHT HOP.mid",
+      "expected_sha256": "e03d38dc674eb5c83cc43a436d3d7ed82c4fdb6115d3faf1f62a1d825afff724",
+      "current_sha256": "e03d38dc674eb5c83cc43a436d3d7ed82c4fdb6115d3faf1f62a1d825afff724",
+      "unchanged": true
+    }
+  ],
+  "verification_method": "Full saved graph reproduction plus audio-source and MIDI-source mute ablations; all routes, buses, inserts and sources retained in analysis copies; originals untouched."
+}

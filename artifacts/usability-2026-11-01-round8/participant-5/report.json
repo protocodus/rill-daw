@@ -1,0 +1,152 @@
+{
+  "purpose": "Fixed report fields for independent simulated participant 5; observations from the visible app only.",
+  "participant": 5,
+  "persona": "Simulated beginner, first introduction to RILL, interested in a short hip-hop beat with a simple synth part.",
+  "piece_name": "night loop",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "I completed arrangement, instrument assignment, drawing notes, mixer changes, naming, saving and both exports using visible mouse controls. The tool instruction lines helped.",
+    "how_cool_it_looks": "The dark interface, colored waveform and MIDI tracks, and matching mixer strips look coherent and easy to scan. Some small text and abbreviated pattern names are less attractive.",
+    "how_fast_it_is": "Clip duplication, notes, faders and pan reacted promptly, but playback failed and needed Retry, then the failure warning returned. WAV export took visible waiting time. This is a virtual laboratory session, not a performance benchmark.",
+    "how_confusing_it_is": "Most controls were explicit. Duplicate first selects a tool rather than immediately duplicating; trimming to exactly 30 seconds needed a second tiny drag. The playback failure interrupted confidence.",
+    "feature_completeness": "The requested audio, MIDI, VST instrument, mixer, bus/send, mouse naming, project save and WAV/MIDI export were all discoverable. Only the supplied drum audio and installed laboratory sine instrument were exercised; broader instrument/effect support was not assessed."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round8/session-5/night loop.rill",
+    "wav": "/workspace/scratch/rill-usability-round8/session-5/night loop.wav",
+    "midi": "/workspace/scratch/rill-usability-round8/session-5/night loop.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Clicking Duplicate displayed the instruction to click a clip. Clicking successive drum clips made adjacent copies, and Fit brought the longer arrangement into view.",
+      "evidence": [
+        "01-duplicate-tool.png",
+        "02-audio-duplicate.png",
+        "04-audio-fourth.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "friction",
+      "observation": "Dragging the last drum edge toward the 30-second mark first left 30.134 seconds. A second four-pixel edge drag changed the displayed duration to 30.000 seconds.",
+      "evidence": [
+        "05-midi-created.png",
+        "06-instrument-assigned.png",
+        "07-piano-roll.png",
+        "mouse-actions.jsonl: 2026-11-01T00:36:27Z"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "The empty-lane hint said Double-click for MIDI. Double-click opened the instrument library, and Assign instrument created a track showing Rill Lab Sine. Pencil drags drew four visible notes.",
+      "evidence": [
+        "05-midi-created.png",
+        "06-instrument-assigned.png",
+        "08-notes-drawn.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "The mixer had visible volume, pan, mute, solo, Add bus and Add send controls. Fader and horizontal knob drags changed the numeric values.",
+      "evidence": [
+        "10-mixer.png",
+        "11-mix-playback.png",
+        "13-drums-muted.png",
+        "14-synth-solo.png",
+        "15-bus.png",
+        "18-send-configured.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "failure",
+      "observation": "The first Play click produced Audio output stream failed or disconnected. The same warning was visible again after subsequent mute/solo use and stopping.",
+      "evidence": [
+        "11-mix-playback.png",
+        "15-bus.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "recovery",
+      "observation": "Clicking Retry playback changed Play to Pause, advanced the transport to 001.01.37, and displayed track and master meter levels. Later screenshots showed later transport values. The recovery did not establish sustained reliable playback.",
+      "evidence": [
+        "12-playback-retry.png",
+        "13-drums-muted.png",
+        "14-synth-solo.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "Rename project exposed a Keyboard button. Its clickable keys let me enter night loop, and Apply name changed the project title. The save dialog inherited night loop.rill in the session-5 folder.",
+      "evidence": [
+        "20-rename.png",
+        "21-mouse-keyboard.png",
+        "22-title-entered.png",
+        "23-save-dialog.png",
+        "24-saved.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "WAV export showed Arrangement 0:30, allowed effect tails to be disabled, and then showed Exported night loop.wav. MIDI export likewise showed Exported night loop.mid.",
+      "evidence": [
+        "27-wav-picker.png",
+        "30-wav-status.png",
+        "31-midi-picker.png",
+        "32-midi-complete.png",
+        "final.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "With the whole arrangement visible, one-bar MIDI clips display abbreviated New p... names. Fourteen repeated clips were created through repeated individual Duplicate clicks.",
+      "evidence": [
+        "09-pattern-repeat.png",
+        "final.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: 30.000-second arrangement, named and saved project, and success notices for WAV and MIDI. Playback reliability and actual file contents remain unverified.",
+    "visible_arrangement_duration_seconds": 30.0,
+    "composition": "At 112 BPM, four adjacent copies of the supplied Circuit rhythm drum audio, with the final copy trimmed to a total 30 seconds. A one-bar C4, D#4, G4, D#4 MIDI phrase was drawn and duplicated to fourteen bars alongside the drums.",
+    "instrument": "Rill Lab Sine (VST3 shown in the library).",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Initial Play produced a stream failed/disconnected warning. Retry briefly displayed Pause, advancing transport, track meters and master meters (-10.8 dB at one capture). Transport later displayed 004.02.47 and 004.02.73. A stream failure warning was visible again after stopping. No audio was captured or auditioned.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows.",
+    "Composition and application control used only the supplied mouse driver. Reports were written separately as authorized.",
+    "Mix balance is based on visible values and meter feedback, not listening. Mute and solo states were visibly toggled and returned off; their audible effect was not verified.",
+    "Timer-paced virtual audio sink, software graphics, no physical audio/MIDI hardware. Stream failures and elapsed times should not be generalized to physical hardware.",
+    "Only the installed Rill Lab Sine instrument was assigned; other plug-ins and effects were not tested.",
+    "Output paths are established by the visible file pickers and success notices, not by inspecting exported files."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged Circuit drums fader from -6.0 dB to -4.0 dB and New instrument from -2.5 dB to -7.3 dB. Values remained visible in the final arrangement.",
+    "pan": "Dragged Circuit drums pan knob horizontally left to L15 and synth knob right to R18; displayed values confirmed both changes.",
+    "mute": "Clicked Circuit drums Mute while playback was active; its button became highlighted and its meter was dark in the screenshot. Clicked again to return it off. No audible verification.",
+    "solo": "Clicked New instrument Solo while playback was active; its button became highlighted. Clicked again to return it off. No audible verification.",
+    "bus": "Clicked Add bus; a New bus strip appeared with 0.0 dB, centered pan and Master output. Later showed Bus 1 in after the send was added.",
+    "send": "Clicked the synth Add send button, then + Send and selected New bus. Routing displayed a 0.25x Post send to New bus. Mixer subsequently displayed Send \u00b7 New bus and a routing line."
+  }
+}

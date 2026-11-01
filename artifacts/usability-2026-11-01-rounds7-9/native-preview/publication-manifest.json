@@ -1,0 +1,110 @@
+{
+  "created_utc": "2026-11-01T01:01:23Z",
+  "scope": "Independent Dark/Light native review before round8. Four selected screenshots, mouse actions and cleanup evidence; projects and other captures remain local.",
+  "file_count": 17,
+  "total_bytes": 785863,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/README.txt",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/README.txt",
+      "bytes": 1299,
+      "sha256": "f4b23f468779a396dac6fd60aa3e1439ebae447e13e3e80ab9c7985284651c48"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/audio.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/audio.py",
+      "bytes": 2747,
+      "sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/cleanup-1793493056103468903.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/cleanup-1793493056103468903.json",
+      "bytes": 898,
+      "sha256": "1820bd88e011a45190a070dfb2f13379800a408fb487760f54f4f15c9700f019"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/cleanup.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/cleanup.py",
+      "bytes": 2037,
+      "sha256": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/launch.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/launch.py",
+      "bytes": 6535,
+      "sha256": "c07269cc3a2f65953efd6d2cb720e0915758d87a52e8f18b8ea4b5ad0b5113e7"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/mouse.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/mouse.py",
+      "bytes": 3710,
+      "sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/observations.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/observations.json",
+      "bytes": 4277,
+      "sha256": "b3c8dfd42887d4e0c0dce99f19434150f492322b15a89ebb918dfa9de50eb858"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/prepare-manifest.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/prepare-manifest.json",
+      "bytes": 1613,
+      "sha256": "d82b8b2ba89ffec1d037015e3ec5b1b6ef0db9f3a3a32933c7c94af6d4cfc7b4"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-1/keypad-expanded.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-1/keypad-expanded.png",
+      "bytes": 190605,
+      "sha256": "7f1b6cdd7cee2065cfdabc71561dac7a5f190524457feafe8ae3b0a8b4aafc02"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-1/mixer-send-routes-visible.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-1/mixer-send-routes-visible.png",
+      "bytes": 197776,
+      "sha256": "ecb0260795242fd78620a9328ef161ac0560b94edf3a4b4dadc802089d1a4578"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-1/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-1/mouse-actions.jsonl",
+      "bytes": 2534,
+      "sha256": "8fb77fad703f9bcf4652f749b0f855f171cf65c0e34dcfbf73cb48e8aad19712"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-1/processes.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-1/processes.json",
+      "bytes": 178,
+      "sha256": "821aef81b1a42c59dc645525f66eeeb95067d92db1ce2ad280a955771a256934"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-2/keypad-expanded.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-2/keypad-expanded.png",
+      "bytes": 186477,
+      "sha256": "ddd2c8bcbbe37a8859d46b45e162351ce22bcc4d42c4ca83d742d71ff27d29f2"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-2/mixer-send-routes-visible.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-2/mixer-send-routes-visible.png",
+      "bytes": 179878,
+      "sha256": "83dfa5eafefeb4506fccaa1ce5e7fc0dec4636d072a0e5704f4e3162ff1d86b8"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-2/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-2/mouse-actions.jsonl",
+      "bytes": 2538,
+      "sha256": "0e9e15397ec2a02c5a38475e4bdc843ecea3638671b97948a4c2612c222f68f0"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/session-2/processes.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/participant-2/processes.json",
+      "bytes": 178,
+      "sha256": "79ea12fae957c1778777ef1b00e73e631e25ee52e480189c1c6761642313f2af"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-preview/setup-manifest.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/native-preview/setup-manifest.json",
+      "bytes": 2583,
+      "sha256": "1b3b38c6d0915b420eed06468ce2409c5a27b67a038375d88144784d9f715440"
+    }
+  ]
+}

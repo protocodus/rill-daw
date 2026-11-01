@@ -1,0 +1,38 @@
+{
+  "prepared_at_utc": "2026-11-01T01:22:47Z",
+  "purpose": "Independent final send-chooser native review, not a participant study or score",
+  "source_project": "/workspace/scratch/rill-usability-round7/session-1/rain.rill",
+  "source_project_sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+  "helpers": {
+    "mouse.py": {
+      "source": "/workspace/scratch/rill-usability-round7/mouse.py",
+      "sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb"
+    },
+    "cleanup.py": {
+      "source": "/workspace/scratch/rill-usability-round7/cleanup.py",
+      "sha256": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12"
+    },
+    "audio.py": {
+      "source": "/workspace/scratch/rill-usability-round7/audio.py",
+      "sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+    }
+  },
+  "sessions": [
+    {
+      "session": 1,
+      "appearance": "Dark",
+      "display": ":893",
+      "project": "/workspace/scratch/rill-send-preview/session-1/rain-preview.rill",
+      "project_sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "settings_sha256": "f2353fccb2159aa9cd461180221bb5b94073f31064c404814dd76ad94b30f3a9"
+    },
+    {
+      "session": 2,
+      "appearance": "Light",
+      "display": ":894",
+      "project": "/workspace/scratch/rill-send-preview/session-2/rain-preview.rill",
+      "project_sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "settings_sha256": "bcc2951e82f0c654b90a6f3731b336dbd9c138a5f8bcd1054c64d5b4b9a1aa8f"
+    }
+  ]
+}

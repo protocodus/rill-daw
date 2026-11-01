@@ -388,6 +388,44 @@ fn pencil_click_creates_a_snapped_note_at_the_selected_pitch() {
 }
 
 #[test]
+fn piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin() {
+    let mut harness = Harness::new(0.0);
+    harness.app.tool = Tool::Pencil;
+    harness.settle(true);
+    for (pitch, first_beat) in [(62, 4.25), (64, 3.5), (67, 5.0)] {
+        let from = harness.piano_position(3.0, pitch);
+        let first = harness.piano_position(first_beat, pitch + 1);
+        let end = harness.piano_position(6.0, pitch + 1);
+        harness.frame(vec![Event::PointerMoved(from)], true);
+        // Native event delivery can combine the press with later movement,
+        // while keeping the button held until a subsequent rendered frame.
+        harness.frame(
+            vec![
+                Event::PointerButton {
+                    pos: from,
+                    button: PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                Event::PointerMoved(first),
+            ],
+            true,
+        );
+        let drawn = harness
+            .notes()
+            .iter()
+            .find(|n| n.pitch == pitch)
+            .expect("the pressed pitch owns the drawing gesture");
+        assert_eq!(drawn.start, 3.0);
+        assert_eq!(drawn.length, first_beat - 3.0);
+        harness.pointer(end, false, true);
+        let drawn = harness.notes().iter().find(|n| n.pitch == pitch).unwrap();
+        assert_eq!(drawn.start, 3.0);
+        assert_eq!(drawn.length, 3.0);
+    }
+}
+
+#[test]
 fn arrangement_clip_drag_accumulates_movement_and_preserves_source_offset() {
     let mut harness = Harness::new(2.0);
     let output = harness.settle(false);

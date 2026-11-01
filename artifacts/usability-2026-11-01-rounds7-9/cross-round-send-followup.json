@@ -1,0 +1,131 @@
+{
+  "at_utc": "2026-11-01T01:27:44Z",
+  "purpose": "Later disposition of repeated send-routing-step feedback; historical matrices remain dated records.",
+  "status": "implemented_and_validated_after_round9",
+  "change": "After round9, an empty mixer strip Add send opens the destination chooser directly. Existing Send summaries continue opening Routing for detailed edits.",
+  "earlier_disposition": "Rounds7/8 retained the explicit routing workflow with reasoned responses. Repeated round9 friction motivated a bounded simplification that preserves explicit source/destination selection.",
+  "observations": [
+    {
+      "round": 7,
+      "participant": 2,
+      "matrix_id": "P2-rating-how_confusing_it_is",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round7/session-2/report.json",
+        "sha256": "ddf7ebba9b7a3796e24e9ee1fdad3cdf3c135ef2a5d81979b30ed71822511880"
+      },
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 2,
+      "reason": "Low overall confusion because tools describe their actions. Initial playback failure and the very small trim adjustment were the main interruptions; a send required a routing panel and another menu.",
+      "response": "The post-round9 direct chooser removes the intermediate Routing and + Send step for an empty strip while retaining explicit source/destination and cancellation safety. This later change addresses the routing-step portion of the observation, not unrelated reservations in the same reason."
+    },
+    {
+      "round": 8,
+      "participant": 1,
+      "matrix_id": "P1-rating-easy_to_use",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round8/session-1/report.json",
+        "sha256": "57016afb5f5ff5f19a51e89a3acde032fd6c4e496ef330ffe63dbaa40f52332a"
+      },
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "Visible tool hints, double-click MIDI creation, pencil dragging, mixer values, a mouse keyboard and prefilled save names let me complete the composition and exports using only the mouse. Exact trimming and nested routing took extra steps.",
+      "response": "The post-round9 direct chooser removes the intermediate Routing and + Send step for an empty strip while retaining explicit source/destination and cancellation safety. This later change addresses the routing-step portion of the observation, not unrelated reservations in the same reason."
+    },
+    {
+      "round": 9,
+      "participant": 1,
+      "matrix_id": "P1-rating-how_confusing_it_is",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+        "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779"
+      },
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 2,
+      "reason": "Most controls had clear labels. Add send opened routing requiring another + Send, and the recurring output-stream warning left uncertainty about instrument playback.",
+      "response": "The post-round9 direct chooser removes the intermediate Routing and + Send step for an empty strip while retaining explicit source/destination and cancellation safety. This later change addresses the routing-step portion of the observation, not unrelated reservations in the same reason."
+    },
+    {
+      "round": 9,
+      "participant": 2,
+      "matrix_id": "P2-rating-easy_to_use",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+        "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5"
+      },
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "The empty-lane hint, labeled tools, on-screen naming keyboard and obvious Mixer controls let me finish with mouse input. Precise end trimming needed a correction and a send required several dialogs.",
+      "response": "The post-round9 direct chooser removes the intermediate Routing and + Send step for an empty strip while retaining explicit source/destination and cancellation safety. This later change addresses the routing-step portion of the observation, not unrelated reservations in the same reason."
+    },
+    {
+      "round": 9,
+      "participant": 2,
+      "matrix_id": "P2-rating-how_confusing_it_is",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+        "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5"
+      },
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 2,
+      "reason": "Most controls had plain labels and useful feedback. The fine trim at a zoomed-out scale was easy to overshoot, and Add send opened a routing dialog with another + Send choice before the bus target.",
+      "response": "The post-round9 direct chooser removes the intermediate Routing and + Send step for an empty strip while retaining explicit source/destination and cancellation safety. This later change addresses the routing-step portion of the observation, not unrelated reservations in the same reason."
+    },
+    {
+      "round": 9,
+      "participant": 1,
+      "matrix_id": "P1-F6",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+        "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779"
+      },
+      "original_finding": {
+        "id": "F6",
+        "kind": "friction",
+        "observation": "Add bus created a New bus strip immediately. Drum Add send opened routing, requiring a second + Send and target selection. The resulting send displayed New bus, 0.25x and Post, and the mixer showed Bus 1 in.",
+        "evidence": [
+          "17-bus.png",
+          "18-send-menu.png",
+          "19-send-target.png",
+          "20-send-created.png",
+          "21-audio-details.png"
+        ]
+      },
+      "response": "Addressed by the validated direct chooser after round9; original finding and score remain unchanged."
+    },
+    {
+      "round": 9,
+      "participant": 2,
+      "matrix_id": "P2-F8",
+      "source_report": {
+        "path": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+        "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5"
+      },
+      "original_finding": {
+        "id": "F8",
+        "kind": "friction",
+        "observation": "Adding the send required entering the routing dialog and opening another + Send menu before selecting the already-created bus. The outcome was clear once the send appeared.",
+        "evidence": [
+          "15-send-menu.png",
+          "16-send-target.png",
+          "17-send-created.png"
+        ]
+      },
+      "response": "Addressed by the validated direct chooser after round9; original finding and score remain unchanged."
+    }
+  ],
+  "historical_matrices_unchanged": [
+    {
+      "path": "/workspace/scratch/rill-usability-round7/feedback-resolution.json",
+      "sha256": "10e031793d9ef92e752658c5ac603eacfef098053916e518cca62f780793597a"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/feedback-resolution.json",
+      "sha256": "125bab2b772cd932ae248bd19b5d26dccb03bde2b6dba88f7d7a5db96f588f0c"
+    }
+  ],
+  "validation": {
+    "path": "/workspace/scratch/rill-study-iteration/final-send-validation.json",
+    "sha256": "0c98e1af443bc13fd7b95d6792c43970ecbbac92ffa2d4d74cae1d802cb47ca2"
+  },
+  "ratings": "All original ratings, reasons and findings remain unchanged. Final send polish was not included in the round9 beginner build and has no assigned score or claimed measured score improvement."
+}

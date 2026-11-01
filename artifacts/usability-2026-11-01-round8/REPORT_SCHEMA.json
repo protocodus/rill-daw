@@ -1,0 +1,59 @@
+{
+  "purpose": "Fixed report fields for each independent simulated participant. Replace placeholders with your own observations; do not infer unseen success.",
+  "participant": "Your assigned integer1\u20135",
+  "persona": "Your assigned beginner persona; explicitly simulated",
+  "piece_name": "Chosen project title, or null if unnamed",
+  "ratings": {
+    "easy_to_use": "Integer1\u20135; higher means more of this quality; higher confusion is worse",
+    "how_cool_it_looks": "Integer1\u20135; higher means more of this quality; higher confusion is worse",
+    "how_fast_it_is": "Integer1\u20135; higher means more of this quality; higher confusion is worse",
+    "how_confusing_it_is": "Integer1\u20135; higher means more of this quality; higher confusion is worse",
+    "feature_completeness": "Integer1\u20135; higher means more of this quality; higher confusion is worse"
+  },
+  "rating_reasons": {
+    "easy_to_use": "Brief observed reason for this rating",
+    "how_cool_it_looks": "Brief observed reason for this rating",
+    "how_fast_it_is": "Brief observed reason for this rating",
+    "how_confusing_it_is": "Brief observed reason for this rating",
+    "feature_completeness": "Brief observed reason for this rating"
+  },
+  "artifacts": {
+    "project": "Absolute saved .rill path, or null",
+    "wav": "Absolute exported .wav path, or null",
+    "midi": "Absolute exported .mid path, or null"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive, friction, failure, or recovery",
+      "observation": "Observed action and visible result, without assuming hidden implementation",
+      "evidence": [
+        "Screenshot filename or mouse log timestamp"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed, partial, or blocked; describe what the UI established",
+    "visible_arrangement_duration_seconds": "Number or null",
+    "composition": "Brief description of audio and MIDI arrangement",
+    "instrument": "Assigned VST name, or unknown/unassigned",
+    "project_saved_via_ui": "Boolean",
+    "wav_export_success_notice_seen": "Boolean",
+    "midi_export_success_notice_seen": "Boolean",
+    "playback_observed": "Visible playhead/meter behavior and any failures; do not equate meters with heard audio",
+    "audio_auditioned": false,
+    "mouse_buttons_released": "Boolean"
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim unless actually verified; independent coordinator verification follows."
+  ],
+  "mixer_outcome": {
+    "volume": "Describe attempted mouse action and visible result, or not attempted/blocked; do not infer success.",
+    "pan": "Describe attempted mouse action and visible result, or not attempted/blocked; do not infer success.",
+    "mute": "Describe attempted mouse action and visible result, or not attempted/blocked; do not infer success.",
+    "solo": "Describe attempted mouse action and visible result, or not attempted/blocked; do not infer success.",
+    "bus": "Describe attempted mouse action and visible result, or not attempted/blocked; do not infer success.",
+    "send": "Describe attempted mouse action and visible result, or not attempted/blocked; do not infer success."
+  }
+}

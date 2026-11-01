@@ -1,0 +1,162 @@
+{
+  "purpose": "Independent simulated beginner mouse-only observation of composing, mixing, saving and exporting a 30-second piece in RILL.",
+  "participant": 3,
+  "persona": "Simulated first-time RILL beginner interested in a short melodic instrumental.",
+  "piece_name": "little orbit",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "The MIDI hint, note Pencil, numerical property keypad, Mixer labels and export menus let me finish using the mouse. Repeating a one-bar melody needed many clicks and playback recovery interrupted the flow.",
+    "how_cool_it_looks": "The dark interface, teal waveforms, clear piano notes and visible routing lines look coherent and attractive. The Mixer has a lot of unused space with only three channels.",
+    "how_fast_it_is": "Drawing, duplication, numeric edits and mix controls visibly responded quickly. WAV rendering took roughly tens of seconds and playback needed retries; elapsed session time includes tool and screenshot overhead.",
+    "how_confusing_it_is": "Duplicate is a tool that requires clicking a clip after selecting it. Mixer controls moved vertically when a status banner appeared or disappeared, making follow-up clicks uncertain. I also misread a key on the on-screen keyboard and corrected the name.",
+    "feature_completeness": "I found all requested task features: audio, MIDI notes, the installed VST3, volume/pan/mute/solo, bus/send, project save, WAV and MIDI export. Playback was unreliable in this laboratory session, and broader plugins or advanced production features were not tested."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round7/session-3/little orbit.rill",
+    "wav": "/workspace/scratch/rill-usability-round7/session-3/little orbit.wav",
+    "midi": "/workspace/scratch/rill-usability-round7/session-3/little orbit.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the visible MIDI drop area opened Device library. Assign instrument created a MIDI track labeled Rill Lab Sine. Pencil drags created C4, E4, G4, E4 notes.",
+      "evidence": [
+        "01-midi-created.png",
+        "02-instrument-assigned.png",
+        "04-melody-drawn.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "friction",
+      "observation": "Clicking Duplicate changed the current tool and displayed Click a clip to duplicate. Building the repeated melody required clicking successive clips and zooming out as the arrangement grew.",
+      "evidence": [
+        "07-first-duplicate.png",
+        "08-duplicating-clips.png",
+        "09-arrangement-length.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "The Properties 123 control opened a clickable numeric keypad. Changing the last audio clip duration from 16 to 8 beats in Trim mode visibly set its end and the project duration to 0:30.000.",
+      "evidence": [
+        "13-number-entry.png",
+        "14-thirty-second-trim.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "Mixer fader drags changed audio from -6.0 to -8.4 dB and MIDI from -2.5 to -4.4 dB. Horizontal knob drags changed pan to L20 and R20. Mute and Solo visibly highlighted when tried and were later cleared.",
+      "evidence": [
+        "15-mixer.png",
+        "16-mixer-balanced-playback.png",
+        "17-mute.png",
+        "18-solo-playback-failure.png",
+        "20-bus-created.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "Add bus created a New bus strip. The audio track Add send opened Routing; + Send then New bus created a 0.25x Post send. Mixer showed Send \u00b7 New bus, Bus 1 in, routing lines and later a bus meter.",
+      "evidence": [
+        "20-bus-created.png",
+        "21-send-menu.png",
+        "23-send-settings.png",
+        "35-wav-export-status.png",
+        "45-playback-meters.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "failure",
+      "observation": "Playback advanced but stopped with Audio output stream failed or disconnected on two visible occasions. Error details reported ALSA snd_pcm_avail_delay I/O error (5), 48000 Hz and 1024 frames.",
+      "evidence": [
+        "17-mute.png",
+        "41-playback-position.png",
+        "42-playback-error-detail.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "friction",
+      "observation": "The status banner changed the available Mixer height, moving mute/solo/pan positions between screenshots. Consecutive clicks at old positions did not reliably target the same control.",
+      "evidence": [
+        "16-mixer-balanced-playback.png",
+        "17-mute.png",
+        "18-solo-playback-failure.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "recovery",
+      "observation": "Retry playback cleared the banner and resumed transport. A later screenshot showed position 007.04.58 and nonzero audio, MIDI, bus and master meters. I stopped playback manually afterwards.",
+      "evidence": [
+        "44-retry-result.png",
+        "45-playback-meters.png",
+        "final.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "recovery",
+      "observation": "Rename project offered a mouse keyboard. I initially entered apostrophes where I intended letter l, used Clear, re-entered little orbit and applied it. Save dialog reused the chosen name.",
+      "evidence": [
+        "26-onscreen-keyboard.png",
+        "27-project-name-entry.png",
+        "28-save-dialog.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "positive",
+      "observation": "Saving returned to the named project without the unsaved dot. WAV export displayed Arrangement \u00b7 0:30 after effect tails were unchecked. Both exports displayed Exported notices for the chosen filenames. The error details later showed the absolute project file path.",
+      "evidence": [
+        "29-project-saved.png",
+        "32-wav-save-ready.png",
+        "35-wav-export-status.png",
+        "37-midi-save-ready.png",
+        "38-midi-result.png",
+        "42-playback-error-detail.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed in the UI: 30-second arrangement, named project saved, WAV and MIDI success notices seen, and all requested Mixer actions performed. Playback errors occurred and recovered; file contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "112 BPM, 4/4. Startup Circuit rhythm audio duplicated through 14 bars, with final audio copy trimmed to two bars. A one-bar C4-E4-G4-E4 melody drawn with the mouse was duplicated to 14 one-bar MIDI clips. New bus receives a post-fader audio send. The result is a simple repeated melodic instrumental.",
+    "instrument": "Rill Lab Sine (visible VST3 instrument)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play/Pause changed, transport and playhead advanced. Two visible stream-failure notices interrupted playback; error details named ALSA I/O error (5). Retry later resumed playback to 007.04.58 with audio, MIDI, bus and master meters active. Playback was stopped manually; uninterrupted full-piece playback was not established.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "All composition and app operations used only the assigned visible session and mouse driver. Report writing was the only direct file-writing operation.",
+    "No file contents or heard audio claim; independent coordinator verification follows. Artifact paths come from the native save dialogs and visible project error details.",
+    "The timer-paced virtual audio sink and software graphics are laboratory conditions. Stream failures and responsiveness here do not establish physical-device behavior or audio quality.",
+    "Only the installed Rill Lab Sine VST3 was used. No claims about other plugins.",
+    "Track balance was adjusted visually and numerically, without audition. The music is a short repeating motif, not a judged audio mix.",
+    "Some screenshot filenames describe the intended next observation: 34-wav-export-success.png still shows Exporting; actual WAV success is in 35-wav-export-status.png. 19-playback-failure-details.png shows recovered meters; actual details are in 42-playback-error-detail.png."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged audio fader to -8.4 dB and MIDI fader to -4.4 dB, with numeric feedback. Bus remained 0.0 dB. No auditory balance judgment.",
+    "pan": "Dragged audio pan left to L20 and MIDI pan right to R20; both labels and knobs changed.",
+    "mute": "Clicked audio Mute; it visibly highlighted amber. Clicked again to clear. Final Mixer and arrangement show it off.",
+    "solo": "Clicked MIDI Solo; it visibly highlighted, and a later screenshot showed MIDI/master meter activity with audio meter empty. Cleared Solo before save and export.",
+    "bus": "Clicked top Add bus; New bus appeared as a distinct BUS strip and later showed Bus 1 in.",
+    "send": "Clicked audio Add send, then + Send, then New bus. Routing displayed 0.25x with Post selected. Mixer displayed Send \u00b7 New bus and a Post send routing line; the bus meter later became active."
+  }
+}

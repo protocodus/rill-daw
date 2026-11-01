@@ -196,6 +196,13 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 assert_eq!(header["fill"], json!([140, 160, 180, 255]));
             }
         }
+        // Send lanes extend below the stable channel controls. Reveal them
+        // with the same mouse scroll used in a short mixer workspace.
+        app.command(json!({"command":"scroll","x":100,"y":400,"delta":-180}));
+        for _ in 0..10 {
+            app.inspect();
+        }
+        let state = paint(&mut app);
         let routes = state["mixer"]["routes"].as_array().unwrap();
         assert_eq!(routes.len(), 2);
         assert_eq!(routes[0]["target"], bus_a);
@@ -217,6 +224,10 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         assert_eq!(state["project"], before["project"]);
         assert_eq!(state["history"], before["history"]);
         assert!(visible(&state, "Send · Room"));
+        app.command(json!({"command":"scroll","x":100,"y":400,"delta":1000}));
+        for _ in 0..10 {
+            app.inspect();
+        }
         app.click("Effects");
         assert_eq!(app.inspect()["popups"]["effects"], true);
         app.key("Escape");
@@ -278,6 +289,20 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         app.click("Ch 2 > Master");
         app.key("Escape");
         let current = app.inspect();
+        let selected_channel = current["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["track"] == bus_a)
+            .unwrap();
+        let x = (selected_channel["strip"]["min"][0].as_f64().unwrap()
+            + selected_channel["strip"]["max"][0].as_f64().unwrap())
+            * 0.5;
+        app.command(json!({"command":"scroll","x":x,"y":400,"delta":-180}));
+        for _ in 0..10 {
+            app.inspect();
+        }
+        let current = paint(&mut app);
         let lane_y = top(&current["mixer"]["routes"][0]["lane"]) + 8.0;
         let selected = app.command(json!({"command":"pointer","phase":"move","x":100,"y":lane_y}));
         assert_eq!(selected["selected_track"], bus_a);

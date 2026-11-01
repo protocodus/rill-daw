@@ -350,3 +350,117 @@ fn mixer_pan_knob_drag_and_exact_entry_override_automation_without_rewriting_the
     assert_eq!(undo(&mut app)["project"], baseline["project"]);
     app.quit();
 }
+
+#[test]
+fn mixer_pan_applies_the_owned_release_position_once_regardless_of_held_sampling() {
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = Harness::new();
+        let mut project = Project::new();
+        let id = project.add_audio_track("Release position");
+        let path = app.directory.path().join("pan-release.rill");
+        project.save(&path).unwrap();
+        app.command(json!({"command":"open", "path":path}));
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.command(json!({"command":"viewport", "width":1100, "height":900,
+            "pixels_per_point":density}));
+        let baseline = app.click("Mixer");
+
+        for (sampled, held_fine, released_fine, expected) in [
+            (12.0, false, false, 0.6),
+            (28.0, false, false, 0.6),
+            (44.0, false, false, 0.6),
+            (20.0, true, true, 0.06),
+            (20.0, false, true, 0.24),
+        ] {
+            let state = app.inspect();
+            let [x, y] = point(&channel(&state, id)["pan_knob"]["center"]);
+            let dial_bottom = channel(&state, id)["pan_knob"]["dial"]["max"][1]
+                .as_f64()
+                .unwrap();
+            assert!(y + 60.0 > dial_bottom, "release leaves the dial's hit area");
+            let down = app.command(json!({"command":"pointer", "phase":"down",
+                "x":x, "y":y, "shift":held_fine}));
+            unchanged(&down, &state);
+            // A downward drag decreases pan. Its last movement is delivered
+            // together with release, without the endpoint frame used by `drag`.
+            let held = app.command(json!({"command":"pointer", "phase":"move",
+                "x":x, "y":y+sampled, "shift":held_fine}));
+            near(
+                track(&held, id)["pan"].as_f64().unwrap(),
+                -sampled * if held_fine { 0.001 } else { 0.01 },
+            );
+            assert_eq!(held["history"], state["history"]);
+            let released = app.command(json!({"command":"pointer", "phase":"up",
+                "x":x, "y":y+60.0, "shift":released_fine}));
+            near(track(&released, id)["pan"].as_f64().unwrap(), -expected);
+            assert_eq!(
+                released["history"]["undo"].as_array().unwrap().len(),
+                baseline["history"]["undo"].as_array().unwrap().len() + 1,
+                "held and released movement form one Undo operation"
+            );
+            assert_knob_paint(&painted(&mut app), id, -expected);
+            let hovered = app.command(json!({"command":"pointer", "phase":"move",
+                "x":x+10.0, "y":y+65.0}));
+            unchanged(&hovered, &released);
+            assert_eq!(undo(&mut app)["project"], baseline["project"]);
+        }
+        app.quit();
+    }
+}
+
+#[test]
+fn mixer_pan_release_overrides_the_effective_value_without_rewriting_automation() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let id = project.add_audio_track("Automated release position");
+    project.track_mut(id).unwrap().pan = 0.173456;
+    let lane = project
+        .add_automation_track(
+            "Pan movement",
+            AutomationTarget {
+                track: id,
+                parameter: AutomationParameter::TrackPan,
+            },
+        )
+        .unwrap();
+    project.automation_lane_mut(lane).unwrap().points = vec![
+        AutomationPoint::new(0.0, 0.25),
+        AutomationPoint::new(8.0, 0.75),
+    ];
+    let path = app.directory.path().join("automated-pan-release.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open", "path":path}));
+    app.command(json!({"command":"viewport", "width":1100, "height":900}));
+    let baseline = app.click("Mixer");
+    let curve = track(&baseline, lane)["automation"]["points"].clone();
+    let [x, y] = point(&channel(&baseline, id)["pan_knob"]["center"]);
+    near(
+        channel(&baseline, id)["pan_knob"]["value"]
+            .as_f64()
+            .unwrap(),
+        -0.5,
+    );
+    near(track(&baseline, id)["pan"].as_f64().unwrap(), 0.173456);
+    app.command(json!({"command":"pointer", "phase":"down", "x":x, "y":y}));
+    let held = app.command(json!({"command":"pointer", "phase":"move",
+        "x":x+20.0, "y":y}));
+    near(track(&held, id)["pan"].as_f64().unwrap(), -0.3);
+    assert_eq!(held["history"], baseline["history"]);
+    let released = app.command(json!({"command":"pointer", "phase":"up",
+        "x":x+40.0, "y":y}));
+    near(track(&released, id)["pan"].as_f64().unwrap(), -0.1);
+    near(
+        track(&released, lane)["automation"]["override_value"]
+            .as_f64()
+            .unwrap(),
+        0.45,
+    );
+    assert_eq!(track(&released, lane)["automation"]["points"], curve);
+    assert_eq!(channel(&released, id)["automation_state"], "Overridden");
+    assert_eq!(
+        released["history"]["undo"].as_array().unwrap().len(),
+        baseline["history"]["undo"].as_array().unwrap().len() + 1
+    );
+    assert_eq!(undo(&mut app)["project"], baseline["project"]);
+    app.quit();
+}

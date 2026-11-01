@@ -1,0 +1,39 @@
+{
+  "purpose": "Distinguish screenshot capture events from unique retained PNG files. Participant mouse captures may reuse a filename before the final evidence freeze; coordinator never overwrites participant captures.",
+  "participants": [
+    {
+      "participant": 1,
+      "screenshot_actions": 37,
+      "retained_png_files": 37,
+      "reused_capture_paths": {}
+    },
+    {
+      "participant": 2,
+      "screenshot_actions": 34,
+      "retained_png_files": 34,
+      "reused_capture_paths": {}
+    },
+    {
+      "participant": 3,
+      "screenshot_actions": 33,
+      "retained_png_files": 33,
+      "reused_capture_paths": {}
+    },
+    {
+      "participant": 4,
+      "screenshot_actions": 38,
+      "retained_png_files": 38,
+      "reused_capture_paths": {}
+    },
+    {
+      "participant": 5,
+      "screenshot_actions": 32,
+      "retained_png_files": 31,
+      "reused_capture_paths": {
+        "/workspace/scratch/rill-usability-round9/session-5/final.png": 2
+      }
+    }
+  ],
+  "total_screenshot_actions": 174,
+  "total_retained_png_files": 173
+}

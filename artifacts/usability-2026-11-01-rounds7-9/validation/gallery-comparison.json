@@ -1,0 +1,92 @@
+[
+  {
+    "file": "actions-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "actions-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "curves-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "curves-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "devices-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "devices-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "feedback-dark.png",
+    "identical_pixels": false,
+    "identical_bytes": false
+  },
+  {
+    "file": "feedback-light.png",
+    "identical_pixels": false,
+    "identical_bytes": false
+  },
+  {
+    "file": "inputs-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "inputs-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "mixer-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "mixer-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "navigation-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "navigation-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "timeline-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "timeline-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "tracks-dark.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  },
+  {
+    "file": "tracks-light.png",
+    "identical_pixels": true,
+    "identical_bytes": true
+  }
+]

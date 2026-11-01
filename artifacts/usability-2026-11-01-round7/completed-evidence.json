@@ -1,0 +1,1417 @@
+{
+  "frozen_at_utc": "2026-11-01T00:03:01Z",
+  "purpose": "Immutable participant reports, reactions, mouse logs, all screenshots, and declared project/WAV/MIDI outputs before coordinator verification",
+  "files": [
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/02-instrument.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/03-editor.png",
+      "bytes": 114045,
+      "sha256": "5b7d9cfddf67850c8f36e8b3178fe21701836b58c6412d8bca7ca02d1982ad1f"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/04-generate.png",
+      "bytes": 158627,
+      "sha256": "3695f4f429da5f00c8a35c490204178a605a7f3a710eea33cea19e36d390a14d"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/05-arpeggio.png",
+      "bytes": 166684,
+      "sha256": "328574587cf6cf92a71b5f23249db9eb35b1436bcea39a988a5970ff924b8cb9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/06-chord-types.png",
+      "bytes": 212736,
+      "sha256": "9d25c5c0d555f594e737414878e3173a19bfff4e26eb45c4834d92a0df48d97b"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/07-speed.png",
+      "bytes": 205266,
+      "sha256": "d7216e7091a17b268471b3d61cf215cb3d46e631b27e5311a5e633924656e648"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/08-notes-added.png",
+      "bytes": 166194,
+      "sha256": "48037b9b2bdea145458af7546d6f43c1a98d13c0d3348f40a4694cf52ae9ed99"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/09-next-root.png",
+      "bytes": 199014,
+      "sha256": "84e7cde19128c96d12eb25dee015e8597467633964e12749fb6093be1a8d0d7c"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/10-final-phrase.png",
+      "bytes": 164202,
+      "sha256": "e0af3eca70fef7f53854aadb2f937345b72bc974ece6fb9d91fd933266abc0ac"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/11-thirty-seconds.png",
+      "bytes": 149294,
+      "sha256": "5c1b0e390eac010e9498a36e5646440664a4376708aaea506e6713c1ceb9f109"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/12-drums-duplicated.png",
+      "bytes": 145091,
+      "sha256": "1db556707bb657d3389f064bb135b40bff6d9dae13cc4fb8ddd414263626ad03"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/13-duplicate-tool.png",
+      "bytes": 169435,
+      "sha256": "c2f3f9f1aa98236437b4d0fb372c88b6520cfe8d116942b605b03ac8cd011e0c"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/14-drum-tail.png",
+      "bytes": 205549,
+      "sha256": "b23a2c6416c75fd9e5345e54f89f42974eaca565d766c7787785eb599d2c5e02"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/15-playback.png",
+      "bytes": 207020,
+      "sha256": "e33c6a1687455c6742fa41c453345d520a677ed5b196ba2e88dbfbe4709ee6e6"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/16-mixer.png",
+      "bytes": 190093,
+      "sha256": "3d4668cc335e362ce75d6d738b2ef60c0abbb2c4b4789a740a20fd9c75b91d67"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/17-mix-mute-solo.png",
+      "bytes": 177891,
+      "sha256": "1a0d483641b8ec203c56866fb086b7b26ed7431e5ed5df951bfdacbd1efff993"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/18-mute-and-solo-active.png",
+      "bytes": 189921,
+      "sha256": "8d97bdf0f386da1987e85458d04b8a7d73c624a3ced7f567d30734fdebd71e7b"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/19-solo-active.png",
+      "bytes": 191059,
+      "sha256": "94cb44c4962261e3a88eb51c5a0edda7040e3b359c1688db14de0a9a60033984"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/20-bus-created.png",
+      "bytes": 199900,
+      "sha256": "6b42f5e3bc2ebba9852afc37d2633bbf8b6b15c124f78d0f13c7ca149eb4781b"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/21-add-send.png",
+      "bytes": 199828,
+      "sha256": "b4e88eecfa37cec090eb1599deb7f7e598b5861ac14d85ba248609f1b1305e20"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/22-send-target.png",
+      "bytes": 206674,
+      "sha256": "f500104cfc6b482297c6c5e16723ea9066478452b1738f3fb93fc26a0f581498"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/23-send-created.png",
+      "bytes": 206489,
+      "sha256": "020dc25f4a1e3799a30858e0d0055e4ea1b5ba6fb15f8d6f0a79e37eb757e1c1"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/24-file-menu.png",
+      "bytes": 191452,
+      "sha256": "279c9de9cdab5e280670c4dc8d58aa9c144d8ed08463fddab98608f8f7150f9f"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/25-rename.png",
+      "bytes": 208996,
+      "sha256": "8663ee5ec97e1c2c745a1132af9852225d0cbf04bcad1bad01924de5fb16067d"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/26-mouse-keyboard.png",
+      "bytes": 226450,
+      "sha256": "451371b837dfbdc4290b0432dad1a7ce6353f69d8409b414567956306ff8e4ec"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/27-save-dialog.png",
+      "bytes": 138080,
+      "sha256": "b446aff2f1bc8fc92ef605d4dc79cfdbfe4c41fc68c4da2db03f0813f92b17a5"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/28-saved.png",
+      "bytes": 201575,
+      "sha256": "dd957cfb3cb7247269382b371a25dadbedd8951810f8e2b2de5b26e266bb2470"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/29-wav-export.png",
+      "bytes": 202605,
+      "sha256": "5f87f3c19c400e7e8017550432908cc7cfa3d07f7550f2e6bab00d4845521f31"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/30-wav-path.png",
+      "bytes": 123208,
+      "sha256": "d04681b238f6a483188ab973938692aec24a89f321bc034b65b68bf3954d2bd3"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/31-wav-picker.png",
+      "bytes": 150018,
+      "sha256": "3440531a0cc9c4cc519ede5ad3e7c0a3ea1c4e56f5bb51c49f6b9a7d6bc9c199"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/32-wav-result.png",
+      "bytes": 202595,
+      "sha256": "3ca9f338c378dbded7ea8e1b78b83c9e9907b0c008b1b8acb47ed4f06e95a68c"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/33-wav-complete.png",
+      "bytes": 202752,
+      "sha256": "a7161eee8a2ad4e2e7ca8b0864cc597e6b3ad1fc7ae95ecff053371be733f5f0"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/34-export-progress.png",
+      "bytes": 195023,
+      "sha256": "bf7ab0c407f2d47e2423dbc1e7c056090b11f024ffbec9b088fb3d450213710a"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/35-wav-success.png",
+      "bytes": 206129,
+      "sha256": "40eeb1ae4b913668987166127db11aae43513817343c1b512ffd9c85334a41f9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/36-midi-export.png",
+      "bytes": 142288,
+      "sha256": "e9a489e87e0beed3f7b73395a3e91d047a59ecd3aa6cf044159238e377780c6f"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/37-midi-success.png",
+      "bytes": 202421,
+      "sha256": "8cd5b17182b94aca68ce0399ee40d669be47c55ea024654c44734d75c89308f1"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/38-playback-retry.png",
+      "bytes": 214776,
+      "sha256": "8a42038376f526e3b5cc11bf041831605e5aa8135443260cdc024b954490ea82"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/39-playback-details.png",
+      "bytes": 284134,
+      "sha256": "599d1b0d805b7b3f3c1dc726c2f7a02f7c933994b11bb0dd40826ac265fdf3c9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/40-audio-setup.png",
+      "bytes": 246838,
+      "sha256": "9a781b5b9d3a1517c04c0c50873720ab52031bb6fffa3d97c1ebd65ef98b5e98"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/41-output-options.png",
+      "bytes": 246043,
+      "sha256": "c342ee6273ad3ca14cc5d1ea3dd26b13ad1921edfed0b675781354a945f4ce79"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/42-specific-output-playback.png",
+      "bytes": 199072,
+      "sha256": "ad53ba399b8e7463b69b3e79c21237e4364748d4498ca03d6e1fba8eda9ea496"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/43-final-play-attempt.png",
+      "bytes": 200056,
+      "sha256": "c345dee123b565dfdbbca05ba459cff2a0806895e04d4de51e7092966162d46c"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/44-playing-mixer.png",
+      "bytes": 203929,
+      "sha256": "6498764db4567fbb3415b5ef6ef43fcff52a97c099f81d8961b964f96c94f3e9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/45-playing-solo-mute.png",
+      "bytes": 205167,
+      "sha256": "b3e78e8c793ee9aad51a3eed245507aa0d800c6c1eb433f024b472130c6c215a"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/final.png",
+      "bytes": 206495,
+      "sha256": "9a96d4d9f85dbcb6225bac6dca7a3ea0cecd2d3cb2e0eaa63dc6f3c758c9a6b5"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/mouse-actions.jsonl",
+      "bytes": 23627,
+      "sha256": "c3c606b556cc40db67a2cfdd8749f8131e0eadc2054cd39afce7f0325345bf14"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/rain.mid",
+      "bytes": 575,
+      "sha256": "87204dccf7d65dd467838f947cf695c140c9727b1904345149e4bf59df0ad2b8"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/rain.rill",
+      "bytes": 3292875,
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/rain.wav",
+      "bytes": 11520068,
+      "sha256": "71c8cc191e294689a70be3fd3ff90ebd3525a63647790296f0ada9d54f5c0a5e"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/reactions.txt",
+      "bytes": 3306,
+      "sha256": "cffbec403698d47b115109916262e5bee40dec672616c204d5a67fee80144eec"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round7/session-1/report.json",
+      "bytes": 9626,
+      "sha256": "a0495a1617330c7dbd11b17fa023c7914d1458bb3f55ddd6105297afb6245fa4"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/02-instrument.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/03-piano-roll.png",
+      "bytes": 114045,
+      "sha256": "5b7d9cfddf67850c8f36e8b3178fe21701836b58c6412d8bca7ca02d1982ad1f"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/04-notes.png",
+      "bytes": 115277,
+      "sha256": "57a8d4a708948d1de280e1ecd189206200a65ce94942a18302d71c99ed5ac110"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/05-clip-menu.png",
+      "bytes": 204202,
+      "sha256": "d1f2ac85431ead0b4d960a13acbc42d03dd646b1383ec067c6c11d3bfdb4f073"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/06-audio-duplicate.png",
+      "bytes": 192270,
+      "sha256": "2afb09ca7547c7a4b6cf20c57653d5ff4e33dc28df5c36c92856c35414ccc387"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/07-duplicate-toolbar.png",
+      "bytes": 189847,
+      "sha256": "478cbfedd3275cc4c8b7cb34b64d1fb5ef4a0281b1221e747af4345d62397097"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/08-third-loop.png",
+      "bytes": 202312,
+      "sha256": "3d2404ea9275c845994fad558a78250640a3847ae8cb7141b5585cf16f055278"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/09-fourth-loop.png",
+      "bytes": 203195,
+      "sha256": "c858fd5354a661dfa702162eba4611e2aa342ee3c314979dff5e7c1a5a66047a"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/10-trim-thirty.png",
+      "bytes": 193266,
+      "sha256": "49755c4bdf9c4d14b1bf1eb7bc92f42c33a9e4031ffb3d74c32b612b3e9daadf"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/11-midi-repeated.png",
+      "bytes": 194415,
+      "sha256": "402cb51b530348d2eb696782d985a3861b1fdf1dabfd2367e48145fd6df68169"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/12-playback.png",
+      "bytes": 209327,
+      "sha256": "4ccb0692dda435efcb7bea0cd0b6c7d7cebfe69258f977b55c0478f6938d2cfe"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/13-playback-retry.png",
+      "bytes": 193164,
+      "sha256": "5daf40addc086611b4e7fcf8fbab9320d19ac504df1f80ed0bb5fa690fb88fd7"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/14-mixer.png",
+      "bytes": 181166,
+      "sha256": "35c6562e415da01b620b3fa1d199005c312bfc861f7e02717e2ad25a9f44c2a0"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/15-mixer-adjust-mute.png",
+      "bytes": 181777,
+      "sha256": "0129ca36e3ee8176a65c9b73e77c078c48a06f6790873c7b9e6d06799c9e2a72"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/16-mixer-solo.png",
+      "bytes": 181094,
+      "sha256": "523c07ba6ab046d70435ac58729bf1a76656ba31318e34daf18cb5e431b5488c"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/17-add-bus.png",
+      "bytes": 200060,
+      "sha256": "5c8a5fb02938af78786d6f057c508b29b76e3583b70b140dfaf90dcbd5e6a2a2"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/18-add-send.png",
+      "bytes": 200585,
+      "sha256": "37e3628777f9d92234d509d7d76a148bbbb91a544280e1629f5995611584f8fa"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/19-send-added.png",
+      "bytes": 206988,
+      "sha256": "12b78d471caf6bccc6dc5f875dd04c7b05ddd8035d9d9fcbcc00107c7ed3e760"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/20-send-routing.png",
+      "bytes": 207677,
+      "sha256": "03b144ed0d36b992571fe585947c16f44db8ffc880f728702883ce86acee4492"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/21-file-menu.png",
+      "bytes": 191600,
+      "sha256": "751cb5b7be4c879f3de05aa64bcdd6e40aff9081730611c1b338e95cd909da40"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/22-rename.png",
+      "bytes": 209657,
+      "sha256": "84eacbb32c28f34e435e8acb7f61b6098e9c03a806f227bd2960f86220b418de"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/23-onscreen-keyboard.png",
+      "bytes": 226984,
+      "sha256": "c5ec79c8042f8a69eb8e473b443677ca8bcbe5d90051bd9c49aab571edf5d92d"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/24-save-dialog.png",
+      "bytes": 190409,
+      "sha256": "3ab2aa90dd7555c0909f3a7eb7fb8599dcd9020c1f8ac98f8c2eeadf7e87e773"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/25-save.png",
+      "bytes": 138592,
+      "sha256": "6250545b776115841fc181525ed82d305adf50561459b3ffd2bd2d067a4767d5"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/26-save-result.png",
+      "bytes": 202556,
+      "sha256": "d6bb5d8d1b4952076b50db27562cd070f1001029d1d77f37b222700628e4c274"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/27-export-wav.png",
+      "bytes": 203498,
+      "sha256": "b4aa7d356b367966c3552b0f7105b469a7bc25e464d5e097b259743d2768ad02"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/28-wav-picker.png",
+      "bytes": 123680,
+      "sha256": "5655390331616b791a3c51b2fdd41a49f25a14aafa49753e26a15ecf350e415c"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/29-wav-picker-ready.png",
+      "bytes": 151018,
+      "sha256": "2a73220c98ae036905db28d880b4e29c78d393051d3df7340f906f7415772d33"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/30-wav-result.png",
+      "bytes": 204585,
+      "sha256": "d854877d4ccc6a2add72e8c7ee53b4c5df1fd05ff3e7e9b22eb98b9224b6cd60"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/31-wav-complete.png",
+      "bytes": 204408,
+      "sha256": "821e74c89cdf3be2fe736d03003dd1558d67202845c5f8d5704b9e1766674ac0"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/32-wav-status.png",
+      "bytes": 207336,
+      "sha256": "fd4a52a74d9d22b04371cabcd8cb1564cf65fcf910d480b85f1713dcc120c9d5"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/33-midi-export-dialog.png",
+      "bytes": 143175,
+      "sha256": "22d489ee9ea2949b32a08b3cb813ce6458a70f59ba3f625e0432c83655457fcf"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/34-midi-result.png",
+      "bytes": 203628,
+      "sha256": "9618c101abed1ddb63d1da9b70d25240ba508002c561b9a65f75b610a04ebdd6"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/final.png",
+      "bytes": 212358,
+      "sha256": "44724d5510c444e45ba094062d992bf91ec69097151a985aeb75d2c821151a57"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/mouse-actions.jsonl",
+      "bytes": 17596,
+      "sha256": "eb4e031b4ba1fde5357defa503b12a1bfbeb0e9cb6a5c3a16110bcbbb1418880"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/pulse.mid",
+      "bytes": 630,
+      "sha256": "8675433f0f36f29a8d2eff6615f3484d8f307113cf967976a698a342ba275eda"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/pulse.rill",
+      "bytes": 3292807,
+      "sha256": "59111a38455bfb9e91f03379972928bd770801b0713c3f5a06d03ea8b19b04e8"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/pulse.wav",
+      "bytes": 11520068,
+      "sha256": "e18290ca8b912a25df677a90ac6eed085d6ee60aa97cac1c73a8eb1b02dd8d06"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/reactions.txt",
+      "bytes": 2953,
+      "sha256": "1969eed9aedd48ed4c9aac5a8344669fc922252a487bd10699da9b9d4e32ec98"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round7/session-2/report.json",
+      "bytes": 9260,
+      "sha256": "ddf7ebba9b7a3796e24e9ee1fdad3cdf3c135ef2a5d81979b30ed71822511880"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/02-instrument-assigned.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/03-note-editor.png",
+      "bytes": 113665,
+      "sha256": "48b126d80e3ce2a68ab4bde48342551e3560439124cedebe1c4c95501f09ac52"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/04-melody-drawn.png",
+      "bytes": 115301,
+      "sha256": "baedba44ffb681f74a48812297a595d2c1ad579666a20b871b0ce0a04ed63e90"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/05-properties.png",
+      "bytes": 205208,
+      "sha256": "584d07d0baea1823444c1694a68cc767c99446f17f2e16c175f6f4beead9ddcf"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/06-duration-modes.png",
+      "bytes": 201298,
+      "sha256": "1bf85ce7d2f4664a14dedb69a16d29f1136a24fc5e4424cb46f26e74a480a05a"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/07-first-duplicate.png",
+      "bytes": 160502,
+      "sha256": "28a47fd2e7ac51fce2120b9e92d54635c76341477f4849dce4de5e89a893914c"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/08-duplicating-clips.png",
+      "bytes": 186603,
+      "sha256": "fb56df91ab1d6e0e435a2358cbd4e8c198addde334d2e354271f682742adac0d"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/09-arrangement-length.png",
+      "bytes": 193280,
+      "sha256": "24a6e2e3aecda6e7aae467f4b0a3989afa649949d1c415ea33e26ad0897e6b78"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/10-last-audio-properties-menu.png",
+      "bytes": 238772,
+      "sha256": "5dd5d640bcafc64164930c5b9ab2890115c662654a4424f7a9fe59e2e8d4971b"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/11-last-audio-properties.png",
+      "bytes": 481533,
+      "sha256": "99860554d5b99d1c9fb22762c57254d38d51e196f24b548d1e0bda842e023960"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/12-duration-keypad.png",
+      "bytes": 362767,
+      "sha256": "40e8076e9b6868b5a0d58b2106782ba7a2117e7805fb9193992c20f32b92dd6c"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/13-number-entry.png",
+      "bytes": 363396,
+      "sha256": "b924e6ad5e018913be2e3f7e7a687b9abfc7a87efeff677edd7fb478385ac7c4"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/14-thirty-second-trim.png",
+      "bytes": 361824,
+      "sha256": "66584dfba24510f6d1a9a7331d2b8560c2bee2d65ce240480ad20275ded162a0"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/15-mixer.png",
+      "bytes": 179370,
+      "sha256": "fcab917344c1ffb0f9044269d68fa0a3f98d08b68758bba55573bbe00f503a94"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/16-mixer-balanced-playback.png",
+      "bytes": 178285,
+      "sha256": "6c87fbf8baf442247f22409747d883cf046ef3dd2492828d818f5edae33743c9"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/17-mute.png",
+      "bytes": 192233,
+      "sha256": "f33402c66b0c952d02e819cafc5fa87740f90be51ae1e044ec44ad10e0577163"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/18-solo-playback-failure.png",
+      "bytes": 180307,
+      "sha256": "bd75c4acb742f5226dadc69dc709c731b5ad49ac52448b7084599326bf21c288"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/19-playback-failure-details.png",
+      "bytes": 180501,
+      "sha256": "4bcb64711c850c4fd5f3c0dbb7bbee2601458fca89b33c7c26a0751dc511d619"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/20-bus-created.png",
+      "bytes": 199216,
+      "sha256": "be207c248b4db1e85a36da2b18ed700abb7ca8dc371e104e37e1c0f393d09dca"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/21-send-menu.png",
+      "bytes": 196912,
+      "sha256": "c2c830e83b5139b81d4e54a5c38b59a1b8536317ec42584aa0e56c5a5d6038e6"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/22-send-created.png",
+      "bytes": 202890,
+      "sha256": "d28400b9abd52500280d3b4408aed0a963328b59e86e0ab758f0d041a4a91813"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/23-send-settings.png",
+      "bytes": 202187,
+      "sha256": "ff842648d6f10588db22214741420d04f25c57e13e349e3e2886e45ba4c8bbf9"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/24-file-menu.png",
+      "bytes": 191535,
+      "sha256": "eed560d51300d8cdfcf24d7f3323fd64f5b4c3f48191f4f74980631920511c85"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/25-rename-project.png",
+      "bytes": 203769,
+      "sha256": "9689b33b4083fd036f0cc71c378429eaf4f807db18bf78add27f146fbaa51708"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/26-onscreen-keyboard.png",
+      "bytes": 219861,
+      "sha256": "332c1d1623c21019479990d26d58d77250ad20a40c4d955fb24657ffdfc244cf"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/27-project-name-entry.png",
+      "bytes": 219657,
+      "sha256": "11b984e1929eee6c662d781e6a68f119f99f0672d74f529a42356349620d1b9b"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/28-save-dialog.png",
+      "bytes": 135165,
+      "sha256": "a51eb42ef55122acbd72e6b8c7e923008562d12c130e7f8ee3d8d118bcf11b73"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/29-project-saved.png",
+      "bytes": 196989,
+      "sha256": "424abc79aa193cacc0d82f7236c30b82bb607a1c318783a8ebb98fa317ec5a16"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/30-wav-export.png",
+      "bytes": 199257,
+      "sha256": "348d003993747e7c6d5adc84c872235daacc13283d3a7afe6373212ea4c417c4"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/31-wav-save-dialog.png",
+      "bytes": 119785,
+      "sha256": "8f97d231b7c3c99381876ae05bd4ef72f9094b722bb6a7fd73d7e2faeb63b307"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/32-wav-save-ready.png",
+      "bytes": 147424,
+      "sha256": "aa4dcaabc89713b17042646b6ff73483fa5763b2ab85c4fd0596248160ccd0bb"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/33-wav-result.png",
+      "bytes": 203262,
+      "sha256": "45efcda4f712a73bfffc04096299eb22c2d030a9018ae7d6e9b6a0a25015ccc5"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/34-wav-export-success.png",
+      "bytes": 203133,
+      "sha256": "87548f9d67e166c5766c93d7f4573b04be37e0de911a2a12ddc9c5f248966950"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/35-wav-export-status.png",
+      "bytes": 206142,
+      "sha256": "05ff8623758ee6a0c32ddec4beb5abb4a1dbcd4636730a7bb87dbc69a7fdd9c5"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/36-midi-export-dialog.png",
+      "bytes": 115398,
+      "sha256": "7216da44ab11789a63af5b409b58685b8f12e6ea72a1c1072a1924dd98fd6289"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/37-midi-save-ready.png",
+      "bytes": 145246,
+      "sha256": "851bef6fa86296a9b3dc42f6725b68d17616d10372fffad28b169114cb9276e3"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/38-midi-result.png",
+      "bytes": 201651,
+      "sha256": "9ee0de6cd2ec3a20e9d2aae1e98d089acb6f7f08d5e80138fc8b27b61bb86ccf"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/39-full-arrangement.png",
+      "bytes": 215313,
+      "sha256": "4f856c57e90f87f86ca798443d192c2f5a1753d2069df8cc106e6c01a4039dea"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/40-arrangement-playing.png",
+      "bytes": 213989,
+      "sha256": "86f4fbcd2d74e6f20e1ca3f4a97f6e89df599866e2b433257371e12ea02a5b85"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/41-playback-position.png",
+      "bytes": 228520,
+      "sha256": "f3a8eb45675be6261a11daedf4f83fa8b8d1e7436e0b4e5d2884113362a27acc"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/42-playback-error-detail.png",
+      "bytes": 288564,
+      "sha256": "ee288f927082c99ddd41244852e7cbcfc9b943257d072efe069f80557e19c9e2"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/43-retry-playback.png",
+      "bytes": 213544,
+      "sha256": "53221f61b95fd6a715d79fcb3ea97cc06ac1d670bf89946a54ad08a8cea97ee4"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/44-retry-result.png",
+      "bytes": 200475,
+      "sha256": "7056f28abf20364126c82e344f0263f84e53973384f835dad4e44001d89acf66"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/45-playback-meters.png",
+      "bytes": 201238,
+      "sha256": "34a2dd139da713db02e7d00acc9dbe2bfe68262ccb92584d4cc53beb52d82643"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/final.png",
+      "bytes": 212360,
+      "sha256": "e9696fbda725dd1b5b66103c30f5f99e7365f550a2e7b1113a35c865a738b2b7"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/little orbit.mid",
+      "bytes": 575,
+      "sha256": "a43dacb958ee0fb22848eb2d71ba9cf6e3045e95116c6d7ffe5f7a070de2f577"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/little orbit.rill",
+      "bytes": 3292814,
+      "sha256": "000c1978ac7ba2df6ac7f6031d89a07d708a68e05f6b70e5c361ad9991ac1cc1"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/little orbit.wav",
+      "bytes": 11520068,
+      "sha256": "43127ceb42bf1bd79819e7db939ec4f805a62a81a5d49074371ec93dae7d0d12"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/mouse-actions.jsonl",
+      "bytes": 26165,
+      "sha256": "0d70151a6e69844519b20dc53015713916047140a9e7ff477527c9a978dbd11d"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/reactions.txt",
+      "bytes": 3167,
+      "sha256": "2bc9c62cd43cf66594ebdcfd788711a0fd269bc80ba3c3cf778d565d7bb16b0b"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round7/session-3/report.json",
+      "bytes": 9505,
+      "sha256": "97dc737513d73ec18f4ef9d0d1824c07412e21aa801ef48b83f832786726b56e"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/01-midi.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/02-instrument.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/03-piano.png",
+      "bytes": 114331,
+      "sha256": "503222bba368d563b1b97ec597b0016e672c9f91d47caad105d77bbb1a4cbcf7"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/04-chord.png",
+      "bytes": 114466,
+      "sha256": "e819d30018f52ffbe28e69ec4999d4b7c82e7441dd8779d73fc795f16b193f40"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/05-arrange.png",
+      "bytes": 162255,
+      "sha256": "32f0e617dee6bbf344c74d88ed044149075f8f1ba9e42c5d924f2f44de4026ff"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/06-duplicate.png",
+      "bytes": 156080,
+      "sha256": "21ee7b4fa22c68c3bed2ea913afab83ce38f72b61cb830a9ba3bc577b3a8b796"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/07-zoom.png",
+      "bytes": 144307,
+      "sha256": "e3fe7f5557305b1e0eccc83425023fbb2c2cc24dbf3a0b8ea569bb2154e66a78"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/08-repeats.png",
+      "bytes": 204627,
+      "sha256": "a4fa83333ca703829f167cfc3bcbfba461163ad87d6402e190e85aa368365f95"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/09-mixer.png",
+      "bytes": 179302,
+      "sha256": "65f03918768d91bfb9630867055e916a14f99d7f695cbcbe9b4c5004da1bdda5"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/10-balanced-playing.png",
+      "bytes": 178837,
+      "sha256": "de118b7253022247b88d26c1fb9342bf818acc85d7f81896bdb3b2a5075e1327"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/11-muted.png",
+      "bytes": 190607,
+      "sha256": "6537162d31494a03f082fcbab908fdfd94d10a30a3d44fa8fd49e2c81687806c"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/12-mute-retry.png",
+      "bytes": 180243,
+      "sha256": "70e95a6d3e255d0a7a403aaf3f72cfd3a683c7049c923415e20114804ce4e4fc"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/13-solo.png",
+      "bytes": 188917,
+      "sha256": "445455f075565fbacf3b09c9aa2995782d15d0e51c862110340ebbe508748e99"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/14-solo.png",
+      "bytes": 179784,
+      "sha256": "7a6d3c2cda52a1d11ddf378417531742d94ff7e8cd3f4a42aa8684e2e1683ed6"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/15-bus.png",
+      "bytes": 201427,
+      "sha256": "cab03c65263fe015a41df3b95b927223ae9891ea36d08326abb91270e64b7705"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/16-send-menu.png",
+      "bytes": 202511,
+      "sha256": "7794fbc00b926ec5e718950db6a65be59e087428d9eed8bab361a89dc9e93f9a"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/17-send.png",
+      "bytes": 207629,
+      "sha256": "4c7cbff23eb9158bbc836a77c9599097541318c9e5337e549ec5dbb488315410"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/18-send-created.png",
+      "bytes": 209728,
+      "sha256": "077f0bfa332eec2bee7afa0a9da430b53e327ecb3fe518620b072ffae13388cd"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/19-duration.png",
+      "bytes": 206288,
+      "sha256": "31085cef890482c37308a1344d71701610e2c8e88f6429b37b75c04ce99ee333"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/20-file-menu.png",
+      "bytes": 217709,
+      "sha256": "3df64dfd867a2b743919ad207c92b79125e058ac08f86d68d0ba10dca9bc2f35"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/21-rename.png",
+      "bytes": 215224,
+      "sha256": "6b3610ed403a011510eadb59a26bda2b79c92e817dd6cd4f82bd5a026b48b63f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/22-keyboard.png",
+      "bytes": 224457,
+      "sha256": "c828c80a9e899135afcc114b99fca4fe33a17febe9670820142cc8de011341ae"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/23-named.png",
+      "bytes": 208097,
+      "sha256": "456acb587a22065ef36e060de412966952c1f38103a9fa81c9a82927a58118ff"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/24-save.png",
+      "bytes": 154905,
+      "sha256": "d3792bd98267de9fce0e4d5f0435792ea520b1ff016d7b910f72b914b18f6fbe"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/25-saved.png",
+      "bytes": 208005,
+      "sha256": "3a474a86287fda2c241b1bedb98dd3ebd5f19ce2f0ae5d4f576b9c45e3d1a115"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/26-wav.png",
+      "bytes": 249988,
+      "sha256": "3b25d24e4265b6025afc69f87b003168bdba28a8d6da896c9b94760786f3cfd2"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/27-wav-file.png",
+      "bytes": 191964,
+      "sha256": "d0d7b4fd340d97bb5323ecd2fe8e93c1c53a6092f11e973c39800ed026772a37"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/28-wav-result.png",
+      "bytes": 213822,
+      "sha256": "1d1826c3e418d426d4b465bdee1bfe0a7fe6d659ca7298481c86c3f062d919ff"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/29-wav-status.png",
+      "bytes": 223381,
+      "sha256": "6f3276b5bd351d71773a68f2a8997c3bcef567b3923bd69b10bcc6f171d5ea5b"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/30-midi-export.png",
+      "bytes": 164879,
+      "sha256": "3edc41f77f75f18577793b936d4ac01b03540283d7532ce42aba5a1c1b116bf2"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/31-midi-result.png",
+      "bytes": 216835,
+      "sha256": "683e10c716012e827f79ce74a2c9bdc9511ff6ea6384120fd25ce58dc8e742c4"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/32-exports.png",
+      "bytes": 234343,
+      "sha256": "39fb009257538b3fc2f9bc8c904e5a9d016758d0c92cedb25316b580656be6ab"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/final.png",
+      "bytes": 216835,
+      "sha256": "683e10c716012e827f79ce74a2c9bdc9511ff6ea6384120fd25ce58dc8e742c4"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/mist.mid",
+      "bytes": 365,
+      "sha256": "5c7106a78f86a0820665ef0fd2465f4e80521f356fb61be0d97bb82a9d42edea"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/mist.rill",
+      "bytes": 3292747,
+      "sha256": "f30a8ef2bbec2e8fbab52dfffb43ceea253c5b5cc2abfdb298a6c2d56cc6f5ab"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/mist.wav",
+      "bytes": 11520068,
+      "sha256": "c20ed8ff630805cd5b49fff3bc4ac7dd38a72dbc3c7a58c8b0b0b56e8448dd7b"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/mouse-actions.jsonl",
+      "bytes": 17701,
+      "sha256": "42aae64c09720385c1b71b9ce0e2d2c4bfaa08a747fc83ca143040814643bc01"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/reactions.txt",
+      "bytes": 3262,
+      "sha256": "c502a2bab7652c244e18ae33426f76994604e6cf37f69961ac7db3a54df734ff"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round7/session-4/report.json",
+      "bytes": 7444,
+      "sha256": "5509b085c1e4fe2b7dcf706f3b2e0aa662d8898c700dd5ad4aff0b5abc2e0693"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/01-duplicate.png",
+      "bytes": 145172,
+      "sha256": "1a75ad1861a269ec2ac7cb77a3ef1960f92b936d5328651c527c9b765900cdf6"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/02-two-clips.png",
+      "bytes": 173223,
+      "sha256": "c8f1c7ab6a0929fe6ae9b9eb351343bd7f2a8a1db8bc498902ed72e0d1fc660f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/03-three-clips.png",
+      "bytes": 185052,
+      "sha256": "76c5eb451c45cf8de5d519e651b11a2524c243a5c8e7a67c5da73516511c66bb"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/04-four-clips.png",
+      "bytes": 187615,
+      "sha256": "64280807303cba404586ba2a281d0a2a6e45d8b0de57b4f51241cf937a15f4cd"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/05-midi-added.png",
+      "bytes": 190935,
+      "sha256": "45f42ff4fa0020df66160ab5c9d1e5e803f98960235f51728ff04c4cb7dc51d4"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/06-instrument.png",
+      "bytes": 190526,
+      "sha256": "9d004c35134e8fed7e56140689a735df035a77c1a6b63d82be2da9948369cb9e"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/07-piano.png",
+      "bytes": 114103,
+      "sha256": "e80b3e3a28ad80100ef5676adfd26ea2a8ecb5576279597a46441cc7c2125da7"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/08-notes.png",
+      "bytes": 115853,
+      "sha256": "b0e8a78e2640806ca9d07dfc33f50504d4a96e8a3620c7205d9176baf587eea6"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/09-clip-menu.png",
+      "bytes": 225255,
+      "sha256": "c92f7ddf01f325b03000371442230105649e5d0ec009ed574103072e961e8e3b"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/10-midi-duplicate.png",
+      "bytes": 192948,
+      "sha256": "445c7e0af9af8c3ef5189a45b522ceb31199c1b68321698c425339f3a4e4bdcb"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/11-arrangement.png",
+      "bytes": 198321,
+      "sha256": "7fdb3c140dcbf880c0000c5bdd2ebc1aa62945110ce9775677e8e2fba4acf4de"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/12-mixer.png",
+      "bytes": 180419,
+      "sha256": "5ee1452753d3254fadafeaaf8705b959b34dc33d186053ca2540c14dc19db4ae"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/13-mix-playback.png",
+      "bytes": 191046,
+      "sha256": "645999ed8be1f511707513beded2554dad200aa44856787f3e62ae853c3b7844"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/14-retry.png",
+      "bytes": 179729,
+      "sha256": "9cf0f288b51082d0eb4761c6ece07c92975d0aceaa693c9edefd435d0ff68e7b"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/15-mute.png",
+      "bytes": 193346,
+      "sha256": "70e0e954682fa5d76d470ac588e0af0f27446ec6c583e40f9aa7864e14068ecc"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/16-solo.png",
+      "bytes": 179933,
+      "sha256": "2a26cf94422354e46cb70500c07bbdd0d002a1510d54a0fd95a35fd44e2a82c0"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/17-bus.png",
+      "bytes": 199758,
+      "sha256": "4b4b155c85f2f9692b3d8f9dedb654b50775321a973a30f685c097d0849c3757"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/18-send-menu.png",
+      "bytes": 200931,
+      "sha256": "b56852ea0e08c78acafb7edefcf4df47a81aeb478c96316a1bf7361ac09082c3"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/19-send-add.png",
+      "bytes": 207563,
+      "sha256": "7359ce84aa8bc588dace5c1085a9f4cbf8b0c40017175fae6cb57699ba10bd41"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/20-send-created.png",
+      "bytes": 208014,
+      "sha256": "74791d8ebefd41969a4a97ac62571b3bcf683d8b7f5cdcc40a0c1c44a217198f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/21-solo-active.png",
+      "bytes": 203413,
+      "sha256": "32f9958778435bfa97ba901f4dc443124819b55eb76f61d26068d28c00d02416"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/22-solo-active.png",
+      "bytes": 204930,
+      "sha256": "c93871ed034780d4633ae3cb24f7c2e9af8d98a4ee86ad2db28cf046b92338de"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/23-file-menu.png",
+      "bytes": 190899,
+      "sha256": "aa6ebe3b8890771c10717b602ac6190ec1baa0a5e133cb7731cccb7d0a56fd2f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/24-rename.png",
+      "bytes": 209416,
+      "sha256": "ea5db3c6b08d7babe52e01968b1e5523fdf8bfaaa2f5475eda23cd62fdb870ba"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/25-keyboard.png",
+      "bytes": 226716,
+      "sha256": "b83dd6b8f3d8b24fa4575fd43b3a6b448541d7c6a644727ffed39939e337785d"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/26-save-dialog.png",
+      "bytes": 139161,
+      "sha256": "d82aba41d8becd6563a97c9d1bb75ffc42914e7040542dc695e6b456183ba72b"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/27-project-saved.png",
+      "bytes": 202804,
+      "sha256": "c16f76b265b143b34f7d479e4a66146ac885def2dfa1fd9ea783be2f01ca36d5"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/28-wav-dialog.png",
+      "bytes": 204086,
+      "sha256": "73489876a3792e489d48a7022b6e8efc7dfcdac7b251d8a871c8bd6852671bec"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/29-wav-save.png",
+      "bytes": 124308,
+      "sha256": "8248903b2d0b124daa3aeda2f2cec79aa4fab1f50cee5f741616e994cba21b65"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/30-wav-save-ready.png",
+      "bytes": 152318,
+      "sha256": "36286f9aa076e19cf42803ddc9b035b8f5dbe001d2d055995268a29d9fc88a85"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/31-wav-export.png",
+      "bytes": 204984,
+      "sha256": "a6bdabf4fbe419df104491f66e5ff2abc8f0fcf43f57c6e474228e5dbce3983e"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/32-wav-success.png",
+      "bytes": 204552,
+      "sha256": "09a87d90f630de40dde5b3cb7f77849d464c0066c49df50589bb8a4a0b4447fc"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/33-midi-dialog.png",
+      "bytes": 130217,
+      "sha256": "8c2f3af1966c30c2b1ad9e4b50fac6be44e954f334203374a66a2d2065160d17"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/34-midi-ready.png",
+      "bytes": 145217,
+      "sha256": "0821e69ee1d79eadbbc0edcd583aab2da582f359778d19b842a7b6251e329c51"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/35-midi-success.png",
+      "bytes": 207865,
+      "sha256": "bd4c61a4029790f353985e8548c06ca10d0ac43ec4c47ba7a541cacb93fd1159"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/36-recent-exports.png",
+      "bytes": 204250,
+      "sha256": "a8f90b46e081dc22884b6c68ec477cd73061c00d7dbf479c3425355ab153f410"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/37-wav-completed.png",
+      "bytes": 207634,
+      "sha256": "b8aae207aa8b4b258646c26cf939c6618d66a20e16caedb33664ffcef98c4557"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/final.png",
+      "bytes": 221220,
+      "sha256": "b9f9a32e9fed9cd4b5f8f45041891f5c90e9cb11050c6c3ddbeb93ee5fe0b470"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/mouse-actions.jsonl",
+      "bytes": 20370,
+      "sha256": "e85eaa145a384e39afc7f4817a4fdee0806e6e1c0923b31053c46ac32d644dd9"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/night drive.mid",
+      "bytes": 630,
+      "sha256": "7b8a933281cf47e8443b3afdccffb25b48ede63e63e94b4c2d33a0eef1e1c4dc"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/night drive.rill",
+      "bytes": 3292809,
+      "sha256": "41e44805aab1ec98f6403cc5a4a8962e4ec00b196cbf6cb60652595801787931"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/night drive.wav",
+      "bytes": 11520068,
+      "sha256": "691743c84391f4bb2399eb16d9c01bcbaacf487568390f454684431289c8af86"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/reactions.txt",
+      "bytes": 3206,
+      "sha256": "9cf0fe23143005dc154b48b445e12af6605134b39748fce57ed57f427ec81c73"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round7/session-5/report.json",
+      "bytes": 9285,
+      "sha256": "a44d54d4aa2b02814e99a6c30ba88f237f94113ec9cf8778c7e5151fecdc89f3"
+    }
+  ],
+  "original_frozen_helper_checks": {
+    "aggregate.py": true,
+    "audio.py": true,
+    "cleanup.py": true,
+    "component_render.py": true,
+    "evidence_utils.py": true,
+    "freeze.py": true,
+    "launch.py": true,
+    "mouse.py": true,
+    "verify_full_graph.py": true,
+    "verify_isolated_midi.py": true,
+    "verify_mix_components.py": true
+  }
+}

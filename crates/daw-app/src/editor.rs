@@ -61,33 +61,7 @@ impl DawApp {
         let mut destination = None;
         ui.add_enabled_ui(source.is_some(), |ui| {
             daw_ui::action_menu(ui, "Add send…", |ui| {
-                let Some(source) = source else {
-                    return;
-                };
-                let track = self.project.track(source).expect("selected channel exists");
-                let buses = self
-                    .project
-                    .eligible_output_buses(source)
-                    .unwrap_or_default();
-                let mut available = false;
-                for bus in buses
-                    .iter()
-                    .filter(|bus| !track.sends.iter().any(|send| send.target_bus == bus.id))
-                {
-                    available = true;
-                    if daw_ui::button(ui, &bus.name).clicked() {
-                        destination = Some(Some(bus.id));
-                        ui.close();
-                    }
-                }
-                if !available {
-                    daw_ui::text::note(ui, "No eligible buses");
-                }
-                ui.separator();
-                if daw_ui::button(ui, "New bus and send").clicked() {
-                    destination = Some(None);
-                    ui.close();
-                }
+                destination = source.and_then(|source| self.mixer_send_choices(ui, source));
             })
             .response
             .on_hover_text(source.and_then(|id| self.project.track(id)).map_or_else(
@@ -96,28 +70,71 @@ impl DawApp {
             ));
         });
         if let Some((source, destination)) = source.zip(destination) {
-            self.begin_edit();
-            let created_bus = destination.is_none();
-            let bus = destination.unwrap_or_else(|| {
-                let name = self.available_bus_name();
-                self.project.add_bus(name)
-            });
-            let result = self.project.add_send(source, bus, 0.25, false);
-            if result.is_ok() {
-                self.edit_label = Some(
-                    if created_bus {
-                        "Add bus send"
-                    } else {
-                        "Add send"
-                    }
-                    .into(),
-                );
-                self.changed();
-            } else if created_bus {
-                self.project.delete_track(bus).ok();
-            }
-            self.message(result, "Send added");
+            self.mixer_create_send(source, destination);
         }
+    }
+
+    /// Both entry points name their source and require a destination choice.
+    /// A channel-strip menu does not retarget the toolbar's selected channel.
+    fn mixer_send_choices(&self, ui: &mut egui::Ui, source: u64) -> Option<Option<u64>> {
+        daw_ui::command_menu_contents(ui, |ui| {
+            let track = self.project.track(source)?;
+            daw_ui::text::truncated(
+                ui,
+                daw_ui::text::TextRole::Label,
+                format!("Send from {}", track.name),
+            );
+            ui.separator();
+            let buses = self
+                .project
+                .eligible_output_buses(source)
+                .unwrap_or_default();
+            let mut destination = None;
+            let mut available = false;
+            for bus in buses
+                .iter()
+                .filter(|bus| !track.sends.iter().any(|send| send.target_bus == bus.id))
+            {
+                available = true;
+                if daw_ui::button(ui, &bus.name).clicked() {
+                    destination = Some(Some(bus.id));
+                    ui.close();
+                }
+            }
+            if !available {
+                daw_ui::text::note(ui, "No eligible buses");
+            }
+            ui.separator();
+            if daw_ui::button(ui, "New bus and send").clicked() {
+                destination = Some(None);
+                ui.close();
+            }
+            destination
+        })
+    }
+
+    fn mixer_create_send(&mut self, source: u64, destination: Option<u64>) {
+        self.begin_edit();
+        let created_bus = destination.is_none();
+        let bus = destination.unwrap_or_else(|| {
+            let name = self.available_bus_name();
+            self.project.add_bus(name)
+        });
+        let result = self.project.add_send(source, bus, 0.25, false);
+        if result.is_ok() {
+            self.edit_label = Some(
+                if created_bus {
+                    "Add bus send"
+                } else {
+                    "Add send"
+                }
+                .into(),
+            );
+            self.changed();
+        } else if created_bus {
+            self.project.delete_track(bus).ok();
+        }
+        self.message(result, "Send added");
     }
 
     pub(crate) fn available_bus_name(&self) -> String {
@@ -143,6 +160,7 @@ impl DawApp {
         let mut channel_selection = None;
         let mut automation_navigation = None;
         let mut automation_overrides = Vec::new();
+        let mut empty_send_menus = Vec::new();
         let mut track_reorder = None;
         let mut reorder_preview = None;
         let mut reorder_viewport = None;
@@ -299,6 +317,17 @@ impl DawApp {
             + daw_ui::MIXER_LEVEL_METER_HEIGHT
             + 18.0
             + 11.0 * spacing;
+        // Size controls against the unobscured workspace, before scrolling.
+        // A transient bottom notice changes the visible clip, not the fader's
+        // travel or the position of Pan/Mute/Solo. Extra send lanes grow below
+        // the strips and remain reachable through the existing scroll pane.
+        let workspace_height = ui.ctx().content_rect().bottom()
+            - daw_ui::tokens::BORDER_WIDTH
+            - ui.available_rect_before_wrap().top();
+        let output_route_height =
+            daw_ui::tokens::MIXER_ROUTE_LANE_HEIGHT + daw_ui::tokens::SPACE_SM;
+        let strip_height = (workspace_height - output_route_height - group_header_height)
+            .max(fixed_height + 120.0);
         let scroll = daw_ui::scroll_area(ui, "mixer_scroll", [true, true]);
         let panning = daw_ui::scroll_area_is_panning(ui, "mixer_scroll");
         let mut diagnostics = Vec::new();
@@ -331,11 +360,10 @@ impl DawApp {
                 })
             })
         };
-        scroll.auto_shrink([false, false]).show_viewport(ui, |ui, viewport| {
+        scroll.auto_shrink([false, false]).show_viewport(ui, |ui, _viewport| {
             let reorder_rect = ui.clip_rect();
             reorder_viewport = Some(rect_json(reorder_rect));
             let scroll_delta = daw_ui::track_reorder_scroll_delta(ui, reorder_rect, daw_ui::TrackReorderAxis::Horizontal);
-            let strip_height = (viewport.height() - route_height - group_header_height).max(fixed_height + 120.0);
             let strip_size = Vec2::new(strip_width, strip_height);
             let fader_height = strip_height - fixed_height;
             let mut anchors = std::collections::HashMap::new();
@@ -519,7 +547,11 @@ impl DawApp {
                             pre_fader: send.pre_fader,
                         }).collect();
                         let sends = daw_ui::mixer_sends_button(ui, content_width, &send_details);
-                        if sends.clicked() { self.selected_track = Some(track.id); popup = Some(PopupKind::Routing); }
+                        if track.sends.is_empty() {
+                            empty_send_menus.push((track.id, sends.clone()));
+                        } else if sends.clicked() {
+                            self.selected_track = Some(track.id); popup = Some(PopupKind::Routing);
+                        }
                         serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":rect_json(name.rect),"source":rect_json(source.response.rect),
                             "source_kind":source_kind,"source_menu":rect_json(source.inner.0),"source_label":rect_json(source.inner.1),
                             "automation_state":channel_state.map(daw_ui::automation_state_label),
@@ -595,6 +627,10 @@ impl DawApp {
             let connection_clip = ui.clip_rect();
             daw_ui::scroll_area(ui, "mixer_route_lanes", [false, true])
                 .max_width(mixer_width).max_height(route_height)
+                // Nested panes otherwise shrink to the height remaining below
+                // the strips. Reserve every visible lane in the outer pane;
+                // the inner scroll still handles more than four routes.
+                .min_scrolled_height(route_height)
                 .auto_shrink([false, false]).show(ui, |ui| {
                 ui.set_min_width(mixer_width);
                 if let Some(track) = flow_source.and_then(|id| self.project.track(id)) {
@@ -632,6 +668,17 @@ impl DawApp {
             // area; otherwise that vertical-only area consumes the horizontal request.
             ui.scroll_with_delta(scroll_delta);
         });
+        // Attach the shared destination choices to the existing strip button
+        // after releasing the mutable track borrow. The captured source owns
+        // this action even when another channel remains selected.
+        for (source, response) in empty_send_menus {
+            if let Some(destination) = egui::Popup::menu(&response)
+                .show(|ui| self.mixer_send_choices(ui, source))
+                .and_then(|shown| shown.inner)
+            {
+                self.mixer_create_send(source, destination);
+            }
+        }
         ui.ctx().data_mut(|data| {
             data.insert_temp(preview_id, (generation, frame, self.selected_track, flow_source));
             data.insert_temp(egui::Id::new("mixer_diagnostics"),

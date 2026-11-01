@@ -1,0 +1,502 @@
+[
+  {
+    "participant": 1,
+    "method": "Full saved routing graph with source-mute ablations; no linearity assumption",
+    "audio_and_vst_components_verified": true,
+    "original_project": "/workspace/scratch/rill-usability-round8/session-1/Dusk.rill",
+    "original_project_sha256": "9bc7ef65cc57bd63e6e1045a42dba24ade0141884ce60bd272a5e742f4225ddf",
+    "original_wav_sha256": "c44ef25af5844dca0d9802ff52d487a0cec84e40a4c5b49b4c8b39767f0bec35",
+    "full_render": {
+      "mode": "full",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-full.rill",
+      "analysis_copy_sha256": "acb8cbf7e50e72606fab200604a850ebe61fd4febca82fe231836f8008579332",
+      "changed_track_mutes": [],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-full.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.825,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-full.wav",
+        "bytes": 11596868,
+        "sha256": "7d4c77a57b3d92c2827e8d6fdbebe56cc9e07bf6d588123aaae002b3fbd73019",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2751408,
+        "peak": 0.31530094146728516,
+        "rms": 0.043986971911659914
+      }
+    },
+    "full_render_max_abs_difference_to_original": 0.0,
+    "reproduction_tolerance": 1e-06,
+    "audio_muted_render": {
+      "mode": "audio-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-audio-muted.rill",
+      "analysis_copy_sha256": "139d24f4998238305a76812c1de2c61bfa063e8034f8bb2a24e97e8f66eefd6d",
+      "changed_track_mutes": [
+        51
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-audio-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.724,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-audio-muted.wav",
+        "bytes": 11596868,
+        "sha256": "926ae226e4a1f26b259caa2e279d022aadc25a9a306201af7944b82c2929fdfd",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2699972,
+        "peak": 0.05878129601478577,
+        "rms": 0.01878877388710131
+      }
+    },
+    "midi_muted_render": {
+      "mode": "midi-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-midi-muted.rill",
+      "analysis_copy_sha256": "2949151972a51eda84f31f12e75edbdf19653c0b1133f19293e757054b9d92fa",
+      "changed_track_mutes": [
+        58
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-midi-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 0.767,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-midi-muted.wav",
+        "bytes": 11596868,
+        "sha256": "a6ad428ad6b2e7402a1262bb5febe90b96b8c74117d9c34d7eeb47c2251ae807",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 1910104,
+        "peak": 0.3072868585586548,
+        "rms": 0.03979507093641598
+      }
+    },
+    "source_contribution_differences": {
+      "audio": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.3072868660092354,
+        "rms_difference": 0.03992750082699776,
+        "nonzero_difference_samples": 1910077
+      },
+      "midi": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.058781297877430916,
+        "rms_difference": 0.018851299097490146,
+        "nonzero_difference_samples": 2699944
+      }
+    },
+    "interpretation": "Audio and actual VST sources both causally contribute to the independently reproduced saved mix.",
+    "original_project_unchanged": true,
+    "original_wav_unchanged": true
+  },
+  {
+    "participant": 2,
+    "method": "Full saved routing graph with source-mute ablations; no linearity assumption",
+    "audio_and_vst_components_verified": true,
+    "original_project": "/workspace/scratch/rill-usability-round8/session-2/pulse.rill",
+    "original_project_sha256": "b31ba05b34a25d98d7ed77e4cf4133963eb9b3cd51c039b39c7431797dc3ac26",
+    "original_wav_sha256": "d9ba6c7df1c3e13e002f7b61449dc34eb2e3e4e952395494f16751d4448ded17",
+    "full_render": {
+      "mode": "full",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-full.rill",
+      "analysis_copy_sha256": "90f39b9d77166b7af503c6f6d3ec7aa2d7b7c4bd98c56c0840cae9c6206200d3",
+      "changed_track_mutes": [],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-full.log",
+      "exit_code": 0,
+      "elapsed_seconds": 4.074,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-full.wav",
+        "bytes": 11596868,
+        "sha256": "32086baef44f67fb16398dbd240f9e317cd0da0e5539bfa4a816cea962963326",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2681848,
+        "peak": 0.3399216830730438,
+        "rms": 0.04389432999813625
+      }
+    },
+    "full_render_max_abs_difference_to_original": 0.0,
+    "reproduction_tolerance": 1e-06,
+    "audio_muted_render": {
+      "mode": "audio-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-audio-muted.rill",
+      "analysis_copy_sha256": "6a7b5024ce040a40d1964d995a382304102a75daa36cba33933ee8c3b1c9712e",
+      "changed_track_mutes": [
+        51
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-audio-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.773,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-audio-muted.wav",
+        "bytes": 11596868,
+        "sha256": "54f70061259fdb5d777682b328065823c1e441130809b7f9cc2486c52a3b71bd",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2591776,
+        "peak": 0.02893700823187828,
+        "rms": 0.017017288304173515
+      }
+    },
+    "midi_muted_render": {
+      "mode": "midi-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-midi-muted.rill",
+      "analysis_copy_sha256": "1c93f035915f5f6c35177b9f336e70274daac56284220b9e5ff48a0ec3756b16",
+      "changed_track_mutes": [
+        58
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-midi-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 0.717,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-midi-muted.wav",
+        "bytes": 11596868,
+        "sha256": "919cbad25916e20b51560fb526ac1f9a8ea2f3921cd918b507bada924e6af2fc",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 1910104,
+        "peak": 0.3315463364124298,
+        "rms": 0.0404866684161552
+      }
+    },
+    "source_contribution_differences": {
+      "audio": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.3315463406033814,
+        "rms_difference": 0.040621399800264774,
+        "nonzero_difference_samples": 1910077
+      },
+      "midi": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.02893701195716858,
+        "rms_difference": 0.01707391837431567,
+        "nonzero_difference_samples": 2591776
+      }
+    },
+    "interpretation": "Audio and actual VST sources both causally contribute to the independently reproduced saved mix.",
+    "original_project_unchanged": true,
+    "original_wav_unchanged": true
+  },
+  {
+    "participant": 3,
+    "method": "Full saved routing graph with source-mute ablations; no linearity assumption",
+    "audio_and_vst_components_verified": true,
+    "original_project": "/workspace/scratch/rill-usability-round8/session-3/Moon drift.rill",
+    "original_project_sha256": "5f76de8e3a2b4b6d7e81c3f06f703a9ac6570d52161b620788f273649d8f8789",
+    "original_wav_sha256": "b001b1c10e8af21f41b47022563bcc11a04ad84770f1acc007be16056c0d97fa",
+    "full_render": {
+      "mode": "full",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-full.rill",
+      "analysis_copy_sha256": "2622a4988a47c65baa90d7c4dbb35273ee03a20f185b4e5eadc986e7e42f007f",
+      "changed_track_mutes": [],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-full.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.775,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-full.wav",
+        "bytes": 11596868,
+        "sha256": "83e7c562541c834f0f21c34dc864aea1dd7292887c3dd225509788908b271c69",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2879938,
+        "peak": 0.32463112473487854,
+        "rms": 0.04210449070788833
+      }
+    },
+    "full_render_max_abs_difference_to_original": 0.0,
+    "reproduction_tolerance": 1e-06,
+    "audio_muted_render": {
+      "mode": "audio-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-audio-muted.rill",
+      "analysis_copy_sha256": "56d6c52bb0e4e3390b503f18f9eef4d569dd295678763ec07a73f21ae561b101",
+      "changed_track_mutes": [
+        51
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-audio-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.724,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-audio-muted.wav",
+        "bytes": 11596868,
+        "sha256": "e381fedbaf5e2ee015a1060ed8f2bdd8f6775c38810e368b8b8baa2344c5bc90",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2841316,
+        "peak": 0.02539370208978653,
+        "rms": 0.016333071620774194
+      }
+    },
+    "midi_muted_render": {
+      "mode": "midi-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-midi-muted.rill",
+      "analysis_copy_sha256": "ae3143727c2e2397acf0915ef71cf9e10156841eb1ec2c1b1282c90f29766d9d",
+      "changed_track_mutes": [
+        54
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-midi-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 0.767,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-midi-muted.wav",
+        "bytes": 11596868,
+        "sha256": "f9e81e0ce42b55eca558d943659c7a8d00dd1d9922ad9c3805d4f0bd9a1e6ab5",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 1910104,
+        "peak": 0.3072868585586548,
+        "rms": 0.03882578059538755
+      }
+    },
+    "source_contribution_differences": {
+      "audio": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.3072868511080742,
+        "rms_difference": 0.03895498488875961,
+        "nonzero_difference_samples": 1910077
+      },
+      "midi": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.02539370395243168,
+        "rms_difference": 0.01638742475666882,
+        "nonzero_difference_samples": 2841064
+      }
+    },
+    "interpretation": "Audio and actual VST sources both causally contribute to the independently reproduced saved mix.",
+    "original_project_unchanged": true,
+    "original_wav_unchanged": true
+  },
+  {
+    "participant": 4,
+    "method": "Full saved routing graph with source-mute ablations; no linearity assumption",
+    "audio_and_vst_components_verified": true,
+    "original_project": "/workspace/scratch/rill-usability-round8/session-4/mist.rill",
+    "original_project_sha256": "6b1b6de22dffa687dfd7005de6b1c93f18fff2aea6207cf3cfe1265dc3a3687c",
+    "original_wav_sha256": "8c06cb5da32a2cca4d0c17b880b4162494114f2431532f69d6e03d12e33daa47",
+    "full_render": {
+      "mode": "full",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-full.rill",
+      "analysis_copy_sha256": "d4a9a41234b329203a6a44667eae63fc1b5227d604acd88a7cdb62c53a8cfaaa",
+      "changed_track_mutes": [],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-full.log",
+      "exit_code": 0,
+      "elapsed_seconds": 4.375,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-full.wav",
+        "bytes": 11596868,
+        "sha256": "26dcb7c49ce551eea3e1e9c4dc1efd9c5f573403d595a549f0876bcc63543ede",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2867140,
+        "peak": 0.16158904135227203,
+        "rms": 0.026220981331277256
+      }
+    },
+    "full_render_max_abs_difference_to_original": 0.0,
+    "reproduction_tolerance": 1e-06,
+    "audio_muted_render": {
+      "mode": "audio-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-audio-muted.rill",
+      "analysis_copy_sha256": "41b791939003faaac87700de9b68d69c36ceb9b6678a68316afaaf645be08ae8",
+      "changed_track_mutes": [
+        51
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-audio-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.881,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-audio-muted.wav",
+        "bytes": 11596868,
+        "sha256": "7f4f12f28bb092981c15522a18bfd00ad178d00f7e87c570bfaf8c2e5fcd6528",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2815708,
+        "peak": 0.06199929118156433,
+        "rms": 0.021671420901159588
+      }
+    },
+    "midi_muted_render": {
+      "mode": "midi-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-midi-muted.rill",
+      "analysis_copy_sha256": "412ef613eb2e333cfc5a4c72e501d3ee068b126e563fc9d910e853280321b902",
+      "changed_track_mutes": [
+        55
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-midi-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.319,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-midi-muted.wav",
+        "bytes": 11596868,
+        "sha256": "ec0995f391fd49d8a9a30d3b68e63f88eee59ce605a6b19ad894da7b095eed62",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2695680,
+        "peak": 0.1390741765499115,
+        "rms": 0.014772256313098756
+      }
+    },
+    "source_contribution_differences": {
+      "audio": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.13907417468726635,
+        "rms_difference": 0.014821415372580771,
+        "nonzero_difference_samples": 2646532
+      },
+      "midi": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.06199928859132342,
+        "rms_difference": 0.021743538976988303,
+        "nonzero_difference_samples": 2815694
+      }
+    },
+    "interpretation": "Audio and actual VST sources both causally contribute to the independently reproduced saved mix.",
+    "original_project_unchanged": true,
+    "original_wav_unchanged": true
+  },
+  {
+    "participant": 5,
+    "method": "Full saved routing graph with source-mute ablations; no linearity assumption",
+    "audio_and_vst_components_verified": true,
+    "original_project": "/workspace/scratch/rill-usability-round8/session-5/night loop.rill",
+    "original_project_sha256": "0d60484a57c0d399fd55564429b2eeeb0ed0e79cf9255a54a0e1f600d109050e",
+    "original_wav_sha256": "14c30fff579aa07212f857aeb0999c5402fb5a232c1ffdc9402d47fae9a21be5",
+    "full_render": {
+      "mode": "full",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-full.rill",
+      "analysis_copy_sha256": "885867c22855963bd9603a5e43e6ea56896f060e205949441a06bc3856e3daf8",
+      "changed_track_mutes": [],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-full.log",
+      "exit_code": 0,
+      "elapsed_seconds": 4.174,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-full.wav",
+        "bytes": 11596868,
+        "sha256": "208901044ee89be2b5a47db0e50658411ca0419d1b8233aa7e5fa628664eeb80",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 2157234,
+        "peak": 0.5158215165138245,
+        "rms": 0.06575838775289687
+      }
+    },
+    "full_render_max_abs_difference_to_original": 0.0,
+    "reproduction_tolerance": 1e-06,
+    "audio_muted_render": {
+      "mode": "audio-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-audio-muted.rill",
+      "analysis_copy_sha256": "0954e0331af94aace5b1245e49f87ac4c8d47b502a1d1c4a3c78418072c8bef3",
+      "changed_track_mutes": [
+        51
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-audio-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 3.774,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-audio-muted.wav",
+        "bytes": 11596868,
+        "sha256": "f3a4e3d85bc10edb9e1a53500ed59d6e0ecb605bf6f80e75b8a80c85759bb759",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 1979888,
+        "peak": 0.02539370208978653,
+        "rms": 0.013568836760281804
+      }
+    },
+    "midi_muted_render": {
+      "mode": "midi-muted",
+      "analysis_copy": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-midi-muted.rill",
+      "analysis_copy_sha256": "3a60cd2fc6e6d2f8fc91afb76bdaf3fe015ec8d9c5bdba62f629aeb47b2c9020",
+      "changed_track_mutes": [
+        58
+      ],
+      "log": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-midi-muted.log",
+      "exit_code": 0,
+      "elapsed_seconds": 0.818,
+      "wav": {
+        "path": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-midi-muted.wav",
+        "bytes": 11596868,
+        "sha256": "deeab700be1e1ebb82c788696152a30aa56622f0877b71a5e4b508caa90f148b",
+        "encoding": "32-bit IEEE float",
+        "sample_rate_hz": 48000,
+        "channels": 2,
+        "frames": 1449600,
+        "duration_seconds": 30.2,
+        "all_samples_finite": true,
+        "nonzero_samples": 1910104,
+        "peak": 0.5094492435455322,
+        "rms": 0.06436905584433826
+      }
+    },
+    "source_contribution_differences": {
+      "audio": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.5094492416828871,
+        "rms_difference": 0.06458326295566649,
+        "nonzero_difference_samples": 1910092
+      },
+      "midi": {
+        "all_samples_finite": true,
+        "max_abs_difference": 0.02539370395243168,
+        "rms_difference": 0.013613991086375525,
+        "nonzero_difference_samples": 1979888
+      }
+    },
+    "interpretation": "Audio and actual VST sources both causally contribute to the independently reproduced saved mix.",
+    "original_project_unchanged": true,
+    "original_wav_unchanged": true
+  }
+]

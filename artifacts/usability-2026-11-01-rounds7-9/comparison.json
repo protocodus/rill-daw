@@ -1,0 +1,306 @@
+{
+  "status": "complete; recomputed from fifteen unchanged original reports",
+  "generated_utc": "2026-11-01T01:11:52Z",
+  "scale": "1\u20135; lower confusion is better; ordinal simulated judgments, not human research or a performance benchmark.",
+  "rounds": {
+    "7": {
+      "aggregate_sha256": "721a78cd8950358719563762da55299183aa620e8875aeb60a9986a397ae2d5e",
+      "mean_ratings": {
+        "easy_to_use": 3.8,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 3.4,
+        "how_confusing_it_is": 2.6,
+        "feature_completeness": 4
+      },
+      "summary": {
+        "completed_exact_30_second_audio_vst_midi_exports": 5,
+        "saved_project_wav_and_midi": 5,
+        "wav_within_half_second_of_30": 5,
+        "wav_audio_and_vst_components_verified": 5,
+        "elapsed_seconds_mean": 362.8,
+        "total_mouse_input_events": 468,
+        "total_screenshots": 203,
+        "prior_pieces_checked": 90,
+        "all_prior_pieces_unchanged": true
+      },
+      "participant_ratings": [
+        {
+          "participant": 1,
+          "report_sha256": "a0495a1617330c7dbd11b17fa023c7914d1458bb3f55ddd6105297afb6245fa4",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 2,
+          "report_sha256": "ddf7ebba9b7a3796e24e9ee1fdad3cdf3c135ef2a5d81979b30ed71822511880",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 4,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 3,
+          "report_sha256": "97dc737513d73ec18f4ef9d0d1824c07412e21aa801ef48b83f832786726b56e",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 4,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 4,
+          "report_sha256": "5509b085c1e4fe2b7dcf706f3b2e0aa662d8898c700dd5ad4aff0b5abc2e0693",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 5,
+          "report_sha256": "a44d54d4aa2b02814e99a6c30ba88f237f94113ec9cf8778c7e5151fecdc89f3",
+          "ratings": {
+            "easy_to_use": 3,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        }
+      ]
+    },
+    "8": {
+      "aggregate_sha256": "6255601bbf3c8717e14590ea01544eb9871c0b7c54d091c6ab193536c2d28d40",
+      "mean_ratings": {
+        "easy_to_use": 3.8,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 3.2,
+        "how_confusing_it_is": 2.4,
+        "feature_completeness": 4
+      },
+      "summary": {
+        "completed_exact_30_second_audio_vst_midi_exports": 5,
+        "saved_project_wav_and_midi": 5,
+        "wav_within_half_second_of_30": 5,
+        "wav_audio_and_vst_components_verified": 5,
+        "elapsed_seconds_mean": 363.4,
+        "total_mouse_input_events": 438,
+        "total_screenshots": 192,
+        "prior_pieces_checked": 105,
+        "all_prior_pieces_unchanged": true
+      },
+      "participant_ratings": [
+        {
+          "participant": 1,
+          "report_sha256": "57016afb5f5ff5f19a51e89a3acde032fd6c4e496ef330ffe63dbaa40f52332a",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 2,
+          "report_sha256": "e1fe3bb0f429d64121ff24f92cdba667ee4f15a978b837a587c2068faa865c6c",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 3,
+          "report_sha256": "7fbe07c5d50675d31313efc00f1a2e72fe8a44df7769a11e59662200c65e50f7",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 4,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 4,
+          "report_sha256": "83d3e43d9d494043581c549caf06d968f231e5c1b2c840d5cae7fb9db23200b2",
+          "ratings": {
+            "easy_to_use": 3,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 5,
+          "report_sha256": "d9a4e1144dd9b5c2a2657cd1a7ffcaebe69f8f27dc77940e3aea212d7086a253",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        }
+      ]
+    },
+    "9": {
+      "aggregate_sha256": "750b6c2b32ce3b6b358ff108812fe1b2c7ff65e024049953ce072a789bfbf4ec",
+      "mean_ratings": {
+        "easy_to_use": 4,
+        "how_cool_it_looks": 4,
+        "how_fast_it_is": 3.2,
+        "how_confusing_it_is": 2.4,
+        "feature_completeness": 4
+      },
+      "summary": {
+        "completed_exact_30_second_audio_vst_midi_exports": 5,
+        "saved_project_wav_and_midi": 5,
+        "wav_within_half_second_of_30": 5,
+        "wav_audio_and_vst_components_verified": 5,
+        "elapsed_seconds_mean": 341.8,
+        "total_mouse_input_events": 424,
+        "total_screenshots": 174,
+        "prior_pieces_checked": 120,
+        "all_prior_pieces_unchanged": true
+      },
+      "participant_ratings": [
+        {
+          "participant": 1,
+          "report_sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 2,
+          "report_sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 3,
+          "report_sha256": "92f41df792ae64737d36f6a528cb2575ec095f0ea9768d40d9b54f55b2624231",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 4,
+            "how_confusing_it_is": 2,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 4,
+          "report_sha256": "6b3cbacf1574971c2cdc2f088e6833fb305f81ae49774317b4c04990b90ff7b8",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        },
+        {
+          "participant": 5,
+          "report_sha256": "e28ea8fa3b5b4df658d2e2316e52ed1de1663d1fa114f6e914dcf7cee9958584",
+          "ratings": {
+            "easy_to_use": 4,
+            "how_cool_it_looks": 4,
+            "how_fast_it_is": 3,
+            "how_confusing_it_is": 3,
+            "feature_completeness": 4
+          }
+        }
+      ]
+    }
+  },
+  "comparison_rows": [
+    {
+      "category": "easy_to_use",
+      "round7": 3.8,
+      "round8": 3.8,
+      "round9": 4,
+      "delta8_minus7": 0.0,
+      "delta9_minus8": 0.2,
+      "delta9_minus7": 0.2,
+      "improves_when": "increases"
+    },
+    {
+      "category": "how_cool_it_looks",
+      "round7": 4,
+      "round8": 4,
+      "round9": 4,
+      "delta8_minus7": 0,
+      "delta9_minus8": 0,
+      "delta9_minus7": 0,
+      "improves_when": "increases"
+    },
+    {
+      "category": "how_fast_it_is",
+      "round7": 3.4,
+      "round8": 3.2,
+      "round9": 3.2,
+      "delta8_minus7": -0.2,
+      "delta9_minus8": 0.0,
+      "delta9_minus7": -0.2,
+      "improves_when": "increases"
+    },
+    {
+      "category": "how_confusing_it_is",
+      "round7": 2.6,
+      "round8": 2.4,
+      "round9": 2.4,
+      "delta8_minus7": -0.2,
+      "delta9_minus8": 0.0,
+      "delta9_minus7": -0.2,
+      "improves_when": "decreases"
+    },
+    {
+      "category": "feature_completeness",
+      "round7": 4,
+      "round8": 4,
+      "round9": 4,
+      "delta8_minus7": 0,
+      "delta9_minus8": 0,
+      "delta9_minus7": 0,
+      "improves_when": "increases"
+    }
+  ],
+  "controlled_conditions": "Same five personas/task, mouse driver, 1440\u00d71000 viewport, laboratory VST, 48 kHz/1024-frame request/60 ms virtual audio and Rust1.99.1 build profile. Fresh independent agents each round.",
+  "implementation_sequence": {
+    "7_to_8": "Stable mixer geometry, retained knob release movement, shared exact-value mouse keypad.",
+    "8_to_9": "Piano-roll gesture origin uses primary press event, including original target/pitch/onset and outside-canvas rejection."
+  },
+  "interpretation_limits": [
+    "Earlier rounds did not explicitly require mixer tasks and have different build conditions; use round7 as this cycle baseline.",
+    "Original ratings precede the subsequent fixes and are never retroactively changed.",
+    "Score changes cannot isolate causal effects of a particular fix or predict human usability.",
+    "Session durations and input counts include tool/reporting overhead; no hardware-speed claim.",
+    "File and source-ablation verification establishes both exported components, not continuous playback or heard musical quality.",
+    "Playback failure remains unresolved; standalone CPAL reproduction does not establish each participant stall cause."
+  ]
+}

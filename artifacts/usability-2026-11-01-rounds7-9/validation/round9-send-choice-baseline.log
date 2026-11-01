@@ -1,0 +1,51 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 0.56s
+     Running tests/mixer_send_choice_e2e.rs (target/debug/deps/mixer_send_choice_e2e-e7ff7f8824c5fc41)
+
+running 4 tests
+test channel_destination_choice_targets_the_clicked_source_and_is_one_undo ... FAILED
+test channel_send_choices_exclude_self_and_all_feedback_paths ... FAILED
+test empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing ... FAILED
+test explicit_new_bus_choice_is_one_undoable_channel_send ... FAILED
+
+failures:
+
+---- channel_destination_choice_targets_the_clicked_source_and_is_one_undo stdout ----
+
+thread 'channel_destination_choice_targets_the_clicked_source_and_is_one_undo' (312033) panicked at crates/daw-app/tests/mixer_send_choice_e2e.rs:42:9:
+assertion `left == right` failed: Opening or cancelling changed selected_track
+  left: Number(2)
+ right: Number(1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- channel_send_choices_exclude_self_and_all_feedback_paths stdout ----
+
+thread 'channel_send_choices_exclude_self_and_all_feedback_paths' (312041) panicked at crates/daw-app/tests/mixer_send_choice_e2e.rs:42:9:
+assertion `left == right` failed: Opening or cancelling changed view
+  left: String("Arrangement")
+ right: String("Mixer")
+
+---- empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing stdout ----
+
+thread 'empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing' (312049) panicked at crates/daw-app/tests/mixer_send_choice_e2e.rs:131:9:
+assertion `left == right` failed
+  left: Bool(true)
+ right: false
+
+---- explicit_new_bus_choice_is_one_undoable_channel_send stdout ----
+
+thread 'explicit_new_bus_choice_is_one_undoable_channel_send' (312057) panicked at crates/daw-app/tests/mixer_send_choice_e2e.rs:42:9:
+assertion `left == right` failed: Opening or cancelling changed selected_track
+  left: Number(11)
+ right: Number(10)
+
+
+failures:
+    channel_destination_choice_targets_the_clicked_source_and_is_one_undo
+    channel_send_choices_exclude_self_and_all_feedback_paths
+    empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing
+    explicit_new_bus_choice_is_one_undoable_channel_send
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.78s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_send_choice_e2e`

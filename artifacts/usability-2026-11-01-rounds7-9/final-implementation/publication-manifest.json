@@ -1,0 +1,68 @@
+{
+  "created_utc": "2026-11-01T01:28:46Z",
+  "scope": "Final source/provenance after round 9, not participant-rated. Immutable app/helper executables are excluded and retained locally.",
+  "file_count": 10,
+  "total_bytes": 486127,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/README.txt",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/README.txt",
+      "bytes": 733,
+      "sha256": "60262b9595420daa3499d0e59781ec1eff77d0634c6e559ab31f9f9162132127"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/freeze_final.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/freeze_final.py",
+      "bytes": 7604,
+      "sha256": "6eee2a734efa9d2f019ed821edafdd58e7f7abf7b0862d02473bb919b6e4327f"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/manifest.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/manifest.json",
+      "bytes": 4735,
+      "sha256": "dd4f4c4d1dedbeccd5f0ccfc833aceef14a015acddaa0029ccd25e7d9a1785de"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/source-diff.patch",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/source-diff.patch",
+      "bytes": 48799,
+      "sha256": "f32fe77f33aa2b230d182c78fc14d330743ebaad1231eb74dc65e2680dcc6b5c"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/source-entries.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/source-entries.json",
+      "bytes": 193723,
+      "sha256": "de8d3f9927f069951a0151adbd812eb9ea931c3b377e2be86f07ec1ae96184e0"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/source-hashes.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/source-hashes.json",
+      "bytes": 131320,
+      "sha256": "c43be57893f269cb04681cd7ddd51c90f17dd2a167ed8b78bed2ab9c30d1b4e9"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/source-status.txt",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/source-status.txt",
+      "bytes": 85903,
+      "sha256": "050933a5ea6fa8deb8052047e3bd294a57e3111ca5d21f4ff99e28b2cc598dbc"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/untracked-source.tar.gz",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/untracked-source.tar.gz",
+      "bytes": 9331,
+      "sha256": "4e74bdc5c3f32f3b555b67921c6ce962da3091083087f566f0c9dd1aff32cd20"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/validation-provenance/1-workspace-final-summary.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/validation-provenance/1-workspace-final-summary.json",
+      "bytes": 495,
+      "sha256": "e3480b7eb1c472e9d2b90a6cdf9c4f75f9952e0476842b09ec81597b662267dd"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-implementation/validation-provenance/2-send-choice-validation-summary.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-implementation/validation-provenance/2-send-choice-validation-summary.json",
+      "bytes": 3484,
+      "sha256": "cb66198e88b3785bc3c7c2cfc0facee600b70a366e245fe1b3c27c4b921bbc29"
+    }
+  ]
+}

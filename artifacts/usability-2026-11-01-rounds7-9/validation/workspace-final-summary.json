@@ -1,0 +1,15 @@
+{
+  "command": "cargo +1.99.1 test --locked --workspace --no-fail-fast -- --test-threads=1",
+  "profile": {
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "exit_code": 0,
+  "completed_targets_including_doc_tests": 261,
+  "passed": 1447,
+  "failed": 0,
+  "ignored": 25,
+  "log": "/workspace/scratch/rill-iteration-validation/workspace-final-1.log",
+  "log_sha256": "7ec2f866229dad32d1903b051635517c9084e4ff57088439a18b1c5409408f8c"
+}

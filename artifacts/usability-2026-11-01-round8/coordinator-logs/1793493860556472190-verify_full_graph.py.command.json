@@ -1,0 +1,12 @@
+{
+  "started_utc": "2026-11-01T00:44:20Z",
+  "command": [
+    "python3",
+    "/workspace/scratch/rill-usability-round8/verify_full_graph.py"
+  ],
+  "cwd": "/workspace",
+  "output_log": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493860556472190-verify_full_graph.py.log",
+  "finished_utc": "2026-11-01T00:45:11Z",
+  "elapsed_seconds": 51.32,
+  "exit_code": 0
+}

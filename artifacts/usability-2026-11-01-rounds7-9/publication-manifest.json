@@ -1,0 +1,38 @@
+{
+  "created_utc": "2026-11-01T01:28:46Z",
+  "scope": "Final comparison, cross-round response, validation and publication helpers. Child manifests cover the supplemental directories.",
+  "file_count": 5,
+  "total_bytes": 31050,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-study-iteration/compare_rounds_7_9.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/compare_rounds_7_9.py",
+      "bytes": 4064,
+      "sha256": "fc3e846be16d66d063fdd32bd4500a7bb7bda6567090b2b4b7ac992defb06951"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/cross-round-send-followup.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/cross-round-send-followup.json",
+      "bytes": 7715,
+      "sha256": "bbfba8e4fafa3dd7ac6686b3005f185fe68b6fb50ef4171a8d77a0165325003b"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/final-send-validation.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/final-send-validation.json",
+      "bytes": 4773,
+      "sha256": "0c98e1af443bc13fd7b95d6792c43970ecbbac92ffa2d4d74cae1d802cb47ca2"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/publish_evidence.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/publish_evidence.py",
+      "bytes": 4248,
+      "sha256": "1e09d0a7fba2d38b148ddf1577dc647a0e60c38fabbdda621ef7bd8e1c32e95f"
+    },
+    {
+      "source": "/workspace/scratch/rill-study-iteration/comparison-rounds7-9.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/comparison.json",
+      "bytes": 10250,
+      "sha256": "535283db596bbcc2048bf5a478a7f13ea31d1e6d41c2659fd5c601d2824eb06d"
+    }
+  ]
+}

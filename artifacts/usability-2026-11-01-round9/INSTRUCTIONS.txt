@@ -1,0 +1,51 @@
+Rill usability session technical controls
+
+The coordinator will provide your participant number N after your isolated app is ready.
+Your app is a native Rill window at 1440 by 1000 pixels.
+Initial screenshot: /workspace/scratch/rill-usability-round9/session-N/initial.png
+
+Use this driver for visible mouse input:
+python3 /workspace/scratch/rill-usability-round9/mouse.py N ACTION ARGUMENTS
+
+Actions:
+click X Y [BUTTON]                  Single click; BUTTON defaults to 1, right click is 3.
+double X Y [BUTTON]                 Double click.
+move X Y                           Move the pointer or inspect hover feedback.
+drag X Y TO_X TO_Y [BUTTON]         Drag and release the mouse button.
+down X Y [BUTTON]                  Move to X Y and press a button, keeping it held.
+drag_hold X Y TO_X TO_Y [BUTTON]    Drag to the target and keep the button held.
+up [BUTTON]                        Release the held button (defaults to the held button or 1).
+scroll X Y COUNT                    Scroll under the pointer; positive up, negative down.
+shot /absolute/path.png             Capture the current native desktop.
+
+To inspect feedback during a drag, use drag_hold, take a screenshot, optionally move
+again, then use up. Likewise down, move, shot, up permits a gesture in small steps.
+A button remains down across commands until up. Do not leave it held when the session
+is finished. The driver refuses a new click/drag/scroll while a button is already held.
+These are ordinary pointer events; the driver does not inspect or modify project state.
+
+View screenshots with the image-viewing tool. Do not use keyboard events, shortcuts,
+project state APIs, direct file edits, code inspection, or another participant's records.
+The driver automatically records UTC timestamps, mouse actions and held-button state in
+your session's mouse-actions.jsonl. Store screenshots, the observable action/reaction
+record and final report inside your session directory. Record brief reactions and
+visible results; do not provide a private reasoning transcript.
+
+Laboratory conditions: software graphics and a timer-paced virtual audio sink, with
+no physical audio/MIDI hardware. The virtual backend uses 60 ms buffering; do not
+generalize its latency or audible quality to a physical setup. The laboratory output
+device uses a 1024-frame request at 48 kHz. Other Rill preferences and project state
+start fresh. The included startup audio is unmodified. One actual native VST3 instrument,
+Rill Lab Sine, is installed for this evaluation. It is a simple laboratory sine
+synthesizer with no custom editor. This is not evidence about other third-party plug-ins.
+File pickers are native GTK dialogs. A window manager is absent, so dialog positioning
+can differ from a normal desktop.
+
+Only claim heard audio if you actually audition a capture. Playback position and meters
+are observable; final file duration and PCM will also be checked independently. Ratings
+reflect your simulated beginner session, not a human participant or hardware benchmark.
+
+At completion, write report.json using REPORT_SCHEMA.json in the lab root as the fixed
+question set. Use your own observations and ratings; unknown or unverified outcomes
+should remain explicit. Save reactions.txt and final.png in your session directory.
+Elapsed time includes screenshot, tool and reporting overhead; it is not a benchmark.

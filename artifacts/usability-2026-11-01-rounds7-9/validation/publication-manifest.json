@@ -1,0 +1,206 @@
+{
+  "created_utc": "2026-11-01T01:28:46Z",
+  "scope": "Complete validation and preserved failed attempts. workspace-full-summary.json precedes round 8; workspace-final-summary.json includes the MIDI correction; send-choice-validation-summary.json contains latest affected-target results after final polish.",
+  "file_count": 33,
+  "total_bytes": 509778,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/clippy-final.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/clippy-final.log",
+      "bytes": 9084,
+      "sha256": "6052a82ee5fd8e4b57fbcb9c46c27b96c6dbf80376ed3038533e120cb3874f30"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/clippy-round9.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/clippy-round9.log",
+      "bytes": 125,
+      "sha256": "4b5f67d66093926dba6043599c78165d4eb6d8417a5e8f41c77567849c79e4a0"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/clippy-send-final.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/clippy-send-final.log",
+      "bytes": 125,
+      "sha256": "69c89109ccff49aaf5a22a3001b258db58435adff91eda7b05c12dde43e7e94e"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/diff-round9.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/diff-round9.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/diff-send-final.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/diff-send-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/final-diff-check.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/final-diff-check.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/final-format.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/final-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/format-round9.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/format-round9.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/format-send-final.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/format-send-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/gallery-comparison.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/gallery-comparison.json",
+      "bytes": 1798,
+      "sha256": "03c28b64a6ec41f48e0bf388cc9b09642389325c6e5b345fd56ba4c4790d18df"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/gallery.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/gallery.log",
+      "bytes": 1616,
+      "sha256": "29e1ac4f9b964995f5e2a8c3a561f70e500120b66cbcf71ecac14c4b84e6c6cd"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/iteration-fixed-2.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/iteration-fixed-2.log",
+      "bytes": 1863,
+      "sha256": "03306b62a00f9e442604fa2c73e9d270e2f0970b0119d460658aa037f3626811"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/midi-press-fixed-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/midi-press-fixed-1.log",
+      "bytes": 14590,
+      "sha256": "df39a85b82eb9f0e70ba156ed776f4a5ee2ea717e2183a96c3cfaf499f68c9b8"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/mixer-fixed-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/mixer-fixed-1.log",
+      "bytes": 4041,
+      "sha256": "53f9a14fc3210d0931812d490298ea8ceb595e44a7945a79575fd0b11c014c70"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/round7-knob-ui-baseline.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/round7-knob-ui-baseline.log",
+      "bytes": 3846,
+      "sha256": "20318e0fb852d4bbd5df342c70cff7229433b9d8d4d5318b09547afaaade3942"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/round7-mixer-stability-baseline.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/round7-mixer-stability-baseline.log",
+      "bytes": 36740,
+      "sha256": "3a35b572e18d036af025fafe390df1372b69be7232bff867c636450ceb82a735"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/round7-parameter-baseline.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/round7-parameter-baseline.log",
+      "bytes": 5939,
+      "sha256": "67f50e5b575f9f6c52d62908a74d862af60ae45e8190acb4f38452ba38fa774a"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/round8-midi-press-app-baseline.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/round8-midi-press-app-baseline.log",
+      "bytes": 3934,
+      "sha256": "ed673e6a263e39ef17c91427dc58e63fd2bcb39191f72796fcb9dbf8b42d5ade"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/round8-midi-press-unit-baseline.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/round8-midi-press-unit-baseline.log",
+      "bytes": 931,
+      "sha256": "93f39ab2a73c733730c5b5d15721a1c1e46ea1b2a4d54f369d4eabf7c5d83f7a"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/round9-send-choice-baseline.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/round9-send-choice-baseline.log",
+      "bytes": 2437,
+      "sha256": "4c696c15f6bd69d3474517b21838cdbd3f668f2101dbec50f48d9357a7e4d8f2"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/send-choice-fixed-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/send-choice-fixed-1.log",
+      "bytes": 16482,
+      "sha256": "26f2550cd9bcc4f2fc11109743633a2e0eefd2b96ee7818d0220920e70dc0810"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/send-choice-fixed-2.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/send-choice-fixed-2.log",
+      "bytes": 2188,
+      "sha256": "15d16d0db370faa9d832d8e85e027dcbaffe13dbbf5121f506347ec42393f698"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/send-choice-fixed-new-target.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/send-choice-fixed-new-target.log",
+      "bytes": 1206,
+      "sha256": "94735afe01b73b024efa5cf452ce647ea5d252b9e4176587beabad3827e07f6b"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/send-choice-validation-summary.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/send-choice-validation-summary.json",
+      "bytes": 3484,
+      "sha256": "cb66198e88b3785bc3c7c2cfc0facee600b70a366e245fe1b3c27c4b921bbc29"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/shared-ui-fixed-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/shared-ui-fixed-1.log",
+      "bytes": 30957,
+      "sha256": "eee25054a94b00d7cbed09420d7073a1ce00b03faf823ddcff0518597b641fee"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/value-entry-fixed-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/value-entry-fixed-1.log",
+      "bytes": 735,
+      "sha256": "fbe36687906780c25016151ba82214db605dcff187bf83f36b06f49e5b4adc84"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-build-final.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-build-final.log",
+      "bytes": 133,
+      "sha256": "76f631f64034f49d8f94192ab6e1b5ecdc4e55b9ee7c27e01b1b7a2e6b07b7bf"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-build-round9.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-build-round9.log",
+      "bytes": 60,
+      "sha256": "59e339d2aa27cd2222fead9549dbc67b0a6e0d10e368fb0ddf49b9c9ba0ac0a3"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-build-send-final.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-build-send-final.log",
+      "bytes": 60,
+      "sha256": "f694a9e074374d315f58b8a63ce849858b1b8708cf56b3d194218605bd2a9d6e"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-final-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-final-1.log",
+      "bytes": 183099,
+      "sha256": "7ec2f866229dad32d1903b051635517c9084e4ff57088439a18b1c5409408f8c"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-final-summary.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-final-summary.json",
+      "bytes": 495,
+      "sha256": "e3480b7eb1c472e9d2b90a6cdf9c4f75f9952e0476842b09ec81597b662267dd"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-full-1.log",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-full-1.log",
+      "bytes": 183334,
+      "sha256": "d66439e782c55779445f1a7c471b4523c5c139445696e1258e857510c27c1405"
+    },
+    {
+      "source": "/workspace/scratch/rill-iteration-validation/workspace-full-summary.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/validation/workspace-full-summary.json",
+      "bytes": 476,
+      "sha256": "fac11bb2f5223693083a4b153cf0bf46d80c1bd498977b8b7a812871adcd04db"
+    }
+  ]
+}
