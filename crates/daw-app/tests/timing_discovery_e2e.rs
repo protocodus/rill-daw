@@ -118,10 +118,39 @@ fn clip_and_loop_time_readouts_fit_both_appearances_and_do_not_edit_values() {
             app.command(json!({"command":"viewport", "width":width, "height":800}));
             app.click("Fractional clip");
             let before = app.inspect();
-            let props = menu(&mut app, "Window", "Properties");
-            assert!(has(&props, "0:01.741 · Bar 2 · Beat 1.25"));
-            assert!(has(&props, "0:05.893 · Bar 4 · Beat 3.00"));
-            assert!(has(&props, "0:04.152 · 2.583 bars"));
+            let opened = menu(&mut app, "Window", "Properties");
+            let window = opened["window_rects"].as_array().unwrap().last().unwrap();
+            // The elapsed/bar summaries follow the editable clip fields.
+            // Reach them with the body's wheel scroll, leaving tabs pinned.
+            app.command(json!({"command":"scroll", "delta":-10000.0,
+                "x":window["max"][0].as_f64().unwrap()-2.0*f64::from(daw_ui::tokens::SPACE_LG),
+                "y":window["max"][1].as_f64().unwrap()-f64::from(daw_ui::tokens::SPACE_XL)}));
+            let mut props = app.inspect();
+            for _ in 0..20 {
+                props = app.inspect();
+            }
+            assert_eq!(props["window_rects"], opened["window_rects"]);
+            for label in [
+                "0:01.741 · Bar 2 · Beat 1.25",
+                "0:05.893 · Bar 4 · Beat 3.00",
+                "0:04.152 · 2.583 bars",
+            ] {
+                let rect = props["label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|rect| rect["text"] == label)
+                    .unwrap_or_else(|| panic!("Missing elapsed readout {label}"));
+                assert!(rect["min"][0].as_f64().unwrap() >= window["min"][0].as_f64().unwrap());
+                assert!(rect["max"][0].as_f64().unwrap() <= window["max"][0].as_f64().unwrap());
+                assert!(rect["min"][1].as_f64().unwrap() >= window["min"][1].as_f64().unwrap());
+                assert!(rect["max"][1].as_f64().unwrap() <= window["max"][1].as_f64().unwrap());
+                assert!(
+                    rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap()
+                        >= f64::from(daw_ui::tokens::FONT_BODY),
+                    "Clipped elapsed readout {label}: {rect}"
+                );
+            }
             assert_eq!(props["project"], before["project"]);
             assert_eq!(props["history"], before["history"]);
             app.click("Arranger");

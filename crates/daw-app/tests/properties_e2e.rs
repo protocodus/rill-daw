@@ -66,6 +66,25 @@ fn front(app: &mut Harness, label: &str) -> Value {
     app.command(json!({"command":"click", "label":label, "occurrence":occurrence}))
 }
 
+fn scroll_properties(app: &mut Harness, delta: f64) -> Value {
+    let before = app.inspect();
+    let window = before["window_rects"].as_array().unwrap().last().unwrap();
+    let x = window["max"][0].as_f64().unwrap() - 2.0 * f64::from(daw_ui::tokens::SPACE_LG);
+    let y = window["max"][1].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_XL);
+    app.command(json!({"command":"scroll", "x":x, "y":y, "delta":delta}));
+    let mut state = app.inspect();
+    for _ in 0..20 {
+        state = app.inspect();
+    }
+    for tab in ["Clip", "Track", "Channel"] {
+        assert_eq!(rect(&state, tab), rect(&before, tab));
+    }
+    assert_eq!(state["window_rects"], before["window_rects"]);
+    assert_eq!(state["project"], before["project"]);
+    assert_eq!(state["history"], before["history"]);
+    state
+}
+
 fn select_track(app: &mut Harness, name: &str) {
     let arrangement = window(app, "Arrangement");
     if name == "Track folder" {
@@ -171,7 +190,8 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
             app.command(json!({"command":"viewport", "width":1100, "height":720,
                 "pixels_per_point":density}));
             app.command(json!({"command":"system_theme", "dark":dark}));
-            let selected = selected_clip(&mut app, first);
+            selected_clip(&mut app, first);
+            let selected = scroll_properties(&mut app, 10000.0);
             accessible(
                 &selected,
                 &[
@@ -183,13 +203,13 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
                     "0.50 beats",
                     "Clip gain",
                     "-2.5 dB",
-                    "Fade in",
-                    "Fade out",
                     "Make independent",
                 ],
             );
             assert!(!visible(&selected, "Compact track"));
             assert!(!visible(&selected, "Path latency"));
+            let lower = scroll_properties(&mut app, -10000.0);
+            accessible(&lower, &["Fade in", "Fade out"]);
             let track = front(&mut app, "Track");
             accessible(&track, &["Color", "Compact track", "Folder"]);
             for channel_control in ["Gain", "Pan", "Mute", "Solo", "Path latency"] {
@@ -199,10 +219,12 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
             accessible(&channel, &["Gain", "Pan", "Mute", "Solo", "Path latency"]);
             assert!(!visible(&channel, "Source offset"));
             assert!(!visible(&channel, "Fade in"));
+            app.click("Clip");
             accessible(
-                &app.click("Clip"),
-                &["Source offset", "Fade out", "Make independent"],
+                &scroll_properties(&mut app, 10000.0),
+                &["Source offset", "Make independent"],
             );
+            accessible(&scroll_properties(&mut app, -10000.0), &["Fade out"]);
 
             for name in [
                 "Audio channel",
@@ -253,7 +275,8 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
 }
 
 fn edit_fade(app: &mut Harness, row: &str, value: &str) -> Value {
-    let state = app.inspect();
+    let state = scroll_properties(app, -10000.0);
+    accessible(&state, &[row]);
     let label = rect(&state, row);
     let y = center(label).1;
     let number = state["label_rects"]
@@ -269,6 +292,13 @@ fn edit_fade(app: &mut Harness, row: &str, value: &str) -> Value {
         })
         .unwrap_or_else(|| panic!("Missing value for {row}: {}", state["visible_labels"]));
     let (x, y) = center(number);
+    let window = state["window_rects"].as_array().unwrap().last().unwrap();
+    let half_target = f64::from(daw_ui::tokens::CONTROL_HEIGHT) * 0.5;
+    assert!(y - half_target >= rect(&state, "Clip")["max"][1].as_f64().unwrap());
+    assert!(
+        y + half_target
+            <= window["max"][1].as_f64().unwrap() - f64::from(daw_ui::tokens::WINDOW_MARGIN.bottom)
+    );
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}));
     app.command(json!({"command":"key", "key":"A", "cmd":true}));
     app.command(json!({"command":"text", "text":value}));
@@ -312,6 +342,7 @@ fn clip_gain_and_fades_edit_linked_instances_and_support_undo_then_independence(
     }
     assert_eq!(undo(&mut app, false)["project"], faded_in["project"]);
     assert_eq!(undo(&mut app, true)["project"], faded_out["project"]);
+    scroll_properties(&mut app, 10000.0);
     let detached = app.click("Make independent");
     assert!(clip(&detached, first)["link_group"].is_null());
     let independent = edit_fade(&mut app, "Fade out", "1.5");

@@ -240,6 +240,8 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
         // Mixer Pan is a rotary control; mixer_pan_knob_e2e checks its
         // calibrated arc, painted index, captions and relative mouse edits.
         let mut lengths = Vec::new();
+        let mut allocations = Vec::new();
+        let mut strip_heights = Vec::new();
         // At 600 px the larger shared control rows hold the fader at its
         // usable minimum. Give the tall case room beyond those fixed rows.
         for (height, fractions) in [
@@ -248,7 +250,12 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
         ] {
             app.command(json!({"command":"viewport", "width":1100, "height":height}));
             let state = painted(&mut app);
-            let fader = Scale::from(&mixer_channel(&state, id)["fader_scale"]);
+            let channel = mixer_channel(&state, id);
+            let fader = Scale::from(&channel["fader_scale"]);
+            let height_of =
+                |rect: &Value| rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
+            allocations.push(height_of(&channel["fader"]));
+            strip_heights.push(height_of(&channel["strip"]));
             caption_left_at(&state, fader.min, "−∞");
             caption_left_at(&state, fader.max, "+3.5 dB");
             lengths.push(fader.length());
@@ -269,10 +276,25 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
                 );
             }
         }
-        assert!(
-            lengths[1] > lengths[0] + 300.0,
-            "The fader should use additional height: {lengths:?}"
+        near(allocations[0], 120.0, 0.1);
+        assert!(allocations[1] > allocations[0]);
+        // Generous fixed control rows occupy more height before the fader
+        // leaves its minimum. Once it grows, every additional strip point
+        // must extend both the native hit target and its painted rail.
+        near(
+            lengths[1] - lengths[0],
+            allocations[1] - allocations[0],
+            0.1,
         );
+        near(
+            strip_heights[1] - strip_heights[0],
+            allocations[1] - allocations[0],
+            0.1,
+        );
+        app.command(json!({"command":"viewport", "width":1100, "height":1440}));
+        let taller = painted(&mut app);
+        let taller_fader = Scale::from(&mixer_channel(&taller, id)["fader_scale"]);
+        near(taller_fader.length() - lengths[1], 140.0, 0.1);
         app.quit();
     }
 }

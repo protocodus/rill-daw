@@ -227,8 +227,10 @@ fn mixer_body<'a>(state: &'a Value, name: &str) -> &'a Value {
                         && right > x
                         && top < y
                         && bottom > y
-                        && left > strip_left
-                        && right < strip_right
+                        // The parent owns the inter-channel gutter; the
+                        // painted card fills its complete declared column.
+                        && (left - strip_left).abs() < 0.1
+                        && (right - strip_right).abs() < 0.1
                         && (top - strip_top).abs() < 0.1
                         && (bottom - strip_bottom).abs() < 0.1
                         && shape["fill"][3].as_u64().unwrap_or(0) > 0
