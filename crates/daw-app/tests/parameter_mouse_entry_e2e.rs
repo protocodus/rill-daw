@@ -66,8 +66,8 @@ fn right_click(app: &mut Harness, rect: &Value) -> Value {
     app.command(json!({"command":"pointer", "phase":"click", "button":"secondary", "x":x, "y":y}))
 }
 
-fn toggle_keypad(app: &mut Harness, state: &Value) -> Value {
-    let heading = label(state, "Value");
+fn toggle_keypad(app: &mut Harness, state: &Value, name: &str) -> Value {
+    let heading = label(state, name);
     let left = heading["min"][0].as_f64().unwrap();
     let top = heading["min"][1].as_f64().unwrap();
     let toggle = state["label_rects"]
@@ -93,7 +93,16 @@ fn open_control(app: &mut Harness, view: &str, id: u64, name: &str) -> Value {
     let before = app.inspect();
     let opened = right_click(app, &channel(&before, view, id)[name]);
     unchanged(&opened, &before);
-    let opened = toggle_keypad(app, &opened);
+    let parameter = match name {
+        "gain" => "Volume",
+        "pan" => "Pan",
+        _ => panic!("Unknown channel parameter {name}"),
+    };
+    let title = format!(
+        "{} · {parameter}",
+        track(&before, id)["name"].as_str().unwrap()
+    );
+    let opened = toggle_keypad(app, &opened, &title);
     unchanged(&opened, &before);
     for text in [
         "7",
@@ -229,7 +238,7 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
         let before = app.click("Routing");
         let opened = right_click(&mut app, send_value_rect(&before));
         assert!(visible(&opened, "Range: 0 to 16 ×"));
-        toggle_keypad(&mut app, &opened);
+        toggle_keypad(&mut app, &opened, "Mouse channel → Room · Send level");
         enter_mouse(&mut app, &before, "0.375");
         let sent = app.click("Apply value");
         let send = track(&sent, source)["sends"]
@@ -278,7 +287,7 @@ fn compact_header_and_channel_properties_keep_the_same_mouse_entry() {
         })
         .unwrap();
     let opened = right_click(&mut app, gain);
-    toggle_keypad(&mut app, &opened);
+    toggle_keypad(&mut app, &opened, "Mouse channel · Volume");
     enter_mouse(&mut app, &before, "-9.875");
     let gained = app.click("Apply value");
     near(
@@ -324,11 +333,11 @@ fn automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve() {
         unchanged(&outside, &before);
         open_control(&mut app, "timeline", source, "pan");
         let drafted = enter_mouse(&mut app, &before, "25.125");
-        let hidden = toggle_keypad(&mut app, &drafted);
+        let hidden = toggle_keypad(&mut app, &drafted, "Mouse channel · Pan");
         unchanged(&hidden, &before);
         assert!(!visible(&hidden, "Clear"));
         assert!(visible(&hidden, "25.125"));
-        let reopened = toggle_keypad(&mut app, &hidden);
+        let reopened = toggle_keypad(&mut app, &hidden, "Mouse channel · Pan");
         unchanged(&reopened, &before);
         assert!(visible(&reopened, "25.125"));
         let applied = app.click("Apply value");
@@ -426,7 +435,14 @@ fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_un
     let dial = &before["native_editor"]["parameter_control"]["dial"];
     let opened = right_click(&mut app, dial);
     assert!(visible(&opened, "Range: 0 to 100 %"));
-    toggle_keypad(&mut app, &opened);
+    let title = opened["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|text| text.starts_with("Mouse synth · ") && text.ends_with(" · Filter Cutoff"))
+        .expect("exact editor must identify the channel, device and parameter");
+    toggle_keypad(&mut app, &opened, title);
     enter_mouse(&mut app, &before, "61.23456789");
     let applied = app.click("Apply value");
     let actual = applied["native_editor"]["selected_value"].as_f64().unwrap();

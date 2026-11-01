@@ -31,10 +31,20 @@ impl Default for State {
 }
 
 pub fn show(ui: &mut Ui, state: &mut State) {
-    controls::workspace_header(ui, "Clip Editor · Glass arpeggio", |ui| {
-        controls::quiet_button(ui, "Properties");
-        controls::quiet_button(ui, "Next");
-    });
+    let song_context = format!(
+        "Song {}–{} · Evening lead",
+        controls::duration::compact_musical_position(state.start - 1.0, 4),
+        controls::duration::compact_musical_position(state.start - 1.0 + state.length, 4),
+    );
+    controls::workspace_header_with_context(
+        ui,
+        "Clip Editor · Glass arpeggio",
+        Some(&song_context),
+        |ui| {
+            controls::quiet_button(ui, "Properties");
+            controls::quiet_button(ui, "Next");
+        },
+    );
     ui.add_space(controls::tokens::SPACE_MD);
     if let Some(view) = controls::view_links(
         ui,

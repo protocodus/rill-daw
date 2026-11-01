@@ -79,7 +79,18 @@ fn undo(app: &mut Harness) -> Value {
 fn open_control(app: &mut Harness, view: &str, id: u64, name: &str) -> Value {
     let state = app.inspect();
     let opened = right_click(app, &channel(&state, view, id)[name]);
-    assert!(visible(&opened, "Value"));
+    let parameter = match name {
+        "gain" => "Volume",
+        "pan" => "Pan",
+        _ => panic!("Unknown channel parameter {name}"),
+    };
+    assert!(visible(
+        &opened,
+        &format!(
+            "{} · {parameter}",
+            track(&state, id)["name"].as_str().unwrap()
+        )
+    ));
     assert!(visible(&opened, "Apply value"));
     assert!(visible(&opened, "Cancel"));
     unchanged(&opened, &state);
@@ -387,7 +398,7 @@ fn routing_send_exact_entry_exposes_full_range_and_recalls_the_fraction() {
     app.click("Precise channel");
     let before = app.click("Routing");
     let opened = right_click(&mut app, send_value_rect(&before));
-    assert!(visible(&opened, "Value"));
+    assert!(visible(&opened, "Precise channel → Room · Send level"));
     assert_eq!(range_text(&opened), "Range: 0 to 16 ×");
     shows_number(&opened, 8.0);
     draft(&mut app, &before, "12.3456");

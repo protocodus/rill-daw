@@ -1,5 +1,5 @@
 //! One inexpensive focus layer for on-demand windows and native popup controls.
-use egui::{Context, Id, LayerId, Order};
+use egui::{Color32, Context, Id, LayerId, Order};
 
 fn backdrop_layer(order: Order) -> LayerId {
     LayerId::new(order, Id::new("rill_popup_backdrop"))
@@ -9,8 +9,17 @@ pub(crate) fn is_popup_backdrop_layer(layer: LayerId) -> bool {
     layer.id == backdrop_layer(layer.order).id
 }
 
+/// A quiet focus cue for routine menus, parameter editors and utility windows.
+/// Preserve readable source values and musical detail; explicit decision
+/// dialogs use the stronger modal scrim and blur instead.
+pub fn popup_backdrop_color(ctx: &Context) -> Color32 {
+    crate::theme::palette(ctx)
+        .popup_scrim
+        .gamma_multiply(1.0 - crate::tokens::GOLDEN_RATIO_INVERSE)
+}
+
 /// Paint once after the workspace and its utilities. A window leaves the caller
-/// visible beneath a dim layer; an anchored menu dims the window as well. Native
+/// readable beneath a light dim layer; an anchored menu dims the window as well. Native
 /// popup layers keep their order above the dimming. This adds no hit targets,
 /// focus, animation, or background processing. Tooltips do not dim the screen.
 pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
@@ -40,10 +49,5 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
         }
     }
     let painter = ctx.layer_painter(layer);
-    crate::backdrop_blur::paint_utility_blur(ctx, &painter, native_popup);
-    painter.rect_filled(
-        ctx.content_rect(),
-        0.0,
-        crate::theme::palette(ctx).popup_scrim,
-    );
+    painter.rect_filled(ctx.content_rect(), 0.0, popup_backdrop_color(ctx));
 }

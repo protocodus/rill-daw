@@ -133,7 +133,7 @@ mod file_dialog;
 mod oneshot;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use file_dialog::FileDialog;
+pub use file_dialog::{FileDialog, FileDialogError};
 
 pub use file_dialog::AsyncFileDialog;
 

@@ -737,12 +737,33 @@ impl<'a> Slider<'a> {
                                         || input.pointer.button_released(button)
                                 })
                         });
+                    // Native Always calls its rounding setter even on an idle
+                    // frame. Clamp existing values to the range here instead,
+                    // so configured edit precision never quantizes stored data
+                    // merely because the slider is rendered or refreshed.
+                    let mut clamped_existing = false;
+                    if pointer_edit && self.clamping == SliderClamping::Always {
+                        let current = (self.value)(None);
+                        let minimum = self.range.start().min(*self.range.end());
+                        let maximum = self.range.start().max(*self.range.end());
+                        if minimum <= maximum {
+                            let clamped = current.clamp(minimum, maximum);
+                            if clamped != current {
+                                (self.value)(Some(clamped));
+                                clamped_existing = true;
+                            }
+                        }
+                    }
                     let mut native = egui::Slider::from_get_set(self.range.clone(), |next| {
                         (self.value)(next.filter(|_| pointer_edit))
                     })
                     .orientation(orientation)
                     .show_value(false)
-                    .clamping(self.clamping)
+                    .clamping(if self.clamping == SliderClamping::Always {
+                        SliderClamping::Edits
+                    } else {
+                        self.clamping
+                    })
                     .smart_aim(self.smart_aim)
                     .min_decimals(self.min_decimals)
                     .handle_shape(shape);
@@ -770,7 +791,7 @@ impl<'a> Slider<'a> {
                     // overlapping widget or independent event handler is created.
                     let mut response =
                         ui.interact(native.rect, native.id, egui::Sense::click_and_drag());
-                    if native.changed() {
+                    if native.changed() || clamped_existing {
                         response.mark_changed();
                     }
                     response
@@ -882,6 +903,8 @@ impl<'a> Slider<'a> {
         let value_before_number = (self.value)(None);
         if self.show_value {
             let mut value = value_before_number;
+            let numeric_id = ui.next_auto_id();
+            crate::value_entry::synchronize_number(ui, numeric_id, value);
             let length = geometry.minimum.distance(geometry.maximum).max(1.0);
             let speed = self.step.unwrap_or_else(|| {
                 ((*self.range.end() - *self.range.start()).abs() / f64::from(length))
@@ -925,6 +948,7 @@ impl<'a> Slider<'a> {
                 }
                 (self.value)(Some(value));
             }
+            crate::value_entry::remember_number_value(ui, numeric_id, (self.value)(None));
             if numeric.has_focus() || numeric.gained_focus() || numeric.lost_focus() {
                 response = numeric.union(response);
             } else {

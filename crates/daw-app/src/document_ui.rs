@@ -169,9 +169,22 @@ impl DawApp {
                 dialog
             };
             let chosen = daw_ui::with_native_dialog_menu(|| match kind {
-                DocumentDialog::Open | DocumentDialog::Import => dialog.pick_file(),
-                _ => dialog.save_file(),
-            })?;
+                DocumentDialog::Open | DocumentDialog::Import => dialog.pick_file_result(),
+                _ => dialog.save_file_result(),
+            });
+            let chosen = match chosen {
+                Ok(selection) => selection?,
+                Err(error) => {
+                    self.message(
+                        Err(anyhow::Error::new(error).context("Could not open the file picker")),
+                        "",
+                    );
+                    if let Some(guard) = self.document_guard.as_mut() {
+                        guard.error = Some(self.status.clone());
+                    }
+                    return None;
+                }
+            };
             (chosen, None)
         };
         if !matches!(kind, DocumentDialog::Open | DocumentDialog::Import)

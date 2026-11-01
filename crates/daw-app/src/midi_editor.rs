@@ -1671,6 +1671,21 @@ impl DawApp {
             self.project.tempo,
             self.project.beats_per_bar,
         );
+        let time_origin = Rect::from_min_max(canvas.min, Pos2::new(plot.left(), ruler.bottom()));
+        daw_ui::text::paint_row(
+            &painter,
+            time_origin.shrink2(Vec2::new(daw_ui::tokens::SPACE_XS, 0.0)),
+            daw_ui::text::TextRole::Note,
+            "Local",
+        );
+        ui.interact(
+            time_origin,
+            ui.id().with("local_time_origin"),
+            Sense::hover(),
+        )
+        .on_hover_text(
+            "Clip-local bars and beats. The workspace header shows this clip's span in the song.",
+        );
 
         let end_x = view.x_at(plot, clip_length);
         let outside_clip = daw_ui::paint_clip_tail(&row_painter, plot, end_x);
@@ -2258,6 +2273,8 @@ impl DawApp {
         );
         ui.ctx().data_mut(|data|data.insert_temp(egui::Id::new("midi_editor_diagnostics"),serde_json::json!({
             "plot":rect_json(plot),"velocity":rect_json(velocity_rect),"keys":key_diagnostics,"notes":note_diagnostics,
+            "ruler":rect_json(ruler),"time_origin":rect_json(time_origin),"time_basis":"clip-local",
+            "clip_global_start":clip_start,"clip_global_end":clip_start+clip_length,"local_cursor":self.cursor-clip_start,
             "outside_clip":outside_clip.map(rect_json),"clip_end_label":clip_end_label.map(rect_json),
             "draw_length":state.draw_length.label(),"drawing_length_beats":drawing_length,
             "start_beat":view.start_beat,"pixels_per_beat":view.pixels_per_beat,"row_offset":view.row_offset,"row_height":view.row_height,

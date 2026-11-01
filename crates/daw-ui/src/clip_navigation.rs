@@ -17,10 +17,11 @@ pub fn clip_navigation_header_controls(
     if !previous && !next {
         return None;
     }
-    let width = 220.0_f32.min(ui.available_width());
+    let compact = ui.ctx().content_rect().width() < 1000.0;
+    let width = (if compact { 160.0_f32 } else { 220.0_f32 }).min(ui.available_width());
     let gap = crate::tokens::SPACE_XS;
     // "Previous" needs more room than "Next" after icon and native padding.
-    let previous_width = ((width - gap) * 0.57).max(1.0);
+    let previous_width = ((width - gap) * if compact { 0.60 } else { 0.57 }).max(1.0);
     let next_width = ((width - gap) - previous_width).max(1.0);
     ui.allocate_ui_with_layout(
         egui::vec2(width, crate::tokens::CONTROL_HEIGHT),
@@ -31,10 +32,14 @@ pub fn clip_navigation_header_controls(
                 .add_enabled_ui(previous, |ui| {
                     ui.add_sized(
                         egui::vec2(previous_width, crate::tokens::CONTROL_HEIGHT),
-                        crate::IconButton::with_icon(crate::Icon::Back, "Previous")
-                            .presentation()
-                            .quiet()
-                            .wrap_mode(egui::TextWrapMode::Extend),
+                        (if compact {
+                            crate::IconButton::new("Previous")
+                        } else {
+                            crate::IconButton::with_icon(crate::Icon::Back, "Previous")
+                        })
+                        .presentation()
+                        .quiet()
+                        .wrap_mode(egui::TextWrapMode::Extend),
                     )
                 })
                 .inner
@@ -44,10 +49,14 @@ pub fn clip_navigation_header_controls(
                 .add_enabled_ui(next, |ui| {
                     ui.add_sized(
                         egui::vec2(next_width, crate::tokens::CONTROL_HEIGHT),
-                        crate::IconButton::with_icon(crate::Icon::ChevronRight, "Next")
-                            .presentation()
-                            .quiet()
-                            .wrap_mode(egui::TextWrapMode::Extend),
+                        (if compact {
+                            crate::IconButton::new("Next")
+                        } else {
+                            crate::IconButton::with_icon(crate::Icon::ChevronRight, "Next")
+                        })
+                        .presentation()
+                        .quiet()
+                        .wrap_mode(egui::TextWrapMode::Extend),
                     )
                 })
                 .inner

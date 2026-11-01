@@ -5,6 +5,28 @@ use std::path::PathBuf;
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 
+/// A file picker could not complete because its native backend failed.
+#[derive(Debug)]
+pub struct FileDialogError {
+    message: String,
+}
+
+impl FileDialogError {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for FileDialogError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for FileDialogError {}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Filter {
     #[allow(dead_code)]
@@ -117,6 +139,15 @@ impl FileDialog {
         FilePickerDialogImpl::pick_file(self)
     }
 
+    /// Pick one file, retaining native backend errors separately from cancellation.
+    ///
+    /// Detailed errors are currently supported by the Linux/BSD portal backend
+    /// and its Zenity fallback. Other backends retain their existing cancellation
+    /// semantics and return `Ok` around their legacy result.
+    pub fn pick_file_result(self) -> Result<Option<PathBuf>, FileDialogError> {
+        FilePickerDialogImpl::pick_file_result(self)
+    }
+
     /// Pick multiple files
     pub fn pick_files(self) -> Option<Vec<PathBuf>> {
         FilePickerDialogImpl::pick_files(self)
@@ -149,6 +180,12 @@ impl FileDialog {
     ///     - If unselected extension was provided it will append selected one at the end, example: `test.png.txt`
     pub fn save_file(self) -> Option<PathBuf> {
         FileSaveDialogImpl::save_file(self)
+    }
+
+    /// Open a save dialog, retaining native backend errors separately from cancellation.
+    /// See [`Self::pick_file_result`] for platform support.
+    pub fn save_file_result(self) -> Result<Option<PathBuf>, FileDialogError> {
+        FileSaveDialogImpl::save_file_result(self)
     }
 }
 

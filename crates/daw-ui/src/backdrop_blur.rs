@@ -1,4 +1,5 @@
-//! Bounded, cached GPU softening of inactive context. No CPU pixel readback,
+//! Bounded GPU softening for explicit modal decisions. Routine utilities and
+//! anchored popovers preserve sharp source context. No CPU pixel readback,
 //! animation, repaint requests, or changes to interaction are involved.
 use egui::{Context, Id, Painter, Rect};
 #[cfg(feature = "glow-backdrop")]
@@ -15,8 +16,6 @@ pub struct BackdropBlurInfo {
 #[derive(Clone, Default)]
 struct BlurFrame {
     pass: u64,
-    source: Option<(Rect, u64)>,
-    modal: bool,
     regions: Vec<BackdropBlurInfo>,
 }
 
@@ -60,29 +59,7 @@ pub(crate) fn begin_blur_frame(ctx: &Context) {
     update_frame(ctx, |_| {});
 }
 
-pub(crate) fn retain_blur_source(ctx: &Context, bounds: Rect, source: u64) {
-    update_frame(ctx, |frame| {
-        frame.source = (source != 0).then_some((bounds, source))
-    });
-}
-
-pub(crate) fn paint_utility_blur(ctx: &Context, painter: &Painter, menu: bool) {
-    let (modal, source) = update_frame(ctx, |frame| (frame.modal, frame.source));
-    if modal {
-        return;
-    }
-    let (bounds, key) = if menu {
-        (ctx.content_rect(), None)
-    } else {
-        source.map_or((ctx.content_rect(), None), |(bounds, key)| {
-            (bounds, Some(key))
-        })
-    };
-    paint_blur(ctx, painter, bounds, key);
-}
-
 pub(crate) fn paint_modal_blur(ctx: &Context, painter: &Painter) {
-    update_frame(ctx, |frame| frame.modal = true);
     paint_blur(ctx, painter, ctx.content_rect(), None);
 }
 

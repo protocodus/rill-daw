@@ -544,6 +544,18 @@ pub fn contextual_ai_button(ui: &mut Ui, scope: &str) -> Response {
     )
 }
 
+/// A compact version for bounded editor headers. Keep a readable AI label and
+/// the same scope explanation without taking space from the musical identity.
+pub fn contextual_ai_button_compact(ui: &mut Ui, scope: &str) -> Response {
+    crate::hover_text(
+        ui.add(crate::button_widget("AI").presentation()),
+        format!(
+            "AI for this context · Open AI scoped to {}",
+            bounded(scope, 2_048)
+        ),
+    )
+}
+
 fn tool_browser(
     ui: &mut Ui,
     prompt: &mut String,

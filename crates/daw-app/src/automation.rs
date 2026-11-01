@@ -1678,8 +1678,15 @@ fn collect_painted_details(
                         colors.push(color);
                     }
                 }
+                let rendered_text = shape
+                    .galley
+                    .rows
+                    .iter()
+                    .map(|row| row.glyphs.iter().map(|glyph| glyph.chr).collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 text.push(
-                    json!({"text":shape.galley.job.text,"rect":rect_json(rect),"colors":colors}),
+                    json!({"text":shape.galley.job.text,"rendered_text":rendered_text,"rect":rect_json(rect),"colors":colors}),
                 );
             }
         }

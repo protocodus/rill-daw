@@ -206,6 +206,9 @@ mod tests {
         assert_eq!(app.song_session.revision, revision + 1);
         assert_eq!(app.history.undo_labels().count(), 1);
         let track = &app.project.tracks[0];
+        // Composition arguments already provide an intentional musical name;
+        // instrument assignment must preserve it, even for a new track.
+        assert_eq!(track.name, "Bass");
         assert_eq!(result["track_id"], track.id);
         assert!(
             matches!(&track.instrument, Instrument::Vst3 { path, .. } if path == "/catalog/Trusted.vst3")
@@ -271,6 +274,7 @@ mod tests {
             .unwrap();
         assert_eq!(result["track_id"], track_id);
         assert_eq!(app.project.tracks.len(), 1);
+        assert_eq!(app.project.tracks[0].name, "Existing bass");
         assert_eq!(app.project.tracks[0].instrument_state, vec![1, 2, 3]);
         assert!(
             matches!(&app.project.tracks[0].clips[0].content, ClipContent::Midi { notes } if !notes.is_empty())
@@ -290,5 +294,16 @@ mod tests {
         );
         assert!(app.project.tracks.is_empty());
         assert_eq!(app.history.undo_labels().count(), 0);
+    }
+
+    #[test]
+    fn an_explicit_default_looking_part_name_is_not_an_automatic_name() {
+        let mut app = app();
+        let mut arguments = args(&app);
+        arguments["part"]["name"] = json!("New instrument");
+        app.instrument_tool("create_instrument_part", arguments)
+            .unwrap()
+            .unwrap();
+        assert_eq!(app.project.tracks[0].name, "New instrument");
     }
 }

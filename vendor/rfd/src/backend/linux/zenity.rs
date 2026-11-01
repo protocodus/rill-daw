@@ -10,6 +10,7 @@ use crate::{
 pub enum ZenityError {
     Io(std::io::Error),
     FromUtf8Error(std::string::FromUtf8Error),
+    FileSelection(String),
 }
 
 impl Error for ZenityError {}
@@ -19,6 +20,7 @@ impl Display for ZenityError {
         match self {
             ZenityError::Io(io) => write!(f, "{io}"),
             ZenityError::FromUtf8Error(err) => err.fmt(f),
+            ZenityError::FileSelection(error) => f.write_str(error),
         }
     }
 }
@@ -60,6 +62,9 @@ fn add_filters(command: &mut Command, filters: &[Filter]) {
 #[path = "zenity_filename.rs"]
 mod filename;
 
+#[path = "zenity_result.rs"]
+mod result;
+
 fn add_filename(command: &mut Command, dialog: &FileDialog) {
     if let Some(filename) = filename::filename_argument(
         dialog.starting_directory.as_deref(),
@@ -76,6 +81,11 @@ async fn run(command: Command) -> ZenityResult<Option<String>> {
     Ok((res.status.success() || !buffer.is_empty()).then_some(buffer))
 }
 
+async fn run_file_dialog(command: Command) -> ZenityResult<Option<String>> {
+    let output = super::async_command::AsyncCommand::spawn(command).await?;
+    result::file_selection(output).map_err(ZenityError::FileSelection)
+}
+
 pub async fn pick_file(dialog: &FileDialog) -> ZenityResult<Option<PathBuf>> {
     let mut command = command();
     command.arg("--file-selection");
@@ -83,7 +93,7 @@ pub async fn pick_file(dialog: &FileDialog) -> ZenityResult<Option<PathBuf>> {
     add_filters(&mut command, &dialog.filters);
     add_filename(&mut command, dialog);
 
-    run(command).await.map(|res| {
+    run_file_dialog(command).await.map(|res| {
         res.map(|buffer| {
             let trimed = buffer.trim();
             trimed.into()
@@ -98,7 +108,7 @@ pub async fn pick_files(dialog: &FileDialog) -> ZenityResult<Vec<PathBuf>> {
     add_filters(&mut command, &dialog.filters);
     add_filename(&mut command, dialog);
 
-    run(command).await.map(|res| {
+    run_file_dialog(command).await.map(|res| {
         res.map(|buffer| {
             let list = buffer.trim().split('|').map(PathBuf::from).collect();
             list
@@ -114,7 +124,7 @@ pub async fn pick_folder(dialog: &FileDialog) -> ZenityResult<Option<PathBuf>> {
     add_filters(&mut command, &dialog.filters);
     add_filename(&mut command, dialog);
 
-    run(command).await.map(|res| {
+    run_file_dialog(command).await.map(|res| {
         res.map(|buffer| {
             let trimed = buffer.trim();
             trimed.into()
@@ -129,7 +139,7 @@ pub async fn pick_folders(dialog: &FileDialog) -> ZenityResult<Vec<PathBuf>> {
     add_filters(&mut command, &dialog.filters);
     add_filename(&mut command, dialog);
 
-    run(command).await.map(|res| {
+    run_file_dialog(command).await.map(|res| {
         res.map(|buffer| {
             let list = buffer.trim().split('|').map(PathBuf::from).collect();
             list
@@ -145,7 +155,7 @@ pub async fn save_file(dialog: &FileDialog) -> ZenityResult<Option<PathBuf>> {
     add_filters(&mut command, &dialog.filters);
     add_filename(&mut command, dialog);
 
-    run(command).await.map(|res| {
+    run_file_dialog(command).await.map(|res| {
         res.map(|buffer| {
             let trimed = buffer.trim();
             trimed.into()

@@ -183,7 +183,7 @@ fn adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channe
     assert_eq!(created["selected_track"], other);
     let tracks = created["project"]["tracks"].as_array().unwrap();
     assert_eq!(tracks.len(), 4);
-    assert_eq!(tracks[3]["name"], "New bus");
+    assert_eq!(tracks[3]["name"], "Bus 1");
     assert_eq!(
         track(&created, other)["sends"][0]["target_bus"],
         tracks[3]["id"]
@@ -196,7 +196,7 @@ fn adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channe
 
     let added = app.click("Add bus");
     assert_eq!(added["project"]["tracks"].as_array().unwrap().len(), 4);
-    assert_eq!(added["project"]["tracks"][3]["name"], "New bus");
+    assert_eq!(added["project"]["tracks"][3]["name"], "Bus 1");
     assert_eq!(undo(&mut app)["project"], baseline["project"]);
 
     // A folder has no channel signal and must not create an arbitrary send.

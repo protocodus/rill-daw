@@ -25,7 +25,7 @@ fn blur_targets_remain_bounded_at_high_density_and_wide_viewports() {
 }
 
 #[test]
-fn utility_blur_uses_frozen_workspace_and_closing_clears_the_request() {
+fn routine_utility_keeps_frozen_workspace_sharp_under_one_light_scrim() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
     let mut backdrop = ViewBackdrop::default();
@@ -51,13 +51,26 @@ fn utility_blur_uses_frozen_workspace_and_closing_clears_the_request() {
             });
             daw_ui::paint_popup_backdrop(ctx, true);
         });
-        let requests = backdrop_blur_info(&ctx);
-        assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].bounds, bounds);
-        assert!(requests[0].cached_source);
+        assert!(backdrop_blur_info(&ctx).is_empty());
+        let scrim = daw_ui::popup_backdrop_color(&ctx);
+        assert!(scrim.a() > 0 && scrim.a() < 64);
+        assert_eq!(
+            output
+                .shapes
+                .iter()
+                .filter(|shape| {
+                    matches!(&shape.shape, egui::Shape::Rect(rect)
+                    if rect.rect == ctx.content_rect() && rect.fill == scrim)
+                })
+                .count(),
+            1,
+            "The utility must use one quiet focus layer"
+        );
         assert!(
-            !requests[0].gpu_available,
-            "headless contexts create no GL resources"
+            output.shapes.iter().any(|shape| {
+                matches!(&shape.shape, egui::Shape::Mesh(_)) && shape.clip_rect.intersects(bounds)
+            }),
+            "The crisp frozen workspace remains painted"
         );
         if frame > 0 {
             assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.job.text == "Foreground")));
@@ -73,7 +86,7 @@ fn utility_blur_uses_frozen_workspace_and_closing_clears_the_request() {
 }
 
 #[test]
-fn modal_blurs_once_before_its_foreground_instead_of_stacking_utility_blur() {
+fn explicit_modal_retains_one_bounded_blur_before_its_foreground() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
     for _ in 0..3 {
@@ -90,5 +103,20 @@ fn modal_blurs_once_before_its_foreground_instead_of_stacking_utility_blur() {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].bounds, ctx.content_rect());
         assert!(!requests[0].cached_source);
+    }
+}
+
+#[test]
+fn routine_scrim_preserves_more_context_than_modal_scrim_in_both_themes() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    for appearance in [
+        daw_ui::theme::Appearance::Dark,
+        daw_ui::theme::Appearance::Light,
+    ] {
+        daw_ui::theme::set_appearance(&ctx, appearance);
+        let routine = daw_ui::popup_backdrop_color(&ctx);
+        let modal = daw_ui::theme::palette(&ctx).popup_scrim;
+        assert!(routine.a() > 0 && routine.a() < modal.a() / 2);
     }
 }

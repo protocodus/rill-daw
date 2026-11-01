@@ -10,6 +10,7 @@ pub struct State {
     pan: f64,
     slider_landmarks: [f64; 4],
     rotary: f64,
+    send_gain: f64,
     enabled: bool,
     monitor: bool,
     mode: u8,
@@ -29,6 +30,7 @@ impl Default for State {
             pan: 0.2,
             slider_landmarks: [0.0, 100.0, 50.0, 0.0],
             rotary: 42.375,
+            send_gain: 0.25,
             enabled: true,
             monitor: false,
             mode: 0,
@@ -153,8 +155,35 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 controls::radio_value(ui, &mut state.mode, 1, "Fast");
             });
             ui.add_space(controls::tokens::SPACE_MD);
-            text::label(ui, "Pan");
-            ui.add(controls::slider(&mut state.pan, -1.0..=1.0).text("L / R"));
+            ui.columns(2, |columns| {
+                text::label(&mut columns[0], "Pan");
+                columns[0].add(controls::slider(&mut state.pan, -1.0..=1.0).text("L / R"));
+                let send = &mut columns[1];
+                text::label(send, "Send · Room");
+                send.horizontal(|ui| {
+                    ui.add(
+                        controls::knob(&mut state.send_gain, 0.0..=16.0)
+                            .compact()
+                            .diameter(64.0)
+                            .perceptual_gain()
+                            .suffix("×"),
+                    );
+                    let (_, exact) = controls::automatable_parameter_value_button(
+                        ui,
+                        "gallery_send_exact",
+                        format!("{}×", controls::parameter_value_text(state.send_gain)),
+                        controls::AutomationControl::Send { track: 1, bus: 2 },
+                        None,
+                        state.send_gain,
+                        0.0..=16.0,
+                        "×",
+                        "Glass Current → Room · Send level",
+                    );
+                    if let Some(value) = exact {
+                        state.send_gain = value;
+                    }
+                });
+            });
             ui.add_space(controls::tokens::SPACE_MD);
             ui.columns(4, |columns| {
                 for (index, (column, label)) in columns

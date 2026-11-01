@@ -35,6 +35,7 @@ fn initial_midi_assignment_and_replacement_keep_the_same_track_and_pattern() {
     let assigned = app.click("Assign instrument");
     assert_eq!(tracks(&assigned).len(), 1);
     assert_eq!(tracks(&assigned)[0]["id"], track);
+    assert_eq!(tracks(&assigned)[0]["name"], "Rill Fixture A");
     assert_eq!(tracks(&assigned)[0]["clips"][0], pattern);
     assert_eq!(
         tracks(&assigned)[0]["instrument"]["Vst3"]["class_id"],
@@ -48,11 +49,12 @@ fn initial_midi_assignment_and_replacement_keep_the_same_track_and_pattern() {
     menu(&mut app, "Window", "Instrument");
     app.click("Change instrument");
     common::wait_library_device(&mut app, "Rill Fixture B");
-    assert!(visible(&app.inspect(), "Assign to New instrument"));
+    assert!(visible(&app.inspect(), "Assign to Rill Fixture A"));
     app.click("Rill Fixture B");
     let replaced = app.click("Assign instrument");
     assert_eq!(tracks(&replaced).len(), 1);
     assert_eq!(tracks(&replaced)[0]["id"], track);
+    assert_eq!(tracks(&replaced)[0]["name"], "Rill Fixture A");
     assert_eq!(tracks(&replaced)[0]["clips"][0], pattern);
     assert_eq!(
         tracks(&replaced)[0]["instrument"]["Vst3"]["class_id"],

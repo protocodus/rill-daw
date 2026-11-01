@@ -1,0 +1,12 @@
+{
+  "rill": {
+    "source": "/workspace/rill-daw/target/debug/rill",
+    "copy": "/workspace/scratch/rill-expert-fixes-preview/binaries/rill",
+    "sha256": "dfc8b8861281f064ca03a2e6190c1e8e775feec0b9c27042027397d2d54c2746"
+  },
+  "daw-plugin-host": {
+    "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+    "copy": "/workspace/scratch/rill-expert-fixes-preview/binaries/daw-plugin-host",
+    "sha256": "ce0ab355d6c0ab268ac9f6a76083d6505d91a2ac306e3c84ec7a1553d1f4f060"
+  }
+}

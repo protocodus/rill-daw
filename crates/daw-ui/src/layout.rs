@@ -361,6 +361,7 @@ pub fn bounded_panes<R>(
 pub struct WorkspaceHeaderResponse<R> {
     pub back: Response,
     pub title: Response,
+    pub context: Option<Response>,
     pub inner: R,
     pub response: Response,
 }
@@ -372,6 +373,23 @@ pub fn workspace_header<R>(
     title: impl Into<WidgetText>,
     actions: impl FnOnce(&mut Ui) -> R,
 ) -> WorkspaceHeaderResponse<R> {
+    workspace_header_with_context(ui, title, None, actions)
+}
+
+/// A workspace identity with an optional reserved context line. Both lines fit
+/// inside the existing control-height band, so context never takes another row
+/// from the canvas. The first trailing action stays anchored to the right edge,
+/// independent of the identity length or the remaining actions.
+/// The caller can attach one complete explanation to the returned context
+/// response; no automatic elision tooltip competes with that explanation.
+pub fn workspace_header_with_context<R>(
+    ui: &mut Ui,
+    title: impl Into<WidgetText>,
+    context: Option<&str>,
+    actions: impl FnOnce(&mut Ui) -> R,
+) -> WorkspaceHeaderResponse<R> {
+    let title = title.into();
+    let full_title = title.text().to_owned();
     let row = crate::soft_surface(
         ui,
         egui::Frame::new().inner_margin(egui::Margin::symmetric(
@@ -388,14 +406,46 @@ pub fn workspace_header<R>(
                             let back = crate::quiet_button(ui, "Back")
                                 .on_hover_text("Return to the previous workspace");
                             ui.add_space(tokens::SPACE_XS);
-                            let title = ui.add(
-                                egui::Label::new(title.into().text_style(egui::TextStyle::Heading))
-                                    .truncate(),
-                            );
-                            (back, title)
+                            let identity = if let Some(context) = context {
+                                ui.vertical(|ui| {
+                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                    ui.set_min_height(tokens::CONTROL_HEIGHT);
+                                    let title = ui
+                                        .add(
+                                            egui::Label::new(
+                                                title.text_style(egui::TextStyle::Body),
+                                            )
+                                            .truncate()
+                                            .show_tooltip_when_elided(false),
+                                        )
+                                        .on_hover_text(&full_title);
+                                    let context = ui.add(
+                                        egui::Label::new(
+                                            crate::text::TextRole::Note.rich(ui.ctx(), context),
+                                        )
+                                        .truncate()
+                                        .show_tooltip_when_elided(false),
+                                    );
+                                    (title, Some(context))
+                                })
+                                .inner
+                            } else {
+                                (
+                                    ui.add(
+                                        egui::Label::new(
+                                            title.text_style(egui::TextStyle::Heading),
+                                        )
+                                        .truncate()
+                                        .show_tooltip_when_elided(false),
+                                    )
+                                    .on_hover_text(&full_title),
+                                    None,
+                                )
+                            };
+                            (back, identity.0, identity.1)
                         })
                         .inner;
-                    (back.0, back.1, inner)
+                    (back.0, back.1, back.2, inner)
                 })
                 .inner
             })
@@ -405,7 +455,8 @@ pub fn workspace_header<R>(
     WorkspaceHeaderResponse {
         back: row.inner.0,
         title: row.inner.1,
-        inner: row.inner.2,
+        context: row.inner.2,
+        inner: row.inner.3,
         response: row.response,
     }
 }

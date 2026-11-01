@@ -5,6 +5,40 @@ use egui::{
 };
 
 #[test]
+fn always_clamps_to_exact_boundaries_but_only_quantizes_intentional_edits() {
+    let minimum = 0.123456789_f64;
+    let maximum = 1.23456789_f64;
+    for (stored, expected, changed) in [
+        (0.23456789, 0.23456789, false),
+        (0.0, minimum, true),
+        (2.0, maximum, true),
+    ] {
+        let ctx = Context::default();
+        daw_ui::theme::apply(&ctx);
+        let mut value = stored;
+        let mut edited = false;
+        let _ = ctx.run(RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                edited = ui
+                    .add(
+                        daw_ui::slider(&mut value, minimum..=maximum)
+                            .clamping(egui::SliderClamping::Always)
+                            .step_by(0.1)
+                            .max_decimals(3),
+                    )
+                    .changed();
+            });
+        });
+        assert_eq!(
+            value.to_bits(),
+            expected.to_bits(),
+            "paint must not quantize an existing fraction or an exact range endpoint"
+        );
+        assert_eq!(edited, changed);
+    }
+}
+
+#[test]
 fn tiny_ranges_keep_distinct_readable_endpoints_without_changing_values() {
     for (minimum, maximum, value, captions) in [
         (0.0001, 0.0009, 0.0005, ["0.0001", "0.0009"]),

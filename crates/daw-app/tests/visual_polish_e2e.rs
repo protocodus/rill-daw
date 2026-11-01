@@ -315,7 +315,7 @@ fn routing_gradients_connect_both_directions_and_master_without_gaps() {
 }
 
 #[test]
-fn inactive_context_requests_one_bounded_blur_and_preserves_foreground_input() {
+fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let mut project = Project::new();
@@ -323,7 +323,7 @@ fn inactive_context_requests_one_bounded_blur_and_preserves_foreground_input() {
         project.track_mut(track).unwrap().clips.push(Clip::midi(
             "Focus phrase",
             0.0,
-            4.0,
+            32.0,
             vec![Note::new(60, 0.0, 1.0, 100)],
         ));
         let path = app.directory.path().join("blur-context.rill");
@@ -333,36 +333,56 @@ fn inactive_context_requests_one_bounded_blur_and_preserves_foreground_input() {
         app.command(
             json!({"command":"viewport","width":1100,"height":900,"pixels_per_point":density}),
         );
-        app.click("Focus phrase");
-        assert_eq!(app.inspect()["backdrop_blur"], json!([]));
+        let source = app.click("Focus phrase");
+        assert_eq!(source["backdrop_blur"], json!([]));
         app.click("Window");
         app.click("Effects");
-        let assert_blur = |state: &Value, cached: bool| {
-            let blur = state["backdrop_blur"].as_array().unwrap();
-            assert_eq!(blur.len(), 1, "Nested focus must not compound blur passes");
-            assert_eq!(blur[0]["cached_source"], cached);
+        let assert_crisp = |state: &Value| {
             assert_eq!(
-                blur[0]["gpu_available"], false,
-                "Headless testing must stay display-free"
+                state["backdrop_blur"],
+                json!([]),
+                "Routine utilities and menus must keep source detail readable"
             );
-            let rect = bounds(&blur[0]["rect"]);
-            assert!(rect[0] >= 0.0 && rect[1] >= 0.0 && rect[2] <= 1100.0 && rect[3] <= 900.0);
-            for (axis, length) in [rect[2] - rect[0], rect[3] - rect[1]]
-                .into_iter()
-                .enumerate()
-            {
-                let size = blur[0]["target_size"][axis].as_f64().unwrap();
-                assert!(size > 0.0 && size <= 512.0);
-                assert!(size <= (length * density / 4.0).ceil());
-            }
             unchanged(state, &baseline);
         };
         let utility = painted(&mut app);
         assert_eq!(utility["popup_context"]["interactive"], false);
-        assert_blur(&utility, true);
+        assert_crisp(&utility);
         let stable = painted(&mut app);
         assert_eq!(stable["backdrop_blur"], utility["backdrop_blur"]);
-        // A real foreground action still works above the softened caller.
+        // The long fixture exposes part of its visible clip outside the centered
+        // utility. The clip remains an inert snapshot: clicking or dragging it
+        // and pressing Delete cannot edit the song behind the foreground tool.
+        let [left, top, right, bottom] = bounds(&source["timeline"]["clips"][0]["visible_rect"]);
+        let background = [left + 10.0, (left + right) * 0.5, right - 10.0]
+            .into_iter()
+            .flat_map(|x| {
+                [top + 8.0, (top + bottom) * 0.5, bottom - 8.0]
+                    .into_iter()
+                    .map(move |y| [x, y])
+            })
+            .find(|[x, y]| {
+                !utility["window_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|window| {
+                        let [left, top, right, bottom] = bounds(window);
+                        left <= *x && *x <= right && top <= *y && *y <= bottom
+                    })
+            })
+            .expect("The fixture exposes clip context outside the Effects utility");
+        app.command(json!({"command":"pointer", "phase":"click",
+            "x":background[0], "y":background[1]}));
+        app.command(json!({"command":"pointer", "phase":"drag_batched",
+            "x":background[0], "y":background[1],
+            "to_x":background[0] + 60.0, "to_y":background[1]}));
+        let blocked = app.key("Delete");
+        assert_crisp(&blocked);
+        assert_eq!(blocked["popups"], utility["popups"]);
+        assert_eq!(blocked["selected_clip"], source["selected_clip"]);
+        assert_eq!(blocked["selected_clips"], source["selected_clips"]);
+        // A real foreground action still works above the legible, inert caller.
         app.click("+ Insert");
         let nested = painted(&mut app);
         assert!(
@@ -371,11 +391,11 @@ fn inactive_context_requests_one_bounded_blur_and_preserves_foreground_input() {
                 .unwrap()
                 .contains(&json!("Device library"))
         );
-        assert_blur(&nested, true);
+        assert_crisp(&nested);
         app.key("Escape");
         app.click("File");
         let menu = painted(&mut app);
-        assert_blur(&menu, false);
+        assert_crisp(&menu);
         assert!(
             menu["visible_labels"]
                 .as_array()
@@ -383,7 +403,7 @@ fn inactive_context_requests_one_bounded_blur_and_preserves_foreground_input() {
                 .contains(&json!("New"))
         );
         app.key("Escape");
-        assert_blur(&painted(&mut app), true);
+        assert_crisp(&painted(&mut app));
         app.key("Escape");
         let restored = painted(&mut app);
         assert_eq!(restored["backdrop_blur"], json!([]));
@@ -394,7 +414,7 @@ fn inactive_context_requests_one_bounded_blur_and_preserves_foreground_input() {
 
 #[test]
 #[ignore = "requires a native desktop or xvfb-run with OpenGL"]
-fn native_utility_blurs_background_detail_in_both_themes() {
+fn native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_themes() {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
 
@@ -425,7 +445,7 @@ fn native_utility_blurs_background_detail_in_both_themes() {
         )
         .unwrap();
         let mut captures = Vec::new();
-        for view in ["arrangement", "properties"] {
+        for view in ["arrangement", "properties", "unsaved-changes"] {
             let screenshot = directory.path().join(format!("{appearance}-{view}.png"));
             let mut child = Command::new(&binary)
                 .arg("--screenshot")
@@ -458,10 +478,10 @@ fn native_utility_blurs_background_detail_in_both_themes() {
             captures.push(image::open(screenshot).unwrap().to_rgb8());
         }
         assert_eq!(captures[0].dimensions(), captures[1].dimensions());
-        let detail = |image: &image::RgbImage| {
-            // This caller-only region contains track names, routing captions,
-            // sliders and scale marks, safely outside the centered utility.
-            // Normalize by image variance so dimming alone cannot pass.
+        assert_eq!(captures[0].dimensions(), captures[2].dimensions());
+        let detail = |image: &image::RgbImage, [left, top, right, bottom]: [u32; 4]| {
+            // Normalize by image variance so dimming alone cannot pass either
+            // the sharp-context or the explicit-modal blur assertion.
             let mut sum = 0.0;
             let mut squared = 0.0;
             let mut differences = 0.0;
@@ -470,8 +490,8 @@ fn native_utility_blurs_background_detail_in_both_themes() {
                 let p = image.get_pixel(x, y);
                 f64::from(p[0]) * 0.2126 + f64::from(p[1]) * 0.7152 + f64::from(p[2]) * 0.0722
             };
-            for y in 220..700.min(image.height() - 1) {
-                for x in 24..220 {
+            for y in top..bottom.min(image.height() - 1) {
+                for x in left..right.min(image.width() - 1) {
                     let value = luma(x, y);
                     sum += value;
                     squared += value * value;
@@ -484,8 +504,19 @@ fn native_utility_blurs_background_detail_in_both_themes() {
             assert!(variance > 1.0, "Inactive caller must remain visible");
             (differences / count / variance).sqrt()
         };
-        let sharp = detail(&captures[0]);
-        let blurred = detail(&captures[1]);
+        // Track names, routing captions and scale marks remain useful source
+        // context outside the routine utility's centered active surface.
+        let sharp = detail(&captures[0], [24, 220, 220, 700]);
+        let routine = detail(&captures[1], [24, 220, 220, 700]);
+        assert!(
+            routine > sharp * 0.9,
+            "{appearance} routine utility must preserve source detail: sharp {sharp:.3}, routine {routine:.3}"
+        );
+        // The unsaved-changes preview begins before a retained workspace exists.
+        // Its menu bar is the same real painted source in both views; use that
+        // detail to test GPU blur, never mistake the ambient canvas for blur.
+        let sharp = detail(&captures[0], [8, 4, 280, 38]);
+        let blurred = detail(&captures[2], [8, 4, 280, 38]);
         assert!(
             blurred < sharp * 0.8,
             "{appearance} inactive content must lose fine detail, not just dim: sharp {sharp:.3}, blurred {blurred:.3}"

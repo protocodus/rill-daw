@@ -1,0 +1,78 @@
+{
+  "time_utc": "2026-11-01T07:17:45.277464+00:00",
+  "all_unchanged": true,
+  "files": [
+    {
+      "role": "original",
+      "path": "/workspace/scratch/rill-expert-review-2026-11-01/session-1/arc pulse.rill",
+      "sha256": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e",
+      "unchanged": true,
+      "post_cleanup_sha256": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e"
+    },
+    {
+      "role": "fixture copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/fixtures/arc pulse.rill",
+      "sha256": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e",
+      "unchanged": true,
+      "post_cleanup_sha256": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e"
+    },
+    {
+      "role": "original",
+      "path": "/workspace/scratch/rill-expert-review-2026-11-01/session-2/glass current.rill",
+      "sha256": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35",
+      "unchanged": true,
+      "post_cleanup_sha256": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35"
+    },
+    {
+      "role": "fixture copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/fixtures/glass current.rill",
+      "sha256": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35",
+      "unchanged": true,
+      "post_cleanup_sha256": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35"
+    },
+    {
+      "role": "original",
+      "path": "/workspace/scratch/rill-expert-review-2026-11-01/session-3/sine circuit.rill",
+      "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true,
+      "post_cleanup_sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+    },
+    {
+      "role": "fixture copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/fixtures/sine circuit.rill",
+      "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true,
+      "post_cleanup_sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+    },
+    {
+      "role": "working copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/session-1/sine circuit.rill",
+      "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true,
+      "post_cleanup_sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+    },
+    {
+      "role": "working copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/session-2/sine circuit.rill",
+      "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true,
+      "post_cleanup_sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+    },
+    {
+      "role": "working copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/session-3/sine circuit.rill",
+      "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true,
+      "post_cleanup_sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+    },
+    {
+      "role": "working copy",
+      "path": "/workspace/scratch/rill-expert-fixes-preview/session-4/sine circuit.rill",
+      "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true,
+      "post_cleanup_sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+    }
+  ],
+  "verified_after_cleanup": true,
+  "post_cleanup_time_utc": "2026-11-01T07:18:50.952072+00:00"
+}

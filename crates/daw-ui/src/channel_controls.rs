@@ -139,6 +139,7 @@ fn slider_at(ui: &mut Ui, rect: Rect, id: impl Hash, slider: impl egui::Widget) 
 
 /// A bounded caption opens the shared precise-value editor. Its draft never
 /// writes back on dismissal; the caller receives only an explicit Apply/Enter.
+#[allow(clippy::too_many_arguments)] // Bounded canvas geometry and contextual parameter metadata are independent inputs.
 fn value_readout_at(
     ui: &mut Ui,
     rect: Rect,
@@ -147,12 +148,13 @@ fn value_readout_at(
     value: &mut f32,
     range: std::ops::RangeInclusive<f64>,
     unit: &str,
+    name: &str,
 ) -> Response {
     let id = ui.make_persistent_id(id_salt);
     let mut response = crate::button_at(ui, rect, id, label);
     let popup = egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| crate::value_entry(ui, id, f64::from(*value), range, unit));
+        .show(|ui| crate::value_entry_named(ui, id, f64::from(*value), range, unit, name));
     if let Some(value_edit) = popup.and_then(|popup| popup.inner)
         && *value != value_edit as f32
     {
@@ -175,6 +177,21 @@ pub fn channel_controls_at(
     pan: &mut f32,
     peaks: [f32; 2],
     compact: bool,
+) -> ChannelControlsResponse {
+    channel_controls_at_named(ui, rect, id_salt, gain, pan, peaks, compact, "Channel")
+}
+
+/// Channel controls whose exact editors identify their source channel.
+#[allow(clippy::too_many_arguments)] // Backward-compatible extension of channel_controls_at.
+pub fn channel_controls_at_named(
+    ui: &mut Ui,
+    rect: Rect,
+    id_salt: impl Hash,
+    gain: &mut f32,
+    pan: &mut f32,
+    peaks: [f32; 2],
+    compact: bool,
+    channel_name: &str,
 ) -> ChannelControlsResponse {
     let id = ui.make_persistent_id(id_salt);
     let meter_width = 10.0;
@@ -233,6 +250,7 @@ pub fn channel_controls_at(
             &mut db,
             -60.0..=f64::from(20.0 * 1.5_f32.log10()),
             "dB",
+            &format!("{channel_name} · Volume"),
         )
         .on_hover_text("Click to enter exact volume");
         gain_response = gain_response.union(readout);
@@ -265,6 +283,7 @@ pub fn channel_controls_at(
             &mut pan_value,
             -100.0..=100.0,
             "%",
+            &format!("{channel_name} · Pan"),
         )
         .on_hover_text("Click to enter exact pan");
         pan_response = pan_response.union(readout);

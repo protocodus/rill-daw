@@ -1,0 +1,139 @@
+{
+  "note": "Focused validation before the final full workspace/CI run. The initial narrow-header assertion used a nominal width; the passing replacement inspects actual rendered glyphs. No failed target is counted as passed here. Final full-suite and cross-platform results are recorded on the pull request.",
+  "passing_runs": [
+    {
+      "log": "/workspace/scratch/rill-expert-fixes-validation/precision-focused-final.log",
+      "sha256": "158c0fec77919763a920f12ae44bb1dac67fca2eb63378efdd453e7af601954f",
+      "passed": 41,
+      "ignored": 0
+    },
+    {
+      "log": "/workspace/scratch/rill-expert-fixes-validation/shared-context-final.log",
+      "sha256": "52fc20ed1656909fb151cbc54dac69f665b713558832b3cc5db823f051e3f918",
+      "passed": 25,
+      "ignored": 0
+    },
+    {
+      "log": "/workspace/scratch/rill-expert-fixes-validation/context-integration.log",
+      "sha256": "6458e696a56e4a323ba338bcf3142047b0cc9b8e85c2b55026651971941f32d7",
+      "passed": 1,
+      "ignored": 0
+    },
+    {
+      "log": "/workspace/scratch/rill-expert-fixes-validation/native-visual-final.log",
+      "sha256": "218e3933aa00b2d7151d2ad2c9ba58529721b3fea130ee020f048354f89c87c1",
+      "passed": 1,
+      "ignored": 0
+    },
+    {
+      "log": "/workspace/scratch/rill-expert-fixes-validation/portal-classification-complete.log",
+      "sha256": "ca97203029076333da27df0f9878275c42ff36461d61803e29c29f1208263b92",
+      "passed": 1,
+      "ignored": 0
+    }
+  ],
+  "app_run": {
+    "log": "/workspace/scratch/rill-expert-fixes-validation/app-complete.log",
+    "sha256": "19a6a3a48305afb51cf6ed47fe15c7d616b111e9a53df0fc21e66967762f546e",
+    "targets": [
+      {
+        "target": "assistant_scope_e2e",
+        "result": "ok",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "automation_e2e",
+        "result": "ok",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 1,
+        "superseded_by": null
+      },
+      {
+        "target": "automation_indicators_e2e",
+        "result": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "clip_editor_context_e2e",
+        "result": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "ignored": 0,
+        "superseded_by": "context-integration.log"
+      },
+      {
+        "target": "cue_editor_flow_e2e",
+        "result": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "expert_mixer_navigation_e2e",
+        "result": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "expert_send_controls_e2e",
+        "result": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "mixer_e2e",
+        "result": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "native_picker_failure_e2e",
+        "result": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "native_picker_results",
+        "result": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "superseded_by": null
+      },
+      {
+        "target": "visual_polish_e2e",
+        "result": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 1,
+        "superseded_by": null
+      }
+    ]
+  },
+  "gallery": {
+    "images": 18,
+    "updated": [
+      "inputs-light.png",
+      "inputs-dark.png",
+      "navigation-light.png",
+      "navigation-dark.png"
+    ],
+    "unchanged_except_animation": "All other pages match previous captures; feedback spinner differs by animation frame."
+  }
+}

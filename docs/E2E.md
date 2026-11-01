@@ -145,13 +145,16 @@ cargo test --locked -p daw-app --test assistant_guidance_e2e --test assistant_e2
 
 `visual_polish_e2e` selects clips and channels through real mouse actions and
 checks bounded halo meshes, continuous routing attachment, source/destination
-color gradients, and inactive-background blur layering without song edits.
-It exercises both appearances and includes a native pixel test that distinguishes
-blur from dimming by measuring normalized image detail.
+color gradients, and readable, inert context behind routine utilities and menus
+without song edits. It exercises both appearances. The opt-in native pixel test
+`native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_themes`
+measures normalized image detail to distinguish the light routine scrim from
+blur behind an explicit modal decision. Headless paint-order checks alone do
+not establish the native renderer's visual result.
 
 ```sh
 cargo test --locked -p daw-app --test visual_polish_e2e --test mixer_flow_e2e -- --test-threads=1
-xvfb-run -a -s '-screen 0 1600x1200x24' cargo test --locked -p daw-app --test visual_polish_e2e native -- --ignored --test-threads=1
+xvfb-run -a -s '-screen 0 1600x1200x24' cargo test --locked -p daw-app --test visual_polish_e2e native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_themes -- --ignored --test-threads=1
 ```
 
 `track_reorder_e2e` drives real title/grip drags in Arrangement and Mixer, including
@@ -353,7 +356,14 @@ pointer/keyboard/native clipboard input. It checks release-time merging,
 selection, Undo, stretched ghosts, untouched imported overlaps and saving during
 a held draw. Chords and partial overlaps remain distinct.
 
-`popup_backdrop_e2e` inspects actual paint order to require one theme-aware dim layer behind the active popup. It covers utilities, nested navigation, menu-bar and context menus, output and color pickers, combo boxes over both workspaces and utilities, and the unsaved-project confirmation. Closing or cancelling restores the caller and removes the dim when no popup remains; both appearances are exercised.
+`popup_backdrop_e2e` inspects actual paint order to require one light,
+theme-aware scrim behind routine popups, with no blur submission, and a stronger
+scrim for the unsaved-project confirmation. It covers utilities, nested
+navigation, menu-bar and context menus, output and color pickers, and combo
+boxes over both workspaces and utilities. Closing or cancelling restores the
+caller and removes the scrim when no popup remains; both appearances are
+exercised. Shared `popup_backdrop` and `backdrop_blur` tests cover layer placement
+and the distinction between routine and explicit-modal rendering.
 
 `parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Third-party compatibility and native editor coverage remain in the opt-in installed-plugin tests.
 
@@ -739,11 +749,30 @@ observing those decisions; native picker presentation still needs desktop tests.
 cargo test --locked -p daw-app --test novice_documents_e2e --test export_options_e2e --test export_feedback_e2e
 ```
 
-The vendored RFD Linux Zenity regression runs separately with
-`cargo test --locked -p daw-app --test native_picker_arguments`.
-It checks directory+basename construction without changing the portal's separate
-fields; native Save as and WAV/MIDI picker checks additionally accept a
-basename-only edit beside a saved project in a directory containing spaces.
+The vendored RFD Linux Zenity regressions run with:
+
+```sh
+cargo test --locked -p daw-app --test native_picker_arguments --test native_picker_results --test native_picker_failure_e2e
+```
+
+`native_picker_arguments` checks directory+basename construction without changing
+the portal's separate fields; native Save as and WAV/MIDI picker checks
+additionally accept a basename-only edit beside a saved project in a directory
+containing spaces. `native_picker_results` compiles the production exit parser
+and distinguishes valid selection, cancellation, malformed/empty output,
+failure with misleading stdout, timeout and signal termination.
+
+`native_picker_failure_e2e` clicks production Save/Open/Import/WAV/MIDI actions
+with only the child process's PATH and session-bus address isolated. It invokes
+the actual RFD adapter instead of injecting picker results. A missing or failed
+helper must show details and preserve the project; a scripted helper's exit 1
+must remain a silent cancellation even with GTK warnings. Restoring the helper
+while the app stays open permits real save/export workers and a guarded Save
+retry. These fixtures do not draw or validate a desktop chooser. Detailed error
+classification applies to the Linux/BSD portal/Zenity backend; other native
+backends retain legacy behavior. A helper that uses the documented cancellation
+code for an unrelated failure remains ambiguous. See
+[the vendor patch notes](../vendor/rfd/RILL-PATCH.md).
 
 `arranger_tools_e2e` exercises the common audio/MIDI toolset through real pointer and keyboard events: selected-result behavior for repeated Duplicate/Cut, Join and Ghost copy, both trim edges, Shift snap bypass, held Shift-duplicate, Stretch/Undo/return-to-origin, and stretch→trim→split composition. It verifies local ghost timing, linked/independent source edits, versioned portable recall, joined WAV duration/pitch, independent workspace tool retention, and device-free audio continuity while stretching. `live_edit_e2e` additionally stretches MIDI and audio while retaining instrument/effect sandbox identities, sustained MIDI voices and continuous PCM, including while the pointer remains held.
 
@@ -927,6 +956,48 @@ installed plug-in or network connection.
 
 
 ## Returning-user feedback regressions
+
+### Precision, context and routing refinements
+
+`expert_send_controls_e2e` locates the painted 64-point send knob, checks that a
+small drag from 0.25× remains below unity, and compares the live value readout
+with the project after pointer adjustment. It exercises the direct value button, named
+source/destination editor, mouse keypad, fractional precision, Cancel,
+untouched Apply and Undo. Pan entry hides binary float display noise without
+changing the stored value. Automated send edits retain the existing normalized
+linear mapping over 0–16× and override without rewriting the curve; Resume and
+Undo restore the appropriate state. Shared `knob` and `value_entry` tests cover
+the `ln(1 + gain / 0.01)` taper, unity landmark, readable drafts, external value
+synchronization and untouched precision, including rounded range boundaries.
+
+`clip_editor_context_e2e` opens repeated MIDI occurrences and an audio clip at
+800- and 1440-point widths, including a 2× density case. It checks track/global
+song-span identity, the **Local** MIDI ruler and local-to-song cursor mapping,
+accurate audio/MIDI time-basis hints, stable Properties placement and retained
+canvas space. Navigation and inspection must preserve the project and history.
+`expert_mixer_navigation_e2e` opens Properties directly on the right-clicked
+audio or MIDI occurrence, edits its start with mouse digits, and checks Cancel
+and Undo. At 1440×1000 in both appearances, it requires main output and one send
+route to remain visible through an export notice without moving fader, pan or
+mute/solo controls. Further scenarios check numbered bus creation, existing-name
+collisions and distinct destination versus creation choices. Shorter viewports
+and additional route lanes can still need scrolling.
+
+`instrument_naming_e2e` uses metadata fixtures to check initial assignment and
+explicit instrument creation, collision suffixes, assignment/rename Undo,
+blank-arranger creation, renamed tracks and save/replacement. A loaded track
+called **New instrument** retains that name: naming permission belongs only to
+the still-open initial creation flow. These naming fixtures do not verify DSP
+or native plug-in compatibility. Shared layout tests cover the optional header
+context without adding a canvas row. `parameter_mouse_entry_e2e` additionally
+checks channel/device/parameter identity in the instrument parameter editor.
+
+```sh
+cargo test --locked -p daw-app --test expert_send_controls_e2e --test clip_editor_context_e2e --test expert_mixer_navigation_e2e --test instrument_naming_e2e --test parameter_mouse_entry_e2e -- --test-threads=1
+cargo test --locked -p daw-ui --test knob --test value_entry --test layout --test popup_backdrop --test backdrop_blur
+```
+
+### Existing workflow regressions
 
 `numeric_replacement_e2e` uses mouse multi-click, typing and a mouse commit to replace complete tempo, gain and generator-range values without Select All. Shared `numeric_entry` tests also cover a coalesced click/text frame, native dragging and deferred commit.
 
