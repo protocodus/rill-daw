@@ -1,0 +1,24 @@
+selection=default device=DeviceDescription { name: "Default Audio Device", manufacturer: None, driver: Some("default"), device_type: Unknown, interface_type: Unknown, direction: Unknown, address: None, extended: ["Default Audio Device"] }
+supported=SupportedStreamConfigRange { channels: 2, min_sample_rate: 1, max_sample_rate: 384000, buffer_size: Range { min: 16, max: 174763 }, sample_format: F32 }
+config=StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(1024) }
+tick=1 elapsed=1.001397 callbacks=4 errors=0
+tick=2 elapsed=2.001517 callbacks=13 errors=0
+tick=3 elapsed=3.001630 callbacks=83 errors=0
+tick=4 elapsed=4.001752 callbacks=153 errors=0
+tick=5 elapsed=5.001871 callbacks=225 errors=0
+tick=6 elapsed=6.002007 callbacks=295 errors=0
+tick=7 elapsed=7.002154 callbacks=365 errors=0
+tick=8 elapsed=8.002272 callbacks=436 errors=0
+tick=9 elapsed=9.002390 callbacks=506 errors=0
+tick=10 elapsed=10.002510 callbacks=576 errors=0
+tick=11 elapsed=11.002619 callbacks=647 errors=0
+tick=12 elapsed=12.002758 callbacks=717 errors=0
+tick=13 elapsed=13.002886 callbacks=787 errors=0
+tick=14 elapsed=14.003046 callbacks=858 errors=0
+tick=15 elapsed=15.006962 callbacks=928 errors=0
+tick=16 elapsed=16.007061 callbacks=998 errors=0
+tick=17 elapsed=17.007172 callbacks=1070 errors=0
+tick=18 elapsed=18.007281 callbacks=1140 errors=0
+tick=19 elapsed=19.007399 callbacks=1210 errors=0
+tick=20 elapsed=20.007504 callbacks=1280 errors=0
+done callbacks=1280 errors=0

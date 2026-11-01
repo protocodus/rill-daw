@@ -1,0 +1,98 @@
+   Compiling syn v3.0.9
+   Compiling getrandom v0.3.4
+   Compiling syn v2.0.119
+   Compiling tracing-core v0.1.36
+   Compiling ahash v0.8.12
+   Compiling num-traits v0.2.19
+   Compiling tracing v0.1.44
+   Compiling x11rb-protocol v0.13.2
+   Compiling moxcms v0.8.1
+   Compiling thiserror-impl v1.0.69
+   Compiling synstructure v0.14.0
+   Compiling zerovec-derive v0.11.7
+   Compiling zerofrom-derive v0.1.8
+   Compiling zerofrom v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling bytemuck_derive v1.12.1
+   Compiling yoke v0.8.4
+   Compiling zerovec v0.11.9
+   Compiling displaydoc v0.2.7
+   Compiling bytemuck v1.25.2
+   Compiling potential_utf v0.1.6
+   Compiling emath v0.33.3
+   Compiling tinystr v0.8.5
+   Compiling icu_locale_core v2.4.0
+   Compiling zerotrie v0.2.5
+   Compiling icu_collections v2.4.0
+   Compiling thiserror v1.0.69
+   Compiling calloop v0.13.0
+   Compiling icu_provider v2.4.0
+   Compiling ecolor v0.33.3
+   Compiling icu_normalizer v2.4.0
+   Compiling icu_properties v2.4.0
+   Compiling epaint v0.33.3
+   Compiling calloop-wayland-source v0.3.0
+   Compiling thiserror-impl v2.0.21
+   Compiling idna_adapter v1.2.2
+   Compiling calloop v0.14.5
+   Compiling image v0.25.10
+   Compiling egui v0.33.3
+   Compiling calloop-wayland-source v0.4.1
+   Compiling thiserror v2.0.21
+   Compiling idna v1.1.0
+   Compiling smithay-client-toolkit v0.19.2
+   Compiling x11rb v0.13.2
+   Compiling form_urlencoded v1.2.2
+   Compiling smithay-client-toolkit v0.20.0
+   Compiling url v2.5.8
+   Compiling winit v0.30.13
+   Compiling webbrowser v1.2.5
+   Compiling arboard v3.7.0
+   Compiling serde_derive v1.0.229
+   Compiling smithay-clipboard v0.7.3
+   Compiling egui_glow v0.33.3
+   Compiling serde v1.0.229
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling glutin-winit v0.5.0
+   Compiling egui-winit v0.33.3
+   Compiling eframe v0.33.3
+    Finished `test` profile [unoptimized] target(s) in 16.54s
+     Running tests/knob.rs (target/debug/deps/knob-e2677bbc9542c9d5)
+
+running 10 tests
+test compact_knob_leaves_unit_aware_hints_to_its_host ... ok
+test compact_knob_fits_the_dial_without_removing_the_default_numeric_editor ... ok
+test exact_number_can_be_typed_and_committed_with_a_mouse_click ... ok
+test owned_release_motion_reaches_the_same_value_between_held_frames ... FAILED
+test automation_has_wording_and_color_and_outside_values_stay_exact ... ok
+test precision_changes_on_release_apply_only_the_remaining_relative_motion ... FAILED
+test relative_drag_has_no_click_jump_and_fine_adjustment_does_not_rebase ... ok
+test steps_disabled_controls_and_secondary_clicks_preserve_expected_values ... ok
+test arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density ... ok
+test secondary_or_middle_buttons_block_concurrent_primary_drag_through_release ... ok
+
+failures:
+
+---- owned_release_motion_reaches_the_same_value_between_held_frames stdout ----
+
+thread 'owned_release_motion_reaches_the_same_value_between_held_frames' (269085) panicked at crates/daw-ui/tests/knob.rs:262:13:
+assertion `left == right` failed: the final owned position must win
+  left: 54.0
+ right: 80.0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- precision_changes_on_release_apply_only_the_remaining_relative_motion stdout ----
+
+thread 'precision_changes_on_release_apply_only_the_remaining_relative_motion' (269086) panicked at crates/daw-ui/tests/knob.rs:315:5:
+assertion `left == right` failed: fine precision must not rebase the held motion
+  left: 60.0
+ right: 62.0
+
+
+failures:
+    owned_release_motion_reaches_the_same_value_between_held_frames
+    precision_changes_on_release_apply_only_the_remaining_relative_motion
+
+test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p daw-ui --test knob`

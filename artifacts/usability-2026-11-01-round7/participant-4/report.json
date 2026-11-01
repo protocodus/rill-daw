@@ -1,0 +1,103 @@
+{
+  "purpose": "Independent simulated beginner mouse-only usability report using the fixed question set.",
+  "participant": 4,
+  "persona": "Simulated first-time RILL user interested in a short ambient soundtrack sketch.",
+  "piece_name": "mist",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Visible MIDI hint, Pencil drags, Duplicate instructions, mixer labels and the on-screen naming keyboard enabled all requested editing and file operations. Exact trimming and shifting controls needed correction.",
+    "how_cool_it_looks": "The dark interface, turquoise waveform and note clips, and large mixer strips looked coherent and readable.",
+    "how_fast_it_is": "Most editing actions responded promptly. WAV export visibly took several seconds and playback repeatedly stopped with an output-stream error, interrupting the task. This is not a benchmark.",
+    "how_confusing_it_is": "Most actions had clear labels. Pan drag direction needed adjustment, precise clip-end snapping was fiddly, and the error banner moved mixer controls underneath subsequent intended clicks.",
+    "feature_completeness": "Found audio and MIDI editing, VST assignment, volume, pan, mute, solo, bus, send, mouse-only naming, save and both exports. Reliable playback was not established in this session."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round7/session-4/mist.rill",
+    "wav": "/workspace/scratch/rill-usability-round7/session-4/mist.wav",
+    "midi": "/workspace/scratch/rill-usability-round7/session-4/mist.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the visible MIDI hint opened Device library; Assign instrument created a track with Rill Lab Sine. Pencil drags visibly created sustained notes and extended the clip.",
+      "evidence": ["01-midi.png", "02-instrument.png", "04-chord.png", "05-arrange.png"]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Duplicate showed an explicit click instruction. Repeated clips plus a trimmed final audio segment produced a project duration readout of 0:30.000.",
+      "evidence": ["06-duplicate.png", "08-repeats.png", "23-named.png", "final.png"]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "First trim ended at 30.134 seconds. A small further edge drag corrected arrangement duration to 30.000, while the loop range still read 30.134. Exact endpoints were difficult at the zoomed-out scale.",
+      "evidence": ["19-duration.png", "21-rename.png", "23-named.png", "final.png"]
+    },
+    {
+      "id": "F4",
+      "kind": "positive",
+      "observation": "Mixer fader and pan drags updated numerical values. Add bus created a bus strip, and MIDI Add send > + Send > New bus produced a visible 0.25x Post send.",
+      "evidence": ["10-balanced-playing.png", "12-mute-retry.png", "15-bus.png", "18-send-created.png"]
+    },
+    {
+      "id": "F5",
+      "kind": "failure",
+      "observation": "Playback initially advanced the transport and lit meters, then stopped with 'Audio output stream failed or disconnected'. Retry briefly restarted playback before the same failure appeared again.",
+      "evidence": ["10-balanced-playing.png", "11-muted.png", "12-mute-retry.png", "13-solo.png"]
+    },
+    {
+      "id": "F6",
+      "kind": "friction",
+      "observation": "The output error banner shortened the mixer strips and shifted pan and mute/solo controls upward; subsequent clicks at the old locations did not toggle the intended buttons. After dismissing the banner, toggling MIDI Solo visibly worked.",
+      "evidence": ["10-balanced-playing.png", "11-muted.png", "13-solo.png", "14-solo.png"]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "Rename project included a visible Keyboard button. Clicking its letters set the title to mist without physical keyboard input. Save proposed mist.rill and the unsaved dot disappeared after OK.",
+      "evidence": ["21-rename.png", "22-keyboard.png", "23-named.png", "24-save.png", "25-saved.png"]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "WAV export displayed Arrangement 0:30; effect tails were unchecked. MIDI showed an Exported notice. Recent exports listed mist.wav and mist.mid under Completed exports.",
+      "evidence": ["26-wav.png", "27-wav-file.png", "31-midi-result.png", "32-exports.png"]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: saved a named project and completed WAV and MIDI exports. Playback was only briefly observed and repeatedly failed; exported contents await independent verification.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "Four copies of the supplied Circuit rhythm audio, with the final copy trimmed; seven repeats of a two-bar MIDI pattern containing two sustained three-note groups. First group visibly C4/G4/C5. Lowered audio and MIDI levels, panned audio L16 and MIDI R28, and added a MIDI send to New bus. Ambient sketch intent; audible result not assessed.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": false,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Play changed to Pause, transport advanced and audio/MIDI/master meters lit. Output stream failure then stopped playback. Retry briefly restarted, followed by another failure. No heard-audio claim.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows.",
+    "WAV appeared under Completed exports, but a separate transient WAV success banner was not captured because MIDI export followed while WAV export was in progress.",
+    "Loop endpoint remained 30.134 seconds; project duration and WAV arrangement export dialog showed 30 seconds.",
+    "Playback failures occurred under the laboratory virtual audio backend; no claim about physical hardware latency or third-party VST compatibility.",
+    "Elapsed session includes screenshot and tool overhead."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged Circuit drums from -6.0 to -10.8 dB and New instrument from -2.5 to -4.6 dB; both numerical readouts visibly changed.",
+    "pan": "Diagonal knob drags initially produced audio R7 and MIDI R28. A horizontal left drag then set audio L16; MIDI remained R28. Final arrangement displays those values.",
+    "mute": "Clicked audio Mute; button highlighted amber and audio level meter went dark while the MIDI meter remained active after Retry. Later turned it off after dismissing the error banner; final Mute buttons were unhighlighted.",
+    "solo": "After correcting for controls shifting with the error banner, clicked MIDI Solo and observed green highlight. Clicked again to disable; final Solo buttons were unhighlighted. Audible isolation not assessed.",
+    "bus": "Clicked Add bus in Mixer; a New bus strip appeared at 0.0 dB routed to Master.",
+    "send": "Clicked MIDI track Add send, then + Send, then New bus. Routing displayed a send to New bus at 0.25x with Post selected. No effect inserted and audible send result not assessed."
+  }
+}

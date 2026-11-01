@@ -1,0 +1,776 @@
+{
+  "created_utc": "2026-11-01T01:28:46Z",
+  "scope": "Verbatim reports, actions, hashes, verification and selected screenshots. Original absolute paths refer to the complete local archive. Executables, VST binaries, music projects/WAV/MIDI, analysis media and other screenshots remain local. The small tar archive contains only untracked source files needed to reconstruct the frozen implementation, not generated media.",
+  "file_count": 128,
+  "total_bytes": 4607829,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-usability-round9/INSTRUCTIONS.txt",
+      "path": "artifacts/usability-2026-11-01-round9/INSTRUCTIONS.txt",
+      "bytes": 3366,
+      "sha256": "82aba2c79e478a47704bd2a9c9dd0ed74fd97a57bef5209c421fbaf470cca89d"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/REPORT_SCHEMA.json",
+      "path": "artifacts/usability-2026-11-01-round9/REPORT_SCHEMA.json",
+      "bytes": 3229,
+      "sha256": "cb22d6ba6fb6809543aa6aa9bcc09b867c59854c1f1de0658eedcc2756a15935"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/aggregate-versions/aggregate-001.json",
+      "path": "artifacts/usability-2026-11-01-round9/aggregate-versions/aggregate-001.json",
+      "bytes": 85369,
+      "sha256": "19adb1b33ea0a6d88f8f1d99124e5734416f270b9e1d52b475af39fe95fd6486"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/aggregate-versions/aggregate-002.json",
+      "path": "artifacts/usability-2026-11-01-round9/aggregate-versions/aggregate-002.json",
+      "bytes": 85364,
+      "sha256": "750b6c2b32ce3b6b358ff108812fe1b2c7ff65e024049953ce072a789bfbf4ec"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/aggregate.json",
+      "path": "artifacts/usability-2026-11-01-round9/aggregate.json",
+      "bytes": 85364,
+      "sha256": "750b6c2b32ce3b6b358ff108812fe1b2c7ff65e024049953ce072a789bfbf4ec"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/aggregate.py",
+      "path": "artifacts/usability-2026-11-01-round9/aggregate.py",
+      "bytes": 8876,
+      "sha256": "257514a9089ebd4291f7d8cd5e21f7778014e4e8fda8131a9a36dfaf80655182"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/audio.py",
+      "path": "artifacts/usability-2026-11-01-round9/audio.py",
+      "bytes": 2747,
+      "sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/cleanup-1793495357306421629.json",
+      "path": "artifacts/usability-2026-11-01-round9/cleanup-1793495357306421629.json",
+      "bytes": 2122,
+      "sha256": "826c932e8d4f3e4322c3078cf4e284c91285b2cd6955094562a64a48eec4facd"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/cleanup.py",
+      "path": "artifacts/usability-2026-11-01-round9/cleanup.py",
+      "bytes": 2037,
+      "sha256": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/completed-evidence.json",
+      "path": "artifacts/usability-2026-11-01-round9/completed-evidence.json",
+      "bytes": 46962,
+      "sha256": "b3415ceebdaf6b5c7ad981d7a5636685f7ac9394245efeaecab11d7088aaa53b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/component_render.py",
+      "path": "artifacts/usability-2026-11-01-round9/component_render.py",
+      "bytes": 3795,
+      "sha256": "4a516ebb58372a88c3cd61cab1cb4a21e526d6207ffffd3633f4900eae9e3b45"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/controlled-comparison-check.json",
+      "path": "artifacts/usability-2026-11-01-round9/controlled-comparison-check.json",
+      "bytes": 1504,
+      "sha256": "2af192c6005374f460a343bf4c86ff3a2c0bc617f4ac8a46a3f9c181cb12797e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793494772437542907-freeze.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793494772437542907-freeze.py.command.json",
+      "bytes": 389,
+      "sha256": "b719fdad276fdc3085403e437e1f63aab340b17d5187b6c346e993588e963418"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793494772437542907-freeze.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793494772437542907-freeze.py.log",
+      "bytes": 4524,
+      "sha256": "9e2c567839e0852832dafcf818bfb07a042e65b39ee8eca42fbe233d76f13867"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793494773125500448-launch.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793494773125500448-launch.py.command.json",
+      "bytes": 387,
+      "sha256": "daa28d4057c051d98c8acd9d45caf9cf889ee8c3b04085628838b131050fe690"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793494773125500448-launch.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793494773125500448-launch.py.log",
+      "bytes": 820,
+      "sha256": "99ce9e3c30345beecc03a13b867d5b29b702638ad1183e7318b2443717817ab5"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495357136300166-cleanup.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495357136300166-cleanup.py.command.json",
+      "bytes": 360,
+      "sha256": "db2fe880f269ae8f8d6f0600b4628d6122eb47fd1b2f610daf0442086810b45e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495357136300166-cleanup.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495357136300166-cleanup.py.log",
+      "bytes": 2122,
+      "sha256": "826c932e8d4f3e4322c3078cf4e284c91285b2cd6955094562a64a48eec4facd"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495357346007999-aggregate.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495357346007999-aggregate.py.command.json",
+      "bytes": 363,
+      "sha256": "a8abdf1009e2ea5bc10037b3744413520ca5391db4b7c4fcce49da98c182467c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495357346007999-aggregate.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495357346007999-aggregate.py.log",
+      "bytes": 2438,
+      "sha256": "05775dcedbfc23f41caf936a83c6997255c11bc64b947168dd62ebab013e25cb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495368653827205-verify_full_graph.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495368653827205-verify_full_graph.py.command.json",
+      "bytes": 381,
+      "sha256": "edd2c5375fa07b9c7d84a59e2d6214180cd7ae9b3ab03a9d2ea6611063886149"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495368653827205-verify_full_graph.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495368653827205-verify_full_graph.py.log",
+      "bytes": 285,
+      "sha256": "9508426bcddec4bcd375135f08c449ca86294dd783d3f21b3474ac59376a5f2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495417797861685-aggregate.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495417797861685-aggregate.py.command.json",
+      "bytes": 363,
+      "sha256": "d79b2121fb225c0e33ea7379723b44b4c01e4105eda021d4668f13bffb219fab"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495417797861685-aggregate.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495417797861685-aggregate.py.log",
+      "bytes": 2438,
+      "sha256": "8b793f1052019997bcd2033665df274c7b42e01ad411329d1e0c50f11c003eef"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495420424145979-summarize_round_verification.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495420424145979-summarize_round_verification.py.command.json",
+      "bytes": 410,
+      "sha256": "944294bcbe1f90880f0d8899d845ae916dae81323691dbd0764a1661f6968956"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793495420424145979-summarize_round_verification.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793495420424145979-summarize_round_verification.py.log",
+      "bytes": 1315,
+      "sha256": "3d4ca3334482fededfc307907793ac4bf98e4338da950494c94ae033d6a1ee3c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793496256679988468-freeze_final.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793496256679988468-freeze_final.py.command.json",
+      "bytes": 653,
+      "sha256": "2a32c4cc16b9baba5526be4ac835ec281e8aacbc229a5237c2f7c3a8de257dc1"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/coordinator-logs/1793496256679988468-freeze_final.py.log",
+      "path": "artifacts/usability-2026-11-01-round9/coordinator-logs/1793496256679988468-freeze_final.py.log",
+      "bytes": 523,
+      "sha256": "5135b17b39a246f9160767b1e6c15361684e4f1a470dd46fb04440f06a9cbed9"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/evidence_utils.py",
+      "path": "artifacts/usability-2026-11-01-round9/evidence_utils.py",
+      "bytes": 4588,
+      "sha256": "932eb7da6c5d2e1882ce98995be774fbda31457ca460de60be5513905baa80f7"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/feedback-resolution-audit-pending-validation.json",
+      "path": "artifacts/usability-2026-11-01-round9/feedback-resolution-audit-pending-validation.json",
+      "bytes": 5080,
+      "sha256": "b6d52c10e33c7e62e239bbab8ff3f505b85474bc34edd249358647482324db7d"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/feedback-resolution-audit.json",
+      "path": "artifacts/usability-2026-11-01-round9/feedback-resolution-audit.json",
+      "bytes": 6408,
+      "sha256": "9d94bcf85fa13a4a62b003d301195e7479c4ef470bf25cee83fe6c20942aa825"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/feedback-resolution-draft.json",
+      "path": "artifacts/usability-2026-11-01-round9/feedback-resolution-draft.json",
+      "bytes": 105048,
+      "sha256": "f9a3eef48120a8c1ee4862e0b53caefd32ff8126a51e43572319e4c073a0ced8"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/feedback-resolution-pending-validation.json",
+      "path": "artifacts/usability-2026-11-01-round9/feedback-resolution-pending-validation.json",
+      "bytes": 105287,
+      "sha256": "178853d95749d2cf4314846a1faf5174bfaba0ef3e8fc985d7fc31964687f407"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/feedback-resolution.json",
+      "path": "artifacts/usability-2026-11-01-round9/feedback-resolution.json",
+      "bytes": 107056,
+      "sha256": "c033db28c6311b33123bda0e835f6127753b74505844bbd0e10540ec4bb1c90e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/freeze-manifest.json",
+      "path": "artifacts/usability-2026-11-01-round9/freeze-manifest.json",
+      "bytes": 4524,
+      "sha256": "9e2c567839e0852832dafcf818bfb07a042e65b39ee8eca42fbe233d76f13867"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/freeze.py",
+      "path": "artifacts/usability-2026-11-01-round9/freeze.py",
+      "bytes": 5151,
+      "sha256": "d15e3c004335a45df7fcaac5ff65993c065da7c64cbfd02e9d44dbea5ae2ae19"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/lab_sine_plugin.rs",
+      "path": "artifacts/usability-2026-11-01-round9/lab_sine_plugin.rs",
+      "bytes": 12951,
+      "sha256": "5b15f83af53056477068e50480823ce77e4b19235e366dc6e7765a598bbc563c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/launch.py",
+      "path": "artifacts/usability-2026-11-01-round9/launch.py",
+      "bytes": 5285,
+      "sha256": "91da5dd393e20251bf1bc8d87e1bb03928e8d35bf48a5b7b8888eb941798bdd4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/mouse.py",
+      "path": "artifacts/usability-2026-11-01-round9/mouse.py",
+      "bytes": 3710,
+      "sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/output-preservation.json",
+      "path": "artifacts/usability-2026-11-01-round9/output-preservation.json",
+      "bytes": 62495,
+      "sha256": "2119ff6a8809bb38c5bca04e97a760ce641aa53a4c18aefe0ccc4aed949f147e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/participant-1-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1-prompt.txt",
+      "bytes": 1889,
+      "sha256": "783ed75dc0f215c4cc2c0a83aaa54d875acd49eb44c52b44230ec606a05b18e9"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/participant-2-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2-prompt.txt",
+      "bytes": 1892,
+      "sha256": "c24923f1ae697c45e3b8d758db7be081ec9c56ee7856ae947c43c27fefe9cf17"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/participant-3-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3-prompt.txt",
+      "bytes": 1889,
+      "sha256": "3cc8b8d40db8dfe58d4ef62167f4425803923a08b4c2ae96aff8caddfbf1b401"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/participant-4-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4-prompt.txt",
+      "bytes": 1894,
+      "sha256": "d8b5b97ac6d1dc1b16b3c19c8cb3e502830aa65feda2a8f5aa6b25e3fdfbd619"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/participant-5-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5-prompt.txt",
+      "bytes": 1906,
+      "sha256": "e6c1c63c7992caed8663e8a2231e5b8015b0c77156e8723c3ec5eef924b3041b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/participant-prompts.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-prompts.json",
+      "bytes": 13313,
+      "sha256": "75efe495a570048df9645d9362f2294f37c496d38d02fef53a88ed81302635e2"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/prepared-manifest.json",
+      "path": "artifacts/usability-2026-11-01-round9/prepared-manifest.json",
+      "bytes": 644,
+      "sha256": "7dcc5545d31627963a85530e6816454dd95ec32a76162d3ad11dd79468ea4f9a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/protocol.json",
+      "path": "artifacts/usability-2026-11-01-round9/protocol.json",
+      "bytes": 4050,
+      "sha256": "c996cc62c1cee2312a634df1e9bf46b2b426bacb20a985b77b6b4def5ce6c847"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/screenshot-capture-inventory.json",
+      "path": "artifacts/usability-2026-11-01-round9/screenshot-capture-inventory.json",
+      "bytes": 1067,
+      "sha256": "a5a2f6e817a93ecb83fc77182ebea45254f34cf06c6583aa317483223b005362"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/04-notes.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/04-notes.png",
+      "bytes": 115518,
+      "sha256": "bd9f026a4375960f69081ddd3b94c5ec47216e8b6124d609aeb5d4465e1828ee"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/14-mixer-balance.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/14-mixer-balance.png",
+      "bytes": 192767,
+      "sha256": "f96ba7ed09d059216fb66fe292448462ce26f2a7272aa50ba12a18d911a08b1d"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/20-send-created.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/20-send-created.png",
+      "bytes": 198049,
+      "sha256": "6c1274d2740c6774e208e291de289e1a90f37681c9a6433f97ba31e138a07f75"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/final.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/final.png",
+      "bytes": 203575,
+      "sha256": "9b37b0d330a721114654c0de252f390c18ce105b092d4f65efe8a0d846a9e1e9"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/mouse-actions.jsonl",
+      "bytes": 18813,
+      "sha256": "1de30b828fc7bc9b1996481fd69f2cd0f843585efdce94236ceb2444ce3d6de8"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/processes.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/processes.json",
+      "bytes": 178,
+      "sha256": "f0cf16a54e16705d73f98cfada946f8decabb384b63d9975075f07857ad6ce08"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/reactions.txt",
+      "bytes": 3206,
+      "sha256": "3889798a1cd4344f2b8b4090809ba272596f4c5460dc51fb7daa281aa4c4feb4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/report.json",
+      "bytes": 7152,
+      "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-1/rill.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-1/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/12-mixer-mute-balance.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/12-mixer-mute-balance.png",
+      "bytes": 190380,
+      "sha256": "fbd8cc7949dbb79a6ce6ba3a444d23a9afee4d727cb18109003b80c2f7107f82"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/17-send-created.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/17-send-created.png",
+      "bytes": 207779,
+      "sha256": "0f17678fe43d366bf18a05a8d05e052e9748fd9c4fa02670353e9c825c1cda07"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/final.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/final.png",
+      "bytes": 212229,
+      "sha256": "67cf18ddf72313f66ebdcab72d2275ceb0933c2a859bc4bfab1fb7928aacf688"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/mouse-actions.jsonl",
+      "bytes": 20301,
+      "sha256": "b297f10df4897f1af5628e7ffa75610b1519b6f597f21c0d60ad8b260aeed477"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/processes.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/processes.json",
+      "bytes": 178,
+      "sha256": "e9d40464ca103af03357498ad454ebacdd3e4d1dc59e4d23610d969b772a7058"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/reactions.txt",
+      "bytes": 4230,
+      "sha256": "6f7eb069c9b79ab032ba814197b620c36aee9041c505cb600fcf88f7d99d1683"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/report.json",
+      "bytes": 8811,
+      "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-2/rill.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-2/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/12-mixer-solo-retry.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/12-mixer-solo-retry.png",
+      "bytes": 179176,
+      "sha256": "9b63d5dcd7362956dc5f72cb398adc8bc75987283fe67c747c43352377d3bc1c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/16-send-created.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/16-send-created.png",
+      "bytes": 199757,
+      "sha256": "1f687db5c77c1ffcef850a1dcc774e1e8ab52bb13e24882127740de95d82cd04"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/final.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/final.png",
+      "bytes": 213731,
+      "sha256": "a2fc90ee615df179adf998bd6c85d6fe2a43a726e99e5e6f57cf5e9cc7744b0b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/mouse-actions.jsonl",
+      "bytes": 16421,
+      "sha256": "d3f6d7cbd0c1bc56c3b63eada5007a77524212409397e3d00799d6010ef6cba8"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/processes.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/processes.json",
+      "bytes": 178,
+      "sha256": "a7a9ebd8541a59b4673fe60fae37e83a7c63a959b3a4e2d9cc47b11751bf527b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/reactions.txt",
+      "bytes": 3996,
+      "sha256": "aaea04bb81d8d25ae5f9deb85f8f33dc4b92fa98cd0c86b86e03828720a0d473"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/report.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/report.json",
+      "bytes": 9093,
+      "sha256": "92f41df792ae64737d36f6a528cb2575ec095f0ea9768d40d9b54f55b2624231"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-3/rill.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-3/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/08-duration-limit.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/08-duration-limit.png",
+      "bytes": 213996,
+      "sha256": "9dcd1162dde99f0989436040d6f261499a314c80edec17004406f44dbd12796f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/23-solo-playing.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/23-solo-playing.png",
+      "bytes": 216509,
+      "sha256": "e6be83a68183de7d5a5f6cbb019576f10367dcdd13c918f1a3d70c2ed02ca1ac"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/final.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/final.png",
+      "bytes": 199835,
+      "sha256": "65f7540b57d089852def3995d8fc12d281973ecb4b1af096829fae75d2ca37f1"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/mouse-actions.jsonl",
+      "bytes": 18706,
+      "sha256": "8c7d53f247e3bac51bb0c492d49ce515028250f7e61d22f96f80c143baeb7aee"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/processes.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/processes.json",
+      "bytes": 178,
+      "sha256": "769992b0c34f75eee5a43c9d486ce7dc7db9f9ff1a6f92f988352fd42d140279"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/reactions.txt",
+      "bytes": 3827,
+      "sha256": "7cc8fe3030ae33cb11edb35d502b21bddd7ea55c177bbdebb559b508cf384585"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/report.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/report.json",
+      "bytes": 9341,
+      "sha256": "6b3cbacf1574971c2cdc2f088e6833fb305f81ae49774317b4c04990b90ff7b8"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-4/rill.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-4/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/07-notes-drawn.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/07-notes-drawn.png",
+      "bytes": 115853,
+      "sha256": "b0e8a78e2640806ca9d07dfc33f50504d4a96e8a3620c7205d9176baf587eea6"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/13-playback-error-solo.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/13-playback-error-solo.png",
+      "bytes": 182012,
+      "sha256": "73d7839b5d7d013b2153bdb61c284428ca81648dc4d3ddc4291a5e44aee4217a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/17-send-routed.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/17-send-routed.png",
+      "bytes": 206676,
+      "sha256": "f70244632ef71b54651a48cf5e59a3f40d647246880f2ad48fb59f3c28ae5e0b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/final.png",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/final.png",
+      "bytes": 221166,
+      "sha256": "5ef2785ede698037d93ae6ebda6eaa77909f8eb5526c62bd777a203dfe1ae67a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/mouse-actions.jsonl",
+      "bytes": 19359,
+      "sha256": "4a6e5c7374706ac11b640ec27880cf7a342217675008e1b7b5867c9fd866bcd0"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/processes.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/processes.json",
+      "bytes": 178,
+      "sha256": "abf797042cbe8976a66539bfeaa76c4f1c38c116e9a28c6815e8a67444c62b0b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/reactions.txt",
+      "bytes": 3966,
+      "sha256": "4dfb7aed6668a9ea37c5b4028ebedbe993396029e09a18b4ab271eb459c9eee3"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/report.json",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/report.json",
+      "bytes": 8693,
+      "sha256": "e28ea8fa3b5b4df658d2e2316e52ed1de1663d1fa114f6e914dcf7cee9958584"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/session-5/rill.log",
+      "path": "artifacts/usability-2026-11-01-round9/participant-5/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/setup-manifest.json",
+      "path": "artifacts/usability-2026-11-01-round9/setup-manifest.json",
+      "bytes": 6183,
+      "sha256": "1df7042ded96135bb25a133c6a3108124b090a2d762ce0771fc69e1910709a19"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/source-diff.patch",
+      "path": "artifacts/usability-2026-11-01-round9/source-diff.patch",
+      "bytes": 38459,
+      "sha256": "d35ec1957170b06d38e3324b214c7249fa657418859aad9c4f763bc65a470af6"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/source-hashes.json",
+      "path": "artifacts/usability-2026-11-01-round9/source-hashes.json",
+      "bytes": 119062,
+      "sha256": "b4a492b3ac1059f451f69c1155302f8bf70a907541295632c544cea1c6a465df"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/source-status.txt",
+      "path": "artifacts/usability-2026-11-01-round9/source-status.txt",
+      "bytes": 85718,
+      "sha256": "05228cf0a2d5549e5c1a820f4b43d6ed5aee3f6598a008f2f219963d31cb712b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-1-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-1-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-1-full.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-1-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-1-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-1-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-2-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-2-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-2-full.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-2-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-2-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-2-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-3-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-3-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-3-full.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-3-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-3-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-3-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-4-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-4-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-4-full.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-4-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-4-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-4-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-5-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-5-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-5-full.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-5-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/participant-5-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/participant-5-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/results.json",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/results.json",
+      "bytes": 21792,
+      "sha256": "e0a89ab171d1c8315941238e63bcf9bf8483a97aa662a2b87a3e5bbe72e64a10"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/full-graph-ablation/routing-review.json",
+      "path": "artifacts/usability-2026-11-01-round9/technical/full-graph-ablation/routing-review.json",
+      "bytes": 5504,
+      "sha256": "400327159c1b074cd757b857a10b3cdbb39a9c22a3a493c065f4da3d60234a98"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/technical/isolated-midi/mix-component-verification.json",
+      "path": "artifacts/usability-2026-11-01-round9/technical/isolated-midi/mix-component-verification.json",
+      "bytes": 21792,
+      "sha256": "e0a89ab171d1c8315941238e63bcf9bf8483a97aa662a2b87a3e5bbe72e64a10"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/untracked-frozen-source.tar.gz",
+      "path": "artifacts/usability-2026-11-01-round9/untracked-frozen-source.tar.gz",
+      "bytes": 7424,
+      "sha256": "c1fae58020eb024a427342d1de6217a1acf06b953ef1b275a223584fd1f5e528"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/verification-summary.json",
+      "path": "artifacts/usability-2026-11-01-round9/verification-summary.json",
+      "bytes": 46411,
+      "sha256": "fbf1df063e6c1d5446e808d569f1cfa4a9fad51884893285e514087f197b7f7a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/verify_full_graph.py",
+      "path": "artifacts/usability-2026-11-01-round9/verify_full_graph.py",
+      "bytes": 6943,
+      "sha256": "ef187ab394c9fb027e706135f9e930d97a7733f56015833a13e6efd4eed92aeb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/verify_isolated_midi.py",
+      "path": "artifacts/usability-2026-11-01-round9/verify_isolated_midi.py",
+      "bytes": 817,
+      "sha256": "2a26fefeb84f840f52ac312bbec4d2552719e14dc22c654d1c1a67c1b6bf7ca0"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round9/verify_mix_components.py",
+      "path": "artifacts/usability-2026-11-01-round9/verify_mix_components.py",
+      "bytes": 3753,
+      "sha256": "0b45b1c35ac68bcd7869a6d85f19d164f023d0dbf9a5981224bbb3aa76be59eb"
+    }
+  ]
+}

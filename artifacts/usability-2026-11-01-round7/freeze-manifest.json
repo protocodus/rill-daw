@@ -1,0 +1,76 @@
+{
+  "status": "frozen; not launched",
+  "frozen_at_utc": "2026-10-31T23:52:40Z",
+  "baseline_git_sha": "6029e61dd7f0a168cd562fac573c183ef00ceabd",
+  "origin_main_sha": "6029e61dd7f0a168cd562fac573c183ef00ceabd",
+  "working_tree_status": "source-status.txt",
+  "source_diff": "source-diff.patch",
+  "source_hashes": "source-hashes.json",
+  "source_file_count": 936,
+  "source_scope": "All existing Git-tracked and untracked non-ignored files under crates plus Cargo.toml and Cargo.lock, without extension filtering.",
+  "untracked_source": "untracked-frozen-source.tar.gz",
+  "source_reconstruction": "Checkout baseline_git_sha, apply source-diff.patch, extract untracked-frozen-source.tar.gz; verify source-hashes.json.",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-usability-round7/baseline/rill",
+      "sha256": "4be01e326a0800c33b152d553f6afcd0d1076a091c1d39d9d771b95cdf361949",
+      "storage": "hard link to immutable content-addressed copy; never linked to Cargo output",
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/4be01e326a0800c33b152d553f6afcd0d1076a091c1d39d9d771b95cdf361949/rill"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-usability-round7/baseline/daw-plugin-host",
+      "sha256": "e6d9b6407dfae8f91c495eb3fc9d42bf66d27e34259560960ce8b141e9234d3d",
+      "storage": "hard link to immutable content-addressed copy; never linked to Cargo output",
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/e6d9b6407dfae8f91c495eb3fc9d42bf66d27e34259560960ce8b141e9234d3d/daw-plugin-host"
+    }
+  },
+  "plugin": {
+    "name": "Rill Lab Sine",
+    "path": "/workspace/scratch/rill-usability-round7/plugins/RillLabSine.vst3",
+    "sha256": "ea9c162882be7efc282dcba683c92010d1804cc3218b37ffa99af7e813d253b8"
+  },
+  "viewport": [
+    1440,
+    1000
+  ],
+  "build_conditions": {
+    "rust": "1.99.1",
+    "profile": "dev",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "comparison_note": "Round7 and round8 use the same compiler/profile settings. Earlier rounds used debug-info builds; do not infer platform performance gains from cross-round timing."
+  },
+  "audio": {
+    "sink_rate_hz": 48000,
+    "application_buffer_request_frames": 1024,
+    "virtual_backend_buffering_ms": 60,
+    "isolation": "Separate timer-paced PulseAudio null sink, ALSA pulse bridge, config and cache per participant"
+  },
+  "protocol_sha256": "f9bdbdd2acac38f73947d5462806ee9f845650eb9a98074c3e8e0b863c1e01a7",
+  "structured_protocol_sha256": "e5f87b1a765e01a6199bccd0a24aea1da6b09d6b08f779bc4c9833709c9bf370",
+  "report_schema_sha256": "cb22d6ba6fb6809543aa6aa9bcc09b867c59854c1f1de0658eedcc2756a15935",
+  "participant_prompt_hashes": {
+    "participant-1-prompt.txt": "4ff8c4c7d4bf2291f343f00851fefcd2fc5f4ecdee01fa1fc6c42d9be7162b43",
+    "participant-2-prompt.txt": "9d60d702a47e0104e3ac34aff617d07f9adb88fe1cc227952daf270339dcafae",
+    "participant-3-prompt.txt": "b73b0cdcf25aa3d4c2c5bfd2c303c0334e6afbc4c009d215361ec9e2954ea5a6",
+    "participant-4-prompt.txt": "bc89be5bf58abe7a6723a86bcbfacb36ecef3719a3412d6d83540357fdea5a84",
+    "participant-5-prompt.txt": "ba548f38c927e58da8cf76e0052f8ad09c7061f48425a8fe9eee75a3d889906d",
+    "participant-prompts.json": "54cfab2587ed17caf799387ecd9767656cac8c97d5b34dc4a19d13a4373bd65e"
+  },
+  "lab_script_sha256": {
+    "aggregate.py": "257514a9089ebd4291f7d8cd5e21f7778014e4e8fda8131a9a36dfaf80655182",
+    "audio.py": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a",
+    "cleanup.py": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12",
+    "component_render.py": "4a516ebb58372a88c3cd61cab1cb4a21e526d6207ffffd3633f4900eae9e3b45",
+    "evidence_utils.py": "932eb7da6c5d2e1882ce98995be774fbda31457ca460de60be5513905baa80f7",
+    "freeze.py": "d15e3c004335a45df7fcaac5ff65993c065da7c64cbfd02e9d44dbea5ae2ae19",
+    "launch.py": "91da5dd393e20251bf1bc8d87e1bb03928e8d35bf48a5b7b8888eb941798bdd4",
+    "mouse.py": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+    "verify_full_graph.py": "aaf959e1cc297301e75ec94444b54e357d942e461b159324746be8f8812dcfaa",
+    "verify_isolated_midi.py": "2a26fefeb84f840f52ac312bbec4d2552719e14dc22c654d1c1a67c1b6bf7ca0",
+    "verify_mix_components.py": "0b45b1c35ac68bcd7869a6d85f19d164f023d0dbf9a5981224bbb3aa76be59eb"
+  },
+  "mouse_driver_sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb",
+  "sessions": []
+}

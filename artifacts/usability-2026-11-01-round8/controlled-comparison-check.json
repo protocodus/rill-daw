@@ -1,0 +1,23 @@
+{
+  "all_controlled_conditions_match": true,
+  "checks": {
+    "INSTRUCTIONS.txt": true,
+    "REPORT_SCHEMA.json": true,
+    "participant-1-prompt.txt": true,
+    "participant-2-prompt.txt": true,
+    "participant-3-prompt.txt": true,
+    "participant-4-prompt.txt": true,
+    "participant-5-prompt.txt": true,
+    "protocol.task": true,
+    "protocol.fixed_questions": true,
+    "protocol.viewport": true,
+    "protocol.audio": true,
+    "protocol.rating_keys": true,
+    "protocol.rating_scale": true,
+    "protocol.build_conditions": true,
+    "mouse_driver": true,
+    "audited_full_graph_helper": true
+  },
+  "path_normalization": "Round-specific lab root paths replaced with LAB before prompt/instruction text comparison",
+  "frozen_or_launched": false
+}

@@ -1,0 +1,97 @@
+{
+  "scope": "Final post-round9 send chooser: latest complete results for all affected targets, counted once. The separate full-workspace result precedes this final polish.",
+  "targets": {
+    "unittests src/main.rs": {
+      "status": "ok",
+      "passed": 141,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-1.log",
+      "log_sha256": "26f2550cd9bcc4f2fc11109743633a2e0eefd2b96ee7818d0220920e70dc0810"
+    },
+    "tests/mixer_e2e.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-1.log",
+      "log_sha256": "26f2550cd9bcc4f2fc11109743633a2e0eefd2b96ee7818d0220920e70dc0810"
+    },
+    "tests/mixer_flow_e2e.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-1.log",
+      "log_sha256": "26f2550cd9bcc4f2fc11109743633a2e0eefd2b96ee7818d0220920e70dc0810"
+    },
+    "tests/mixer_height_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-1.log",
+      "log_sha256": "26f2550cd9bcc4f2fc11109743633a2e0eefd2b96ee7818d0220920e70dc0810"
+    },
+    "tests/mixer_navigation_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-1.log",
+      "log_sha256": "26f2550cd9bcc4f2fc11109743633a2e0eefd2b96ee7818d0220920e70dc0810"
+    },
+    "tests/mixer_readability_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-2.log",
+      "log_sha256": "15d16d0db370faa9d832d8e85e027dcbaffe13dbbf5121f506347ec42393f698"
+    },
+    "tests/mixer_send_choice_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-2.log",
+      "log_sha256": "15d16d0db370faa9d832d8e85e027dcbaffe13dbbf5121f506347ec42393f698"
+    },
+    "tests/mixer_signal_flow_e2e.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-2.log",
+      "log_sha256": "15d16d0db370faa9d832d8e85e027dcbaffe13dbbf5121f506347ec42393f698"
+    },
+    "tests/mixer_stability_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-2.log",
+      "log_sha256": "15d16d0db370faa9d832d8e85e027dcbaffe13dbbf5121f506347ec42393f698"
+    },
+    "tests/routing_layout_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "send-choice-fixed-2.log",
+      "log_sha256": "15d16d0db370faa9d832d8e85e027dcbaffe13dbbf5121f506347ec42393f698"
+    }
+  },
+  "target_count": 10,
+  "passed": 160,
+  "failed": 0,
+  "ignored": 0,
+  "baseline": {
+    "binary": "/workspace/scratch/rill-usability-round9/baseline/rill",
+    "sha256": "bb8de010c6461160ac9840c5fc5931e20b3523483e8668a0905d12b7d2732972",
+    "failed_new_tests": 4,
+    "log": "round9-send-choice-baseline.log"
+  },
+  "test_correction": "Two initial cancellation tests used blind screen coordinates and navigated to Arrangement. Replaced those coordinates with a point verified to lie in empty mixer body outside menu foreground areas; all state assertions retained. No claim that the original point hit a specific control. Production code was unchanged between these attempts.",
+  "ratings": "All round9 ratings precede this final simplification; no extra beginner scores assigned."
+}

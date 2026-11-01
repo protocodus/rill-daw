@@ -1,0 +1,146 @@
+{
+  "at_utc": "2026-11-01T01:25:53Z",
+  "purpose": "Independent native review of post-round9 direct-send polish; not a beginner study or score.",
+  "status": "passed_scoped_native_review",
+  "setup_manifest": "/workspace/scratch/rill-send-preview/setup-manifest.json",
+  "binary": {
+    "path": "/workspace/rill-daw/target/debug/rill",
+    "sha256": "e579236fbe84414aae39b0a6a0a9fb3f9649d0f861757b5d1e6fd7b38215a27f"
+  },
+  "plugin_host": {
+    "path": "/workspace/rill-daw/target/debug/daw-plugin-host",
+    "sha256": "6a16fbeaa3857f173f4f0318d7009053464cbc6976bdefc45638fdb30c6dcdf2"
+  },
+  "method": "Visible mouse clicks only in isolated 1440x1000 Dark/Light sessions on copies of the round7 participant1 project. No playback, project edits, destination activation, or save requested.",
+  "observations": [
+    "In both themes, the audio strip Add send opens the destination chooser directly without navigating to Routing. Caption Send from Circuit drums, existing destination New bus, and explicit New bus and send are fully visible.",
+    "In both themes, the unselected bus strip Add send opens a chooser captioned Send from New bus while Circuit drums remains selected. The menu correctly shows No eligible buses because its only existing bus destination would be itself; New bus and send remains explicit.",
+    "Both menus fit within the viewport, above their low-positioned strip buttons, with readable text and distinct targets. No clipped captions or overlapping targets observed at this native size.",
+    "Clicking the empty body at (1100,600) cancels each chooser, leaves Mixer open, keeps Circuit drums selected, and leaves the project title unmodified. A bus route can remain visually focused after interacting with its button; this does not change the selected strip.",
+    "All original and copied project hashes remain identical before and after review. All six owned app/Pulse/Xvfb processes exited through recorded PID-plus-start-time cleanup; both display sockets are gone."
+  ],
+  "screenshots": [
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/audio-cancelled.png",
+      "sha256": "3137003bee24296951a76133172c0bb9f0f10af89b0e0dc52d04030777eb4b3d"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/audio-chooser.png",
+      "sha256": "7f096624050d058191d1812e0a5af57d0b20da8c3d2fb0e18e92c4a1cd34f0dd"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/bus-cancelled.png",
+      "sha256": "e344597bf8637d29a2d43560017858dc6f8d3990c9a645ad9354c80c3f42bb66"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/mixer.png",
+      "sha256": "3137003bee24296951a76133172c0bb9f0f10af89b0e0dc52d04030777eb4b3d"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/unselected-bus-chooser.png",
+      "sha256": "4ac5795ffea3d7964d832e66343710ba0dfebcdc01236ca1c8be92ca64b7a99b"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/audio-cancelled.png",
+      "sha256": "ad6d5ab4621038eb7fd86e3bc32592619744ac3fae843a87b42b6a5f5c7d1516"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/audio-chooser.png",
+      "sha256": "a7d346c3aac6c93d79601c41cd2fcb7c00bac4f404c2c3b6da8d1cd4d4c88f5d"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/bus-cancelled.png",
+      "sha256": "cfbd419e2b9d698a66ee72a9e4f8c69a8bd38e5541be708c9ff6af206ff90326"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/mixer.png",
+      "sha256": "ad6d5ab4621038eb7fd86e3bc32592619744ac3fae843a87b42b6a5f5c7d1516"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/unselected-bus-chooser.png",
+      "sha256": "ed2f2e57fb1bff6a91b9b5ac1fad2dc21716a6eab4f0a40673f53fa8352599d6"
+    }
+  ],
+  "action_logs": [
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/mouse-actions.jsonl",
+      "sha256": "61972bed6a31dfb9ab7808b3f3f629afcb78b9dffdd439bc1450abf0bd3611fc"
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/mouse-actions.jsonl",
+      "sha256": "1d144e7de5a1889ef04950c6cfe0309772ef5e2d400829a17963839ecc9652fe"
+    }
+  ],
+  "project_hash_checks": [
+    {
+      "path": "/workspace/scratch/rill-usability-round7/session-1/rain.rill",
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "matches_original": true
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-1/rain-preview.rill",
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "matches_original": true
+    },
+    {
+      "path": "/workspace/scratch/rill-send-preview/session-2/rain-preview.rill",
+      "sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "matches_original": true
+    }
+  ],
+  "cleanup_report": "/workspace/scratch/rill-send-preview/cleanup-1793496353516490423.json",
+  "cleanup": {
+    "at_utc": "2026-11-01T01:25:53Z",
+    "apps_only": false,
+    "processes": [
+      {
+        "participant": 1,
+        "process": "app",
+        "pid": 313445,
+        "result": "SIGTERM sent",
+        "exited": true
+      },
+      {
+        "participant": 1,
+        "process": "pulse",
+        "pid": 313439,
+        "result": "SIGTERM sent",
+        "exited": true
+      },
+      {
+        "participant": 1,
+        "process": "xvfb",
+        "pid": 313442,
+        "result": "SIGTERM sent",
+        "exited": true
+      },
+      {
+        "participant": 2,
+        "process": "app",
+        "pid": 313476,
+        "result": "SIGTERM sent",
+        "exited": true
+      },
+      {
+        "participant": 2,
+        "process": "pulse",
+        "pid": 313470,
+        "result": "SIGTERM sent",
+        "exited": true
+      },
+      {
+        "participant": 2,
+        "process": "xvfb",
+        "pid": 313473,
+        "result": "SIGTERM sent",
+        "exited": true
+      }
+    ]
+  },
+  "limits": [
+    "Native review confirms appearance and cancellation for these two sources and themes at 1440x1000. Creation, Undo/Redo, graph eligibility, modified/history state and 800x600 layout are covered separately by affected E2Es.",
+    "On-disk hash equality does not by itself prove in-memory history or selection invariants; screenshots and separate E2E assertions provide those complementary checks.",
+    "No ratings were changed or assigned after this polish."
+  ],
+  "blockers": []
+}

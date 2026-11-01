@@ -1,0 +1,52 @@
+selection=default device=DeviceDescription { name: "Default Audio Device", manufacturer: None, driver: Some("default"), device_type: Unknown, interface_type: Unknown, direction: Unknown, address: None, extended: ["Default Audio Device"] }
+supported=SupportedStreamConfigRange { channels: 2, min_sample_rate: 1, max_sample_rate: 384000, buffer_size: Range { min: 16, max: 174763 }, sample_format: F32 }
+config=StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(1024) }
+first_callback_samples=1364 elapsed=0.001267
+tick=1 elapsed=1.001299 callbacks=4 errors=0
+tick=2 elapsed=2.001423 callbacks=13 errors=0
+injected_callback_stall count=64 ms=60
+error elapsed=2.799398 count=1 kind=Xrun raw=A buffer underrun or overrun occurred.
+error elapsed=2.799926 count=2 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799937 count=3 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799943 count=4 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799948 count=5 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799954 count=6 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799959 count=7 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799965 count=8 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799972 count=9 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799978 count=10 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799983 count=11 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799988 count=12 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799993 count=13 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.799998 count=14 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.800004 count=15 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.800009 count=16 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.800014 count=17 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.800019 count=18 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.800024 count=19 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+error elapsed=2.800030 count=20 kind=BackendError raw=ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'
+tick=3 elapsed=3.001551 callbacks=69 errors=2497
+tick=4 elapsed=4.001678 callbacks=69 errors=2497
+tick=5 elapsed=5.001834 callbacks=87 errors=2497
+injected_callback_stall count=128 ms=60
+tick=6 elapsed=6.001965 callbacks=133 errors=2498
+tick=7 elapsed=7.002302 callbacks=133 errors=2498
+tick=8 elapsed=8.002434 callbacks=160 errors=2498
+injected_callback_stall count=192 ms=60
+tick=9 elapsed=9.002546 callbacks=197 errors=2499
+tick=10 elapsed=10.002651 callbacks=197 errors=2499
+tick=11 elapsed=11.002969 callbacks=234 errors=2499
+injected_callback_stall count=256 ms=60
+tick=12 elapsed=12.003132 callbacks=261 errors=7496
+tick=13 elapsed=13.003305 callbacks=261 errors=7496
+tick=14 elapsed=14.003431 callbacks=307 errors=7496
+injected_callback_stall count=320 ms=60
+tick=15 elapsed=15.003544 callbacks=325 errors=8851
+tick=16 elapsed=16.003667 callbacks=325 errors=8851
+tick=17 elapsed=17.003778 callbacks=381 errors=8851
+injected_callback_stall count=384 ms=60
+tick=18 elapsed=18.003889 callbacks=389 errors=8874
+tick=19 elapsed=19.004014 callbacks=389 errors=8874
+injected_callback_stall count=448 ms=60
+tick=20 elapsed=20.004121 callbacks=453 errors=8896
+done callbacks=453 errors=8896

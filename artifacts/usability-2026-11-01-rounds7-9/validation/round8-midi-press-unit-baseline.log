@@ -1,0 +1,22 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 8.84s
+     Running unittests src/main.rs (target/debug/deps/rill-43a8062c2bab1cf7)
+
+running 1 test
+test ui_tests::piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin ... FAILED
+
+failures:
+
+---- ui_tests::piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin stdout ----
+
+thread 'ui_tests::piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin' (295960) panicked at crates/daw-app/src/ui_tests.rs:418:14:
+the pressed pitch owns the drawing gesture
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ui_tests::piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 140 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p daw-app --bin rill`

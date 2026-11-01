@@ -1,0 +1,11 @@
+{
+  "recorded_utc": "2026-11-01T00:03:01Z",
+  "original_helper": "/workspace/scratch/rill-usability-round7/verify_full_graph.py",
+  "original_sha256": "aaf959e1cc297301e75ec94444b54e357d942e461b159324746be8f8812dcfaa",
+  "frozen_sha256": "aaf959e1cc297301e75ec94444b54e357d942e461b159324746be8f8812dcfaa",
+  "executed_helper": "/workspace/scratch/rill-usability-round7/verify_full_graph_audited.py",
+  "executed_sha256": "ef187ab394c9fb027e706135f9e930d97a7733f56015833a13e6efd4eed92aeb",
+  "change": "Routing audit reads persisted track 'gain' instead of nonexistent 'volume'; render/copy/ablation/comparison logic unchanged.",
+  "evidence": "All five saved project manifests contain gain, pan, mute and solo fields. Original frozen helper retained byte-for-byte.",
+  "original_outputs_modified": false
+}

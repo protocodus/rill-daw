@@ -1,0 +1,167 @@
+{
+  "participant": 4,
+  "persona": "Independent simulated first-time RILL beginner interested in a short ambient soundtrack sketch.",
+  "piece_name": "mist",
+  "ratings": {
+    "easy_to_use": 3,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "I completed naming, VST assignment, notes, audio stretch, mixing, saving and both export commands with the mouse. Precise note placement and duration correction took extra steps.",
+    "how_cool_it_looks": "The dark interface, teal waveforms, colored notes and tall Mixer strips looked coherent and readable. The many toolbar controls felt dense.",
+    "how_fast_it_is": "Most buttons and mixer drags responded promptly. Preparing audio, one output-stream failure, export progress, and initially black native file dialogs interrupted the flow. This is a session impression, not a hardware benchmark.",
+    "how_confusing_it_is": "The visible hints and labeled Mixer buttons helped. I had to translate 30 seconds into beats, several drawn note starts were staggered despite similar drag starts, and playback failed once without an immediately clear cause.",
+    "feature_completeness": "The requested mouse controls, native VST3 assignment, audio stretching, bus/send routing and WAV/MIDI exports were discoverable. I did not evaluate other plug-ins or advanced sound design."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round8/session-4/mist.rill",
+    "wav": "/workspace/scratch/rill-usability-round8/session-4/mist.wav",
+    "midi": "/workspace/scratch/rill-usability-round8/session-4/mist.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "File > Rename project exposed an on-screen Keyboard. Clicking Clear and letters let me apply the chosen name mist without physical keyboard input.",
+      "evidence": [
+        "02-rename.png",
+        "03-keyboard.png",
+        "04-midi-track.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "The visible Double-click for MIDI hint led to the Device library, where Rill Lab Sine was listed as a VST3 instrument. Assign instrument produced a MIDI track and pattern.",
+      "evidence": [
+        "initial.png",
+        "04-midi-track.png",
+        "05-assigned.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "positive",
+      "observation": "Clip Properties provided a numeric keypad. Setting 56 beats at 112 BPM showed 30 seconds. Choosing Stretch and entering 56 beats extended the startup audio to 350%, with an explicit 0:30.000 endpoint.",
+      "evidence": [
+        "08-duration-pad.png",
+        "09-long-midi.png",
+        "14-stretch-option.png",
+        "16-audio-stretched.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "friction",
+      "observation": "Pencil drags created twelve sustained notes, but several starts appeared at different times despite drags beginning at the same intended x positions. The last drags extended the clip to 0:30.134. I reset duration from 56.25 to 56 beats using Properties; the final project header returned to 0:30.000.",
+      "evidence": [
+        "10-notes.png",
+        "17-midi-duration-fix.png",
+        "18-mixer.png",
+        "mouse-actions.jsonl"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "Mixer faders and pan knobs gave immediate numeric feedback. Audio ended at -14.0 dB / L20 and MIDI at -9.1 dB / R20. Mute and Solo each showed an active highlight and were switched off again.",
+      "evidence": [
+        "18-mixer.png",
+        "19-mixer-playback.png",
+        "20-mute.png",
+        "21-solo.png",
+        "22-bus.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "Add bus immediately created New bus. MIDI Add send opened Routing; + Send offered New bus, and choosing it displayed a 0.25x Post send. Later the mixer showed Bus 1 in and Send - New bus.",
+      "evidence": [
+        "22-bus.png",
+        "23-send-menu.png",
+        "24-send-added.png",
+        "25-send-created.png",
+        "40-playback-retry.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "failure",
+      "observation": "After an earlier loop playback had advanced transport numbers, a later playback attempt stopped with Audio output stream failed or disconnected. No heard-audio claim was made.",
+      "evidence": [
+        "20-mute.png",
+        "21-solo.png",
+        "26-play-arranger.png",
+        "27-playhead-advanced.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "recovery",
+      "observation": "A subsequent Play retry advanced the transport to 004.03.23 and showed green MIDI, bus and master meter activity, with master reading -17.5 dB. I then stopped playback.",
+      "evidence": [
+        "40-playback-retry.png",
+        "41-retry-result.png",
+        "final.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "The native save/export dialogs initially appeared as a black rectangle; a later screenshot showed usable file pickers. Their default names already matched mist, allowing mouse-only acceptance.",
+      "evidence": [
+        "28-save.png",
+        "29-save-dialog.png",
+        "32-wav-dialog.png",
+        "33-wav-save.png",
+        "36-midi-dialog.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "positive",
+      "observation": "The save dialog accepted mist.rill in session-4 and the title lost its unsaved dot. WAV export showed Arrangement 0:30 after disabling effect tails. MIDI showed Exported - mist.mid, and Recent exports listed both mist.mid and mist.wav under Completed exports.",
+      "evidence": [
+        "29-save-dialog.png",
+        "30-save-success.png",
+        "32-wav-dialog.png",
+        "33-wav-save.png",
+        "37-midi-result.png",
+        "38-recent-exports.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: a named 30-second audio-plus-VST-MIDI arrangement was saved, both export commands completed according to Recent exports, and all requested mixer controls were exercised. File contents remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "Startup Circuit rhythm audio stretched to 30 seconds at 350%, plus a 56-beat MIDI pattern with twelve sustained notes in four rough chord groups (C4/E4/G4, A3/C4/E4, F3/A3/C4, G3/B3/D4). Some note starts are staggered. Audio is quieter and left-panned; MIDI is right-panned and has a 0.25x post send to New bus.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": false,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Initial loop playback advanced transport numbers but the captured meters were dark. A later attempt displayed Audio output stream failed or disconnected. Retrying Play subsequently advanced to 004.03.23 with active MIDI, bus and master meters and a -17.5 dB master reading. Playback was stopped before final.png.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio were verified; independent coordinator verification follows.",
+    "The WAV transient success toast was not observed: export progress was seen, and the Completed exports submenu later explicitly listed WAV - mist.wav. The false toast flag does not mean export failure.",
+    "The project path comes from the visible save dialog and removal of the unsaved title dot; no file inspection was used.",
+    "Virtual audio sink and software graphics may affect this session. No physical-hardware latency, audio quality, or other VST compatibility claim is made.",
+    "The musical balance was selected using visible control values; it was not evaluated by listening.",
+    "Elapsed interaction includes screenshots, tool overhead and reporting and is not a speed benchmark."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged the Circuit drums fader from -6.0 dB to -14.0 dB and New instrument from -2.5 dB to -9.1 dB; numeric values visibly updated.",
+    "pan": "Dragged audio pan knob left to L20 and MIDI pan knob right to R20; both labels visibly updated.",
+    "mute": "Clicked Circuit drums Mute during playback; orange active highlight appeared. Clicked again to restore unmuted state.",
+    "solo": "Clicked New instrument Solo during playback; active highlight appeared. Clicked again to clear solo before export.",
+    "bus": "Clicked Mixer Add bus; a New bus strip appeared with 0.0 dB fader and Master output. Final mixer displayed Bus 1 in.",
+    "send": "Clicked MIDI Add send, then + Send, then New bus. Routing displayed New bus, 0.25x level and Post selected; final mixer displayed Send - New bus."
+  }
+}

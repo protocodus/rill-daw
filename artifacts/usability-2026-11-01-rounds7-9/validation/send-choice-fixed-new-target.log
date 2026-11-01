@@ -1,0 +1,26 @@
+    Finished `test` profile [unoptimized] target(s) in 0.25s
+     Running tests/mixer_send_choice_e2e.rs (target/debug/deps/mixer_send_choice_e2e-e7ff7f8824c5fc41)
+
+running 4 tests
+test channel_destination_choice_targets_the_clicked_source_and_is_one_undo ... ok
+test channel_send_choices_exclude_self_and_all_feedback_paths ... ok
+test empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing ... FAILED
+test explicit_new_bus_choice_is_one_undoable_channel_send ... ok
+
+failures:
+
+---- empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing stdout ----
+
+thread 'empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing' (312811) panicked at crates/daw-app/tests/mixer_send_choice_e2e.rs:42:9:
+assertion `left == right` failed: Opening or cancelling changed view
+  left: String("Arrangement")
+ right: String("Mixer")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.03s
+
+error: test failed, to rerun pass `-p daw-app --test mixer_send_choice_e2e`

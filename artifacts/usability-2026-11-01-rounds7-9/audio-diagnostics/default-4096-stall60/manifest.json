@@ -1,0 +1,17 @@
+{
+  "start_utc": "2026-11-01T00:06:52Z",
+  "selection": "default",
+  "frames": 4096,
+  "seconds": 20,
+  "extra_probe_arguments": [
+    "60"
+  ],
+  "server_pid": 269300,
+  "server_start_ticks": "2807344",
+  "initial_load": "0.39 4.02 3.86 1/574 269302",
+  "probe_sha256": "24b854684a71d75a4470dc744c226414c2107d79eafb1e0868c06fccb5229e34",
+  "source_sha256": "7d733b6c00615b9494b7843e7767e671e8f23c48be20c32570eed174a0feac73",
+  "exit_code": 0,
+  "final_load": "0.36 3.77 3.78 1/572 269313",
+  "finish_utc": "2026-11-01T00:07:12Z"
+}

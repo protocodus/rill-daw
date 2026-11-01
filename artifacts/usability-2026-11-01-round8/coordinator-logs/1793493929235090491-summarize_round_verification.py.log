@@ -1,0 +1,31 @@
+{
+  "verified_at_utc": "2026-11-01T00:45:29Z",
+  "mean_ratings": {
+    "easy_to_use": 3.8,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3.2,
+    "how_confusing_it_is": 2.4,
+    "feature_completeness": 4
+  },
+  "summary": {
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "saved_project_wav_and_midi": 5,
+    "wav_within_half_second_of_30": 5,
+    "wav_audio_and_vst_components_verified": 5,
+    "elapsed_seconds_mean": 363.4,
+    "total_mouse_input_events": 438,
+    "total_screenshots": 192,
+    "prior_pieces_checked": 105,
+    "all_prior_pieces_unchanged": true
+  },
+  "audio_and_vst_proofs": 5,
+  "largest_full_render_difference": 0.0,
+  "original_current_evidence_files_checked": 222,
+  "all_current_evidence_unchanged": true,
+  "previous_cycle_evidence_files_checked": 233,
+  "all_previous_cycle_evidence_unchanged": true,
+  "frozen_helpers_unchanged": true,
+  "verification_method": "Full saved graph reproduction plus audio-source and MIDI-source mute ablations; all routes, buses, inserts and sources retained in analysis copies; originals untouched.",
+  "toast_flags_policy": "Participant-reported toast observations are preserved. Independently verified file output and Completed exports evidence establish completion even when a transient toast was not seen.",
+  "discrepancies": []
+}

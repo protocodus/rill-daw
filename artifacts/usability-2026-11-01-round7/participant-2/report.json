@@ -1,0 +1,162 @@
+{
+  "purpose": "Independent simulated beginner mouse-only RILL usability report; observations are from this session only.",
+  "participant": 2,
+  "persona": "Simulated first-time RILL beginner interested in a small electronic dance groove.",
+  "piece_name": "pulse",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 4,
+    "how_confusing_it_is": 2,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "Visible double-click guidance led directly to the instrument library; Pencil, Duplicate, Mixer, and export labels were usable without keyboard input. Exact trimming needed a small correction.",
+    "how_cool_it_looks": "The dark interface, colored waveforms, clear notes, channel strips, and routing lines looked coherent and polished. Native save dialogs looked visually separate.",
+    "how_fast_it_is": "Most clicks and drags produced immediate visible changes; repeated MIDI clips were quick to create. Playback needed one retry and native dialogs sometimes appeared after an extra screenshot. WAV export showed elapsed progress and completed.",
+    "how_confusing_it_is": "Low overall confusion because tools describe their actions. Initial playback failure and the very small trim adjustment were the main interruptions; a send required a routing panel and another menu.",
+    "feature_completeness": "This task exposed audio clips, MIDI editing, a VST3 instrument, volume, pan, mute, solo, bus/send routing, naming, save, and two export formats. I did not explore effects or more advanced composition features."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round7/session-2/pulse.rill",
+    "wav": "/workspace/scratch/rill-usability-round7/session-2/pulse.wav",
+    "midi": "/workspace/scratch/rill-usability-round7/session-2/pulse.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "Double-clicking the visible blank lane opened the Device library. Assign instrument created a MIDI track showing Rill Lab Sine. Double-clicking its pattern opened the piano roll, where Pencil drags created C4, C4, G4, F4 notes.",
+      "evidence": [
+        "01-midi-created.png",
+        "02-instrument.png",
+        "04-notes.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Clip context-menu Duplicate appended a drum clip. The toolbar Duplicate tool then showed Click a clip to duplicate and appended additional audio and MIDI clips. Fit exposed the whole arrangement.",
+      "evidence": [
+        "05-clip-menu.png",
+        "06-audio-duplicate.png",
+        "07-duplicate-toolbar.png",
+        "11-midi-repeated.png",
+        "final.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "Dragging the final audio edge to the visible 30-second line initially produced 0:30.134. A second four-pixel drag changed the project duration to 0:30.000. MIDI duplication required repeated clicks on successive clips.",
+      "evidence": [
+        "10-trim-thirty.png",
+        "11-midi-repeated.png",
+        "mouse-actions.jsonl at 2026-10-31T23:55:02Z"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "failure",
+      "observation": "The first Play click left the playhead at the start and displayed Audio output stream failed or disconnected, with Retry playback and Audio setup controls.",
+      "evidence": [
+        "12-playback.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "recovery",
+      "observation": "Retry playback changed Play to Pause. The following Mixer screenshot showed transport 003.02.15, active audio and MIDI channel level bars, and active master meters; later transport values advanced. No audio was auditioned.",
+      "evidence": [
+        "13-playback-retry.png",
+        "14-mixer.png",
+        "15-mixer-adjust-mute.png",
+        "16-mixer-solo.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "Mixer fader drags visibly changed drums from -6.0 to -7.5 dB and MIDI from -2.5 to -8.6 dB. Horizontal knob drags changed pan to L16 and R21. Mute and Solo buttons gained distinct active outlines, and both were returned to off.",
+      "evidence": [
+        "14-mixer.png",
+        "15-mixer-adjust-mute.png",
+        "16-mixer-solo.png",
+        "17-add-bus.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "Add bus immediately created New bus. The MIDI Add send button opened Routing; + Send offered New bus, and selecting it displayed a 0.25x Post send. The mixer then showed Send \u00b7 New bus and a routing line to the bus.",
+      "evidence": [
+        "17-add-bus.png",
+        "18-add-send.png",
+        "19-send-added.png",
+        "20-send-routing.png",
+        "26-save-result.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "positive",
+      "observation": "Rename project exposed a Keyboard button. Its on-screen keys and Clear allowed the name pulse to be entered entirely with mouse clicks. Save defaulted to pulse.rill in session-2; accepting the picker returned to the app with the saved title.",
+      "evidence": [
+        "22-rename.png",
+        "23-onscreen-keyboard.png",
+        "25-save.png",
+        "26-save-result.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "friction",
+      "observation": "Native save/export pickers appeared in the upper-left corner over the app; the WAV picker was briefly black before its contents appeared in a later screenshot. This did not block completion.",
+      "evidence": [
+        "25-save.png",
+        "28-wav-picker.png",
+        "29-wav-picker-ready.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "positive",
+      "observation": "WAV export displayed Arrangement \u00b7 0:30, 48 kHz, Stereo, 32-bit float. I disabled effect tails, accepted pulse.wav, and saw Exported \u00b7 pulse.wav. MIDI export defaulted to pulse.mid and showed Exported \u00b7 pulse.mid after acceptance.",
+      "evidence": [
+        "29-wav-picker-ready.png",
+        "30-wav-result.png",
+        "32-wav-status.png",
+        "33-midi-export-dialog.png",
+        "34-midi-result.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed through the visible UI: a 30-second audio plus VST MIDI arrangement was named and saved, and both exports showed success. File contents and actual audio remain independently unverified.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "112 BPM, 4/4. The supplied Circuit rhythm audio was duplicated into three full clips and a trimmed fourth clip ending at 30 seconds. A one-bar C4, C4, G4, F4 MIDI motif was drawn and duplicated into fourteen adjacent clips ending at 30 seconds. One bus receives a post send from the MIDI track.",
+    "instrument": "Rill Lab Sine (VST3)",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "First Play showed an audio-stream failure. Retry succeeded visibly: Pause appeared, transport advanced from the start to 003.02.15 and later 009.03.97 and 012.03.40, and channel/master meters were active in the first Mixer screenshot. The mute and solo screenshots had empty meters at their capture instants, so no claim is made about their audible effect. Playback was stopped before saving and exporting.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "No file contents or heard audio claim; independent coordinator verification follows. Artifact paths are those displayed in native save dialogs.",
+    "No physical hardware was tested. The laboratory uses software graphics and a timer-paced virtual audio sink, so these observations do not establish physical latency or audio quality.",
+    "Only the supplied Rill Lab Sine VST3 was assigned; other plug-ins and custom editors were not evaluated.",
+    "Mix balance was adjusted by visible numeric values and meters, without listening. No effects were added to the bus.",
+    "Session elapsed time includes screenshots, tool overhead, and report writing; it is not a performance benchmark."
+  ],
+  "mixer_outcome": {
+    "volume": "Completed visibly: dragged drums fader from -6.0 to -7.5 dB and MIDI fader from -2.5 to -8.6 dB. Final arranger and mixer retained these values. No audible balance judgment.",
+    "pan": "Completed visibly: horizontal drags changed drums to L16 and MIDI to R21; values persisted in final arranger.",
+    "mute": "Clicked drums Mute; its orange outline appeared. Clicked again to disable it before saving/exporting. Audible effect unverified.",
+    "solo": "Clicked MIDI Solo; its green outline appeared. Clicked again to disable it before saving/exporting. Audible effect unverified.",
+    "bus": "Clicked Mixer Add bus; a New bus channel appeared with 0.0 dB and center pan, feeding Master. It remained in the final arrangement.",
+    "send": "Clicked MIDI Add send, then + Send, then New bus. Routing showed New bus at 0.25x with Post selected. The mixer showed the send label and routing line, and the bus label showed 1 in. No send level adjustment or effect was added."
+  }
+}

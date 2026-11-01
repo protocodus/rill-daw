@@ -1,0 +1,21 @@
+Participant 2 — independent simulated beginner, interested in a small electronic dance groove.
+All composition input was through the supplied mouse driver. This record contains observable actions and short reactions, not private reasoning.
+
+01:00 — Double-clicked the empty lane, following its visible hint. The Device library appeared with Rill Lab Sine selected. Clicked Assign instrument; a New instrument track and New pattern appeared. This was easy to discover. Evidence: 01-midi-created.png, 02-instrument.png.
+01:00 — Double-clicked the pattern; selected Pencil and drew eight short notes with horizontal mouse drags. Note labels showed C4, E4, G4 and F4. Drawing felt direct, and the Clip end marker made the one-bar length visible. Evidence: 03-piano-roll.png, 04-notes-drawn.png.
+01:01 — Used Duplicate; the toolbar said Click a clip to duplicate. Clicked successive copies to repeat the MIDI pattern and drum audio. Fit kept the growing arrangement visible. Evidence: 05-duplicate-mode.png through 09-sixteen-bars.png.
+01:02 — Trimmed the final audio edge. The first result read 0:30.134; a second small drag corrected it to 0:30.000. The edge was slightly fiddly at this zoom, but the duration display provided useful feedback. The MIDI pattern was repeated fourteen times. Evidence: 10-thirty-second-arrangement.png, 11-mixer-playing.png.
+01:02 — Disabled Loop, started playback and opened Mixer. Transport advanced and track/master meters lit. No audio was auditioned. Evidence: 11-mixer-playing.png.
+01:02 — Dragged the two Mixer faders and pan knobs. Final visible values: Circuit drums -8.0 dB / Pan L15; New instrument -8.9 dB / Pan R19. Clicked drum Mute; it highlighted. During these actions a banner appeared: Audio output stream failed or disconnected. Playback had stopped. Evidence: 12-mixer-mute-balance.png.
+01:02 — Turned Mute off, turned instrument Solo on, clicked Retry playback. Pause returned, transport advanced and master/instrument meters lit. Solo highlighted clearly. Turned Solo off and stopped playback before continuing. Evidence: 13-solo-retry.png and mouse-actions.jsonl.
+01:03 — Clicked Add bus. A New bus column appeared. Clicked the instrument Add send, then + Send and New bus. The routing dialog showed a 0.25x Post send; closing it showed Send · New bus and Bus 1 in. Clear buttons made this discoverable, though the route took multiple dialogs. Evidence: 14-add-bus.png through 17-send-created.png, 21-named.png.
+01:03–01:04 — File > Rename project showed a Keyboard button. Its on-screen keys let me enter Sine Circuit and click Apply name. This was a useful mouse-only feature. Evidence: 19-rename.png through 21-named.png.
+01:04 — File > Save opened a native picker prefilled with Sine Circuit.rill in /workspace/scratch/rill-usability-round9/session-2. Clicked OK; the modification dot disappeared. The dialog took a moment to appear in the upper left. Evidence: 22-save-picker.png, 23-save-dialog.png, 24-saved.png.
+01:04–01:05 — File > Export WAV displayed Arrangement · 0:30 + tails and 48 kHz / Stereo / 32-bit float. Unchecked Include effect tails, clicked Export, accepted Sine Circuit.wav in the session-2 folder. The bottom status showed Exporting with elapsed seconds. Evidence: 25-wav-export-options.png through 29-wav-status.png.
+
+01:05 — The bottom status changed to Exported · Sine Circuit.wav. Evidence: 30-wav-success.png.
+01:05–01:06 — File > Export MIDI opened a native picker prefilled with Sine Circuit.mid in session-2. Clicked OK and saw Exported · Sine Circuit.mid. Evidence: 31-midi-export.png, 32-midi-success.png.
+01:06 — Returned to Arranger, clicked Fit, released the mouse button explicitly and captured final.png. The title reads Sine Circuit 0:30.000, both composition tracks reach the same endpoint, and New bus is visible. App remains open and stopped.
+
+Ratings (1–5): easy_to_use 4; how_cool_it_looks 4; how_fast_it_is 3; how_confusing_it_is 2 (higher is worse); feature_completeness 4. Detailed reasons are in report.json.
+No audio was auditioned. Playback observations concern transport/meters only. The exported file contents and duration have not been independently inspected by this participant.

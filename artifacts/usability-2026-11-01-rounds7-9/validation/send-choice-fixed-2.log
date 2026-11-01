@@ -1,0 +1,44 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 0.74s
+     Running tests/mixer_readability_e2e.rs (target/debug/deps/mixer_readability_e2e-5e2ba4bcb18aad74)
+
+running 1 test
+test mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mouse ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+
+     Running tests/mixer_send_choice_e2e.rs (target/debug/deps/mixer_send_choice_e2e-e7ff7f8824c5fc41)
+
+running 4 tests
+test channel_destination_choice_targets_the_clicked_source_and_is_one_undo ... ok
+test channel_send_choices_exclude_self_and_all_feedback_paths ... ok
+test empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing ... ok
+test explicit_new_bus_choice_is_one_undoable_channel_send ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.63s
+
+     Running tests/mixer_signal_flow_e2e.rs (target/debug/deps/mixer_signal_flow_e2e-12020c133c808f8a)
+
+running 2 tests
+test adjacent_mixer_toolbar_actions_create_sends_and_buses_for_the_selected_channel ... ok
+test mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.38s
+
+     Running tests/mixer_stability_e2e.rs (target/debug/deps/mixer_stability_e2e-06152a3dcaf5c68c)
+
+running 4 tests
+test mixer_controls_stay_under_the_pointer_during_output_failure_and_recovery ... ok
+test mixer_export_completion_preserves_control_geometry_and_mouse_target ... ok
+test mixer_notice_changes_keep_an_existing_short_window_scroll_position ... ok
+test mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.37s
+
+     Running tests/routing_layout_e2e.rs (target/debug/deps/routing_layout_e2e-b7e15a6bd87e3cac)
+
+running 1 test
+test routing_from_properties_keeps_sends_and_output_reachable_across_live_display_changes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.40s
+

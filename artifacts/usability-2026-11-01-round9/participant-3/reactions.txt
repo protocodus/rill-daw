@@ -1,0 +1,20 @@
+Participant 3 — independent simulated beginner; observable action/reaction record
+
+01:00:31 — Followed the empty-lane double-click-for-MIDI hint. The Device library opened with Rill Lab Sine selected; Assign instrument created the track and pattern. Clear route into MIDI. Evidence: 01-midi-created.png, 02-instrument-assigned.png.
+01:00:42–01:01:21 — Opened the pattern, tried Generate, selected Melody, used the 123 length keypad for 14 bars, and clicked Add notes. A populated melody and 0:30.000 duration appeared. The preview and mouse keypad were helpful. Evidence: 03–07 screenshots.
+01:01:30–01:01:43 — Selected the audio and clicked Duplicate repeatedly. Initially nothing duplicated; the hint revealed that Duplicate is a tool. Clicking clips then made three copies and extended the total to 0:34.286. Small terminology surprise, recoverable from the visible hint. Evidence: 08-drums-duplicated.png, 09-drums-repeated.png.
+01:01:50–01:01:53 — Selected and trimmed the last drum clip, switched Loop off and opened Mixer. Duration was 0:30.134, slightly longer than intended. Evidence: 10-mixer.png.
+01:02:02–01:02:08 — Dragged both volume faders and pan knobs, clicked Play and drum Mute. Readouts showed -8.4/-5.8 dB and L15/R16; Mute highlighted. Play produced an audio output stream failed or disconnected banner. Mixer controls were easy to read; the error interrupted confidence. Evidence: 11-mixer-mute-play.png.
+01:02:14–01:02:16 — Turned Mute off, turned MIDI Solo on, and clicked Retry playback. Solo highlighted, Pause replaced Play, transport advanced, and MIDI/master meters became active. No audio was auditioned. Evidence: 12-mixer-solo-retry.png.
+01:02:22 — Turned Solo off and clicked Add bus. New bus appeared. The audio-stream failure banner returned, with transport at 003.02.94. Evidence: 13-bus-added.png.
+01:02:31–01:02:45 — Used MIDI Add send, + Send, New bus. Routing showed a 0.25x Post send. This was discoverable without needing the global Add send menu. Evidence: 14–16 screenshots.
+01:02:54–01:03:05 — Closed routing, stopped playback, returned to Arranger and made a second short edge drag. Later duration showed exactly 0:30.000. Evidence: 17-arrangement-trim.png, 23-wav-settings.png.
+01:03:13–01:03:36 — Used File > Rename project, Keyboard, Clear and the on-screen letter buttons to name the piece glow. File > Save as offered glow.rill in the session-3 folder. The naming keyboard made mouse-only naming practical. Evidence: 19–22 screenshots.
+01:03:52 — Accepted the project save and opened Export WAV. Export showed Arrangement · 0:30, 48 kHz, stereo, 32-bit float. Evidence: 23-wav-settings.png.
+01:04:03–01:04:37 — Unchecked Include effect tails, exported glow.wav to session-3, observed elapsed export progress, then Exported · glow.wav. Native dialogs initially rendered black but appeared normally in the next screenshot. Evidence: 24–28 screenshots.
+01:04:43–01:04:51 — Export MIDI offered glow.mid in session-3. Accepted it and saw Exported · glow.mid. Evidence: 29-midi-save.png, 30-midi-success.png.
+01:05:03–01:05:14 — Used File > Save again, inspected final Mixer, returned to Arranger and captured final.png. Mute and Solo were off; drum/MIDI values persisted, bus showed 1 input and MIDI showed Send · New bus. App left open, stopped, buttons released. Evidence: 31-final-mixer.png, final.png.
+
+Ratings (1–5): easy_to_use 4; how_cool_it_looks 4; how_fast_it_is 4; how_confusing_it_is 2 (higher is worse); feature_completeness 4. Full reasons in report.json.
+
+Visible completion: 30.000-second glow arrangement saved via UI; WAV and MIDI success notices seen. Paths: /workspace/scratch/rill-usability-round9/session-3/glow.rill, glow.wav and glow.mid. File contents not inspected. No heard-audio claim; visual balancing only. Playback briefly showed moving transport and active meters after retry, but repeated stream errors prevent claiming reliable continuous playback.

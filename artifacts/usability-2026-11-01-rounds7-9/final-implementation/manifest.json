@@ -1,0 +1,82 @@
+{
+  "kind": "final implementation after round9; distinct from every rated executable",
+  "frozen_at_utc": "2026-11-01T01:24:17Z",
+  "rated_by_participants": false,
+  "rating_scope": "Round9 ratings apply only to round9/freeze-manifest.json. This final snapshot contains subsequent per-strip Add send chooser polish and has automated/native validation, with no fourth study or invented participant score.",
+  "baseline_git_sha": "6029e61dd7f0a168cd562fac573c183ef00ceabd",
+  "origin_main_sha": "6029e61dd7f0a168cd562fac573c183ef00ceabd",
+  "branch": "codex/usability-iteration-7",
+  "source_scope": [
+    "crates",
+    "vendor",
+    "scripts",
+    ".cargo",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "rust-toolchain",
+    "build.rs",
+    "rustfmt.toml",
+    ".rustfmt.toml"
+  ],
+  "source_file_count": 1051,
+  "source_entries": "source-entries.json",
+  "source_hashes": "source-hashes.json",
+  "source_diff": "source-diff.patch",
+  "untracked_source": "untracked-source.tar.gz",
+  "source_reconstruction": "Checkout baseline_git_sha, apply source-diff.patch, extract untracked-source.tar.gz. Verify source-hashes.json (regular-file bytes or symlink-target bytes); source-entries.json records kinds.",
+  "binaries": {
+    "rill": {
+      "path": "/workspace/scratch/rill-study-iteration/final-implementation/binaries/rill",
+      "sha256": "e579236fbe84414aae39b0a6a0a9fb3f9649d0f861757b5d1e6fd7b38215a27f",
+      "bytes": 123278152,
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/e579236fbe84414aae39b0a6a0a9fb3f9649d0f861757b5d1e6fd7b38215a27f/rill",
+      "storage": "Hard link to independent immutable content-addressed copy; never linked to Cargo output"
+    },
+    "daw-plugin-host": {
+      "path": "/workspace/scratch/rill-study-iteration/final-implementation/binaries/daw-plugin-host",
+      "sha256": "6a16fbeaa3857f173f4f0318d7009053464cbc6976bdefc45638fdb30c6dcdf2",
+      "bytes": 52765776,
+      "immutable_cache": "/workspace/scratch/rill-usability-binary-cache/6a16fbeaa3857f173f4f0318d7009053464cbc6976bdefc45638fdb30c6dcdf2/daw-plugin-host",
+      "storage": "Hard link to independent immutable content-addressed copy; never linked to Cargo output"
+    }
+  },
+  "compiler": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "build_configuration": {
+    "toolchain": "1.99.1",
+    "profile": "dev",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "provenance": "Root FINALBUILD signal confirms these established build settings, explicit workspace build, latest affected tests, strict all-targets Clippy, formatting and diff checks. This mechanism itself performs metadata reads and immutable copies only."
+  },
+  "validation_summaries": [
+    {
+      "original_path": "/workspace/scratch/rill-iteration-validation/workspace-final-summary.json",
+      "retained_copy": "/workspace/scratch/rill-study-iteration/final-implementation/validation-provenance/1-workspace-final-summary.json",
+      "sha256": "e3480b7eb1c472e9d2b90a6cdf9c4f75f9952e0476842b09ec81597b662267dd"
+    },
+    {
+      "original_path": "/workspace/scratch/rill-iteration-validation/send-choice-validation-summary.json",
+      "retained_copy": "/workspace/scratch/rill-study-iteration/final-implementation/validation-provenance/2-send-choice-validation-summary.json",
+      "sha256": "cb66198e88b3785bc3c7c2cfc0facee600b70a366e245fe1b3c27c4b921bbc29"
+    }
+  ],
+  "round9_rated_manifest": "/workspace/scratch/rill-usability-round9/freeze-manifest.json",
+  "round9_preservation": {
+    "binaries_unchanged": true,
+    "helpers_unchanged": true,
+    "participant_evidence_count": 203,
+    "participant_evidence_unchanged": true
+  },
+  "publication_scope": "Small source/provenance files and validation-summary copies may be published. Immutable application/helper binaries remain in the local archive.",
+  "snapshot_file_hashes": {
+    "source-status.txt": "050933a5ea6fa8deb8052047e3bd294a57e3111ca5d21f4ff99e28b2cc598dbc",
+    "untracked-source.tar.gz": "4e74bdc5c3f32f3b555b67921c6ce962da3091083087f566f0c9dd1aff32cd20",
+    "source-entries.json": "de8d3f9927f069951a0151adbd812eb9ea931c3b377e2be86f07ec1ae96184e0",
+    "source-diff.patch": "f32fe77f33aa2b230d182c78fc14d330743ebaad1231eb74dc65e2680dcc6b5c",
+    "freeze_final.py": "6eee2a734efa9d2f019ed821edafdd58e7f7abf7b0862d02473bb919b6e4327f",
+    "README.txt": "60262b9595420daa3499d0e59781ec1eff77d0634c6e559ab31f9f9162132127",
+    "source-hashes.json": "c43be57893f269cb04681cd7ddd51c90f17dd2a167ed8b78bed2ab9c30d1b4e9"
+  }
+}

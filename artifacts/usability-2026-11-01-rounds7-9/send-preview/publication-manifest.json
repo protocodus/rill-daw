@@ -1,0 +1,140 @@
+{
+  "created_utc": "2026-11-01T01:28:46Z",
+  "scope": "Independent native Dark/Light final send-chooser review: no new participant score, no playback, project edits or saves. Screenshots, actions and cleanup are published; project copies remain local.",
+  "file_count": 22,
+  "total_bytes": 1887019,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-send-preview/audio.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/audio.py",
+      "bytes": 2747,
+      "sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/cleanup-1793496353516490423.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/cleanup-1793496353516490423.json",
+      "bytes": 898,
+      "sha256": "8936dae528a98156c94d96ebed0ac78268b0ff2d76917eed99b1d40380c47088"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/cleanup.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/cleanup.py",
+      "bytes": 2037,
+      "sha256": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/launch.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/launch.py",
+      "bytes": 6535,
+      "sha256": "c07269cc3a2f65953efd6d2cb720e0915758d87a52e8f18b8ea4b5ad0b5113e7"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/mouse.py",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/mouse.py",
+      "bytes": 3710,
+      "sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/observations.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/observations.json",
+      "bytes": 6452,
+      "sha256": "228dc1cedc9a6e7839396c48a650a7d4f0abe28ceff43cfcf6d13f167b48ee35"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/prepare-manifest.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/prepare-manifest.json",
+      "bytes": 1607,
+      "sha256": "fc69370e9d081593d3392f1b781538d83586b68185487a9c3919b17b7f47c21d"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/audio-cancelled.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/audio-cancelled.png",
+      "bytes": 199505,
+      "sha256": "3137003bee24296951a76133172c0bb9f0f10af89b0e0dc52d04030777eb4b3d"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/audio-chooser.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/audio-chooser.png",
+      "bytes": 179384,
+      "sha256": "7f096624050d058191d1812e0a5af57d0b20da8c3d2fb0e18e92c4a1cd34f0dd"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/bus-cancelled.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/bus-cancelled.png",
+      "bytes": 198911,
+      "sha256": "e344597bf8637d29a2d43560017858dc6f8d3990c9a645ad9354c80c3f42bb66"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/mixer.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/mixer.png",
+      "bytes": 199505,
+      "sha256": "3137003bee24296951a76133172c0bb9f0f10af89b0e0dc52d04030777eb4b3d"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/mouse-actions.jsonl",
+      "bytes": 1517,
+      "sha256": "61972bed6a31dfb9ab7808b3f3f629afcb78b9dffdd439bc1450abf0bd3611fc"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/processes.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/processes.json",
+      "bytes": 178,
+      "sha256": "6653dcdac5e74bbb4fad7500a8284f0d33f59ad9d82cbbc0e28466afd54115ac"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-1/unselected-bus-chooser.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-1/unselected-bus-chooser.png",
+      "bytes": 183548,
+      "sha256": "4ac5795ffea3d7964d832e66343710ba0dfebcdc01236ca1c8be92ca64b7a99b"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/audio-cancelled.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/audio-cancelled.png",
+      "bytes": 181070,
+      "sha256": "ad6d5ab4621038eb7fd86e3bc32592619744ac3fae843a87b42b6a5f5c7d1516"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/audio-chooser.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/audio-chooser.png",
+      "bytes": 174968,
+      "sha256": "a7d346c3aac6c93d79601c41cd2fcb7c00bac4f404c2c3b6da8d1cd4d4c88f5d"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/bus-cancelled.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/bus-cancelled.png",
+      "bytes": 180505,
+      "sha256": "cfbd419e2b9d698a66ee72a9e4f8c69a8bd38e5541be708c9ff6af206ff90326"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/mixer.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/mixer.png",
+      "bytes": 181070,
+      "sha256": "ad6d5ab4621038eb7fd86e3bc32592619744ac3fae843a87b42b6a5f5c7d1516"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/mouse-actions.jsonl",
+      "bytes": 1519,
+      "sha256": "1d144e7de5a1889ef04950c6cfe0309772ef5e2d400829a17963839ecc9652fe"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/processes.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/processes.json",
+      "bytes": 178,
+      "sha256": "24d6b8272996ab52a14a687834a138957db7a4ee46a5017c1acda75b96d85ea7"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/session-2/unselected-bus-chooser.png",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/participant-2/unselected-bus-chooser.png",
+      "bytes": 178598,
+      "sha256": "ed2f2e57fb1bff6a91b9b5ac1fad2dc21716a6eab4f0a40673f53fa8352599d6"
+    },
+    {
+      "source": "/workspace/scratch/rill-send-preview/setup-manifest.json",
+      "path": "artifacts/usability-2026-11-01-rounds7-9/send-preview/setup-manifest.json",
+      "bytes": 2577,
+      "sha256": "b5b22ca953156718d85b91b5d5f2a99e3be78d37312621ac52ddfbd851c5dc7b"
+    }
+  ]
+}

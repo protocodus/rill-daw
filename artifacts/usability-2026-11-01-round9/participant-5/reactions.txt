@@ -1,0 +1,22 @@
+Participant 5: independent simulated first-time RILL beginner; observable actions and reactions only.
+
+01:00:43–01:00:53 — Clicked Duplicate repeatedly; no extra clip appeared until I followed the visible “Click a clip to duplicate” hint. Reaction: understandable once the instruction was noticed, but the button initially looked like an immediate command. Evidence: 01-duplicated.png, 02-first-repeat.png.
+01:01:00–01:01:32 — Repeated the audio to 34.286 seconds, then dragged the final edge. First result was 30.134 seconds; a second small drag gave 30.000. Reaction: the precise duration display helped, but the final adjustment was small. Evidence: 03-four-repeats.png, 04-midi-created.png, 06-piano-roll.png.
+01:01:12–01:01:32 — Followed “Double-click for MIDI,” assigned Rill Lab Sine, and opened the clip editor. Reaction: this discovery path was clear. Evidence: 04-midi-created.png, 05-instrument-assigned.png, 06-piano-roll.png.
+01:01:44–01:02:35 — Drew four notes. The first C4 appeared later than intended, so used Select to move it toward the beginning. Duplicated the one-bar pattern across the arrangement. Reaction: note previews made repetitions easy to see; note placement required care. Evidence: 07-notes-drawn.png, 09-midi-repeats.png, 27-full-arrangement.png.
+01:02:47–01:03:06 — Changed Mixer faders to audio -7.5 dB and MIDI -9.6 dB. Pan drags ended at L25 and R28. Reaction: values and separate strips made changes visible. The initial horizontal drags had already changed pan to L10/R13; the later vertical drags increased those offsets. Evidence: 11-mixer-playing-balanced.png, 12-mute-pan.png.
+01:02:52–01:03:25 — Started playback, tested audio mute and MIDI solo, then returned both to off. Playback advanced, but a screenshot showed “Audio output stream failed or disconnected.” A later screenshot showed active playback and meters without that banner. Reaction: the error weakened confidence even though playback visibly resumed. No audio was heard or auditioned. Evidence: 12-mute-pan.png, 13-playback-error-solo.png, 14-bus-created.png.
+01:03:25–01:03:46 — Created New bus and an audio-track send to it. Routing displayed 0.25x, Post. Reaction: Add bus was immediate; Add send required opening routing and then another + Send choice, but the destination was discoverable. Evidence: 14-bus-created.png, 15-send-menu.png, 16-send-added.png, 17-send-routed.png.
+01:04:05–01:04:42 — Renamed the piece Night hop through the on-screen keyboard, applied the name, and saved Night hop.rill in session-5. Reaction: the keyboard was very useful for a mouse-only task, and the suggested save name matched. Evidence: 19-name-dialog.png through 22-project-saved.png.
+01:04:45–01:05:20 — Export WAV showed a 30-second arrangement. Disabled Include effect tails and confirmed Night hop.wav. Export progress was visible, followed by an Exported notice. Evidence: 23-wav-export.png, 24-wav-path.png, 25-wav-result.png, 27-full-arrangement.png.
+01:05:27–01:05:36 — Exported Night hop.mid and saw its success notice. Reaction: MIDI export was direct after finding it in File. Evidence: 28-midi-export.png, 29-midi-complete.png.
+01:06:01 — Released mouse buttons; app remains open. final.png records the final arrangement and MIDI export success notice.
+
+Ratings: easy_to_use 4/5; how_cool_it_looks 4/5; how_fast_it_is 3/5; how_confusing_it_is 3/5 (higher is worse); feature_completeness 4/5. Detailed reasons and limitations are in report.json.
+
+Observed output paths:
+/workspace/scratch/rill-usability-round9/session-5/Night hop.rill
+/workspace/scratch/rill-usability-round9/session-5/Night hop.wav
+/workspace/scratch/rill-usability-round9/session-5/Night hop.mid
+
+These are UI-established results. File contents, actual audio, and musical quality were not inspected. This is a simulated session under the specified virtual audio laboratory conditions, not human research or a hardware benchmark.

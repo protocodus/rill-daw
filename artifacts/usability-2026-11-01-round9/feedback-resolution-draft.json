@@ -1,0 +1,2360 @@
+{
+  "status": "verified round9 feedback matrix; accepted final send-chooser polish pending validation",
+  "created_utc": "2026-11-01T01:13:04Z",
+  "round": 9,
+  "policy": "Original reports, ratings, IDs, kinds, observations, evidence strings, outcomes and limitations are preserved verbatim. Reasoned responses and technical reconciliation are separate. No participant contact or rerating; round9 scores precede the final send-chooser polish. Missing complaints are not proof of absent defects.",
+  "sources": [
+    {
+      "participant": 1,
+      "report": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+      "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779",
+      "outcome": {
+        "status": "Completed through UI: named and saved a 30-second audio/MIDI arrangement, adjusted mixer controls, created a bus/send, and saw both export success notices. Playback reliability and file contents remain unverified.",
+        "visible_arrangement_duration_seconds": 30,
+        "composition": "Four consecutive copies of the starter Circuit rhythm audio, with the last trimmed to two bars, plus fourteen one-bar MIDI patterns containing C4, E4, G4, F4 at 112 BPM. Drums are panned L15 and instrument R14; drums also send to New bus.",
+        "instrument": "Rill Lab Sine (VST3)",
+        "project_saved_via_ui": true,
+        "wav_export_success_notice_seen": true,
+        "midi_export_success_notice_seen": true,
+        "playback_observed": "First Play failed with an output-stream warning. Retry produced an advancing transport, Pause button and active drum/master meters. Later solo showed blank meters and an output-stream warning subsequently reappeared. Full 30-second playback and instrument sound were not established. App left stopped.",
+        "audio_auditioned": false,
+        "mouse_buttons_released": true
+      },
+      "mixer_outcome": {
+        "volume": "Dragged drum and instrument faders; visible values changed from -6.0 to -8.2 dB and -2.5 to -6.6 dB. Balance chosen visually, not by hearing.",
+        "pan": "Dragged drum pan left and instrument pan right; labels changed to Pan L15 and Pan R14.",
+        "mute": "Clicked instrument Mute; button highlighted orange, then clicked again to turn off. No audible mute claim.",
+        "solo": "Clicked instrument Solo; button highlighted teal, then clicked again to turn off. Meters were blank in the solo screenshot, with a subsequent output-stream warning, so audibility was not established.",
+        "bus": "Clicked Add bus; New bus strip appeared with 0.0 dB and centered pan. After adding send it showed Bus 1 in.",
+        "send": "Clicked drum Add send, then + Send, then New bus. Routing displayed a New bus send at 0.25x Post; mixer displayed Send · New bus."
+      },
+      "limitations": [
+        "Simulated participant, not human research.",
+        "No file contents were inspected and no audio was auditioned; independent coordinator verification follows.",
+        "Paths are based on visible save dialogs and filenames, not filesystem verification.",
+        "Software graphics and a timer-paced virtual audio sink with 60 ms buffering; playback errors and timing cannot be generalized to a physical setup.",
+        "Only the provided Rill Lab Sine VST3 was used; no claim about other third-party plug-ins.",
+        "Screenshot 30-wav-success.png actually captured export progress; the success notice is in 31-wav-status.png."
+      ]
+    },
+    {
+      "participant": 2,
+      "report": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+      "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5",
+      "outcome": {
+        "status": "Completed through the visible UI: named and saved a 30.000-second audio-plus-MIDI arrangement, exercised all requested Mixer controls, and saw WAV and MIDI export success notices. File contents await independent verification.",
+        "visible_arrangement_duration_seconds": 30,
+        "composition": "At 112 BPM, repeated the supplied Circuit rhythm drum audio across fourteen bars, trimming the final copy to the endpoint. Drew a one-bar eight-note C4/C4/E4/G4/C4/E4/G4/F4 pattern and duplicated it to fourteen bars. One audio track, one MIDI instrument track, and one bus are visible.",
+        "instrument": "Rill Lab Sine (Device library displayed VST3)",
+        "project_saved_via_ui": true,
+        "wav_export_success_notice_seen": true,
+        "midi_export_success_notice_seen": true,
+        "playback_observed": "Transport advanced and track/master meters lit after Play. One Audio output stream failed or disconnected banner appeared during Mixer work; Retry playback restored advancing transport and visible meters. Playback was stopped before save/export and left stopped. No claim of heard audio.",
+        "audio_auditioned": false,
+        "mouse_buttons_released": true
+      },
+      "mixer_outcome": {
+        "volume": "Dragged both vertical faders. Circuit drums changed from -6.0 dB to -8.0 dB; New instrument changed from -2.5 dB to -8.9 dB. Values remained visible in final arrangement.",
+        "pan": "Dragged the drum knob left and instrument knob right. Labels changed from C to L15 and R19 respectively.",
+        "mute": "Clicked the drum Mute button; it highlighted amber in screenshot 12. Clicked it again to clear it before later work. Audible effect was not tested.",
+        "solo": "Clicked instrument Solo; it highlighted in screenshot 13, with instrument/master meter activity after Retry playback. Clicked it again to clear it before save/export. Audible effect was not tested.",
+        "bus": "Clicked Add bus. New bus appeared in the Mixer Buses group at 0.0 dB and centered pan, and later in the arrangement.",
+        "send": "Clicked the instrument Add send, then + Send and New bus. The routing dialog showed New bus, level 0.25x and Post selected. The Mixer showed Send · New bus and the bus showed Bus 1 in. No effects were inserted and no audible bus processing was assessed."
+      },
+      "limitations": [
+        "Simulated participant, not human research.",
+        "No file contents were inspected and no audio was auditioned; independent coordinator verification follows.",
+        "Volume and pan balancing was based on visible values/meters, not a listening judgment.",
+        "Software graphics and a timer-paced virtual audio sink were used; the observed failure and speed rating do not establish physical-device behavior.",
+        "Only the installed laboratory Rill Lab Sine VST3 instrument was exercised.",
+        "Elapsed session time includes screenshot, tool and reporting overhead and is not a benchmark."
+      ]
+    },
+    {
+      "participant": 3,
+      "report": "/workspace/scratch/rill-usability-round9/session-3/report.json",
+      "sha256": "92f41df792ae64737d36f6a528cb2575ec095f0ea9768d40d9b54f55b2624231",
+      "outcome": {
+        "status": "Completed via the visible UI: named and saved a 30.000-second arrangement, obtained WAV and MIDI export success notices, and performed all requested Mixer actions. File contents and sound remain for independent verification.",
+        "visible_arrangement_duration_seconds": 30,
+        "composition": "112 BPM, 4/4 melodic instrumental: startup Circuit rhythm audio duplicated to four consecutive clips with the last trimmed to the 30-second endpoint, plus a 14-bar C-major-triad Random walk melody generated in a MIDI pattern. Added one bus with a 0.25x post send from the MIDI track.",
+        "instrument": "Rill Lab Sine (VST3)",
+        "project_saved_via_ui": true,
+        "wav_export_success_notice_seen": true,
+        "midi_export_success_notice_seen": true,
+        "playback_observed": "Initial Play produced an audio-stream failure banner. Retry playback showed Pause, a transport value of 001.01.39 and active MIDI/master meters. Later the transport was at 003.02.94 with another failure banner. Playback was stopped and returned to the start before exports. This does not establish continuous 30-second playback or heard audio.",
+        "audio_auditioned": false,
+        "mouse_buttons_released": true
+      },
+      "mixer_outcome": {
+        "volume": "Dragged drum fader from -6.0 to -8.4 dB and MIDI fader from -2.5 to -5.8 dB; both values remained visible in the final Mixer.",
+        "pan": "Dragged drum knob horizontally to L15 and MIDI knob to R16; both values remained visible in the final Mixer.",
+        "mute": "Clicked drum Mute on; amber highlighting appeared. Clicked it off before export. Audible muting unverified.",
+        "solo": "Clicked MIDI Solo on; teal highlighting appeared, with MIDI/master meters active after playback retry. Clicked it off before export. Audible isolation unverified.",
+        "bus": "Clicked Add bus; New bus strip appeared with 0.0 dB, center pan and output Ch 3 > Master. Final strip showed Bus 1 in.",
+        "send": "Clicked MIDI Add send, then + Send, then New bus. Routing displayed New bus at 0.25x with Post selected. Final Mixer showed Send · New bus on the MIDI strip."
+      },
+      "limitations": [
+        "Simulated participant, not human research.",
+        "No file contents were inspected and no audio capture was auditioned; output paths come from visible save dialogs. Independent coordinator verification follows.",
+        "Volume and pan changes were made visually, not judged by listening. Mute/solo button states were observed without an audible comparison.",
+        "The laboratory uses software graphics and a timer-paced virtual audio sink with 60 ms buffering; the stream failures and perceived speed cannot be generalized to physical hardware.",
+        "Only Rill Lab Sine was available and explored; no conclusions about other VST instruments.",
+        "The native save dialogs briefly appeared as black rectangles before rendering on a later screenshot. Session elapsed time includes screenshots, tools and reporting overhead."
+      ]
+    },
+    {
+      "participant": 4,
+      "report": "/workspace/scratch/rill-usability-round9/session-4/report.json",
+      "sha256": "6b3cbacf1574971c2cdc2f088e6833fb305f81ae49774317b4c04990b90ff7b8",
+      "outcome": {
+        "status": "Completed the composition, Mixer, naming, save and export tasks as established by the UI. Playback was only partly successful: transport advancement was observed, followed by an output-stream error; retry was brief.",
+        "visible_arrangement_duration_seconds": 30,
+        "composition": "One supplied Circuit rhythm audio clip stretched across the 30-second arrangement, with four adjacent sustained C4/E4/G4 MIDI chord clips; the last MIDI clip was trimmed shorter. Intended as a simple ambient drone with slowed rhythmic texture. Audible musical result was not auditioned.",
+        "instrument": "Rill Lab Sine",
+        "project_saved_via_ui": true,
+        "wav_export_success_notice_seen": true,
+        "midi_export_success_notice_seen": true,
+        "playback_observed": "Preparing audio appeared, then transport position advanced from 001.01.00 to 004.03.20. At 007.04.26 the app showed Audio output stream failed or disconnected. Retry restored Pause appearance, then I stopped. Captured Mixer meters appeared empty; no audible-output claim.",
+        "audio_auditioned": false,
+        "mouse_buttons_released": true
+      },
+      "mixer_outcome": {
+        "volume": "Dragged the audio fader down to -12.0 dB and MIDI fader down to -6.0 dB; numeric values visibly updated. Bus remained at 0.0 dB.",
+        "pan": "Dragged the audio pan knob horizontally left to L14 and MIDI right to R21; labels visibly updated.",
+        "mute": "Clicked audio Mute during transport playback and observed orange active styling; clicked again to restore inactive styling. Audible muting not verified.",
+        "solo": "Clicked MIDI Solo and observed green active styling; clicked again to restore inactive styling before export. The stream-error banner appeared during this part of the session; no causal or audible claim.",
+        "bus": "Clicked Add bus and observed a new New bus strip, later displayed as Bus 1 in after adding the send.",
+        "send": "Clicked MIDI Add send, then + Send, then New bus. Routing displayed a New bus send at 0.25x with Post selected; Mixer displayed Send - New bus. No effects were added to the bus."
+      },
+      "limitations": [
+        "Simulated participant, not human research.",
+        "Only this assigned native session, its screenshots and the supplied mouse driver were used for composition; no keyboard events, shortcuts, APIs, source inspection or project-file inspection.",
+        "No file contents or heard audio claim: paths come from the visible native save/export dialogs and success notices. Independent coordinator verification follows.",
+        "Laboratory software graphics and virtual audio sink; the playback failure and timing should not be generalized to physical audio hardware.",
+        "Only the supplied Rill Lab Sine VST3 was used. No other plug-in compatibility or custom editor behavior was tested.",
+        "Mix balance and ambient character reflect visible edits and intention, not an auditioned judgment. Mute and solo were visually toggled but their audible effect was not verified.",
+        "Elapsed session time includes screenshot, tool and reporting overhead; it is not an application performance benchmark."
+      ]
+    },
+    {
+      "participant": 5,
+      "report": "/workspace/scratch/rill-usability-round9/session-5/report.json",
+      "sha256": "e28ea8fa3b5b4df658d2e2316e52ed1de1663d1fa114f6e914dcf7cee9958584",
+      "outcome": {
+        "status": "Completed in the UI: named and saved a 30-second audio plus VST MIDI arrangement, adjusted Mixer volume/pan, tried mute/solo, created a bus/send, and saw both export success notices. File contents and audible result remain unverified.",
+        "visible_arrangement_duration_seconds": 30,
+        "composition": "112 BPM, 4/4. The supplied Circuit rhythm audio was repeated three full times plus a trimmed final section. A four-note C4/D-sharp4/G4/D-sharp4 synth motif was drawn and repeated in fourteen one-bar MIDI clips across the 30-second arrangement.",
+        "instrument": "Rill Lab Sine (VST3)",
+        "project_saved_via_ui": true,
+        "wav_export_success_notice_seen": true,
+        "midi_export_success_notice_seen": true,
+        "playback_observed": "Play changed to Pause and the bar/beat position advanced. One screenshot showed Audio output stream failed or disconnected with playback stopped. A later screenshot showed resumed playback at 005.04.40 with MIDI and master meters lit; further screenshots showed advancing transport. No capture was auditioned.",
+        "audio_auditioned": false,
+        "mouse_buttons_released": true
+      },
+      "mixer_outcome": {
+        "volume": "Dragged both Mixer faders. Audio changed from -6.0 to -7.5 dB; MIDI changed from -2.5 to -9.6 dB. These final values were visible before exporting. Balance was set visually, not by listening.",
+        "pan": "Dragged each Mixer pan knob horizontally and vertically. Final displayed values were audio L25 and MIDI R28.",
+        "mute": "Clicked Circuit drums Mute; its button highlighted amber. Clicked again to disable before saving/exporting.",
+        "solo": "Clicked New instrument Solo; its button highlighted teal and MIDI/master meters were visible. Clicked again to disable before saving/exporting.",
+        "bus": "Clicked Add bus. A New bus strip appeared at 0.0 dB, centered, output to Master. After adding the send it displayed Bus 1 in.",
+        "send": "Clicked the audio strip Add send, then + Send, then New bus. Routing showed New bus, 0.25x level, Post selected. Mixer showed Send · New bus. No bus effects were inserted."
+      },
+      "limitations": [
+        "Simulated participant, not human research.",
+        "No source, project-state API, composition file contents, other participant records, keyboard input, or prior study results were used.",
+        "No audio capture was auditioned. Meter activity does not establish audible quality or subjective balance.",
+        "Saved/exported paths were observed in native file dialogs and success notices; independent coordinator file verification follows.",
+        "Playback used the specified timer-paced virtual laboratory sink, so the observed failure and speed impression should not be generalized to physical audio hardware.",
+        "The installed Rill Lab Sine was the only instrument evaluated; no claims about other third-party plug-ins.",
+        "The audio source was supplied; hip-hop suitability and musical quality were not verified by listening."
+      ]
+    }
+  ],
+  "issue_responses": {
+    "positive": {
+      "status": "preserve_observed_success",
+      "response": "Preserve the successful visible workflow and its original evidence. Independent verification confirms all five saved project/WAV/MIDI sets, exact 30.000-second WAVs, sample-exact full saved-graph reproduction and actual audio/VST mix contributions through separate source ablations. This does not establish heard musical quality, sustained live playback reliability, physical-device behavior or broad plug-in compatibility.",
+      "product_change_claimed": false
+    },
+    "duplicate_tool": {
+      "status": "retained_design_with_reasoned_response",
+      "response": "The toolbar Duplicate selects a persistent tool and exposes Click a clip to duplicate; context/Edit Duplicate performs an immediate copy. Preserve consistent tool/action semantics and the visible instruction. Initial discovery and repeated-copy steps remain recorded friction. Repeat to loop end is an existing alternative for filling a chosen range; no new duplication behavior or reduced click count is claimed.",
+      "product_change_claimed": false
+    },
+    "precise_trim": {
+      "status": "retained_precision_route_with_reasoned_response",
+      "response": "A zoomed-out drag can require a small correction from 30.134 to 30.000 seconds. Preserve the observation and existing snap, source and Undo semantics. Properties duration entry and an exact loop duration followed by Repeat to loop end remain mouse-accessible alternatives. All five final WAVs verify as exactly 30.000 seconds, but that does not prove every one-drag endpoint is exact or that trimming friction is newly fixed.",
+      "product_change_claimed": false
+    },
+    "send_routing_steps": {
+      "status": "accepted_final_workflow_polish_validation_pending",
+      "response": "Participants1 and2 explicitly found the per-channel Add send → Routing → + Send sequence redundant, repeating earlier feedback. A final bounded improvement has been accepted: an empty strip’s Add send should open the destination chooser directly using the existing toolbar logic, while an existing Send summary continues to open Routing for detailed edits. Source targeting, eligible destinations, cancellation and one-step Undo must remain correct. Tests and implementation validation are pending; no completed fix is claimed in this snapshot.",
+      "product_change_claimed": false,
+      "ratings_scope": "All round9 ratings precede this final polish. No fourth full beginner study is planned, so validation must not be represented as a new participant score.",
+      "validation": "pending coordinator baseline/fixed checks and final validation"
+    },
+    "audio_failure": {
+      "status": "known_lab_failure_unresolved",
+      "response": "All five reports retain their output-stream failures. The separate CPAL-only probe reproduced Xrun followed by the same snd_pcm_avail_delay EIO under injected60 ms callback stalls, without RILL code. Default and named output share one PCM, and a larger requested buffer was not demonstrated to remedy the failure. Each participant stall’s actual cause remains unknown. Keep fatal handling, explicit Retry/Audio setup and raw diagnostics; no audio product fix or physical-hardware reliability conclusion is claimed.",
+      "diagnostics": "/workspace/scratch/rill-audio-diagnostics/results.json",
+      "product_change_claimed": false
+    },
+    "audio_recovery": {
+      "status": "observed_recovery_no_reliability_fix",
+      "response": "Retry and later UI activity sometimes restored Pause, transport movement or meters; repeated later failures and unknown recovery causes remain in the record. Such visual activity does not establish heard audio or uninterrupted playback. Preserve explicit recovery controls and diagnostics without treating a selected device name or unrelated edit as a proven remedy. The actual restart sequence requires separate stream-state evidence before changing classification or restart behavior.",
+      "product_change_claimed": false
+    },
+    "audio_preparation": {
+      "status": "existing_async_preparation_retained",
+      "response": "Participant4 saw Preparing audio before transport progress. Keep visible preparation feedback for stretched audio and the asynchronous preparation path. The wait is acknowledged; these observations do not isolate its cost or establish a performance defect. No faster preparation, lower latency or new progress estimate is claimed.",
+      "product_change_claimed": false
+    },
+    "native_dialog": {
+      "status": "known_lab_observation_unresolved",
+      "response": "Native-picker paint delay, transient black rectangles and visual separation remain documented. The laboratory has no window manager, so these captures do not isolate an app defect or establish normal desktop behavior. Retain native dialogs and require ordinary-desktop reproduction before changing their integration. Verified file completion does not erase the presentation friction.",
+      "product_change_claimed": false
+    },
+    "export_wait": {
+      "status": "retained_feedback_no_performance_fix",
+      "response": "WAV export showed elapsed progress and later completion. Preserve asynchronous export and clear receipts. The visible wait is a session impression; screenshot/tool overhead and the virtual environment prevent treating these timings as hardware or throughput benchmarks. No faster export or time-to-completion estimate is claimed.",
+      "product_change_claimed": false
+    },
+    "untested_scope": {
+      "status": "coverage_limit",
+      "response": "Only the supplied audio and Rill Lab Sine VST3 were exercised in a small composition/mixer/export task. Other plug-ins, effects, advanced production features, physical hardware and audible quality remain untested by these sessions. Do not infer their absence or general compatibility from task completion.",
+      "product_change_claimed": false
+    },
+    "sparse_mixer_space": {
+      "status": "retained_design_with_reasoned_response",
+      "response": "Participants1 and3 found the few-channel mixer sparse. Preserve readable channel widths and room for more channels rather than filling unused space with unrelated panels or stretching controls to inconsistent sizes. Record this appearance preference; no new layout feature is claimed.",
+      "product_change_claimed": false
+    },
+    "clip_label_readability": {
+      "status": "retained_bounded_labels_with_reasoned_response",
+      "response": "Participants2 and5 noted truncated names in the fitted full arrangement. Keep text within each clip’s time bounds to avoid overlapping neighbors. Zooming or opening a clip provides more space and its editor title. The readability preference remains recorded; no typography or naming fix is claimed.",
+      "product_change_claimed": false
+    },
+    "stretch_bound": {
+      "status": "correct_source_bound_discovery_friction_retained",
+      "response": "Participant4 stretched an original four-beat source to16 beats and then saw Range1–16 again. That is the supported source-rate bound:25%–400% of the original source speed allows1–16 beats for that source window. Reopening Stretch must not compound16 to64 and bypass the original rate limit. Preserve the exact observation, visible range and successful duplication alternative. Treat this as discovery friction around a correct bound, with no new stretch feature or range-regression fix claimed.",
+      "product_change_claimed": false,
+      "contract": "Source window remains the original four beats; current occurrence length16 at25%rate is already at its maximum supported duration."
+    },
+    "note_origin_perception": {
+      "status": "original_perception_preserved_no_recurrence_established",
+      "response": "Preserve P5-F4 and its confusion rating verbatim. Read-only review found that screenshot07, taken before the claimed correction, already shows C4 at the zero-time edge. Recorded press x65 maps to beat0, and the saved four notes begin at0/1/2/3 with0.75-beat lengths. The later Select drag starts atx143 on the C4 row, outside the note ending nearx119, consistent with marquee selection rather than moving it. No recurrence of the round8 onset defect is established by this evidence. Participant1 independently has correct0/1/2/3 native onsets. This does not explain unseen intermediate frames or prove universal input reliability, and does not justify rewriting the participant’s perception or score.",
+      "technical_audit": {
+        "path": "/workspace/scratch/rill-study-iteration/round9-note-origin-audit.json",
+        "sha256": "81cbc1f9d05e1fc958cc7e51210cb997a2ca8a4025899ef9a70a875a764c153c"
+      },
+      "product_change_claimed": false
+    }
+  },
+  "findings": [
+    {
+      "participant": 1,
+      "original_report_id": "F1",
+      "matrix_id": "P1-F1",
+      "kind": "positive",
+      "observation": "The empty-arrangement hint led to double-clicking for MIDI. Device library exposed Rill Lab Sine and Assign instrument created a track and pattern.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "initial.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/initial.png",
+          "exists": true
+        },
+        {
+          "original_reference": "01-midi-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/01-midi-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "02-instrument.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/02-instrument.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F2",
+      "matrix_id": "P1-F2",
+      "kind": "positive",
+      "observation": "Pencil drag created four labeled notes C4, E4, G4, F4. Duplicate repeated clips; Fit revealed the final audio edge, and trimming plus repeated MIDI clips produced a visible 0:30.000 arrangement.",
+      "evidence": [
+        "04-notes.png",
+        "08-duplicate.png",
+        "11-fit.png",
+        "12-thirty-seconds.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "04-notes.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/04-notes.png",
+          "exists": true
+        },
+        {
+          "original_reference": "08-duplicate.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/08-duplicate.png",
+          "exists": true
+        },
+        {
+          "original_reference": "11-fit.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/11-fit.png",
+          "exists": true
+        },
+        {
+          "original_reference": "12-thirty-seconds.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/12-thirty-seconds.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F3",
+      "matrix_id": "P1-F3",
+      "kind": "failure",
+      "observation": "The first Play attempt showed Audio output stream failed or disconnected. A similar warning reappeared after brief retry playback and mute/solo experimentation. Stable full-piece playback was not established.",
+      "evidence": [
+        "13-mixer-play.png",
+        "17-bus.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "13-mixer-play.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/13-mixer-play.png",
+          "exists": true
+        },
+        {
+          "original_reference": "17-bus.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/17-bus.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_failure"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F4",
+      "matrix_id": "P1-F4",
+      "kind": "recovery",
+      "observation": "Retry playback changed Play to Pause, advanced the transport to 002.04.86 and displayed active drum/master meters. No sound was auditioned.",
+      "evidence": [
+        "14-mixer-balance.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "14-mixer-balance.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/14-mixer-balance.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_recovery"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F5",
+      "matrix_id": "P1-F5",
+      "kind": "positive",
+      "observation": "Mixer fader drags visibly changed drums to -8.2 dB and instrument to -6.6 dB; pan drags produced L15 and R14. Mute and Solo visibly highlighted when clicked and were then turned off.",
+      "evidence": [
+        "14-mixer-balance.png",
+        "15-mute.png",
+        "16-solo.png",
+        "21-audio-details.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "14-mixer-balance.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/14-mixer-balance.png",
+          "exists": true
+        },
+        {
+          "original_reference": "15-mute.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/15-mute.png",
+          "exists": true
+        },
+        {
+          "original_reference": "16-solo.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/16-solo.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-audio-details.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/21-audio-details.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F6",
+      "matrix_id": "P1-F6",
+      "kind": "friction",
+      "observation": "Add bus created a New bus strip immediately. Drum Add send opened routing, requiring a second + Send and target selection. The resulting send displayed New bus, 0.25x and Post, and the mixer showed Bus 1 in.",
+      "evidence": [
+        "17-bus.png",
+        "18-send-menu.png",
+        "19-send-target.png",
+        "20-send-created.png",
+        "21-audio-details.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "17-bus.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/17-bus.png",
+          "exists": true
+        },
+        {
+          "original_reference": "18-send-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/18-send-menu.png",
+          "exists": true
+        },
+        {
+          "original_reference": "19-send-target.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/19-send-target.png",
+          "exists": true
+        },
+        {
+          "original_reference": "20-send-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/20-send-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-audio-details.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/21-audio-details.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "send_routing_steps"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F7",
+      "matrix_id": "P1-F7",
+      "kind": "positive",
+      "observation": "File > Rename project exposed an onscreen Keyboard; clicking its letters entered dusk. The project save dialog suggested dusk.rill in session-1 and closed after OK.",
+      "evidence": [
+        "23-rename.png",
+        "24-keyboard.png",
+        "25-save-dialog.png",
+        "26-saved.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "23-rename.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/23-rename.png",
+          "exists": true
+        },
+        {
+          "original_reference": "24-keyboard.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/24-keyboard.png",
+          "exists": true
+        },
+        {
+          "original_reference": "25-save-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/25-save-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "26-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/26-saved.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 1,
+      "original_report_id": "F8",
+      "matrix_id": "P1-F8",
+      "kind": "positive",
+      "observation": "WAV export showed Arrangement 0:30. I unchecked effect tails and accepted dusk.wav. Exported notices appeared for both dusk.wav and dusk.mid after their UI save operations.",
+      "evidence": [
+        "27-wav-dialog.png",
+        "28-wav-save.png",
+        "31-wav-status.png",
+        "33-midi-save.png",
+        "34-midi-result.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "27-wav-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/27-wav-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "28-wav-save.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/28-wav-save.png",
+          "exists": true
+        },
+        {
+          "original_reference": "31-wav-status.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/31-wav-status.png",
+          "exists": true
+        },
+        {
+          "original_reference": "33-midi-save.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/33-midi-save.png",
+          "exists": true
+        },
+        {
+          "original_reference": "34-midi-result.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-1/34-midi-result.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F1",
+      "matrix_id": "P2-F1",
+      "kind": "positive",
+      "observation": "Following the Double-click for MIDI hint opened the Device library; Assign instrument created a track using Rill Lab Sine and a one-bar pattern.",
+      "evidence": [
+        "01-midi-created.png",
+        "02-instrument.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "01-midi-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/01-midi-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "02-instrument.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/02-instrument.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F2",
+      "matrix_id": "P2-F2",
+      "kind": "positive",
+      "observation": "Pencil drags created eight short labeled notes, and successive Duplicate clicks extended the MIDI pattern and drum clip. Fit made the expanding arrangement visible.",
+      "evidence": [
+        "04-notes-drawn.png",
+        "05-duplicate-mode.png",
+        "06-four-bar-phrase.png",
+        "final.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "04-notes-drawn.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/04-notes-drawn.png",
+          "exists": true
+        },
+        {
+          "original_reference": "05-duplicate-mode.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/05-duplicate-mode.png",
+          "exists": true
+        },
+        {
+          "original_reference": "06-four-bar-phrase.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/06-four-bar-phrase.png",
+          "exists": true
+        },
+        {
+          "original_reference": "final.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/final.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F3",
+      "matrix_id": "P2-F3",
+      "kind": "friction",
+      "observation": "The first audio end trim produced a visible duration of 0:30.134. A second four-pixel drag corrected the project display to 0:30.000; exact trimming was fiddly at this zoom.",
+      "evidence": [
+        "10-thirty-second-arrangement.png",
+        "11-mixer-playing.png",
+        "mouse-actions.jsonl: 2026-11-01T01:02:23Z"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "10-thirty-second-arrangement.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/10-thirty-second-arrangement.png",
+          "exists": true
+        },
+        {
+          "original_reference": "11-mixer-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/11-mixer-playing.png",
+          "exists": true
+        },
+        {
+          "original_reference": "mouse-actions.jsonl: 2026-11-01T01:02:23Z",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/mouse-actions.jsonl",
+          "exists": true,
+          "locator": "2026-11-01T01:02:23Z",
+          "locator_found": true
+        }
+      ],
+      "issue_responses": [
+        "precise_trim"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F4",
+      "matrix_id": "P2-F4",
+      "kind": "positive",
+      "observation": "Dragging Mixer faders and pan knobs changed the displayed values to drums -8.0 dB/L15 and instrument -8.9 dB/R19. Mute and Solo showed distinct active highlights.",
+      "evidence": [
+        "12-mixer-mute-balance.png",
+        "13-solo-retry.png",
+        "21-named.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "12-mixer-mute-balance.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/12-mixer-mute-balance.png",
+          "exists": true
+        },
+        {
+          "original_reference": "13-solo-retry.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/13-solo-retry.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-named.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/21-named.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F5",
+      "matrix_id": "P2-F5",
+      "kind": "failure",
+      "observation": "During Mixer work playback stopped and the banner stated Audio output stream failed or disconnected.",
+      "evidence": [
+        "12-mixer-mute-balance.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "12-mixer-mute-balance.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/12-mixer-mute-balance.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_failure"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F6",
+      "matrix_id": "P2-F6",
+      "kind": "recovery",
+      "observation": "Clicking Retry playback restored the Pause state, an advanced transport position and lit master/instrument meters while the instrument was soloed. No audio was auditioned.",
+      "evidence": [
+        "13-solo-retry.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "13-solo-retry.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/13-solo-retry.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_recovery"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F7",
+      "matrix_id": "P2-F7",
+      "kind": "positive",
+      "observation": "Add bus immediately created New bus. Instrument Add send > + Send > New bus produced a 0.25x Post send; the Mixer then showed Send · New bus and Bus 1 in.",
+      "evidence": [
+        "14-add-bus.png",
+        "15-send-menu.png",
+        "16-send-target.png",
+        "17-send-created.png",
+        "21-named.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "14-add-bus.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/14-add-bus.png",
+          "exists": true
+        },
+        {
+          "original_reference": "15-send-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/15-send-menu.png",
+          "exists": true
+        },
+        {
+          "original_reference": "16-send-target.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/16-send-target.png",
+          "exists": true
+        },
+        {
+          "original_reference": "17-send-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/17-send-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-named.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/21-named.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F8",
+      "matrix_id": "P2-F8",
+      "kind": "friction",
+      "observation": "Adding the send required entering the routing dialog and opening another + Send menu before selecting the already-created bus. The outcome was clear once the send appeared.",
+      "evidence": [
+        "15-send-menu.png",
+        "16-send-target.png",
+        "17-send-created.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "15-send-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/15-send-menu.png",
+          "exists": true
+        },
+        {
+          "original_reference": "16-send-target.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/16-send-target.png",
+          "exists": true
+        },
+        {
+          "original_reference": "17-send-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/17-send-created.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "send_routing_steps"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F9",
+      "matrix_id": "P2-F9",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard button; clicking its on-screen keys and Apply name successfully set Sine Circuit without keyboard events.",
+      "evidence": [
+        "19-rename.png",
+        "20-keyboard.png",
+        "21-named.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "19-rename.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/19-rename.png",
+          "exists": true
+        },
+        {
+          "original_reference": "20-keyboard.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/20-keyboard.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-named.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/21-named.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F10",
+      "matrix_id": "P2-F10",
+      "kind": "positive",
+      "observation": "Save and both export pickers prefilled Sine Circuit with the appropriate extension in session-2. Save removed the modification dot; both exports subsequently showed Exported notices.",
+      "evidence": [
+        "23-save-dialog.png",
+        "24-saved.png",
+        "27-wav-dialog.png",
+        "30-wav-success.png",
+        "31-midi-export.png",
+        "32-midi-success.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "23-save-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/23-save-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "24-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/24-saved.png",
+          "exists": true
+        },
+        {
+          "original_reference": "27-wav-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/27-wav-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "30-wav-success.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/30-wav-success.png",
+          "exists": true
+        },
+        {
+          "original_reference": "31-midi-export.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/31-midi-export.png",
+          "exists": true
+        },
+        {
+          "original_reference": "32-midi-success.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/32-midi-success.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 2,
+      "original_report_id": "F11",
+      "matrix_id": "P2-F11",
+      "kind": "positive",
+      "observation": "The WAV options displayed Arrangement · 0:30 and an Include effect tails checkbox. Turning tails off visibly removed + tails before export.",
+      "evidence": [
+        "25-wav-export-options.png",
+        "27-wav-dialog.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "25-wav-export-options.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/25-wav-export-options.png",
+          "exists": true
+        },
+        {
+          "original_reference": "27-wav-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-2/27-wav-dialog.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F1",
+      "matrix_id": "P3-F1",
+      "kind": "positive",
+      "observation": "The empty-lane hint said double-click for MIDI. Double-clicking opened the Device library, where Assign instrument placed Rill Lab Sine on a new MIDI track with a pattern.",
+      "evidence": [
+        "01-midi-created.png",
+        "02-instrument-assigned.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "01-midi-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/01-midi-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "02-instrument-assigned.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/02-instrument-assigned.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F2",
+      "matrix_id": "P3-F2",
+      "kind": "positive",
+      "observation": "Generate notes offered Melody with a visible preview. The Length 123 button opened a mouse keypad; setting 14 bars and Add notes produced a populated MIDI pattern and a displayed project duration of 0:30.000.",
+      "evidence": [
+        "05-melody.png",
+        "06-length-keypad.png",
+        "07-melody-added.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "05-melody.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/05-melody.png",
+          "exists": true
+        },
+        {
+          "original_reference": "06-length-keypad.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/06-length-keypad.png",
+          "exists": true
+        },
+        {
+          "original_reference": "07-melody-added.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/07-melody-added.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F3",
+      "matrix_id": "P3-F3",
+      "kind": "friction",
+      "observation": "Clicking Duplicate several times did not immediately duplicate the selected clip. The toolbar then said Click a clip to duplicate. Clicking the audio clips with that tool created consecutive copies.",
+      "evidence": [
+        "08-drums-duplicated.png",
+        "09-drums-repeated.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "08-drums-duplicated.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/08-drums-duplicated.png",
+          "exists": true
+        },
+        {
+          "original_reference": "09-drums-repeated.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/09-drums-repeated.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "duplicate_tool"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F4",
+      "matrix_id": "P3-F4",
+      "kind": "recovery",
+      "observation": "The first drag of the final drum clip edge left the project at 0:30.134. A second short drag aligned it with the MIDI endpoint; later UI showed 0:30.000.",
+      "evidence": [
+        "10-mixer.png",
+        "17-arrangement-trim.png",
+        "23-wav-settings.png",
+        "final.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "10-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/10-mixer.png",
+          "exists": true
+        },
+        {
+          "original_reference": "17-arrangement-trim.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/17-arrangement-trim.png",
+          "exists": true
+        },
+        {
+          "original_reference": "23-wav-settings.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/23-wav-settings.png",
+          "exists": true
+        },
+        {
+          "original_reference": "final.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/final.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "precise_trim"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F5",
+      "matrix_id": "P3-F5",
+      "kind": "positive",
+      "observation": "Dragging both Mixer faders changed the displayed drum level to -8.4 dB and MIDI level to -5.8 dB. Horizontal knob drags changed drum pan to L15 and MIDI pan to R16.",
+      "evidence": [
+        "10-mixer.png",
+        "11-mixer-mute-play.png",
+        "31-final-mixer.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "10-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/10-mixer.png",
+          "exists": true
+        },
+        {
+          "original_reference": "11-mixer-mute-play.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/11-mixer-mute-play.png",
+          "exists": true
+        },
+        {
+          "original_reference": "31-final-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/31-final-mixer.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F6",
+      "matrix_id": "P3-F6",
+      "kind": "failure",
+      "observation": "The first Play attempt showed Audio output stream failed or disconnected. Retry playback produced a Pause button, transport movement and visible MIDI/master meters; a later screenshot after adding a bus showed the failure banner again.",
+      "evidence": [
+        "11-mixer-mute-play.png",
+        "12-mixer-solo-retry.png",
+        "13-bus-added.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "11-mixer-mute-play.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/11-mixer-mute-play.png",
+          "exists": true
+        },
+        {
+          "original_reference": "12-mixer-solo-retry.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/12-mixer-solo-retry.png",
+          "exists": true
+        },
+        {
+          "original_reference": "13-bus-added.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/13-bus-added.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_failure",
+        "audio_recovery"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F7",
+      "matrix_id": "P3-F7",
+      "kind": "positive",
+      "observation": "Drum Mute and MIDI Solo visibly highlighted when clicked. Both were toggled back off before export. No audible comparison was made.",
+      "evidence": [
+        "11-mixer-mute-play.png",
+        "12-mixer-solo-retry.png",
+        "31-final-mixer.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "11-mixer-mute-play.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/11-mixer-mute-play.png",
+          "exists": true
+        },
+        {
+          "original_reference": "12-mixer-solo-retry.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/12-mixer-solo-retry.png",
+          "exists": true
+        },
+        {
+          "original_reference": "31-final-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/31-final-mixer.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F8",
+      "matrix_id": "P3-F8",
+      "kind": "positive",
+      "observation": "Add bus immediately added a New bus strip. The MIDI Add send button opened routing; + Send offered New bus. Selecting it created a 0.25x Post send, and the final Mixer showed Bus 1 in and Send · New bus.",
+      "evidence": [
+        "13-bus-added.png",
+        "14-send-menu.png",
+        "15-send-target.png",
+        "16-send-created.png",
+        "31-final-mixer.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "13-bus-added.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/13-bus-added.png",
+          "exists": true
+        },
+        {
+          "original_reference": "14-send-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/14-send-menu.png",
+          "exists": true
+        },
+        {
+          "original_reference": "15-send-target.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/15-send-target.png",
+          "exists": true
+        },
+        {
+          "original_reference": "16-send-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/16-send-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "31-final-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/31-final-mixer.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F9",
+      "matrix_id": "P3-F9",
+      "kind": "positive",
+      "observation": "File > Rename project exposed a Keyboard control. Clicking its keys entered glow. Save as prefilled glow.rill in the session-3 folder, and accepting the dialog returned to the project. A later File > Save also returned without an error.",
+      "evidence": [
+        "19-rename.png",
+        "20-name-keyboard.png",
+        "22-save-dialog.png",
+        "23-wav-settings.png",
+        "mouse-actions.jsonl at 2026-11-01T01:05:04Z"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "19-rename.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/19-rename.png",
+          "exists": true
+        },
+        {
+          "original_reference": "20-name-keyboard.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/20-name-keyboard.png",
+          "exists": true
+        },
+        {
+          "original_reference": "22-save-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/22-save-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "23-wav-settings.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/23-wav-settings.png",
+          "exists": true
+        },
+        {
+          "original_reference": "mouse-actions.jsonl at 2026-11-01T01:05:04Z",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/mouse-actions.jsonl",
+          "exists": true,
+          "locator": "2026-11-01T01:05:04Z",
+          "locator_found": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 3,
+      "original_report_id": "F10",
+      "matrix_id": "P3-F10",
+      "kind": "positive",
+      "observation": "WAV export displayed Arrangement · 0:30. I unchecked Include effect tails, accepted glow.wav in session-3, and saw Exported · glow.wav. Export MIDI likewise prefilled glow.mid and showed Exported · glow.mid.",
+      "evidence": [
+        "24-wav-dialog.png",
+        "25-wav-save.png",
+        "28-wav-status.png",
+        "29-midi-save.png",
+        "30-midi-success.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "24-wav-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/24-wav-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "25-wav-save.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/25-wav-save.png",
+          "exists": true
+        },
+        {
+          "original_reference": "28-wav-status.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/28-wav-status.png",
+          "exists": true
+        },
+        {
+          "original_reference": "29-midi-save.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/29-midi-save.png",
+          "exists": true
+        },
+        {
+          "original_reference": "30-midi-success.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-3/30-midi-success.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F1",
+      "matrix_id": "P4-F1",
+      "kind": "positive",
+      "observation": "The empty-area Double-click for MIDI prompt opened the Device library. Assign instrument created a MIDI track visibly labeled Rill Lab Sine.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "initial.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/initial.png",
+          "exists": true
+        },
+        {
+          "original_reference": "01-midi-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/01-midi-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "02-instrument.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/02-instrument.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F2",
+      "matrix_id": "P4-F2",
+      "kind": "positive",
+      "observation": "Pencil drag drew three sustained notes labeled C4, E4 and G4. Properties exposed duration controls and a numeric mouse keypad.",
+      "evidence": [
+        "04-chord.png",
+        "05-properties.png",
+        "07-keypad.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "04-chord.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/04-chord.png",
+          "exists": true
+        },
+        {
+          "original_reference": "05-properties.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/05-properties.png",
+          "exists": true
+        },
+        {
+          "original_reference": "07-keypad.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/07-keypad.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F3",
+      "matrix_id": "P4-F3",
+      "kind": "friction",
+      "observation": "After stretching the original four-beat MIDI clip to 16 beats, reopening the duration keypad still showed Range: 1 to 16. I used repeated clips instead of extending that one clip farther.",
+      "evidence": [
+        "07-keypad.png",
+        "08-duration-limit.png",
+        "13-midi-four-clips.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "07-keypad.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/07-keypad.png",
+          "exists": true
+        },
+        {
+          "original_reference": "08-duration-limit.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/08-duration-limit.png",
+          "exists": true
+        },
+        {
+          "original_reference": "13-midi-four-clips.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/13-midi-four-clips.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "stretch_bound"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F4",
+      "matrix_id": "P4-F4",
+      "kind": "recovery",
+      "observation": "Stretching the audio and trimming the final MIDI clip by dragging produced 30.134 seconds. Moving both right edges a small amount left produced a visible 0:30.000 title.",
+      "evidence": [
+        "14-thirty-seconds.png",
+        "16-mixer.png",
+        "final.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "14-thirty-seconds.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/14-thirty-seconds.png",
+          "exists": true
+        },
+        {
+          "original_reference": "16-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/16-mixer.png",
+          "exists": true
+        },
+        {
+          "original_reference": "final.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/final.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "precise_trim"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F5",
+      "matrix_id": "P4-F5",
+      "kind": "positive",
+      "observation": "Mixer fader drags changed audio from -6.0 to -12.0 dB and MIDI from -2.5 to -6.0 dB. Horizontal pan drags showed L14 and R21.",
+      "evidence": [
+        "16-mixer.png",
+        "17-bus-and-balance.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "16-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/16-mixer.png",
+          "exists": true
+        },
+        {
+          "original_reference": "17-bus-and-balance.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/17-bus-and-balance.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F6",
+      "matrix_id": "P4-F6",
+      "kind": "positive",
+      "observation": "Add bus immediately created New bus. The MIDI Add send button opened routing; + Send then New bus added a visible post-fader send at 0.25x. The Mixer showed Bus 1 in and a Send - New bus row.",
+      "evidence": [
+        "17-bus-and-balance.png",
+        "18-send-menu.png",
+        "19-send-added.png",
+        "20-send-route.png",
+        "21-playing.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "17-bus-and-balance.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/17-bus-and-balance.png",
+          "exists": true
+        },
+        {
+          "original_reference": "18-send-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/18-send-menu.png",
+          "exists": true
+        },
+        {
+          "original_reference": "19-send-added.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/19-send-added.png",
+          "exists": true
+        },
+        {
+          "original_reference": "20-send-route.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/20-send-route.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/21-playing.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F7",
+      "matrix_id": "P4-F7",
+      "kind": "positive",
+      "observation": "Clicking audio Mute highlighted it in orange; clicking MIDI Solo highlighted it in green. Both were clicked again to restore their inactive appearance before saving/exporting. Audible isolation was not verified.",
+      "evidence": [
+        "22-muted-playing.png",
+        "23-solo-playing.png",
+        "24-retry-playback.png",
+        "29-saved.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "22-muted-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/22-muted-playing.png",
+          "exists": true
+        },
+        {
+          "original_reference": "23-solo-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/23-solo-playing.png",
+          "exists": true
+        },
+        {
+          "original_reference": "24-retry-playback.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/24-retry-playback.png",
+          "exists": true
+        },
+        {
+          "original_reference": "29-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/29-saved.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F8",
+      "matrix_id": "P4-F8",
+      "kind": "failure",
+      "observation": "Play first displayed Preparing audio, then the transport advanced to 004.03.20. Later it stopped at 007.04.26 with Audio output stream failed or disconnected. Track and master meters appeared empty in captured playback views.",
+      "evidence": [
+        "21-playing.png",
+        "22-muted-playing.png",
+        "23-solo-playing.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "21-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/21-playing.png",
+          "exists": true
+        },
+        {
+          "original_reference": "22-muted-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/22-muted-playing.png",
+          "exists": true
+        },
+        {
+          "original_reference": "23-solo-playing.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/23-solo-playing.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_preparation",
+        "audio_failure"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F9",
+      "matrix_id": "P4-F9",
+      "kind": "recovery",
+      "observation": "Retry playback removed the error banner and returned the transport button to Pause. I stopped playback shortly afterward. Sustained error-free playback and audible output were not established.",
+      "evidence": [
+        "24-retry-playback.png",
+        "25-file-menu.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "24-retry-playback.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/24-retry-playback.png",
+          "exists": true
+        },
+        {
+          "original_reference": "25-file-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/25-file-menu.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_recovery"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F10",
+      "matrix_id": "P4-F10",
+      "kind": "positive",
+      "observation": "File > Rename project exposed an on-screen keyboard. I entered haze with mouse clicks; the Save picker defaulted to haze.rill in this session directory. Confirming closed the picker and the title showed haze without the unsaved dot.",
+      "evidence": [
+        "26-rename.png",
+        "27-name-keyboard.png",
+        "28-save-dialog.png",
+        "29-saved.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "26-rename.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/26-rename.png",
+          "exists": true
+        },
+        {
+          "original_reference": "27-name-keyboard.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/27-name-keyboard.png",
+          "exists": true
+        },
+        {
+          "original_reference": "28-save-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/28-save-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "29-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/29-saved.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 4,
+      "original_report_id": "F11",
+      "matrix_id": "P4-F11",
+      "kind": "positive",
+      "observation": "The WAV dialog showed Arrangement 0:30 at 48 kHz, stereo, 32-bit float. I unchecked effect tails, confirmed haze.wav, and saw Exported - haze.wav. Export MIDI similarly showed Exported - haze.mid.",
+      "evidence": [
+        "30-wav-options.png",
+        "31-wav-dialog.png",
+        "34-wav-status.png",
+        "35-midi-dialog.png",
+        "36-midi-exported.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "30-wav-options.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/30-wav-options.png",
+          "exists": true
+        },
+        {
+          "original_reference": "31-wav-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/31-wav-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "34-wav-status.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/34-wav-status.png",
+          "exists": true
+        },
+        {
+          "original_reference": "35-midi-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/35-midi-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "36-midi-exported.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-4/36-midi-exported.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F1",
+      "matrix_id": "P5-F1",
+      "kind": "friction",
+      "observation": "Clicked the Duplicate toolbar control repeatedly without adding audio. Its visible hint then said to click a clip; clicking the clip created an adjacent copy.",
+      "evidence": [
+        "01-duplicated.png",
+        "02-first-repeat.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "01-duplicated.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/01-duplicated.png",
+          "exists": true
+        },
+        {
+          "original_reference": "02-first-repeat.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/02-first-repeat.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "duplicate_tool"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F2",
+      "matrix_id": "P5-F2",
+      "kind": "recovery",
+      "observation": "Four audio copies reached 34.286 seconds. Dragging the last right edge first reached 30.134 seconds; a second small drag produced the visible 0:30.000 duration.",
+      "evidence": [
+        "03-four-repeats.png",
+        "04-midi-created.png",
+        "06-piano-roll.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "03-four-repeats.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/03-four-repeats.png",
+          "exists": true
+        },
+        {
+          "original_reference": "04-midi-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/04-midi-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "06-piano-roll.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/06-piano-roll.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "precise_trim"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F3",
+      "matrix_id": "P5-F3",
+      "kind": "positive",
+      "observation": "The empty area said Double-click for MIDI. Double-clicking opened a device library with Rill Lab Sine, and Assign instrument created a MIDI track showing that instrument.",
+      "evidence": [
+        "initial.png",
+        "04-midi-created.png",
+        "05-instrument-assigned.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "initial.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/initial.png",
+          "exists": true
+        },
+        {
+          "original_reference": "04-midi-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/04-midi-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "05-instrument-assigned.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/05-instrument-assigned.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F4",
+      "matrix_id": "P5-F4",
+      "kind": "friction",
+      "observation": "Pencil drags produced four visible notes, but the first C4 appeared later than intended. A subsequent Select drag moved it toward the start, and the resulting four-note pattern was duplicated across the arrangement.",
+      "evidence": [
+        "07-notes-drawn.png",
+        "09-midi-repeats.png",
+        "27-full-arrangement.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "07-notes-drawn.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/07-notes-drawn.png",
+          "exists": true
+        },
+        {
+          "original_reference": "09-midi-repeats.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/09-midi-repeats.png",
+          "exists": true
+        },
+        {
+          "original_reference": "27-full-arrangement.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/27-full-arrangement.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "note_origin_perception"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F5",
+      "matrix_id": "P5-F5",
+      "kind": "positive",
+      "observation": "Mixer fader drags displayed audio -7.5 dB and MIDI -9.6 dB. Pan drags ended at audio L25 and MIDI R28. Mute and Solo had distinct visible active states and were turned off again.",
+      "evidence": [
+        "10-mixer.png",
+        "11-mixer-playing-balanced.png",
+        "12-mute-pan.png",
+        "13-playback-error-solo.png",
+        "22-project-saved.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "10-mixer.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/10-mixer.png",
+          "exists": true
+        },
+        {
+          "original_reference": "11-mixer-playing-balanced.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/11-mixer-playing-balanced.png",
+          "exists": true
+        },
+        {
+          "original_reference": "12-mute-pan.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/12-mute-pan.png",
+          "exists": true
+        },
+        {
+          "original_reference": "13-playback-error-solo.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/13-playback-error-solo.png",
+          "exists": true
+        },
+        {
+          "original_reference": "22-project-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/22-project-saved.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F6",
+      "matrix_id": "P5-F6",
+      "kind": "failure",
+      "observation": "After starting playback, the transport advanced but a bottom banner reported Audio output stream failed or disconnected. A later screenshot showed the banner absent, playback active, and MIDI/master meters lit; the reason for recovery was not established.",
+      "evidence": [
+        "12-mute-pan.png",
+        "13-playback-error-solo.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "12-mute-pan.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/12-mute-pan.png",
+          "exists": true
+        },
+        {
+          "original_reference": "13-playback-error-solo.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/13-playback-error-solo.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "audio_failure",
+        "audio_recovery"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F7",
+      "matrix_id": "P5-F7",
+      "kind": "positive",
+      "observation": "Add bus created New bus. The audio track Add send control opened routing, where + Send and New bus produced a visible 0.25x Post send; the Mixer subsequently showed Send · New bus and Bus 1 in.",
+      "evidence": [
+        "14-bus-created.png",
+        "15-send-menu.png",
+        "17-send-routed.png",
+        "22-project-saved.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "14-bus-created.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/14-bus-created.png",
+          "exists": true
+        },
+        {
+          "original_reference": "15-send-menu.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/15-send-menu.png",
+          "exists": true
+        },
+        {
+          "original_reference": "17-send-routed.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/17-send-routed.png",
+          "exists": true
+        },
+        {
+          "original_reference": "22-project-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/22-project-saved.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F8",
+      "matrix_id": "P5-F8",
+      "kind": "positive",
+      "observation": "Rename project exposed an on-screen keyboard. Mouse clicks entered Night hop, Apply name changed the title, and the Save dialog proposed Night hop.rill in session-5. Confirming removed the unsaved marker.",
+      "evidence": [
+        "19-name-dialog.png",
+        "20-onscreen-keyboard.png",
+        "21-save-dialog.png",
+        "22-project-saved.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "19-name-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/19-name-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "20-onscreen-keyboard.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/20-onscreen-keyboard.png",
+          "exists": true
+        },
+        {
+          "original_reference": "21-save-dialog.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/21-save-dialog.png",
+          "exists": true
+        },
+        {
+          "original_reference": "22-project-saved.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/22-project-saved.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    },
+    {
+      "participant": 5,
+      "original_report_id": "F9",
+      "matrix_id": "P5-F9",
+      "kind": "positive",
+      "observation": "The WAV dialog identified Arrangement · 0:30. Include effect tails was unchecked. The file dialog showed Night hop.wav, and the UI later showed Exported · Night hop.wav. MIDI export similarly showed Night hop.mid and a success notice.",
+      "evidence": [
+        "23-wav-export.png",
+        "24-wav-path.png",
+        "27-full-arrangement.png",
+        "28-midi-export.png",
+        "29-midi-complete.png",
+        "final.png"
+      ],
+      "evidence_paths": [
+        {
+          "original_reference": "23-wav-export.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/23-wav-export.png",
+          "exists": true
+        },
+        {
+          "original_reference": "24-wav-path.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/24-wav-path.png",
+          "exists": true
+        },
+        {
+          "original_reference": "27-full-arrangement.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/27-full-arrangement.png",
+          "exists": true
+        },
+        {
+          "original_reference": "28-midi-export.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/28-midi-export.png",
+          "exists": true
+        },
+        {
+          "original_reference": "29-midi-complete.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/29-midi-complete.png",
+          "exists": true
+        },
+        {
+          "original_reference": "final.png",
+          "resolved_path": "/workspace/scratch/rill-usability-round9/session-5/final.png",
+          "exists": true
+        }
+      ],
+      "issue_responses": [
+        "positive"
+      ]
+    }
+  ],
+  "rating_reservations": [
+    {
+      "participant": 1,
+      "matrix_id": "P1-rating-easy_to_use",
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "Visible double-click and Pencil hints led directly to an instrument and notes; Duplicate, faders and pan worked with mouse actions. The playback failure interrupted an otherwise approachable workflow.",
+      "issue_responses": [
+        "positive",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-1/report.json"
+    },
+    {
+      "participant": 1,
+      "matrix_id": "P1-rating-how_cool_it_looks",
+      "original_report_field": "rating_reasons.how_cool_it_looks",
+      "rating": 4,
+      "reason": "The dark interface, teal waveform and colored note display looked cohesive and readable; the large empty mixer area felt sparse.",
+      "issue_responses": [
+        "positive",
+        "sparse_mixer_space"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-1/report.json"
+    },
+    {
+      "participant": 1,
+      "matrix_id": "P1-rating-how_fast_it_is",
+      "original_report_field": "rating_reasons.how_fast_it_is",
+      "rating": 3,
+      "reason": "Editing and navigation responded promptly. Repeated playback failure needed Retry, and the 30-second WAV export showed several seconds of progress before completion. This is a session impression, not a benchmark.",
+      "issue_responses": [
+        "positive",
+        "audio_failure",
+        "audio_recovery",
+        "export_wait"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-1/report.json"
+    },
+    {
+      "participant": 1,
+      "matrix_id": "P1-rating-how_confusing_it_is",
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 2,
+      "reason": "Most controls had clear labels. Add send opened routing requiring another + Send, and the recurring output-stream warning left uncertainty about instrument playback.",
+      "issue_responses": [
+        "send_routing_steps",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-1/report.json"
+    },
+    {
+      "participant": 1,
+      "matrix_id": "P1-rating-feature_completeness",
+      "original_report_field": "rating_reasons.feature_completeness",
+      "rating": 4,
+      "reason": "I could discover audio and MIDI editing, VST assignment, mixer volume/pan/mute/solo, a bus/send, project naming/saving, and WAV/MIDI export. Reliable playback was not established for the full piece.",
+      "issue_responses": [
+        "positive",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-1/report.json"
+    },
+    {
+      "participant": 2,
+      "matrix_id": "P2-rating-easy_to_use",
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "The empty-lane hint, labeled tools, on-screen naming keyboard and obvious Mixer controls let me finish with mouse input. Precise end trimming needed a correction and a send required several dialogs.",
+      "issue_responses": [
+        "positive",
+        "precise_trim",
+        "send_routing_steps"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-2/report.json"
+    },
+    {
+      "participant": 2,
+      "matrix_id": "P2-rating-how_cool_it_looks",
+      "original_report_field": "rating_reasons.how_cool_it_looks",
+      "rating": 4,
+      "reason": "The dark interface, teal waveforms and notes, readable faders and visible routing lines look cohesive. Several default track/pattern names became truncated in the fitted arrangement.",
+      "issue_responses": [
+        "positive",
+        "clip_label_readability"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-2/report.json"
+    },
+    {
+      "participant": 2,
+      "matrix_id": "P2-rating-how_fast_it_is",
+      "original_report_field": "rating_reasons.how_fast_it_is",
+      "rating": 3,
+      "reason": "Drawing, duplicating and Mixer changes responded promptly. Native file dialogs appeared after a short delay, WAV export remained in progress for multiple screenshots, and one playback failure interrupted the session. This is a subjective lab-session rating, not a hardware benchmark.",
+      "issue_responses": [
+        "positive",
+        "native_dialog",
+        "export_wait",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-2/report.json"
+    },
+    {
+      "participant": 2,
+      "matrix_id": "P2-rating-how_confusing_it_is",
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 2,
+      "reason": "Most controls had plain labels and useful feedback. The fine trim at a zoomed-out scale was easy to overshoot, and Add send opened a routing dialog with another + Send choice before the bus target.",
+      "issue_responses": [
+        "precise_trim",
+        "send_routing_steps"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-2/report.json"
+    },
+    {
+      "participant": 2,
+      "matrix_id": "P2-rating-feature_completeness",
+      "original_report_field": "rating_reasons.feature_completeness",
+      "rating": 4,
+      "reason": "The requested audio, VST MIDI, Mixer volume/pan, mute/solo, bus/send, naming, save and both exports were all accessible. This task does not establish broader plugin compatibility or production completeness.",
+      "issue_responses": [
+        "positive",
+        "untested_scope"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-2/report.json"
+    },
+    {
+      "participant": 3,
+      "matrix_id": "P3-rating-easy_to_use",
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "Completed composition, naming, saving, exports and every requested Mixer action through visible mouse controls. The Duplicate button initially behaved differently from my expectation, and exact trimming needed a second drag.",
+      "issue_responses": [
+        "positive",
+        "duplicate_tool",
+        "precise_trim"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-3/report.json"
+    },
+    {
+      "participant": 3,
+      "matrix_id": "P3-rating-how_cool_it_looks",
+      "original_report_field": "rating_reasons.how_cool_it_looks",
+      "rating": 4,
+      "reason": "The dark teal arrangement, clear waveforms, note preview and mixer strips looked coherent and readable. Some mixer space was sparse, and the native save dialogs looked visually separate.",
+      "issue_responses": [
+        "positive",
+        "sparse_mixer_space",
+        "native_dialog"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-3/report.json"
+    },
+    {
+      "participant": 3,
+      "matrix_id": "P3-rating-how_fast_it_is",
+      "original_report_field": "rating_reasons.how_fast_it_is",
+      "rating": 4,
+      "reason": "Instrument assignment, generated notes, duplicates and Mixer changes appeared promptly. WAV export showed elapsed progress and completed within the short observation interval; playback errors interrupted the flow. This is a UI impression, not a latency benchmark.",
+      "issue_responses": [
+        "positive",
+        "export_wait",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-3/report.json"
+    },
+    {
+      "participant": 3,
+      "matrix_id": "P3-rating-how_confusing_it_is",
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 2,
+      "reason": "Most labels led to the expected controls. Duplicate was a persistent tool requiring a clip click, and the first trim left 30.134 seconds instead of 30.000. Audio-stream failure banners caused uncertainty even though Retry briefly worked.",
+      "issue_responses": [
+        "duplicate_tool",
+        "precise_trim",
+        "audio_failure",
+        "audio_recovery"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-3/report.json"
+    },
+    {
+      "participant": 3,
+      "matrix_id": "P3-rating-feature_completeness",
+      "original_report_field": "rating_reasons.feature_completeness",
+      "rating": 4,
+      "reason": "The requested audio, MIDI/VST, generator, mixer volume/pan, mute/solo, bus/send, naming, project save and WAV/MIDI exports were present. Playback reliability was not established, and only the single installed laboratory instrument was explored.",
+      "issue_responses": [
+        "positive",
+        "audio_failure",
+        "untested_scope"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-3/report.json"
+    },
+    {
+      "participant": 4,
+      "matrix_id": "P4-rating-easy_to_use",
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "I completed arrangement, instrument assignment, mixing, naming, save and both exports with the mouse. Visible instructions and the on-screen name keyboard helped. Exact duration and playback needed extra attention.",
+      "issue_responses": [
+        "positive",
+        "precise_trim",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-4/report.json"
+    },
+    {
+      "participant": 4,
+      "matrix_id": "P4-rating-how_cool_it_looks",
+      "original_report_field": "rating_reasons.how_cool_it_looks",
+      "rating": 4,
+      "reason": "The dark interface, restrained track colors, clear waveforms and large Mixer controls looked coherent and readable. The bus and send connection display was useful.",
+      "issue_responses": [
+        "positive"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-4/report.json"
+    },
+    {
+      "participant": 4,
+      "matrix_id": "P4-rating-how_fast_it_is",
+      "original_report_field": "rating_reasons.how_fast_it_is",
+      "rating": 3,
+      "reason": "Most pointer actions responded promptly. Playback first showed Preparing audio and later failed; WAV export displayed an elapsed wait before success. This is a session impression, not a benchmark.",
+      "issue_responses": [
+        "positive",
+        "audio_preparation",
+        "audio_failure",
+        "export_wait"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-4/report.json"
+    },
+    {
+      "participant": 4,
+      "matrix_id": "P4-rating-how_confusing_it_is",
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 3,
+      "reason": "The stretch keypad stayed limited to 16 beats, so I changed to duplication and trimming. A drag left 30.134 seconds and needed a small correction. Playback advanced while meters appeared empty, then reported a stream failure.",
+      "issue_responses": [
+        "stretch_bound",
+        "precise_trim",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-4/report.json"
+    },
+    {
+      "participant": 4,
+      "matrix_id": "P4-rating-feature_completeness",
+      "original_report_field": "rating_reasons.feature_completeness",
+      "rating": 4,
+      "reason": "The visible app supplied audio stretching, MIDI note drawing, the installed VST3, track mixing, bus/send creation, project save and both requested export formats. The playback failure limited confidence; broader plug-in and effect capabilities were not tested.",
+      "issue_responses": [
+        "positive",
+        "audio_failure",
+        "untested_scope"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-4/report.json"
+    },
+    {
+      "participant": 5,
+      "matrix_id": "P5-rating-easy_to_use",
+      "original_report_field": "rating_reasons.easy_to_use",
+      "rating": 4,
+      "reason": "Completed the main task entirely by mouse. The MIDI hint, instrument assignment, Mixer labels, and on-screen keyboard were useful. Duplication and precise trimming needed a little discovery.",
+      "issue_responses": [
+        "positive",
+        "duplicate_tool",
+        "precise_trim"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-5/report.json"
+    },
+    {
+      "participant": 5,
+      "matrix_id": "P5-rating-how_cool_it_looks",
+      "original_report_field": "rating_reasons.how_cool_it_looks",
+      "rating": 4,
+      "reason": "Clean dark interface, clear waveforms and note previews, restrained track colors, and readable Mixer strips. Small clip names became truncated in the full arrangement.",
+      "issue_responses": [
+        "positive",
+        "clip_label_readability"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-5/report.json"
+    },
+    {
+      "participant": 5,
+      "matrix_id": "P5-rating-how_fast_it_is",
+      "original_report_field": "rating_reasons.how_fast_it_is",
+      "rating": 3,
+      "reason": "Most edits responded promptly and repeating clips was quick once understood. WAV export displayed elapsed progress for several seconds, and playback briefly reported an output failure. This is a session impression, not a hardware benchmark.",
+      "issue_responses": [
+        "positive",
+        "export_wait",
+        "audio_failure"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-5/report.json"
+    },
+    {
+      "participant": 5,
+      "matrix_id": "P5-rating-how_confusing_it_is",
+      "original_report_field": "rating_reasons.how_confusing_it_is",
+      "rating": 3,
+      "reason": "Initially treated Duplicate as a command rather than a tool. The first drawn note appeared later than intended and needed adjustment. Playback failure followed by resumed meters made its state less predictable.",
+      "issue_responses": [
+        "duplicate_tool",
+        "note_origin_perception",
+        "audio_failure",
+        "audio_recovery"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-5/report.json"
+    },
+    {
+      "participant": 5,
+      "matrix_id": "P5-rating-feature_completeness",
+      "original_report_field": "rating_reasons.feature_completeness",
+      "rating": 4,
+      "reason": "Found audio arrangement, MIDI drawing, the installed VST3 instrument, track mixing, bus/send routing, project naming/saving, and WAV/MIDI export. Only a simple instrument was available in this laboratory, and no broader plug-in or effects capability was tested.",
+      "issue_responses": [
+        "positive",
+        "untested_scope"
+      ],
+      "source_report": "/workspace/scratch/rill-usability-round9/session-5/report.json"
+    }
+  ],
+  "summary": {
+    "reports_included": 5,
+    "explicit_findings": 49,
+    "rating_reasons_including_reservations": 25,
+    "finding_kinds": {
+      "positive": 31,
+      "failure": 5,
+      "recovery": 6,
+      "friction": 7
+    },
+    "all_evidence_paths_resolve": true,
+    "new_correctness_defects_established": 0,
+    "accepted_final_workflow_improvements": 1,
+    "new_product_fix_validated": false,
+    "round9_ratings_unchanged": true
+  },
+  "verification": {
+    "source": {
+      "path": "/workspace/scratch/rill-usability-round9/verification-summary.json",
+      "sha256": "fbf1df063e6c1d5446e808d569f1cfa4a9fad51884893285e514087f197b7f7a"
+    },
+    "aggregate": {
+      "path": "/workspace/scratch/rill-usability-round9/aggregate.json",
+      "sha256": "750b6c2b32ce3b6b358ff108812fe1b2c7ff65e024049953ce072a789bfbf4ec"
+    },
+    "exact_30_second_project_wav_midi_sets": 5,
+    "audio_and_vst_contributions_verified": 5,
+    "maximum_full_graph_sample_difference": 0.0,
+    "prior_media_files_unchanged": 120,
+    "prior_cycle_evidence_files_unchanged": 455,
+    "current_evidence_files_unchanged": 203,
+    "method": "Full saved graph reproduction plus audio-source and MIDI-source mute ablations; all routes, buses, inserts and sources retained in analysis copies; originals untouched.",
+    "frozen_build": {
+      "path": "/workspace/scratch/rill-usability-round9/freeze-manifest.json",
+      "sha256": "9e2c567839e0852832dafcf818bfb07a042e65b39ee8eca42fbe233d76f13867"
+    },
+    "capture_events": 174,
+    "unique_pngs": 173,
+    "capture_count_note": "P5 final.png was captured twice before closeout.174 counts screenshot commands, not174 distinct images; all mouse actions remain preserved."
+  },
+  "rating_summary": {
+    "scale": "1–5; lower confusion is better",
+    "means": {
+      "easy_to_use": 4.0,
+      "how_cool_it_looks": 4.0,
+      "how_fast_it_is": 3.2,
+      "how_confusing_it_is": 2.4,
+      "feature_completeness": 4.0
+    },
+    "round7_means": {
+      "easy_to_use": 3.8,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 3.4,
+      "how_confusing_it_is": 2.6,
+      "feature_completeness": 4
+    },
+    "round8_means": {
+      "easy_to_use": 3.8,
+      "how_cool_it_looks": 4,
+      "how_fast_it_is": 3.2,
+      "how_confusing_it_is": 2.4,
+      "feature_completeness": 4
+    },
+    "change_from_round7": {
+      "easy_to_use": 0.2,
+      "how_cool_it_looks": 0.0,
+      "how_fast_it_is": -0.2,
+      "how_confusing_it_is": -0.2,
+      "feature_completeness": 0.0
+    },
+    "change_from_round8": {
+      "easy_to_use": 0.2,
+      "how_cool_it_looks": 0.0,
+      "how_fast_it_is": 0.0,
+      "how_confusing_it_is": 0.0,
+      "feature_completeness": 0.0
+    },
+    "interpretation": "Versus round7, ease rises0.2, confusion falls0.2 and subjective speed falls0.2; appearance/completeness are unchanged. Versus round8, only ease rises0.2. These small simulated ordinal samples do not establish statistical significance or causal effect. All scores precede the accepted final send-chooser polish.",
+    "limits": [
+      "Rounds7and8 add an explicit mixer task absent from earlier rounds; only round7→8 is directly comparable.",
+      "Simulated participants, not human research.",
+      "Elapsed time includes screenshots and reporting; input events include new held-gesture actions and are not equivalent to physical gesture counts.",
+      "Round1 did not explicitly encourage a chosen project name; later rounds did.",
+      "Each round evaluates its frozen build; ratings are never retroactively applied to later fixes."
+    ]
+  },
+  "review": {
+    "note_origin_audit": {
+      "path": "/workspace/scratch/rill-study-iteration/round9-note-origin-audit.json",
+      "sha256": "81cbc1f9d05e1fc958cc7e51210cb997a2ca8a4025899ef9a70a875a764c153c"
+    },
+    "note_origin_disposition": "P5 perception preserved, no recurrence established in original pre-correction screenshot/inputs/saved notes; P1 supplies a separate successful sequence.",
+    "stretch_disposition": "P4 range1–16 is correct for the original4-beat source under25%–400%source-rate bounds; no new stretch change claimed.",
+    "mixer_geometry": "No explicit report of notice/send-induced mixer control movement in the five round9 findings or rating reasons. This is an observed report difference, not proof of perfect stability or a failure-rate estimate.",
+    "send_polish": "Accepted after round9; validation pending. No fourth full beginner round or score is claimed.",
+    "participant_evidence_unmodified": true,
+    "reporting_review_ran_apps_builds_or_probes": false
+  },
+  "audit_report": "/workspace/scratch/rill-usability-round9/feedback-resolution-audit.json"
+}

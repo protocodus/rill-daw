@@ -1,0 +1,170 @@
+{
+  "purpose": "Fixed-question report of independent simulated beginner participant 4, based only on this native session and mouse actions.",
+  "participant": 4,
+  "persona": "Simulated beginner, first introduction to RILL, interested in a short ambient soundtrack sketch.",
+  "piece_name": "haze",
+  "ratings": {
+    "easy_to_use": 4,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3,
+    "how_confusing_it_is": 3,
+    "feature_completeness": 4
+  },
+  "rating_reasons": {
+    "easy_to_use": "I completed arrangement, instrument assignment, mixing, naming, save and both exports with the mouse. Visible instructions and the on-screen name keyboard helped. Exact duration and playback needed extra attention.",
+    "how_cool_it_looks": "The dark interface, restrained track colors, clear waveforms and large Mixer controls looked coherent and readable. The bus and send connection display was useful.",
+    "how_fast_it_is": "Most pointer actions responded promptly. Playback first showed Preparing audio and later failed; WAV export displayed an elapsed wait before success. This is a session impression, not a benchmark.",
+    "how_confusing_it_is": "The stretch keypad stayed limited to 16 beats, so I changed to duplication and trimming. A drag left 30.134 seconds and needed a small correction. Playback advanced while meters appeared empty, then reported a stream failure.",
+    "feature_completeness": "The visible app supplied audio stretching, MIDI note drawing, the installed VST3, track mixing, bus/send creation, project save and both requested export formats. The playback failure limited confidence; broader plug-in and effect capabilities were not tested."
+  },
+  "artifacts": {
+    "project": "/workspace/scratch/rill-usability-round9/session-4/haze.rill",
+    "wav": "/workspace/scratch/rill-usability-round9/session-4/haze.wav",
+    "midi": "/workspace/scratch/rill-usability-round9/session-4/haze.mid"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "kind": "positive",
+      "observation": "The empty-area Double-click for MIDI prompt opened the Device library. Assign instrument created a MIDI track visibly labeled Rill Lab Sine.",
+      "evidence": [
+        "initial.png",
+        "01-midi-created.png",
+        "02-instrument.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "kind": "positive",
+      "observation": "Pencil drag drew three sustained notes labeled C4, E4 and G4. Properties exposed duration controls and a numeric mouse keypad.",
+      "evidence": [
+        "04-chord.png",
+        "05-properties.png",
+        "07-keypad.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "kind": "friction",
+      "observation": "After stretching the original four-beat MIDI clip to 16 beats, reopening the duration keypad still showed Range: 1 to 16. I used repeated clips instead of extending that one clip farther.",
+      "evidence": [
+        "07-keypad.png",
+        "08-duration-limit.png",
+        "13-midi-four-clips.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "kind": "recovery",
+      "observation": "Stretching the audio and trimming the final MIDI clip by dragging produced 30.134 seconds. Moving both right edges a small amount left produced a visible 0:30.000 title.",
+      "evidence": [
+        "14-thirty-seconds.png",
+        "16-mixer.png",
+        "final.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "kind": "positive",
+      "observation": "Mixer fader drags changed audio from -6.0 to -12.0 dB and MIDI from -2.5 to -6.0 dB. Horizontal pan drags showed L14 and R21.",
+      "evidence": [
+        "16-mixer.png",
+        "17-bus-and-balance.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "kind": "positive",
+      "observation": "Add bus immediately created New bus. The MIDI Add send button opened routing; + Send then New bus added a visible post-fader send at 0.25x. The Mixer showed Bus 1 in and a Send - New bus row.",
+      "evidence": [
+        "17-bus-and-balance.png",
+        "18-send-menu.png",
+        "19-send-added.png",
+        "20-send-route.png",
+        "21-playing.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "kind": "positive",
+      "observation": "Clicking audio Mute highlighted it in orange; clicking MIDI Solo highlighted it in green. Both were clicked again to restore their inactive appearance before saving/exporting. Audible isolation was not verified.",
+      "evidence": [
+        "22-muted-playing.png",
+        "23-solo-playing.png",
+        "24-retry-playback.png",
+        "29-saved.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "kind": "failure",
+      "observation": "Play first displayed Preparing audio, then the transport advanced to 004.03.20. Later it stopped at 007.04.26 with Audio output stream failed or disconnected. Track and master meters appeared empty in captured playback views.",
+      "evidence": [
+        "21-playing.png",
+        "22-muted-playing.png",
+        "23-solo-playing.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "kind": "recovery",
+      "observation": "Retry playback removed the error banner and returned the transport button to Pause. I stopped playback shortly afterward. Sustained error-free playback and audible output were not established.",
+      "evidence": [
+        "24-retry-playback.png",
+        "25-file-menu.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "kind": "positive",
+      "observation": "File > Rename project exposed an on-screen keyboard. I entered haze with mouse clicks; the Save picker defaulted to haze.rill in this session directory. Confirming closed the picker and the title showed haze without the unsaved dot.",
+      "evidence": [
+        "26-rename.png",
+        "27-name-keyboard.png",
+        "28-save-dialog.png",
+        "29-saved.png"
+      ]
+    },
+    {
+      "id": "F11",
+      "kind": "positive",
+      "observation": "The WAV dialog showed Arrangement 0:30 at 48 kHz, stereo, 32-bit float. I unchecked effect tails, confirmed haze.wav, and saw Exported - haze.wav. Export MIDI similarly showed Exported - haze.mid.",
+      "evidence": [
+        "30-wav-options.png",
+        "31-wav-dialog.png",
+        "34-wav-status.png",
+        "35-midi-dialog.png",
+        "36-midi-exported.png"
+      ]
+    }
+  ],
+  "outcome": {
+    "status": "Completed the composition, Mixer, naming, save and export tasks as established by the UI. Playback was only partly successful: transport advancement was observed, followed by an output-stream error; retry was brief.",
+    "visible_arrangement_duration_seconds": 30,
+    "composition": "One supplied Circuit rhythm audio clip stretched across the 30-second arrangement, with four adjacent sustained C4/E4/G4 MIDI chord clips; the last MIDI clip was trimmed shorter. Intended as a simple ambient drone with slowed rhythmic texture. Audible musical result was not auditioned.",
+    "instrument": "Rill Lab Sine",
+    "project_saved_via_ui": true,
+    "wav_export_success_notice_seen": true,
+    "midi_export_success_notice_seen": true,
+    "playback_observed": "Preparing audio appeared, then transport position advanced from 001.01.00 to 004.03.20. At 007.04.26 the app showed Audio output stream failed or disconnected. Retry restored Pause appearance, then I stopped. Captured Mixer meters appeared empty; no audible-output claim.",
+    "audio_auditioned": false,
+    "mouse_buttons_released": true
+  },
+  "limitations": [
+    "Simulated participant, not human research.",
+    "Only this assigned native session, its screenshots and the supplied mouse driver were used for composition; no keyboard events, shortcuts, APIs, source inspection or project-file inspection.",
+    "No file contents or heard audio claim: paths come from the visible native save/export dialogs and success notices. Independent coordinator verification follows.",
+    "Laboratory software graphics and virtual audio sink; the playback failure and timing should not be generalized to physical audio hardware.",
+    "Only the supplied Rill Lab Sine VST3 was used. No other plug-in compatibility or custom editor behavior was tested.",
+    "Mix balance and ambient character reflect visible edits and intention, not an auditioned judgment. Mute and solo were visually toggled but their audible effect was not verified.",
+    "Elapsed session time includes screenshot, tool and reporting overhead; it is not an application performance benchmark."
+  ],
+  "mixer_outcome": {
+    "volume": "Dragged the audio fader down to -12.0 dB and MIDI fader down to -6.0 dB; numeric values visibly updated. Bus remained at 0.0 dB.",
+    "pan": "Dragged the audio pan knob horizontally left to L14 and MIDI right to R21; labels visibly updated.",
+    "mute": "Clicked audio Mute during transport playback and observed orange active styling; clicked again to restore inactive styling. Audible muting not verified.",
+    "solo": "Clicked MIDI Solo and observed green active styling; clicked again to restore inactive styling before export. The stream-error banner appeared during this part of the session; no causal or audible claim.",
+    "bus": "Clicked Add bus and observed a new New bus strip, later displayed as Bus 1 in after adding the send.",
+    "send": "Clicked MIDI Add send, then + Send, then New bus. Routing displayed a New bus send at 0.25x with Post selected; Mixer displayed Send - New bus. No effects were added to the bus."
+  }
+}

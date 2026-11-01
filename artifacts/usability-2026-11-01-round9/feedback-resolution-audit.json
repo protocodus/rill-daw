@@ -1,0 +1,147 @@
+{
+  "audited_at_utc": "2026-11-01T01:27:44Z",
+  "matrix": {
+    "path": "/workspace/scratch/rill-usability-round9/feedback-resolution.json",
+    "sha256": "c033db28c6311b33123bda0e835f6127753b74505844bbd0e10540ec4bb1c90e"
+  },
+  "draft": {
+    "path": "/workspace/scratch/rill-usability-round9/feedback-resolution-draft.json",
+    "sha256": "f9a3eef48120a8c1ee4862e0b53caefd32ff8126a51e43572319e4c073a0ced8"
+  },
+  "original_reports": [
+    {
+      "participant": 1,
+      "report": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+      "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779",
+      "findings": 8,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 2,
+      "report": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+      "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5",
+      "findings": 11,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 3,
+      "report": "/workspace/scratch/rill-usability-round9/session-3/report.json",
+      "sha256": "92f41df792ae64737d36f6a528cb2575ec095f0ea9768d40d9b54f55b2624231",
+      "findings": 10,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 4,
+      "report": "/workspace/scratch/rill-usability-round9/session-4/report.json",
+      "sha256": "6b3cbacf1574971c2cdc2f088e6833fb305f81ae49774317b4c04990b90ff7b8",
+      "findings": 11,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 5,
+      "report": "/workspace/scratch/rill-usability-round9/session-5/report.json",
+      "sha256": "e28ea8fa3b5b4df658d2e2316e52ed1de1663d1fa114f6e914dcf7cee9958584",
+      "findings": 9,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    }
+  ],
+  "coverage": {
+    "original_findings": 49,
+    "matrix_findings": 49,
+    "original_rating_reasons": 25,
+    "matrix_rating_reasons": 25,
+    "unique_matrix_ids": 74,
+    "missing": [],
+    "extra_original_rows": [],
+    "finding_kinds": {
+      "positive": 31,
+      "failure": 5,
+      "recovery": 6,
+      "friction": 7
+    },
+    "all_original_ids_kinds_observations_evidence_scores_reasons_exact": true,
+    "all_original_outcomes_limitations_mixer_outcomes_exact": true,
+    "evidence_references_checked": 165,
+    "all_evidence_paths_resolve": true,
+    "timestamp_locators_checked": 2,
+    "all_locators_found": true,
+    "all_rows_have_explicit_reasoned_responses": true
+  },
+  "verified_outcomes": {
+    "source": {
+      "path": "/workspace/scratch/rill-usability-round9/verification-summary.json",
+      "sha256": "fbf1df063e6c1d5446e808d569f1cfa4a9fad51884893285e514087f197b7f7a"
+    },
+    "aggregate": {
+      "path": "/workspace/scratch/rill-usability-round9/aggregate.json",
+      "sha256": "750b6c2b32ce3b6b358ff108812fe1b2c7ff65e024049953ce072a789bfbf4ec"
+    },
+    "exact_30_second_project_wav_midi_sets": 5,
+    "audio_and_vst_contributions_verified": 5,
+    "maximum_full_graph_sample_difference": 0.0,
+    "prior_media_files_unchanged": 120,
+    "prior_cycle_evidence_files_unchanged": 455,
+    "current_evidence_files_unchanged": 203,
+    "method": "Full saved graph reproduction plus audio-source and MIDI-source mute ablations; all routes, buses, inserts and sources retained in analysis copies; originals untouched.",
+    "frozen_build": {
+      "path": "/workspace/scratch/rill-usability-round9/freeze-manifest.json",
+      "sha256": "9e2c567839e0852832dafcf818bfb07a042e65b39ee8eca42fbe233d76f13867"
+    },
+    "capture_events": 174,
+    "unique_pngs": 173,
+    "capture_count_note": "P5 final.png was captured twice before closeout.174 counts screenshot commands, not174 distinct images; all mouse actions remain preserved."
+  },
+  "rating_means_recomputed_from_originals": {
+    "easy_to_use": 4.0,
+    "how_cool_it_looks": 4.0,
+    "how_fast_it_is": 3.2,
+    "how_confusing_it_is": 2.4,
+    "feature_completeness": 4.0
+  },
+  "technical_reconciliation": {
+    "P5-F4": "Original perception and score preserved; original screenshot 07 already has C4 at zero. Native command/saved-note checks do not establish a recurring onset defect.",
+    "P4-F3": "Original stretch-bound observation preserved; 1–16 beats remains correct for the unchanged four-beat source window.",
+    "artifact": {
+      "path": "/workspace/scratch/rill-study-iteration/round9-note-origin-audit.json",
+      "sha256": "81cbc1f9d05e1fc958cc7e51210cb997a2ca8a4025899ef9a70a875a764c153c"
+    }
+  },
+  "root_judgment_needed": [],
+  "original_reports_modified": false,
+  "product_source_modified_by_reporting_agent": false,
+  "apps_builds_or_probes_run_by_reporting_agent": true,
+  "pending_matrix_snapshot": {
+    "path": "/workspace/scratch/rill-usability-round9/feedback-resolution-pending-validation.json",
+    "sha256": "178853d95749d2cf4314846a1faf5174bfaba0ef3e8fc985d7fc31964687f407"
+  },
+  "pending_audit_snapshot": {
+    "path": "/workspace/scratch/rill-usability-round9/feedback-resolution-audit-pending-validation.json",
+    "sha256": "b6d52c10e33c7e62e239bbab8ff3f505b85474bc34edd249358647482324db7d"
+  },
+  "final_polish": {
+    "issue": "send_routing_steps",
+    "status": "implemented and validated after round9",
+    "validation": {
+      "path": "/workspace/scratch/rill-study-iteration/final-send-validation.json",
+      "sha256": "0c98e1af443bc13fd7b95d6792c43970ecbbac92ffa2d4d74cae1d802cb47ca2"
+    },
+    "native_review": {
+      "path": "/workspace/scratch/rill-send-preview/observations.json",
+      "sha256": "228dc1cedc9a6e7839396c48a650a7d4f0abe28ceff43cfcf6d13f167b48ee35"
+    },
+    "cross_round_followup": {
+      "path": "/workspace/scratch/rill-study-iteration/cross-round-send-followup.json",
+      "sha256": "bbfba8e4fafa3dd7ac6686b3005f185fe68b6fb50ef4171a8d77a0165325003b"
+    },
+    "ratings_precede_change": true,
+    "new_full_beginner_study_claimed": false
+  },
+  "execution_scope": "No apps/builds/probes during participant sessions. After all sessions and explicit final build signal, reporting reviewer ran two isolated native previews on copied projects, with no playback or saves, then cleaned all owned processes. Reviewer ran no Cargo builds or audio probes.",
+  "all_original_rows_identical_to_pending_snapshot_and_draft": true,
+  "draft_unchanged": true
+}

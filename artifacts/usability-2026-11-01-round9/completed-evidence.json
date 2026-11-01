@@ -1,0 +1,1237 @@
+{
+  "frozen_at_utc": "2026-11-01T01:09:17Z",
+  "purpose": "Immutable participant reports, reactions, mouse logs, all screenshots, and declared project/WAV/MIDI outputs before coordinator verification",
+  "files": [
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/02-instrument.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/03-piano.png",
+      "bytes": 114045,
+      "sha256": "5b7d9cfddf67850c8f36e8b3178fe21701836b58c6412d8bca7ca02d1982ad1f"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/04-notes.png",
+      "bytes": 115518,
+      "sha256": "bd9f026a4375960f69081ddd3b94c5ec47216e8b6124d609aeb5d4465e1828ee"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/05-properties.png",
+      "bytes": 205681,
+      "sha256": "edfc1bc157fe8cdc89bb194fbcb0409e6e04d56e492de4f6ee90ba3206e10732"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/06-duration-menu.png",
+      "bytes": 201495,
+      "sha256": "9ac0dedfa24a102780993cc775c79ff0a1ea352f47d51d5fe773c1f89f15543a"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/07-zoomed.png",
+      "bytes": 144038,
+      "sha256": "6975f67805152ac78546bd63680a9c9cb5114c82c08c420f68a90ff05db87e33"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/08-duplicate.png",
+      "bytes": 167531,
+      "sha256": "6ef5d550316fb24f4a078eabf2e72fe423e5adcd781953ac6184fc632d88a024"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/09-audio-extended.png",
+      "bytes": 202937,
+      "sha256": "72d4d3272affe16d73ef7403b53642d82f6f95812f29036b663068ac60b542b9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/10-clip-menu.png",
+      "bytes": 231548,
+      "sha256": "c9205e83ceb63557b3dce40d3bba8c6b1c1cbeb3059d2eea51a9b87c26742dcd"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/11-fit.png",
+      "bytes": 204708,
+      "sha256": "f1b41cc2e9ed32dd44a11977ebc64d76ed2f743003bacaa93c627ed730334484"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/12-thirty-seconds.png",
+      "bytes": 196675,
+      "sha256": "b6b6adeea123a6a5ed3000243b48171c6b5ac6fd320b914556084ead7207a471"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/13-mixer-play.png",
+      "bytes": 192645,
+      "sha256": "deb350aba5ca9e7d27981b6814334515c82ed6edd122692e1356d2940285f804"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/14-mixer-balance.png",
+      "bytes": 192767,
+      "sha256": "f96ba7ed09d059216fb66fe292448462ce26f2a7272aa50ba12a18d911a08b1d"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/15-mute.png",
+      "bytes": 181035,
+      "sha256": "22f33fab7942d029dd54644acf7e38a7585d1fe5715ec1f0f04eee95ffa3c008"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/16-solo.png",
+      "bytes": 181066,
+      "sha256": "26de3391f8dd1f2e43df53295b80c172572c71e9bdd9172c5e2b7917b2a35623"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/17-bus.png",
+      "bytes": 209272,
+      "sha256": "0975ee025b4227f9fc3b3c91cd433b2de1f25ea4da6ce3dec060e331aba1e762"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/18-send-menu.png",
+      "bytes": 205337,
+      "sha256": "abb211a745a00bd9d23ca5bcba9a2375fd72683d9299257717507b44c634b8c9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/19-send-target.png",
+      "bytes": 211876,
+      "sha256": "9f5784e7d45c6d0052669cb84101887adee3f1f83f35ccf2c021c72b112f5839"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/20-send-created.png",
+      "bytes": 198049,
+      "sha256": "6c1274d2740c6774e208e291de289e1a90f37681c9a6433f97ba31e138a07f75"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/21-audio-details.png",
+      "bytes": 200378,
+      "sha256": "c294eee6b692c0f95977e968057b5afe2a321af9e7533c5fd5dc1a474179d104"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/22-file-menu.png",
+      "bytes": 187473,
+      "sha256": "ed3c13f0bbc28da80bc04f66b197a038f3143edc31a5ba1edd99d5a319b79196"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/23-rename.png",
+      "bytes": 205693,
+      "sha256": "6960af291f2a82375266952228d7e30bc2ffeb88b678acb27341d120c6a66c71"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/24-keyboard.png",
+      "bytes": 222965,
+      "sha256": "cea752383336555aa01410c8ac70495fcd17a7fb6e508687f42ac2988dc3c405"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/25-save-dialog.png",
+      "bytes": 133066,
+      "sha256": "9ca35b6d23031f33282de736af063c3ea6d65d5f1c1cf56ca3bc1047f338546b"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/26-saved.png",
+      "bytes": 198547,
+      "sha256": "7c6de9a05074589ef24a9de30b629247fdcb313f4af7ad531552b759b9bb561b"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/27-wav-dialog.png",
+      "bytes": 200167,
+      "sha256": "33a520f3941055c111037bfa2fa4a0c5e840ead5aabfe914137198f923609090"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/28-wav-save.png",
+      "bytes": 147653,
+      "sha256": "2e4b4e3333ba7863ba998dca59ce744c9d55648a9e9d5ca4aa003b22fc45af1e"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/29-wav-result.png",
+      "bytes": 199960,
+      "sha256": "9a6ad8e4403acb88ebc9c374883ef80776f468c1232f5b7014af80762c31b3fb"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/30-wav-success.png",
+      "bytes": 199894,
+      "sha256": "fb64dcd1617fb75c638da9f05ae2740833ebf9d437a92882e3d221455142cd1c"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/31-wav-status.png",
+      "bytes": 203161,
+      "sha256": "3e1f52f096795cdaf411d8548b3c593ef93ff75fed6da53e7b4d655fe87b32ae"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/32-midi-export.png",
+      "bytes": 190380,
+      "sha256": "a85130b07990f7bd1d9759117f15dd72586f73f362c26176125a2e93de98671a"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/33-midi-save.png",
+      "bytes": 137532,
+      "sha256": "778eae16d190b5ac55541bd745ea20ce1bac09303069601a0d1f2fc5c7f6aa45"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/34-midi-result.png",
+      "bytes": 202961,
+      "sha256": "139edeffbcb0b271ac1f566177bfc472a5ce2ad6f04833be6be04e2890732394"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/35-arrangement.png",
+      "bytes": 212214,
+      "sha256": "59b54c17cb262cc317a77b44a965cd1dcf2773ded11b8f9c44d50b3bacf6c8b3"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/dusk.mid",
+      "bytes": 575,
+      "sha256": "42815ac118e775cc119ba1fa48482700cca96cf8560e6e120e19f0f2223cf911"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/dusk.rill",
+      "bytes": 3292802,
+      "sha256": "3cb92027a6bee6c57af00851efb727440ba598f1befa61b021d253b712c6220c"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/dusk.wav",
+      "bytes": 11520068,
+      "sha256": "8d8ac086bed3f49e4caf93b9129a6f6752b8559524c287bb31d2ea8f4464aa45"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/final.png",
+      "bytes": 203575,
+      "sha256": "9b37b0d330a721114654c0de252f390c18ce105b092d4f65efe8a0d846a9e1e9"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/mouse-actions.jsonl",
+      "bytes": 18813,
+      "sha256": "1de30b828fc7bc9b1996481fd69f2cd0f843585efdce94236ceb2444ce3d6de8"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/reactions.txt",
+      "bytes": 3206,
+      "sha256": "3889798a1cd4344f2b8b4090809ba272596f4c5460dc51fb7daa281aa4c4feb4"
+    },
+    {
+      "participant": 1,
+      "path": "/workspace/scratch/rill-usability-round9/session-1/report.json",
+      "bytes": 7152,
+      "sha256": "f714e39457be869fdb65a910dab2b49e7cb70c199d36d08fbc2287c49250f779"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/02-instrument.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/03-piano-roll.png",
+      "bytes": 114045,
+      "sha256": "5b7d9cfddf67850c8f36e8b3178fe21701836b58c6412d8bca7ca02d1982ad1f"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/04-notes-drawn.png",
+      "bytes": 116037,
+      "sha256": "abec3ce0f13571a490ec688d7ba2b49725461f9387c5d08cee2f481ddedd3990"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/05-duplicate-mode.png",
+      "bytes": 160615,
+      "sha256": "81c065685998aa837d367eb7e30f42782696bc66ba0639bfb94c621d95067cbb"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/06-four-bar-phrase.png",
+      "bytes": 193038,
+      "sha256": "0e653e2a8458c38bae749b2b8b08233c6eeb751dd0bb4a993313150a59dda0d3"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/07-clip-menu.png",
+      "bytes": 236300,
+      "sha256": "dd71e7f81ecbbb2e3e466c6c59355ac14173e74778f49f96853619c50c7ad4ee"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/08-twelve-bars.png",
+      "bytes": 204715,
+      "sha256": "35487f1ee34738ecea8efbe463b14c75bbf3a6aba6c48e1adbcce6530eb79ba7"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/09-sixteen-bars.png",
+      "bytes": 205019,
+      "sha256": "ee9b4c948235c2afa27c76c93708e9b75afb022b8f5b8f60d784a251720610c1"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/10-thirty-second-arrangement.png",
+      "bytes": 197451,
+      "sha256": "48259eb240e1259cdfef68282719901071562bc0e36e4a7153aeca5a2d82bf0a"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/11-mixer-playing.png",
+      "bytes": 179209,
+      "sha256": "ef98b0d0d5837235457c8627daf4e0fe41b77af971c93805877a86113c9fc0e2"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/12-mixer-mute-balance.png",
+      "bytes": 190380,
+      "sha256": "fbd8cc7949dbb79a6ce6ba3a444d23a9afee4d727cb18109003b80c2f7107f82"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/13-solo-retry.png",
+      "bytes": 178961,
+      "sha256": "31926f1f888986c913e4ede840f334ec12a2879c41b46a69f779dd7f03c9886c"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/14-add-bus.png",
+      "bytes": 200119,
+      "sha256": "22c8bfade49901771d4cf360048557aa14b57899f950b1b32a0ee5bbcde0110a"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/15-send-menu.png",
+      "bytes": 200692,
+      "sha256": "9859ad38c967212b4420d09267e51ea4d298cd8e16a60a08b66c95929ea686e7"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/16-send-target.png",
+      "bytes": 207344,
+      "sha256": "e0c48cdba9fdad9e65357561f5112d8a84faffc7f239b38302cc3a23090fc425"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/17-send-created.png",
+      "bytes": 207779,
+      "sha256": "0f17678fe43d366bf18a05a8d05e052e9748fd9c4fa02670353e9c825c1cda07"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/18-file-menu.png",
+      "bytes": 189215,
+      "sha256": "61745a445c8bab0a84605683dd198ef2758d70348bc9cd2592c46be3e51e2b8c"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/19-rename.png",
+      "bytes": 209570,
+      "sha256": "aed718e92ee40f5873dc9150de39a35f0e887c1538691550a7da17f9966697d8"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/20-keyboard.png",
+      "bytes": 226770,
+      "sha256": "947565953da8d622285d1d7c8990c377fe49fe5684fefc50205e1f18c47b39b6"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/21-named.png",
+      "bytes": 203163,
+      "sha256": "7a455404bc35b78999e2f43b298659290888cc0c4654ae27257aa5d8a01a619d"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/22-save-picker.png",
+      "bytes": 189047,
+      "sha256": "df8a85d574b2213baebe9aa168c559b1c2f272a9f7c92e2cae95876e758b8509"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/23-save-dialog.png",
+      "bytes": 137134,
+      "sha256": "361125937adde1f8f47e47c8ee6e3ae4e25b8a9542e50e27f028b93e12bb0551"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/24-saved.png",
+      "bytes": 203039,
+      "sha256": "edbb2894e03e2fb11352e1c6c5a0810e0c9f78cb7a4583fb3c022a2f96a58437"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/25-wav-export-options.png",
+      "bytes": 201106,
+      "sha256": "87c5dcde7762c8f80d4999d7fcbf1af48584e65aa7ecbe4e0ebb20309140a5bf"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/26-wav-picker.png",
+      "bytes": 121574,
+      "sha256": "4e41f7505037039a86507b3e3926355315ab886657885d5be7cf44a4fa5878ba"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/27-wav-dialog.png",
+      "bytes": 149362,
+      "sha256": "6efb7fec4963b8bebc4748dd65661634eb562b92ed364dfe95ef7c1648d19521"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/28-wav-render.png",
+      "bytes": 205152,
+      "sha256": "db1fee06c62ef7d78121f5d437d6fad108a13c929bb0d0a1f62abeccc7c6fb40"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/29-wav-status.png",
+      "bytes": 205243,
+      "sha256": "fb6f87b37e5bd41f5dfcf59a5b85eb259af01572f1b47d6cd98edac6de624966"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/30-wav-success.png",
+      "bytes": 207969,
+      "sha256": "feab667117b3a8d4cd65da4357ca67ec9d3c5fe66d4d9e2857084cedc34ab751"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/31-midi-export.png",
+      "bytes": 140969,
+      "sha256": "06ee1d9005f8941b26555cbdd3d3ffe55994577e880eab7cfbde9ee36ec39181"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/32-midi-success.png",
+      "bytes": 207729,
+      "sha256": "99da0769bc139d5f9007a46b5c7e5c4e520850759e16c66d72ab66f30df9cccf"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/Sine Circuit.mid",
+      "bytes": 1079,
+      "sha256": "40627fb5dd2fa17eecd7a7f5cc24000f3b8c4223b8e60a52012fc7e7aed64f73"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/Sine Circuit.rill",
+      "bytes": 3293082,
+      "sha256": "f30d31311b11f2a704f981c13cb83930b464db76c1572c8b81840c6627dee357"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/Sine Circuit.wav",
+      "bytes": 11520068,
+      "sha256": "2dc1aa3ffc7fb1b2c69a62d9a39c8397e286d5b6eb75dd5aa7693b221252d47a"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/final.png",
+      "bytes": 212229,
+      "sha256": "67cf18ddf72313f66ebdcab72d2275ceb0933c2a859bc4bfab1fb7928aacf688"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/mouse-actions.jsonl",
+      "bytes": 20301,
+      "sha256": "b297f10df4897f1af5628e7ffa75610b1519b6f597f21c0d60ad8b260aeed477"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/reactions.txt",
+      "bytes": 4230,
+      "sha256": "6f7eb069c9b79ab032ba814197b620c36aee9041c505cb600fcf88f7d99d1683"
+    },
+    {
+      "participant": 2,
+      "path": "/workspace/scratch/rill-usability-round9/session-2/report.json",
+      "bytes": 8811,
+      "sha256": "2f145f19e01cbfaec80f415f642098f1064c3fe28d0c611dd71b5fd5be0979f5"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/02-instrument-assigned.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/03-piano-roll.png",
+      "bytes": 114045,
+      "sha256": "5b7d9cfddf67850c8f36e8b3178fe21701836b58c6412d8bca7ca02d1982ad1f"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/04-generate.png",
+      "bytes": 158627,
+      "sha256": "3695f4f429da5f00c8a35c490204178a605a7f3a710eea33cea19e36d390a14d"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/05-melody.png",
+      "bytes": 173426,
+      "sha256": "d3da62a81b68b0eec3a064419667265abd4ccab96831d07d73346a28275f9d38"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/06-length-keypad.png",
+      "bytes": 213139,
+      "sha256": "d088136ce759fb3e6f8a9b6e2b021b7018930ee7dd4cd3a9c3ad982067bd58bb"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/07-melody-added.png",
+      "bytes": 162810,
+      "sha256": "1a4ce341a48a23f3730fead6044d929ecc39b8dce6841544c167aca944a878ee"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/08-drums-duplicated.png",
+      "bytes": 145116,
+      "sha256": "6f542cb3c8848f7116c660f0d53a14afbfa79f52b483fc08f1a9027adfa97ca2"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/09-drums-repeated.png",
+      "bytes": 204713,
+      "sha256": "240e45fb285969fc8d9582907434a1eb64ceb3f5bbc5713e44c73726a39ada9c"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/10-mixer.png",
+      "bytes": 178332,
+      "sha256": "1567ac3bf32d378d95898cfd5d79321c7dea266daac1c875de7fee565df39045"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/11-mixer-mute-play.png",
+      "bytes": 190526,
+      "sha256": "84562453fe87139bd27ac97ddfa904ea2ad6049f344ff9e5465d6d5a9b09252a"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/12-mixer-solo-retry.png",
+      "bytes": 179176,
+      "sha256": "9b63d5dcd7362956dc5f72cb398adc8bc75987283fe67c747c43352377d3bc1c"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/13-bus-added.png",
+      "bytes": 212180,
+      "sha256": "006b955dc0b081ab94eb3b8729a14fcbe7c63bb1940c410313ac77358a97f1cc"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/14-send-menu.png",
+      "bytes": 208734,
+      "sha256": "ed661f5c779e6e2c6c003fbda56d32573490518628d77f52451055aa697a4ed9"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/15-send-target.png",
+      "bytes": 218083,
+      "sha256": "dc1dfb988a4a55cfd1c34cd65da8076c8bca63d3ee1532910c1d05b62bb12f02"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/16-send-created.png",
+      "bytes": 199757,
+      "sha256": "1f687db5c77c1ffcef850a1dcc774e1e8ab52bb13e24882127740de95d82cd04"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/17-arrangement-trim.png",
+      "bytes": 202300,
+      "sha256": "eeaa49b7c355d67426367b9ea6fc038692f18c9a451c833a7a0dfab15105ef62"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/18-file-menu.png",
+      "bytes": 213351,
+      "sha256": "2bbece8950246b55e6b43d86f26e1326b2459ea31322951cde1cc2dd0ba09576"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/19-rename.png",
+      "bytes": 209806,
+      "sha256": "e01131a2c82f8362550a58cdbba924bbbeb45b82441935a3bd47f05d8ffa9537"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/20-name-keyboard.png",
+      "bytes": 219467,
+      "sha256": "622cfda79b9f00fd27bd3abd3170521ebd7d7a1e6789e3295406f9550cf6dd4e"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/21-save-as.png",
+      "bytes": 119367,
+      "sha256": "0c17cfc3d62170a4c033b33f4cf47ccd6be7f08558ba4f890055b3922b6924f3"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/22-save-dialog.png",
+      "bytes": 151107,
+      "sha256": "9cfa7cffb713aa475340d4b478253aa59bfb6f2e1ce3a9a19bf9ebddda53b8c9"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/23-wav-settings.png",
+      "bytes": 241416,
+      "sha256": "d3ee5eb3c2cd44a139f2e48de12250014557d930b0582d636cd2af362e5cddb4"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/24-wav-dialog.png",
+      "bytes": 155276,
+      "sha256": "ade3deb8ac2157b45fa54a728746c3eae465104e12315248d3122fff09b0cbc6"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/25-wav-save.png",
+      "bytes": 183733,
+      "sha256": "7c8ebe88a203fbd02e1f5b68e905302644ef467a8477e0d0737d249a34ed6aab"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/26-wav-exported.png",
+      "bytes": 208979,
+      "sha256": "735063b418e083128dce77690d1876ee2cdd3fab07992395c8244898ad1ac34f"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/27-wav-success.png",
+      "bytes": 219093,
+      "sha256": "89057be5c4dca049b2e5492cc85eae9dc83cf69c198560381e4aa4ef5d7facb6"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/28-wav-status.png",
+      "bytes": 212538,
+      "sha256": "00ad703bffba93ef61c217636f7c85a62e996cf8f10ca206f390aff7b4d26d38"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/29-midi-save.png",
+      "bytes": 160929,
+      "sha256": "20b336cc5433634ad1c3fdbbbc47df2e1d13bda131869c19d165a3865a563d53"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/30-midi-success.png",
+      "bytes": 212286,
+      "sha256": "083e22a6c657f6ef5e1dc51b167e44e930bcd9f724b62fff238c0b9a68fb7135"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/31-final-mixer.png",
+      "bytes": 205012,
+      "sha256": "bb9ea214136bc8ef61b08931e094cd927d5d8af1a0e06e24e886740859e2e8c8"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/final.png",
+      "bytes": 213731,
+      "sha256": "a2fc90ee615df179adf998bd6c85d6fe2a43a726e99e5e6f57cf5e9cc7744b0b"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/glow.mid",
+      "bytes": 950,
+      "sha256": "92cccca09055d2aef72455f746ab31e3205bc37f2fb5761e681d72169430a3c9"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/glow.rill",
+      "bytes": 3293101,
+      "sha256": "50f6991bed45aafb858ba77353011dd8bebd647b20b3b7ea1ce90e299f151cd7"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/glow.wav",
+      "bytes": 11520068,
+      "sha256": "07c2e81b2c48cc8c898359e04bb8ca43f7b5e6927119389bcb36ae9a805bda94"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/mouse-actions.jsonl",
+      "bytes": 16421,
+      "sha256": "d3f6d7cbd0c1bc56c3b63eada5007a77524212409397e3d00799d6010ef6cba8"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/reactions.txt",
+      "bytes": 3996,
+      "sha256": "aaea04bb81d8d25ae5f9deb85f8f33dc4b92fa98cd0c86b86e03828720a0d473"
+    },
+    {
+      "participant": 3,
+      "path": "/workspace/scratch/rill-usability-round9/session-3/report.json",
+      "bytes": 9093,
+      "sha256": "92f41df792ae64737d36f6a528cb2575ec095f0ea9768d40d9b54f55b2624231"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/01-midi-created.png",
+      "bytes": 190433,
+      "sha256": "9fa681cff630ff4b40b0bd4ece349fe9f327fafec9cf1c64f5d508ca63b70f93"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/02-instrument.png",
+      "bytes": 161250,
+      "sha256": "a7be4b4f1c32f426d26a6738eb5d594b66884429b208a5e20df5f6773f3ec471"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/03-piano.png",
+      "bytes": 114045,
+      "sha256": "5b7d9cfddf67850c8f36e8b3178fe21701836b58c6412d8bca7ca02d1982ad1f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/04-chord.png",
+      "bytes": 114795,
+      "sha256": "c7af7296b4ce5ac61de418abf6cad8825f8ee98367bb901750874995cf4c1cdd"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/05-properties.png",
+      "bytes": 199963,
+      "sha256": "0de494b688dd0925505ccd2e6ebdddb0c4109cd238bb8b6091c820491ab0639d"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/06-duration-mode.png",
+      "bytes": 196635,
+      "sha256": "f0faa24a5901752534e269a667e0ded9a823f7cf46f970e4b6ed2b89a838503a"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/07-keypad.png",
+      "bytes": 213729,
+      "sha256": "b5488d2b5422070defdce80b635e0e32e7fa3122438e28b8bb8d95d5d033a9e5"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/08-duration-limit.png",
+      "bytes": 213996,
+      "sha256": "9dcd1162dde99f0989436040d6f261499a314c80edec17004406f44dbd12796f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/09-stretch-confirmed.png",
+      "bytes": 196427,
+      "sha256": "f3183db3ab52fbdafa39e28fca750e50add9fac57723e0ef52a51173f423aa3d"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/10-arrangement.png",
+      "bytes": 179546,
+      "sha256": "6229bb5cf0e31f9ba00d13d70a454d82c22507e0ec66759183c65fa19f9e1cb0"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/11-duplicate-tool.png",
+      "bytes": 177938,
+      "sha256": "589979676124b32338b38f5f0c7ba8e3e378dcd4b72583762b4748d2f160b6ff"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/12-midi-duplicated.png",
+      "bytes": 158997,
+      "sha256": "a88a25f445d0a7e3e05481eae718742d4456b43efa1b82b541d266c879fc246f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/13-midi-four-clips.png",
+      "bytes": 148008,
+      "sha256": "6ccf55fe68d3bc4964e616ef92e2b1bbc7de8853b378cd5c2293d282dbb7e5b1"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/14-thirty-seconds.png",
+      "bytes": 184515,
+      "sha256": "3806a0d5c6316f6cb5e10f58759a7de7b479ec5d40959ffcba72bf643686c8ee"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/15-audio-context.png",
+      "bytes": 229235,
+      "sha256": "59c86d28cdc3842a6dcd7b4076828ab5c9de9dda705ca4420fe3b55f86202af3"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/16-mixer.png",
+      "bytes": 181454,
+      "sha256": "a3f19491d76bca64255441a0996093b8abfdc6131c9f4594d53d43101950a843"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/17-bus-and-balance.png",
+      "bytes": 201475,
+      "sha256": "334a95ceb2c78f828ef85f91495c05add89bd0958609f6dfc20c24d99f589e9b"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/18-send-menu.png",
+      "bytes": 200612,
+      "sha256": "1a8f2f964317d983013a424cfc687f123f066f8e8e00eea466ce79ca90d41489"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/19-send-added.png",
+      "bytes": 206490,
+      "sha256": "1d0c14be1b8ccf29d0a55a9ebcdae72b3c4ad3c4c31d332dfb376dc193e45178"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/20-send-route.png",
+      "bytes": 207656,
+      "sha256": "54dc9f3215742c3fe4d81844b91946a9b5f532a2f1149481f458735f871de92f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/21-playing.png",
+      "bytes": 202722,
+      "sha256": "7b42132567752aa7a00dcfecf65a6ac0d4830d3cbae3f78f49cc685ae5067c77"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/22-muted-playing.png",
+      "bytes": 205437,
+      "sha256": "79c1ef1bf61ba4d79aae7cef49f954d84fbd5eb8d68962d5babad8dee1d0e4d4"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/23-solo-playing.png",
+      "bytes": 216509,
+      "sha256": "e6be83a68183de7d5a5f6cbb019576f10367dcdd13c918f1a3d70c2ed02ca1ac"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/24-retry-playback.png",
+      "bytes": 203882,
+      "sha256": "74ca91f91495c5883c204b9340ac1aa4b57d20cc5dfabd6c0b194e408d647a0e"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/25-file-menu.png",
+      "bytes": 187341,
+      "sha256": "75f4c71dd6b1e27ff4826d8ce7c0ec490a972d1241c0f50263c8ec53b53c7cb5"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/26-rename.png",
+      "bytes": 209688,
+      "sha256": "2e41d1c2e0d33152b340c3654fa418c7f9f3764a2b7a9d466b2b7650d461e320"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/27-name-keyboard.png",
+      "bytes": 226821,
+      "sha256": "a4920a95b470b2c5456bff6cb5a65009e7446da5991bd5ed2fcb9bb14864dea2"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/28-save-dialog.png",
+      "bytes": 133749,
+      "sha256": "8d139cc799373430f20e750fd0f0c992903fbcccfc4c8ae13cf6eee0ecac02bc"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/29-saved.png",
+      "bytes": 202445,
+      "sha256": "1fed11c6197362ad1d9b72ba5255adaf2d7eb1df8e54f21469d35166f0d7f73e"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/30-wav-options.png",
+      "bytes": 200211,
+      "sha256": "a969ef80d65dee150929ed6d21240fb8dc5422564080f7567d1e6dfb77e9b2a9"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/31-wav-dialog.png",
+      "bytes": 147886,
+      "sha256": "3c79f7b194730ccf9e54c38de119f9d94fca3963f10ea1d1ba0d798e5ab02dfe"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/32-wav-exporting.png",
+      "bytes": 203687,
+      "sha256": "f8d3d040f9eb2cb14adba1bebb71b4f1d1610cfb62ae3da99b90be00935bac45"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/33-wav-status.png",
+      "bytes": 203582,
+      "sha256": "25fe03d43b85384b693888f9495b89f456326b470eb65aa02a0f7b91a981915d"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/34-wav-status.png",
+      "bytes": 206633,
+      "sha256": "2c450152f527783ce2154b6b0f8145a9d0e01ebe63e0f61d8d5a56c2800292c7"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/35-midi-dialog.png",
+      "bytes": 136867,
+      "sha256": "6f0ce3e671626bf8e9467b089db1365a381cd0085c8f48f0ed1fd3d8ddc6db53"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/36-midi-exported.png",
+      "bytes": 206414,
+      "sha256": "36f26a9d8983780ae7cc739755bf2b0d35f866dc4c5b02450d5639749f7fcd36"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/final.png",
+      "bytes": 199835,
+      "sha256": "65f7540b57d089852def3995d8fc12d281973ecb4b1af096829fae75d2ca37f1"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/haze.mid",
+      "bytes": 155,
+      "sha256": "53fe994e7c972403c131d65e2c0605bc2db811b78bf07c770311595dad14c4a0"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/haze.rill",
+      "bytes": 3292552,
+      "sha256": "e62a2c0fb4c1f9be5dd7be05bd99b4bb867724b0c990d73f8eccfefb17aa6e04"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/haze.wav",
+      "bytes": 11520068,
+      "sha256": "aea8fe192c9ff868273de1c2f28640da1170217bff5f46191a6b9c213aec30a6"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/mouse-actions.jsonl",
+      "bytes": 18706,
+      "sha256": "8c7d53f247e3bac51bb0c492d49ce515028250f7e61d22f96f80c143baeb7aee"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/reactions.txt",
+      "bytes": 3827,
+      "sha256": "7cc8fe3030ae33cb11edb35d502b21bddd7ea55c177bbdebb559b508cf384585"
+    },
+    {
+      "participant": 4,
+      "path": "/workspace/scratch/rill-usability-round9/session-4/report.json",
+      "bytes": 9341,
+      "sha256": "6b3cbacf1574971c2cdc2f088e6833fb305f81ae49774317b4c04990b90ff7b8"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/01-duplicated.png",
+      "bytes": 163223,
+      "sha256": "577b6182d9208aee8b91a107bb5093a9c89f6c9346c245326e53713693887d23"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/02-first-repeat.png",
+      "bytes": 173223,
+      "sha256": "c8f1c7ab6a0929fe6ae9b9eb351343bd7f2a8a1db8bc498902ed72e0d1fc660f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/03-four-repeats.png",
+      "bytes": 187615,
+      "sha256": "64280807303cba404586ba2a281d0a2a6e45d8b0de57b4f51241cf937a15f4cd"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/04-midi-created.png",
+      "bytes": 190935,
+      "sha256": "45f42ff4fa0020df66160ab5c9d1e5e803f98960235f51728ff04c4cb7dc51d4"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/05-instrument-assigned.png",
+      "bytes": 190526,
+      "sha256": "9d004c35134e8fed7e56140689a735df035a77c1a6b63d82be2da9948369cb9e"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/06-piano-roll.png",
+      "bytes": 114103,
+      "sha256": "e80b3e3a28ad80100ef5676adfd26ea2a8ecb5576279597a46441cc7c2125da7"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/07-notes-drawn.png",
+      "bytes": 115853,
+      "sha256": "b0e8a78e2640806ca9d07dfc33f50504d4a96e8a3620c7205d9176baf587eea6"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/08-midi-context.png",
+      "bytes": 224870,
+      "sha256": "c8a86e2ab46d14be0c8270236c1917d30bed0814c6733a3330a5a1e29b22b32a"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/09-midi-repeats.png",
+      "bytes": 193405,
+      "sha256": "8324fcfe85d9070d0e23c197a4a2a9038548ac7d74d95ee31b143f23919112f7"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/10-mixer.png",
+      "bytes": 180419,
+      "sha256": "5ee1452753d3254fadafeaaf8705b959b34dc33d186053ca2540c14dc19db4ae"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/11-mixer-playing-balanced.png",
+      "bytes": 179576,
+      "sha256": "29b670db0640f886cc62f1731606a51980194ed74b6fb738d152cb60ab2110f7"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/12-mute-pan.png",
+      "bytes": 193406,
+      "sha256": "39eb08ee754148df9cbae6ed9f157c89d617949295660d25ff1669c65e084205"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/13-playback-error-solo.png",
+      "bytes": 182012,
+      "sha256": "73d7839b5d7d013b2153bdb61c284428ca81648dc4d3ddc4291a5e44aee4217a"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/14-bus-created.png",
+      "bytes": 200564,
+      "sha256": "d6f6fec49c616affbdf7539b9f4e4852a8b32c0866b1f30d68ec1c0adac60f26"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/15-send-menu.png",
+      "bytes": 200671,
+      "sha256": "186d24e1c1d41abc8d2d60f1515e1f479f58f69b8bacf07ce9f9defe150bba78"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/16-send-added.png",
+      "bytes": 206357,
+      "sha256": "a6869d10e2e13396493e5071108ad6b48b67ceac71c9524a631140fea9153c0f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/17-send-routed.png",
+      "bytes": 206676,
+      "sha256": "f70244632ef71b54651a48cf5e59a3f40d647246880f2ad48fb59f3c28ae5e0b"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/18-file-menu.png",
+      "bytes": 187824,
+      "sha256": "501727c4fb9946d35d22a59d694fdf9c4fec88f67f6cb60eb6cc8f226c6610e5"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/19-name-dialog.png",
+      "bytes": 205959,
+      "sha256": "0368eb023b8ad9e1c7235498f3f22d2b263d7eff348195d816b08a6adda3ae71"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/20-onscreen-keyboard.png",
+      "bytes": 223254,
+      "sha256": "80504f42ec178cd4e70ba96f9281d40f85715cd5a5d9f963020a5bd6b0ce959e"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/21-save-dialog.png",
+      "bytes": 135401,
+      "sha256": "da818eb9894dbf4b6aead9ed54f7eeb78eb0b0e20b75eff20757dead80999fae"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/22-project-saved.png",
+      "bytes": 199432,
+      "sha256": "ddc5450dc72fbb76fd9b79a332d4be84ea21a93d42329aae3f4f7c3ad7f97b2a"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/23-wav-export.png",
+      "bytes": 199923,
+      "sha256": "03d18a0bc1e78662df7058b539961afd250abc50018e19327a566cfa0a3f4460"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/24-wav-path.png",
+      "bytes": 148028,
+      "sha256": "ffbcde736b5a3f971b0283306599c7c8de69575ab8e772e80ccc6c30d20a837f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/25-wav-result.png",
+      "bytes": 201420,
+      "sha256": "680e8d08063bc6b1b0747b5430b2a77cce3a56f828f02b09cbf89978de1b6fc2"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/26-wav-complete.png",
+      "bytes": 201452,
+      "sha256": "58c80cc373fa32dbccacb81a1e236f5d30adc44c28677290913788041c14e588"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/27-full-arrangement.png",
+      "bytes": 222143,
+      "sha256": "37c801106b683ace4f7c27f75a5b0bc753558ff3215362d09f201281b8c5c1f5"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/28-midi-export.png",
+      "bytes": 173847,
+      "sha256": "b530654b568d24f91d1aec27601da5c9a6bb1391a084f12dc48fa5563cb06bfa"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/29-midi-complete.png",
+      "bytes": 221166,
+      "sha256": "5ef2785ede698037d93ae6ebda6eaa77909f8eb5526c62bd777a203dfe1ae67a"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/Night hop.mid",
+      "bytes": 630,
+      "sha256": "7b8a933281cf47e8443b3afdccffb25b48ede63e63e94b4c2d33a0eef1e1c4dc"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/Night hop.rill",
+      "bytes": 3292807,
+      "sha256": "53e4f1bb55cec242ab04af55539db421ab07168ef466a38b7503c6088414e9ab"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/Night hop.wav",
+      "bytes": 11520068,
+      "sha256": "5c6183d006bb7b481d4c96c7e40fe3fe7e26b1bb9ea3daccf7349488fba54919"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/final.png",
+      "bytes": 221166,
+      "sha256": "5ef2785ede698037d93ae6ebda6eaa77909f8eb5526c62bd777a203dfe1ae67a"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/initial.png",
+      "bytes": 146713,
+      "sha256": "2643a8bdcab44115e34ad45cdbadb951f7227d827f311ea337ce484de197234f"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/mouse-actions.jsonl",
+      "bytes": 19359,
+      "sha256": "4a6e5c7374706ac11b640ec27880cf7a342217675008e1b7b5867c9fd866bcd0"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/reactions.txt",
+      "bytes": 3966,
+      "sha256": "4dfb7aed6668a9ea37c5b4028ebedbe993396029e09a18b4ab271eb459c9eee3"
+    },
+    {
+      "participant": 5,
+      "path": "/workspace/scratch/rill-usability-round9/session-5/report.json",
+      "bytes": 8693,
+      "sha256": "e28ea8fa3b5b4df658d2e2316e52ed1de1663d1fa114f6e914dcf7cee9958584"
+    }
+  ],
+  "original_frozen_helper_checks": {
+    "aggregate.py": true,
+    "audio.py": true,
+    "cleanup.py": true,
+    "component_render.py": true,
+    "evidence_utils.py": true,
+    "freeze.py": true,
+    "launch.py": true,
+    "mouse.py": true,
+    "verify_full_graph.py": true,
+    "verify_isolated_midi.py": true,
+    "verify_mix_components.py": true
+  }
+}

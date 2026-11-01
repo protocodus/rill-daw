@@ -1,0 +1,257 @@
+{
+  "status": "Confirmed defect; baseline failing regressions captured; corrected validation owned by root",
+  "finding": "Round8 P4-F4 staggered Pencil onsets",
+  "original_files": [
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/mist.rill",
+      "sha256": "6b1b6de22dffa687dfd7005de6b1c93f18fff2aea6207cf3cfe1265dc3a3687c"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/mouse-actions.jsonl",
+      "sha256": "ddf2161ddd4e8c9cd1df9637e991e6da4e4a7a3b28ca726ffff62b244be96588"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/09-long-midi.png",
+      "sha256": "87ea63ff53fc247d4bbe032c7c0303c946d702684d681bcc87158ca9c9d989e0"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/10-notes.png",
+      "sha256": "4f1954df7e92b77d529edeb6ef37cce99e0b520f7424d3d11f565a6608ed811b"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/session-4/report.json",
+      "sha256": "83d3e43d9d494043581c549caf06d968f231e5c1b2c840d5cae7fb9db23200b2"
+    }
+  ],
+  "original_native_drags": [
+    {
+      "time": "2026-11-01T00:36:47Z",
+      "started_unix": 1793493406.8562286,
+      "action": "drag",
+      "args": [
+        "64",
+        "605",
+        "449",
+        "605"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:36:49Z",
+      "started_unix": 1793493408.4586875,
+      "action": "drag",
+      "args": [
+        "64",
+        "518",
+        "449",
+        "518"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:36:51Z",
+      "started_unix": 1793493410.3677018,
+      "action": "drag",
+      "args": [
+        "64",
+        "454",
+        "449",
+        "454"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:36:54Z",
+      "started_unix": 1793493412.5154705,
+      "action": "drag",
+      "args": [
+        "455",
+        "669",
+        "840",
+        "669"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:36:56Z",
+      "started_unix": 1793493414.8050108,
+      "action": "drag",
+      "args": [
+        "455",
+        "605",
+        "840",
+        "605"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:36:57Z",
+      "started_unix": 1793493416.656129,
+      "action": "drag",
+      "args": [
+        "455",
+        "518",
+        "840",
+        "518"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:36:59Z",
+      "started_unix": 1793493418.5514026,
+      "action": "drag",
+      "args": [
+        "845",
+        "753",
+        "1228",
+        "753"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:37:01Z",
+      "started_unix": 1793493420.1891198,
+      "action": "drag",
+      "args": [
+        "845",
+        "669",
+        "1228",
+        "669"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:37:03Z",
+      "started_unix": 1793493422.1157663,
+      "action": "drag",
+      "args": [
+        "845",
+        "605",
+        "1228",
+        "605"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:37:06Z",
+      "started_unix": 1793493424.7421079,
+      "action": "drag",
+      "args": [
+        "1234",
+        "711",
+        "1420",
+        "711"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:37:09Z",
+      "started_unix": 1793493427.451083,
+      "action": "drag",
+      "args": [
+        "1234",
+        "626",
+        "1420",
+        "626"
+      ],
+      "held_button_after": null
+    },
+    {
+      "time": "2026-11-01T00:37:11Z",
+      "started_unix": 1793493430.158957,
+      "action": "drag",
+      "args": [
+        "1234",
+        "561",
+        "1420",
+        "561"
+      ],
+      "held_button_after": null
+    }
+  ],
+  "saved_note_values": [
+    {
+      "pitch": 60,
+      "start": 2.25,
+      "length": 13.75
+    },
+    {
+      "pitch": 64,
+      "start": 0.5,
+      "length": 15.5
+    },
+    {
+      "pitch": 67,
+      "start": 3.75,
+      "length": 12.25
+    },
+    {
+      "pitch": 57,
+      "start": 19.5,
+      "length": 12.75
+    },
+    {
+      "pitch": 60,
+      "start": 16.25,
+      "length": 16.0
+    },
+    {
+      "pitch": 64,
+      "start": 16.25,
+      "length": 16.0
+    },
+    {
+      "pitch": 53,
+      "start": 32.5,
+      "length": 15.75
+    },
+    {
+      "pitch": 57,
+      "start": 33.0,
+      "length": 15.25
+    },
+    {
+      "pitch": 60,
+      "start": 35.0,
+      "length": 13.25
+    },
+    {
+      "pitch": 55,
+      "start": 50.0,
+      "length": 6.25
+    },
+    {
+      "pitch": 59,
+      "start": 48.75,
+      "length": 7.5
+    },
+    {
+      "pitch": 62,
+      "start": 48.5,
+      "length": 7.75
+    }
+  ],
+  "saved_clip_length": 56.0,
+  "cause": "Piano-roll primary_pressed was paired with latest pointer.interact_pos. Press and later motion delivered in one frame therefore used a later position for initial note pitch/onset and target. The original log does not capture internal native frame boundaries, so exact per-gesture batching timing is not measured.",
+  "baseline_regressions": {
+    "unit": "piano_pencil_press_and_motion_in_one_frame_keep_the_press_origin failed: pressed pitch absent when press+motion arrived before one frame, release later.",
+    "app": [
+      "repeated_batched_pencil_drags_keep_the_pressed_onset_and_pitch failed: pressed pitch absent",
+      "batched_movement_uses_the_note_under_press_and_keeps_its_length failed: expected start8, got2",
+      "entering_the_canvas_after_an_outside_press_does_not_draw failed: inserted note64 at beat4"
+    ],
+    "logs": [
+      "/workspace/scratch/rill-iteration-validation/round8-midi-press-unit-baseline.log",
+      "/workspace/scratch/rill-iteration-validation/round8-midi-press-app-baseline.log"
+    ]
+  },
+  "correction": "Capture primary press Event::PointerButton position and modifiers; use its position for initial keyboard focus, note/velocity target and gesture creation. Require fresh press origin inside canvas. Keep latest pointer for updates and release. Preserve existing enabled/modal/popup/current canvas layer guards.",
+  "coordinate_space": "The piano roll uses untransformed egui screen-point rectangles, matching raw pointer event positions. No new coordinate transform or UI component is introduced.",
+  "limits": [
+    "The30.134-second extension is not automatically attributed to the onset bug; release endpoint snapping and initial note-length extension require separate evidence.",
+    "Existing conservative behavior when latest pointer is outside canvas is retained; this is not universal cross-widget pointer capture.",
+    "Multiple complete primary gestures within a single input frame are not newly supported.",
+    "Round8 ratings precede this correction and must remain unchanged."
+  ],
+  "participant_files_modified": false
+}

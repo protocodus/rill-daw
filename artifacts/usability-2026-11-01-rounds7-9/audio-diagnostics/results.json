@@ -1,0 +1,509 @@
+{
+  "purpose": "Bounded technical reproduction of round 7 ALSA output failure outside RILL. This is not a fresh usability study or physical-device benchmark.",
+  "method": "Independent fresh PulseAudio null sink per probe; same round 7 audio helper, ALSA bridge,48 kHz stereo f32, requested 1024 frames and PULSE_LATENCY_MSEC=60 unless explicitly changed. A standalone CPAL 0.18.2 program writes zeros; no RILL code, UI, audio renderer, VST, MIDI, or project is linked. Scheduled stalls are artificial delays in the callback, not measurements of participant stalls.",
+  "compiler": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "cpal_version": "0.18.2",
+  "cpal_rlib": "/workspace/rill-daw/target/debug/deps/libcpal-d91c41d47461545a.rlib",
+  "cpal_rlib_sha256": "08e8ae594fb84982dbfb9580a0580d1582f0e7648ae7e730b859a93833361720",
+  "round7_audio_helper_sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a",
+  "runs": [
+    {
+      "name": "default-1024-1",
+      "manifest": "/workspace/scratch/rill-audio-diagnostics/default-1024-1/manifest.json",
+      "manifest_sha256": "b72d05f9c25bc512df5bc62343309da2d55646c6db5afa4aa2a476ca6c977f9b",
+      "log": "/workspace/scratch/rill-audio-diagnostics/default-1024-1/probe.log",
+      "log_sha256": "60de610c0491758a725629e05e076343ad87f71f2608bc881bb9edce62283a9b",
+      "selection": "default",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "requested_buffer_frames": 1024,
+      "pulse_latency_environment_msec": 60,
+      "injected_stall_msec": 0,
+      "stall_injections_observed": 0,
+      "callback_frames_observed": null,
+      "observation_seconds": 20,
+      "callbacks_total": 1280,
+      "error_callbacks_total": 0,
+      "raw_errors_first_20": [],
+      "start_utc": "2026-11-01T00:04:33Z",
+      "finish_utc": "2026-11-01T00:04:53Z",
+      "cleanup_original_server_identity_alive": false,
+      "source_sha256": "9c12ae23dfc8a92618120bf04e7a5ca89c59b043d56ec574821da3bd7e8b0b79",
+      "probe_binary_sha256": "56812992dc2fd22d651343f02d80c7e0cef0c645cc07b7fb7afb26e1797d8924"
+    },
+    {
+      "name": "default-1024-stall60",
+      "manifest": "/workspace/scratch/rill-audio-diagnostics/default-1024-stall60/manifest.json",
+      "manifest_sha256": "b7119adcef188813b6758d3e48e1671dceb41606c8a37ec782a051f5eee276a3",
+      "log": "/workspace/scratch/rill-audio-diagnostics/default-1024-stall60/probe.log",
+      "log_sha256": "55b892fec08db68e2d8eb270449ba4137767a322f1940d2850490db5e77047e3",
+      "selection": "default",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "requested_buffer_frames": 1024,
+      "pulse_latency_environment_msec": 60,
+      "injected_stall_msec": 60,
+      "stall_injections_observed": 7,
+      "callback_frames_observed": 682,
+      "observation_seconds": 20,
+      "callbacks_total": 453,
+      "error_callbacks_total": 8896,
+      "raw_errors_first_20": [
+        {
+          "elapsed_seconds": 2.799398,
+          "count": 1,
+          "kind": "Xrun",
+          "raw": "A buffer underrun or overrun occurred."
+        },
+        {
+          "elapsed_seconds": 2.799926,
+          "count": 2,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799937,
+          "count": 3,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799943,
+          "count": 4,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799948,
+          "count": 5,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799954,
+          "count": 6,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799959,
+          "count": 7,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799965,
+          "count": 8,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799972,
+          "count": 9,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799978,
+          "count": 10,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799983,
+          "count": 11,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799988,
+          "count": 12,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799993,
+          "count": 13,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.799998,
+          "count": 14,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.800004,
+          "count": 15,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.800009,
+          "count": 16,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.800014,
+          "count": 17,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.800019,
+          "count": 18,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.800024,
+          "count": 19,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.80003,
+          "count": 20,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        }
+      ],
+      "start_utc": "2026-11-01T00:05:33Z",
+      "finish_utc": "2026-11-01T00:05:53Z",
+      "cleanup_original_server_identity_alive": false,
+      "source_sha256": "7d733b6c00615b9494b7843e7767e671e8f23c48be20c32570eed174a0feac73",
+      "probe_binary_sha256": "24b854684a71d75a4470dc744c226414c2107d79eafb1e0868c06fccb5229e34"
+    },
+    {
+      "name": "named-1024-stall60",
+      "manifest": "/workspace/scratch/rill-audio-diagnostics/named-1024-stall60/manifest.json",
+      "manifest_sha256": "96bde854acd901010ea419a9e571d4b350cad2c4d963670afc8a15d5ab529389",
+      "log": "/workspace/scratch/rill-audio-diagnostics/named-1024-stall60/probe.log",
+      "log_sha256": "59b33c7c854ff672cd0ad168b6afe04ecbe538e7e64385a5ceacf5776f697f26",
+      "selection": "named",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "requested_buffer_frames": 1024,
+      "pulse_latency_environment_msec": 60,
+      "injected_stall_msec": 60,
+      "stall_injections_observed": 7,
+      "callback_frames_observed": 682,
+      "observation_seconds": 20,
+      "callbacks_total": 453,
+      "error_callbacks_total": 10077,
+      "raw_errors_first_20": [
+        {
+          "elapsed_seconds": 2.798872,
+          "count": 1,
+          "kind": "Xrun",
+          "raw": "A buffer underrun or overrun occurred."
+        },
+        {
+          "elapsed_seconds": 2.799703,
+          "count": 2,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 5.675512,
+          "count": 3,
+          "kind": "Xrun",
+          "raw": "A buffer underrun or overrun occurred."
+        },
+        {
+          "elapsed_seconds": 5.675963,
+          "count": 4,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.550846,
+          "count": 5,
+          "kind": "Xrun",
+          "raw": "A buffer underrun or overrun occurred."
+        },
+        {
+          "elapsed_seconds": 8.551331,
+          "count": 6,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551348,
+          "count": 7,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551356,
+          "count": 8,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551364,
+          "count": 9,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551391,
+          "count": 10,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551397,
+          "count": 11,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551404,
+          "count": 12,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551409,
+          "count": 13,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551416,
+          "count": 14,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551422,
+          "count": 15,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551429,
+          "count": 16,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551435,
+          "count": 17,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551442,
+          "count": 18,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551447,
+          "count": 19,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 8.551454,
+          "count": 20,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        }
+      ],
+      "start_utc": "2026-11-01T00:06:32Z",
+      "finish_utc": "2026-11-01T00:06:52Z",
+      "cleanup_original_server_identity_alive": false,
+      "source_sha256": "7d733b6c00615b9494b7843e7767e671e8f23c48be20c32570eed174a0feac73",
+      "probe_binary_sha256": "24b854684a71d75a4470dc744c226414c2107d79eafb1e0868c06fccb5229e34"
+    },
+    {
+      "name": "default-4096-stall60",
+      "manifest": "/workspace/scratch/rill-audio-diagnostics/default-4096-stall60/manifest.json",
+      "manifest_sha256": "a57b9399fa75729b03fd3b96c3aab9597ceb9b8fe972dbbabc3be60cbee88ed6",
+      "log": "/workspace/scratch/rill-audio-diagnostics/default-4096-stall60/probe.log",
+      "log_sha256": "52613d02608a9976120787bc2c645ccad390eb757fd46f180f80815801649fdf",
+      "selection": "default",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "requested_buffer_frames": 4096,
+      "pulse_latency_environment_msec": 60,
+      "injected_stall_msec": 60,
+      "stall_injections_observed": 0,
+      "callback_frames_observed": 2730,
+      "observation_seconds": 20,
+      "callbacks_total": 23,
+      "error_callbacks_total": 4900,
+      "raw_errors_first_20": [
+        {
+          "elapsed_seconds": 2.005572,
+          "count": 1,
+          "kind": "Xrun",
+          "raw": "A buffer underrun or overrun occurred."
+        },
+        {
+          "elapsed_seconds": 2.006083,
+          "count": 2,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006093,
+          "count": 3,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.0061,
+          "count": 4,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006107,
+          "count": 5,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006113,
+          "count": 6,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006119,
+          "count": 7,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006125,
+          "count": 8,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006133,
+          "count": 9,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.00614,
+          "count": 10,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006145,
+          "count": 11,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006152,
+          "count": 12,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006157,
+          "count": 13,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006163,
+          "count": 14,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.00617,
+          "count": 15,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006176,
+          "count": 16,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006182,
+          "count": 17,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006189,
+          "count": 18,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.006194,
+          "count": 19,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        },
+        {
+          "elapsed_seconds": 2.0062,
+          "count": 20,
+          "kind": "BackendError",
+          "raw": "ALSA function 'snd_pcm_avail_delay' failed with error 'I/O error (5)'"
+        }
+      ],
+      "start_utc": "2026-11-01T00:06:52Z",
+      "finish_utc": "2026-11-01T00:07:12Z",
+      "cleanup_original_server_identity_alive": false,
+      "source_sha256": "7d733b6c00615b9494b7843e7767e671e8f23c48be20c32570eed174a0feac73",
+      "probe_binary_sha256": "24b854684a71d75a4470dc744c226414c2107d79eafb1e0868c06fccb5229e34"
+    }
+  ],
+  "findings": [
+    {
+      "id": "A1",
+      "status": "observed",
+      "finding": "Default output with requested 1024 frames and no artificial stalls completed 20 seconds with 1280 callbacks and zero errors."
+    },
+    {
+      "id": "A2",
+      "status": "reproduced",
+      "finding": "A 60 ms delay every 64 callbacks causes an Xrun followed immediately by the identical snd_pcm_avail_delay I/O error (5) without RILL code. CPAL later resumes its callbacks, but can emit thousands of BackendError callbacks during recovery. The first recorded error and first 20 raw errors are preserved."
+    },
+    {
+      "id": "A3",
+      "status": "reproduced",
+      "finding": "Selecting the named Rill lab paced output also produces the same failure under the same artificial delays. Its CPAL driver identifier and the default device both resolve to ALSA PCM default."
+    },
+    {
+      "id": "A4",
+      "status": "observed",
+      "finding": "The requested 4096-frame run failed at startup before reaching its first scheduled delay. Only 23 callbacks were observed in 20 seconds. Increasing requestedbuffer alone was not demonstrated to solve the failure under this fixed Pulse configuration."
+    },
+    {
+      "id": "A5",
+      "status": "observed",
+      "finding": "ALSA negotiated 682-frame callbacks for a 1024-frame request and 2730-frame callbacks for a 4096-frame request. CPAL documents nearest supported periods; study reports should continue to distinguish requested from observed buffer size."
+    }
+  ],
+  "limits": [
+    "Only one 20-second run per listed condition; no estimate of failure rate, reliability, or physical hardware behavior.",
+    "The unstalled1024 probe is v1; v2 adds one first callback size log plus optional controlled stalls. Both sources and hashes are preserved.",
+    "The actual cause, duration, and thread scheduling of each participant failure were not captured. The independent reproduction establishes a backend recovery path, not that every participant failure was caused by the same event.",
+    "The observed temporary recovery is not permission to ignore arbitrary EIO/BackendError events. Other device disconnects and recording clock invalidation remain possible.",
+    "PULSE_LATENCY_MSEC=60 is the configured environment request; actual end-to-end latency was not measured.",
+    "Named/default differences in one participant recovery do not establish that choosing the named output fixes the fault; changing the output also recreates the stream."
+  ],
+  "recommendation": "Preserve fatal handling for unknown/BackendError, explicit Retry/Audio setup, and raw diagnostics. Fix the separately evidenced mixer geometry jumps. Keep round 8 lab settings unchanged for comparison. Do not claim device selection or a larger buffer is a verified fix. Retain this bounded backend limitation and consider a separate ALSA/Pulse/CPAL recovery investigation with platform-specific stream state before changing error classification.",
+  "production_files_changed": false,
+  "participant_files_changed": false,
+  "all_original_probe_server_identities_stopped": true
+}

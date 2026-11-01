@@ -1,0 +1,163 @@
+{
+  "audited_at_utc": "2026-11-01T01:00:47Z",
+  "matrix": {
+    "path": "/workspace/scratch/rill-usability-round8/feedback-resolution.json",
+    "sha256": "125bab2b772cd932ae248bd19b5d26dccb03bde2b6dba88f7d7a5db96f588f0c"
+  },
+  "drafts": [
+    {
+      "path": "/workspace/scratch/rill-usability-round8/feedback-resolution-draft.json",
+      "sha256": "e15b0704fa5f607ad7f7be1d7e95b324ec08730a0b251cb52881e36ff0a94017"
+    },
+    {
+      "path": "/workspace/scratch/rill-usability-round8/feedback-resolution-complete-draft.json",
+      "sha256": "50f2c29a27938d5e611fb068c9f23c92e3d1b68aaad3f427eed60dfd2619c9e6"
+    }
+  ],
+  "original_reports": [
+    {
+      "participant": 1,
+      "report": "/workspace/scratch/rill-usability-round8/session-1/report.json",
+      "sha256": "57016afb5f5ff5f19a51e89a3acde032fd6c4e496ef330ffe63dbaa40f52332a",
+      "findings": 8,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 2,
+      "report": "/workspace/scratch/rill-usability-round8/session-2/report.json",
+      "sha256": "e1fe3bb0f429d64121ff24f92cdba667ee4f15a978b837a587c2068faa865c6c",
+      "findings": 11,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 3,
+      "report": "/workspace/scratch/rill-usability-round8/session-3/report.json",
+      "sha256": "7fbe07c5d50675d31313efc00f1a2e72fe8a44df7769a11e59662200c65e50f7",
+      "findings": 9,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 4,
+      "report": "/workspace/scratch/rill-usability-round8/session-4/report.json",
+      "sha256": "83d3e43d9d494043581c549caf06d968f231e5c1b2c840d5cae7fb9db23200b2",
+      "findings": 10,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    },
+    {
+      "participant": 5,
+      "report": "/workspace/scratch/rill-usability-round8/session-5/report.json",
+      "sha256": "d9a4e1144dd9b5c2a2657cd1a7ffcaebe69f8f27dc77940e3aea212d7086a253",
+      "findings": 9,
+      "rating_reasons": 5,
+      "all_original_fields_exact": true
+    }
+  ],
+  "coverage": {
+    "original_findings": 47,
+    "matrix_findings": 47,
+    "original_rating_reasons": 25,
+    "matrix_rating_reasons": 25,
+    "unique_matrix_ids": 72,
+    "finding_kinds": {
+      "positive": 29,
+      "friction": 9,
+      "failure": 5,
+      "recovery": 4
+    },
+    "missing": [],
+    "extra_original_rows": [],
+    "all_original_ids_kinds_observations_evidence_scores_reasons_exact": true,
+    "all_original_outcomes_limitations_mixer_outcomes_exact": true,
+    "all_rows_equal_complete_draft": true,
+    "evidence_references_checked": 182,
+    "all_evidence_paths_resolve": true,
+    "timestamp_locators_checked": 1,
+    "all_timestamp_locators_found": true,
+    "all_rows_have_reasoned_response_links": true,
+    "all_rows_equal_prior_pending_snapshot": true
+  },
+  "verified_outcomes": {
+    "source": {
+      "path": "/workspace/scratch/rill-usability-round8/verification-summary.json",
+      "sha256": "6dbe1a3e692abc7e072316eb528611d66305f522b551ec9bff9082f7f5a64a66"
+    },
+    "aggregate": {
+      "path": "/workspace/scratch/rill-usability-round8/aggregate.json",
+      "sha256": "6255601bbf3c8717e14590ea01544eb9871c0b7c54d091c6ab193536c2d28d40"
+    },
+    "completed_exact_30_second_audio_vst_midi_exports": 5,
+    "saved_project_wav_and_midi": 5,
+    "full_saved_graph_render_maximum_sample_difference": 0.0,
+    "audio_and_vst_contributions_proved": 5,
+    "prior_media_files_checked_unchanged": 105,
+    "round7_evidence_files_checked_unchanged": 233,
+    "round8_evidence_files_checked_unchanged": 222,
+    "method": "Full saved graph reproduction plus audio-source and MIDI-source mute ablations; all routes, buses, inserts and sources retained in analysis copies; originals untouched.",
+    "toast_flags_policy": "Participant-reported toast observations are preserved. Independently verified file output and Completed exports evidence establish completion even when a transient toast was not seen.",
+    "evidence_is_frozen_build_specific": true,
+    "frozen_build": {
+      "path": "/workspace/scratch/rill-usability-round8/freeze-manifest.json",
+      "sha256": "d2d1b22056186a3e713a5a4c5b5c05f91e2314122dfa2b5650df722d4079fd3b"
+    }
+  },
+  "rating_means_recomputed_from_originals": {
+    "easy_to_use": 3.8,
+    "how_cool_it_looks": 4,
+    "how_fast_it_is": 3.2,
+    "how_confusing_it_is": 2.4,
+    "feature_completeness": 4
+  },
+  "confirmed_new_defect": {
+    "matrix_id": "P4-F4",
+    "status": "implemented and validated",
+    "scores_preserved": true,
+    "validation": {
+      "path": "/workspace/scratch/rill-study-iteration/finalpress-origin-validation.json",
+      "sha256": "6dfc4e1e340d3dc129de65b7afbc899ec5094456663aa48ed700677a75093235"
+    },
+    "round8_scores_preserved": true
+  },
+  "evidence_qualifications": [
+    "No reported mixer-geometry complaint in round8 is not proof of perfect stability.",
+    "P4 original false WAV-toast flag is retained; Completed exports and independent files establish completion.",
+    "P3 original true WAV-toast flag is retained together with its limitation that the transient banner was not captured; no normalization or five-toast visibility claim.",
+    "Press-origin cause is supported by source review; native command logs do not capture exact per-frame event batches.",
+    "No post-correction user score is attributed to round8.",
+    "The 56.25-to-56-beat endpoint correction is explicitly separate from the press-origin onset fix."
+  ],
+  "root_judgment_needed": [],
+  "original_reports_and_drafts_modified": false,
+  "product_source_modified": false,
+  "new_cargo_apps_or_audio_probes_run": false,
+  "prior_pending_snapshot": {
+    "matrix": {
+      "path": "/workspace/scratch/rill-usability-round8/feedback-resolution-pending-validation.json",
+      "sha256": "b29ba51dd4bf7155e55edfa7b2898282ce777ea904203fbeea7f3e2651616e3a"
+    },
+    "audit": {
+      "path": "/workspace/scratch/rill-usability-round8/feedback-resolution-audit-pending-validation.json",
+      "sha256": "88d5a327f109c04dcef236f97448613f855941c5fe378044cf27a34934833712"
+    },
+    "preservation": "Byte-for-byte copies of the prior pending-validation artifacts."
+  },
+  "final_validation": {
+    "passed": 1447,
+    "failed": 0,
+    "ignored": 25,
+    "targets_including_doc_tests": 261,
+    "summary": {
+      "path": "/workspace/scratch/rill-iteration-validation/workspace-final-summary.json",
+      "sha256": "e3480b7eb1c472e9d2b90a6cdf9c4f75f9952e0476842b09ec81597b662267dd"
+    },
+    "log_sha256": "7ec2f866229dad32d1903b051635517c9084e4ff57088439a18b1c5409408f8c",
+    "build": "passed",
+    "strict_clippy": "passed",
+    "format": "passed",
+    "diff_whitespace": "passed"
+  },
+  "original_press_origin_review_unchanged": true
+}

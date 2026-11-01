@@ -1,0 +1,37 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 7.56s
+     Running tests/mixer_flow_e2e.rs (target/debug/deps/mixer_flow_e2e-bebb2209dd15a6d0)
+
+running 2 tests
+test mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback ... ok
+test mixer_orders_signal_stages_and_separates_primary_and_send_arrows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.56s
+
+     Running tests/mixer_height_e2e.rs (target/debug/deps/mixer_height_e2e-d750f3337414fd2e)
+
+running 1 test
+test mixer_fills_height_and_resizes_faders_without_losing_channel_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.12s
+
+     Running tests/mixer_stability_e2e.rs (target/debug/deps/mixer_stability_e2e-06152a3dcaf5c68c)
+
+running 4 tests
+test mixer_controls_stay_under_the_pointer_during_output_failure_and_recovery ... ok
+test mixer_export_completion_preserves_control_geometry_and_mouse_target ... ok
+test mixer_notice_changes_keep_an_existing_short_window_scroll_position ... ok
+test mixer_send_creation_keeps_existing_controls_fixed_and_routes_reachable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.41s
+
+     Running tests/parameter_mouse_entry_e2e.rs (target/debug/deps/parameter_mouse_entry_e2e-24939a943b293daa)
+
+running 4 tests
+test automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve ... ok
+test compact_header_and_channel_properties_keep_the_same_mouse_entry ... ok
+test mixer_gain_pan_and_send_accept_precise_mouse_only_drafts ... ok
+test plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_units ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.94s
+

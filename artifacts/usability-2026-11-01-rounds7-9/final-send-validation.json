@@ -1,0 +1,77 @@
+{
+  "at_utc": "2026-11-01T01:27:44Z",
+  "change": "After round9, an empty mixer strip Add send opens the destination chooser directly. Existing Send summaries continue opening Routing for detailed edits.",
+  "status": "validated",
+  "affected_targets": {
+    "path": "/workspace/scratch/rill-iteration-validation/send-choice-validation-summary.json",
+    "sha256": "cb66198e88b3785bc3c7c2cfc0facee600b70a366e245fe1b3c27c4b921bbc29"
+  },
+  "affected_targets_passed": 160,
+  "affected_targets_failed": 0,
+  "affected_target_count": 10,
+  "new_send_choice_e2es_passed": 4,
+  "baseline": {
+    "binary": "/workspace/scratch/rill-usability-round9/baseline/rill",
+    "sha256": "bb8de010c6461160ac9840c5fc5931e20b3523483e8668a0905d12b7d2732972",
+    "failed_new_tests": 4,
+    "log": "round9-send-choice-baseline.log"
+  },
+  "test_correction": "Two initial cancellation tests used blind screen coordinates and navigated to Arrangement. Replaced those coordinates with a point verified to lie in empty mixer body outside menu foreground areas; all state assertions retained. No claim that the original point hit a specific control. Production code was unchanged between these attempts.",
+  "final_checks": {
+    "workspace_build": {
+      "path": "/workspace/scratch/rill-iteration-validation/workspace-build-send-final.log",
+      "sha256": "f694a9e074374d315f58b8a63ce849858b1b8708cf56b3d194218605bd2a9d6e"
+    },
+    "strict_clippy": {
+      "path": "/workspace/scratch/rill-iteration-validation/clippy-send-final.log",
+      "sha256": "69c89109ccff49aaf5a22a3001b258db58435adff91eda7b05c12dde43e7e94e"
+    },
+    "format": {
+      "path": "/workspace/scratch/rill-iteration-validation/format-send-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "diff_check": {
+      "path": "/workspace/scratch/rill-iteration-validation/diff-send-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "result": "Coordinator confirmed all four serial checks passed under set -e, exit 0. Empty format/diff logs are preserved."
+  },
+  "full_workspace_scope": {
+    "source": {
+      "path": "/workspace/scratch/rill-iteration-validation/workspace-final-summary.json",
+      "sha256": "e3480b7eb1c472e9d2b90a6cdf9c4f75f9952e0476842b09ec81597b662267dd"
+    },
+    "passed": 1447,
+    "failed": 0,
+    "ignored": 25,
+    "targets": 261,
+    "timing": "Full workspace result is after the note press-origin correction and before the final send chooser polish. The later 160 tests across 10 affected targets validate this final polish; no post-polish full-workspace rerun is claimed."
+  },
+  "independent_source_review": {
+    "status": "no blockers within reviewed scope",
+    "observations": [
+      "Toolbar and empty-strip entry points reuse destination filtering and creation. The strip popup retains its captured source ID without retargeting selected_track.",
+      "Existing summaries still open Routing. Existing graph-cycle eligibility and duplicate-send filtering remain; explicit new bus and send uses the existing edit/rollback path.",
+      "Tests preserve project/history/modified/selection/view invariants on open/cancel, correct source ownership, eligible destination guards, one-step Undo/Redo, and existing-summary Routing behavior.",
+      "Cancellation test coordinates now derive from verified empty body bounds outside foreground menu areas. Assertions were retained; no claim identifies which control the earlier blind points hit."
+    ],
+    "source": {
+      "path": "/workspace/rill-daw/crates/daw-app/src/editor.rs",
+      "sha256": "fc09c33c7fff4cc4699de46fa192635c62bf0a7c234d6da3646e074133c33b7f"
+    },
+    "new_tests": {
+      "path": "/workspace/rill-daw/crates/daw-app/tests/mixer_send_choice_e2e.rs",
+      "sha256": "a8ddcfb8561402ac42fe77335fb39dff87a78ca83424bf8bc4f6e3ee771c1012"
+    },
+    "adapted_readability_test": {
+      "path": "/workspace/rill-daw/crates/daw-app/tests/mixer_readability_e2e.rs",
+      "sha256": "7cd2fedc55dc38142cf48373b6195f2280ea20f9e4e7317c1d74a3d2dac61745"
+    }
+  },
+  "native_review": {
+    "path": "/workspace/scratch/rill-send-preview/observations.json",
+    "sha256": "228dc1cedc9a6e7839396c48a650a7d4f0abe28ceff43cfcf6d13f167b48ee35"
+  },
+  "native_scope": "Dark and Light at 1440x1000: direct destination and no-eligible-bus menus, unselected source ownership, readable bounds, outside-body cancellation. No playback, destination activation or save. Original and copy hashes unchanged; all owned app/Pulse/Xvfb processes exited.",
+  "ratings_scope": "All round9 ratings precede this polish. No further full beginner study, new participant score or measured score improvement is attributed to this final change."
+}

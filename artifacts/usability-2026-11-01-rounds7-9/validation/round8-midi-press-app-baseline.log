@@ -1,0 +1,38 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 0.44s
+     Running tests/midi_press_origin_e2e.rs (target/debug/deps/midi_press_origin_e2e-5f0d03de1f3c2c1e)
+
+running 3 tests
+test batched_movement_uses_the_note_under_press_and_keeps_its_length ... FAILED
+test entering_the_canvas_after_an_outside_press_does_not_draw ... FAILED
+test repeated_batched_pencil_drags_keep_the_pressed_onset_and_pitch ... FAILED
+
+failures:
+
+---- batched_movement_uses_the_note_under_press_and_keeps_its_length stdout ----
+
+thread 'batched_movement_uses_the_note_under_press_and_keeps_its_length' (295995) panicked at crates/daw-app/tests/midi_press_origin_e2e.rs:57:5:
+expected 8, got 2.0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- entering_the_canvas_after_an_outside_press_does_not_draw stdout ----
+
+thread 'entering_the_canvas_after_an_outside_press_does_not_draw' (296003) panicked at crates/daw-app/tests/midi_press_origin_e2e.rs:122:5:
+assertion `left == right` failed
+  left: Object {"beats_per_bar": Number(4), "loop_enabled": Bool(false), "loop_end": Number(16.0), "loop_start": Number(0.0), "metronome_enabled": Bool(false), "metronome_gain": Number(0.25), "name": String("Untitled session"), "precount_bars": Number(0), "tempo": Number(120.0), "tracks": Array [Object {"audio_input": Null, "automation": Null, "clips": Array [Object {"content": Object {"Midi": Object {"notes": Array [Object {"id": Number(7), "length": Number(0.25), "pitch": Number(64), "start": Number(4.0), "velocity": Number(100)}]}}, "id": Number(5), "length": Number(16.0), "name": String("Press phrase"), "offset": Number(0.0), "source_rate": Number(1.0), "start": Number(0.0)}], "collapsed": Bool(false), "color": Array [Number(96), Number(177), Number(166)], "gain": Number(0.75), "id": Number(4), "inserts": Array [], "instrument": String("None"), "instrument_parameters": Array [], "instrument_state": Array [], "kind": String("Midi"), "latency_samples": Number(0), "midi_input": String("All"), "mute": Bool(false), "name": String("Press origin"), "output_bus": Null, "pan": Number(0.0), "parent_folder": Null, "sends": Array [], "solo": Bool(false)}]}
+ right: Object {"beats_per_bar": Number(4), "loop_enabled": Bool(false), "loop_end": Number(16.0), "loop_start": Number(0.0), "metronome_enabled": Bool(false), "metronome_gain": Number(0.25), "name": String("Untitled session"), "precount_bars": Number(0), "tempo": Number(120.0), "tracks": Array [Object {"audio_input": Null, "automation": Null, "clips": Array [Object {"content": Object {"Midi": Object {"notes": Array []}}, "id": Number(5), "length": Number(16.0), "name": String("Press phrase"), "offset": Number(0.0), "source_rate": Number(1.0), "start": Number(0.0)}], "collapsed": Bool(false), "color": Array [Number(96), Number(177), Number(166)], "gain": Number(0.75), "id": Number(4), "inserts": Array [], "instrument": String("None"), "instrument_parameters": Array [], "instrument_state": Array [], "kind": String("Midi"), "latency_samples": Number(0), "midi_input": String("All"), "mute": Bool(false), "name": String("Press origin"), "output_bus": Null, "pan": Number(0.0), "parent_folder": Null, "sends": Array [], "solo": Bool(false)}]}
+
+---- repeated_batched_pencil_drags_keep_the_pressed_onset_and_pitch stdout ----
+
+thread 'repeated_batched_pencil_drags_keep_the_pressed_onset_and_pitch' (296011) panicked at crates/daw-app/tests/midi_press_origin_e2e.rs:87:14:
+a drawn note retains its pressed pitch
+
+
+failures:
+    batched_movement_uses_the_note_under_press_and_keeps_its_length
+    entering_the_canvas_after_an_outside_press_does_not_draw
+    repeated_batched_pencil_drags_keep_the_pressed_onset_and_pitch
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+error: test failed, to rerun pass `-p daw-app --test midi_press_origin_e2e`

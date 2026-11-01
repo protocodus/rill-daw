@@ -1,0 +1,71 @@
+{
+  "prepared_at_utc": "2026-11-01T01:22:47Z",
+  "purpose": "Independent final send-chooser native review, not a participant study or score",
+  "source_project": "/workspace/scratch/rill-usability-round7/session-1/rain.rill",
+  "source_project_sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+  "helpers": {
+    "mouse.py": {
+      "source": "/workspace/scratch/rill-usability-round7/mouse.py",
+      "sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb"
+    },
+    "cleanup.py": {
+      "source": "/workspace/scratch/rill-usability-round7/cleanup.py",
+      "sha256": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12"
+    },
+    "audio.py": {
+      "source": "/workspace/scratch/rill-usability-round7/audio.py",
+      "sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+    }
+  },
+  "sessions": [
+    {
+      "session": 1,
+      "appearance": "Dark",
+      "display": ":893",
+      "project": "/workspace/scratch/rill-send-preview/session-1/rain-preview.rill",
+      "project_sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "settings_sha256": "f2353fccb2159aa9cd461180221bb5b94073f31064c404814dd76ad94b30f3a9",
+      "processes": {
+        "display": ":893",
+        "process_start_ticks": {
+          "pulse": "3267112",
+          "xvfb": "3267117",
+          "app": "3267123"
+        },
+        "pulse": 313439,
+        "xvfb": 313442,
+        "app": 313445
+      }
+    },
+    {
+      "session": 2,
+      "appearance": "Light",
+      "display": ":894",
+      "project": "/workspace/scratch/rill-send-preview/session-2/rain-preview.rill",
+      "project_sha256": "090b11942f5594157a9e4a25dc19f570bb9b35c2b321fcd3c17fb5efa4ab8b5b",
+      "settings_sha256": "bcc2951e82f0c654b90a6f3731b336dbd9c138a5f8bcd1054c64d5b4b9a1aa8f",
+      "processes": {
+        "display": ":894",
+        "process_start_ticks": {
+          "pulse": "3267279",
+          "xvfb": "3267285",
+          "app": "3267290"
+        },
+        "pulse": 313470,
+        "xvfb": 313473,
+        "app": 313476
+      }
+    }
+  ],
+  "status": "two isolated native mixer sessions ready",
+  "launched_at_utc": "2026-11-01T01:23:29Z",
+  "binary": {
+    "path": "/workspace/rill-daw/target/debug/rill",
+    "sha256": "e579236fbe84414aae39b0a6a0a9fb3f9649d0f861757b5d1e6fd7b38215a27f"
+  },
+  "plugin_host": {
+    "path": "/workspace/rill-daw/target/debug/daw-plugin-host",
+    "sha256": "6a16fbeaa3857f173f4f0318d7009053464cbc6976bdefc45638fdb30c6dcdf2"
+  },
+  "playback_requested": false
+}

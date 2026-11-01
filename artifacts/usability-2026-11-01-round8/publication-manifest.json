@@ -1,0 +1,764 @@
+{
+  "created_utc": "2026-11-01T01:01:22Z",
+  "scope": "Verbatim reports, actions, hashes, verification and selected screenshots. Original absolute paths refer to the complete local archive. Executables, VST binaries, music projects/WAV/MIDI, analysis media and other screenshots remain local. The small tar archive contains only untracked source files needed to reconstruct the frozen implementation, not generated media.",
+  "file_count": 126,
+  "total_bytes": 4757565,
+  "files": [
+    {
+      "source": "/workspace/scratch/rill-usability-round8/INSTRUCTIONS.txt",
+      "path": "artifacts/usability-2026-11-01-round8/INSTRUCTIONS.txt",
+      "bytes": 3366,
+      "sha256": "841de68619119315d4601f9175f254d91d8eb95af92d9bd63b818b14bc56d7b7"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/REPORT_SCHEMA.json",
+      "path": "artifacts/usability-2026-11-01-round8/REPORT_SCHEMA.json",
+      "bytes": 3229,
+      "sha256": "cb22d6ba6fb6809543aa6aa9bcc09b867c59854c1f1de0658eedcc2756a15935"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/aggregate-versions/aggregate-001.json",
+      "path": "artifacts/usability-2026-11-01-round8/aggregate-versions/aggregate-001.json",
+      "bytes": 79740,
+      "sha256": "68000db1f16bb5b42cdffdf8f3bbeeeb1cb03dbc581d73578b4b2daeaa1773db"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/aggregate-versions/aggregate-002.json",
+      "path": "artifacts/usability-2026-11-01-round8/aggregate-versions/aggregate-002.json",
+      "bytes": 79735,
+      "sha256": "6255601bbf3c8717e14590ea01544eb9871c0b7c54d091c6ab193536c2d28d40"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/aggregate.json",
+      "path": "artifacts/usability-2026-11-01-round8/aggregate.json",
+      "bytes": 79735,
+      "sha256": "6255601bbf3c8717e14590ea01544eb9871c0b7c54d091c6ab193536c2d28d40"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/aggregate.py",
+      "path": "artifacts/usability-2026-11-01-round8/aggregate.py",
+      "bytes": 8876,
+      "sha256": "257514a9089ebd4291f7d8cd5e21f7778014e4e8fda8131a9a36dfaf80655182"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/audio.py",
+      "path": "artifacts/usability-2026-11-01-round8/audio.py",
+      "bytes": 2747,
+      "sha256": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/cleanup-1793493844943099353.json",
+      "path": "artifacts/usability-2026-11-01-round8/cleanup-1793493844943099353.json",
+      "bytes": 2122,
+      "sha256": "0a93bfaab074a4b587ddea774fd0b633b08a9f4ae3f2b504a7e3e6114b97c53c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/cleanup.py",
+      "path": "artifacts/usability-2026-11-01-round8/cleanup.py",
+      "bytes": 2037,
+      "sha256": "f2f15041a8016e88dee71cd80712256145378c17100adfcf0c1e369250d07e12"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/completed-evidence.json",
+      "path": "artifacts/usability-2026-11-01-round8/completed-evidence.json",
+      "bytes": 51370,
+      "sha256": "a7eb7e9ccd71c11f847f83938e2cee45ed5db2c6e67beca0a0b09fea0c058659"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/component_render.py",
+      "path": "artifacts/usability-2026-11-01-round8/component_render.py",
+      "bytes": 3795,
+      "sha256": "4a516ebb58372a88c3cd61cab1cb4a21e526d6207ffffd3633f4900eae9e3b45"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/controlled-comparison-check.json",
+      "path": "artifacts/usability-2026-11-01-round8/controlled-comparison-check.json",
+      "bytes": 761,
+      "sha256": "0d4c3518ddb92485f1d23d6bde0e213ffea7d5b267e20616cefeb6217a7dbc91"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493152752574227-freeze.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493152752574227-freeze.py.command.json",
+      "bytes": 390,
+      "sha256": "78438305deb977f65c5e19a99a172d1bc841bfea8ab1c20af5708325ea941f3f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493152752574227-freeze.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493152752574227-freeze.py.log",
+      "bytes": 4524,
+      "sha256": "d2d1b22056186a3e713a5a4c5b5c05f91e2314122dfa2b5650df722d4079fd3b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493153390540682-launch.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493153390540682-launch.py.command.json",
+      "bytes": 388,
+      "sha256": "9fa2bd61378acae4a8a8affe6c803a953ed4b90c859333887e2924a04126c2e4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493153390540682-launch.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493153390540682-launch.py.log",
+      "bytes": 820,
+      "sha256": "c4344ba5accd7fe746e0f9d025b307697717ebd25afb297ce16191b10f6d77c5"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493844761156674-cleanup.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493844761156674-cleanup.py.command.json",
+      "bytes": 360,
+      "sha256": "126e9b43309d9fcd0ca8c97c81b057e309168bb8a68db1d0afb4e1d15f983779"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493844761156674-cleanup.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493844761156674-cleanup.py.log",
+      "bytes": 2122,
+      "sha256": "0a93bfaab074a4b587ddea774fd0b633b08a9f4ae3f2b504a7e3e6114b97c53c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493844983373298-aggregate.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493844983373298-aggregate.py.command.json",
+      "bytes": 364,
+      "sha256": "2fe7ddf746ea7e172097bc9892b706bcf40249f0100965daef972a13574e5cb4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493844983373298-aggregate.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493844983373298-aggregate.py.log",
+      "bytes": 2441,
+      "sha256": "3ad25602b731b430d653988092735bfb231ff159b15cbad0bb34f5f17f5e74a7"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493860556472190-verify_full_graph.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493860556472190-verify_full_graph.py.command.json",
+      "bytes": 380,
+      "sha256": "5300da14cfcb0707f6eff283a55151df3b6f6978ba990fac8b541bac98abb06b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493860556472190-verify_full_graph.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493860556472190-verify_full_graph.py.log",
+      "bytes": 285,
+      "sha256": "9508426bcddec4bcd375135f08c449ca86294dd783d3f21b3474ac59376a5f2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493911914168051-aggregate.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493911914168051-aggregate.py.command.json",
+      "bytes": 364,
+      "sha256": "35cefbd3d88b2ecdf0048612414dc5448c210a30d47ce105a1b24ff211d819fb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493911914168051-aggregate.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493911914168051-aggregate.py.log",
+      "bytes": 2441,
+      "sha256": "dea47e0641d38b54120092d112cdeab86fd7456e7898fcd5144baefb27dcfb34"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493929235090491-summarize_round_verification.py.command.json",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493929235090491-summarize_round_verification.py.command.json",
+      "bytes": 410,
+      "sha256": "fce9113fa1c242cb6366123c5c2fb8246c4e5b349c3039adee19f8d01cd40168"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/coordinator-logs/1793493929235090491-summarize_round_verification.py.log",
+      "path": "artifacts/usability-2026-11-01-round8/coordinator-logs/1793493929235090491-summarize_round_verification.py.log",
+      "bytes": 1317,
+      "sha256": "5d5c83adec89e64f5011c18afc72060794610ec3dc60c1088530c9539cf20e97"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/evidence_utils.py",
+      "path": "artifacts/usability-2026-11-01-round8/evidence_utils.py",
+      "bytes": 4588,
+      "sha256": "932eb7da6c5d2e1882ce98995be774fbda31457ca460de60be5513905baa80f7"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/feedback-resolution-audit-pending-validation.json",
+      "path": "artifacts/usability-2026-11-01-round8/feedback-resolution-audit-pending-validation.json",
+      "bytes": 5562,
+      "sha256": "88d5a327f109c04dcef236f97448613f855941c5fe378044cf27a34934833712"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/feedback-resolution-audit.json",
+      "path": "artifacts/usability-2026-11-01-round8/feedback-resolution-audit.json",
+      "bytes": 6825,
+      "sha256": "0c07c19a1079806cdf99159681f0b310e4e25d63def88cb11f02ecd1598ddad9"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/feedback-resolution-complete-draft.json",
+      "path": "artifacts/usability-2026-11-01-round8/feedback-resolution-complete-draft.json",
+      "bytes": 105800,
+      "sha256": "50f2c29a27938d5e611fb068c9f23c92e3d1b68aaad3f427eed60dfd2619c9e6"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/feedback-resolution-draft.json",
+      "path": "artifacts/usability-2026-11-01-round8/feedback-resolution-draft.json",
+      "bytes": 42997,
+      "sha256": "e15b0704fa5f607ad7f7be1d7e95b324ec08730a0b251cb52881e36ff0a94017"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/feedback-resolution-pending-validation.json",
+      "path": "artifacts/usability-2026-11-01-round8/feedback-resolution-pending-validation.json",
+      "bytes": 111426,
+      "sha256": "b29ba51dd4bf7155e55edfa7b2898282ce777ea904203fbeea7f3e2651616e3a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/feedback-resolution.json",
+      "path": "artifacts/usability-2026-11-01-round8/feedback-resolution.json",
+      "bytes": 113274,
+      "sha256": "125bab2b772cd932ae248bd19b5d26dccb03bde2b6dba88f7d7a5db96f588f0c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/freeze-manifest.json",
+      "path": "artifacts/usability-2026-11-01-round8/freeze-manifest.json",
+      "bytes": 4524,
+      "sha256": "d2d1b22056186a3e713a5a4c5b5c05f91e2314122dfa2b5650df722d4079fd3b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/freeze.py",
+      "path": "artifacts/usability-2026-11-01-round8/freeze.py",
+      "bytes": 5151,
+      "sha256": "d15e3c004335a45df7fcaac5ff65993c065da7c64cbfd02e9d44dbea5ae2ae19"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/lab_sine_plugin.rs",
+      "path": "artifacts/usability-2026-11-01-round8/lab_sine_plugin.rs",
+      "bytes": 12951,
+      "sha256": "5b15f83af53056477068e50480823ce77e4b19235e366dc6e7765a598bbc563c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/launch.py",
+      "path": "artifacts/usability-2026-11-01-round8/launch.py",
+      "bytes": 5285,
+      "sha256": "91da5dd393e20251bf1bc8d87e1bb03928e8d35bf48a5b7b8888eb941798bdd4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/mouse.py",
+      "path": "artifacts/usability-2026-11-01-round8/mouse.py",
+      "bytes": 3710,
+      "sha256": "41eb51a9549a8b9478d749e442b47e3592a4099d61d8baf50f0aa0bb091266fb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/output-preservation.json",
+      "path": "artifacts/usability-2026-11-01-round8/output-preservation.json",
+      "bytes": 68404,
+      "sha256": "d4b45ce76cb989cdd3da4443ca9d22018beb14f5319386bab5e314a4263aab8c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/participant-1-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1-prompt.txt",
+      "bytes": 1889,
+      "sha256": "82d48801654af6c2ceaccb36a604dd4e12b14b1278f3866a0aa1c0ebe916675c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/participant-2-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2-prompt.txt",
+      "bytes": 1892,
+      "sha256": "b9f2ecc82788fdc5b9aa775992ebd7544b7f5ffe445d1974dc11916467fa89ff"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/participant-3-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3-prompt.txt",
+      "bytes": 1889,
+      "sha256": "6700ad29880d91bf5c6318806218d37704d3ec67e439438a22bc9873be5d13fa"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/participant-4-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4-prompt.txt",
+      "bytes": 1894,
+      "sha256": "fcd1435590e425953b27905aef84dbe93b3d5f6045fa465ecc6484506bf3cb93"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/participant-5-prompt.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5-prompt.txt",
+      "bytes": 1906,
+      "sha256": "3aeace5ef2d58d04601248ade60981f6c133ab9a95893fea172da842901418e4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/participant-prompts.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-prompts.json",
+      "bytes": 13313,
+      "sha256": "d350a9e8ce7d155c3a6851b0d4fc63e46edc618b900441166b46be9e3fb37e96"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/prepared-manifest.json",
+      "path": "artifacts/usability-2026-11-01-round8/prepared-manifest.json",
+      "bytes": 644,
+      "sha256": "9da9a2ccc5a7d549472e0c4d9a86d18686806c365d5f130b89b0e04b7aa6af17"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/protocol.json",
+      "path": "artifacts/usability-2026-11-01-round8/protocol.json",
+      "bytes": 4012,
+      "sha256": "43403f2177ee8906b564c2cd6a5f9470673b2fb3be8840c25304bb3955415910"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/12-mixer-playing.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/12-mixer-playing.png",
+      "bytes": 180430,
+      "sha256": "0bc97558346270886bebf467e7207fb0c0bc1c73f58bc20fa166e445b609b9e0"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/18-send-created.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/18-send-created.png",
+      "bytes": 200825,
+      "sha256": "66301875c5222268ec027bed8fc166e17f89f14109181783628bbbfb787dff20"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/final.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/final.png",
+      "bytes": 219236,
+      "sha256": "50814f4d15e021f4c54c3a50f8d73b6799336a1b47f7d7b3ea796f6c6844c8ec"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/mouse-actions.jsonl",
+      "bytes": 20323,
+      "sha256": "aa8b4860fc27e6df7aa05ab3f10556772fb6da0c34002c7d1abc5636f881b28e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/processes.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/processes.json",
+      "bytes": 178,
+      "sha256": "1d5abe89364b9bb5ddde5c781ed4c29793c98f6a9c0d1fec356d1c40dc21e8e6"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/reactions.txt",
+      "bytes": 3800,
+      "sha256": "55083e3529a78caecd98becb88bbde5b2219b5f38747a4f3f24ad0fa3f97337d"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/report.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/report.json",
+      "bytes": 7964,
+      "sha256": "57016afb5f5ff5f19a51e89a3acde032fd6c4e496ef330ffe63dbaa40f52332a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-1/rill.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-1/rill.log",
+      "bytes": 64,
+      "sha256": "8f267bc40aed6026eb5674e0d90830827aa4bbfbb166feac8895db557b17398a"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/13-mixer-balance.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/13-mixer-balance.png",
+      "bytes": 192952,
+      "sha256": "2e1bdbcd6cd43d9c174c2460993517f4bd37757fc83fdb2db654e60572f87f9e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/19-send-routing.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/19-send-routing.png",
+      "bytes": 208165,
+      "sha256": "4e2aeec323fa9c46627e3646852f83b81afa73cf03008fe1241a4313491f3300"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/final.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/final.png",
+      "bytes": 209683,
+      "sha256": "b3f1d0fe675f466d7af6236e5d762c27624ac486cb8c7b8b5cfc9321a1af115e"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/mouse-actions.jsonl",
+      "bytes": 16567,
+      "sha256": "dd797e36caabc5a56f29d59edf39e127829caca77dfbbf790b163b138f976f62"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/processes.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/processes.json",
+      "bytes": 178,
+      "sha256": "d7853e51a61fc6b495c68c75e7e746c4752b316fa3b134291f35fd5c5d2dc0eb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/reactions.txt",
+      "bytes": 3267,
+      "sha256": "907402813b282683147a3afc81f75d36d42ee088c62e082cbc8fafb08cab3c49"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/report.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/report.json",
+      "bytes": 9034,
+      "sha256": "e1fe3bb0f429d64121ff24f92cdba667ee4f15a978b837a587c2068faa865c6c"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-2/rill.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-2/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/17-send-controls.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/17-send-controls.png",
+      "bytes": 207521,
+      "sha256": "3877189565808d145f47a0acaec9e220e41a35fa552b16fa02affb8e76fad846"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/34-mixer-active.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/34-mixer-active.png",
+      "bytes": 209972,
+      "sha256": "3480d2e4c866064a1bcd3fa5f38c4456bbc6ebac6f2933c0d70de56b5922030d"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/final.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/final.png",
+      "bytes": 209603,
+      "sha256": "0c54cb54cf7780df8c762a598b5381e5137c98cab3eebaea4cdc1ca87cb18821"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/mouse-actions.jsonl",
+      "bytes": 22131,
+      "sha256": "a71ee580bfdf427b01e899f2c08cb9e730a96b0f35576f84899adb3152a3c1d7"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/processes.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/processes.json",
+      "bytes": 178,
+      "sha256": "b3142b0766dc85a66873b3dae71a7b743c1ddb941026f0fa4df2cc39c0f4b150"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/reactions.txt",
+      "bytes": 4403,
+      "sha256": "9c331c3416a70929ebba95a87eb36545e89f63d096621249714f9de1585c27e0"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/report.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/report.json",
+      "bytes": 7901,
+      "sha256": "7fbe07c5d50675d31313efc00f1a2e72fe8a44df7769a11e59662200c65e50f7"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-3/rill.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-3/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/10-notes.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/10-notes.png",
+      "bytes": 120245,
+      "sha256": "4f1954df7e92b77d529edeb6ef37cce99e0b520f7424d3d11f565a6608ed811b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/17-midi-duration-fix.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/17-midi-duration-fix.png",
+      "bytes": 238136,
+      "sha256": "d0b5b9e29fb780d6d394f9f63d73faa16384f75ee1c748a89ea45c847ed20ac4"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/18-mixer.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/18-mixer.png",
+      "bytes": 180150,
+      "sha256": "597ba3db45f7afbac4b1a4ff565799926457ef7b0af72abf07d9a41007a4d9dc"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/25-send-created.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/25-send-created.png",
+      "bytes": 207390,
+      "sha256": "eaab8c4def31332520361bb4cb057d1bf7fa1e7891d2b931dec0e239c356bc31"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/final.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/final.png",
+      "bytes": 196726,
+      "sha256": "d4c3c49786532d936f25d62954848515662f767d95525b59443032ab36b63081"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/mouse-actions.jsonl",
+      "bytes": 22348,
+      "sha256": "ddf2161ddd4e8c9cd1df9637e991e6da4e4a7a3b28ca726ffff62b244be96588"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/processes.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/processes.json",
+      "bytes": 178,
+      "sha256": "a192f90999911fb8c2e6036c80e407738099c1623bacfa97fb7f5072325c8675"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/reactions.txt",
+      "bytes": 3747,
+      "sha256": "08c3f1b1c21d5f47b2408809a76948f31c4b20530f179710e74aa15b3f0c68e5"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/report.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/report.json",
+      "bytes": 8934,
+      "sha256": "83d3e43d9d494043581c549caf06d968f231e5c1b2c840d5cae7fb9db23200b2"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-4/rill.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-4/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/12-playback-retry.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/12-playback-retry.png",
+      "bytes": 181586,
+      "sha256": "aba882c64e249a48fef669310b519eb197a453bccce12bb96d402f8a7ec021e1"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/18-send-configured.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/18-send-configured.png",
+      "bytes": 202091,
+      "sha256": "fa39a080f051cb1657908b42ece55d131b1bb5ced2933c630be69346b66cd0db"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/final.png",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/final.png",
+      "bytes": 216782,
+      "sha256": "8daa068b9cee8b85784b1b143c2bfa8c577e995bf957f78ba91355d7f8db8ca0"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/mouse-actions.jsonl",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/mouse-actions.jsonl",
+      "bytes": 17761,
+      "sha256": "6d49a709fa983c31eab162d843db0381b8844cefe9fb4dda91a42bcfc6195b64"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/mouse-state.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/mouse-state.json",
+      "bytes": 22,
+      "sha256": "8dbc8966d17c378644da8909dbe20a5c90738c422b8a249c267071873cdf6d78"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/processes.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/processes.json",
+      "bytes": 178,
+      "sha256": "88d3ecae825144fe53ddf74b7b263c6d0dfcba55f119b87719966a5ba1fc7273"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/pulse.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/pulse.log",
+      "bytes": 2683,
+      "sha256": "c804f33b151e5539e26b2565488a5f1cdd87e1f4c386506fe50d55fe17cc4c2f"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/reactions.txt",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/reactions.txt",
+      "bytes": 3088,
+      "sha256": "fa6525a0285056e5ec417ef258edaded0a0847957472c9f9edbdb77ad62e556b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/report.json",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/report.json",
+      "bytes": 8545,
+      "sha256": "d9a4e1144dd9b5c2a2657cd1a7ffcaebe69f8f27dc77940e3aea212d7086a253"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/session-5/rill.log",
+      "path": "artifacts/usability-2026-11-01-round8/participant-5/rill.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/setup-manifest.json",
+      "path": "artifacts/usability-2026-11-01-round8/setup-manifest.json",
+      "bytes": 6183,
+      "sha256": "30fbec9d305341ce1fa6456f6e02c6d67fe27793cc9ae39f6d9a17b742fc9597"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/source-diff.patch",
+      "path": "artifacts/usability-2026-11-01-round8/source-diff.patch",
+      "bytes": 31297,
+      "sha256": "785cccd78675a58b29cc54f4c51b53044301fe2fb2e4139fe773c108455ef0cc"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/source-hashes.json",
+      "path": "artifacts/usability-2026-11-01-round8/source-hashes.json",
+      "bytes": 118943,
+      "sha256": "9a4d14b45362ae73efa4ecf92953a549e12281d16399fb5e529e95d69607f93d"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/source-status.txt",
+      "path": "artifacts/usability-2026-11-01-round8/source-status.txt",
+      "bytes": 85556,
+      "sha256": "2511a1c83ad4b200d98837a841ed0f0d7be2f7c52f0664830b93a0ca51b2cc8b"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-1-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-full.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-1-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-1-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-1-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-2-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-full.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-2-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-2-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-2-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-3-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-full.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-3-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-3-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-3-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-4-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-full.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-4-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-4-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-4-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-audio-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-5-audio-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-full.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-5-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/participant-5-midi-muted.log",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/participant-5-midi-muted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/results.json",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/results.json",
+      "bytes": 21782,
+      "sha256": "3623fdd6a5043c4a33e7bccf6598c3eab09d96a6f28a82b39e167c1f5b3920e2"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/full-graph-ablation/routing-review.json",
+      "path": "artifacts/usability-2026-11-01-round8/technical/full-graph-ablation/routing-review.json",
+      "bytes": 5502,
+      "sha256": "3e5f4a069d5ddeab6788b146feb738002a15e82cdbf8b2852e1cb5de3cce30cf"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/technical/isolated-midi/mix-component-verification.json",
+      "path": "artifacts/usability-2026-11-01-round8/technical/isolated-midi/mix-component-verification.json",
+      "bytes": 21782,
+      "sha256": "3623fdd6a5043c4a33e7bccf6598c3eab09d96a6f28a82b39e167c1f5b3920e2"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/untracked-frozen-source.tar.gz",
+      "path": "artifacts/usability-2026-11-01-round8/untracked-frozen-source.tar.gz",
+      "bytes": 6358,
+      "sha256": "c022c7eb3cd8d95acb0a193429234780e5ee84f1514ee2b58df0d02c0ae9a572"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/verification-summary.json",
+      "path": "artifacts/usability-2026-11-01-round8/verification-summary.json",
+      "bytes": 40809,
+      "sha256": "6dbe1a3e692abc7e072316eb528611d66305f522b551ec9bff9082f7f5a64a66"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/verify_full_graph.py",
+      "path": "artifacts/usability-2026-11-01-round8/verify_full_graph.py",
+      "bytes": 6943,
+      "sha256": "ef187ab394c9fb027e706135f9e930d97a7733f56015833a13e6efd4eed92aeb"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/verify_isolated_midi.py",
+      "path": "artifacts/usability-2026-11-01-round8/verify_isolated_midi.py",
+      "bytes": 817,
+      "sha256": "2a26fefeb84f840f52ac312bbec4d2552719e14dc22c654d1c1a67c1b6bf7ca0"
+    },
+    {
+      "source": "/workspace/scratch/rill-usability-round8/verify_mix_components.py",
+      "path": "artifacts/usability-2026-11-01-round8/verify_mix_components.py",
+      "bytes": 3753,
+      "sha256": "0b45b1c35ac68bcd7869a6d85f19d164f023d0dbf9a5981224bbb3aa76be59eb"
+    }
+  ]
+}

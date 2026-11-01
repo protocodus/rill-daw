@@ -1,0 +1,111 @@
+{
+  "at_utc": "2026-11-01T00:03:01Z",
+  "apps_only": false,
+  "processes": [
+    {
+      "participant": 1,
+      "process": "app",
+      "pid": 263970,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 1,
+      "process": "pulse",
+      "pid": 263964,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 1,
+      "process": "xvfb",
+      "pid": 263967,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 2,
+      "process": "app",
+      "pid": 264001,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 2,
+      "process": "pulse",
+      "pid": 263995,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 2,
+      "process": "xvfb",
+      "pid": 263998,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 3,
+      "process": "app",
+      "pid": 264032,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 3,
+      "process": "pulse",
+      "pid": 264026,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 3,
+      "process": "xvfb",
+      "pid": 264029,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 4,
+      "process": "app",
+      "pid": 264063,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 4,
+      "process": "pulse",
+      "pid": 264057,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 4,
+      "process": "xvfb",
+      "pid": 264060,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 5,
+      "process": "app",
+      "pid": 264094,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 5,
+      "process": "pulse",
+      "pid": 264088,
+      "result": "SIGTERM sent",
+      "exited": true
+    },
+    {
+      "participant": 5,
+      "process": "xvfb",
+      "pid": 264091,
+      "result": "SIGTERM sent",
+      "exited": true
+    }
+  ]
+}

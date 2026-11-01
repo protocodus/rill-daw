@@ -1,0 +1,27 @@
+Independent simulated participant 4: observable action/reaction record
+Persona: first introduction to RILL; short ambient soundtrack sketch.
+All composition input used the supplied mouse driver. No audio was heard or auditioned.
+
+01:00:38 Double-clicked the visible MIDI creation area. Device library appeared; the prompt made the next action clear. (01-midi-created.png)
+01:00:45 Assigned Rill Lab Sine. A new MIDI track and pattern appeared with the instrument name. (02-instrument.png)
+01:01:03-01:01:07 Selected Pencil and dragged three sustained notes. C4, E4 and G4 labels made the result readable. (04-chord.png)
+01:01:14-01:02:05 Opened Properties, chose Stretch and used the numeric keypad to set 16 beats. Reopening still showed a 1-to-16 range; this prevented the longer single-clip stretch I wanted. (05-properties.png, 07-keypad.png, 08-duration-limit.png)
+01:02:26-01:02:44 Used the Duplicate tool and Fit to create four adjacent MIDI clips. The tool hint explained that a clip click would duplicate it. (11-duplicate-tool.png, 13-midi-four-clips.png)
+01:02:53-01:03:20 Trimmed the final MIDI clip and stretched the audio. The title first read 30.134 seconds, then 30.000 after small edge corrections. Accurate timing needed a second pass. (14-thirty-seconds.png, 16-mixer.png)
+01:03:21-01:03:38 Opened Mixer, dragged faders to audio -12.0 dB and MIDI -6.0 dB, dragged pan to L14 and R21, clicked Add bus. Large controls and numeric feedback were straightforward. (16-mixer.png, 17-bus-and-balance.png)
+01:03:44-01:04:02 Clicked the MIDI Add send button, + Send, and New bus. Routing showed a 0.25x Post send; the Mixer showed the resulting route. This required a few clicks but the destination was clear. (18-send-menu.png through 21-playing.png)
+01:04:17 Started playback with Loop disabled. Preparing audio appeared, then the transport advanced. (21-playing.png, 22-muted-playing.png)
+01:04:29 Clicked audio Mute; the button became orange. Clicked again to restore it. (22-muted-playing.png)
+01:04:39 Clicked MIDI Solo; it became green. At this point the transport had stopped with Audio output stream failed or disconnected. The captured meters appeared empty, so playback confidence was low. (23-solo-playing.png)
+01:04:50-01:05:00 Turned Solo off, clicked Retry playback, saw Pause return, then stopped. I did not establish long uninterrupted playback. (24-retry-playback.png, 25-file-menu.png)
+01:05:09-01:05:31 Used File > Rename project and its mouse keyboard to enter haze, then Save. The native picker already proposed haze.rill in my session folder. The name carried through neatly. (26-rename.png through 28-save-dialog.png)
+01:05:40 Confirmed Save; the dialog closed and the title showed haze without the unsaved dot. (29-saved.png)
+01:05:48-01:06:34 Opened WAV export, unchecked effect tails to keep the shown 30-second arrangement, and confirmed haze.wav. Export showed elapsed progress and then a success notice. (30-wav-options.png through 34-wav-status.png)
+01:06:39-01:06:48 Exported MIDI as haze.mid and saw its success notice. (35-midi-dialog.png, 36-midi-exported.png)
+01:07:02 Returned to Arranger and Fit. Final screenshot shows haze, 0:30.000, audio plus MIDI and the bus. App left open, stopped, with no mouse buttons held. (final.png)
+
+Ratings, 1-5: ease 4, looks 4, speed 3, confusion 3 (higher is worse), completeness 4. I could finish all requested editing and export operations with the mouse. Exact duration controls needed adjustment, and the visible stream failure undermined confidence in playback. See report.json for full fixed-question responses and limitations.
+Output paths shown by the UI:
+/workspace/scratch/rill-usability-round9/session-4/haze.rill
+/workspace/scratch/rill-usability-round9/session-4/haze.wav
+/workspace/scratch/rill-usability-round9/session-4/haze.mid

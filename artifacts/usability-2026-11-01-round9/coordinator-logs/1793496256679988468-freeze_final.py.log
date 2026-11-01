@@ -1,0 +1,15 @@
+{
+  "manifest": "/workspace/scratch/rill-study-iteration/final-implementation/manifest.json",
+  "rated_by_participants": false,
+  "source_file_count": 1051,
+  "binaries": {
+    "rill": "e579236fbe84414aae39b0a6a0a9fb3f9649d0f861757b5d1e6fd7b38215a27f",
+    "daw-plugin-host": "6a16fbeaa3857f173f4f0318d7009053464cbc6976bdefc45638fdb30c6dcdf2"
+  },
+  "round9_preserved": {
+    "binaries_unchanged": true,
+    "helpers_unchanged": true,
+    "participant_evidence_count": 203,
+    "participant_evidence_unchanged": true
+  }
+}
