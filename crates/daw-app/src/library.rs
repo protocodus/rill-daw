@@ -28,6 +28,9 @@ pub(crate) enum LibraryTarget {
     Browse,
     Instrument {
         track: Option<u64>,
+        /// Only the chooser opened as part of creating a track may replace its
+        /// provisional name. Existing names never imply naming permission.
+        name_new_track: bool,
     },
     Insert(u64),
     Send(u64),
@@ -339,7 +342,36 @@ impl DawApp {
         self.plugin_assign_target = if assign { target } else { None };
         self.library_target = LibraryTarget::Instrument {
             track: self.plugin_assign_target,
+            name_new_track: false,
         };
+    }
+
+    pub(crate) fn open_new_instrument_chooser(&mut self) {
+        self.open_instrument_chooser(true);
+        if let LibraryTarget::Instrument { name_new_track, .. } = &mut self.library_target {
+            *name_new_track = true;
+        }
+    }
+
+    fn available_instrument_name(&self, name: &str, target: Option<u64>) -> String {
+        let name = name.trim();
+        let name = if name.is_empty() { "Instrument" } else { name };
+        for index in 1.. {
+            let candidate = if index == 1 {
+                name.to_owned()
+            } else {
+                format!("{name} {index}")
+            };
+            if !self
+                .project
+                .tracks
+                .iter()
+                .any(|track| Some(track.id) != target && track.name == candidate)
+            {
+                return candidate;
+            }
+        }
+        unreachable!()
     }
 
     pub(crate) fn open_effect_library(&mut self, track: u64, send: bool) {
@@ -379,7 +411,7 @@ impl DawApp {
         // later selection change must never turn Assign into Add, or send it
         // to a different MIDI track.
         let assignment_target = match self.library_target {
-            LibraryTarget::Instrument { track } => track,
+            LibraryTarget::Instrument { track, .. } => track,
             _ => self.plugin_assign_target,
         };
         let assign = assignment_target.is_some();
@@ -390,7 +422,9 @@ impl DawApp {
         });
         let source = match self.library_target {
             LibraryTarget::Insert(track) | LibraryTarget::Send(track) => Some(track),
-            LibraryTarget::Instrument { track: Some(track) } => Some(track),
+            LibraryTarget::Instrument {
+                track: Some(track), ..
+            } => Some(track),
             _ => self.selected_track,
         }
         .filter(|id| {
@@ -1075,11 +1109,26 @@ impl DawApp {
         if replace && target.is_none() {
             return;
         }
+        let name_new_track = replace
+            && matches!(
+                self.library_target,
+                LibraryTarget::Instrument {
+                    track,
+                    name_new_track: true,
+                } if track == target
+            )
+            && target
+                .and_then(|id| self.project.track(id))
+                .is_some_and(|track| {
+                    track.name == "New instrument" && track.instrument == Instrument::None
+                });
+        let instrument_name = self
+            .available_instrument_name(&plugin.name, if name_new_track { target } else { None });
         self.begin_edit();
         let track = if replace {
             target.unwrap()
         } else {
-            let id = self.project.add_midi_track(&plugin.name);
+            let id = self.project.add_midi_track(&instrument_name);
             let clip = Clip::midi(
                 "New pattern",
                 self.snapped(self.cursor).max(0.0),
@@ -1098,6 +1147,9 @@ impl DawApp {
             },
         );
         if result.is_ok() {
+            if name_new_track {
+                self.project.track_mut(track).unwrap().name = instrument_name;
+            }
             self.selected_track = Some(track);
             if replace {
                 self.selected_clip = self
@@ -1134,6 +1186,74 @@ impl DawApp {
 mod tests {
     use super::*;
     use daw_core::Project;
+
+    fn naming_app(name: &str) -> (DawApp, u64) {
+        let ctx = egui::Context::default();
+        let mut project = Project::new();
+        let track = project.add_midi_track(name);
+        let mut app = DawApp::with_context(&ctx, project, None);
+        app.audio_device_enabled = false;
+        app.selected_track = Some(track);
+        (app, track)
+    }
+
+    fn naming_plugin() -> PluginInfo {
+        PluginInfo {
+            name: "Test synth".into(),
+            path: "/catalog/Test.vst3".into(),
+            category: "Instrument|Synth".into(),
+            class_id: Some("11111111111111111111111111111111".into()),
+            ..PluginInfo::default()
+        }
+    }
+
+    #[test]
+    fn initial_assignment_names_the_track_in_the_same_undo_step() {
+        let (mut app, track) = naming_app("New instrument");
+        let before = app.project.clone();
+        app.open_new_instrument_chooser();
+        app.add_library_device(naming_plugin(), DeviceAction::Assign, Some(track));
+        app.flush_pending_edit();
+        assert_eq!(app.project.track(track).unwrap().name, "Test synth");
+        assert_eq!(app.history.undo_labels().count(), 1);
+        let assigned = app.project.clone();
+        app.undo_redo(false);
+        assert_eq!(app.project, before);
+        app.undo_redo(true);
+        assert_eq!(app.project, assigned);
+    }
+
+    #[test]
+    fn existing_names_and_edits_during_the_initial_chooser_are_preserved() {
+        for name in ["New instrument", "My lead", "Test synth"] {
+            let (mut app, track) = naming_app(name);
+            app.open_instrument_chooser(true);
+            app.add_library_device(naming_plugin(), DeviceAction::Assign, Some(track));
+            assert_eq!(app.project.track(track).unwrap().name, name);
+        }
+        let (mut app, track) = naming_app("New instrument");
+        app.open_new_instrument_chooser();
+        app.project.track_mut(track).unwrap().name = "My lead".into();
+        app.add_library_device(naming_plugin(), DeviceAction::Assign, Some(track));
+        assert_eq!(app.project.track(track).unwrap().name, "My lead");
+    }
+
+    #[test]
+    fn instrument_names_skip_used_numbers_and_only_exclude_the_renamed_track() {
+        let (mut app, track) = naming_app("Test synth");
+        app.project.add_audio_track("Test synth 2");
+        assert_eq!(
+            app.available_instrument_name("Test synth", None),
+            "Test synth 3"
+        );
+        assert_eq!(
+            app.available_instrument_name("Test synth", Some(track)),
+            "Test synth"
+        );
+        // Explicit Add instrument must count the selected track as occupied.
+        app.add_library_device(naming_plugin(), DeviceAction::Instrument, Some(track));
+        assert_eq!(app.project.tracks.last().unwrap().name, "Test synth 3");
+    }
 
     #[test]
     fn categories_come_from_vst3_metadata_until_the_user_names_their_own() {

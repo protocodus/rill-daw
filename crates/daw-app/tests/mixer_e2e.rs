@@ -137,9 +137,9 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
         "Cancel must preserve routing"
     );
     click_header_section(&mut app, &source_track, "routing");
-    let state = click_front(&mut app, "New bus");
+    let state = click_front(&mut app, "Bus 1");
     assert_eq!(state["project"]["tracks"][0]["output_bus"], bus);
-    assert_header_output(&state, &source_track, "New bus");
+    assert_header_output(&state, &source_track, "Bus 1");
     let state = menu(&mut app, "Edit", "Undo");
     assert!(state["project"]["tracks"][0]["output_bus"].is_null());
     let state = menu(&mut app, "Edit", "Redo");
@@ -176,7 +176,7 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     app.click("S");
 
     let state = menu(&mut app, "Window", "Mixer");
-    assert!(visible(&state, "Ch 1 > New bus"));
+    assert!(visible(&state, "Ch 1 > Bus 1"));
     assert!(visible(&state, "Ch 2 > Master"));
     let expected_db = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain as f32));
     assert!(
@@ -347,7 +347,7 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
     let mut app = Harness::new();
     for name in ["Bus A", "Bus B", "Bus C"] {
         menu(&mut app, "Track", "Add bus");
-        rename_selected_track(&mut app, "New bus", name);
+        rename_selected_track(&mut app, "Bus 1", name);
     }
     menu(&mut app, "Track", "Add audio track");
     let before = app.inspect();

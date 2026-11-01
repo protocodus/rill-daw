@@ -46,6 +46,15 @@ fn dim_layers(state: &Value) -> Vec<usize> {
 }
 
 fn assert_backdrop(state: &Value, foreground: &str) {
+    assert_focus_layer(state, foreground, false);
+    assert_eq!(
+        state["backdrop_blur"],
+        json!([]),
+        "Routine editing must retain sharp source context"
+    );
+}
+
+fn assert_focus_layer(state: &Value, foreground: &str, modal: bool) {
     let dim = dim_layers(state);
     assert_eq!(dim.len(), 1, "{foreground} needs one full-window dim layer");
     assert_eq!(
@@ -54,13 +63,19 @@ fn assert_backdrop(state: &Value, foreground: &str) {
             0,
             0,
             0,
-            if state["effective_theme"] == "Dark" {
-                104
+            if modal {
+                if state["effective_theme"] == "Dark" {
+                    104
+                } else {
+                    64
+                }
+            } else if state["effective_theme"] == "Dark" {
+                40
             } else {
-                64
+                24
             }
         ]),
-        "the backdrop uses the shared theme's dim strength"
+        "Routine context has a lighter scrim than an explicit modal decision"
     );
     let label = state["label_rects"]
         .as_array()
@@ -264,7 +279,10 @@ fn save_confirmation_uses_one_dim_layer_and_restores_the_utility_on_cancel() {
     common::wait_visible(&mut app, "Save changes?");
     let prompt = painted(&mut app);
     assert_eq!(prompt["document_guard"]["phase"], "confirm");
-    assert_backdrop(&prompt, "Save changes?");
+    assert_focus_layer(&prompt, "Save changes?", true);
+    let blur = prompt["backdrop_blur"].as_array().unwrap();
+    assert_eq!(blur.len(), 1, "Explicit document decisions retain one blur");
+    assert_eq!(blur[0]["gpu_available"], false);
     app.click("Cancel");
     let restored = painted(&mut app);
     assert_backdrop(&restored, "Track · New audio");

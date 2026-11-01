@@ -54,12 +54,24 @@ mod xdg_desktop_portal;
 pub trait FilePickerDialogImpl {
     fn pick_file(self) -> Option<PathBuf>;
     fn pick_files(self) -> Option<Vec<PathBuf>>;
+    fn pick_file_result(self) -> Result<Option<PathBuf>, crate::FileDialogError>
+    where
+        Self: Sized,
+    {
+        Ok(self.pick_file())
+    }
 }
 
 /// Dialog used to save file
 #[cfg(not(target_arch = "wasm32"))]
 pub trait FileSaveDialogImpl {
     fn save_file(self) -> Option<PathBuf>;
+    fn save_file_result(self) -> Result<Option<PathBuf>, crate::FileDialogError>
+    where
+        Self: Sized,
+    {
+        Ok(self.save_file())
+    }
 }
 
 /// Dialog used to pick folder

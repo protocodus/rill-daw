@@ -283,27 +283,54 @@ impl DawApp {
                                         })
                                         .map(|(_, _, value)| parameter.denormalize(value))
                                         .unwrap_or(send.gain);
+                                    let destination = buses
+                                        .iter()
+                                        .find(|bus| bus.0 == send.target_bus)
+                                        .map(|bus| bus.1.as_str())
+                                        .unwrap_or("Unavailable bus");
+                                    let name = format!("{track_name} → {destination} · Send level");
+                                    let control = daw_ui::AutomationControl::Send {
+                                        track: track_id,
+                                        bus: send.target_bus,
+                                    };
                                     let response = ui.add(
-                                        widgets::slider(&mut gain, parameter.range())
+                                        widgets::knob(&mut gain, parameter.range())
+                                            .compact()
+                                            .diameter(64.0)
+                                            .perceptual_gain()
                                             .clamping(egui::SliderClamping::Edits)
-                                            .min_decimals(2)
-                                            .max_decimals(6)
+                                            .automation(state.map(|(_, status, _)| status))
                                             .suffix("×")
                                             .text("Level"),
-                                    );
-                                    let (action, exact) =
-                                        daw_ui::automatable_parameter_value_context(
+                                    ).on_hover_text(format!(
+                                        "{name}: {}×\nDrag up/right to increase; down/left to decrease. Shift for fine adjustment. Click the value for exact entry.",
+                                        daw_ui::parameter_value_text(f64::from(gain)),
+                                    ));
+                                    let (context_action, context_exact) =
+                                        daw_ui::automatable_parameter_value_context_named(
                                             ui,
                                             &response,
-                                            daw_ui::AutomationControl::Send {
-                                                track: track_id,
-                                                bus: send.target_bus,
-                                            },
+                                            control,
                                             state.map(|(lane, status, _)| (lane, status)),
                                             f64::from(gain),
                                             0.0..=16.0,
                                             "×",
+                                            &name,
                                         );
+                                    widgets::text::label(ui, "Level");
+                                    let (action, exact) = daw_ui::automatable_parameter_value_button(
+                                            ui,
+                                            "send_exact",
+                                            format!("{}×", daw_ui::parameter_value_text(f64::from(gain))),
+                                            control,
+                                            state.map(|(lane, status, _)| (lane, status)),
+                                            f64::from(gain),
+                                            0.0..=16.0,
+                                            "×",
+                                            &name,
+                                        );
+                                    let action = action.or(context_action);
+                                    let exact = exact.or(context_exact);
                                     if let Some(action) = action {
                                         automation_navigation = Some(action);
                                     }

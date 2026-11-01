@@ -69,6 +69,8 @@ pub struct KnobGeometry {
     pub value: f64,
     pub divisions: usize,
     pub ticks: Vec<Pos2>,
+    /// The painted unity landmark for perceptual gain controls.
+    pub unity: Option<Pos2>,
 }
 
 pub fn knob_geometry(ctx: &egui::Context, id: Id) -> Option<KnobGeometry> {
@@ -97,6 +99,7 @@ pub struct Knob<'a> {
     automation: Option<AutomationState>,
     show_automation_label: bool,
     compact: bool,
+    perceptual_gain: bool,
 }
 
 pub fn knob<T: egui::emath::Numeric>(value: &mut T, range: RangeInclusive<T>) -> Knob<'_> {
@@ -125,6 +128,7 @@ impl<'a> Knob<'a> {
             automation: None,
             show_automation_label: true,
             compact: false,
+            perceptual_gain: false,
         }
     }
 
@@ -155,6 +159,14 @@ impl<'a> Knob<'a> {
     /// Hidden numeric geometry is `Rect::NOTHING`. The default knob is unchanged.
     pub fn compact(mut self) -> Self {
         self.compact = true;
+        self
+    }
+    /// An audio gain taper with continuous silence, useful travel below unity,
+    /// and the caller's unchanged linear gain range and stored values.
+    /// A labelled unity landmark is painted when 1.0 lies inside the range.
+    pub fn perceptual_gain(mut self) -> Self {
+        self.perceptual_gain =
+            *self.range.start() >= 0.0 && *self.range.end() > *self.range.start();
         self
     }
     pub fn min_decimals(mut self, decimals: usize) -> Self {
@@ -192,12 +204,34 @@ impl<'a> Knob<'a> {
     }
 
     fn normalized(&self, value: f64) -> f32 {
-        let span = self.range.end() - self.range.start();
+        let minimum = self.scale_value(*self.range.start());
+        let span = self.scale_value(*self.range.end()) - minimum;
         if span == 0.0 || !span.is_finite() || !value.is_finite() {
             0.5
         } else {
-            ((value - self.range.start()) / span).clamp(0.0, 1.0) as f32
+            ((self.scale_value(value) - minimum) / span).clamp(0.0, 1.0) as f32
         }
+    }
+
+    fn scale_value(&self, value: f64) -> f64 {
+        if self.perceptual_gain {
+            (value.max(0.0) / 0.01).ln_1p()
+        } else {
+            value
+        }
+    }
+
+    fn unscale_value(&self, value: f64) -> f64 {
+        if self.perceptual_gain {
+            value.exp_m1() * 0.01
+        } else {
+            value
+        }
+    }
+
+    fn adjusted_value(&self, value: f64, fraction: f64) -> f64 {
+        let span = self.scale_value(*self.range.end()) - self.scale_value(*self.range.start());
+        self.unscale_value(self.scale_value(value) + fraction * span)
     }
 
     fn edited_value(&self, mut value: f64) -> f64 {
@@ -294,8 +328,10 @@ impl<'a> Knob<'a> {
                     .zip(drag.position)
                     .map_or(Vec2::ZERO, |(position, previous)| position - previous);
                 let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
-                let span = self.range.end() - self.range.start();
-                drag.value += f64::from(movement.x - movement.y) * span / 200.0 * fine;
+                drag.value = self.adjusted_value(
+                    drag.value,
+                    f64::from(movement.x - movement.y) / 200.0 * fine,
+                );
                 if self.clamping != SliderClamping::Never {
                     drag.value = drag.value.clamp(
                         self.range.start().min(*self.range.end()),
@@ -319,11 +355,21 @@ impl<'a> Knob<'a> {
                     i8::from(up) - i8::from(down)
                 });
                 if direction != 0 {
-                    let step = self
-                        .step
-                        .unwrap_or((self.range.end() - self.range.start()).abs() / 200.0);
                     let current = (self.value)(None);
-                    let value = self.edited_value(current + f64::from(direction) * step);
+                    let next = self.step.map_or_else(
+                        || {
+                            if self.perceptual_gain {
+                                self.adjusted_value(current, f64::from(direction) / 200.0)
+                            } else {
+                                current
+                                    + f64::from(direction)
+                                        * (self.range.end() - self.range.start()).abs()
+                                        / 200.0
+                            }
+                        },
+                        |step| current + f64::from(direction) * step,
+                    );
+                    let value = self.edited_value(next);
                     if value.is_finite() && value != (self.value)(None) {
                         (self.value)(Some(value));
                         response.mark_changed();
@@ -386,6 +432,8 @@ impl<'a> Knob<'a> {
         } else {
             let mut current = (self.value)(None);
             let current_before_number = current;
+            let numeric_id = ui.next_auto_id();
+            crate::value_entry::synchronize_number(ui, numeric_id, current);
             let minimum_decimals = self.min_decimals;
             let maximum_decimals = self.max_decimals;
             let integral = self.integral;
@@ -413,6 +461,7 @@ impl<'a> Knob<'a> {
                     response.mark_changed();
                 }
             }
+            crate::value_entry::remember_number_value(ui, numeric_id, (self.value)(None));
             if numeric.has_focus() || numeric.gained_focus() || numeric.lost_focus() {
                 response = numeric.clone().union(response);
             } else {
@@ -462,6 +511,9 @@ impl<'a> Knob<'a> {
                     center + samples[(*fraction * ARC_STEPS as f32).round() as usize] * radius
                 })
                 .collect(),
+            unity: (self.perceptual_gain && self.range.contains(&1.0)).then(|| {
+                center + Vec2::angled(START_ANGLE + ARC_ANGLE * self.normalized(1.0)) * radius
+            }),
         };
         if ui.is_rect_visible(dial) {
             let state_color = self
@@ -505,6 +557,17 @@ impl<'a> Knob<'a> {
                                     }),
                     ],
                     Stroke::new(1.0_f32, colors.muted),
+                );
+            }
+            if let Some(unity) = geometry.unity {
+                ui.painter()
+                    .circle_stroke(unity, 3.0, Stroke::new(1.5_f32, colors.text));
+                ui.painter().text(
+                    center + egui::vec2(0.0, radius * 0.42),
+                    egui::Align2::CENTER_CENTER,
+                    "1× unity",
+                    egui::FontId::proportional(tokens::FONT_SCALE),
+                    colors.muted,
                 );
             }
             ui.painter().line_segment(

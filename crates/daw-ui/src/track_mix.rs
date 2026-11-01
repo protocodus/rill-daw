@@ -44,10 +44,26 @@ pub fn track_mix_controls_at(
     mute: bool,
     solo: bool,
 ) -> TrackMixResponse {
+    track_mix_controls_at_named(ui, rect, id_salt, gain, pan, mute, solo, "Channel")
+}
+
+/// The same header controls with contextual names in both compact and expanded
+/// exact editors. Presentation never changes parameter identity or precision.
+#[allow(clippy::too_many_arguments)] // Backward-compatible extension of track_mix_controls_at.
+pub fn track_mix_controls_at_named(
+    ui: &mut Ui,
+    rect: Rect,
+    id_salt: impl Hash,
+    gain: &mut f32,
+    pan: &mut f32,
+    mute: bool,
+    solo: bool,
+    channel_name: &str,
+) -> TrackMixResponse {
     let id = ui.make_persistent_id(id_salt);
     let compact = rect.height() < tokens::COMPACT_HEIGHT * 2.0;
     if compact {
-        return compact_mix_at(ui, rect, id, gain, pan, [mute, solo]);
+        return compact_mix_at(ui, rect, id, gain, pan, [mute, solo], channel_name);
     }
     let geometry = mix_geometry(rect);
     let gain_rect = geometry.gain;
@@ -79,6 +95,7 @@ pub fn track_mix_controls_at(
         &mut db,
         gain_range,
         "dB",
+        &format!("{channel_name} · Volume"),
     );
     let mut gain_response = gain_rail.union(gain_readout.clone());
     if ui.is_enabled() && gain_response.changed() {
@@ -111,6 +128,7 @@ pub fn track_mix_controls_at(
         &mut percent,
         -100.0..=100.0,
         "%",
+        &format!("{channel_name} · Pan"),
     );
     let mut pan_response = pan_rail.union(pan_readout.clone());
     if ui.is_enabled() && pan_response.changed() {
@@ -231,6 +249,7 @@ fn compact_mix_at(
     gain: &mut f32,
     pan: &mut f32,
     states: [bool; 2],
+    channel_name: &str,
 ) -> TrackMixResponse {
     let geometry = mix_geometry(rect);
     let mut db = crate::channel_gain_to_db(*gain);
@@ -246,6 +265,7 @@ fn compact_mix_at(
         &mut db,
         MixParameter::Gain,
         &caption,
+        &format!("{channel_name} · Volume"),
     );
     if gain_response.changed() && ui.is_enabled() {
         *gain = crate::channel_gain_from_db(db);
@@ -258,6 +278,7 @@ fn compact_mix_at(
         &mut percent,
         MixParameter::Pan,
         &track_pan_caption(*pan),
+        &format!("{channel_name} · Pan"),
     );
     if pan_response.changed() && ui.is_enabled() {
         *pan = percent / 100.0;
@@ -302,6 +323,7 @@ fn compact_value_at(
     value: &mut f32,
     parameter: MixParameter,
     caption: &str,
+    name: &str,
 ) -> Response {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
@@ -447,7 +469,9 @@ fn compact_value_at(
     let popup = egui::Popup::menu(&response)
         .id(id.with("exact_value_popup"))
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| crate::value_entry(ui, id, f64::from(*value), range, parameter.unit()));
+        .show(|ui| {
+            crate::value_entry_named(ui, id, f64::from(*value), range, parameter.unit(), name)
+        });
     if let Some(next) = popup.and_then(|popup| popup.inner)
         && ui.is_enabled()
         && *value != next as f32
@@ -615,6 +639,7 @@ fn rail_at(
     (response, geometry)
 }
 
+#[allow(clippy::too_many_arguments)] // Keep canvas bounds separate from parameter and contextual display metadata.
 fn readout_at(
     ui: &mut Ui,
     rect: Rect,
@@ -623,6 +648,7 @@ fn readout_at(
     value: &mut f32,
     range: RangeInclusive<f64>,
     unit: &str,
+    name: &str,
 ) -> Response {
     let (label, caption) = label_and_value;
     let compact = rect.height() < tokens::COMPACT_HEIGHT;
@@ -680,7 +706,7 @@ fn readout_at(
     crate::text::paint_single_line(&painter, value_rect, font, colors.text, caption);
     let popup = egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| crate::value_entry(ui, id, f64::from(*value), range, unit));
+        .show(|ui| crate::value_entry_named(ui, id, f64::from(*value), range, unit, name));
     if let Some(next) = popup.and_then(|popup| popup.inner)
         && ui.is_enabled()
         && *value != next as f32

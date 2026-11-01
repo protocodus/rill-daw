@@ -129,7 +129,7 @@ Arrangement is the main canvas. **Window** opens one focused tool at a time:
 | **Assistant** | Open global AI for the current song; editor AI buttons target only their opened context. |
 | **Setup** | Configure Audio, Storage, Plug-ins, Appearance, and AI on separate pages. |
 
-Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Utilities open as centered popups with a softly blurred, inactive background; transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
+Clip Editor and Mixer use the whole workspace, with **Back** to return to Arrangement. Routine utilities and parameter menus keep the surrounding workspace sharp and lightly dimmed, so notes and values remain readable while only the foreground view accepts edits. Explicit confirmation dialogs use a stronger dimmed, blurred background where the renderer supports it. Transport and application menus remain available. Close a utility, press Escape, or choose **Window → Arrangement** to return. Nested tools restore their caller and its editing position when dismissed.
 
 Editing tools stay in a single shared strip. Arrangement, MIDI and audio retain their own selected tools when you move between them. Audio **Clip** and **Process** menus reveal trimming, copy/paste, normalization, reversal, and transient analysis; fade settings appear with the selected fade tool. MIDI **Notes** holds note transformations; **Draw settings** holds note length, grid scale and harmony. Secondary controls appear when needed, leaving the waveform or notes in focus.
 
@@ -158,6 +158,13 @@ The Master meter follows the combined output, keeps short hits visible as the
 peaks fall, and clears when playback pauses or stops.
 
 In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start**, **Duration** and **Source offset** in beats. Visible **−/+** buttons step each value by one beat; drag the number for fine adjustment or click to type. Start is one-based, and each step supports Undo. Tempo has matching buttons that step by one BPM. While trimming an arrangement clip, a pointer readout shows its current end and duration in seconds and beats. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
+
+Right-click an audio or MIDI clip and choose **Properties** to edit that clip's
+timing directly above Arrangement. In Clip Editor, **Properties** stays at the
+same end of the header for both clip types. The header shows the track and the
+clip's **Song** start/end bars and beats; hover for clock times and the ruler's
+time basis. MIDI's **Local** ruler starts at bar 1 for the open phrase, even
+when that phrase repeats later in the song. Audio's ruler shows song positions.
 
 Clip Properties also shows **Starts at**, **Ends at** and **Elapsed** in clock time
 and bars/beats, so you can check a clip's exact timing without converting units.
@@ -262,12 +269,21 @@ that would cause feedback are excluded. New sends are post-fader; open the
 channel's sends control to adjust their level or choose Pre/Post in Routing.
 Pre-fader sends follow inserts but bypass volume and pan; both types respect
 Mute. **Add bus** creates and selects a bus without adding a send.
+**Add bus** and **New bus and send** choose **Bus 1**, **Bus 2**, and so on,
+skipping names already in use. The destination list keeps existing buses
+separate from the creation command.
 
 An empty channel's own **Add send…** opens the same destination choices directly.
 The menu names its source, so you can add a send without changing the selected
 channel. Click an existing send summary to edit its settings in Routing.
 
-Selected clips and mixer channels have a subtle glow in their track color. Hover or select a mixer channel to trace its output and sends: continuous U-shaped arrows blend from that channel’s color to each destination’s color. Scroll below the channel strips to inspect additional send lanes. Notices and added sends keep the existing fader, pan, and mute/solo controls in place.
+Routing gives each send a larger level knob, a **1× unity** mark and a clickable
+value beside **Level**. Drag up or right to increase the send, down or left to
+decrease it; Shift makes adjustments finer. The taper gives quieter sends more
+useful travel while retaining the 0–16× gain range. Click the value for named
+exact entry and **123** mouse digits. The value readout follows the dial.
+
+Selected clips and mixer channels have a subtle glow in their track color. Hover or select a mixer channel to trace its output and sends: continuous U-shaped arrows blend from that channel’s color to each destination’s color. Mixer reserves space for its output and first send route plus an ordinary notice; shorter windows and additional send lanes still scroll. Notices and added sends keep the existing fader, pan, and mute/solo controls in place.
 
 Drag an Arrangement track's name or grip to reorder it. The insertion line shows
 Before or After; drop in the middle of a folder header to move inside it. Folders
@@ -306,14 +322,18 @@ its history intact.
 
 ## Automation
 
-Right-click a channel fader, pan control, or send level to enter an exact value.
-The menu shows the current value and allowed range. Choose **123** beside the
+Right-click a channel fader, pan control, or send level to enter an exact value;
+Routing also opens it directly from the send's value button. The menu identifies
+the channel and parameter, plus the destination for a send, and shows a readable
+current value and allowed range. Hover the field for its full stored value.
+Opening the editor or choosing Apply without editing does not round the stored
+number or create an automation override. Choose **123** beside the
 field to enter digits with the mouse, then choose **Apply value** to
 commit or **Cancel** to keep the original. This also works in compact track
 headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left through
 0% center to 100% right, and send levels use a linear multiplier. Properties also
 has a directly editable volume readout. Exact-entry fields retain fractional
-values; the short track-header captions do not change their stored precision.
+values; concise displays do not change their stored precision.
 
 Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Track-header rails keep only a concise current value and pan center mark. Parameter sliders retain endpoint captions and adaptive tick scales, showing halves, fifths, or tenths. Mixer Pan uses a rotary position index with a current balance readout; its context menu accepts −100% left through 0% center to 100% right. Mixer volume keeps its vertical fader, dB scale and separate editable dB readout.
 
@@ -344,6 +364,12 @@ For an instrument, open **Window → Instrument**, choose **Open editor**, and a
 ## VST3 instruments
 
 Open **Window → Setup → Plug-ins**, add folders, and apply the settings; Rill rescans them. Choose **Track → Add instrument…**, type a name or vendor, then press Enter or double-click a result. Rill creates a MIDI track and four-beat clip, assigns the VST, and opens its native editor. **Track → Add MIDI track** opens the same chooser after creating its empty pattern. Double-click the clip to write notes. To use an existing MIDI track, choose **Choose instrument…** in its arrangement or Clip Editor header, or open **Window → Instrument → Choose instrument**; assigning the plug-in preserves its notes. **Window → Library** also provides browsing and explicit add/assign actions. When no VST3 instruments/effects have been found, the library explains installation and links to **Plug-in folders**. When installed inventory is hidden by search or filters, it offers **Clear filters**.
+
+Choosing an instrument in the initial creation flow gives an untouched **New
+instrument** track the device's name; repeated names receive a numeric suffix.
+That naming change belongs to the same Undo step as assignment. Names you set,
+names loaded from projects, and names on tracks assigned through a reopened
+chooser remain intact, even if the name is **New instrument**.
 
 Rill keeps an index of installed plug-ins. Each launch shows the last index immediately, then rescans the plug-in folders in the background; **Refresh** in the library rescans on demand, for example after installing a plug-in. New, updated and removed plug-ins are picked up without restarting. After a scan, Rill opens each verified instrument or effect that has no preview in an isolated helper, screenshots its native editor, and adds the image to the index, one plug-in at a time. The library header shows how many previews remain. Cache entries are invalidated when the plug-in bundle changes. A failed editor or screenshot leaves the plug-in listed under **Without preview**, alongside plug-ins whose image has not been captured; it is not retried on every scan, and it does not close Rill. Plug-ins without classification metadata are labelled **Unverified VST3**; their preview is captured when you select one, and they are checked when loaded. **More → Capture preview** or **Refresh preview** captures one again. **Preview image / Unavailable** refers only to that optional image; details retain the capture error, and the instrument can still be assigned. Loading reports its own errors separately.
 
@@ -386,6 +412,14 @@ Setup persists at `~/Library/Application Support/Rill/settings.json` on macOS, `
 New projects save as `.rill` ZIP archives containing `manifest.json` and source WAV files; edits, MIDI, routing, automation, and instrument/effect state live in the manifest. Extracted audio uses the configured scratch directory. Plugins and their own sample libraries must remain installed. Legacy `.daw.json` files stay supported. See [project format and limits](PROJECT_FORMAT.md).
 
 After Save as, the project header shows the saved filename with a dirty marker for later edits; hover it for the full path. Save and WAV/MIDI export pickers reuse that directory and filename stem. Extensionless project saves receive `.rill`. **Export WAV…** warns when visible notes on contributing MIDI tracks have no instrument; Cancel to assign a VST3, or continue to export without those notes. The WAV dialog shows its sample rate, stereo layout and 32-bit float format. Its duration summary says **+ tails** when **Include effect tails** is enabled; turn it off to end exactly at the arrangement boundary. WAV and MIDI completion show the resulting filename and **Copy path**. MIDI export waits for a pending WAV export or session update to finish. Offline WAV rendering does not require an output device.
+
+On Linux, if a document file picker reports a portal or Zenity helper failure,
+Rill shows **Could not open the file picker** and retains your work. **Details**
+includes the cause and, when the fallback fails, guidance to restore the desktop
+portal or make `zenity` available on PATH; then retry Save, Open, Import or
+export. A failed Save inside **Save changes?** leaves that decision open. Normal
+picker cancellation stays silent. Other platforms retain their existing native
+picker behavior.
 
 **File → Recent exports** keeps the current document's last five successful WAV/MIDI destinations. Choose an entry to copy its full path. This lets you check an earlier WAV after the MIDI completion appears. Re-exporting the same destination moves it to the front; failed or cancelled exports add no success entry. New/Open clears the list.
 

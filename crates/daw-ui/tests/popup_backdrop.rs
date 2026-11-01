@@ -21,8 +21,7 @@ fn pointer(point: Pos2, pressed: bool) -> Vec<Event> {
     ]
 }
 
-fn dim_index(output: &FullOutput, ctx: &Context) -> usize {
-    let scrim = theme::palette(ctx).popup_scrim;
+fn dim_index(output: &FullOutput, ctx: &Context, scrim: egui::Color32) -> usize {
     let indices: Vec<_> = output
         .shapes
         .iter()
@@ -81,7 +80,7 @@ fn utility_dimming_preserves_foreground_and_never_enters_retained_snapshots() {
                     retained = captured_nested;
                 });
                 if frame > 1 {
-                    let dim = dim_index(&output, &ctx);
+                    let dim = dim_index(&output, &ctx, daw_ui::popup_backdrop_color(&ctx));
                     assert!(text(&output, "Caller context").0 < dim);
                     assert!(text(&output, "Foreground action").0 > dim);
                 }
@@ -94,7 +93,7 @@ fn utility_dimming_preserves_foreground_and_never_enters_retained_snapshots() {
             });
             assert!(!output.shapes.iter().any(|shape| {
                 matches!(&shape.shape, egui::Shape::Rect(rect)
-                    if rect.fill == theme::palette(&ctx).popup_scrim)
+                    if rect.fill == daw_ui::popup_backdrop_color(&ctx))
             }));
         }
     }
@@ -136,7 +135,7 @@ fn native_menu_hierarchy_stays_above_one_backdrop_and_accepts_clicks() {
         draw(pointer(options, pressed));
     }
     output = draw(vec![]);
-    let dim = dim_index(&output, &ctx);
+    let dim = dim_index(&output, &ctx, daw_ui::popup_backdrop_color(&ctx));
     assert!(text(&output, "Parent action").0 < dim);
     assert!(text(&output, "Visible menu").0 > dim);
     let nested = text(&output, "Nested").1.center();
@@ -146,7 +145,7 @@ fn native_menu_hierarchy_stays_above_one_backdrop_and_accepts_clicks() {
     for _ in 0..3 {
         output = draw(vec![]);
     }
-    let dim = dim_index(&output, &ctx);
+    let dim = dim_index(&output, &ctx, daw_ui::popup_backdrop_color(&ctx));
     assert!(text(&output, "Visible menu").0 > dim);
     assert!(text(&output, "Apply selection").0 > dim);
     let selection = text(&output, "Apply selection").1.center();
@@ -155,7 +154,7 @@ fn native_menu_hierarchy_stays_above_one_backdrop_and_accepts_clicks() {
     }
     output = draw(vec![]);
     assert!(!egui::Popup::is_any_open(&ctx));
-    let dim = dim_index(&output, &ctx);
+    let dim = dim_index(&output, &ctx, daw_ui::popup_backdrop_color(&ctx));
     assert!(text(&output, "Parent action").0 > dim);
     let parent = text(&output, "Parent action").1.center();
     for pressed in [true, false] {
@@ -185,7 +184,7 @@ fn native_confirmation_uses_the_shared_dim_color_and_keeps_its_buttons_active() 
     for _ in 0..3 {
         output = draw(vec![]);
     }
-    let dim = dim_index(&output, &ctx);
+    let dim = dim_index(&output, &ctx, theme::palette(&ctx).popup_scrim);
     assert!(text(&output, "Caller context").0 < dim);
     assert!(text(&output, "Continue").0 > dim);
     let point = text(&output, "Continue").1.center();

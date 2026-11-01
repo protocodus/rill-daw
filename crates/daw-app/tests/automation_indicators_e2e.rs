@@ -138,7 +138,16 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
             })
             .max_by(|a, b| center(a).0.total_cmp(&center(b).0))
             .unwrap_or_else(|| panic!("No send value: {}", routing["visible_labels"]));
-        let changed = enter_number(&mut app, numeric, "0.4");
+        // Send readouts now open deliberate exact entry with a single click.
+        let (x, y) = center(numeric);
+        let exact = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+        label(&exact, "Source → Room · Send level");
+        app.click("123");
+        app.click("Clear");
+        for key in ["0", ".", "4"] {
+            app.click(key);
+        }
+        let changed = app.click("Apply value");
         assert!((lane(&changed, send)["override_value"].as_f64().unwrap() - 0.025).abs() < 1e-6);
         label(&changed, "Overridden");
         let resumed = menu(&mut app, "Overridden", "Resume automation");

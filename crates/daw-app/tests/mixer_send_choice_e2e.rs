@@ -237,7 +237,7 @@ fn explicit_new_bus_choice_is_one_undoable_channel_send() {
     assert_eq!(tracks.len(), 4);
     let new_bus = &tracks[3];
     assert_eq!(new_bus["kind"], "Bus");
-    assert_eq!(new_bus["name"], "New bus");
+    assert_eq!(new_bus["name"], "Bus 1");
     assert!(new_bus["output_bus"].is_null());
     assert_eq!(sent["selected_track"], selected);
     assert_eq!(track(&sent, selected)["sends"], json!([]));

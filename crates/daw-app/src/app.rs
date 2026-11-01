@@ -2782,17 +2782,17 @@ impl DawApp {
             ] {
                 if daw_ui::button(ui, name).clicked() {
                     let (edit_kind, track_name) = match kind {
-                        TrackKind::Midi => (EditableTrackKind::Midi, "New instrument"),
-                        TrackKind::Audio => (EditableTrackKind::Audio, "New audio"),
-                        TrackKind::Bus => (EditableTrackKind::Bus, "New bus"),
-                        TrackKind::Folder => (EditableTrackKind::Folder, "New folder"),
+                        TrackKind::Midi => (EditableTrackKind::Midi, "New instrument".to_owned()),
+                        TrackKind::Audio => (EditableTrackKind::Audio, "New audio".to_owned()),
+                        TrackKind::Bus => (EditableTrackKind::Bus, self.available_bus_name()),
+                        TrackKind::Folder => (EditableTrackKind::Folder, "New folder".to_owned()),
                         TrackKind::Automation => {
                             unreachable!("Automation requires a parameter target")
                         }
                     };
                     let mut edits = vec![SongEdit::AddTrack {
                         kind: edit_kind,
-                        name: track_name.into(),
+                        name: track_name,
                         key: Some("new_track".into()),
                     }];
                     if kind == TrackKind::Midi {
@@ -2833,7 +2833,7 @@ impl DawApp {
                                 self.history.retained_state_ids(),
                             );
                             if kind == TrackKind::Midi {
-                                self.open_instrument_chooser(true);
+                                self.open_new_instrument_chooser();
                             }
                         }
                         Err(error) => self.message(Err(anyhow::anyhow!(error)), ""),
@@ -3187,7 +3187,34 @@ impl DawApp {
                 } else {
                     "Mixer".into()
                 };
-                let header = daw_ui::workspace_header(ui, &title, |ui| {
+                let clip_context = (workspace == WorkspaceView::Clip)
+                    .then(|| {
+                        let clip = self.selected()?;
+                        let track = self.selected_track.and_then(|id| self.project.track(id))?;
+                        let position = |beat: f64| {
+                            daw_ui::duration::compact_musical_position(
+                                beat,
+                                self.project.beats_per_bar,
+                            )
+                        };
+                        Some(format!(
+                            "Song {}–{} · {}",
+                            position(clip.start),
+                            position(clip.start + clip.length),
+                            track.name,
+                        ))
+                    })
+                    .flatten();
+                let header = daw_ui::workspace_header_with_context(ui, &title, clip_context.as_deref(), |ui| {
+                    // The first trailing command occupies the same slot for
+                    // audio and MIDI, regardless of their other header tools.
+                    if workspace == WorkspaceView::Clip
+                        && daw_ui::quiet_button(ui, "Properties")
+                            .on_hover_text("Clip position, duration, name and other properties")
+                            .clicked()
+                    {
+                        self.open_popup(PopupKind::Inspector);
+                    }
                     let ai_scope = if workspace == WorkspaceView::Clip {
                         self.selected_clip_ai_scope()
                     } else {
@@ -3199,11 +3226,19 @@ impl DawApp {
                             })
                             .map(|track_id| daw_tools::ToolScope::Channel { track_id })
                     };
-                    if let Some(scope) = ai_scope
-                        && daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked()
-                    {
-                        self.open_context_assistant(scope);
-                        return;
+                    if let Some(scope) = ai_scope {
+                        let label = scope.label(&self.project);
+                        let response = if workspace == WorkspaceView::Clip
+                            && ui.ctx().content_rect().width() < 1000.0
+                        {
+                            daw_ui::contextual_ai_button_compact(ui, &label)
+                        } else {
+                            daw_ui::contextual_ai_button(ui, &label)
+                        };
+                        if response.clicked() {
+                            self.open_context_assistant(scope);
+                            return;
+                        }
                     }
                     if workspace == WorkspaceView::Mixer {
                         self.mixer_add_send_menu(ui);
@@ -3242,14 +3277,28 @@ impl DawApp {
                     }
                     if workspace == WorkspaceView::Clip {
                         self.clip_navigation_header(ui);
-                        if daw_ui::quiet_button(ui, "Properties").clicked() {
-                            self.open_popup(PopupKind::Inspector);
-                        }
                     }
                 });
                 ctx.data_mut(|data| {
                     data.insert_temp(egui::Id::new("workspace_title_rect"), header.title.rect)
                 });
+                if let Some(context) = header.context
+                    && let Some(clip) = self.selected()
+                {
+                    let ruler_context = if matches!(&clip.content, ClipContent::Midi { .. }) {
+                        "The editor ruler starts at local bar 1 for this clip."
+                    } else {
+                        "The editor ruler shows song bars and beats."
+                    };
+                    context.on_hover_text(format!(
+                        "{}\nSong position: {} to {} (bar:beat)\n{}–{}\n{ruler_context}",
+                        clip_context.as_deref().unwrap_or_default(),
+                        daw_ui::duration::compact_musical_position(clip.start, self.project.beats_per_bar),
+                        daw_ui::duration::compact_musical_position(clip.start + clip.length, self.project.beats_per_bar),
+                        daw_ui::duration::format_seconds(clip.start * 60.0 / self.project.tempo),
+                        daw_ui::duration::format_seconds((clip.start + clip.length) * 60.0 / self.project.tempo),
+                    ));
+                }
                 if header.back.clicked() {
                     self.close_popup();
                 } else if self.view == workspace {

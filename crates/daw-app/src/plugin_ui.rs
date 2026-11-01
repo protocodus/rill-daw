@@ -715,12 +715,20 @@ impl DawApp {
                     .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                     .show(|ui| {
                         ui.add_enabled_ui(editing_enabled, |ui| {
-                            entered = daw_ui::value_entry(
+                            entered = daw_ui::value_entry_named(
                                 ui,
                                 (target.track, target.effect, parameter.id),
                                 percent,
                                 0.0..=100.0,
                                 "%",
+                                &format!(
+                                    "{} · {device_name} · {}",
+                                    self.project
+                                        .track(target.track)
+                                        .map(|track| track.name.as_str())
+                                        .unwrap_or("Channel"),
+                                    parameter.name
+                                ),
                             );
                         });
                     });

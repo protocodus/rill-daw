@@ -89,6 +89,32 @@ impl Harness {
         Self::launch_configured(None, directory, Some(&config), None, false, false)
     }
 
+    /// Run the real Linux portal/Zenity path against this child's empty helper
+    /// directory and nonexistent session bus. Tests may restore a helper while
+    /// the app runs, without altering the host PATH or desktop services.
+    #[cfg(target_os = "linux")]
+    pub fn with_isolated_file_picker() -> Self {
+        let directory = tempfile::tempdir().expect("create isolated picker directory");
+        let helpers = directory.path().join("picker-bin");
+        std::fs::create_dir(&helpers).unwrap();
+        let bus = format!(
+            "unix:path={}",
+            directory.path().join("absent-session-bus").display()
+        );
+        Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            false,
+            &[
+                ("PATH", helpers.into_os_string()),
+                ("DBUS_SESSION_BUS_ADDRESS", bus.into()),
+            ],
+        )
+    }
+
     fn launch(vst_path: Option<&std::path::Path>) -> Self {
         let directory = tempfile::tempdir().expect("create isolated E2E directory");
         Self::launch_in(vst_path, directory)
@@ -106,6 +132,26 @@ impl Harness {
         plugin_previews: bool,
         virtual_audio: bool,
     ) -> Self {
+        Self::launch_configured_with_environment(
+            vst_path,
+            directory,
+            null_audio,
+            plugin_host,
+            plugin_previews,
+            virtual_audio,
+            &[],
+        )
+    }
+
+    fn launch_configured_with_environment(
+        vst_path: Option<&std::path::Path>,
+        directory: TempDir,
+        null_audio: Option<&std::path::Path>,
+        plugin_host: Option<&std::path::Path>,
+        plugin_previews: bool,
+        virtual_audio: bool,
+        environment: &[(&str, std::ffi::OsString)],
+    ) -> Self {
         let binary = std::env::var_os("RILL_E2E_BINARY")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_rill").into());
         let mut command = Command::new(binary);
@@ -122,6 +168,9 @@ impl Harness {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
+        for (key, value) in environment {
+            command.env(key, value);
+        }
         if virtual_audio {
             command.env("RILL_E2E_VIRTUAL_AUDIO", "1");
         }

@@ -1095,8 +1095,8 @@ impl DawApp {
                                 .map(|(_, _, value)| AutomationParameter::TrackGain.denormalize(value)).unwrap_or(track.gain);
                             let mut pan = pan_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                                 .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value)).unwrap_or(track.pan);
-                            let controls = daw_ui::track_mix_controls_at(ui, mix_rect, (track.id, "channel_controls"),
-                                &mut gain, &mut pan, track.mute, track.solo);
+                            let controls = daw_ui::track_mix_controls_at_named(ui, mix_rect, (track.id, "channel_controls"),
+                                &mut gain, &mut pan, track.mute, track.solo, &track.name);
                             if controls.mute.clicked() { edits.push(Edit::Mute(track.id)); }
                             if controls.solo.clicked() { edits.push(Edit::Solo(track.id)); }
                             let peaks = self.engine.as_ref()
@@ -1109,14 +1109,14 @@ impl DawApp {
                                 .on_hover_text("Channel output level · post-fader");
                             let mut exact_gain = false;
                             let mut exact_pan = false;
-                            for (response, control, state, current, range, unit) in [
+                            for (response, control, state, current, range, unit, name) in [
                                 (&controls.gain, daw_ui::AutomationControl::Gain { track: track.id }, gain_automation,
-                                    f64::from(daw_ui::channel_gain_to_db(gain)), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB"),
+                                    f64::from(daw_ui::channel_gain_to_db(gain)), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB", "Volume"),
                                 (&controls.pan, daw_ui::AutomationControl::Pan { track: track.id }, pan_automation,
-                                    f64::from(pan) * 100.0, -100.0..=100.0, "%"),
+                                    f64::from(pan) * 100.0, -100.0..=100.0, "%", "Pan"),
                             ] {
-                                let (action, value) = daw_ui::automatable_parameter_value_context(ui, response, control,
-                                    state.map(|(lane, state, _)| (lane, state)), current, range, unit);
+                                let (action, value) = daw_ui::automatable_parameter_value_context_named(ui, response, control,
+                                    state.map(|(lane, state, _)| (lane, state)), current, range, unit, &format!("{} · {name}", track.name));
                                 if let Some(action) = action {
                                     automation_navigation = Some(action);
                                 }
@@ -1641,6 +1641,16 @@ impl DawApp {
                                 self.selected_clip = Some(clip.id);
                                 self.selected_notes.clear();
                                 open_editor = true;
+                                ui.close();
+                            }
+                            if daw_ui::button(ui, "Properties")
+                                .on_hover_text("Edit this clip's exact timing and settings")
+                                .clicked()
+                            {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                self.selected_notes.clear();
+                                popup = Some(PopupKind::Inspector);
                                 ui.close();
                             }
                             let member = self.arranger_selection.ids.contains(&clip.id);
@@ -2338,7 +2348,7 @@ impl DawApp {
                     self.project.track_mut(id).unwrap().clips.push(clip);
                     self.edit_label = Some("Add pattern".into());
                     if new_track {
-                        self.open_instrument_chooser(true);
+                        self.open_new_instrument_chooser();
                     }
                     Ok(())
                 }
@@ -2857,7 +2867,7 @@ impl DawApp {
                         gain = daw_ui::channel_gain_from_db(db);
                     }
                     let response = response.union(numeric);
-                    let (action, exact) = daw_ui::automatable_parameter_value_context(
+                    let (action, exact) = daw_ui::automatable_parameter_value_context_named(
                         ui,
                         &response,
                         daw_ui::AutomationControl::Gain { track: id },
@@ -2865,6 +2875,7 @@ impl DawApp {
                         f64::from(db),
                         -60.0..=f64::from(20.0 * 1.5_f32.log10()),
                         "dB",
+                        &format!("{} · Volume", track.name),
                     );
                     if let Some(action) = action {
                         navigation = Some(action);
@@ -2920,7 +2931,7 @@ impl DawApp {
                 if response.changed() {
                     pan = pan_percent / 100.0;
                 }
-                let (action, exact) = daw_ui::automatable_parameter_value_context(
+                let (action, exact) = daw_ui::automatable_parameter_value_context_named(
                     ui,
                     &response,
                     daw_ui::AutomationControl::Pan { track: id },
@@ -2928,6 +2939,7 @@ impl DawApp {
                     f64::from(pan) * 100.0,
                     -100.0..=100.0,
                     "%",
+                    &format!("{} · Pan", track.name),
                 );
                 if let Some(action) = action {
                     navigation = Some(action);

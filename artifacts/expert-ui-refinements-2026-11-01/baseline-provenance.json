@@ -1,0 +1,51 @@
+{
+  "source_commit": "83f5447467af3daf6298461b828fb76bd40f90f9",
+  "source_root": "/workspace/scratch/rill-expert-review-2026-11-01",
+  "description": "Unmodified selections from the independent simulated expert review; no new ratings. Original songs and full reports remain in the source root.",
+  "selected_images": [
+    {
+      "file": "before/send-stale-value.png",
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-1/28-send-small-drag.png",
+      "sha256": "c4d398697ebdf41906d0da8ce171634592982efd1460f452868ff00687eae41d"
+    },
+    {
+      "file": "before/pan-exact-value.png",
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-2/20-pan-exact.png",
+      "sha256": "7de537273f7048589a538efc1b3fb543a4824eb524ed79c6b06feeda0424be36"
+    },
+    {
+      "file": "before/midi-editor-context.png",
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-3/45-ending-phrase-before.png",
+      "sha256": "6b9a7fc2ca26f56bdada2ec4eba6fa2cbd6c68e7c6377b30740f50ae0fc8a6c2"
+    },
+    {
+      "file": "before/menu-context.png",
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-3/47-edit-menu.png",
+      "sha256": "ae715d95e125959255294a45147e88b9896df31819f834b3d9d6260083de9eb9"
+    },
+    {
+      "file": "before/mixer-routing.png",
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-2/61-cancel-recovered.png",
+      "sha256": "52792d74b9c6d65d1a8bca074936ec7ec39ac5a427ec9e4265b8e012f39c287a"
+    },
+    {
+      "file": "before/trim-tooltip.png",
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-2/11-trim-held.png",
+      "sha256": "c9b015c40b0fb6ba77a3f401b97cefa2a824f0f26f696bd7999abd9643832aed"
+    }
+  ],
+  "original_report_hashes": [
+    {
+      "file": "session-1/report.json",
+      "sha256": "dd7da4875456b6cd226ff49c1e704f6b961e7a0151b09984a2deb8d7ba78142f"
+    },
+    {
+      "file": "session-2/report.json",
+      "sha256": "622e86ccff11602add1a8f25ed66e5af5d3306b5bd792a0e0b5d536ea330128d"
+    },
+    {
+      "file": "session-3/report.json",
+      "sha256": "fc121a2a916c799eef68ce56f39b8f2ddbe73377924039a44cdd905382781378"
+    }
+  ]
+}

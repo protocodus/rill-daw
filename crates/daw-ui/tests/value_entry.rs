@@ -8,6 +8,8 @@ struct Harness {
     automation: Option<(u64, AutomationState)>,
     action: Option<daw_ui::AutomationNavigation>,
     height: f32,
+    name: Option<String>,
+    range: std::ops::RangeInclusive<f64>,
 }
 
 impl Harness {
@@ -21,6 +23,8 @@ impl Harness {
             automation: None,
             action: None,
             height: 480.0,
+            name: None,
+            range: -60.0..=6.0,
         }
     }
 
@@ -39,15 +43,28 @@ impl Harness {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     let response = daw_ui::button(ui, "Parameter");
                     self.control = response.rect;
-                    let (action, value) = automatable_parameter_value_context(
-                        ui,
-                        &response,
-                        AutomationControl::Pan { track: 42 },
-                        self.automation,
-                        self.value,
-                        -60.0..=6.0,
-                        "dB",
-                    );
+                    let (action, value) = if let Some(name) = &self.name {
+                        daw_ui::automatable_parameter_value_context_named(
+                            ui,
+                            &response,
+                            AutomationControl::Pan { track: 42 },
+                            self.automation,
+                            self.value,
+                            self.range.clone(),
+                            "dB",
+                            name,
+                        )
+                    } else {
+                        automatable_parameter_value_context(
+                            ui,
+                            &response,
+                            AutomationControl::Pan { track: 42 },
+                            self.automation,
+                            self.value,
+                            self.range.clone(),
+                            "dB",
+                        )
+                    };
                     self.action = action;
                     selected = value;
                 });
@@ -196,7 +213,7 @@ fn invalid_values_never_clamp_or_commit_and_cancel_reopens_fresh() {
     }
     app.value = 0.123456789;
     let fresh = app.open();
-    assert!(contains(&fresh, "0.123456789"));
+    assert!(contains(&fresh, "0.123457"));
     let editing = app.frame(vec![Event::Text("2e-3".into())]);
     app.click(&editing, "Apply value");
     assert_eq!(app.value, 0.002);
@@ -244,6 +261,121 @@ fn exact_value_formatting_round_trips_extreme_and_fractional_values() {
         assert!(text.len() < 128);
         assert_eq!(text.parse::<f64>().unwrap().to_bits(), value.to_bits());
     }
+}
+
+#[test]
+fn concise_parameter_display_removes_float_noise_without_rounding_unchanged_apply() {
+    for (stored, displayed) in [
+        (14.00000059604645, "14"),
+        (15.00000596046448, "15"),
+        (0.17345678806304932, "0.173457"),
+    ] {
+        assert_eq!(daw_ui::parameter_value_text(stored), displayed);
+        let mut app = Harness::new();
+        // This harness's editable range ends at 6, so keep residue cases in it.
+        app.value = stored / 100.0;
+        let exact = app.value.to_bits();
+        let opened = app.open();
+        app.click(&opened, "Apply value");
+        assert_eq!(
+            app.value.to_bits(),
+            exact,
+            "display must not quantize storage"
+        );
+        assert!(daw_ui::value_entry_rect(&app.ctx).is_none());
+    }
+}
+
+#[test]
+fn rounded_boundary_displays_validate_the_untouched_exact_value_and_allow_noop_apply() {
+    let maximum_db = f64::from(20.0 * 1.5_f32.log10());
+    let minimum = 0.12345621;
+    for (stored, range) in [(maximum_db, -60.0..=maximum_db), (minimum, minimum..=1.0)] {
+        let display = daw_ui::parameter_value_text(stored);
+        assert!(
+            !range.contains(&display.parse::<f64>().unwrap()),
+            "fixture must round beyond its boundary"
+        );
+        let mut app = Harness::new();
+        app.value = stored;
+        app.range = range;
+        let opened = app.open();
+        assert!(contains(&opened, &display));
+        assert!(!contains(&opened, "The value must be inside the range."));
+        app.click(&opened, "Apply value");
+        assert_eq!(app.value.to_bits(), stored.to_bits());
+        assert!(
+            daw_ui::value_entry_rect(&app.ctx).is_none(),
+            "an untouched valid boundary must remain applicable"
+        );
+
+        // Entering the rounded number deliberately is different: it really
+        // lies outside the range and must still be rejected without clamping.
+        app.open();
+        let invalid = app.frame(vec![Event::Text(display)]);
+        assert!(contains(&invalid, "The value must be inside the range."));
+        app.click(&invalid, "Apply value");
+        assert_eq!(app.value.to_bits(), stored.to_bits());
+        assert!(daw_ui::value_entry_rect(&app.ctx).is_some());
+    }
+}
+
+#[test]
+fn deliberately_reentering_the_rounded_display_applies_the_requested_exact_value() {
+    let mut app = Harness::new();
+    app.value = 1.250000059604645;
+    let original = app.value;
+    let opened = app.open();
+    assert!(contains(&opened, "1.25"));
+    app.click(&opened, "Apply value");
+    assert_eq!(
+        app.value, original,
+        "untouched Apply preserves the exact value"
+    );
+    let opened = app.open();
+    app.click(&opened, "123");
+    let keypad = app.frame(vec![]);
+    let mut output = app.click(&keypad, "Clear");
+    for key in ["1", ".", "2", "5"] {
+        output = app.click(&output, key);
+    }
+    assert_eq!(app.value, original, "keypad edits remain a draft");
+    app.click(&output, "Apply value");
+    assert_eq!(
+        app.value, 1.25,
+        "explicit entry replaces conversion residue"
+    );
+}
+
+#[test]
+fn pristine_editor_follows_changed_parameter_while_stable_drafts_keep_the_caret() {
+    let mut app = Harness::new();
+    app.open();
+    app.value = 0.17345678806304932;
+    let updated = app.frame(vec![]);
+    assert!(contains(&updated, "0.173457"));
+    let exact = app.value.to_bits();
+    app.click(&updated, "Apply value");
+    assert_eq!(app.value.to_bits(), exact);
+
+    app.open();
+    app.frame(vec![Event::Text("2.3456789".into())]);
+    let focus = app.ctx.memory(|memory| memory.focused()).unwrap();
+    let mut edit = egui::TextEdit::load_state(&app.ctx, focus).unwrap();
+    edit.cursor
+        .set_char_range(Some(egui::text::CCursorRange::one(
+            egui::text::CCursor::new(4),
+        )));
+    edit.store(&app.ctx, focus);
+    for _ in 0..3 {
+        let output = app.frame(vec![]);
+        assert!(contains(&output, "2.3456789"));
+        let edit = egui::TextEdit::load_state(&app.ctx, focus).unwrap();
+        assert_eq!(edit.cursor.char_range().unwrap().primary.index, 4);
+    }
+    let edited = app.frame(vec![Event::Text("9".into())]);
+    app.click(&edited, "Apply value");
+    assert_eq!(app.value, 2.34956789, "edits preserve all supplied digits");
 }
 
 fn visible_text(output: &FullOutput, label: &str) -> Option<Rect> {
@@ -327,4 +459,31 @@ fn short_parameter_menu_scrolls_only_keys_and_keeps_apply_and_automation_reachab
     assert!(contains(&reopened, "1.25"));
     assert!(!contains(&reopened, "Clear"), "a new editor starts compact");
     assert_eq!(app.value, 1.25);
+}
+
+#[test]
+fn long_context_titles_keep_the_field_and_actions_inside_a_short_viewport() {
+    let mut app = Harness::new();
+    app.height = 420.0;
+    app.name = Some(format!(
+        "{} → Room · Send level",
+        "Long channel name ".repeat(30)
+    ));
+    app.automation = Some((9, AutomationState::Read));
+    let opened = app.open();
+    app.click(&opened, "123");
+    let expanded = app.frame(vec![]);
+    let viewport = Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, app.height));
+    assert!(viewport.contains_rect(daw_ui::value_entry_rect(&app.ctx).unwrap()));
+    for name in [
+        "Apply value",
+        "Cancel",
+        "Edit automation",
+        "Override automation",
+    ] {
+        assert!(
+            viewport.contains_rect(visible_text(&expanded, name).unwrap()),
+            "{name}"
+        );
+    }
 }

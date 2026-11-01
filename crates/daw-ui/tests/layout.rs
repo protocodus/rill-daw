@@ -243,6 +243,61 @@ fn workspace_header_stays_at_the_top_and_back_keeps_native_keyboard_accessibilit
 }
 
 #[test]
+fn contextual_workspace_header_keeps_command_and_canvas_geometry_across_clip_kinds() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for (width, density) in [(800.0, 1.0), (800.0, 2.0), (1440.0, 1.0)] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            theme::set_appearance(&ctx, appearance);
+            ctx.set_pixels_per_point(density);
+            // Apply egui's pending scale/viewport update before comparing
+            // workspace geometry, as the native app does during startup.
+            let _ = ctx.run(input(vec![], egui::vec2(width, 760.0)), |_| {});
+            let mut properties_rect = None;
+            let mut canvas_top = None;
+            for midi in [false, true, false] {
+                let _ = ctx.run(input(vec![], egui::vec2(width, 760.0)), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let header = controls::workspace_header_with_context(
+                            ui,
+                            "Clip Editor · A repeated phrase with a deliberately very long Unicode name 夜のシンセ",
+                            Some("Song 9:1–11:1 · Evening lead"),
+                            |ui| {
+                                let properties = controls::quiet_button(ui, "Properties");
+                                if midi {
+                                    controls::button(ui, "Choose instrument…");
+                                }
+                                controls::quiet_button(ui, "Next");
+                                properties
+                            },
+                        );
+                        let context = header.context.as_ref().unwrap();
+                        assert!(header.title.rect.right() < header.inner.rect.left());
+                        assert!(context.rect.right() < header.inner.rect.left());
+                        assert!(header.title.rect.bottom() <= context.rect.top() + 0.1);
+                        assert!(header.response.rect.contains_rect(header.title.rect));
+                        assert!(header.response.rect.contains_rect(context.rect));
+                        assert!(header.response.rect.right() <= ui.max_rect().right() + 0.1);
+                        assert!(
+                            header.response.rect.height()
+                                <= controls::tokens::CONTROL_HEIGHT + 2.0 * controls::tokens::SPACE_SM + 1.0,
+                            "Context must reuse the header's existing height: {:?}",
+                            header.response.rect,
+                        );
+                        if let Some(expected) = properties_rect {
+                            assert_eq!(header.inner.rect, expected, "Properties changed slots");
+                            assert_eq!(ui.cursor().top(), canvas_top.unwrap());
+                        }
+                        properties_rect = Some(header.inner.rect);
+                        canvas_top = Some(ui.cursor().top());
+                    });
+                });
+            }
+        }
+    }
+}
+
+#[test]
 fn toolbar_wraps_complete_native_controls_without_eating_the_canvas() {
     let ctx = Context::default();
     theme::apply(&ctx);

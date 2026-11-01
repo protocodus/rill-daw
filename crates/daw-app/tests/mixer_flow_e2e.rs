@@ -354,8 +354,8 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     let added = app.click("Add bus");
     assert_eq!(added["project"]["tracks"].as_array().unwrap().len(), 5);
     let second = app.click("Add bus");
-    assert_eq!(second["project"]["tracks"][4]["name"], "New bus");
-    assert_eq!(second["project"]["tracks"][5]["name"], "New bus 2");
+    assert_eq!(second["project"]["tracks"][4]["name"], "Bus 1");
+    assert_eq!(second["project"]["tracks"][5]["name"], "Bus 2");
     undo(&mut app, false);
     assert_eq!(undo(&mut app, false)["project"], initial["project"]);
     open_routing(&mut app, "Ch 1 > Master");

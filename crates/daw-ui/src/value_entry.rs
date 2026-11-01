@@ -7,6 +7,8 @@ use std::{hash::Hash, ops::RangeInclusive};
 #[derive(Clone)]
 struct ValueDraft {
     text: String,
+    initial_value: f64,
+    edited: bool,
     last_frame: u64,
     field: Rect,
     focus_pending: bool,
@@ -30,6 +32,55 @@ pub fn exact_value_text(value: f64) -> String {
     }
 }
 
+/// Readable parameter display. Editing retains the exact opening value until
+/// the user changes this text, so displaying six significant digits is lossless.
+pub fn parameter_value_text(value: f64) -> String {
+    if !value.is_finite() || value == 0.0 {
+        return exact_value_text(value);
+    }
+    let magnitude = value.abs().log10().floor() as i32;
+    let (mut text, exponent) = if !(-6..9).contains(&magnitude) {
+        let scientific = format!("{value:.5e}");
+        let (mantissa, exponent) = scientific.split_once('e').unwrap();
+        (mantissa.to_owned(), format!("e{exponent}"))
+    } else {
+        let decimals = (5 - magnitude).max(0) as usize;
+        (format!("{value:.decimals$}"), String::new())
+    };
+    if text.contains('.') {
+        while text.ends_with('0') {
+            text.pop();
+        }
+        if text.ends_with('.') {
+            text.pop();
+        }
+    }
+    text + &exponent
+}
+
+/// Native DragValue retains text while focused. A sibling rail/dial may edit
+/// its value first; discard only that now-stale text, never a stable draft.
+pub(crate) fn synchronize_number(ui: &Ui, id: Id, current: f64) {
+    let previous = ui.data(|data| data.get_temp::<f64>(id.with("number_current_value")));
+    let external_change = previous.is_some_and(|previous| previous.to_bits() != current.to_bits());
+    // Slider and Knob commit native text edits as they are typed. DragValue's
+    // additional blur parse is redundant, and can quantize an untouched value
+    // when its freshly formatted display has fewer digits than its storage.
+    let losing_focus = ui.memory(|memory| memory.had_focus_last_frame(id) && !memory.has_focus(id));
+    if external_change || losing_focus {
+        ui.data_mut(|data| {
+            data.remove::<String>(id);
+            if external_change {
+                data.remove::<f64>(id);
+            }
+        });
+    }
+}
+
+pub(crate) fn remember_number_value(ui: &Ui, id: Id, current: f64) {
+    ui.data_mut(|data| data.insert_temp(id.with("number_current_value"), current));
+}
+
 /// Active exact-entry input, available to application interaction diagnostics.
 /// A previously closed editor stops being reported on the next frame.
 pub fn value_entry_rect(ctx: &Context) -> Option<Rect> {
@@ -50,7 +101,20 @@ pub fn value_entry(
     range: RangeInclusive<f64>,
     unit: &str,
 ) -> Option<f64> {
-    value_entry_with_footer(ui, id_salt, current, range, unit, 0.0)
+    value_entry_named(ui, id_salt, current, range, unit, "Value")
+}
+
+/// Exact entry identified by its channel and parameter, with a visible keypad
+/// action. The name changes presentation only; draft identity stays stable.
+pub fn value_entry_named(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    current: f64,
+    range: RangeInclusive<f64>,
+    unit: &str,
+    name: &str,
+) -> Option<f64> {
+    value_entry_with_footer(ui, id_salt, current, range, unit, name, 0.0)
 }
 
 /// Reserve the caller's trailing menu actions when limiting the keypad's height.
@@ -62,6 +126,7 @@ pub(crate) fn value_entry_with_footer(
     current: f64,
     range: RangeInclusive<f64>,
     unit: &str,
+    name: &str,
     trailing_height: f32,
 ) -> Option<f64> {
     value_entry_contents(
@@ -71,9 +136,10 @@ pub(crate) fn value_entry_with_footer(
         range,
         ValueEntryOptions {
             unit,
-            name: "Value",
+            name,
             keypad: false,
             whole_numbers: false,
+            concise: true,
             trailing_height,
         },
     )
@@ -110,6 +176,7 @@ pub(crate) fn numeric_value_entry(
             name,
             keypad: true,
             whole_numbers,
+            concise: false,
             trailing_height: 0.0,
         },
     )
@@ -120,6 +187,7 @@ struct ValueEntryOptions<'a> {
     name: &'a str,
     keypad: bool,
     whole_numbers: bool,
+    concise: bool,
     trailing_height: f32,
 }
 
@@ -135,6 +203,7 @@ fn value_entry_contents(
         name,
         keypad,
         whole_numbers,
+        concise,
         trailing_height,
     } = options;
     ui.set_min_width(220.0);
@@ -158,8 +227,15 @@ fn value_entry_contents(
             })
     });
     let mut draft = if fresh {
+        let text = if concise {
+            parameter_value_text(current)
+        } else {
+            exact_value_text(current)
+        };
         ValueDraft {
-            text: exact_value_text(current),
+            text,
+            initial_value: current,
+            edited: false,
             last_frame: frame,
             field: Rect::NOTHING,
             focus_pending: true,
@@ -168,6 +244,16 @@ fn value_entry_contents(
     } else {
         previous.expect("an existing draft is present")
     };
+    // Follow a moving parameter while viewing it. Once the user starts a
+    // draft, automation must not replace their text or move their caret.
+    if draft.initial_value.to_bits() != current.to_bits() && !draft.edited {
+        draft.text = if concise {
+            parameter_value_text(current)
+        } else {
+            exact_value_text(current)
+        };
+        draft.initial_value = current;
+    }
     let input_id = id.with("input");
     let focused = ui.is_enabled() && ui.memory(|memory| memory.has_focus(input_id));
     let enter = focused && ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter));
@@ -175,7 +261,7 @@ fn value_entry_contents(
     let minimum = range.start().min(*range.end());
     let maximum = range.start().max(*range.end());
     let range_valid = range.start().is_finite() && range.end().is_finite();
-    let label = text::label(ui, name);
+    let label = text::bounded_block(ui, text::TextRole::Label, name, 2);
     text::note(
         ui,
         format!(
@@ -229,8 +315,10 @@ fn value_entry_contents(
             response
         })
         .inner
-        .labelled_by(label.id);
+        .labelled_by(label.id)
+        .on_hover_text(format!("Stored value: {}", exact_value_text(current)));
     draft.field = response.rect;
+    draft.edited |= response.changed();
     draft.last_frame = frame;
     // Popups first measure their contents in a disabled sizing pass. Defer
     // focus until the field is genuinely interactive, rather than consuming
@@ -261,19 +349,22 @@ fn value_entry_contents(
             - frame_margin
             - 2.0 * tokens::SPACE_SM)
             .max(tokens::CONTROL_HEIGHT);
-        egui::ScrollArea::vertical()
+        let edited = egui::ScrollArea::vertical()
             .id_salt(id.with("keypad"))
             .max_height(maximum)
             .min_scrolled_height(tokens::CONTROL_HEIGHT)
             .auto_shrink([false, true])
             .show(ui, |ui| numeric_keypad(ui, input_id, &mut draft.text));
+        draft.edited |= edited.inner;
     }
-    let parsed = draft
-        .text
-        .trim()
-        .parse::<f64>()
-        .ok()
-        .filter(|value| value.is_finite());
+    // The concise display can round just beyond a range endpoint. Until an
+    // actual edit, validate the exact stored value represented by that text.
+    let parsed = if draft.edited {
+        draft.text.trim().parse::<f64>().ok()
+    } else {
+        Some(draft.initial_value)
+    }
+    .filter(|value| value.is_finite());
     let in_range = parsed.filter(|value| range_valid && (minimum..=maximum).contains(value));
     let valid = in_range.filter(|value| !whole_numbers || value.fract() == 0.0);
     // Reserve feedback height for the keypad so Clear/invalid drafts never
@@ -315,7 +406,9 @@ fn value_entry_contents(
         ui.data_mut(|data| data.remove::<(u64, Rect)>(Id::new("exact_value_input_rect")));
         ui.close();
         if !cancel && !escape {
-            return valid.filter(|value| *value != current);
+            // An untouched rounded display is a view of the stored value,
+            // never a request to round it or create an automation override.
+            return valid.filter(|value| draft.edited && *value != current);
         }
     } else {
         ui.data_mut(|data| data.insert_temp(id, draft));
@@ -333,7 +426,7 @@ enum NumericKey {
 
 /// Pointer keys edit the same selection/caret as native text entry. They never
 /// emit keyboard events or apply an intermediate numeric value to the owner.
-fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) {
+fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) -> bool {
     let mut pressed = None;
     ui.add_space(tokens::SPACE_XS);
     let key_width =
@@ -367,7 +460,7 @@ fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) {
         }
     });
     let Some(pressed) = pressed else {
-        return;
+        return false;
     };
     let mut edit = egui::TextEdit::load_state(ui.ctx(), input).unwrap_or_default();
     let count = draft.chars().count();
@@ -383,6 +476,7 @@ fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) {
         )));
     edit.store(ui.ctx(), input);
     ui.ctx().memory_mut(|memory| memory.request_focus(input));
+    true
 }
 
 fn edit_numeric_draft(draft: &mut String, range: std::ops::Range<usize>, key: NumericKey) -> usize {

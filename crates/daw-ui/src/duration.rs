@@ -22,6 +22,23 @@ pub fn musical_position(beat: f64, beats_per_bar: u8) -> String {
     )
 }
 
+/// Compact one-based bar:beat position. Round the whole position before
+/// decomposing it so a displayed fractional beat carries into the next bar.
+pub fn compact_musical_position(beat: f64, beats_per_bar: u8) -> String {
+    let units = (beat.max(0.0) * 1_000.0).round() as u64;
+    let units_per_bar = u64::from(beats_per_bar.max(1)) * 1_000;
+    let bar = units / units_per_bar + 1;
+    let within_bar = units % units_per_bar + 1_000;
+    let fractional = within_bar % 1_000;
+    if fractional == 0 {
+        format!("{bar}:{}", within_bar / 1_000)
+    } else {
+        format!("{bar}:{}.{fractional:03}", within_bar / 1_000)
+            .trim_end_matches('0')
+            .to_owned()
+    }
+}
+
 /// Read-only conversions in a property grid. Timing is still edited by the
 /// caller, so inspecting either unit cannot round the project or add history.
 pub fn timing_summary(ui: &mut Ui, start: f64, length: f64, tempo: f64, beats_per_bar: u8) {

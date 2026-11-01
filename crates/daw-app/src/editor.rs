@@ -139,11 +139,7 @@ impl DawApp {
 
     pub(crate) fn available_bus_name(&self) -> String {
         for index in 1.. {
-            let name = if index == 1 {
-                "New bus".to_owned()
-            } else {
-                format!("New bus {index}")
-            };
+            let name = format!("Bus {index}");
             if !self.project.tracks.iter().any(|track| track.name == name) {
                 return name;
             }
@@ -318,16 +314,19 @@ impl DawApp {
             + 18.0
             + 11.0 * spacing;
         // Size controls against the unobscured workspace, before scrolling.
-        // A transient bottom notice changes the visible clip, not the fader's
-        // travel or the position of Pan/Mute/Solo. Extra send lanes grow below
-        // the strips and remain reachable through the existing scroll pane.
+        // Reserve an overview of the main output and one send, plus room for
+        // an ordinary status notice. These fixed reservations let the useful
+        // routes remain visible without making controls jump when a send or
+        // notice appears. Additional lanes use the existing scroll pane.
         let workspace_height = ui.ctx().content_rect().bottom()
             - daw_ui::tokens::BORDER_WIDTH
             - ui.available_rect_before_wrap().top();
-        let output_route_height =
-            daw_ui::tokens::MIXER_ROUTE_LANE_HEIGHT + daw_ui::tokens::SPACE_SM;
-        let strip_height = (workspace_height - output_route_height - group_header_height)
-            .max(fixed_height + 120.0);
+        let routing_overview_height =
+            2.0 * daw_ui::tokens::MIXER_ROUTE_LANE_HEIGHT + daw_ui::tokens::SPACE_SM;
+        let notice_reserve = daw_ui::tokens::CONTROL_HEIGHT + 2.0 * daw_ui::tokens::SPACE_SM;
+        let strip_height =
+            (workspace_height - routing_overview_height - notice_reserve - group_header_height)
+                .max(fixed_height + 120.0);
         let scroll = daw_ui::scroll_area(ui, "mixer_scroll", [true, true]);
         let panning = daw_ui::scroll_area_is_panning(ui, "mixer_scroll");
         let mut diagnostics = Vec::new();
@@ -483,9 +482,9 @@ impl DawApp {
                             let gain = ui.add_sized(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                                 daw_ui::channel_gain_number(&mut db))
                                 .on_hover_text("Channel volume · drag or double-click to type");
-                            let (action, exact) = daw_ui::automatable_parameter_value_context(ui, &gain,
+                            let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &gain,
                                 daw_ui::AutomationControl::Gain { track: track.id }, gain_automation.map(|(lane, state, _)| (lane, state)),
-                                f64::from(db), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB");
+                                f64::from(db), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB", &format!("{} · Volume", track.name));
                             if let Some(action) = action {
                                 automation_navigation = Some(action);
                             }
@@ -500,9 +499,9 @@ impl DawApp {
                                 let response = daw_ui::mixer_fader(ui, &mut gain, fader_height);
                                 let response = daw_ui::hover_text(response, "Channel volume");
                                 let scale = daw_ui::slider_scale_geometry(ui.ctx(), response.id);
-                                let (action, exact) = daw_ui::automatable_parameter_value_context(ui, &response,
+                                let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &response,
                                     daw_ui::AutomationControl::Gain { track: track.id }, gain_automation.map(|(lane, state, _)| (lane, state)),
-                                    f64::from(daw_ui::channel_gain_to_db(gain)), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB");
+                                    f64::from(daw_ui::channel_gain_to_db(gain)), -60.0..=f64::from(20.0 * 1.5_f32.log10()), "dB", &format!("{} · Volume", track.name));
                                 if let Some(action) = action {
                                     automation_navigation = Some(action);
                                 }
@@ -517,9 +516,9 @@ impl DawApp {
                             .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value)).unwrap_or(track.pan);
                         let pan_response = daw_ui::mixer_pan(ui, &mut pan, content_width)
                             .on_hover_text("Stereo balance");
-                        let (action, exact) = daw_ui::automatable_parameter_value_context(ui, &pan_response,
+                        let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &pan_response,
                             daw_ui::AutomationControl::Pan { track: track.id }, pan_automation.map(|(lane, state, _)| (lane, state)),
-                            f64::from(pan) * 100.0, -100.0..=100.0, "%");
+                            f64::from(pan) * 100.0, -100.0..=100.0, "%", &format!("{} · Pan", track.name));
                         if let Some(action) = action {
                             automation_navigation = Some(action);
                         }

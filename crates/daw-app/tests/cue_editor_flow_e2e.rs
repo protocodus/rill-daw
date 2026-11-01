@@ -115,7 +115,11 @@ fn single_clip_header_keeps_actions_without_empty_navigation_controls() {
             "Back",
             "Properties",
             "Choose instrument…",
-            "AI for this context",
+            if width < 1000 {
+                "AI"
+            } else {
+                "AI for this context"
+            },
         ] {
             assert!(labels.iter().any(|text| text == label), "Missing {label}");
         }

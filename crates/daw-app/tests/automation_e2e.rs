@@ -568,7 +568,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     menu(&mut app, "+ Insert", "Rill Fixture FX");
     app.click("Add to effect chain");
     menu(&mut app, "Window", "Routing");
-    menu(&mut app, "+ Send", "New bus");
+    menu(&mut app, "+ Send", "Bus 1");
     let state = app.inspect();
     let target = state["project"]["tracks"][0]["id"].clone();
     let effect = state["project"]["tracks"][0]["inserts"][0]["id"].clone();
@@ -576,7 +576,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     let choices = [
         ("Volume", json!("TrackGain")),
         ("Pan", json!("TrackPan")),
-        ("Send · New bus", json!({"SendGain":{"bus":bus}})),
+        ("Send · Bus 1", json!({"SendGain":{"bus":bus}})),
         (
             "01 · Rill Fixture FX · Parameter",
             json!({"VstParameter":{"effect":effect,"id":0}}),

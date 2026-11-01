@@ -79,6 +79,24 @@ pub fn automatable_parameter_value_context(
     range: RangeInclusive<f64>,
     unit: &str,
 ) -> (Option<AutomationNavigation>, Option<f64>) {
+    automatable_parameter_value_context_named(
+        ui, response, control, automation, current, range, unit, "Value",
+    )
+}
+
+/// Contextual exact entry without changing existing drag, focus or automation
+/// semantics. `name` can identify the source channel and destination as well.
+#[allow(clippy::too_many_arguments)] // Extend the existing context API without breaking its callers.
+pub fn automatable_parameter_value_context_named(
+    ui: &Ui,
+    response: &Response,
+    control: AutomationControl,
+    automation: Option<(u64, AutomationState)>,
+    current: f64,
+    range: RangeInclusive<f64>,
+    unit: &str,
+    name: &str,
+) -> (Option<AutomationNavigation>, Option<f64>) {
     if let Some((_, state)) = automation {
         crate::paint_automation_control(ui, response, state);
         crate::hover_text(response.clone(), state.hint());
@@ -87,9 +105,72 @@ pub fn automatable_parameter_value_context(
         response.clone(),
         "Right-click for exact value and automation",
     );
+    parameter_value_popup(
+        egui::Popup::context_menu(response),
+        response.id,
+        control,
+        automation,
+        current,
+        range,
+        unit,
+        name,
+    )
+}
+
+/// A visible, single-click value button opening the same exact editor and
+/// automation actions as a parameter's context menu. The shared 123 action
+/// beside its field makes the mouse keypad discoverable immediately.
+#[allow(clippy::too_many_arguments)] // Keep parameter ownership, units and context identical to the context-menu API.
+pub fn automatable_parameter_value_button(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    label: impl Into<egui::WidgetText>,
+    control: AutomationControl,
+    automation: Option<(u64, AutomationState)>,
+    current: f64,
+    range: RangeInclusive<f64>,
+    unit: &str,
+    name: &str,
+) -> (Option<AutomationNavigation>, Option<f64>) {
+    ui.push_id(id_salt, |ui| {
+        let response = crate::button(ui, label)
+            .on_hover_text(format!("Edit {name} · Exact value and mouse keypad"));
+        if let Some((_, state)) = automation {
+            crate::paint_automation_control(ui, &response, state);
+        }
+        let popup = egui::Popup::menu(&response).open_memory(if response.secondary_clicked() {
+            Some(egui::SetOpenCommand::Bool(true))
+        } else {
+            response.clicked().then_some(egui::SetOpenCommand::Toggle)
+        });
+        parameter_value_popup(
+            popup,
+            response.id,
+            control,
+            automation,
+            current,
+            range,
+            unit,
+            name,
+        )
+    })
+    .inner
+}
+
+#[allow(clippy::too_many_arguments)] // One implementation serves both native popup anchors.
+fn parameter_value_popup(
+    popup: egui::Popup<'_>,
+    id: egui::Id,
+    control: AutomationControl,
+    automation: Option<(u64, AutomationState)>,
+    current: f64,
+    range: RangeInclusive<f64>,
+    unit: &str,
+    name: &str,
+) -> (Option<AutomationNavigation>, Option<f64>) {
     let mut action = None;
     let mut value = None;
-    egui::Popup::context_menu(response)
+    popup
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
             let spacing = ui.spacing().item_spacing.y;
@@ -107,16 +188,17 @@ pub fn automatable_parameter_value_context(
                 });
             value = crate::value_entry::value_entry_with_footer(
                 ui,
-                response.id,
+                id,
                 current,
                 range,
                 unit,
+                name,
                 trailing_height,
             );
             ui.separator();
             action = automatable_menu_contents(ui, control, automation);
             if action.is_some() {
-                crate::value_entry::clear_value_entry(ui, response.id);
+                crate::value_entry::clear_value_entry(ui, id);
             }
         });
     (action, value)

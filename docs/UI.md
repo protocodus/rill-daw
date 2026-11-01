@@ -159,7 +159,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. The previous workspace and any parent popup remain visible as softly blurred, dimmed context; only the foreground utility accepts editing input. Menus, dropdowns, and color pickers dim their caller too, while tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities retain crisp, inactive context beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers use the same light scrim so surrounding notes and values remain readable. Explicit modal decisions retain stronger dimming and native-renderer blur. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -218,7 +218,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Application and contextual menus | `menu_bar`, `menu_button` |
 | Toolbar command, choice, and presentation menus | `action_menu`, `choice_menu`, `view_menu` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
-| Focused workspace structure | `workspace_header`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
+| Focused workspace structure | `workspace_header`, `workspace_header_with_context`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Mixer parameter controls and output level | `mixer_fader`, `mixer_pan`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `mixer_level_meter` |
@@ -235,7 +235,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
 | Mouse naming | `inline_name_editor`, `name_keyboard`, `set_name_keyboard_open`, `name_keyboard_open` |
-| Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantSubmitState`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button` |
+| Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantSubmitState`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button`, `contextual_ai_button_compact` |
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `path_row` |
 | Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
@@ -243,6 +243,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Numeric mouse steps and exact entry | `number_stepper`, `number_stepper_integer`, `mouse_value_entry`, `NumberStepperResponse` |
+| Named parameter entry and readouts | `value_entry_named`, `parameter_value_text`, `automatable_parameter_value_context_named`, `automatable_parameter_value_button` |
 | Exact time ranges and readouts | `duration::duration_presets`, `duration::timing_summary`, `duration::paint_loop_region`, `duration::loop_endpoint_handle` |
 | Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
@@ -352,22 +353,32 @@ the built-in endpoints with `.scale_labels(false)` when providing a calibrated
 external scale, as Mixer does for dB faders. `slider_scale_geometry` exposes the
 same native rail and handle positions for such scales and diagnostics.
 
-`value_entry(ui, id, current, range, unit)` provides a deliberate exact editor
-inside a parameter menu. It displays the current value and range, selects the
-initial text, and returns a changed value only on **Apply value**. Invalid or
+`value_entry_named(ui, id, current, range, unit, name)` provides a deliberate
+exact editor inside an anchored parameter menu. Name the channel and parameter;
+send editors also name the destination. `value_entry` remains the generic
+wrapper. Parameter drafts use concise six-significant-digit formatting in the
+usual parameter ranges, while the field's **Stored value** tooltip exposes the
+full stored number. Opening the menu or applying its untouched display never
+rounds the underlying value or creates an automation override. An untouched
+draft follows live parameter changes; once edited, its text and caret remain
+the user's draft. The editor shows the allowed range, selects the initial text,
+and returns a changed value only on **Apply value**. Invalid or
 non-finite text keeps the editor open; **Cancel**, Escape, and outside dismissal
 leave the value untouched. **123** beside the field opens the shared mouse
 keypad without changing the draft or its precision. On short screens only the
 keys scroll; Apply/Cancel and the caller's automation actions remain reachable.
-Use `automatable_parameter_value_context` for channel
+Use `automatable_parameter_value_context_named` for channel
 controls so exact entry and Create/Edit/Override/Resume automation share one
-menu. Such menus close only on outside clicks or explicit actions, allowing
+menu. `automatable_parameter_value_button` opens that same editor from a visible
+value button; Routing uses it beside every send dial. Such menus close only on outside clicks or explicit actions, allowing
 normal text selection and correction. `value_entry_rect` exposes the active
 field for app interaction diagnostics.
 
 Endpoint formatting retains small ranges instead of rounding both ends to zero.
 Stored values outside an editing range are preserved, visibly marked as outside
-the range, and reported exactly in the tooltip and context editor. A slider's
+the range, and reported exactly in the stored-value tooltip. Slider and knob
+numeric readouts discard stale native text when a sibling rail or dial changes
+the value, while preserving an unchanged typing draft. A slider's
 automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
 and a muted dash for Bypassed, without covering the center index or captions.
 
@@ -402,6 +413,14 @@ hover guidance and exact-entry context menu. `KnobGeometry.number` is
 `Rect::NOTHING` in this mode. The default plug-in parameter knob keeps its
 visible numeric editor.
 
+`.perceptual_gain()` gives a nonnegative gain knob continuous travel through
+silence using `ln(1 + gain / 0.01)`, with an inverse mapping for edits. This is a
+control taper: the stored gain and automation mapping remain linear. When the
+range contains unity, the dial paints a hollow landmark and **1× unity** label;
+`KnobGeometry.unity` exposes that position. Routing uses a 64-point compact
+send dial over the existing 0–16× range, with a separate live value button for
+exact entry and the usual Shift fine adjustment.
+
 `assistant(ui, prompt, state, options)` provides a bounded, selectable conversation,
 captured-context label, optional progress, multiline **AI prompt**, and fixed
 primary, cancellation/recovery, and **Undo** controls. Enter adds a newline; Ctrl/Cmd+Enter
@@ -425,13 +444,21 @@ must never include it in diagnostic or conversation text.
 
 For a modal opened above a menu or another modal, `ViewBackdrop::capture_dialog_context` also retains foreground content. Call it before drawing the new dialog. It omits existing shared popup and modal scrims so the new modal dims the complete retained caller once; replay still creates no controls or accessibility targets.
 
-Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one theme-aware dim layer below the active window or native menu/picker, including submenus. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the same palette color through its native input-blocking backdrop. Confirmation dialogs retain the previous view. The native app enables shared `glow-backdrop` rendering: two low-resolution Gaussian passes soften the inactive context before the dim rectangle. Each of two GPU targets is capped at 512 × 512 pixels (2 MiB combined). Frozen utility backgrounds reuse the blurred result; menus refresh only during existing redraws. There is no CPU pixel readback, animation, extra hit target, or repaint request. Unsupported graphics contexts retain dimming. Call `enable_backdrop_blur` after renderer creation and `destroy_backdrop_blur` while its context is current at shutdown.
+Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one light, theme-aware scrim below the active window or native menu/picker, including submenus, without submitting blur. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the stronger palette scrim through its native input-blocking backdrop. Confirmation dialogs retain the previous view. For these explicit modals, the native app's shared `glow-backdrop` renderer uses two low-resolution Gaussian passes to soften the inactive context before dimming. Each of two GPU targets is capped at 512 × 512 pixels (2 MiB combined). There is no CPU pixel readback, animation, extra hit target, or repaint request. Unsupported graphics contexts retain dimming. Call `enable_backdrop_blur` after renderer creation and `destroy_backdrop_blur` while its context is current at shutdown.
 
 `scroll_body` inside a window with `.vscroll(false)` lets short utility content fit naturally while long chains remain bounded and scrollable. Use a stable height for tabbed forms and reserve footer space before sizing inner lists.
 
 `notice` keeps readable feedback and trailing actions within one bounded row. It supports progress, success, warning, and error states; long text truncates with a full-message tooltip. Export completion stays visible until dismissed, shows the resulting filename, and offers **Copy path**. Errors retain priority; ongoing work and later export completions remain visible alongside a retained failure. A new export clears the previous result. Notifications never add project history or block editing.
 
 The project header uses the saved filename stem, with the full path on hover and a dirty marker after edits. Unsaved projects retain their musical project name. Save and WAV/MIDI destination pickers reuse the saved directory and filename stem. New projects also remember the last successful project-save directory across restarts, ignoring deleted folders; extensionless project saves receive `.rill`, while explicit `.rill` and legacy `.json` extensions are accepted case-insensitively. MIDI export uses the same persistent completion notice as WAV.
+
+Document pickers use the vendored RFD result APIs to distinguish cancellation
+from reported Linux portal/Zenity failures. A missing or failed fallback appears
+in the existing notice and Details, and in an active unsaved-document guard;
+the project remains available for retry. Normal Cancel stays silent. Other
+native backends retain their legacy result behavior. See
+[the RFD patch notes](../vendor/rfd/RILL-PATCH.md) for the cancellation-code
+ambiguity and test boundaries.
 
 Errors offer **Details** from the notification, plugin view, or unsaved-project dialog.
 Audio-device errors also offer **Audio setup…** in the notification, restoring the caller when Setup closes.
@@ -494,7 +521,7 @@ Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The 
 
 When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable. `popup_body_size(ctx)` supplies the available utility content bounds when a view needs an explicit minimum height. Routing uses this bound to keep a useful send viewport below its navigation and AI actions as display density changes; long send lists and output choices scroll together.
 
-`workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, inner, response }`; handle `back.clicked()` in the application's navigation logic. The action closure is laid out from right to left. The title truncates before trailing controls, and the header occupies one bounded row. Back and Properties are quiet actions; the Previous/Next pair is omitted when the clip has no neighbors. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
+`workspace_header(ui, title, actions)` returns `WorkspaceHeaderResponse { back, title, context, inner, response }`; handle `back.clicked()` in the application's navigation logic. `workspace_header_with_context` adds an optional context line inside the existing header height. The action closure is laid out from right to left, with its first action anchored to the trailing edge. Titles and context truncate before controls. Clip Editor puts Properties first so it stays in the same place for audio and MIDI, and shows **Song start–end · Track** beneath the clip name. The caller supplies one context tooltip with full identity, global musical positions, clock times and the ruler's time basis. Below 1000 logical points, the contextual assistant uses a compact **AI** caption and Previous/Next keep their labels in a narrower pair, leaving room for the song span. The MIDI ruler is explicitly labelled **Local** and starts at local bar 1; the audio ruler retains song time. Back and Properties are quiet actions; the Previous/Next pair is omitted when the clip has no neighbors. `toolbar(ui, ...)` wraps whole native controls when needed; both helpers include an eight-point inset. `toolbar_group` keeps related controls together. `context_section` groups a quiet label and controls without another panel outline.
 
 `toolbar_group_sized(ui, width, contents)` reserves a known width before drawing
 related controls from left to right. It stays on the current row when space
@@ -589,6 +616,12 @@ Folders and automation lanes have no audio channel gain/pan or meter; folder
 mute/solo acts on descendants.
 
 **Track → Add MIDI track** creates a four-beat pattern at the cursor and opens the library in assignment mode. The chooser identifies its target by name. Selecting an instrument assigns that existing track and returns to its caller without opening another panel; **Window → Instrument** remains available explicitly. Closing the chooser leaves the pattern unassigned. **Add instrument…** starts with the chooser and creates the track and pattern after selection.
+
+The initial creation chooser may replace the untouched **New instrument** name
+with the chosen device name, adding a numeric suffix to avoid existing channel
+names. Assignment and that rename share one Undo step. Closing and reopening a
+chooser does not confer naming permission: existing, loaded and user-edited
+names remain intact, including an intentionally named **New instrument**.
 
 Arrangement **Add pattern** creates a four-beat pattern at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
 
@@ -696,8 +729,11 @@ the adjacent caption shows **Pan C**, **Pan L…** or **Pan R…**. The complete
 is an exact-entry context target, and `knob_geometry` returns the actual dial
 geometry through its response ID. The full-height volume fader remains separate.
 Strip height follows the window rather than transient notices or the number of
-sends. Notices and added routing lanes keep existing controls in place; extra
-lanes remain accessible by scrolling below the strips. The viewport still clamps
+sends. The height calculation reserves two routing lanes (main output and one
+send) plus space for an ordinary notice, keeping that overview visible at the
+reviewed 1440×1000 viewport. Faders retain their usable minimum height; shorter
+windows and additional lanes remain accessible by scrolling. Notices and added
+routing lanes keep existing controls in place. The viewport still clamps
 scroll offsets at the content boundaries when its visible area changes.
 `mixer_mute_solo` gives the two independent switches equal-width, full-height
 buttons with explicit selected states. `mixer_level_meter` shows separate L/R
@@ -709,6 +745,9 @@ selected audio, MIDI or bus channel and requires an explicit eligible destinatio
 it excludes duplicate sends and feedback routes. **New bus and send** creates
 both in one Undo step. New sends start post-fader at gain 0.25. Without an eligible
 selected channel, the send action is disabled.
+Generic bus creation chooses the first unused **Bus 1**, **Bus 2**, and so on,
+checking all existing channel names. Existing names remain unchanged, and bus
+destinations stay distinct from the **New bus and send** creation command.
 The output control carries the destination's color. Each strip's separate send
 action names a single destination or shows the send count; hover lists every
 destination, pre/post position and level. An empty strip's **Add send…** opens
@@ -751,6 +790,11 @@ Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut,
 `clip_title` paints an elided clip name and optional chain icon inside a timeline rectangle, returning the icon/text bounds for diagnostics. It adds no hit target. `clip_label` shows the same link identity in editor headers and Properties. Names remain ordinary Unicode text in the project; the link indicator is a vector icon, not a name prefix. Properties separates Clip, Track, and Channel pages, opening Clip for a valid selected clip and Track otherwise. **Start**, **Duration** and **Source offset** use numeric fields with visible one-beat steppers and Undo; Start uses one-based beats, while duration and source offset remain distances in beats. Moving or trimming uses the ordinary clip-edit paths, and source offset keeps the occurrence in place. Only audio clips expose **Clip gain**; MIDI clips have no gain or pan. Track holds naming, color, hierarchy, and display options. Channel holds mixer gain, pan, mute, solo, and latency for audio, MIDI, and bus channels. Folders and automation tracks have no Channel page. Every ghost group member displays the shared name and exposes **Make independent**.
 
 `clip_timing_fields` accepts the occurrence-specific supported stretch-duration range from its owner. Stretch intersects it with remaining timeline space and uses it consistently for the number, steppers and numeric keypad; Trim retains ordinary boundary limits. The app derives these bounds from the current source window and core playback-rate constants, so trimmed or already-stretched ghosts receive correct local limits without changing their peers. Invalid keypad drafts stay editable and cannot Apply.
+
+Audio and MIDI clip context menus expose **Properties** directly. Opening the
+menu leaves selection unchanged; choosing Properties targets that occurrence's
+Clip page above Arrangement, without opening Clip Editor or creating an edit.
+The usual timing fields, mouse keypad, Cancel and Undo apply there.
 
 `clip_edge_handle` registers narrow drag-only targets at actual visible clip edges. It adds no paint or layout. Arrangement owns the original bounds and gesture transaction, ignores zero horizontal motion, retains source and snap limits, and gives audio fade handles priority. Small edge corrections do not wait for the body click/drag threshold; the release position completes the same Undo step.
 

@@ -85,6 +85,109 @@ fn labels(output: &egui::FullOutput) -> Vec<&str> {
         .collect()
 }
 
+fn gain_frame(
+    ctx: &Context,
+    value: &mut f64,
+    events: Vec<Event>,
+) -> (Response, KnobGeometry, egui::FullOutput) {
+    let mut result = None;
+    let output = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(440.0, 420.0))),
+            time: Some(ctx.cumulative_frame_nr() as f64 * 0.2),
+            events,
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let response = ui.add(
+                    daw_ui::knob(value, 0.0..=16.0)
+                        .compact()
+                        .diameter(64.0)
+                        .perceptual_gain()
+                        .suffix("×"),
+                );
+                let geometry = daw_ui::knob_geometry(ctx, response.id).unwrap();
+                result = Some((response, geometry));
+            });
+        },
+    );
+    let (response, geometry) = result.unwrap();
+    (response, geometry, output)
+}
+
+#[test]
+fn gain_taper_gives_sub_unity_adjustments_room_and_keeps_silence_and_full_range() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let mut value = 0.25;
+    let (_, geometry, output) = gain_frame(&ctx, &mut value, vec![]);
+    assert_eq!(value, 0.25);
+    assert_eq!(geometry.range, [0.0, 16.0]);
+    assert!(geometry.unity.is_some());
+    assert!(labels(&output).contains(&"1× unity"));
+    let start = geometry.center;
+    gain_frame(
+        &ctx,
+        &mut value,
+        pointer(start, PointerButton::Primary, true, Modifiers::NONE),
+    );
+    assert_eq!(value, 0.25, "pressing the dial never jumps the value");
+    let moved = start + vec2(0.0, -12.0);
+    gain_frame(&ctx, &mut value, vec![Event::PointerMoved(moved)]);
+    assert!(
+        (0.25..0.5).contains(&value),
+        "useful low-level travel: {value}"
+    );
+    let before = value;
+    let fine = moved + vec2(0.0, -4.0);
+    gain_frame(&ctx, &mut value, vec![Event::PointerMoved(fine)]);
+    assert!(
+        (0.0..0.1).contains(&(value - before)),
+        "four points must remain a small adjustment"
+    );
+    gain_frame(
+        &ctx,
+        &mut value,
+        pointer(fine, PointerButton::Primary, false, Modifiers::NONE),
+    );
+    gain_frame(
+        &ctx,
+        &mut value,
+        pointer(start, PointerButton::Primary, true, Modifiers::NONE),
+    );
+    gain_frame(
+        &ctx,
+        &mut value,
+        vec![Event::PointerMoved(start + vec2(0.0, 300.0))],
+    );
+    assert_eq!(value, 0.0, "silence remains reachable");
+    gain_frame(
+        &ctx,
+        &mut value,
+        pointer(
+            start + vec2(0.0, 300.0),
+            PointerButton::Primary,
+            false,
+            Modifiers::NONE,
+        ),
+    );
+    gain_frame(
+        &ctx,
+        &mut value,
+        pointer(start, PointerButton::Primary, true, Modifiers::NONE),
+    );
+    gain_frame(
+        &ctx,
+        &mut value,
+        vec![Event::PointerMoved(start - vec2(0.0, 200.0))],
+    );
+    assert!(
+        (value - 16.0).abs() < 1e-12,
+        "the full gain range remains reachable"
+    );
+}
+
 #[test]
 fn arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density() {
     for dark in [false, true] {

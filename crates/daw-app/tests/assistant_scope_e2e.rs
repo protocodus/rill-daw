@@ -29,16 +29,20 @@ fn menu(app: &mut Harness, item: &str) -> Value {
 
 fn local_ai(app: &mut Harness, kind: &str) -> Value {
     let before = app.inspect();
+    let caption = if visible(&before, "AI for this context") {
+        "AI for this context"
+    } else {
+        "AI"
+    };
     let occurrence = before["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|rect| rect["text"] == "AI for this context")
+        .filter(|rect| rect["text"] == caption)
         .count()
         .checked_sub(1)
         .expect("contextual AI control visible");
-    let state = app
-        .command(json!({"command":"click","label":"AI for this context","occurrence":occurrence}));
+    let state = app.command(json!({"command":"click","label":caption,"occurrence":occurrence}));
     assert_eq!(
         state["assistant"]["scope"]["kind"], kind,
         "{}",

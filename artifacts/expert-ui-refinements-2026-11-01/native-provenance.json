@@ -1,0 +1,66 @@
+{
+  "method": "Native mouse inspection of copied study projects in isolated Dark/Light Xvfb sessions at 1440x1000 and 800x600. No playback or audition. Naming/drag edits were undone; original and copied projects were not saved.",
+  "build_notes": "Early send, menu and mixer captures use build.json. Final narrow headers, consolidated tooltips, naming and pan captures use build-v3.json. The final subsequent change adds only opt-in painted glyph diagnostics and test assertions.",
+  "screenshots": [
+    {
+      "file": "after/send-exact-light.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-2/03-send-exact.png",
+      "sha256": "636dc49917acab84239903db810e9e64813ce6e8d316ee8575201852a7608e42",
+      "build": "build.json"
+    },
+    {
+      "file": "after/send-keypad-dark.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-1/07-send-exact-keypad.png",
+      "sha256": "022d939e7937a15530dc18b30e5492d3db990df8bedf4a38fe5ede022d4f9fc6",
+      "build": "build.json"
+    },
+    {
+      "file": "after/send-small-drag-dark.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-1/09-send-small-drag-released.png",
+      "sha256": "5aa092f1b626abf8c97763e307403fcb1185ca84e690befe314be58e2c6a6d4f",
+      "build": "build.json"
+    },
+    {
+      "file": "after/mixer-routing-light.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-2/04-mixer.png",
+      "sha256": "942e298e2f479791b9a9de3f8da57775db4600ad911b3db82ee65d16a4938e67",
+      "build": "build.json"
+    },
+    {
+      "file": "after/midi-menu-dark.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-1/03-midi-edit-menu-context.png",
+      "sha256": "04431a6da1e637c0724c89edcf9f17cd50ed67209b9fc55399cdc30a31bf7a3c",
+      "build": "build.json"
+    },
+    {
+      "file": "after/names-dark.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-1/33-v3-instrument-name-numbered-bus.png",
+      "sha256": "cc02072f29565deef6b68df1e6f89718682a69ce041fa3063617c26a0d33d214",
+      "build": "build-v3.json"
+    },
+    {
+      "file": "after/pan-exact-dark.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-1/35-v3-pan-exact-context.png",
+      "sha256": "95e9f46eb416c6771423ccddd21e1eaea8ab61d2a7fc333f471537e1a74952d1",
+      "build": "build-v3.json"
+    },
+    {
+      "file": "after/midi-context-dark-800.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-3/32-v3-midi-context-single-tooltip.png",
+      "sha256": "51e76f3aa37da84f407cdd16716c80a8a593290a2ffa9d0badc65ef878f93263",
+      "build": "build-v3.json"
+    },
+    {
+      "file": "after/midi-context-light-800.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-4/32-v3-midi-context-tooltip.png",
+      "sha256": "7d8caf2dba342159e49bb64fbefbf894dad57a9eb9daa289575085a7115c4b15",
+      "build": "build-v3.json"
+    },
+    {
+      "file": "after/audio-context-light-800.png",
+      "source": "/workspace/scratch/rill-expert-fixes-preview/session-4/34-v3-audio-context-tooltip.png",
+      "sha256": "4ee23ddf24ac4a2db99e388f0937d0d5ed5be5ee79e2e6891303358e70aa4532",
+      "build": "build-v3.json"
+    }
+  ]
+}
