@@ -182,6 +182,9 @@ The piano roll separates note actions from the **View** menu. Note-tool controls
 
 The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**, **Cursor**, **Cut**, **Glue**, **Erase**, and **Duplicate**. Separators distinguish related tool families; the toolbar wraps when needed. The active tool keeps its underline, and all shortcuts remain available.
 
+With **Pencil**, press at the note's starting time and pitch, then drag to choose
+its length. The starting pitch stays fixed while drawing.
+
 The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Draw settings → Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
 
 Select notes with the mouse or **Edit → Select all notes**, then open **Notes** for Randomize, Quantize, and Legato. These actions are available with every tool:
@@ -260,7 +263,11 @@ channel's sends control to adjust their level or choose Pre/Post in Routing.
 Pre-fader sends follow inserts but bypass volume and pan; both types respect
 Mute. **Add bus** creates and selects a bus without adding a send.
 
-Selected clips and mixer channels have a subtle glow in their track color. Hover or select a mixer channel to trace its output and sends: continuous U-shaped arrows blend from that channel’s color to each destination’s color.
+An empty channel's own **Add send…** opens the same destination choices directly.
+The menu names its source, so you can add a send without changing the selected
+channel. Click an existing send summary to edit its settings in Routing.
+
+Selected clips and mixer channels have a subtle glow in their track color. Hover or select a mixer channel to trace its output and sends: continuous U-shaped arrows blend from that channel’s color to each destination’s color. Scroll below the channel strips to inspect additional send lanes. Notices and added sends keep the existing fader, pan, and mute/solo controls in place.
 
 Drag an Arrangement track's name or grip to reorder it. The insertion line shows
 Before or After; drop in the middle of a folder header to move inside it. Folders
@@ -300,7 +307,8 @@ its history intact.
 ## Automation
 
 Right-click a channel fader, pan control, or send level to enter an exact value.
-The menu shows the current value and allowed range; choose **Apply value** to
+The menu shows the current value and allowed range. Choose **123** beside the
+field to enter digits with the mouse, then choose **Apply value** to
 commit or **Cancel** to keep the original. This also works in compact track
 headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left through
 0% center to 100% right, and send levels use a linear multiplier. Properties also
@@ -318,7 +326,8 @@ value to an automated control creates the same visible override as dragging it.
 The plug-in parameter browser uses a knob with a visible range, position index,
 and editable number. Drag vertically or horizontally to adjust it; Shift makes
 dragging finer. Right-click the knob for exact entry with **Apply value** and
-**Cancel**. Its value is explicitly a normalized percentage, because plug-in
+**Cancel**, or open **123** there for mouse-only digit entry. Its value is
+explicitly a normalized percentage, because plug-in
 unit names alone do not provide a physical-unit conversion. Stepped parameters
 use their declared steps when edited, and automation state remains visible.
 

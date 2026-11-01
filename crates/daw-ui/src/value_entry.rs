@@ -10,6 +10,7 @@ struct ValueDraft {
     last_frame: u64,
     field: Rect,
     focus_pending: bool,
+    keypad_visible: bool,
 }
 
 fn draft_id(ui: &Ui, id_salt: impl Hash) -> Id {
@@ -41,12 +42,27 @@ pub fn value_entry_rect(ctx: &Context) -> Option<Rect> {
 /// Draw inside a control's existing context menu. A changed finite value is
 /// returned only after Apply value (or Enter while the field owns focus).
 /// Cancel/Escape and outside dismissal leave the caller's parameter untouched.
+/// The visible 123 action opens the same mouse keypad used by timing fields.
 pub fn value_entry(
     ui: &mut Ui,
     id_salt: impl Hash,
     current: f64,
     range: RangeInclusive<f64>,
     unit: &str,
+) -> Option<f64> {
+    value_entry_with_footer(ui, id_salt, current, range, unit, 0.0)
+}
+
+/// Reserve the caller's trailing menu actions when limiting the keypad's height.
+/// Only the keys scroll; the exact field, Apply/Cancel and caller actions remain
+/// visible, including when an automation menu has additional controls.
+pub(crate) fn value_entry_with_footer(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    current: f64,
+    range: RangeInclusive<f64>,
+    unit: &str,
+    trailing_height: f32,
 ) -> Option<f64> {
     value_entry_contents(
         ui,
@@ -58,6 +74,7 @@ pub fn value_entry(
             name: "Value",
             keypad: false,
             whole_numbers: false,
+            trailing_height,
         },
     )
 }
@@ -93,6 +110,7 @@ pub(crate) fn numeric_value_entry(
             name,
             keypad: true,
             whole_numbers,
+            trailing_height: 0.0,
         },
     )
 }
@@ -102,6 +120,7 @@ struct ValueEntryOptions<'a> {
     name: &'a str,
     keypad: bool,
     whole_numbers: bool,
+    trailing_height: f32,
 }
 
 fn value_entry_contents(
@@ -116,11 +135,11 @@ fn value_entry_contents(
         name,
         keypad,
         whole_numbers,
+        trailing_height,
     } = options;
-    if keypad {
-        ui.set_min_width(220.0);
-        ui.set_max_width(220.0);
-    }
+    ui.set_min_width(220.0);
+    ui.set_max_width(220.0);
+    let top = ui.cursor().top();
     let id = draft_id(ui, id_salt);
     let frame = ui.ctx().cumulative_frame_nr();
     let previous = ui.data_mut(|data| {
@@ -144,6 +163,7 @@ fn value_entry_contents(
             last_frame: frame,
             field: Rect::NOTHING,
             focus_pending: true,
+            keypad_visible: keypad,
         }
     } else {
         previous.expect("an existing draft is present")
@@ -167,18 +187,48 @@ fn value_entry_contents(
         ),
     );
     let response = ui
-        .add(
-            egui::TextEdit::singleline(&mut draft.text)
-                .id(input_id)
-                .desired_width(220.0_f32.min(ui.available_width()))
-                .char_limit(128)
-                .margin(egui::vec2(
-                    tokens::BUTTON_PADDING_X,
-                    tokens::BUTTON_PADDING_Y,
-                ))
-                .vertical_align(egui::Align::Center)
-                .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
-        )
+        .horizontal(|ui| {
+            let toggle_width = if keypad {
+                0.0
+            } else {
+                ui.painter()
+                    .layout_no_wrap(
+                        "123".into(),
+                        egui::FontId::proportional(tokens::FONT_BUTTON),
+                        ui.visuals().text_color(),
+                    )
+                    .size()
+                    .x
+                    + 2.0 * tokens::BUTTON_PADDING_X
+                    + ui.spacing().item_spacing.x
+            };
+            let input_width = (ui.available_width() - toggle_width).max(tokens::CONTROL_HEIGHT);
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut draft.text)
+                    .id(input_id)
+                    .desired_width(input_width)
+                    .char_limit(128)
+                    .margin(egui::vec2(
+                        tokens::BUTTON_PADDING_X,
+                        tokens::BUTTON_PADDING_Y,
+                    ))
+                    .vertical_align(egui::Align::Center)
+                    .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
+            );
+            if !keypad
+                && crate::button(ui, "123")
+                    .on_hover_text(if draft.keypad_visible {
+                        "Hide mouse keypad"
+                    } else {
+                        "Show mouse keypad"
+                    })
+                    .clicked()
+            {
+                draft.keypad_visible = !draft.keypad_visible;
+            }
+            response
+        })
+        .inner
         .labelled_by(label.id);
     draft.field = response.rect;
     draft.last_frame = frame;
@@ -198,8 +248,25 @@ fn value_entry_contents(
         draft.focus_pending = false;
     }
     ui.data_mut(|data| data.insert_temp(Id::new("exact_value_input_rect"), (frame, response.rect)));
-    if keypad {
-        numeric_keypad(ui, input_id, &mut draft.text);
+    if draft.keypad_visible {
+        let spacing = ui.spacing().item_spacing.y;
+        let footer_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0
+            + tokens::CONTROL_HEIGHT
+            + 3.0 * spacing;
+        let frame_margin = egui::Frame::popup(ui.style()).total_margin().sum().y;
+        let maximum = (ui.ctx().content_rect().height()
+            - (ui.cursor().top() - top)
+            - footer_height
+            - trailing_height
+            - frame_margin
+            - 2.0 * tokens::SPACE_SM)
+            .max(tokens::CONTROL_HEIGHT);
+        egui::ScrollArea::vertical()
+            .id_salt(id.with("keypad"))
+            .max_height(maximum)
+            .min_scrolled_height(tokens::CONTROL_HEIGHT)
+            .auto_shrink([false, true])
+            .show(ui, |ui| numeric_keypad(ui, input_id, &mut draft.text));
     }
     let parsed = draft
         .text
@@ -220,7 +287,7 @@ fn value_entry_contents(
     } else {
         ""
     };
-    if keypad {
+    if draft.keypad_visible {
         let feedback_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0;
         ui.allocate_ui_with_layout(
             egui::vec2(220.0, feedback_height),
@@ -269,13 +336,15 @@ enum NumericKey {
 fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) {
     let mut pressed = None;
     ui.add_space(tokens::SPACE_XS);
+    let key_width =
+        ((ui.available_width() - 2.0 * tokens::SPACE_XS) / 3.0).max(tokens::CONTROL_HEIGHT);
     for row in ["789", "456", "123", "±0."] {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
             for character in row.chars() {
                 if ui
                     .add_sized(
-                        egui::vec2(70.0, tokens::CONTROL_HEIGHT),
+                        egui::vec2(key_width, tokens::CONTROL_HEIGHT),
                         crate::button_widget(character.to_string()),
                     )
                     .clicked()

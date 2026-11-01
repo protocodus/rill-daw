@@ -92,7 +92,27 @@ pub fn automatable_parameter_value_context(
     egui::Popup::context_menu(response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
-            value = crate::value_entry(ui, response.id, current, range, unit);
+            let spacing = ui.spacing().item_spacing.y;
+            let action_height = crate::tokens::CONTROL_HEIGHT + spacing;
+            let trailing_height = crate::tokens::SPACE_SM * 2.0
+                + automation.map_or(action_height, |(_, state)| {
+                    ui.text_style_height(&egui::TextStyle::Body)
+                        + spacing
+                        + action_height
+                            * if state == AutomationState::Bypassed {
+                                1.0
+                            } else {
+                                2.0
+                            }
+                });
+            value = crate::value_entry::value_entry_with_footer(
+                ui,
+                response.id,
+                current,
+                range,
+                unit,
+                trailing_height,
+            );
             ui.separator();
             action = automatable_menu_contents(ui, control, automation);
             if action.is_some() {

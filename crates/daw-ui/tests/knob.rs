@@ -228,6 +228,98 @@ fn relative_drag_has_no_click_jump_and_fine_adjustment_does_not_rebase() {
 }
 
 #[test]
+fn owned_release_motion_reaches_the_same_value_between_held_frames() {
+    for compact in [false, true] {
+        for sampled_distance in [8.0, 24.0, 44.0] {
+            let ctx = Context::default();
+            daw_ui::theme::apply(&ctx);
+            let mut value = 50.0;
+            let (_, geometry, _) = compact_frame(&ctx, &mut value, compact, vec![]);
+            let origin = geometry.center;
+            compact_frame(
+                &ctx,
+                &mut value,
+                compact,
+                pointer(origin, PointerButton::Primary, true, Modifiers::NONE),
+            );
+            assert_eq!(value, 50.0, "pressing the dial must not jump its value");
+            compact_frame(
+                &ctx,
+                &mut value,
+                compact,
+                vec![Event::PointerMoved(origin + vec2(sampled_distance, 0.0))],
+            );
+            assert_eq!(value, 50.0 + f64::from(sampled_distance) * 0.5);
+
+            let released = origin + vec2(60.0, 0.0);
+            assert!(!geometry.dial.contains(released));
+            let (response, _, _) = compact_frame(
+                &ctx,
+                &mut value,
+                compact,
+                pointer(released, PointerButton::Primary, false, Modifiers::NONE),
+            );
+            assert_eq!(value, 80.0, "the final owned position must win");
+            assert!(response.changed());
+            let (response, _, _) = compact_frame(
+                &ctx,
+                &mut value,
+                compact,
+                vec![Event::PointerMoved(released + vec2(10.0, 0.0))],
+            );
+            assert_eq!(value, 80.0, "released motion must never be replayed");
+            assert!(!response.changed());
+        }
+    }
+}
+
+#[test]
+fn precision_changes_on_release_apply_only_the_remaining_relative_motion() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let options = Options::default();
+    let mut value = 50.0;
+    let (_, geometry, _) = frame(&ctx, &mut value, options, Modifiers::NONE, vec![]);
+    let origin = geometry.center;
+    frame(
+        &ctx,
+        &mut value,
+        options,
+        Modifiers::NONE,
+        pointer(origin, PointerButton::Primary, true, Modifiers::NONE),
+    );
+    frame(
+        &ctx,
+        &mut value,
+        options,
+        Modifiers::NONE,
+        vec![Event::PointerMoved(origin + vec2(20.0, 0.0))],
+    );
+    assert_eq!(value, 60.0);
+    let fine = Modifiers {
+        shift: true,
+        ..Modifiers::NONE
+    };
+    let (response, _, _) = frame(
+        &ctx,
+        &mut value,
+        options,
+        fine,
+        pointer(
+            origin + vec2(60.0, 0.0),
+            PointerButton::Primary,
+            false,
+            fine,
+        ),
+    );
+    assert_eq!(
+        value, 62.0,
+        "fine precision must not rebase the held motion"
+    );
+    assert!(response.changed());
+}
+
+#[test]
 fn exact_number_can_be_typed_and_committed_with_a_mouse_click() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
@@ -558,7 +650,12 @@ fn secondary_or_middle_buttons_block_concurrent_primary_drag_through_release() {
                     &ctx,
                     &mut value,
                     compact,
-                    pointer(released, PointerButton::Primary, false, Modifiers::NONE),
+                    pointer(
+                        released + vec2(15.0, -10.0),
+                        PointerButton::Primary,
+                        false,
+                        Modifiers::NONE,
+                    ),
                 );
                 assert_eq!(value, before);
             }

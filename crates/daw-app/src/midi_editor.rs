@@ -1519,18 +1519,35 @@ impl DawApp {
         let pressed = ui.input(|i| i.pointer.primary_pressed());
         let down = ui.input(|i| i.pointer.primary_down());
         let released = ui.input(|i| i.pointer.primary_released());
+        // A native frame can contain both the press and later pointer motion.
+        // Start the edit at the event's position, while the latest pointer still
+        // supplies its movement and release endpoint below.
+        let press = ui.input(|input| {
+            input.events.iter().rev().find_map(|event| match event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers,
+                } => Some((*pos, modifiers.shift)),
+                _ => None,
+            })
+        });
+        let press_position = press.map(|(position, _)| position);
+        let hit_pointer = if pressed { press_position } else { pointer };
         let owns_pointer = ui.is_enabled()
             && state.transform.is_none()
             && state.generate.is_none()
             && !open_generate
             && ui.rect_contains_pointer(canvas)
+            && (!pressed || press_position.is_some_and(|position| canvas.contains(position)))
             && !egui::Popup::is_any_open(ui.ctx());
         if pressed && !owns_pointer {
             state.last_click = None;
         }
         if pressed
             && owns_pointer
-            && let Some(pos) = pointer
+            && let Some(pos) = press_position
         {
             state.keyboard_focus = keys.contains(pos);
             if state.keyboard_focus {
@@ -1541,22 +1558,7 @@ impl DawApp {
         }
         let mut double = false;
         let modifiers = ui.input(|i| i.modifiers);
-        let press_shift = ui.input(|input| {
-            input
-                .events
-                .iter()
-                .rev()
-                .find_map(|event| match event {
-                    egui::Event::PointerButton {
-                        button: egui::PointerButton::Primary,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } => Some(modifiers.shift),
-                    _ => None,
-                })
-                .unwrap_or(input.modifiers.shift)
-        });
+        let press_shift = press.map_or(modifiers.shift, |(_, shift)| shift);
         let pitch_at = |pos: Pos2| rows.pitch_at(view.row_at(plot, pos.y));
         let snap = self.snap;
         let snap_beat = |beat: f64| {
@@ -1748,7 +1750,7 @@ impl DawApp {
                         contrast_text(fill),
                     );
                 }
-                if pointer.is_some_and(|p| plot.contains(p) && rect.contains(p)) {
+                if hit_pointer.is_some_and(|p| plot.contains(p) && rect.contains(p)) {
                     note_hit = Some((note.clone(), rect));
                 }
             }
@@ -1764,7 +1766,7 @@ impl DawApp {
                     selected,
                     state.color_out_of_scale && !self.scale.contains(self.root, note.pitch),
                 );
-                if pointer.is_some_and(|p| velocity_rect.contains(p) && marker.contains(p)) {
+                if hit_pointer.is_some_and(|p| velocity_rect.contains(p) && marker.contains(p)) {
                     velocity_hit = Some(note.clone());
                 }
             }
@@ -1842,9 +1844,9 @@ impl DawApp {
         }
         if !navigation.navigating
             && owns_pointer
-            && let Some(pos) = pointer
+            && let Some(pos) = press_position
         {
-            if pressed && velocity_rect.contains(pos) {
+            if velocity_rect.contains(pos) {
                 self.begin_edit();
                 let paint =
                     matches!(self.tool, Tool::Pencil | Tool::MultiDraw) || velocity_hit.is_none();
@@ -1880,7 +1882,7 @@ impl DawApp {
                         .collect();
                     actions.push(NoteEdit::Velocity(values));
                 }
-            } else if pressed && plot.contains(pos) {
+            } else if plot.contains(pos) {
                 if let Some((note, rect)) = &note_hit {
                     match self.tool {
                         Tool::Erase => actions.push(NoteEdit::Delete(note.id)),
@@ -1970,9 +1972,14 @@ impl DawApp {
                         selected,
                     });
                 }
-            } else if pressed && ruler.contains(pos) {
+            } else if ruler.contains(pos) {
                 self.seek(clip_start + beat_at(pos));
             }
+        }
+        if !navigation.navigating
+            && owns_pointer
+            && let Some(pos) = pointer
+        {
             if double && plot.contains(pos) {
                 if let Some((note, _)) = &note_hit {
                     // A double background gesture with Pencil has already drawn

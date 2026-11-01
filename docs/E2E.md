@@ -39,12 +39,18 @@ transformations remain reachable by mouse, with cancellation preserving notes
 and history. Audio editor coverage checks the same direct-tool convention.
 
 The five-participant simulated beginner study is documented in
-[Mouse-only usability, 31 October 2026](USABILITY_2026-10-31.md). Its regressions
-exercise the production app without a desktop or physical audio device:
+[Mouse-only usability, 31 October 2026](USABILITY_2026-10-31.md).
+[Rounds 7–9](USABILITY_2026-11-01_ROUNDS7-9.md) record the subsequent mixer and
+input corrections. These regressions exercise the production app without a
+desktop or physical audio device:
 
 - `number_stepper_e2e`: visible mouse steps, fractional values, bounds and separate Undo entries.
 - `numeric_keypad_e2e`: exact mouse entry for tempo, clip duration and nested loop bounds; full precision, invalid drafts, cancellation, separate Undo and existing keyboard/drag/step behavior.
+- `parameter_mouse_entry_e2e`: the exact-value menu's **123** toggle and mouse digits for channel gain, pan, sends and normalized plug-in parameters; retained drafts, units, automation curves, cancellation, Undo and bounded short-window actions. The plug-in fixture supplies metadata and IPC, without a DSP claim.
+- `mixer_stability_e2e`: original-coordinate clicks after output failure/recovery, export completion and added sends; unchanged fader/pan/mute/solo geometry, reachable routing lanes and a previously scrolled short window. Ordinary clamping at a scroll boundary remains in effect.
+- `mixer_send_choice_e2e`: empty-strip destination choices target the clicked channel while preserving selection; opening/cancelling changes no project or history, eligible destinations exclude feedback, and bus/send creation is one Undo. Both themes, a short viewport and existing-summary Routing remain covered.
 - `midi_toolbar_stability_e2e`: stable note-tool controls at three widths in both themes, transforms, and hover pitch names.
+- `midi_press_origin_e2e`: coalesced press/move/release events retain the pressed note onset, pitch and existing-note target, with one Undo/Redo; a press outside the canvas cannot draw after entering it. An app-unit scenario also covers press/motion in one frame followed by a later release.
 - `loop_duration_e2e`: exact seconds at arbitrary tempos, phrase repetition, portable recall and a 30-second WAV.
 - `library_preview_status_e2e`: optional image status, retained capture errors/retry, filtering and instrument assignment.
 - `export_sequence_e2e`: visible tail/format information, WAV/MIDI ordering, failed-write recovery and destination identity.
@@ -334,10 +340,12 @@ with Undo. Viewing preserves the project and history. A separate scenario checks
 that dragging or applying an exact value overrides automation without rewriting
 its curve, and that Resume and Undo restore the expected state. Diagnostics
 expose the actual `pan_knob` geometry; Pan has no slider rail or inline numeric
-field.
+field. Explicit down/move/up events also check final-release displacement,
+different held-frame sampling, release-time fine adjustment and one Undo without
+replaying motion on later hover frames.
 
 ```sh
-cargo test --locked -p daw-app --test mixer_signal_flow_e2e --test mixer_pan_knob_e2e --test mixer_flow_e2e --test mixer_height_e2e --test mixer_navigation_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test mixer_signal_flow_e2e --test mixer_pan_knob_e2e --test mixer_stability_e2e --test parameter_mouse_entry_e2e --test mixer_flow_e2e --test mixer_height_e2e --test mixer_navigation_e2e -- --test-threads=1
 ```
 
 `midi_overlap_merge_e2e` creates and moves fully covered notes through normal
