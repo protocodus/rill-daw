@@ -46,72 +46,89 @@ pub fn generation_bar_range(
 ) -> GenerationBarRangeResponse {
     *start_bar = (*start_bar).clamp(1, 1_000_000);
     *length_bars = (*length_bars).min(1024);
-    let response = crate::form_grid(ui, "generation_bar_range", |ui| {
-        let label = text::label(ui, "Start bar");
-        let mut start_value = f64::from(*start_bar);
-        let start = ui
-            .push_id("generation_start", |ui| {
-                crate::number_stepper_integer(
-                    ui,
-                    &mut start_value,
-                    1.0,
-                    1.0..=1_000_000.0,
-                    "Start bar",
-                    |ui, value| {
-                        ui.add(
-                            crate::number(value)
-                                .range(1.0..=1_000_000.0)
-                                .speed(0.1)
-                                .max_decimals(0),
-                        )
-                    },
-                )
-                .response
-            })
-            .inner
-            .labelled_by(label.id);
-        if start.changed() {
-            *start_bar = start_value.round().clamp(1.0, 1_000_000.0) as u32;
-        }
-        ui.end_row();
-        let label = text::label(ui, "Length");
-        let mut length_value = f64::from(*length_bars);
-        let length = ui
-            .push_id("generation_length", |ui| {
-                crate::number_stepper_integer(
-                    ui,
-                    &mut length_value,
-                    1.0,
-                    0.0..=1024.0,
-                    "Length",
-                    |ui, value| {
-                        ui.add(
-                            crate::number(value)
-                                .range(0.0..=1024.0)
-                                .speed(0.1)
-                                .max_decimals(0)
-                                .suffix(" bars"),
-                        )
-                    },
-                )
-                .response
-            })
-            .inner
-            .labelled_by(label.id);
-        if length.changed() {
-            *length_bars = length_value.round().clamp(0.0, 1024.0) as u32;
-        }
-        ui.end_row();
-        GenerationBarRangeResponse { start, length }
-    })
-    .inner;
-    if *length_bars == 0 {
-        text::note(ui, "No complete bars in view");
+    let wide = ui.available_width() >= 520.0;
+    let response = egui::Grid::new("generation_bar_range")
+        .num_columns(if wide { 4 } else { 2 })
+        .min_col_width(if wide {
+            // Grid labels need a real width on the first sizing pass. A zero
+            // minimum wraps "Start bar" one character per line and inflates
+            // the supposedly compact header before column widths stabilize.
+            89.0
+        } else {
+            crate::tokens::SELECT_WIDTH
+        })
+        .spacing(egui::vec2(crate::tokens::SPACE_LG, crate::tokens::SPACE_MD))
+        .min_row_height(crate::tokens::CONTROL_HEIGHT)
+        .show(ui, |ui| {
+            let label = text::truncated(ui, text::TextRole::Label, "Start bar");
+            let mut start_value = f64::from(*start_bar);
+            let start = ui
+                .push_id("generation_start", |ui| {
+                    crate::number_stepper_integer(
+                        ui,
+                        &mut start_value,
+                        1.0,
+                        1.0..=1_000_000.0,
+                        "Start bar",
+                        |ui, value| {
+                            ui.add(
+                                crate::number(value)
+                                    .range(1.0..=1_000_000.0)
+                                    .speed(0.1)
+                                    .max_decimals(0),
+                            )
+                        },
+                    )
+                    .response
+                })
+                .inner
+                .labelled_by(label.id);
+            if start.changed() {
+                *start_bar = start_value.round().clamp(1.0, 1_000_000.0) as u32;
+            }
+            if !wide {
+                ui.end_row();
+            }
+            let label = text::truncated(ui, text::TextRole::Label, "Length");
+            let mut length_value = f64::from(*length_bars);
+            let length = ui
+                .push_id("generation_length", |ui| {
+                    crate::number_stepper_integer(
+                        ui,
+                        &mut length_value,
+                        1.0,
+                        0.0..=1024.0,
+                        "Length",
+                        |ui, value| {
+                            ui.add(
+                                crate::number(value)
+                                    .range(0.0..=1024.0)
+                                    .speed(0.1)
+                                    .max_decimals(0)
+                                    .suffix(" bars"),
+                            )
+                        },
+                    )
+                    .response
+                })
+                .inner
+                .labelled_by(label.id);
+            if length.changed() {
+                *length_bars = length_value.round().clamp(0.0, 1024.0) as u32;
+            }
+            ui.end_row();
+            GenerationBarRangeResponse { start, length }
+        })
+        .inner;
+    let summary = if *length_bars == 0 {
+        "No complete bars in view".to_owned()
     } else {
-        text::note(
-            ui,
-            format!("Bars {}–{}", start_bar, *start_bar + *length_bars - 1),
-        );
+        format!("Bars {}–{}", start_bar, *start_bar + *length_bars - 1)
+    };
+    if wide {
+        response.length.clone().on_hover_text(summary);
+    } else {
+        text::note(ui, summary);
     }
     response
 }
@@ -133,13 +150,53 @@ pub fn generation_footer(
     can_advance: bool,
     has_added: bool,
 ) -> GenerationFooterResponse {
+    generation_footer_inner(ui, status, can_add, can_advance, has_added, None).0
+}
+
+/// Compact utilities keep preview controls beside their bounded feedback,
+/// leaving the scroll body for generation parameters. Returns whether Fit was
+/// requested; the caller still owns every musical and viewport change.
+pub fn generation_footer_with_preview(
+    ui: &mut Ui,
+    status: &str,
+    can_add: bool,
+    can_advance: bool,
+    has_added: bool,
+    preview: &mut bool,
+) -> (GenerationFooterResponse, bool) {
+    generation_footer_inner(ui, status, can_add, can_advance, has_added, Some(preview))
+}
+
+fn generation_footer_inner(
+    ui: &mut Ui,
+    status: &str,
+    can_add: bool,
+    can_advance: bool,
+    has_added: bool,
+    preview: Option<&mut bool>,
+) -> (GenerationFooterResponse, bool) {
+    let mut fit = false;
     let status_size = egui::vec2(ui.available_width(), crate::tokens::CONTROL_HEIGHT);
     let status = ui.allocate_ui_with_layout(
         status_size,
         egui::Layout::top_down(egui::Align::Min),
         |ui| {
             ui.set_min_size(status_size);
-            text::bounded_block(ui, text::TextRole::Note, status, 2)
+            if let Some(preview) = preview {
+                fit = crate::action_row(
+                    ui,
+                    |ui| {
+                        let fit = crate::view_button(ui, "Fit preview").clicked();
+                        crate::checkbox(ui, preview, "Preview");
+                        fit
+                    },
+                    |ui| text::bounded_block(ui, text::TextRole::Note, status, 2),
+                )
+                .inner
+                .0;
+            } else {
+                text::bounded_block(ui, text::TextRole::Note, status, 2);
+            }
         },
     );
     let (add, next, close) = ui
@@ -163,12 +220,15 @@ pub fn generation_footer(
             },
         )
         .inner;
-    GenerationFooterResponse {
-        status: status.response.rect,
-        add,
-        next,
-        close,
-    }
+    (
+        GenerationFooterResponse {
+            status: status.response.rect,
+            add,
+            next,
+            close,
+        },
+        fit,
+    )
 }
 
 /// Violet is reserved here for draft notes, separate from blue committed notes

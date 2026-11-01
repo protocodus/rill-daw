@@ -5,10 +5,15 @@
 
 pub const GOLDEN_RATIO: f32 = 1.618_034;
 pub const GOLDEN_RATIO_INVERSE: f32 = 1.0 / GOLDEN_RATIO;
+/// Tight caption/detail separation; never the padding of an ordinary surface.
 pub const SPACE_XS: f32 = 5.0;
+/// Related controls and compact toolbar groups.
 pub const SPACE_SM: f32 = 8.0;
+/// Ordinary rows, card/inset padding, and horizontal menu-item padding.
 pub const SPACE_MD: f32 = 13.0;
+/// Section boundaries, pane gutters, and horizontal window padding.
 pub const SPACE_LG: f32 = 21.0;
+/// Major workspace separation.
 pub const SPACE_XL: f32 = 34.0;
 pub const CONTROL_HEIGHT: f32 = 34.0;
 /// A centered control line with room for readable slider scale captions.
@@ -35,8 +40,8 @@ pub const POPUP_MARGIN: f32 = SPACE_LG;
 pub const WINDOW_MARGIN: egui::Margin = egui::Margin {
     left: SPACE_LG as i8,
     right: SPACE_LG as i8,
-    top: SPACE_SM as i8,
-    bottom: SPACE_SM as i8,
+    top: SPACE_MD as i8,
+    bottom: SPACE_MD as i8,
 };
 pub const WINDOW_BORDER_WIDTH: f32 = FOCUS_WIDTH;
 /// Two persistent control rows, their panel padding, and a comfortable gap.

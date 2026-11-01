@@ -574,7 +574,21 @@ impl DawApp {
             &mut state.viewport,
             CurveTimeline {
                 snap: self.snap,
-                height: (ui.available_height() - 116.0).max(120.0),
+                // Each inspector toolbar owns its 8 px top/bottom inset. The
+                // gap after the plot and between inspectors follows the theme.
+                height: (ui.available_height()
+                    - 2.0
+                        * (daw_ui::tokens::CONTROL_HEIGHT
+                            + daw_ui::tokens::SPACE_SM * 2.0
+                            + ui.spacing().item_spacing.y))
+                    // Keep a useful mouse canvas; compact windows scroll the
+                    // point and segment inspectors below it instead of
+                    // compressing the curve into overlapping percentage rows.
+                    .max(
+                        daw_ui::tokens::TIMELINE_RULER_HEIGHT
+                            + 2.0 * daw_ui::tokens::SPACE_MD
+                            + daw_ui::tokens::PARAMETER_ROW_HEIGHT,
+                    ),
                 tempo: self.project.tempo,
                 beats_per_bar: self.project.beats_per_bar,
                 fit,

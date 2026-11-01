@@ -886,37 +886,46 @@ impl DawApp {
                     daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips");
                     crate::spectrogram::view_options(ui);
                 });
-                daw_ui::select(
-                "audio_snap",
-                if self.snap > 0.0 {
-                    format!("Grid {}", self.snap)
-                } else {
-                    "Grid off".into()
-                },
-            )
-            .width(90.0)
-            .height(380.0)
-            .show_ui(ui, |ui| {
-                daw_ui::text::label(ui, "Grid");
-                for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
-                    daw_ui::selectable_value(
-                        ui,
-                        &mut self.snap,
-                        snap,
-                        if snap == 0.0 {
-                            "Off".into()
-                        } else {
-                            format!("{snap} beat")
-                        },
-                    );
-                }
-                ui.separator();
-                daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
-                daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
-                daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
-                    .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
-                daw_ui::text::note(ui, "Hold Shift to bypass snapping");
-            });
+                daw_ui::choice_menu(
+                    ui,
+                    if self.snap > 0.0 {
+                        format!("Grid {}", self.snap)
+                    } else {
+                        "Grid off".into()
+                    },
+                    |ui| {
+                        daw_ui::text::label(ui, "Grid");
+                        for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
+                            if daw_ui::selectable_value(
+                                ui,
+                                &mut self.snap,
+                                snap,
+                                if snap == 0.0 {
+                                    "Off".into()
+                                } else {
+                                    format!("{snap} beat")
+                                },
+                            )
+                            .clicked()
+                            {
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        let mut changed =
+                            daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges").changed();
+                        changed |=
+                            daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers")
+                                .changed();
+                        changed |= daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
+                    .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.")
+                    .changed();
+                        if changed {
+                            ui.close();
+                        }
+                        daw_ui::text::note(ui, "Hold Shift to bypass snapping");
+                    },
+                );
                 daw_ui::editor_tool_caption(ui, state.tool, daw_ui::ToolHintContext::Audio);
             });
         });

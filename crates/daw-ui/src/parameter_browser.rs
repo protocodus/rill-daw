@@ -31,6 +31,9 @@ pub struct ParameterBrowserState {
     pub selected: Option<u32>,
     pub focus_search: bool,
     pub scope: ParameterScope,
+    /// Return to the selected parameter's heading after visiting a nested tool.
+    /// Consumed by the detail pane without changing the catalogue scroll state.
+    pub reset_details: bool,
 }
 
 pub struct ParameterBrowserResponse<R> {
@@ -38,7 +41,13 @@ pub struct ParameterBrowserResponse<R> {
     pub inner: R,
 }
 
-const ROW_HEIGHT: f32 = 64.0;
+const ROW_TEXT_HEIGHT: f32 = tokens::SPACE_LG;
+const VALUE_RAIL_HEIGHT: f32 = 2.0;
+const ROW_HEIGHT: f32 = 2.0 * tokens::SPACE_MD
+    + 2.0 * ROW_TEXT_HEIGHT
+    + tokens::SPACE_XS
+    + tokens::SPACE_SM
+    + VALUE_RAIL_HEIGHT;
 
 #[derive(Clone)]
 struct SearchCache {
@@ -159,11 +168,15 @@ fn parameter_row(ui: &mut Ui, item: &ParameterItem<'_>, selected: bool) -> Respo
             colors.panel
         },
     );
+    let inset = rect.shrink2(egui::vec2(
+        tokens::SPACE_MD.min(rect.width() * 0.5),
+        tokens::SPACE_MD,
+    ));
     let icon = Rect::from_center_size(
-        egui::pos2(rect.left() + 28.0, rect.center().y),
-        egui::Vec2::splat(22.0),
+        egui::pos2(inset.left() + tokens::SPACE_XL * 0.5, rect.center().y),
+        egui::Vec2::splat(tokens::SPACE_LG),
     );
-    painter.circle_filled(icon.center(), 18.0, colors.control_fill);
+    painter.circle_filled(icon.center(), tokens::SPACE_XL * 0.5, colors.control_fill);
     if item.automated {
         Icon::Automation
     } else if item.last_touched {
@@ -182,13 +195,15 @@ fn parameter_row(ui: &mut Ui, item: &ParameterItem<'_>, selected: bool) -> Respo
             colors.muted
         },
     );
-    let text_left = (rect.left() + 54.0).min(rect.right());
-    let text_right = (rect.right() - tokens::SPACE_MD).max(text_left);
+    let text_left = (inset.left() + tokens::SPACE_XL + tokens::SPACE_MD).min(inset.right());
+    let text_right = inset.right();
+    let name_bottom = inset.top() + ROW_TEXT_HEIGHT;
+    let detail_top = name_bottom + tokens::SPACE_XS;
     crate::text::paint_row(
         &painter,
         Rect::from_min_max(
-            egui::pos2(text_left, rect.top() + 6.0),
-            egui::pos2(text_right, rect.top() + 30.0),
+            egui::pos2(text_left, inset.top()),
+            egui::pos2(text_right, name_bottom),
         ),
         TextRole::Label,
         item.name,
@@ -211,15 +226,15 @@ fn parameter_row(ui: &mut Ui, item: &ParameterItem<'_>, selected: bool) -> Respo
     crate::text::paint_row(
         &painter,
         Rect::from_min_max(
-            egui::pos2(text_left, rect.top() + 30.0),
-            egui::pos2(text_right, rect.bottom() - 10.0),
+            egui::pos2(text_left, detail_top),
+            egui::pos2(text_right, detail_top + ROW_TEXT_HEIGHT),
         ),
         TextRole::Note,
         &detail,
     );
     let rail = Rect::from_min_max(
-        egui::pos2(text_left, rect.bottom() - 7.0),
-        egui::pos2(text_right, rect.bottom() - 5.0),
+        egui::pos2(text_left, inset.bottom() - VALUE_RAIL_HEIGHT),
+        egui::pos2(text_right, inset.bottom()),
     );
     painter.rect_filled(rail, 1.0, colors.line);
     painter.rect_filled(
@@ -312,7 +327,7 @@ pub fn parameter_browser<R>(
                 let width = (ui.available_width()
                     - 4.0 * tokens::BUTTON_PADDING_X
                     - 18.0
-                    - tokens::SPACE_SM)
+                    - ui.spacing().item_spacing.x)
                     .max(0.0);
                 let search = crate::text_field(ui, &mut state.query, "Search parameters", width);
                 if ui
@@ -480,11 +495,18 @@ pub fn parameter_browser<R>(
                     .iter()
                     .find(|&&index| Some(items[index].id) == state.selected)
                     .map(|&index| &items[index]);
+                let mut scroll = egui::ScrollArea::vertical()
+                    .id_salt("parameter_details")
+                    .min_scrolled_height(0.0)
+                    .max_height(ui.available_height().max(0.0))
+                    .auto_shrink([false, true]);
+                if std::mem::take(&mut state.reset_details) {
+                    scroll = scroll.vertical_scroll_offset(0.0);
+                }
                 inner = Some(
-                    crate::scroll_body(ui, "parameter_details", |ui| {
-                        details.take().unwrap()(ui, selected)
-                    })
-                    .inner,
+                    scroll
+                        .show(ui, |ui| details.take().unwrap()(ui, selected))
+                        .inner,
                 );
             }
         });
@@ -509,6 +531,72 @@ pub fn parameter_browser<R>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parameter_labels_and_value_rail_have_clearance_at_display_scales() {
+        for scale in [1.0, 1.25, 2.0] {
+            for width in [180.0, 320.0] {
+                let ctx = egui::Context::default();
+                theme::apply(&ctx);
+                ctx.set_pixels_per_point(scale);
+                for (selected, enabled, automated, last_touched) in [
+                    (false, true, false, false),
+                    (true, true, true, false),
+                    (true, false, false, true),
+                ] {
+                    let mut bounds = Rect::NOTHING;
+                    let item = ParameterItem {
+                        id: 1,
+                        name: "Frequency modulation amount",
+                        unit: "Hz",
+                        value: 0.42,
+                        automated,
+                        last_touched,
+                    };
+                    let output = ctx.run(
+                        egui::RawInput {
+                            screen_rect: Some(Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(500.0, 300.0),
+                            )),
+                            ..Default::default()
+                        },
+                        |ctx| {
+                            egui::CentralPanel::default().show(ctx, |ui| {
+                                ui.set_width(width);
+                                if !enabled {
+                                    ui.disable();
+                                }
+                                bounds = parameter_row(ui, &item, selected).rect;
+                            });
+                        },
+                    );
+                    let mut labels = Vec::new();
+                    let mut rail = Rect::NOTHING;
+                    for shape in &output.shapes {
+                        match &shape.shape {
+                            egui::Shape::Text(text) => {
+                                let rect = text.galley.rect.translate(text.pos.to_vec2());
+                                assert!(shape.clip_rect.expand(0.1).contains_rect(rect));
+                                assert!(bounds.shrink(tokens::SPACE_MD - 0.1).contains_rect(rect));
+                                labels.push(rect);
+                            }
+                            egui::Shape::Rect(rect)
+                                if (rect.rect.height() - VALUE_RAIL_HEIGHT).abs() < 0.1 =>
+                            {
+                                rail = rail.union(rect.rect);
+                            }
+                            _ => {}
+                        }
+                    }
+                    assert_eq!(labels.len(), 2, "Both label rows stay readable");
+                    assert!(labels[1].top() - labels[0].bottom() >= tokens::SPACE_XS - 0.1);
+                    assert!(rail.top() - labels[1].bottom() >= tokens::SPACE_SM - 0.1);
+                    assert!(bounds.bottom() - rail.bottom() >= tokens::SPACE_MD - 0.1);
+                }
+            }
+        }
+    }
 
     #[test]
     fn unchanged_large_search_reuses_results_while_parameter_values_remain_live() {

@@ -29,19 +29,32 @@ pub fn error_details(
         title,
         Some(1),
         |ui| {
-            text::bounded_block(ui, text::TextRole::Subtitle, summary, 2);
-            ui.add_space(tokens::SPACE_MD);
+            // A very short host can show the full summary on hover while
+            // retaining a useful diagnostic viewport and both footer actions.
+            let compact = ctx.content_rect().height() < 377.0;
+            let section_gap = if compact {
+                tokens::SPACE_MD
+            } else {
+                tokens::SPACE_LG
+            };
+            text::bounded_block(
+                ui,
+                text::TextRole::Subtitle,
+                summary,
+                if compact { 1 } else { 2 },
+            );
+            ui.add_space(section_gap);
             // Reserve the footer before sizing the scroll area. Long messages and
             // paths must never move Copy or Close beyond the visible window.
+            let frame = crate::inset(ctx).inner_margin(tokens::SPACE_MD);
+            let footer_height = section_gap + tokens::CONTROL_HEIGHT + ui.spacing().item_spacing.y;
             let details_height = (ctx.content_rect().height()
                 - 4.0 * tokens::POPUP_MARGIN
-                - ui.min_rect().height()
-                - tokens::SPACE_MD
-                - tokens::CONTROL_HEIGHT
-                - 2.0 * tokens::SPACE_SM)
-                .clamp(36.0, 360.0);
-            let scroll = crate::inset(ctx)
-                .inner_margin(tokens::SPACE_SM)
+                - (ui.cursor().top() - ui.min_rect().top())
+                - footer_height
+                - frame.total_margin().sum().y)
+                .clamp(0.0, 377.0);
+            let scroll = frame
                 .show(ui, |ui| {
                     egui::ScrollArea::vertical()
                         // A different diagnostic opens at its first line, rather
@@ -55,7 +68,7 @@ pub fn error_details(
                         })
                 })
                 .inner;
-            ui.add_space(tokens::SPACE_MD);
+            ui.add_space(section_gap);
             let buttons = crate::action_row(
                 ui,
                 |ui| {

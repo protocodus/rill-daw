@@ -116,7 +116,7 @@ fn assert_knob_paint(state: &Value, id: u64, expected: f64) {
     near(dial_max[1] - dial_min[1], 48.0);
     near(
         row_max[1] - row_min[1],
-        f64::from(daw_ui::tokens::PARAMETER_ROW_HEIGHT),
+        f64::from(daw_ui::Knob::compact_height(48.0)),
     );
     assert!(dial_min[0] >= row_min[0] && dial_min[1] >= row_min[1]);
     assert!(dial_max[0] <= row_max[0] && dial_max[1] <= row_max[1]);

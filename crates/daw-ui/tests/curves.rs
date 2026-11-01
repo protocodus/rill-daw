@@ -51,6 +51,128 @@ fn pointer(pos: Pos2, pressed: bool) -> Vec<Event> {
 }
 
 #[test]
+fn short_timeline_preserves_a_usable_plot_and_room_for_inspector_actions() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let mut selected = None;
+    let mut viewport = daw_ui::TimelineViewport::default();
+    let bounds = egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(640.0, 180.0));
+    let _ = ctx.run(
+        RawInput {
+            screen_rect: Some(bounds),
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let response = daw_ui::curve_timeline_editor(
+                    ui,
+                    egui::Id::new("short_curve"),
+                    &[],
+                    &mut selected,
+                    &mut viewport,
+                    daw_ui::CurveTimeline {
+                        snap: 0.25,
+                        height: 96.0,
+                        tempo: 120.0,
+                        beats_per_bar: 4,
+                        fit: true,
+                        keyboard_active: false,
+                    },
+                    |_| 0.5,
+                );
+                assert_eq!(response.response.rect.height(), 96.0);
+                assert!(response.plot_rect.height() >= daw_ui::tokens::SPACE_LG);
+                assert!(response.response.rect.contains_rect(response.plot_rect));
+                let action = daw_ui::button(ui, "Edit selected point");
+                assert!(
+                    bounds.contains_rect(action.rect),
+                    "Inspector was displaced: {:?}",
+                    action.rect
+                );
+                assert!(
+                    action.rect.top() - response.response.rect.bottom() >= daw_ui::tokens::SPACE_MD
+                );
+            });
+        },
+    );
+}
+
+#[test]
+fn percent_ticks_follow_available_height_without_overlapping_at_display_scales() {
+    for density in [1.0, 1.25, 2.0] {
+        for (height, expected_ticks) in [(96.0, 2), (120.0, 3), (210.0, 5)] {
+            let ctx = Context::default();
+            daw_ui::theme::apply(&ctx);
+            ctx.set_pixels_per_point(density);
+            let screen = egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(640.0, 480.0));
+            let _ = ctx.run(
+                RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |_| {},
+            );
+            let mut viewport = daw_ui::TimelineViewport::default();
+            let mut selected = None;
+            let output = ctx.run(
+                RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let curve = daw_ui::curve_timeline_editor(
+                            ui,
+                            egui::Id::new("tick_spacing"),
+                            &[],
+                            &mut selected,
+                            &mut viewport,
+                            daw_ui::CurveTimeline {
+                                snap: 0.25,
+                                height,
+                                tempo: 120.0,
+                                beats_per_bar: 4,
+                                fit: true,
+                                keyboard_active: false,
+                            },
+                            |_| 0.5,
+                        );
+                        assert_eq!(curve.response.rect.height(), height);
+                    });
+                },
+            );
+            let mut labels: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| {
+                    if let egui::Shape::Text(text) = &shape.shape
+                        && ["0%", "25%", "50%", "75%", "100%"].contains(&text.galley.text())
+                    {
+                        Some((
+                            text.galley.text(),
+                            text.galley.rect.translate(text.pos.to_vec2()),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            assert_eq!(labels.len(), expected_ticks);
+            labels.sort_by(|a, b| a.1.top().total_cmp(&b.1.top()));
+            assert_eq!(labels.first().unwrap().0, "100%");
+            assert_eq!(labels.last().unwrap().0, "0%");
+            for pair in labels.windows(2) {
+                assert!(
+                    pair[1].1.top() - pair[0].1.bottom()
+                        >= daw_ui::tokens::SPACE_XS - 1.0 / density,
+                    "Percent labels crowded at {height}pt and {density}×: {pair:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn click_adds_snapped_normalized_point() {
     let ctx = Context::default();
     let mut selected = None;

@@ -118,6 +118,36 @@ fn pointer(app: &mut Harness, card: &Value, phase: &str) -> Value {
     app.command(json!({"command":"pointer", "phase":phase, "x":x, "y":y}))
 }
 
+fn scroll_details(app: &mut Harness, delta: f64) -> Value {
+    let before = app.inspect();
+    let pane = &before["library"]["details"];
+    let x = (pane["min"][0].as_f64().unwrap() + pane["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (pane["min"][1].as_f64().unwrap() + pane["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"scroll", "x":x, "y":y, "delta":delta}));
+    let mut state = app.inspect();
+    for _ in 0..20 {
+        state = app.inspect();
+    }
+    for field in ["catalog", "footer", "selected"] {
+        assert_eq!(state["library"][field], before["library"][field]);
+    }
+    assert_eq!(state["project"], before["project"]);
+    state
+}
+
+fn readable_detail(state: &Value, label: &str) -> bool {
+    let pane = &state["library"]["details"];
+    state["label_rects"].as_array().unwrap().iter().any(|rect| {
+        rect["text"] == label
+            && rect["min"][0].as_f64().unwrap() >= pane["min"][0].as_f64().unwrap()
+            && rect["max"][0].as_f64().unwrap() <= pane["max"][0].as_f64().unwrap()
+            && rect["min"][1].as_f64().unwrap() >= pane["min"][1].as_f64().unwrap()
+            && rect["max"][1].as_f64().unwrap() <= pane["max"][1].as_f64().unwrap()
+            && rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap()
+                >= f64::from(daw_ui::tokens::FONT_BODY)
+    })
+}
+
 #[test]
 fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_request() {
     let workers = tempfile::tempdir().unwrap();
@@ -150,12 +180,16 @@ fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_reques
     app.click("Window");
     let library = app.click("Library");
     assert!(card(&library, "Acme Keys")["preview"].is_boolean());
-    let library = wait_until(&mut app, |state| {
+    wait_until(&mut app, |state| {
         card(state, "Acme Keys")["preview"] == true
     });
-    assert!(visible(&library, "Format") && visible(&library, "2.5"));
-    assert!(visible(&library, "x86_64-linux"));
-    assert!(visible(&library, "Captured"));
+    // Installation metadata follows identity and editable categories in the
+    // independently scrolling detail pane. Catalog and actions stay pinned.
+    let details = scroll_details(&mut app, -10000.0);
+    for label in ["Format", "2.5", "x86_64-linux", "Captured"] {
+        assert!(readable_detail(&details, label), "Clipped detail {label}");
+    }
+    let library = scroll_details(&mut app, 10000.0);
 
     // Selecting the unverified bundle captures it on demand; More refreshes it.
     let selected = pointer(&mut app, card(&library, "Mystery Box"), "click");
@@ -286,7 +320,19 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     app.click("View");
     let list = app.click("List");
     assert_eq!(list["library"]["view"], "list");
-    assert_eq!(list["library"]["card_size"][1], 56.0);
+    let row_height = f64::from(daw_ui::DEVICE_ROW_HEIGHT);
+    assert_eq!(list["library"]["card_size"][1], row_height);
+    let row = &card(&list, "Rill Fixture B")["rect"];
+    let catalog = &list["library"]["catalog"];
+    assert_eq!(
+        row["max"][1].as_f64().unwrap() - row["min"][1].as_f64().unwrap(),
+        row_height,
+        "The complete shared device row must be available"
+    );
+    for axis in 0..2 {
+        assert!(row["min"][axis].as_f64().unwrap() >= catalog["min"][axis].as_f64().unwrap());
+        assert!(row["max"][axis].as_f64().unwrap() <= catalog["max"][axis].as_f64().unwrap());
+    }
     assert!(
         card(&list, "Rill Fixture B")["rect"]["max"][0]
             .as_f64()

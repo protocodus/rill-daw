@@ -458,6 +458,7 @@ pub struct Slider<'a> {
     max_decimals: Option<usize>,
     trailing_fill: Option<bool>,
     handle_shape: Option<egui::style::HandleShape>,
+    display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
 }
 
 impl<'a> Slider<'a> {
@@ -489,6 +490,7 @@ impl<'a> Slider<'a> {
             max_decimals: None,
             trailing_fill: None,
             handle_shape: None,
+            display_round_trip: None,
         }
     }
     pub fn text(mut self, text: impl Into<WidgetText>) -> Self {
@@ -551,6 +553,14 @@ impl<'a> Slider<'a> {
     }
     pub fn clamping(mut self, clamping: SliderClamping) -> Self {
         self.clamping = clamping;
+        self
+    }
+    /// Predict the display value the owner will return after accepting an edit,
+    /// including its storage type and unit conversion. This preserves native
+    /// drafts across an exact model round trip without tolerating real changes.
+    /// Called only when this control requests a write; idle input stays exact.
+    pub fn display_round_trip(mut self, convert: impl Fn(f64) -> f64 + 'a) -> Self {
+        self.display_round_trip = Some(Box::new(convert));
         self
     }
     pub fn smart_aim(mut self, smart: bool) -> Self {
@@ -948,7 +958,15 @@ impl<'a> Slider<'a> {
                 }
                 (self.value)(Some(value));
             }
-            crate::value_entry::remember_number_value(ui, numeric_id, (self.value)(None));
+            let current = (self.value)(None);
+            let expected = if response.changed() || numeric.changed() {
+                self.display_round_trip
+                    .as_ref()
+                    .map_or(current, |convert| convert(current))
+            } else {
+                current
+            };
+            crate::value_entry::remember_number_value(ui, numeric_id, expected);
             if numeric.has_focus() || numeric.gained_focus() || numeric.lost_focus() {
                 response = numeric.union(response);
             } else {

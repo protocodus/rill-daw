@@ -349,7 +349,9 @@ fn card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe(
         down_at_end["library"]["selected"], late_fingerprint,
         "Down on the last row must preserve the selected column"
     );
+    common::reveal_library_filter(&mut app, "All developers");
     app.click("All developers");
+    common::reveal_library_filter(&mut app, SECOND_PRODUCER);
     let narrowed = app.click(SECOND_PRODUCER);
     assert_eq!(narrowed["library"]["total"], 12);
     assert_eq!(
@@ -366,6 +368,7 @@ fn card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe(
         "A retained selection must stay visible after the producer filter changes row indices"
     );
     app.click(SECOND_PRODUCER);
+    common::reveal_library_filter(&mut app, "All developers");
     app.click("All developers");
 
     let empty = query(&mut app, "Card Synth", "No such device Ω");
@@ -382,7 +385,9 @@ fn card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe(
     assert_eq!(after_enter["popups"]["library"], true);
 
     query(&mut app, "No such device Ω", "Card Synth");
+    common::reveal_library_filter(&mut app, "All developers");
     app.click("All developers");
+    common::reveal_library_filter(&mut app, SECOND_PRODUCER);
     let filtered = app.click(SECOND_PRODUCER);
     assert_eq!(filtered["library"]["total"], 12);
     assert!(

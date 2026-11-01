@@ -12,7 +12,7 @@ pub fn form_grid<R>(
     egui::Grid::new(id_salt)
         .num_columns(2)
         .min_col_width(tokens::SELECT_WIDTH)
-        .spacing(egui::vec2(tokens::SPACE_LG, tokens::SPACE_SM))
+        .spacing(egui::vec2(tokens::SPACE_LG, tokens::SPACE_MD))
         .min_row_height(tokens::CONTROL_HEIGHT)
         .show(ui, contents)
 }

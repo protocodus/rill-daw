@@ -215,6 +215,37 @@ pub struct InlineNameResponse {
     pub action: InlineNameAction,
 }
 
+/// Full row width for a name field's requested text width and its three actions.
+/// Native TextEdit adds its margins outside `desired_width`; measure the action
+/// labels and icons before anchoring the row near a viewport edge.
+pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
+    let style = ctx.style();
+    let font = egui::TextStyle::Button.resolve(&style);
+    let color = style.visuals.text_color();
+    let density = ctx.pixels_per_point();
+    let actions = ctx.fonts_mut(|fonts| {
+        ["Keyboard", "Apply name", "Cancel"]
+            .into_iter()
+            .map(|label| {
+                let text = fonts
+                    .layout_no_wrap(label.to_owned(), font.clone(), color)
+                    .size()
+                    .x;
+                let icon = if crate::Icon::for_label(label).is_some() {
+                    18.0 + style.spacing.icon_spacing
+                } else {
+                    0.0
+                };
+                ((text + icon + 2.0 * crate::tokens::SPACE_SM) * density).ceil() / density
+            })
+            .sum::<f32>()
+    });
+    text_width
+        + 2.0 * crate::tokens::BUTTON_PADDING_X
+        + actions
+        + 3.0 * style.spacing.item_spacing.x
+}
+
 /// Single-line naming in the existing item context. The caller owns its draft,
 /// anchor and transaction; Enter/focus loss commits and Escape discards it.
 pub fn inline_name_editor(

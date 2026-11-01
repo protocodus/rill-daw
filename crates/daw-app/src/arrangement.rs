@@ -2917,6 +2917,8 @@ impl DawApp {
                     .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value))
                     .unwrap_or(track.pan);
                 let mut pan_percent = pan * 100.0;
+                let automated_pan = pan_automation
+                    .is_some_and(|(_, state, _)| state != daw_ui::AutomationState::Bypassed);
                 let response = ui
                     .add(
                         daw_ui::slider(&mut pan_percent, -100.0..=100.0)
@@ -2924,7 +2926,17 @@ impl DawApp {
                             .endpoint_labels("100% L", "100% R")
                             .suffix("%")
                             .min_decimals(1)
-                            .max_decimals(6),
+                            .max_decimals(6)
+                            .display_round_trip(move |percent| {
+                                let pan = percent as f32 / 100.0;
+                                let pan = if automated_pan {
+                                    AutomationParameter::TrackPan
+                                        .denormalize(AutomationParameter::TrackPan.normalize(pan))
+                                } else {
+                                    pan
+                                };
+                                f64::from(pan * 100.0)
+                            }),
                     )
                     .labelled_by(label.id)
                     .on_hover_text("Mixer channel pan · −100% left · 0% center · 100% right");

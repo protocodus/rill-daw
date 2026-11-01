@@ -7,8 +7,10 @@ use std::hash::Hash;
 pub const DEVICE_CARD_HEIGHT: f32 = 208.0;
 pub const DEVICE_CARD_MIN_WIDTH: f32 = 196.0;
 const MIN_CARD_HEIGHT: f32 = 144.0;
-pub const DEVICE_ROW_HEIGHT: f32 = 56.0;
-const PREVIEW_HEIGHT: f32 = 118.0;
+const NAME_HEIGHT: f32 = 2.0 * tokens::SPACE_LG;
+const PRODUCER_HEIGHT: f32 = tokens::SPACE_LG;
+pub const DEVICE_ROW_HEIGHT: f32 =
+    2.0 * tokens::SPACE_MD + 2.0 * tokens::SPACE_LG + tokens::SPACE_XS;
 const ROW_PREVIEW_WIDTH: f32 = 80.0;
 const SCROLLBAR_GUTTER: f32 = 16.0;
 
@@ -281,7 +283,12 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
         tokens::SPACE_MD.min(width * 0.5),
         tokens::SPACE_MD,
     ));
-    let preview_height = PREVIEW_HEIGHT - (DEVICE_CARD_HEIGHT - height);
+    // Reserve the complete text stack before sizing the preview. Short panes
+    // reduce the image, never the clearance around a two-line device name.
+    let producer_top = inset.bottom() - PRODUCER_HEIGHT;
+    let name_bottom = producer_top - tokens::SPACE_SM;
+    let name_top = name_bottom - NAME_HEIGHT;
+    let preview_height = (name_top - tokens::SPACE_MD - inset.top()).max(0.0);
     let preview_rect = Rect::from_min_size(inset.min, egui::vec2(inset.width(), preview_height));
     if ui.is_rect_visible(rect) {
         let painter = ui.painter_at(rect);
@@ -297,11 +304,8 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
         crate::text::paint_bounded_block(
             &painter,
             Rect::from_min_max(
-                egui::pos2(inset.left(), preview_rect.bottom() + tokens::SPACE_SM),
-                egui::pos2(
-                    inset.right(),
-                    preview_rect.bottom() + tokens::SPACE_SM + 40.0,
-                ),
+                egui::pos2(inset.left(), name_top),
+                egui::pos2(inset.right(), name_bottom),
             ),
             TextRole::Label,
             card.name,
@@ -309,10 +313,7 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
         );
         crate::text::paint_row(
             &painter,
-            Rect::from_min_max(
-                egui::pos2(inset.left(), rect.bottom() - 28.0),
-                egui::pos2(inset.right(), rect.bottom() - 10.0),
-            ),
+            Rect::from_min_max(egui::pos2(inset.left(), producer_top), inset.right_bottom()),
             TextRole::Note,
             producer,
         );
@@ -341,7 +342,7 @@ pub fn device_row(
     let producer = producer(card);
     let activated = activation(ui, &response, card.id);
     let rect = response.rect;
-    let inset = rect.shrink(tokens::SPACE_SM);
+    let inset = rect.shrink(tokens::SPACE_MD);
     let preview_rect = Rect::from_min_size(
         inset.min,
         egui::vec2(ROW_PREVIEW_WIDTH.min(inset.width() * 0.3), inset.height()),
@@ -361,16 +362,15 @@ pub fn device_row(
             egui::pos2(preview_rect.right() + tokens::SPACE_MD, inset.top()),
             egui::pos2(trailing - detail_width - tokens::SPACE_SM, inset.bottom()),
         );
-        let half = text.height() * 0.5;
         crate::text::paint_row(
             &painter,
-            text.with_max_y(text.top() + half),
+            text.with_max_y(text.top() + tokens::SPACE_LG),
             TextRole::Label,
             card.name,
         );
         crate::text::paint_row(
             &painter,
-            text.with_min_y(text.top() + half),
+            text.with_min_y(text.bottom() - PRODUCER_HEIGHT),
             TextRole::Note,
             producer,
         );
@@ -498,7 +498,7 @@ pub fn device_list_layout(width: f32) -> DeviceGridLayout {
     DeviceGridLayout {
         columns: 1,
         card_width: width,
-        row_height: DEVICE_ROW_HEIGHT + tokens::SPACE_XS,
+        row_height: DEVICE_ROW_HEIGHT + tokens::SPACE_SM,
     }
 }
 
@@ -808,6 +808,85 @@ mod tests {
                 names && producers,
                 "full text remains available in real text shapes"
             );
+        }
+    }
+
+    #[test]
+    fn device_labels_keep_clearance_in_short_cards_and_list_rows_at_display_scales() {
+        let name = "Long instrument name with two readable rows";
+        let producer = "Unicode producer Ω";
+        for scale in [1.0, 1.25, 2.0] {
+            for (list, height) in [(false, 144.0), (false, 208.0), (true, DEVICE_ROW_HEIGHT)] {
+                let ctx = egui::Context::default();
+                theme::apply(&ctx);
+                ctx.set_pixels_per_point(scale);
+                let mut previous = None;
+                for (selected, enabled) in [(false, true), (true, true), (true, false)] {
+                    let mut bounds = Rect::NOTHING;
+                    let mut preview = Rect::NOTHING;
+                    let output = ctx.run(input(400.0, 0.0, vec![]), |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(240.0, height),
+                                egui::Layout::top_down(egui::Align::Min),
+                                |ui| {
+                                    if !enabled {
+                                        ui.disable();
+                                    }
+                                    let card = DeviceCard {
+                                        id: Id::new("spaced_device"),
+                                        name,
+                                        producer,
+                                        preview: None,
+                                        selected,
+                                        favorite: true,
+                                        icon: Icon::Instrument,
+                                    };
+                                    let result = if list {
+                                        device_row(ui, &card, "", 240.0)
+                                    } else {
+                                        device_card(ui, &card, 240.0)
+                                    };
+                                    bounds = result.response.rect;
+                                    preview = result.preview_rect;
+                                },
+                            );
+                        });
+                    });
+                    let text_bounds = |label| {
+                        output
+                            .shapes
+                            .iter()
+                            .find_map(|shape| match &shape.shape {
+                                egui::Shape::Text(text) if text.galley.text() == label => {
+                                    let rect = text.galley.rect.translate(text.pos.to_vec2());
+                                    assert!(shape.clip_rect.expand(0.1).contains_rect(rect));
+                                    Some(rect)
+                                }
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| panic!("Missing {label} at scale {scale}"))
+                    };
+                    let name = text_bounds(name);
+                    let producer = text_bounds(producer);
+                    assert!(
+                        bounds
+                            .shrink(tokens::SPACE_MD - 0.1)
+                            .contains_rect(producer)
+                    );
+                    assert!(producer.top() - name.bottom() >= tokens::SPACE_XS - 0.1);
+                    if list {
+                        assert!(name.left() - preview.right() >= tokens::SPACE_MD - 0.1);
+                    } else {
+                        assert!(name.top() - preview.bottom() >= tokens::SPACE_MD - 0.1);
+                    }
+                    let geometry = (bounds, preview, name, producer);
+                    if let Some(previous) = previous {
+                        assert_eq!(geometry, previous, "States must retain label clearance");
+                    }
+                    previous = Some(geometry);
+                }
+            }
         }
     }
 

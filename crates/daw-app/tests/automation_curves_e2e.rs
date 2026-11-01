@@ -40,6 +40,34 @@ fn menu(app: &mut Harness, parent: &str, item: &str) -> Value {
     app.click(item)
 }
 
+fn scroll_curve_popup(app: &mut Harness, down: bool) -> Value {
+    let state = app.inspect();
+    let plot = &state["automation_editor"]["plot"];
+    let (_, y) = center(plot);
+    app.command(json!({"command":"scroll",
+        "x":plot["min"][0].as_f64().unwrap() - 21.0, "y":y,
+        "delta":if down { -1000.0 } else { 1000.0 }}));
+    for _ in 0..20 {
+        app.inspect();
+    }
+    app.inspect()
+}
+
+fn click_visible_inspector(app: &mut Harness, name: &str) -> Value {
+    let state = app.inspect();
+    let target = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|label| label["text"] == name)
+        .expect("Inspector action is visible");
+    let (x, y) = center(target);
+    // Let the scroll area's hover state follow the mouse before pressing.
+    // A real pointer travels from its wheel target to the inspector first.
+    app.command(json!({"command":"pointer", "phase":"move", "x":x, "y":y}));
+    app.click(name)
+}
+
 fn lane(state: &Value, id: u64) -> &Value {
     &state["project"]["tracks"]
         .as_array()
@@ -147,6 +175,82 @@ fn pump_level(app: &mut Harness, identity: &Value, gain: f64) -> Value {
         }
     }
     state
+}
+
+#[test]
+fn compact_curve_keeps_readable_percentages_and_mouse_access_to_point_inspectors() {
+    for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
+        let (mut app, _, automation) = fixture(dark, density);
+        app.click("Held volume");
+        app.command(json!({"command":"viewport", "width":800, "height":600}));
+        menu(&mut app, "Window", "Automation");
+        let state = app.command(json!({"command":"inspect", "paint":true}));
+        let plot = &state["automation_editor"]["plot"];
+        let left = plot["min"][0].as_f64().unwrap();
+        let top = plot["min"][1].as_f64().unwrap();
+        let bottom = plot["max"][1].as_f64().unwrap();
+        assert!(bottom - top >= f64::from(daw_ui::tokens::PARAMETER_ROW_HEIGHT) - 0.1);
+        assert!(
+            top >= 0.0 && bottom <= 600.0,
+            "The minimum curve must be visible"
+        );
+        let mut ticks: Vec<_> = state["painted_text"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|text| {
+                ["0%", "25%", "50%", "75%", "100%"]
+                    .iter()
+                    .any(|tick| text["text"] == *tick)
+                    && text["rect"]["max"][0].as_f64().unwrap() < left
+                    && text["rect"]["min"][1].as_f64().unwrap() >= top - 21.0
+                    && text["rect"]["max"][1].as_f64().unwrap() <= bottom + 21.0
+            })
+            .collect();
+        ticks.sort_by(|a, b| {
+            a["rect"]["min"][1]
+                .as_f64()
+                .unwrap()
+                .total_cmp(&b["rect"]["min"][1].as_f64().unwrap())
+        });
+        assert_eq!(ticks.first().unwrap()["text"], "100%");
+        assert_eq!(ticks.last().unwrap()["text"], "0%");
+        for pair in ticks.windows(2) {
+            assert!(
+                pair[1]["rect"]["min"][1].as_f64().unwrap()
+                    - pair[0]["rect"]["max"][1].as_f64().unwrap()
+                    >= f64::from(daw_ui::tokens::SPACE_XS) - 1.0 / density
+            );
+        }
+        let initial = lane(&state, automation)["points"].clone();
+        let (x, y) = point(&state, 4.0, 0.8);
+        let selected = app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
+        assert_eq!(
+            selected["automation_editor"]["selected_point"],
+            initial[1]["id"]
+        );
+        assert_eq!(selected["project"], state["project"]);
+        // Scroll over the value gutter, outside the timeline's pan surface.
+        app.command(
+            json!({"command":"scroll", "x":left - 21.0, "y":(top + bottom) * 0.5, "delta":-1000.0}),
+        );
+        for _ in 0..20 {
+            app.inspect();
+        }
+        let scrolled = app.inspect();
+        let exp = scrolled["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == "Exp")
+            .expect("Segment inspector remains reachable by scrolling");
+        assert!(exp["min"][1].as_f64().unwrap() >= 0.0 && exp["max"][1].as_f64().unwrap() <= 600.0);
+        let shaped = click_visible_inspector(&mut app, "Exp");
+        assert_eq!(lane(&shaped, automation)["points"][1]["curve"], 1.0);
+        assert_eq!(lane(&shaped, automation)["points"][0], initial[0]);
+        assert_eq!(lane(&shaped, automation)["points"][2], initial[2]);
+        app.quit();
+    }
 }
 
 #[test]
@@ -315,18 +419,21 @@ fn segment_shapes_and_mouse_handles_preserve_neighbors_and_hold_song_endpoints()
 }
 
 #[test]
-fn compact_automation_keeps_slope_and_resume_controls_visible() {
+fn compact_automation_keeps_slope_and_resume_controls_reachable() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let (mut app, _, automation) = fixture(dark, density);
         app.click("Held volume");
         menu(&mut app, "Window", "Automation");
         for (width, height) in [(800, 600), (1100, 720)] {
             app.command(json!({"command":"viewport","width":width,"height":height,"pixels_per_point":density}));
+            scroll_curve_popup(&mut app, false);
             let state = app.click("Fit");
             let (x, y) = point(&state, 2.0, 0.2);
             app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
-            let shaped = app.click("Exp");
+            scroll_curve_popup(&mut app, true);
+            let shaped = click_visible_inspector(&mut app, "Exp");
             assert_eq!(lane(&shaped, automation)["points"][0]["curve"], 1.0);
+            let shaped = scroll_curve_popup(&mut app, true);
             for name in ["Log", "Exp"] {
                 let label = shaped["label_rects"]
                     .as_array()
@@ -344,7 +451,8 @@ fn compact_automation_keeps_slope_and_resume_controls_visible() {
                 assert!(label["max"][0].as_f64().unwrap() <= f64::from(width));
                 assert!(label["max"][1].as_f64().unwrap() <= f64::from(height));
             }
-            let overridden = app.click("Override automation");
+            scroll_curve_popup(&mut app, false);
+            let overridden = click_visible_inspector(&mut app, "Override automation");
             let resume = overridden["label_rects"]
                 .as_array()
                 .unwrap()

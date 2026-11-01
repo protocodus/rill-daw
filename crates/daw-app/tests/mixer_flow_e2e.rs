@@ -5,8 +5,41 @@ use daw_core::{AudioData, Clip, Project};
 use serde_json::{Value, json};
 
 fn menu(app: &mut Harness, parent: &str, item: &str) -> Value {
-    app.click(parent);
+    if parent == "+ Send" {
+        open_send_choices(app);
+    } else {
+        app.click(parent);
+    }
     app.click(item)
+}
+
+fn routing_footer(app: &mut Harness) -> Value {
+    let state = app.inspect();
+    let window = &state["window_rects"][0];
+    app.command(json!({"command":"scroll",
+        "x":(window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5,
+        "y":window["max"][1].as_f64().unwrap() - 50.0, "delta":-10000.0}));
+    for _ in 0..20 {
+        app.inspect();
+    }
+    let scrolled = app.inspect();
+    assert_eq!(scrolled["project"], state["project"]);
+    scrolled
+}
+
+fn open_send_choices(app: &mut Harness) -> Value {
+    let state = routing_footer(app);
+    let target = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|label| label["text"] == "+ Send")
+        .expect("Send action reachable by scrolling");
+    assert!(bottom(target) - top(target) >= 13.0);
+    app.command(json!({"command":"pointer", "phase":"move",
+        "x":(target["min"][0].as_f64().unwrap() + target["max"][0].as_f64().unwrap()) * 0.5,
+        "y":(top(target) + bottom(target)) * 0.5}));
+    app.click("+ Send")
 }
 fn undo(app: &mut Harness, redo: bool) -> Value {
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":redo}))
@@ -363,7 +396,22 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     app.click("Music");
     menu(&mut app, "+ Send", "Room");
     menu(&mut app, "+ Send", "Parallel");
-    let sent = app.command(json!({"command":"click","label":"Pre","occurrence":1}));
+    let controls = routing_footer(&mut app);
+    let occurrence = count(&controls, "Pre")
+        .checked_sub(1)
+        .expect("Last send's Pre control is visible");
+    let pre = controls["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|label| label["text"] == "Pre")
+        .unwrap();
+    assert!(bottom(pre) - top(pre) >= 13.0);
+    app.command(json!({"command":"pointer", "phase":"move",
+        "x":(pre["min"][0].as_f64().unwrap() + pre["max"][0].as_f64().unwrap()) * 0.5,
+        "y":(top(pre) + bottom(pre)) * 0.5}));
+    let sent = app.command(json!({"command":"click","label":"Pre","occurrence":occurrence}));
     assert_eq!(sent["project"]["tracks"][0]["output_bus"], bus_a);
     assert_eq!(
         sent["project"]["tracks"][0]["sends"]
@@ -373,6 +421,7 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
         2
     );
     assert_eq!(sent["project"]["tracks"][0]["sends"][1]["pre_fader"], true);
+    assert_eq!(sent["project"]["tracks"][0]["sends"][0]["pre_fader"], false);
     let snapshot = sent["project"].clone();
     menu(&mut app, "+ Send", "+ Bus and send");
     let created = app.inspect();
@@ -396,8 +445,8 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     app.click("Room");
     app.key("Escape");
     open_routing(&mut app, "Ch 3 > Master");
-    let before_choices = app.inspect();
-    let choices = app.click("+ Send");
+    let before_choices = routing_footer(&mut app);
+    let choices = open_send_choices(&mut app);
     assert_eq!(count(&choices, "Music"), count(&before_choices, "Music"));
     assert_eq!(count(&choices, "Room"), count(&before_choices, "Room"));
     app.key("Escape");

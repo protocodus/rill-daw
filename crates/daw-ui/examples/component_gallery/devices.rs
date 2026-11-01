@@ -129,7 +129,8 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             "gallery_parameters",
             &mut state.browser,
             &parameters,
-            430.0,
+            // The static catalogue shows all four rows with their full insets.
+            right.available_height(),
             |ui, selected| {
                 if let Some(item) = selected {
                     daw_ui::text::subtitle(ui, item.name);

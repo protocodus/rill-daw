@@ -619,7 +619,7 @@ impl IconButton {
         button
     }
     /// Quiet exclusive page navigation: full-size targets and a persistent
-    /// underline, with a surface only on hover or keyboard focus.
+    /// glowing border, with a surface only on hover or keyboard focus.
     pub fn tab(selected: bool, label: impl Into<WidgetText>) -> Self {
         let label = label.into();
         let accessible_label = label.text().to_owned();
@@ -737,7 +737,20 @@ impl Widget for IconButton {
         // Keep this native widget in its parent's layout: a nested `scope`
         // prevents horizontal_wrapped from wrapping individual buttons.
         let previous_style = ui.style().clone();
+        if egui::containers::menu::is_in_menu(ui) {
+            // Native menus install compact defaults after the shared theme.
+            // Keep ordinary label padding on shared controls in those menus.
+            ui.spacing_mut().button_padding = egui::vec2(
+                crate::tokens::BUTTON_PADDING_X,
+                crate::tokens::BUTTON_PADDING_Y,
+            );
+        }
         let colors = crate::theme::palette(ui.ctx());
+        let selected_mode = self.selected
+            && matches!(
+                self.role,
+                ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
+            );
         ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(
             crate::tokens::BORDER_WIDTH,
             colors
@@ -776,7 +789,9 @@ impl Widget for IconButton {
             let material = crate::surface::ComponentMaterial {
                 elevated: self.fill.is_some_and(|fill| fill != Color32::TRANSPARENT)
                     && ui.is_enabled(),
-                active: ui.is_enabled() && (self.selected || response.has_focus()),
+                active: ui.is_enabled()
+                    && !selected_mode
+                    && (self.selected || response.has_focus()),
             };
             ui.painter().set(
                 background,
@@ -820,24 +835,29 @@ impl Widget for IconButton {
                 }
             });
         }
-        if matches!(
-            self.role,
-            ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
-        ) && self.selected
-        {
-            // A shape cue remains legible without relying on accent color alone.
+        if selected_mode {
+            // Selection outlines the complete native target. The halo shares
+            // the clip/channel treatment and never changes layout or hit areas.
             let rect = output.response.rect;
-            let indicator = Rect::from_min_max(
-                egui::pos2(rect.left() + crate::tokens::SPACE_SM, rect.bottom() - 3.0),
-                egui::pos2(rect.right() - crate::tokens::SPACE_SM, rect.bottom()),
-            );
-            ui.painter().rect_filled(
-                indicator,
-                1.0,
-                ui.style()
-                    .interact_selectable(&output.response, true)
-                    .fg_stroke
-                    .color,
+            if ui.is_enabled() {
+                crate::paint_selection_glow(
+                    ui.painter(),
+                    rect,
+                    crate::tokens::RADIUS,
+                    colors.accent,
+                );
+            }
+            ui.painter().rect_stroke(
+                rect,
+                crate::tokens::RADIUS,
+                Stroke::new(
+                    crate::tokens::FOCUS_WIDTH,
+                    ui.style()
+                        .interact_selectable(&output.response, true)
+                        .fg_stroke
+                        .color,
+                ),
+                egui::StrokeKind::Inside,
             );
         }
         if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {

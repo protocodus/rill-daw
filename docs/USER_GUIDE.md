@@ -187,7 +187,7 @@ and bars/beats, so you can check a clip's exact timing without converting units.
 
 The piano roll separates note actions from the **View** menu. Note-tool controls keep their positions when switching tools. Hover a row or the piano keyboard to reveal its pitch names. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. **Draw settings** shows the current length, root and scale, with root/scale/chord choices inside. Natural-key rows use a neutral base and black-key rows are slightly darker; scale and chord guides add a subtle green tint. Notes are blue, with stronger shades for higher velocities. Selected notes keep their shade and gain an outline. Notes outside the grid scale are red; turn off **View → Color out-of-scale notes** to keep every note blue. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
 
-The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**, **Cursor**, **Cut**, **Glue**, **Erase**, and **Duplicate**. Separators distinguish related tool families; the toolbar wraps when needed. The active tool keeps its underline, and all shortcuts remain available.
+The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**, **Cursor**, **Cut**, **Glue**, **Erase**, and **Duplicate**. Separators distinguish related tool families; the toolbar wraps when needed. The active tool keeps its glowing border, and all shortcuts remain available.
 
 With **Pencil**, press at the note's starting time and pitch, then drag to choose
 its length. The starting pitch stays fixed while drawing.
@@ -204,7 +204,7 @@ Each applied action is one Undo step. Randomize and Quantize leave the song unch
 
 ## Clips and looping
 
-The arranger shows every tool directly, separated into related families: **Select**, **Pencil**, and **Cursor**; **Cut**, **Join**, and **Erase**; **Duplicate** and **Ghost copy**; **Stretch** and **Slip**. The toolbar wraps when needed. The active tool retains its underline; hover or **Tool help** shows its instructions and shortcut. The shortcuts remain **Q Select**, **W Pencil**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **L Slip**, **Z Erase**, and **P Cursor**.
+The arranger shows every tool directly, separated into related families: **Select**, **Pencil**, and **Cursor**; **Cut**, **Join**, and **Erase**; **Duplicate** and **Ghost copy**; **Stretch** and **Slip**. The toolbar wraps when needed. The active tool retains its glowing border; hover or **Tool help** shows its instructions and shortcut. The shortcuts remain **Q Select**, **W Pencil**, **E Cut**, **R Duplicate**, **T Join**, **G Ghost copy**, **S Stretch**, **L Slip**, **Z Erase**, and **P Cursor**.
 
 Audio and MIDI clips share these tools; Pencil creates MIDI clips and Slip moves audio within fixed clip edges. Select drags move clips; either edge trims the visible source window. Shift-dragging the body creates one independent copy, while Shift at a trim/stretch edge temporarily bypasses snap. Join opens a focused chooser. Actions select their resulting clip consistently, whether invoked from tools, menus, or the context menu.
 

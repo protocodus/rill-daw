@@ -71,10 +71,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         let right = &mut columns[1];
         text::subtitle(right, "Interaction tools");
         ui::panel(right.ctx()).show(right, |ui| {
-            text::note(
-                ui,
-                "The active tool retains its underline and selected tint.",
-            );
+            text::note(ui, "A glowing border marks the active tool.");
             ui.add_space(ui::tokens::SPACE_MD);
             ui.horizontal(|ui| {
                 ui::tool_value(ui, &mut state.tool, 0, "Select");

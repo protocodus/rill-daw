@@ -130,13 +130,13 @@ fn selected_clips_and_channels_gain_a_bounded_halo_without_editing_content() {
             assert_eq!(state["selected_track"], selected);
             unchanged(&state, &baseline);
             for channel in state["mixer"]["channels"].as_array().unwrap() {
-                let mut rect = bounds(&channel["strip"]);
-                let gutter = f64::from(
-                    (daw_ui::tokens::SPACE_XS * daw_ui::tokens::GOLDEN_RATIO_INVERSE).round(),
+                // Gutters belong between strips; the halo follows the full
+                // painted card, including its internal control padding.
+                assert_glow(
+                    &state,
+                    bounds(&channel["strip"]),
+                    channel["track"] == selected,
                 );
-                rect[0] += gutter;
-                rect[2] -= gutter;
-                assert_glow(&state, rect, channel["track"] == selected);
             }
             let repeated = painted(&mut app);
             assert_eq!(
@@ -165,6 +165,17 @@ fn point(value: &Value) -> [f64; 2] {
 fn bottom_center(rect: &Value) -> [f64; 2] {
     let [left, _, right, bottom] = bounds(rect);
     [(left + right) * 0.5, bottom]
+}
+
+fn scroll_mixer(app: &mut Harness, delta: f64) {
+    let state = app.inspect();
+    let [_, top, right, bottom] = bounds(&state["mixer"]["reorder_viewport"]);
+    // This fixture leaves empty space to the right of Master. Scroll the
+    // outer channel pane without hovering a different route source.
+    let master_right = bounds(&state["mixer"]["master_strip"])[2];
+    let x = right - f64::from(daw_ui::tokens::SPACE_SM);
+    assert!(x > master_right);
+    app.command(json!({"command":"scroll", "x":x, "y":(top+bottom)*0.5, "delta":delta}));
 }
 
 fn assert_route(state: &Value, route: &Value, project: &Project) {
@@ -292,6 +303,9 @@ fn routing_gradients_connect_both_directions_and_master_without_gaps() {
         );
         app.click("Route phrase");
         app.click("Mixer");
+        // Generous controls may require the outer pane to scroll before the
+        // complete routing overview is visible at this viewport height.
+        scroll_mixer(&mut app, -10000.0);
         let state = painted(&mut app);
         let routes = state["mixer"]["routes"].as_array().unwrap();
         assert_eq!(routes.len(), 2);
@@ -299,11 +313,16 @@ fn routing_gradients_connect_both_directions_and_master_without_gaps() {
         assert!(point(&routes[1]["from"])[0] < point(&routes[1]["to"])[0]);
         assert!(bounds(&routes[0]["lane"])[3] <= bounds(&routes[1]["lane"])[1]);
         for route in routes {
+            let lane = bounds(&route["lane"]);
+            let viewport = bounds(&state["mixer"]["reorder_viewport"]);
+            assert!(lane[1] >= viewport[1] && lane[3] <= viewport[3]);
             assert_route(&state, route, &project);
         }
         unchanged(&state, &baseline);
+        scroll_mixer(&mut app, 10000.0);
         app.click("Amber group");
         app.key("Escape");
+        scroll_mixer(&mut app, -10000.0);
         let state = painted(&mut app);
         let routes = state["mixer"]["routes"].as_array().unwrap();
         assert_eq!(routes.len(), 1);
@@ -361,22 +380,32 @@ fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work(
                     .into_iter()
                     .map(move |y| [x, y])
             })
-            .find(|[x, y]| {
-                !utility["window_rects"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|window| {
-                        let [left, top, right, bottom] = bounds(window);
-                        left <= *x && *x <= right && top <= *y && *y <= bottom
-                    })
+            .flat_map(|start| [-60.0, 60.0].map(|dx| (start, [start[0] + dx, start[1]])))
+            .find(|(start, end)| {
+                let within_clip =
+                    |[x, y]: [f64; 2]| left <= x && x <= right && top <= y && y <= bottom;
+                within_clip(*start)
+                    && within_clip(*end)
+                    && !utility["window_rects"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|window| {
+                            let [left, top, right, bottom] = bounds(window);
+                            // The complete horizontal gesture stays outside the
+                            // foreground, including the segment between endpoints.
+                            top <= start[1]
+                                && start[1] <= bottom
+                                && start[0].min(end[0]) <= right
+                                && start[0].max(end[0]) >= left
+                        })
             })
-            .expect("The fixture exposes clip context outside the Effects utility");
+            .expect("The fixture exposes a full clip gesture outside the Effects utility");
+        let (start, end) = background;
         app.command(json!({"command":"pointer", "phase":"click",
-            "x":background[0], "y":background[1]}));
+            "x":start[0], "y":start[1]}));
         app.command(json!({"command":"pointer", "phase":"drag_batched",
-            "x":background[0], "y":background[1],
-            "to_x":background[0] + 60.0, "to_y":background[1]}));
+            "x":start[0], "y":start[1], "to_x":end[0], "to_y":end[1]}));
         let blocked = app.key("Delete");
         assert_crisp(&blocked);
         assert_eq!(blocked["popups"], utility["popups"]);

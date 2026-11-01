@@ -140,3 +140,85 @@ fn clip_and_channel_selection_add_halos_without_changing_geometry_or_controls() 
         previous = bounds;
     }
 }
+
+#[test]
+fn tool_and_page_selection_outline_the_full_target_without_moving_labels() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for density in [1.0, 1.25, 2.0] {
+            for role in ["tool", "choice", "tab"] {
+                let ctx = Context::default();
+                theme::apply(&ctx);
+                theme::set_appearance(&ctx, appearance);
+                ctx.set_pixels_per_point(density);
+                let mut original = None;
+                for (selected, enabled) in
+                    [(false, true), (true, true), (true, false), (false, true)]
+                {
+                    let mut target = Rect::NOTHING;
+                    let output = ctx.run(RawInput::default(), |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            let response = ui
+                                .add_enabled_ui(enabled, |ui| {
+                                    ui.add(match role {
+                                        "tool" => daw_ui::IconButton::tool(selected, "Duplicate"),
+                                        "choice" => daw_ui::IconButton::tool_group_choice(
+                                            "Duplicate",
+                                            daw_ui::Icon::Duplicate,
+                                            selected.then_some("Duplicate"),
+                                        ),
+                                        _ => daw_ui::IconButton::tab(selected, "Duplicate"),
+                                    })
+                                })
+                                .inner;
+                            target = response.rect;
+                            assert_eq!(response.enabled(), enabled);
+                        });
+                    });
+                    let label = output
+                        .shapes
+                        .iter()
+                        .find_map(|shape| match &shape.shape {
+                            Shape::Text(text) if text.galley.text() == "Duplicate" => {
+                                Some(text.galley.rect.translate(text.pos.to_vec2()))
+                            }
+                            _ => None,
+                        })
+                        .unwrap();
+                    assert_eq!(*original.get_or_insert((target, label)), (target, label));
+                    assert!(target.shrink(tokens::SPACE_XS).contains_rect(label));
+                    let halos: Vec<_> = meshes(&output)
+                        .into_iter()
+                        .filter(|mesh| mesh.vertices.len() == 128 && mesh.indices.len() == 576)
+                        .collect();
+                    assert_eq!(halos.len(), usize::from(selected && enabled));
+                    if let Some(halo) = halos.first() {
+                        let expected = target.expand(tokens::SELECTION_GLOW_EXTENT);
+                        assert!((halo.calc_bounds().min - expected.min).length() < 0.1);
+                        assert!((halo.calc_bounds().max - expected.max).length() < 0.1);
+                    }
+                    let borders: Vec<_> = output
+                        .shapes
+                        .iter()
+                        .filter_map(|shape| match &shape.shape {
+                            Shape::Rect(shape)
+                                if shape.rect == target
+                                    && shape.stroke.width == tokens::FOCUS_WIDTH =>
+                            {
+                                Some(shape)
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    assert_eq!(borders.len(), usize::from(selected));
+                    if let Some(border) = borders.first() {
+                        assert_eq!(border.stroke_kind, egui::StrokeKind::Inside);
+                        assert_eq!(border.fill, Color32::TRANSPARENT);
+                        if enabled {
+                            assert_eq!(border.stroke.color, theme::palette(&ctx).accent);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -245,7 +245,7 @@ fn workspace_header_stays_at_the_top_and_back_keeps_native_keyboard_accessibilit
 #[test]
 fn contextual_workspace_header_keeps_command_and_canvas_geometry_across_clip_kinds() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-        for (width, density) in [(800.0, 1.0), (800.0, 2.0), (1440.0, 1.0)] {
+        for (width, density) in [(800.0, 1.0), (800.0, 1.25), (800.0, 2.0), (1440.0, 1.0)] {
             let ctx = Context::default();
             theme::apply(&ctx);
             theme::set_appearance(&ctx, appearance);
@@ -274,14 +274,18 @@ fn contextual_workspace_header_keeps_command_and_canvas_geometry_across_clip_kin
                         let context = header.context.as_ref().unwrap();
                         assert!(header.title.rect.right() < header.inner.rect.left());
                         assert!(context.rect.right() < header.inner.rect.left());
-                        assert!(header.title.rect.bottom() <= context.rect.top() + 0.1);
+                        assert!(context.rect.top() - header.title.rect.bottom()
+                            >= controls::tokens::SPACE_XS - 1.0 / density);
+                        let identity = header.title.rect.union(context.rect);
+                        assert!((identity.center().y - header.inner.rect.center().y).abs()
+                            <= 1.0 / density);
                         assert!(header.response.rect.contains_rect(header.title.rect));
                         assert!(header.response.rect.contains_rect(context.rect));
                         assert!(header.response.rect.right() <= ui.max_rect().right() + 0.1);
                         assert!(
                             header.response.rect.height()
-                                <= controls::tokens::CONTROL_HEIGHT + 2.0 * controls::tokens::SPACE_SM + 1.0,
-                            "Context must reuse the header's existing height: {:?}",
+                                <= identity.height() + 2.0 * controls::tokens::SPACE_SM + 1.0,
+                            "Context reserves only its measured lines and padding: {:?}",
                             header.response.rect,
                         );
                         if let Some(expected) = properties_rect {
@@ -685,5 +689,112 @@ fn mixer_strips_stack_their_contents_and_meter_rejects_nonfinite_readings() {
         if let egui::epaint::Shape::Rect(rect) = shape.shape {
             assert!(rect.rect.is_finite());
         }
+    }
+}
+
+#[test]
+fn mixer_card_padding_and_parent_gutters_survive_display_scaling() {
+    for density in [1.0, 1.25, 2.0] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_pixels_per_point(density);
+        let _ = ctx.run(input(vec![], egui::vec2(640.0, 480.0)), |_| {});
+        let _ = ctx.run(input(vec![], egui::vec2(640.0, 480.0)), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = controls::tokens::SPACE_SM;
+                    let mut previous: Option<egui::Rect> = None;
+                    for selected in [false, true] {
+                        let strip = controls::mixer_strip(
+                            ui,
+                            selected,
+                            egui::vec2(180.0, 400.0),
+                            None,
+                            selected,
+                            |ui| controls::button(ui, "Effects").rect,
+                        );
+                        let tolerance = 1.0 / density;
+                        assert!(
+                            strip.inner.left() - strip.response.rect.left()
+                                >= controls::tokens::SPACE_MD - tolerance
+                        );
+                        assert!(
+                            strip.inner.top() - strip.response.rect.top()
+                                >= controls::tokens::SPACE_MD - tolerance
+                        );
+                        assert!(
+                            strip.response.rect.right() - strip.inner.right()
+                                >= controls::tokens::SPACE_MD - tolerance
+                        );
+                        assert!((strip.response.rect.width() - 180.0).abs() <= tolerance);
+                        if let Some(previous) = previous {
+                            assert!(
+                                (strip.response.rect.left()
+                                    - previous.right()
+                                    - controls::tokens::SPACE_SM)
+                                    .abs()
+                                    <= tolerance
+                            );
+                        }
+                        previous = Some(strip.response.rect);
+                    }
+                });
+            });
+        });
+    }
+}
+
+#[test]
+fn take_lane_labels_keep_clearance_from_the_waveform_at_display_scales() {
+    for density in [1.0, 1.25, 2.0] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_pixels_per_point(density);
+        let _ = ctx.run(input(vec![], egui::vec2(640.0, 480.0)), |_| {});
+        let mut card = egui::Rect::NOTHING;
+        let mut plot = egui::Rect::NOTHING;
+        let output = ctx.run(input(vec![], egui::vec2(640.0, 480.0)), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                card = controls::audio_take_lane_with_waveform(
+                    ui,
+                    &controls::TakeLane {
+                        name: "Vocal take",
+                        detail: "Eight beats · Alternative",
+                        selected: true,
+                        color: egui::Color32::LIGHT_BLUE,
+                        peaks: &[],
+                        span: (0.0, 1.0),
+                        selection: Some((0.25, 0.75)),
+                    },
+                    |painter, bounds| {
+                        plot = bounds;
+                        assert_eq!(painter.clip_rect(), bounds);
+                    },
+                )
+                .rect;
+            });
+        });
+        let mut labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| {
+                if let egui::Shape::Text(text) = &shape.shape
+                    && ["Vocal take", "Eight beats · Alternative"].contains(&text.galley.text())
+                {
+                    Some(text.galley.rect.translate(text.pos.to_vec2()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        labels.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        assert_eq!(labels.len(), 2);
+        let tolerance = 1.0 / density;
+        assert!(labels[0].left() - card.left() >= controls::tokens::SPACE_MD - tolerance);
+        assert!(labels[1].top() - labels[0].bottom() >= controls::tokens::SPACE_XS - tolerance);
+        assert!(plot.top() - labels[1].bottom() >= controls::tokens::SPACE_XS - tolerance);
+        assert!(plot.height() >= controls::tokens::SPACE_LG - tolerance);
+        assert!(card.bottom() - plot.bottom() >= controls::tokens::SPACE_SM - tolerance);
+        assert!((card.height() - 89.0).abs() <= tolerance);
     }
 }

@@ -159,7 +159,7 @@ fn material_texture(ctx: &egui::Context) -> egui::TextureHandle {
     texture
 }
 
-/// Paint a soft, track-colored halo around an active clip or mixer channel.
+/// Paint a soft, bounded halo around a selected clip, channel, or control.
 ///
 /// Four rounded rings form one texture-free mesh (128 vertices, 576 indices).
 /// Geometry and cost stay constant at every zoom and density. The transparent

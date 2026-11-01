@@ -49,6 +49,37 @@ fn clip_rect(state: &Value, track: usize) -> &Value {
         .unwrap()["rect"]
 }
 
+fn reveal_clip(app: &mut Harness, track: usize) -> Value {
+    let before = app.inspect();
+    let mut state = before.clone();
+    for _ in 0..8 {
+        let rect = clip_rect(&state, track);
+        let canvas = &state["timeline"]["canvas"];
+        let top = canvas["min"][1].as_f64().unwrap();
+        let bottom = canvas["max"][1].as_f64().unwrap();
+        let clip_top = rect["min"][1].as_f64().unwrap();
+        let clip_bottom = rect["max"][1].as_f64().unwrap();
+        if clip_top >= top && clip_bottom <= bottom {
+            assert_eq!(state["project"], before["project"]);
+            assert_eq!(state["selected_clips"], before["selected_clips"]);
+            assert_eq!(state["history"], before["history"]);
+            return state;
+        }
+        let x = (canvas["min"][0].as_f64().unwrap() + canvas["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (top + bottom) * 0.5;
+        let delta = if clip_bottom > bottom {
+            bottom - clip_bottom - 8.0
+        } else {
+            top - clip_top + 8.0
+        };
+        state = app.command(json!({"command":"scroll", "x":x, "y":y, "delta":delta}));
+    }
+    panic!(
+        "Could not reveal clip {track} for trimming: {}",
+        clip_rect(&state, track)
+    );
+}
+
 fn assert_feedback(state: &Value, track: usize, width: f64, height: f64) {
     let clip = &state["project"]["tracks"][track]["clips"][0];
     let start = clip["start"].as_f64().unwrap();
@@ -158,7 +189,9 @@ fn trim_feedback_stays_inside_the_viewport_at_pointer_edges_and_does_not_block_r
             app.command(json!({"command":"viewport", "width":width, "height":height}));
             for track in [0, 1] {
                 app.command(json!({"command":"open", "path":path}));
-                let before = app.inspect();
+                // Compact transport/header rows can leave the second lane partly
+                // below the viewport. Reveal it with the mouse before trimming.
+                let before = reveal_clip(&mut app, track);
                 let rect = clip_rect(&before, track);
                 let x = rect["max"][0].as_f64().unwrap() - 2.0;
                 let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;

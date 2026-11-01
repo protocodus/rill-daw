@@ -189,12 +189,18 @@ fn generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole
         let original = app.inspect();
         let ready = app.click("Generate…");
         let initial_length = generator(&ready)["length_bars"].clone();
-        let (_, field_y) = center(&generator(&ready)["controls"]["length_bars"]);
+        let length_field = &generator(&ready)["controls"]["length_bars"];
+        let (_, field_y) = center(length_field);
         let keypad = ready["label_rects"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|rect| rect["text"] == "123" && (center(rect).1 - field_y).abs() < 1.0)
+            .filter(|rect| {
+                rect["text"] == "123"
+                    && (center(rect).1 - field_y).abs() < 1.0
+                    && rect["min"][0].as_f64().unwrap() >= length_field["max"][0].as_f64().unwrap()
+            })
+            .min_by(|a, b| center(a).0.total_cmp(&center(b).0))
             .expect("Length has a visible mouse keypad action");
         click_rect(&mut app, keypad);
         for label in ["Clear", "2", ".", "5"] {
@@ -229,9 +235,44 @@ fn generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole
 }
 
 #[test]
+fn open_generator_reflows_when_resized_to_a_short_viewport() {
+    let (mut app, _, _) = fixture(0.0, 0.0, 1.0, false);
+    app.click("Generate…");
+    app.command(json!({"command":"viewport","width":800,"height":600}));
+    for mode in ["Chord", "Arpeggio", "Melody"] {
+        app.click(mode);
+        let state = app.inspect();
+        let controls = &generator(&state)["controls"];
+        let options = &controls["options"];
+        assert!(
+            options["max"][1].as_f64().unwrap() - options["min"][1].as_f64().unwrap() >= 89.0,
+            "{mode}: options need room for visible generation parameters: {options}"
+        );
+        assert!(
+            (center(&controls["start_bar"]).1 - center(&controls["length_bars"]).1).abs() < 1.0,
+            "{mode}: range fields did not reflow into the compact header"
+        );
+        let targets = footer_rects(&state);
+        assert_footer_stable(&app.inspect(), &targets, 800, 600);
+        for label in ["Add notes", "Next range", "Cancel"] {
+            assert!(
+                state["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|text| text == label),
+                "{mode}: missing {label}"
+            );
+        }
+    }
+    app.click("Cancel");
+    app.quit();
+}
+
+#[test]
 fn generator_add_and_next_targets_stay_fixed_through_feedback_and_repeated_mouse_additions() {
     for dark in [false, true] {
-        for (width, height) in [(800, 640), (1100, 720), (1440, 1000)] {
+        for (width, height) in [(800, 600), (800, 640), (1100, 720), (1440, 1000)] {
             let (mut app, _, id) = fixture(0.0, 0.0, 1.0, false);
             app.command(json!({"command":"system_theme","dark":dark}));
             app.command(json!({"command":"viewport","width":width,"height":height}));
@@ -467,7 +508,8 @@ fn all_roots_are_visible_and_scale_sync_is_explicit_and_view_only() {
             "Generator choices must not silently change the C minor grid"
         );
     }
-    let synced = app.click("Use scale for grid");
+    let use_scale = control(&mut app, "use_grid_scale");
+    let synced = click_rect(&mut app, &use_scale);
     assert_eq!(synced["project"], before_sync["project"]);
     assert_eq!(synced["history"], before_sync["history"]);
     for key in synced["midi_editor"]["keys"].as_array().unwrap() {

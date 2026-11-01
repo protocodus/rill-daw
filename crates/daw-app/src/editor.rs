@@ -265,6 +265,7 @@ impl DawApp {
         let selected_channels: std::collections::HashSet<_> =
             self.finishing_selected_channels().into_iter().collect();
         let group_gap = daw_ui::tokens::SPACE_LG;
+        let channel_gap = daw_ui::tokens::SPACE_SM;
         let group_header_height = 18.0 + daw_ui::tokens::SPACE_XS;
         let preview_id = egui::Id::new("mixer_flow_preview");
         let selection_before = self.selected_track;
@@ -302,17 +303,26 @@ impl DawApp {
             .unwrap_or_default();
         let strip_width = 180.0;
         let group_count = channel_groups.len() + 1;
-        let mixer_width =
-            (channels.len() + 1) as f32 * strip_width + (group_count - 1) as f32 * group_gap;
+        let mixer_width = (channels.len() + 1) as f32 * strip_width
+            + (channels.len() + 1 - group_count) as f32 * channel_gap
+            + (group_count - 1) as f32 * group_gap;
         let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
-        let spacing = daw_ui::tokens::SPACE_XS;
+        let spacing = daw_ui::tokens::SPACE_SM;
+        let stage_gap = daw_ui::tokens::SPACE_MD;
+        let caption_gap = daw_ui::tokens::SPACE_XS;
+        let pan_height =
+            daw_ui::Knob::compact_height(48.0).max(daw_ui::tokens::PARAMETER_ROW_HEIGHT);
+        // The same eleven gaps are used below: seven between controls, three
+        // between signal-flow stages, and one joining Output to its target.
         let fixed_height = 2.0 * daw_ui::tokens::SPACE_MD
             + 7.0 * daw_ui::tokens::CONTROL_HEIGHT
-            + daw_ui::tokens::PARAMETER_ROW_HEIGHT
+            + pan_height
             + daw_ui::tokens::COMPACT_HEIGHT
             + daw_ui::MIXER_LEVEL_METER_HEIGHT
             + 18.0
-            + 11.0 * spacing;
+            + 7.0 * spacing
+            + 3.0 * stage_gap
+            + caption_gap;
         // Size controls against the unobscured workspace, before scrolling.
         // Reserve an overview of the main output and one send, plus room for
         // an ordinary status notice. These fixed reservations let the useful
@@ -371,7 +381,8 @@ impl DawApp {
             let (headings, _) = ui.allocate_exact_size(Vec2::new(mixer_width, 18.0), egui::Sense::hover());
             let mut group_x = headings.left();
             for (label, count) in channel_groups.iter().map(|(bus, count)| (if *bus { "Buses" } else { "Tracks" }, *count)).chain(std::iter::once(("Master", 1))) {
-                let rect = egui::Rect::from_min_size(egui::pos2(group_x, headings.top()), Vec2::new(count as f32 * strip_width, 18.0));
+                let width = count as f32 * strip_width + count.saturating_sub(1) as f32 * channel_gap;
+                let rect = egui::Rect::from_min_size(egui::pos2(group_x, headings.top()), Vec2::new(width, 18.0));
                 daw_ui::paint_mixer_group_header(ui.painter(), rect, label);
                 group_diagnostics.push(serde_json::json!({"label":label,"rect":rect_json(rect)}));
                 group_x = rect.right() + group_gap;
@@ -391,7 +402,9 @@ impl DawApp {
                     channel_automation.sort_by_key(|(_, state)| state.0);
                     let channel_state = channel_automation.iter().map(|(_, (_, state, _))| *state)
                         .max_by_key(|state| match state { daw_ui::AutomationState::Bypassed => 0, daw_ui::AutomationState::Read => 1, daw_ui::AutomationState::Overridden => 2 });
-                    if previous_bus.is_some_and(|previous| previous != bus) { ui.add_space(group_gap); }
+                    if let Some(previous) = previous_bus {
+                        ui.add_space(if previous != bus { group_gap } else { channel_gap });
+                    }
                     previous_bus = Some(bus);
                     let destination = track.output_bus.and_then(|id| names.get(&id))
                         .map(String::as_str).unwrap_or("Master");
@@ -468,6 +481,7 @@ impl DawApp {
                             };
                             (menu.response.rect, kind.rect)
                         });
+                        ui.add_space(stage_gap - spacing);
                         let effects = daw_ui::mixer_effects_button(ui, content_width,
                             track.inserts.len(), track.inserts.iter().filter(|slot| slot.enabled).count());
                         if effects.clicked() {
@@ -528,12 +542,16 @@ impl DawApp {
                         let mute_solo = daw_ui::mixer_mute_solo(ui, &mut track.mute, &mut track.solo, content_width);
                         changed |= mute_solo.mute.changed() || mute_solo.solo.changed();
                         let mute_solo_rect = mute_solo.mute.rect.union(mute_solo.solo.rect);
+                        ui.add_space(stage_gap - spacing);
                         let level = daw_ui::mixer_level_meter(ui, channel_peaks, content_width)
                             .on_hover_text("Channel output level · after inserts, volume and pan");
+                        ui.add_space(stage_gap - spacing);
+                        ui.spacing_mut().item_spacing.y = caption_gap;
                         let output_label = ui.allocate_ui_with_layout(Vec2::new(content_width, 18.0),
                             egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             daw_ui::text::note(ui, "Output");
                         });
+                        ui.spacing_mut().item_spacing.y = spacing;
                         let target = daw_ui::mixer_output_button(ui, content_width, &route, destination,
                             track.output_bus.and_then(|id| channel_colors.get(&id)).copied());
                         if target.clicked() { self.selected_track = Some(track.id); popup = Some(PopupKind::Routing); }
@@ -591,6 +609,7 @@ impl DawApp {
                     ui.spacing_mut().item_spacing.y = spacing;
                     daw_ui::mixer_master_title(ui, content_width);
                     for label in ["Stereo mix", ""] {
+                        if label.is_empty() { ui.add_space(stage_gap - spacing); }
                         ui.allocate_ui_with_layout(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                             egui::Layout::centered_and_justified(egui::Direction::TopDown), |ui| {
                             ui.set_min_size(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT));
@@ -608,11 +627,15 @@ impl DawApp {
                         });
                         daw_ui::stereo_meter(ui, [meter.peak_left, meter.peak_right], Vec2::new(56.0, fader_height));
                     });
-                    ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::PARAMETER_ROW_HEIGHT));
+                    ui.allocate_space(Vec2::new(content_width, pan_height));
                     ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT));
+                    ui.add_space(stage_gap - spacing);
                     ui.allocate_space(Vec2::new(content_width, daw_ui::MIXER_LEVEL_METER_HEIGHT));
+                    ui.add_space(stage_gap - spacing);
+                    ui.spacing_mut().item_spacing.y = caption_gap;
                     ui.allocate_ui_with_layout(Vec2::new(content_width, 18.0),
                         egui::Layout::left_to_right(egui::Align::Center), |ui| { daw_ui::text::note(ui, "Output"); });
+                    ui.spacing_mut().item_spacing.y = spacing;
                     ui.allocate_ui_with_layout(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT),
                         egui::Layout::centered_and_justified(egui::Direction::TopDown), |ui| { daw_ui::text::note(ui, "Stereo output"); });
                     ui.allocate_space(Vec2::new(content_width, daw_ui::tokens::CONTROL_HEIGHT));

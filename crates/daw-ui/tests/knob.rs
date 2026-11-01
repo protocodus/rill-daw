@@ -283,7 +283,10 @@ fn relative_drag_has_no_click_jump_and_fine_adjustment_does_not_rebase() {
     let options = Options::default();
     let mut value = 50.0;
     let (_, geometry, _) = frame(&ctx, &mut value, options, Modifiers::NONE, vec![]);
-    let origin = geometry.minimum;
+    // The arc endpoint contains trig-derived f32 coordinates. Use whole
+    // screen points so this test isolates fine-drag precision from pointer
+    // subtraction rounding when a move crosses an f32 exponent boundary.
+    let origin = geometry.minimum.round();
     frame(
         &ctx,
         &mut value,
@@ -637,7 +640,7 @@ fn compact_frame(
 }
 
 #[test]
-fn compact_knob_fits_the_dial_without_removing_the_default_numeric_editor() {
+fn compact_knob_reserves_its_captions_without_removing_the_default_numeric_editor() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
     let mut value = 140.123_456_789;
@@ -646,8 +649,12 @@ fn compact_knob_fits_the_dial_without_removing_the_default_numeric_editor() {
     assert!(full_before.rect.width() >= 112.0);
     assert!(full_before.rect.height() > 48.0);
     let (compact, geometry, output) = compact_frame(&ctx, &mut value, true, vec![]);
-    assert_eq!(compact.rect.size(), vec2(48.0, 48.0));
-    assert_eq!(geometry.dial, compact.rect);
+    assert_eq!(
+        compact.rect.size(),
+        vec2(48.0, daw_ui::Knob::compact_height(48.0))
+    );
+    assert_eq!(geometry.dial.size(), vec2(48.0, 48.0));
+    assert!(compact.rect.contains_rect(geometry.dial));
     assert_eq!(geometry.number, Rect::NOTHING);
     assert_eq!(geometry.value, 140.123_456_789);
     assert_eq!(value, 140.123_456_789);
@@ -672,6 +679,134 @@ fn compact_knob_fits_the_dial_without_removing_the_default_numeric_editor() {
     assert!(rendered.contains(&AutomationState::Read.label()));
     assert!(rendered.contains(&"Outside range"));
     assert!(rendered.iter().any(|label| label.contains("140.123456789")));
+}
+
+#[test]
+fn compact_scale_captions_keep_edge_and_tick_clearance_at_display_scales() {
+    for scale in [1.0, 1.25, 2.0] {
+        for diameter in [48.0, 64.0] {
+            for enabled in [true, false] {
+                let ctx = Context::default();
+                daw_ui::theme::apply(&ctx);
+                ctx.set_pixels_per_point(scale);
+                let mut value = 0.25;
+                let mut result = None;
+                let output = ctx.run(
+                    RawInput {
+                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(440.0, 420.0))),
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            let response = ui.add_enabled(
+                                enabled,
+                                daw_ui::knob(&mut value, 0.0..=16.0)
+                                    .compact()
+                                    .diameter(diameter)
+                                    .perceptual_gain()
+                                    .suffix("×"),
+                            );
+                            let geometry = daw_ui::knob_geometry(ctx, response.id).unwrap();
+                            result = Some((response, geometry));
+                        });
+                    },
+                );
+                let (response, geometry) = result.unwrap();
+                assert_eq!(geometry.dial.size(), vec2(diameter, diameter));
+                assert_eq!(
+                    response.rect.height(),
+                    daw_ui::Knob::compact_height(diameter)
+                );
+                let tick_bottom = geometry
+                    .ticks
+                    .iter()
+                    .map(|tick| {
+                        let direction = (*tick - geometry.center).normalized();
+                        (geometry.center + direction * (geometry.radius + 5.0)).y + 0.5
+                    })
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let mut captions = 0;
+                for shape in &output.shapes {
+                    if let egui::Shape::Text(text) = &shape.shape
+                        && ["0×", "16×"].contains(&text.galley.text())
+                    {
+                        let bounds = text.galley.rect.translate(text.pos.to_vec2());
+                        assert!(
+                            response
+                                .rect
+                                .shrink(daw_ui::tokens::SPACE_XS - 0.1)
+                                .contains_rect(bounds)
+                        );
+                        assert!(bounds.top() - tick_bottom >= daw_ui::tokens::SPACE_XS - 0.1);
+                        captions += 1;
+                    }
+                }
+                assert_eq!(captions, 2);
+                assert_eq!(
+                    value, 0.25,
+                    "Spacing and disabled presentation never change values"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn full_knob_labels_use_available_width_before_wrapping_without_expanding_the_pane() {
+    for scale in [1.0, 1.25, 2.0] {
+        for name in [
+            "Normalized value",
+            "A long descriptive parameter label that must wrap inside its pane",
+        ] {
+            let ctx = Context::default();
+            daw_ui::theme::apply(&ctx);
+            ctx.set_pixels_per_point(scale);
+            let mut value = 0.5;
+            let mut rect = Rect::NOTHING;
+            let output = ctx.run(
+                RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(440.0, 420.0))),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.allocate_ui_with_layout(
+                            vec2(160.0, ui.available_height()),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                rect = ui.add(daw_ui::knob(&mut value, 0.0..=1.0).text(name)).rect;
+                            },
+                        );
+                    });
+                },
+            );
+            assert!(
+                rect.width() <= 160.1,
+                "Labels must not widen the pane: {rect:?}"
+            );
+            let label = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == name => Some(text),
+                    _ => None,
+                })
+                .unwrap();
+            if name == "Normalized value" {
+                assert_eq!(
+                    label.galley.rows.len(),
+                    1,
+                    "Available width avoids a needless extra line"
+                );
+            } else {
+                assert!(label.galley.rows.len() > 1);
+            }
+            assert!(
+                rect.expand(0.1)
+                    .contains_rect(label.galley.rect.translate(label.pos.to_vec2()))
+            );
+        }
+    }
 }
 
 #[test]

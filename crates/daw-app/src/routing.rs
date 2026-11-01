@@ -53,7 +53,7 @@ impl DawApp {
                 widgets::popup_scroll_body(
                     ui,
                     "effects_body",
-                    widgets::tokens::CONTROL_HEIGHT + widgets::tokens::SPACE_SM,
+                    widgets::tokens::CONTROL_HEIGHT + widgets::tokens::SPACE_LG,
                     |ui| {
                         let mut remove = None;
                         let mut move_up = None;
@@ -226,6 +226,10 @@ impl DawApp {
             .id(egui::Id::new("routing"))
             .open(&mut open)
             .default_width(620.0)
+            // Keep both send-setting rows intact when a remembered window is
+            // resized by a live display-density change. Shorter viewports can
+            // still scroll the sends; the window remains bounded horizontally.
+            .min_width(widgets::popup_body_size(ctx).x.min(377.0))
             .default_height(440.0)
             // Keep a useful send viewport below navigation and contextual AI.
             // Otherwise a remembered compact size can collapse the scrolling
@@ -272,7 +276,7 @@ impl DawApp {
                                         );
                                     },
                                 );
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     let parameter = AutomationParameter::SendGain {
                                         bus: send.target_bus,
                                     };
@@ -317,8 +321,10 @@ impl DawApp {
                                             "×",
                                             &name,
                                         );
+                                    let (action, exact) = ui.vertical(|ui| {
+                                        let entry = ui.horizontal_wrapped(|ui| {
                                     widgets::text::label(ui, "Level");
-                                    let (action, exact) = daw_ui::automatable_parameter_value_button(
+                                    daw_ui::automatable_parameter_value_button(
                                             ui,
                                             "send_exact",
                                             format!("{}×", daw_ui::parameter_value_text(f64::from(gain))),
@@ -328,26 +334,9 @@ impl DawApp {
                                             0.0..=16.0,
                                             "×",
                                             &name,
-                                        );
-                                    let action = action.or(context_action);
-                                    let exact = exact.or(context_exact);
-                                    if let Some(action) = action {
-                                        automation_navigation = Some(action);
-                                    }
-                                    if let Some(value) = exact {
-                                        gain = value as f32;
-                                    }
-                                    if response.changed() || exact.is_some() {
-                                        send.gain = gain;
-                                        changed = true;
-                                        automation_overrides.push((
-                                            AutomationTarget {
-                                                track: track_id,
-                                                parameter,
-                                            },
-                                            parameter.normalize(gain),
-                                        ));
-                                    }
+                                        )
+                                        }).inner;
+                                        ui.horizontal_wrapped(|ui| {
                                     changed |=
                                         widgets::radio_value(ui, &mut send.pre_fader, true, "Pre")
                                             .on_hover_text(
@@ -387,6 +376,28 @@ impl DawApp {
                                                 }
                                             },
                                         );
+                                    }
+                                        });
+                                        entry
+                                    }).inner;
+                                    let action = action.or(context_action);
+                                    let exact = exact.or(context_exact);
+                                    if let Some(action) = action {
+                                        automation_navigation = Some(action);
+                                    }
+                                    if let Some(value) = exact {
+                                        gain = value as f32;
+                                    }
+                                    if response.changed() || exact.is_some() {
+                                        send.gain = gain;
+                                        changed = true;
+                                        automation_overrides.push((
+                                            AutomationTarget {
+                                                track: track_id,
+                                                parameter,
+                                            },
+                                            parameter.normalize(gain),
+                                        ));
                                     }
                                 });
                             });
@@ -438,7 +449,7 @@ impl DawApp {
 
                     create_send = widgets::button(ui, "Create send track").clicked();
 
-                    ui.add_space(16.0);
+                ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
                     label(ui, "OUTPUT");
                     let current = self.project.track(track_id).unwrap().output_bus;
                     let mut output = current;

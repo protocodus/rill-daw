@@ -207,7 +207,7 @@ fn arm_in_header(app: &mut Harness, track: u64) -> Value {
         "y":(arm["min"][1].as_f64().unwrap()+arm["max"][1].as_f64().unwrap())*0.5}))
 }
 fn expose_popup_label(app: &mut Harness, label: &str) {
-    for _ in 0..8 {
+    for attempt in 0..16 {
         let state = app.inspect();
         let window = state["window_rects"]
             .as_array()
@@ -219,17 +219,25 @@ fn expose_popup_label(app: &mut Harness, label: &str) {
                 && item["min"][0].as_f64().unwrap() >= window["min"][0].as_f64().unwrap()
                 && item["min"][1].as_f64().unwrap() >= window["min"][1].as_f64().unwrap()
                 && item["max"][1].as_f64().unwrap() <= window["max"][1].as_f64().unwrap()
+                && item["max"][1].as_f64().unwrap() - item["min"][1].as_f64().unwrap()
+                    >= f64::from(daw_ui::tokens::FONT_BODY)
         });
         if inside {
             return;
         }
-        app.command(json!({"command":"scroll", "delta":-220.0,
-            "x":(window["min"][0].as_f64().unwrap()+window["max"][0].as_f64().unwrap())*0.5,
-            "y":(window["min"][1].as_f64().unwrap()+window["max"][1].as_f64().unwrap())*0.5}));
+        // Input selection has its own body above the fixed timing/actions.
+        // Reset retained focus scrolling, then inspect each input row by mouse.
+        app.command(json!({"command":"scroll", "delta":if attempt == 0 {10000.0} else {-55.0},
+            "x":window["max"][0].as_f64().unwrap()-2.0*f64::from(daw_ui::tokens::SPACE_LG),
+            "y":window["min"][1].as_f64().unwrap()+f64::from(daw_ui::tokens::SPACE_XL)*2.0+f64::from(daw_ui::tokens::SPACE_MD)}));
+        for _ in 0..20 {
+            app.inspect();
+        }
     }
     panic!("Popup control {label:?} is unreachable in the compact viewport");
 }
 fn select_midi_channel(app: &mut Harness, current: &str, channel: &str) {
+    expose_popup_label(app, current);
     app.click(current);
     for _ in 0..8 {
         let state = app.inspect();
@@ -272,6 +280,7 @@ fn configure_midi(app: &mut Harness, channel: &str, monitor: &str, armed: bool) 
     }
     select_midi_channel(app, "All channels", channel);
     if armed {
+        expose_popup_label(app, "Arm recording");
         app.click("Arm recording");
     }
     let state = app.inspect();
@@ -280,6 +289,7 @@ fn configure_midi(app: &mut Harness, channel: &str, monitor: &str, armed: bool) 
         .as_str()
         .unwrap_or("Off");
     if monitor != current {
+        expose_popup_label(app, current);
         app.click(current);
         app.click(monitor);
     }
@@ -1235,6 +1245,7 @@ fn an_unselected_midi_channel_records_no_empty_clip() {
     assert_eq!(armed["recording"]["armed"], json!([track]));
     assert_eq!(armed["recording"]["monitors"][track.to_string()], "Auto");
     popup(&mut app);
+    expose_popup_label(&mut app, "Auto");
     app.click("Auto");
     app.click("Off");
     expose_popup_label(&mut app, "No pre-count");

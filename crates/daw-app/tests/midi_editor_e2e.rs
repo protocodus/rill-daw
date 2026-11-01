@@ -89,6 +89,25 @@ fn center(rect: &Value) -> (f64, f64) {
         (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
     )
 }
+
+fn scroll_open_menu_to_bottom(app: &mut Harness) -> Value {
+    let state = app.inspect();
+    let rect = &state["native_menu"]["scroll_rect"];
+    assert!(
+        rect.is_array(),
+        "The shared menu exposes its scroll viewport"
+    );
+    app.command(json!({
+        "command":"scroll",
+        "x":(rect[0].as_f64().unwrap() + rect[2].as_f64().unwrap()) * 0.5,
+        "y":(rect[1].as_f64().unwrap() + rect[3].as_f64().unwrap()) * 0.5,
+        "delta":-10000.0
+    }));
+    for _ in 0..16 {
+        app.inspect();
+    }
+    app.inspect()
+}
 fn undo(app: &mut Harness, redo: bool) -> Value {
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":redo}))
 }
@@ -524,7 +543,8 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     assert!(visible(&pitch, "Major triad"));
     assert_eq!(app.key("Escape")["view"], "Clip");
     app.command(json!({"command":"key","key":"A","cmd":true}));
-    let selected = app.click("Notes");
+    app.click("Notes");
+    let selected = scroll_open_menu_to_bottom(&mut app);
     assert!(visible(&selected, "Glue selected"));
     assert_eq!(
         selected["visible_labels"]
@@ -544,14 +564,74 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     let plot = &multi["midi_editor"]["plot"];
     let top = plot["min"][1].as_f64().unwrap();
     let bottom = plot["max"][1].as_f64().unwrap();
+    // Keep one octave plus two context rows on each side visible. The
+    // workspace's measured two-line heading may legitimately change pixels.
+    let minimum_height = 16.0 * multi["midi_editor"]["row_height"].as_f64().unwrap();
     assert!(
-        bottom - top >= 300.0 && top >= 0.0 && bottom <= multi["viewport"][1].as_f64().unwrap(),
+        bottom - top >= minimum_height
+            && top >= 0.0
+            && bottom <= multi["viewport"][1].as_f64().unwrap(),
         "Context controls must leave a useful, visible piano-roll canvas: {plot}"
     );
     let select = app.key("Q");
     assert!(!visible(&select, "Chord stack"));
     assert_eq!(select["project"], before["project"]);
     app.quit();
+}
+
+#[test]
+fn compact_notes_menu_scrolls_to_velocity_and_edits_the_note_with_the_mouse() {
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = open(vec![Note::new(60, 1.0, 1.0, 90)]);
+        app.command(json!({"command":"viewport", "width":800, "height":600,
+            "pixels_per_point":density}));
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.click("Select");
+        // Viewport resize preserves the musical camera. Fit through the
+        // visible toolbar before targeting a note in the shorter viewport.
+        app.click("Fit");
+        let before = app.inspect();
+        let id = notes(&before)[0]["id"].as_u64().unwrap();
+        let position = center(&note_rect(&before, id));
+        let plot = &before["midi_editor"]["plot"];
+        assert!(
+            position.0 >= plot["min"][0].as_f64().unwrap()
+                && position.0 <= plot["max"][0].as_f64().unwrap()
+                && position.1 >= plot["min"][1].as_f64().unwrap()
+                && position.1 <= plot["max"][1].as_f64().unwrap(),
+            "Fit must expose the note before a mouse click: {position:?} in {plot}"
+        );
+        pointer(&mut app, "click", position, None);
+        app.click("Notes");
+        let menu = scroll_open_menu_to_bottom(&mut app);
+        let menu_label = |name| {
+            menu["menu_label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|label| label["text"] == name)
+                .unwrap_or_else(|| panic!("Missing {name}: {}", menu["menu_label_rects"]))
+        };
+        let velocity = menu_label("Velocity");
+        assert!(velocity["max"][1].as_f64().unwrap() <= 600.0);
+        assert!(
+            velocity["max"][1].as_f64().unwrap() - velocity["min"][1].as_f64().unwrap() >= 13.0
+        );
+        // Endpoint captions and the numeric field identify the real slider
+        // rail. Click near its maximum without using keyboard entry or a shortcut.
+        let x = center(menu_label("127")).0;
+        let y = center(menu_label("90")).1;
+        let changed = pointer(&mut app, "click", (x, y), None);
+        let velocity = notes(&changed)[0]["velocity"].as_u64().unwrap();
+        assert!(
+            (91..=127).contains(&velocity),
+            "The visible rail changes the selected note: {velocity}"
+        );
+        app.click("Edit");
+        let restored = app.click("Undo");
+        assert_eq!(restored["project"], before["project"]);
+        app.quit();
+    }
 }
 
 #[test]

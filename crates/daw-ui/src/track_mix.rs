@@ -741,24 +741,44 @@ fn state_button_at(
     } else {
         colors.bg
     };
+    // A compact 21-point target leaves only 1.5 points around its label.
+    // Put the selected keyline outside that target, within the existing halo,
+    // instead of consuming the glyph's clear interior or enlarging the control.
+    let outside_selection = selected && rect.height() <= tokens::COMPACT_HEIGHT;
     painter.add(crate::component_shape(
         &painter,
         rect,
         tokens::RADIUS,
         fill,
-        Stroke::new(
-            tokens::BORDER_WIDTH,
-            if selected || response.has_focus() {
-                colors.accent
-            } else {
-                colors.line
-            },
-        ),
+        if outside_selection {
+            Stroke::NONE
+        } else {
+            Stroke::new(
+                if selected {
+                    tokens::FOCUS_WIDTH
+                } else {
+                    tokens::BORDER_WIDTH
+                },
+                if selected || response.has_focus() {
+                    colors.accent
+                } else {
+                    colors.line
+                },
+            )
+        },
         crate::ComponentMaterial {
             elevated: false,
-            active: response.has_focus() && response.enabled(),
+            active: !selected && response.has_focus() && response.enabled(),
         },
     ));
+    if outside_selection {
+        ui.painter().rect_stroke(
+            rect,
+            tokens::RADIUS,
+            Stroke::new(tokens::FOCUS_WIDTH, colors.accent),
+            egui::StrokeKind::Outside,
+        );
+    }
     painter.text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
@@ -766,12 +786,8 @@ fn state_button_at(
         crate::text::TextRole::Label.font(),
         if selected { colors.accent } else { colors.text },
     );
-    if selected {
-        let underline = Rect::from_center_size(
-            egui::pos2(rect.center().x, rect.bottom() - 3.0),
-            egui::vec2(tokens::SPACE_MD, 2.0),
-        );
-        painter.rect_filled(underline, 1, colors.accent);
+    if selected && response.enabled() {
+        crate::paint_selection_glow(ui.painter(), rect, tokens::RADIUS, colors.accent);
     }
     response.on_hover_text(label)
 }

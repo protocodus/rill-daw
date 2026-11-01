@@ -90,6 +90,22 @@ fn header_sections_stay_separate_across_normal_compact_and_nested_geometry() {
 }
 
 #[test]
+fn expanded_headers_separate_identity_processing_and_connections_without_growing_rows() {
+    for width in [224.0, 288.0, 377.0] {
+        let rect = row(width, daw_ui::TRACK_HEADER_HEIGHT);
+        let layout = TrackHeaderLayout::new(rect);
+        let mix = layout.mix.unwrap();
+        let routing = layout.routing.unwrap();
+        let device = layout.device.unwrap();
+        assert!(layout.name.left() - layout.icon.right() >= daw_ui::tokens::SPACE_SM);
+        assert!(mix.top() - layout.identity.bottom() >= daw_ui::tokens::SPACE_SM);
+        assert!(routing.top() - mix.bottom() >= daw_ui::tokens::SPACE_MD);
+        assert!(device.top() - routing.bottom() >= daw_ui::tokens::SPACE_XS);
+        assert!(rect.bottom() - device.bottom() >= daw_ui::tokens::SPACE_XS);
+    }
+}
+
+#[test]
 fn nested_identity_indents_without_moving_channel_controls_or_hiding_the_title() {
     let bounds = row(287.0, 144.0).translate(egui::vec2(13.0, 0.0));
     let parent = TrackHeaderLayout::new(bounds)
@@ -100,6 +116,14 @@ fn nested_identity_indents_without_moving_channel_controls_or_hiding_the_title()
         .with_record_arm()
         .with_depth(2);
     assert!(child.name.left() > parent.name.left());
+    assert_eq!(
+        parent.name.left() - parent.icon.right(),
+        daw_ui::tokens::SPACE_SM
+    );
+    assert_eq!(
+        parent.icon.left() - parent.disclosure.unwrap().right(),
+        daw_ui::tokens::SPACE_XS
+    );
     for width in [112.0, 168.0, 223.0, 287.0, 600.0] {
         for height in [56.0, 89.0, 144.0] {
             for depth in [0, 1, 2, 8, 32, usize::MAX] {

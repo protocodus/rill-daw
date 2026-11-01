@@ -313,7 +313,7 @@ pub fn apply(ctx: &egui::Context) {
         }
         style.visuals.window_corner_radius = tokens::SURFACE_RADIUS.into();
         style.visuals.menu_corner_radius = tokens::SURFACE_RADIUS.into();
-        style.spacing.item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
+        style.spacing.item_spacing = egui::vec2(tokens::SPACE_MD, tokens::SPACE_MD);
         style.spacing.button_padding =
             egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
         style.spacing.window_margin = tokens::WINDOW_MARGIN;

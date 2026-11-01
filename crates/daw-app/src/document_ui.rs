@@ -495,39 +495,65 @@ impl DawApp {
                 "Please wait"
             },
             |ui| {
-                daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Subtitle, &identity, 2);
-                ui.add_space(daw_ui::tokens::SPACE_SM);
-                if confirmation {
-                    daw_ui::text::body(ui, format!("Save your changes before {action}?"));
-                } else if export_failed {
-                    daw_ui::text::body(
-                        ui,
-                        "Cancel to return and retry, or continue without this export.",
-                    );
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        daw_ui::text::body(ui, export_progress.as_deref().unwrap_or(progress));
-                    });
-                    if export_progress.is_some() {
-                        daw_ui::text::body(ui, "The export will finish before switching sessions.");
-                    }
-                }
-                if let Some(error) = &error {
-                    ui.add_space(daw_ui::tokens::SPACE_MD);
-                    daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Body, error, 4);
-                    if daw_ui::button(ui, "Details").clicked() {
-                        if export_failed {
-                            self.show_status_error_details();
-                        } else {
-                            self.show_error_details(
-                                "Project error",
-                                error.lines().next().unwrap_or(error),
-                                error,
+                let footer_height = daw_ui::tokens::SPACE_XL
+                    + daw_ui::tokens::CONTROL_HEIGHT
+                    + 2.0 * ui.spacing().item_spacing.y;
+                let body_height = (ctx.content_rect().height()
+                    - 4.0 * daw_ui::tokens::POPUP_MARGIN
+                    - (ui.cursor().top() - ui.min_rect().top())
+                    - footer_height)
+                    .max(daw_ui::tokens::COMPACT_HEIGHT);
+                egui::ScrollArea::vertical()
+                    .id_salt("document_guard_body")
+                    .max_height(body_height)
+                    .min_scrolled_height(daw_ui::tokens::COMPACT_HEIGHT)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        daw_ui::text::bounded_block(
+                            ui,
+                            daw_ui::text::TextRole::Subtitle,
+                            &identity,
+                            2,
+                        );
+                        ui.add_space(daw_ui::tokens::SPACE_MD);
+                        if confirmation {
+                            daw_ui::text::body(ui, format!("Save your changes before {action}?"));
+                        } else if export_failed {
+                            daw_ui::text::body(
+                                ui,
+                                "Cancel to return and retry, or continue without this export.",
                             );
+                        } else {
+                            ui.horizontal(|ui| {
+                                ui.spinner();
+                                daw_ui::text::body(
+                                    ui,
+                                    export_progress.as_deref().unwrap_or(progress),
+                                );
+                            });
+                            if export_progress.is_some() {
+                                daw_ui::text::body(
+                                    ui,
+                                    "The export will finish before switching sessions.",
+                                );
+                            }
                         }
-                    }
-                }
+                        if let Some(error) = &error {
+                            ui.add_space(daw_ui::tokens::SPACE_LG);
+                            daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Body, error, 4);
+                            if daw_ui::button(ui, "Details").clicked() {
+                                if export_failed {
+                                    self.show_status_error_details();
+                                } else {
+                                    self.show_error_details(
+                                        "Project error",
+                                        error.lines().next().unwrap_or(error),
+                                        error,
+                                    );
+                                }
+                            }
+                        }
+                    });
                 ui.add_space(daw_ui::tokens::SPACE_XL);
                 daw_ui::action_row(
                     ui,

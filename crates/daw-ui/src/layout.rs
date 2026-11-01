@@ -376,9 +376,9 @@ pub fn workspace_header<R>(
     workspace_header_with_context(ui, title, None, actions)
 }
 
-/// A workspace identity with an optional reserved context line. Both lines fit
-/// inside the existing control-height band, so context never takes another row
-/// from the canvas. The first trailing action stays anchored to the right edge,
+/// A workspace identity with an optional reserved context line. Measure both
+/// lines and their breathing room before laying out the centered actions.
+/// The first trailing action stays anchored to the right edge,
 /// independent of the identity length or the remaining actions.
 /// The caller can attach one complete explanation to the returned context
 /// response; no automatic elision tooltip competes with that explanation.
@@ -397,19 +397,35 @@ pub fn workspace_header_with_context<R>(
             tokens::SPACE_SM as i8,
         )),
         |ui| {
+            let identity_height = if context.is_some() {
+                ui.fonts_mut(|fonts| {
+                    fonts.row_height(&egui::TextStyle::Body.resolve(ui.style()))
+                        + tokens::SPACE_XS
+                        + fonts.row_height(&crate::text::TextRole::Note.font())
+                })
+            } else {
+                tokens::CONTROL_HEIGHT
+            }
+            .max(tokens::CONTROL_HEIGHT);
             ui.horizontal(|ui| {
+                ui.set_min_height(identity_height);
+                ui.set_row_height(identity_height);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.set_min_height(identity_height);
+                    ui.set_row_height(identity_height);
                     let inner = actions(ui);
                     ui.add_space(tokens::SPACE_MD);
                     let back = ui
                         .with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.set_min_height(identity_height);
+                            ui.set_row_height(identity_height);
                             let back = crate::quiet_button(ui, "Back")
                                 .on_hover_text("Return to the previous workspace");
                             ui.add_space(tokens::SPACE_XS);
                             let identity = if let Some(context) = context {
                                 ui.vertical(|ui| {
-                                    ui.spacing_mut().item_spacing.y = 0.0;
-                                    ui.set_min_height(tokens::CONTROL_HEIGHT);
+                                    ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
+                                    ui.set_min_height(identity_height);
                                     let title = ui
                                         .add(
                                             egui::Label::new(
@@ -546,17 +562,13 @@ pub fn mixer_strip<R>(
             };
             base.lerp_to_gamma(color, amount)
         });
-        // A real canvas gutter keeps adjacent strips separate even when they
-        // share a track color. Preserve the total width and control alignment.
-        // Frame margins are integral: round once so inner + outer margins
-        // retain the exact channel width at every display density.
-        let gutter = (tokens::SPACE_XS * tokens::GOLDEN_RATIO_INVERSE).round();
+        // The parent owns the gutter between cards. Keep a full, consistent
+        // inset here so controls never borrow space from the adjacent channel.
         let frame = egui::Frame::new()
             .fill(fill)
             .corner_radius(tokens::RADIUS)
-            .outer_margin(egui::Margin::symmetric(gutter as i8, 0))
             .inner_margin(egui::Margin::symmetric(
-                (tokens::SPACE_MD - gutter) as i8,
+                tokens::SPACE_MD as i8,
                 tokens::SPACE_MD as i8,
             ));
         let content = |ui: &mut Ui| {
@@ -572,7 +584,7 @@ pub fn mixer_strip<R>(
         } else {
             frame.show(ui, content)
         };
-        let rect = result.response.rect.shrink2(egui::vec2(gutter, 0.0));
+        let rect = result.response.rect;
         if selected {
             crate::paint_selection_glow(
                 ui.painter(),

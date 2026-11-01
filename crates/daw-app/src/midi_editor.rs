@@ -747,7 +747,7 @@ impl DawApp {
                 daw_ui::quiet_picker_button(ui, "Draw settings", |ui| {
                     ui.set_min_width(260.0);
                     daw_ui::drawing_note_length(ui, &mut state.draw_length);
-                    ui.separator();
+                    ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
                         let grid_scale_label = daw_ui::text::truncated(
                             ui,
                             daw_ui::text::TextRole::Label,
@@ -991,11 +991,13 @@ impl DawApp {
                                 for grid in [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0] { daw_ui::selectable_value(ui, &mut settings.grid, grid, format!("{grid} beat")); }
                             });
                             let mut strength = settings.strength * 100.0;
-                            let strength_response = ui.add(daw_ui::slider(&mut strength, 0.0..=100.0).text("Strength").suffix("%"));
-                            settings.strength = strength / 100.0;
+                            let strength_response = ui.add(daw_ui::slider(&mut strength, 0.0..=100.0).text("Strength").suffix("%")
+                                .display_round_trip(|percent| f64::from(percent as f32 / 100.0 * 100.0)));
+                            if strength_response.changed() { settings.strength = strength / 100.0; }
                             let mut swing = settings.swing * 100.0;
-                            let swing_response = ui.add(daw_ui::slider(&mut swing, 50.0..=75.0).text("Swing").suffix("%"));
-                            settings.swing = swing / 100.0;
+                            let swing_response = ui.add(daw_ui::slider(&mut swing, 50.0..=75.0).text("Swing").suffix("%")
+                                .display_round_trip(|percent| f64::from(percent as f32 / 100.0 * 100.0)));
+                            if swing_response.changed() { settings.swing = swing / 100.0; }
                             daw_ui::checkbox(ui, &mut settings.ends, "Note ends");
                             apply = daw_ui::primary_button(ui, "Apply quantize").clicked();
                             cancel = daw_ui::button(ui, "Cancel quantize").clicked();

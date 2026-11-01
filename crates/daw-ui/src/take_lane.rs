@@ -1,5 +1,5 @@
 //! Compact waveform choices for take selection. Musical state stays in the caller.
-use crate::{text::TextRole, theme};
+use crate::{text::TextRole, theme, tokens};
 use egui::{Color32, Rect, Response, Sense, Stroke, StrokeKind, Ui};
 
 pub struct TakeLane<'a> {
@@ -59,8 +59,11 @@ pub fn audio_take_lane_with_waveform(
     lane: &TakeLane<'_>,
     waveform: impl FnOnce(&egui::Painter, Rect),
 ) -> Response {
+    // Three clear rows: identity, detail and waveform, with related-label
+    // gaps and equal top/bottom breathing room (89 points in total).
+    let height = 3.0 * tokens::SPACE_LG + 2.0 * tokens::SPACE_XS + 2.0 * tokens::SPACE_SM;
     let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 86.0), Sense::click());
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
@@ -81,7 +84,7 @@ pub fn audio_take_lane_with_waveform(
         });
         painter.rect(
             rect.shrink(1.0),
-            6.0,
+            f32::from(tokens::RADIUS),
             fill,
             Stroke::new(
                 if lane.selected || response.has_focus() {
@@ -98,8 +101,11 @@ pub fn audio_take_lane_with_waveform(
             StrokeKind::Inside,
         );
         let text_rect = Rect::from_min_max(
-            rect.min + egui::vec2(12.0, 8.0),
-            egui::pos2(rect.right() - 12.0, rect.top() + 28.0),
+            rect.min + egui::vec2(tokens::SPACE_MD, tokens::SPACE_SM),
+            egui::pos2(
+                rect.right() - tokens::SPACE_MD,
+                rect.top() + tokens::SPACE_SM + tokens::SPACE_LG,
+            ),
         );
         crate::text::paint_single_line(
             &painter,
@@ -108,7 +114,7 @@ pub fn audio_take_lane_with_waveform(
             colors.text,
             lane.name,
         );
-        let detail = text_rect.translate(egui::vec2(0.0, 22.0));
+        let detail = text_rect.translate(egui::vec2(0.0, tokens::SPACE_LG + tokens::SPACE_XS));
         crate::text::paint_single_line(
             &painter,
             detail,
@@ -117,8 +123,8 @@ pub fn audio_take_lane_with_waveform(
             lane.detail,
         );
         let plot = Rect::from_min_max(
-            rect.min + egui::vec2(12.0, 51.0),
-            rect.max - egui::vec2(12.0, 8.0),
+            egui::pos2(text_rect.left(), detail.bottom() + tokens::SPACE_XS),
+            rect.max - egui::vec2(tokens::SPACE_MD, tokens::SPACE_SM),
         );
         if let Some((a, b)) = lane.selection {
             painter.rect_filled(

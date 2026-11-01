@@ -139,9 +139,6 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
         let mut strips = Vec::new();
         for channel in channels {
             let column = Bounds::from(&channel["strip"]);
-            let gutter = f64::from(
-                (daw_ui::tokens::SPACE_XS * daw_ui::tokens::GOLDEN_RATIO_INVERSE).round(),
-            );
             let name = Bounds::from(&channel["name"]);
             let output = Bounds::from(&channel["target"]);
             let sends = Bounds::from(&channel["sends"]);
@@ -156,8 +153,8 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                 .iter()
                 .find(|paint| {
                     let rect = Bounds::from(&paint["rect"]);
-                    (rect.left - column.left - gutter).abs() <= 0.1
-                        && (column.right - rect.right - gutter).abs() <= 0.1
+                    (rect.left - column.left).abs() <= 0.1
+                        && (column.right - rect.right).abs() <= 0.1
                         && rect.contains(name)
                         && rect.contains(sends)
                         && rect.height() > 250.0
@@ -165,12 +162,18 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                 })
                 .unwrap_or_else(|| panic!("No bounded strip for channel {channel}"));
             assert!(strip["stroke_width"].as_f64().unwrap() >= 1.0);
-            strips.push(Bounds::from(&strip["rect"]));
+            let strip = Bounds::from(&strip["rect"]);
+            for control in [name, output, sends] {
+                assert!(control.left - strip.left >= f64::from(daw_ui::tokens::SPACE_MD) - 0.1);
+                assert!(strip.right - control.right >= f64::from(daw_ui::tokens::SPACE_MD) - 0.1);
+            }
+            strips.push(strip);
         }
         assert!(
             strips
                 .windows(2)
-                .all(|pair| pair[1].left - pair[0].right >= 3.9),
+                .all(|pair| pair[1].left - pair[0].right
+                    >= f64::from(daw_ui::tokens::SPACE_SM) - 0.1),
             "Each channel needs a visible gutter: {strips:?}"
         );
         assert!(

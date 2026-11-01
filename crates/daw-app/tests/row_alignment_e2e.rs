@@ -27,7 +27,9 @@ fn label<'a>(state: &'a Value, name: &str) -> &'a Value {
 
 fn aligned(state: &Value, density: f64, width: f64) -> [Value; 2] {
     let first = center(label(state, "Quantize preview")).1;
-    let pitch = f64::from(daw_ui::tokens::PARAMETER_ROW_HEIGHT + daw_ui::tokens::SPACE_SM);
+    // The preview is a wrapped parameter row inside a card. It inherits the
+    // ordinary row gap, while compact toolbars override theirs to SPACE_SM.
+    let pitch = f64::from(daw_ui::tokens::PARAMETER_ROW_HEIGHT + daw_ui::tokens::SPACE_MD);
     let tolerance = 0.5 / density;
     let on_row = |name: &str, y: f64| {
         let row = ((y - first) / pitch).round();

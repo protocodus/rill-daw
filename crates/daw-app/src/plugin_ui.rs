@@ -656,50 +656,62 @@ impl DawApp {
                         );
                     },
                 );
-                ui.horizontal_wrapped(|ui| {
-                    if !parameter.unit.is_empty() {
-                        daw_ui::text::note(ui, format!("Plug-in unit · {}", parameter.unit))
-                            .on_hover_text("This control shows normalized percentages. Use the plug-in editor for physical units.");
-                    }
-                    if steps > 0 {
-                        daw_ui::text::note(ui, format!("{} discrete values", i64::from(steps) + 1));
-                    }
-                    if let Some(&(lane, state, _)) = automation_states.get(&parameter.id) {
-                        daw_ui::automation_badge(ui, state);
-                        match state {
-                            daw_ui::AutomationState::Read => {
-                                if ui.add_enabled(editing_enabled,
-                                    daw_ui::button_widget("Override automation"))
-                                    .on_hover_text("Hold this parameter at its current value until automation resumes")
-                                    .clicked()
-                                {
-                                    actions.update = Some((parameter.id, parameter.value));
-                                }
-                            }
-                            daw_ui::AutomationState::Overridden => {
-                                if ui.add_enabled(editing_enabled,
-                                    daw_ui::button_widget("Resume automation"))
-                                    .on_hover_text("Return to the existing curve at the playback position")
-                                    .clicked()
-                                {
-                                    actions.resume = Some(lane);
-                                }
-                            }
-                            daw_ui::AutomationState::Bypassed => {}
-                        }
-                    }
-                });
-                ui.add_space(daw_ui::tokens::SPACE_SM);
                 // This host metadata exposes normalized values, not the VST
                 // controller's physical-unit conversion. Keep percentages
                 // explicit instead of presenting, for example, 0.5 as Hz.
                 let mut percent = parameter.value * 100.0;
+                let automated_value = automation_states
+                    .get(&parameter.id)
+                    .is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed);
+                // Keep the exact numeric field visible before secondary metadata.
+                // The details pane scrolls; use its visible bounds, not the
+                // unbounded content height, to size only the dial preview.
+                let label_height = egui::WidgetText::from(
+                    daw_ui::text::TextRole::Label.rich(ui.ctx(), "Normalized value"),
+                )
+                .into_galley(
+                    ui,
+                    Some(egui::TextWrapMode::Wrap),
+                    ui.available_width().max(112.0),
+                    egui::TextStyle::Body,
+                )
+                .size()
+                .y;
+                let control_chrome = label_height
+                    + daw_ui::tokens::FONT_SMALL
+                    + daw_ui::tokens::SPACE_XS
+                    + daw_ui::tokens::CONTROL_HEIGHT
+                    + 3.0 * ui.spacing().item_spacing.y;
+                let metadata_height = if !parameter.unit.is_empty()
+                    || steps > 0
+                    || automation_states.contains_key(&parameter.id)
+                {
+                    daw_ui::tokens::CONTROL_HEIGHT + ui.spacing().item_spacing.y
+                } else {
+                    0.0
+                };
+                let preceding_height = ui.cursor().min.y - ui.min_rect().top();
+                let diameter =
+                    (ui.clip_rect().height() - preceding_height - control_chrome - metadata_height)
+                        .clamp(48.0, 96.0);
                 let mut knob = daw_ui::knob(&mut percent, 0.0..=100.0)
                     .text("Normalized value")
-                    .diameter(96.0)
+                    .diameter(diameter)
                     .suffix(" %")
                     .min_decimals(2)
                     .max_decimals(6)
+                    .display_round_trip(move |percent| {
+                        // Match the accepted normalized value, including the
+                        // f32 storage of an active automation override.
+                        let mut value = (percent / 100.0).clamp(0.0, 1.0);
+                        if steps > 0 {
+                            value = (value * f64::from(steps)).round() / f64::from(steps);
+                        }
+                        if automated_value {
+                            value = f64::from(value as f32);
+                        }
+                        value * 100.0
+                    })
                     .show_automation_label(false)
                     .automation(
                         automation_states
@@ -752,6 +764,39 @@ impl DawApp {
                     };
                     actions.update = Some((parameter.id, value));
                 }
+                ui.horizontal_wrapped(|ui| {
+                    if !parameter.unit.is_empty() {
+                        daw_ui::text::note(ui, format!("Plug-in unit · {}", parameter.unit))
+                            .on_hover_text("This control shows normalized percentages. Use the plug-in editor for physical units.");
+                    }
+                    if steps > 0 {
+                        daw_ui::text::note(ui, format!("{} discrete values", i64::from(steps) + 1));
+                    }
+                    if let Some(&(lane, state, _)) = automation_states.get(&parameter.id) {
+                        daw_ui::automation_badge(ui, state);
+                        match state {
+                            daw_ui::AutomationState::Read => {
+                                if ui.add_enabled(editing_enabled,
+                                    daw_ui::button_widget("Override automation"))
+                                    .on_hover_text("Hold this parameter at its current value until automation resumes")
+                                    .clicked()
+                                {
+                                    actions.update = Some((parameter.id, parameter.value));
+                                }
+                            }
+                            daw_ui::AutomationState::Overridden => {
+                                if ui.add_enabled(editing_enabled,
+                                    daw_ui::button_widget("Resume automation"))
+                                    .on_hover_text("Return to the existing curve at the playback position")
+                                    .clicked()
+                                {
+                                    actions.resume = Some(lane);
+                                }
+                            }
+                            daw_ui::AutomationState::Bypassed => {}
+                        }
+                    }
+                });
                 if parameter.last_touched {
                     daw_ui::text::note(ui, "Last touched");
                 }
@@ -764,6 +809,11 @@ impl DawApp {
             && let Some(parameter) = items.iter().find(|p| p.id == id)
         {
             actions.automate = Some((id, parameter.value));
+        }
+        if actions.automate.is_some() {
+            // Returning from the nested lane editor should expose its Edit
+            // automation action, even if the detail pane had been scrolled.
+            self.instrument_ui.browser.reset_details = true;
         }
         actions
     }
@@ -876,6 +926,7 @@ impl DawApp {
                     self.open_context_assistant(scope);
                     return;
                 }
+                ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
                 match &instrument {
                     Instrument::None => {
                         daw_ui::text::subtitle(ui, "No instrument assigned");
@@ -1908,11 +1959,22 @@ mod tests {
                 .iter()
                 .find_map(|shape| match &shape.shape {
                     egui::Shape::Text(text) if text.galley.text() == existing_action => {
-                        Some(text.galley.rect.translate(text.pos.to_vec2()).center())
+                        let rect = text.galley.rect.translate(text.pos.to_vec2());
+                        shape.clip_rect.contains_rect(rect).then_some(rect.center())
                     }
                     _ => None,
                 })
-                .expect("existing automation remains reachable");
+                .unwrap_or_else(|| {
+                    let candidates: Vec<_> = output.shapes.iter().filter_map(|shape| {
+                        match &shape.shape {
+                            egui::Shape::Text(text) if text.galley.text() == existing_action => {
+                                Some((text.galley.rect.translate(text.pos.to_vec2()), shape.clip_rect))
+                            }
+                            _ => None,
+                        }
+                    }).collect();
+                    panic!("Existing automation must remain visible at {size:?}, last touched={last_touched}: {candidates:?}")
+                });
             for pressed in [true, false] {
                 draw(
                     &mut app,
@@ -1931,7 +1993,10 @@ mod tests {
                 app.project, saved,
                 "Reopening automation must not create a duplicate lane"
             );
-            assert_eq!(app.selected_track, lane);
+            assert_eq!(
+                app.selected_track, lane,
+                "Existing action at {point:?}, viewport {size:?}, last touched={last_touched}"
+            );
             assert!(app.automation_open);
         }
     }

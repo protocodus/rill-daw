@@ -232,8 +232,8 @@ fn compact_pan_preserves_values_and_paints_its_real_index_in_a_bounded_row() {
             assert_eq!(geometry.dial.size(), vec2(48.0, 48.0));
             assert!((response.rect.width() - 180.0).abs() < 0.1);
             assert!(
-                (response.rect.height() - daw_ui::tokens::PARAMETER_ROW_HEIGHT).abs() < 0.1,
-                "compact pan row grew around its dial: {:?}, dial {:?}",
+                (response.rect.height() - daw_ui::Knob::compact_height(48.0)).abs() < 0.1,
+                "compact pan row must include its endpoint caption clearance: {:?}, dial {:?}",
                 response.rect,
                 geometry.dial
             );
@@ -570,14 +570,16 @@ fn mute_and_solo_are_equal_sized_independent_native_buttons() {
 
 #[test]
 fn level_meter_has_a_bounded_captioned_footprint_and_sanitizes_nonfinite_input() {
-    for dark in [false, true] {
+    for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
         let ctx = Context::default();
         daw_ui::theme::apply(&ctx);
+        ctx.set_pixels_per_point(density);
         ctx.set_theme(if dark {
             egui::Theme::Dark
         } else {
             egui::Theme::Light
         });
+        let _ = ctx.run(input(vec![]), |_| {});
         for peaks in [
             [0.0, 0.0],
             [f32::NAN, f32::INFINITY],
@@ -603,6 +605,32 @@ fn level_meter_has_a_bounded_captioned_footprint_and_sanitizes_nonfinite_input()
                     labels.iter().any(|label| label == caption),
                     "missing {caption}: {labels:?}"
                 );
+            }
+            let caption_rects: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| {
+                    if let egui::Shape::Text(text) = &shape.shape {
+                        Some((
+                            text.galley.text(),
+                            text.galley.rect.translate(text.pos.to_vec2()),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for (index, (caption, bounds)) in caption_rects.iter().enumerate() {
+                assert!(
+                    response.rect.expand(1.0 / density).contains_rect(*bounds),
+                    "Meter caption {caption} escaped its allocated height: {bounds:?}"
+                );
+                for (other, other_bounds) in &caption_rects[..index] {
+                    assert!(
+                        !bounds.intersects(*other_bounds),
+                        "Meter captions {caption} and {other} overlap"
+                    );
+                }
             }
             for shape in &output.shapes {
                 if !matches!(shape.shape, egui::Shape::Noop) {

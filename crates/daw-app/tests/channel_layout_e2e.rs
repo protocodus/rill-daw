@@ -26,6 +26,34 @@ fn window(app: &mut Harness, name: &str) -> Value {
     app.click(name)
 }
 
+fn scroll_routing(app: &mut Harness, down: bool) -> Value {
+    let state = app.inspect();
+    let window = &state["window_rects"][0];
+    let x = (window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5;
+    let y = window["max"][1].as_f64().unwrap() - 50.0;
+    app.command(json!({"command":"scroll", "x":x, "y":y,
+        "delta":if down { -10000.0 } else { 10000.0 }}));
+    for _ in 0..20 {
+        app.inspect();
+    }
+    app.inspect()
+}
+
+fn click_revealed(app: &mut Harness, name: &str) -> Value {
+    let state = app.inspect();
+    let target = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|label| label["text"] == name)
+        .unwrap();
+    let x = (target["min"][0].as_f64().unwrap() + target["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (target["min"][1].as_f64().unwrap() + target["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer", "phase":"move", "x":x, "y":y}));
+    app.click(name)
+}
+
 #[test]
 fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
     for dark in [false, true] {
@@ -96,11 +124,27 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
             "×",
             "+ Send",
             "Create send track",
-            "Master output",
         ] {
             visible(&state, label);
         }
-        let state = app.click("Pre");
+        // Generous send controls can put the output below the first viewport.
+        // Reveal it with the wheel and exercise the actual output picker.
+        let output = scroll_routing(&mut app, true);
+        visible(&output, "Master output");
+        assert_eq!(output["project"], state["project"]);
+        let choices = click_revealed(&mut app, "Master output");
+        assert!(
+            choices["menu_label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label["text"] == project.track(bus).unwrap().name)
+        );
+        let unchanged = app.click("Master output");
+        assert_eq!(unchanged["project"], state["project"]);
+        let top = scroll_routing(&mut app, false);
+        visible(&top, "Pre");
+        let state = click_revealed(&mut app, "Pre");
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["pre_fader"], true);
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["gain"], 2.5);
         let state = app.click("×");
@@ -144,6 +188,15 @@ fn long_insert_chain_scrolls_to_actions_and_shrinks_after_removal() {
     }
     visible(&state, "+ Insert");
     visible(&state, "20  Insert 20");
+    let expanded_height = {
+        let labels = state["label_rects"].as_array().unwrap();
+        let title = labels
+            .iter()
+            .find(|row| row["text"] == "Effects of Compact effects")
+            .unwrap();
+        let action = labels.iter().find(|row| row["text"] == "+ Insert").unwrap();
+        action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap()
+    };
     let library = app.click("+ Insert");
     assert_eq!(library["popups"]["library"], true);
     let returned = app.key("Escape");
@@ -168,11 +221,20 @@ fn long_insert_chain_scrolls_to_actions_and_shrinks_after_removal() {
         .unwrap();
     let action = labels.iter().find(|row| row["text"] == "+ Insert").unwrap();
     let empty_height = action["max"][1].as_f64().unwrap() - title["min"][1].as_f64().unwrap();
-    // Include the shared signal-chain header, empty-state card, and contextual
-    // AI row, while still rejecting a retained tall canvas from the long chain.
+    // The empty card and its insertion action hug their measured content,
+    // rather than retaining the long chain's scrolling height.
     assert!(
-        empty_height < 280.0 + f64::from(daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_SM),
+        empty_height + f64::from(daw_ui::tokens::SPACE_LG) < expanded_height,
         "an empty chain should hug its context links and remaining controls: {empty_height}"
+    );
+    let hint = labels
+        .iter()
+        .find(|row| row["text"] == "Add an insert to shape this channel.")
+        .unwrap();
+    assert!(
+        action["min"][1].as_f64().unwrap() - hint["max"][1].as_f64().unwrap()
+            <= f64::from(daw_ui::tokens::PARAMETER_ROW_HEIGHT),
+        "Empty-state padding and the action gap must not retain an empty canvas"
     );
     app.click("Edit");
     let restored = app.click("Undo");

@@ -47,6 +47,7 @@ impl DawApp {
             } else {
                 daw_ui::text::note(ui, "No earlier clip overlaps this start.");
             }
+            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
             let mut enabled = original.is_some();
             daw_ui::switch(ui, &mut enabled, "Enable crossfade")
                 .on_hover_text("Blend from the preceding clip at this clip’s start. Disabled: switch immediately.");
@@ -55,10 +56,13 @@ impl DawApp {
                 curve: CrossfadeCurve::LINEAR,
             });
             ui.add_enabled_ui(enabled, |ui| {
-                let duration = ui.horizontal(|ui| {
-                    daw_ui::text::label(ui, "Duration");
-                    ui.add(daw_ui::number(&mut config.duration).speed(0.05).range(0.001..=MAX_BEAT).suffix(" beats"))
-                        .on_hover_text("Automatically limited to the available overlap and next clip takeover.")
+                let duration = daw_ui::form_grid(ui, "crossfade_duration", |ui| {
+                    let label = daw_ui::text::label(ui, "Duration");
+                    let response = ui.add(daw_ui::number(&mut config.duration).speed(0.05).range(0.001..=MAX_BEAT).suffix(" beats"))
+                        .labelled_by(label.id)
+                        .on_hover_text("Automatically limited to the available overlap and next clip takeover.");
+                    ui.end_row();
+                    response
                 }).inner;
                 ui.horizontal(|ui| {
                     if daw_ui::button(ui, "Linear").clicked() { config.curve = CrossfadeCurve::LINEAR; }

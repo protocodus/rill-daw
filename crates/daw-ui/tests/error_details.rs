@@ -35,8 +35,12 @@ fn long_unicode_diagnostics_scroll_without_hiding_actions_or_eliding_details() {
         "Plugin initialization failed: nested cause αβγ\n".repeat(80)
     );
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-        for density in [1.0, 2.0] {
-            for size in [Vec2::new(360.0, 280.0), Vec2::new(1100.0, 720.0)] {
+        for density in [1.0, 1.25, 2.0] {
+            for size in [
+                Vec2::new(360.0, 280.0),
+                Vec2::new(800.0, 600.0),
+                Vec2::new(1440.0, 1000.0),
+            ] {
                 let ctx = Context::default();
                 theme::apply(&ctx);
                 theme::set_appearance(&ctx, appearance);

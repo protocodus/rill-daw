@@ -3,7 +3,7 @@ use egui::{Context, Event, Key, Modifiers, RawInput, Rect, Response};
 
 #[test]
 fn long_path_row_keeps_actions_in_bounds_and_keyboard_accessible() {
-    for density in [1.0, 2.0] {
+    for density in [1.0, 1.25, 2.0] {
         let context = Context::default();
         theme::apply(&context);
         context.set_pixels_per_point(density);
@@ -42,6 +42,52 @@ fn long_path_row_keeps_actions_in_bounds_and_keyboard_accessible() {
                         assert!(available.contains_rect(row.inner.rect));
                         assert_eq!(row.inner.clicked(), activate);
                         action = Some(row.inner);
+                    });
+                },
+            );
+        }
+    }
+}
+
+#[test]
+fn form_rows_leave_clear_space_between_labels_and_adjacent_controls_at_display_scales() {
+    for density in [1.0, 1.25, 2.0] {
+        let context = Context::default();
+        theme::apply(&context);
+        context.set_pixels_per_point(density);
+        for _ in 0..3 {
+            let _ = context.run(
+                RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(620.0, 440.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let mut previous: Option<Rect> = None;
+                        controls::form_grid(ui, "field_clearance", |ui| {
+                            for label in ["Output", "Sample rate", "Sample conversion"] {
+                                let label = text::label(ui, label);
+                                let control = controls::select(label.id, "System default")
+                                    .show_ui(ui, |_| {})
+                                    .response;
+                                assert!(
+                                    control.rect.left() - label.rect.right() >= 20.5,
+                                    "form labels need a clear gutter at {density}×"
+                                );
+                                let row = label.rect.union(control.rect);
+                                if let Some(previous) = previous {
+                                    assert!(
+                                        row.top() - previous.bottom() >= 12.5,
+                                        "adjacent field targets crowd at {density}×: {previous:?}, {row:?}"
+                                    );
+                                }
+                                previous = Some(row);
+                                ui.end_row();
+                            }
+                        });
                     });
                 },
             );

@@ -103,6 +103,59 @@ fn select_range(app: &mut Harness, start: f64, end: f64) {
 }
 
 #[test]
+fn compact_take_selection_keeps_commit_actions_visible_and_stable() {
+    for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
+        let (mut app, alternate) = fixture(false);
+        import(&mut app, &alternate);
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.command(
+            json!({"command":"viewport","width":800,"height":600,"pixels_per_point":density}),
+        );
+        let label_rect = |state: &Value, label: &str| {
+            let rect = state["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|rect| rect["text"] == label)
+                .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
+            assert!(rect["min"][0].as_f64().unwrap() >= 0.0);
+            assert!(rect["max"][0].as_f64().unwrap() <= 800.0);
+            assert!(rect["min"][1].as_f64().unwrap() >= 0.0);
+            assert!(rect["max"][1].as_f64().unwrap() <= 600.0);
+            rect.clone()
+        };
+        let before = app.inspect();
+        label_rect(&before, "Use whole take");
+        let back = label_rect(&before, "Back to editor");
+        let layer = label_rect(&before, "Layer as overdub");
+        // A whole take remains visible above the pinned actions. Scroll its
+        // body to reach range settings, keeping the commit targets in place.
+        let row = &before["audio_takes"]["rows"][0];
+        let x = (row["min"][0].as_f64().unwrap() + row["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (row["min"][1].as_f64().unwrap() + row["max"][1].as_f64().unwrap()) * 0.5;
+        assert!(row["max"][1].as_f64().unwrap() < back["min"][1].as_f64().unwrap());
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-1000.0}));
+        for _ in 0..20 {
+            app.inspect();
+        }
+        let selection = app.click("Time selection");
+        label_rect(&selection, "Use selection");
+        for (label, expected) in [("Back to editor", back), ("Layer as overdub", layer)] {
+            let actual = label_rect(&selection, label);
+            assert_eq!(
+                actual["min"][1], expected["min"][1],
+                "{label} moved after enabling a range"
+            );
+        }
+        let selected = app.click("Use selection");
+        assert!(!selected["error"].as_bool().unwrap());
+        assert_editor_comp(&selected);
+        assert_eq!(selected["audio_takes"]["open"], false);
+        app.quit();
+    }
+}
+
+#[test]
 fn import_select_whole_take_undo_archive_and_restore() {
     let (mut app, alternate) = fixture(false);
     let state = import(&mut app, &alternate);
