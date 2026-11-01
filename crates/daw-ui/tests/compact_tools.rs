@@ -72,7 +72,7 @@ fn click(ctx: &Context, tool: &mut EditorTool, width: f32, enabled: bool, at: eg
 #[test]
 fn every_tool_is_visible_and_one_click_away_without_moving_adjacent_controls() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-        for density in [1.0, 2.0] {
+        for density in [1.0, 1.25, 2.0] {
             let ctx = Context::default();
             theme::apply(&ctx);
             theme::set_appearance(&ctx, appearance);
@@ -112,9 +112,19 @@ fn every_tool_is_visible_and_one_click_away_without_moving_adjacent_controls() {
                             .collect::<Vec<_>>(),
                         initial
                     );
+                    assert!(
+                        selected.shapes.iter().any(|shape| matches!(&shape.shape,
+                            Shape::Rect(shape) if shape.rect == response.rect
+                                && shape.stroke.width == daw_ui::tokens::FOCUS_WIDTH
+                                && shape.stroke.color == theme::palette(&ctx).accent
+                        )),
+                        "The active {name} mode outlines its complete target"
+                    );
                     assert!(selected.shapes.iter().any(|shape| matches!(&shape.shape,
-                        Shape::Rect(shape) if shape.rect.height() == 3.0 && response.rect.contains_rect(shape.rect)
-                    )), "The active {name} mode keeps its underline");
+                        Shape::Mesh(mesh) if mesh.vertices.len() == 128
+                            && (mesh.calc_bounds().min - response.rect.expand(daw_ui::tokens::SELECTION_GLOW_EXTENT).min).length() < 0.1
+                            && (mesh.calc_bounds().max - response.rect.expand(daw_ui::tokens::SELECTION_GLOW_EXTENT).max).length() < 0.1
+                    )), "The active {name} border has a bounded soft halo");
                 }
             }
         }

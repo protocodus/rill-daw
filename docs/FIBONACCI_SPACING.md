@@ -19,20 +19,26 @@ Measured bounds round outward where captions or keys must fit completely.
 | Value | Relationship | Application |
 | --- | --- | --- |
 | 5 | Tight details | Caption pairs and small internal offsets |
-| 8 | Related compact controls | Toolbar groups, keyboard gaps, sidebar entries |
-| 13 | Ordinary rows and insets | Item spacing, form rows, card padding, menu margins, vertical window padding |
+| 8 | Related compact controls | Toolbar groups, keyboard gaps, sidebar entries, menu frames and gaps |
+| 13 | Ordinary rows and insets | Item spacing, form rows, card padding, menu-item horizontal padding, vertical window padding |
 | 21 | Separate sections | Pane gutters, horizontal window padding, section boundaries |
 | 34 | Full control target | Buttons, inputs, and count-item rows |
 | 55 | Captioned parameter row | Control line plus scale captions |
 | 89 | Larger content unit | Complete take-lane row and minimum compact Generate parameter viewport |
 
-Ordinary gaps, form-row gaps, menu insets, and vertical window margins increase
-from 8 to 13. Form label/control columns retain a 21-point gutter; compact
-toolbars retain 8-point internal gaps. The scale establishes relationships:
+Ordinary gaps, form-row gaps, and vertical window margins increase from 8 to
+13. Menus use an 8-point frame inset, with 13-point horizontal padding inside
+shared items and 8-point gaps in shared command and choice menus.
+Form label/control columns retain a 21-point gutter;
+compact toolbars retain 8-point internal gaps. The scale establishes relationships:
 musical coordinates, plugin units, image ratios, and measured text dimensions
 remain independent of it.
 
 ## Implementation
+
+Selected tools, tool choosers, workspace tabs, and compact M/S controls use a
+rounded accent border with a soft, bounded glow. This keeps the full target
+visible without changing its geometry, interaction, or accessibility semantics.
 
 | Surface | Before | Result |
 | --- | --- | --- |
@@ -72,22 +78,35 @@ The native review covers dark/light themes at 1440×1000 and 800×600, with a
 1.25× sample using 1000×750 physical pixels for 800×600 logical content. Shared
 geometry tests also exercise 2× density where applicable.
 
-The retained artifact set contains 20 unmodified PNGs: nine before/after pairs
+The retained artifact set contains 24 unmodified PNGs: nine before/after pairs
 for Arrangement, MIDI, Audio, Mixer, Routing, Generate, Automation, Takes, and
-long Properties titles, plus Notes-menu scrolling and Library typography.
+long Properties titles, plus Notes-menu scrolling and Library typography, and
+two additional pairs for Natural minor menu padding and selected Duplicate
+borders. The original baseline images remain unchanged. Every after image uses
+frozen build 11; the two additional before images use build 9.
 The manifest identifies each image hash, binary hash, viewport, scale, and
-theme. The main matrix uses build 5; Takes uses revision 6, Library revision 8,
-and final menus revision 9. Earlier captures are not presented as later builds.
+theme. Earlier revision captures and their previous manifest remain in the raw
+audit evidence with their actual build provenance.
 
-Additional native checks cover editing tools, Quantize preview/cancel, nested
-choices, color/numeric editors, device parameters, Setup, Assistant Tools,
+A build-12 follow-up checks the normal Effects dialog and Mixer Channel menu
+in compact dark/light views. It is recorded separately in the manifest; the
+24 comparison images retain their build-11 provenance. The raw-native submenu
+icon-inset edge case is exercised directly by the shared menu geometry test,
+since that exact parent/submenu combination is not an application menu path.
+
+Additional native checks cover selected tools and compact M/S borders,
+Quantize preview/cancel, nested choices through the final scale entry,
+color/numeric editors, device parameters, Setup, Assistant Tools,
 History, About, Export, crossfades, Join, naming, and error details. All 18
 1120×987 component-gallery captures were visually reviewed in both themes for
 complete sections, label clearance, and clipping.
 
 Native interaction checks used copied projects and isolated settings; original
-project hashes remained unchanged. Audio was not auditioned. OS dialogs and
-plugin-owned editor chrome are outside RILL's styling scope.
+project hashes remained unchanged. Library captures remained pixel-identical
+after three idle seconds in dark 800×600 and light 1.25× samples. Owned app,
+audio-server, and display processes were stopped after capture. Audio was not
+auditioned. OS dialogs and plugin-owned editor chrome are outside RILL's styling
+scope.
 
 ## Reproducing validation
 

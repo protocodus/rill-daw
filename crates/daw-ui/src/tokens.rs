@@ -9,7 +9,7 @@ pub const GOLDEN_RATIO_INVERSE: f32 = 1.0 / GOLDEN_RATIO;
 pub const SPACE_XS: f32 = 5.0;
 /// Related controls and compact toolbar groups.
 pub const SPACE_SM: f32 = 8.0;
-/// Ordinary sibling rows and the inside of cards, menus, and inset surfaces.
+/// Ordinary rows, card/inset padding, and horizontal menu-item padding.
 pub const SPACE_MD: f32 = 13.0;
 /// Section boundaries, pane gutters, and horizontal window padding.
 pub const SPACE_LG: f32 = 21.0;

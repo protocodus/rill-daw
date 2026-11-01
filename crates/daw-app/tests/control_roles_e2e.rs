@@ -84,8 +84,8 @@ fn background<'a>(state: &'a Value, text: &str) -> Option<&'a Value> {
         })
 }
 
-fn underline(state: &Value, text: &str, dark: bool) -> bool {
-    let [left, _, right, bottom] = bounds(label(state, text));
+fn glowing_border(state: &Value, text: &str, dark: bool) -> bool {
+    let [left, top, right, bottom] = bounds(label(state, text));
     let accent = if dark {
         daw_ui::theme::DARK.accent
     } else {
@@ -97,14 +97,36 @@ fn underline(state: &Value, text: &str, dark: bool) -> bool {
         .iter()
         .any(|shape| {
             let [x0, y0, x1, y1] = bounds(&shape["rect"]);
-            shape["fill"] == json!(accent.to_array())
-                && (y1 - y0 - 3.0).abs() < 0.2
-                && x0 <= left
-                && x0 >= left - 45.0
-                && x1 >= right - 1.0
-                && x1 <= right + 20.0
-                && y0 >= bottom - 1.0
-                && y1 <= bottom + 15.0
+            if shape["stroke"] != json!(accent.to_array())
+                || (shape["stroke_width"].as_f64().unwrap_or(0.0)
+                    - f64::from(daw_ui::tokens::FOCUS_WIDTH))
+                .abs()
+                    > 0.01
+                || x0 > left
+                || x0 < left - 55.0
+                || x1 < right
+                || x1 > right + 34.0
+                || y0 > top
+                || y0 < top - 21.0
+                || y1 < bottom
+                || y1 > bottom + 21.0
+            {
+                return false;
+            }
+            let extent = f64::from(daw_ui::tokens::SELECTION_GLOW_EXTENT);
+            let expected = [x0 - extent, y0 - extent, x1 + extent, y1 + extent];
+            state["painted_meshes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|mesh| {
+                    mesh["vertices"] == 128
+                        && mesh["indices"] == 576
+                        && mesh["transparent_vertices"].as_u64().unwrap() > 0
+                        && mesh["bounds"].as_array().unwrap().iter().zip(expected).all(
+                            |(actual, expected)| (actual.as_f64().unwrap() - expected).abs() < 0.2,
+                        )
+                })
         })
 }
 
@@ -167,8 +189,8 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
             let mut app = fixture(width, height, density, dark);
             let initial = paint(&mut app);
             mode(&initial, "Select");
-            assert!(underline(&initial, "Select", dark));
-            assert!(!underline(&initial, "Pencil", dark));
+            assert!(glowing_border(&initial, "Select", dark));
+            assert!(!glowing_border(&initial, "Pencil", dark));
 
             // All three roles remain visible at narrow and wide desktop sizes.
             for text in ["Select", "Pencil", "Generate…", "View", "Fit"] {
@@ -183,7 +205,7 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
                     }),
                     "Idle {text} uses the shared quiet toolbar treatment"
                 );
-                assert!(!underline(&initial, text, dark));
+                assert!(!glowing_border(&initial, text, dark));
                 let [left, top, right, bottom] = bounds(label(&initial, text));
                 app.command(json!({"command":"pointer", "phase":"move",
                     "x":(left+right)*0.5, "y":(top+bottom)*0.5}));
@@ -203,11 +225,11 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
             let active = paint(&mut app);
             mode(&active, "Pencil");
             unchanged(&active, &initial);
-            assert!(underline(&active, "Pencil", dark));
-            assert!(!underline(&active, "Select", dark));
+            assert!(glowing_border(&active, "Pencil", dark));
+            assert!(!glowing_border(&active, "Select", dark));
             // Inspecting further frames cannot turn the active mode into a
             // momentary pressed state or lose its non-colour selection marker.
-            assert!(underline(&paint(&mut app), "Pencil", dark));
+            assert!(glowing_border(&paint(&mut app), "Pencil", dark));
 
             app.command(json!({"command":"key", "key":"A", "cmd":true}));
             let before_action = app.inspect();
@@ -226,7 +248,7 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
             let undone = app.command(json!({"command":"key", "key":"Z", "cmd":true}));
             mode(&undone, "Pencil");
             assert_eq!(undone["project"], initial["project"]);
-            assert!(underline(&paint(&mut app), "Pencil", dark));
+            assert!(glowing_border(&paint(&mut app), "Pencil", dark));
 
             // Generate is a command that opens a decision; cancelling it leaves
             // both the project and the chosen interaction mode intact.
@@ -260,8 +282,32 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
             let fitted = app.click("Fit");
             mode(&fitted, "Pencil");
             unchanged(&fitted, &before_view);
-            assert!(underline(&paint(&mut app), "Pencil", dark));
+            assert!(glowing_border(&paint(&mut app), "Pencil", dark));
             app.quit();
         }
+    }
+}
+
+#[test]
+fn workspace_tabs_keep_the_same_targets_and_persistent_glowing_selection() {
+    for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
+        let mut app = fixture(1100, 900, density, dark);
+        let original = app.inspect();
+        let mut labels = None;
+        for chosen in ["Arranger", "Mixer", "Arranger"] {
+            app.click(chosen);
+            app.command(json!({"command":"pointer", "phase":"move", "x":1, "y":1}));
+            let state = app.command(json!({"command":"inspect", "paint":true}));
+            unchanged(&state, &original);
+            let current = [
+                bounds(label(&state, "Arranger")),
+                bounds(label(&state, "Mixer")),
+            ];
+            assert_eq!(*labels.get_or_insert(current), current);
+            for tab in ["Arranger", "Mixer"] {
+                assert_eq!(glowing_border(&state, tab, dark), tab == chosen);
+            }
+        }
+        app.quit();
     }
 }

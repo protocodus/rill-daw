@@ -213,6 +213,16 @@ fn rectangle_style(output: &FullOutput, rect: Rect) -> Option<(egui::Color32, eg
     style
 }
 
+fn selection_border(output: &FullOutput, rect: Rect, accent: egui::Color32) -> bool {
+    output.shapes.iter().any(|shape| {
+        matches!(&shape.shape,
+            Shape::Rect(shape) if shape.rect == rect
+                && shape.stroke.width == controls::tokens::FOCUS_WIDTH
+                && shape.stroke.color == accent
+        )
+    })
+}
+
 #[test]
 fn named_tool_families_keep_their_label_and_target_and_announce_the_active_mode() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
@@ -245,9 +255,10 @@ fn named_tool_families_keep_their_label_and_target_and_announce_the_active_mode(
                 )),
                 "The category stays visible when its current tool changes"
             );
-            assert_eq!(output.shapes.iter().any(|shape| matches!(&shape.shape,
-                Shape::Rect(rect) if rect.rect.height() == 3.0 && idle.rect.contains_rect(rect.rect)
-            )), active.is_some());
+            assert_eq!(
+                selection_border(&output, idle.rect, theme::palette(&ctx).accent),
+                active.is_some()
+            );
             idle.request_focus();
             let (activated, output) = frame(&ctx, key(Key::Enter, true), draw);
             assert!(activated.clicked());
@@ -338,7 +349,17 @@ fn quiet_tabs_keep_full_targets_selection_and_native_activation() {
             assert!(idle.rect.height() >= controls::tokens::CONTROL_HEIGHT);
             if let Some((fill, stroke)) = rectangle_style(&output, idle.rect) {
                 assert_eq!(fill, egui::Color32::TRANSPARENT);
-                assert_eq!(stroke, egui::Stroke::NONE);
+                assert_eq!(
+                    stroke,
+                    if selected {
+                        egui::Stroke::new(
+                            controls::tokens::FOCUS_WIDTH,
+                            theme::palette(&ctx).accent,
+                        )
+                    } else {
+                        egui::Stroke::NONE
+                    }
+                );
             }
             let target = idle.rect.center();
             frame(&ctx, pointer(target, true), |ui| {
@@ -374,7 +395,7 @@ fn quiet_tabs_keep_full_targets_selection_and_native_activation() {
 #[test]
 fn role_styles_do_not_leak_and_active_tools_keep_a_palette_indicator_at_both_densities() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-        for (width, density) in [(280.0, 1.0), (900.0, 2.0)] {
+        for (width, density) in [(280.0, 1.0), (800.0, 1.25), (900.0, 2.0)] {
             let ctx = Context::default();
             theme::apply(&ctx);
             theme::set_appearance(&ctx, appearance);
@@ -436,8 +457,8 @@ fn role_styles_do_not_leak_and_active_tools_keep_a_palette_indicator_at_both_den
                 .iter()
                 .filter_map(|shape| match &shape.shape {
                     Shape::Rect(shape)
-                        if (shape.rect.height() - 3.0).abs() < 0.01
-                            && shape.fill == theme::palette(&ctx).accent =>
+                        if shape.stroke.width == controls::tokens::FOCUS_WIDTH
+                            && shape.stroke.color == theme::palette(&ctx).accent =>
                     {
                         Some(shape.rect)
                     }
@@ -445,7 +466,7 @@ fn role_styles_do_not_leak_and_active_tools_keep_a_palette_indicator_at_both_den
                 })
                 .collect();
             assert_eq!(indicators.len(), 1);
-            assert!(active.rect.contains_rect(indicators[0]));
+            assert_eq!(active.rect, indicators[0]);
             assert!(!inactive.rect.intersects(indicators[0]));
         }
     }

@@ -54,7 +54,7 @@ pub fn view_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) ->
     ui.add(button_widget(label).presentation().selected(selected))
 }
 
-/// A quiet page choice with an active underline, native keyboard activation,
+/// A quiet page choice with an active glowing border, native keyboard activation,
 /// and the same full-size target as other controls. The host owns navigation.
 pub fn tab_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> Response {
     ui.add(crate::IconButton::tab(selected, label))
@@ -136,6 +136,14 @@ pub fn menu_button<R>(
 ) -> InnerResponse<Option<R>> {
     let label = label.into();
     if let Some(icon) = crate::Icon::for_label(label.text()) {
+        // Submenu buttons use ordinary padding even inside raw native menus.
+        // Capture that effective inset before the native helper restores its
+        // caller's style, so the painted icon stays in its allocated atom.
+        let icon_padding = if egui::containers::menu::is_in_menu(ui) {
+            tokens::BUTTON_PADDING_X
+        } else {
+            ui.spacing().button_padding.x
+        };
         let response = native_menu_button(
             ui,
             (
@@ -146,7 +154,7 @@ pub fn menu_button<R>(
         );
         let rect = egui::Rect::from_center_size(
             egui::pos2(
-                response.response.rect.left() + ui.spacing().button_padding.x + 9.0,
+                response.response.rect.left() + icon_padding + 9.0,
                 response.response.rect.center().y,
             ),
             egui::Vec2::splat(18.0),
@@ -179,6 +187,9 @@ pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R
     if ui.ctx().data(|data| data.get_temp::<bool>(scope_id)) == Some(true) {
         return contents(ui);
     }
+    // Native menu styling replaces theme padding with (2, 0). Keep the frame
+    // compact, but give each command and selection its own readable inset.
+    menu_item_spacing(ui.style_mut());
     // Popup chooses its position from the previous frame's size. A capacity
     // derived from that moving position feeds back into placement, making a
     // submenu shrink after a wheel gesture has already reached its end. Keep
@@ -482,7 +493,11 @@ fn native_menu_button<'a, R>(
     if open {
         ui.visuals_mut().widgets.inactive = ui.visuals().widgets.open;
     }
+    let padding = ui.spacing().button_padding;
+    ui.spacing_mut().button_padding =
+        egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
     let response = ui.add(submenu.button);
+    ui.spacing_mut().button_padding = padding;
     ui.visuals_mut().widgets.inactive = inactive;
     let mut config = MenuConfig::find(ui);
     if response.clicked() {
@@ -861,10 +876,16 @@ pub fn number_at(
     child.add_sized(rect.size(), value)
 }
 
+fn menu_item_spacing(style: &mut egui::Style) {
+    style.spacing.button_padding = egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+    style.spacing.item_spacing = egui::Vec2::splat(tokens::SPACE_SM);
+}
+
 pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> ComboBox {
     ComboBox::from_id_salt(id_salt)
         .selected_text(selected_text)
         .width(tokens::SELECT_WIDTH)
+        .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
 }
 
 pub fn select_labeled(
@@ -874,6 +895,7 @@ pub fn select_labeled(
     ComboBox::from_label(label)
         .selected_text(selected_text)
         .width(tokens::SELECT_WIDTH)
+        .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
 }
 
 pub fn slider<T: egui::emath::Numeric>(

@@ -191,15 +191,18 @@ Use the spacing scale consistently:
 | Relationship | Space |
 | --- | --- |
 | Tight caption/detail separation | 5 |
-| Related controls and compact toolbar groups | 8 |
-| Ordinary sibling rows, form rows, card/menu/inset padding | 13 |
+| Related controls, compact toolbar groups, and menu frames | 8 |
+| Ordinary sibling rows, form rows, card/inset padding, menu-item horizontal padding | 13 |
 | Separate sections, pane gutters, horizontal window padding | 21 |
 | Major workspace separation | 34 |
 
 Windows use 21-point horizontal and 13-point vertical padding. Standard actions
 retain 34-point targets and 13 × 8 padding; compact actions reduce horizontal
 padding to 8 without shrinking the target. Toolbars retain 8-point control gaps
-and vertical padding so small windows leave room for the musical canvas.
+and vertical padding so small windows leave room for the musical canvas. Menus
+use 8-point outer insets, with 13-point horizontal padding inside shared items
+so text stays clear of its selection border. Shared command and choice menus
+use 8-point row gaps.
 Label bands must reserve their measured height and a deliberate gap: empty
 space inside a font's line box is not a substitute for component padding.
 Derive list strides, scroll-body heights, and pinned footer reservations from
@@ -211,7 +214,7 @@ Choose controls by what they change:
 | Role | Behavior | Shared treatment |
 | --- | --- | --- |
 | Action | Execute a command on content, such as Duplicate or Generate | Filled `button` or `action_menu`; no persistent active state |
-| Tool | Change how the next canvas interaction behaves, such as Pencil or Cut | Exclusive `tool_value`; active tint and persistent underline, radio selection semantics |
+| Tool | Change how the next canvas interaction behaves, such as Pencil or Cut | Exclusive `tool_value`; active tint and persistent glowing border, radio selection semantics |
 | View | Change representation or framing, such as highlighting, Show all, or Fit | Outlined `view_button` or eye-marked `view_menu`; no document or tool change |
 | Parameter | Set a stored value, such as gain, duration, or interpolation | Labelled numeric field, slider, checkbox, or current-value choice |
 
@@ -465,7 +468,7 @@ must never include it in diagnostic or conversation text.
 
 `paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases retain flat fills; selected clips and channels add a soft track-colored outline glow. The tint uses golden-ratio light placement, one bounded mesh (at most 308 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
 
-`paint_selection_glow` adds a six-point track-colored halo using one fixed mesh (128 vertices, 576 indices). It respects the parent clip and culls hidden items. Clip and mixer selection use this shared treatment without altering layout, input, or playback.
+`paint_selection_glow` adds a six-point halo using one fixed mesh (128 vertices, 576 indices). It respects the parent clip and culls hidden items. Selected clips and mixer channels use their track color; selected tools, tool choosers, tabs, and M/S controls use the theme accent. This treatment preserves layout, input, and playback.
 
 `view_links` presents a wrapping row of related destinations with the active one marked. The caller supplies destinations and handles the returned selection. `ViewBackdrop` retains the caller's paint for a utility background without creating widgets, hit targets, or keyboard focus; cached context cannot edit the project or duplicate active accessibility controls. Nested utilities keep their parent context and restore the prior selection and inspector page when dismissed.
 
@@ -569,7 +572,7 @@ its complete control. Structural columns, such as mixer strips, align at the top
 together as individual quiet buttons. A fine vertical separator distinguishes
 families sharing a row; wrapped rows start cleanly. Every supported tool stays
 visible, and families wrap as whole units where space permits. Toolbars have a quiet panel fill and bottom
-divider; active tools retain their underline and keyboard semantics.
+divider; active tools retain their glowing border and keyboard semantics.
 
 Use distinct control roles consistently. Primary and confirmation actions use filled buttons; persistent secondary toolbar commands use the quiet variants below. `action_menu` keeps the filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
 
@@ -1070,11 +1073,11 @@ selected channels. Mixer context menus provide Select/Add/Remove/All/Clear;
 Shift-click and arrows accelerate those selection changes. Re-export uses the
 last successful destination and tail setting through the normal export path.
 
-`EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent active underline and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Each workspace retains its own supported tool when navigating between editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.
+`EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent glowing border and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Each workspace retains its own supported tool when navigating between editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.
 
 `editor_tools_with_context(ui, tool, supported, context)` exposes every supported
 mode as a direct button with contextual wording, a shortcut hint, and a persistent
-active underline. The arranger, piano roll, and audio editor use the same
+active glowing border. The arranger, piano roll, and audio editor use the same
 selection/drawing, edit, copy, and timing families. Fine separators divide
 families on the same row; no tool is hidden in an overflow menu. Tool selection
 preserves neighboring geometry, document state, selection, and history.
@@ -1282,7 +1285,7 @@ rows are labeled **Activity**, since starting a tool is not proof that an edit
 succeeded. Context and long status rows retain their full bounded text on hover.
 The compact header keeps scope beside **AI settings** and **More**, with provider
 readiness on the settings tooltip. Page navigation uses shared `tab_choice`
-controls: full-height targets, an active underline, and a surface on hover or
+controls: full-height targets, an active glowing border, and a surface on hover or
 keyboard focus. The primary action stays at the right of the composer footer;
 **Stop** appears only during a run, and **Undo** only when available and idle.
 Absent footer actions return disabled, zero-size responses to the host.
