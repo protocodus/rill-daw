@@ -555,8 +555,8 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
         changed["visible_labels"]
     );
 
-    // The context editor preserves more digits than the compact readout and
-    // does not edit the song until its visible Apply action is clicked.
+    // The context editor shows a concise draft without changing stored
+    // precision, and edits the song only after its visible Apply action.
     let center = &changed["native_editor"]["parameter_control"]["center"];
     let editing = app.command(
         json!({"command":"pointer","phase":"click","button":"secondary",
@@ -565,7 +565,7 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     assert!(visible(&editing, "Range: 0 to 100 %"));
     assert!(visible(&editing, "Apply value"));
     let current_percent = changed["native_editor"]["selected_value"].as_f64().unwrap() * 100.0;
-    let current_text = daw_ui::exact_value_text(current_percent);
+    let current_text = daw_ui::parameter_value_text(current_percent);
     let input = editing["label_rects"]
         .as_array()
         .unwrap()

@@ -1,0 +1,46 @@
+{
+  "production_commit": "94dc0f9a07316c1424dcaa2d02d53cf57156b9fb",
+  "workspace_command": "cargo +1.99.1 test --locked --workspace --no-fail-fast -- --test-threads=1",
+  "initial_run": {
+    "passed": 1490,
+    "failed": 2,
+    "ignored": 25,
+    "result_blocks": 270
+  },
+  "correction": "Only two test display expectations changed from exact_value_text to parameter_value_text, matching the intended concise parameter editor. All project, history, precision, Cancel, and Undo assertions remain. Production code did not change.",
+  "rerun_command": "cargo +1.99.1 test --locked -p daw-app --test header_readability_e2e --test parameter_search_e2e -- --test-threads=1",
+  "rerun": {
+    "passed": 10,
+    "failed": 0,
+    "targets": [
+      "header_readability_e2e",
+      "parameter_search_e2e"
+    ]
+  },
+  "combined_outcome": {
+    "passed_without_double_counting": 1492,
+    "failed": 0,
+    "ignored": 25,
+    "method": "The two complete passing target outcomes replace their initial outcomes; duplicated passing cases are not added twice."
+  },
+  "strict_clippy": "Passed again after the test-only correction.",
+  "logs": [
+    {
+      "path": "/workspace/scratch/rill-expert-fixes-validation/workspace-complete.log",
+      "sha256": "38fad12cbac4b37673cfdc7f764e71112b3ae918ac4db1f61a1807d225779e76"
+    },
+    {
+      "path": "/workspace/scratch/rill-expert-fixes-validation/display-assertions-final.log",
+      "sha256": "b61cef087c48749ab61f6a693be4af7d68f3d8fc5d04e70ed0b54fc87f4645ab"
+    },
+    {
+      "path": "/workspace/scratch/rill-expert-fixes-validation/clippy-reviewed.log",
+      "sha256": "202639bf71c85468a6e4e76926432748350cadaa4fdc76eefda1ca05ce3520e1"
+    },
+    {
+      "path": "/workspace/scratch/rill-expert-fixes-validation/build-integration.log",
+      "sha256": "531b0d1f8c507d7a84b298d9aca71ae6cc692836f74c56b2c54c3912e4dde517"
+    }
+  ],
+  "ci": "Final platform checks are attached to https://github.com/protocodus/rill-daw/pull/20"
+}

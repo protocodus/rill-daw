@@ -49,8 +49,10 @@ The [focused validation record][validation] records 41 precision/control tests,
 25 context/layout component tests, passing application regressions, the native
 routine-versus-modal rendering test, and portal-cancellation classification.
 The narrow-header regression checks actual rendered glyphs at both display
-densities. Workspace build and strict all-target Clippy passed. Final full-suite
-and cross-platform results are recorded with the pull request.
+densities. Workspace build and strict all-target Clippy passed. [Workspace verification][workspace-validation]
+covered 1,492 tests after rerunning two corrected display-assertion targets;
+25 opt-in tests were ignored. The initial failures and rerun are retained in
+the record. Final cross-platform results are attached to the pull request.
 
 [Native inspection evidence][native] includes both appearances at 1440×1000 and
 800×600, exact send entry/keypad, concise named Pan entry, readable clip context,
@@ -92,3 +94,5 @@ inspected; the four changed input/navigation images are updated in the shared co
 [before-trim]: ../artifacts/expert-ui-refinements-2026-11-01/before/trim-tooltip.png
 [validation]: ../artifacts/expert-ui-refinements-2026-11-01/focused-validation.json
 [native]: ../artifacts/expert-ui-refinements-2026-11-01/README.md
+
+[workspace-validation]: ../artifacts/expert-ui-refinements-2026-11-01/workspace-validation.json

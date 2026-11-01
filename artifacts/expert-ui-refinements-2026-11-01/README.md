@@ -33,8 +33,9 @@ verifies no owned app/audio/display processes or display sockets remained.
 [Focused validation](focused-validation.json) records passing component, app,
 native-rendering and picker checks, and identifies the superseded header-width
 assertion rather than counting its failure as a pass. The replacement checks
-the actual visible song-span glyphs. Final full-workspace and five-platform CI
-results are reported on the pull request.
+the actual visible song-span glyphs. [Workspace validation](workspace-validation.json) records the full run and two
+corrected assertion targets (1,492 passing tests, without double counting;
+25 opt-in tests ignored). Five-platform CI results are reported on the pull request.
 
 The recurring virtual-ALSA EIO was not reproduced or repaired by this UI work.
 The existing explicit output recovery remains in place. The silent missing-file-picker

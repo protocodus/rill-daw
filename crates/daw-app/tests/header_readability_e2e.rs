@@ -91,7 +91,8 @@ fn header_captions_stay_bounded_and_exact_popup_dismissal_preserves_precision() 
                 unchanged(&state, &original);
                 click_label(&mut app, gain_label, false);
                 let focused = app.command(json!({"command":"inspect", "paint":true}));
-                let precise = daw_ui::exact_value_text(f64::from(daw_ui::channel_gain_to_db(gain)));
+                let precise =
+                    daw_ui::parameter_value_text(f64::from(daw_ui::channel_gain_to_db(gain)));
                 let field = label(&focused, &precise);
                 assert!(field["min"][0].as_f64().unwrap() >= 0.0);
                 assert!(field["max"][0].as_f64().unwrap() < f64::from(width));
