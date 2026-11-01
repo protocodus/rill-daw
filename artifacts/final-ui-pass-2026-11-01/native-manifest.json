@@ -1,0 +1,2313 @@
+{
+  "at": "2026-11-01T11:45:17.710764+00:00",
+  "status": "complete",
+  "curated_count": 18,
+  "images": [
+    {
+      "file": "native-01-mixer-pan-before.png",
+      "family": "mixer-pan",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/mixer-knobs-scrolled.png",
+      "sha256": "445d0003eb038190fc273d8926724c16bc5d91f1135cd27fa652302ad75962a9",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-02-mixer-pan-after.png",
+      "family": "mixer-pan",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/mixer-knobs-scrolled.png",
+      "sha256": "6235e5eba25a4dc43a552783d6a9d6bb1518a957eb7b56d9f4439e4178c9eae8",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "file": "native-03-send-compact-before.png",
+      "family": "send-compact",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/routing-knobs-initial.png",
+      "sha256": "98acd7073af1db84d9d9c131ece3fe2c95679ab12d9e2f05f3f7ebc64a16af22",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-04-send-compact-after.png",
+      "family": "send-compact",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-3/routing-knobs-initial.png",
+      "sha256": "01ae6340f0376fec9f8755cadefb12196127e1d34b272b8544c13e0db374e9bb",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+    },
+    {
+      "file": "native-05-send-wide-before.png",
+      "family": "send-wide",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/bwide-supplemental/case-2/routing-knobs-initial.png",
+      "sha256": "08d8021fa3f7ec72f07ae04dbe36d07f7c43db88ea9149e0a82dce73fec8a056",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-06-send-wide-after.png",
+      "family": "send-wide",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4wide-supplemental/case-2/routing-knobs-initial.png",
+      "sha256": "67cc3f2ee503e6884e6f3947aaafaa575a93ab1f4d94f63562a306707b29fe2d",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+    },
+    {
+      "file": "native-07-silence-dark-before.png",
+      "family": "silence-dark",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/bls-supplemental/case-3/long-silence-dialog.png",
+      "sha256": "cfbcc20ee96da1cc0339a3ff68d35056a742cb81577a5503eeb280938d238435",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-08-silence-dark-after.png",
+      "family": "silence-dark",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-silence-dialog.png",
+      "sha256": "b5d649ffe74115f9132eb47d42665f7606c781d95a665202780d0a0302ca0592",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "file": "native-09-silence-light-before.png",
+      "family": "silence-light",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/bls-supplemental/case-4/long-silence-dialog.png",
+      "sha256": "1c98e4abecba37acd8a7b1afcd1413716e0e819b70119d3a5b9c78a7bfe2bf7e",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-10-silence-light-after.png",
+      "family": "silence-light",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/long-silence-dialog.png",
+      "sha256": "ad900819d9d0f0793ebbc8505fb1fba11d32522f2e1fd07d5e01f8469c0fccd4",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "file": "native-11-rename-compact-before.png",
+      "family": "rename-compact",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/brg-supplemental/case-3/long-name-keyboard.png",
+      "sha256": "108ce3c4d9e4dd3cc0772249cc52919929e79a75f7e1b68180a0f7f23783c829",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-12-rename-compact-after.png",
+      "family": "rename-compact",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-name-keyboard.png",
+      "sha256": "8ec249e50e830103cbabbeb5588381156e5743358ab3bfae446046e9f81465ee",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "file": "native-13-rename-wide-before.png",
+      "family": "rename-wide",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/brgw-supplemental/case-2/long-name-keyboard.png",
+      "sha256": "0f2fb90bfb0bf1e3da0347c500b1c12b5e5c84ae6f1d9a8b87b5f9a1d2171e2d",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-14-rename-wide-after.png",
+      "family": "rename-wide",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-2/long-name-keyboard.png",
+      "sha256": "b5eb6a7375294f307b9eacbd2729ddc8957ccf700c84f2084175d1739ddc99cb",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "file": "native-15-parameter-unit-before.png",
+      "family": "parameter-unit",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/b/case-2/instrument-parameters.png",
+      "sha256": "d315a32bc909f1cfad355a9eecbdaf099d2492a3c84de79c126e5eaf7d23c158",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-16-parameter-unit-after.png",
+      "family": "parameter-unit",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-2/instrument-parameters.png",
+      "sha256": "6cd08f48008d26dd9382a45124e2f7b752dd4ec1b34513e2075309bb0d8d089b",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "file": "native-17-menu-open-before.png",
+      "family": "menu-open",
+      "phase": "before",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/mixer-channel-menu.png",
+      "sha256": "e1c331a7787f72f31c1ede899d72e0c7d6b3e8df5c96a2dfb82fecc5d41aaea0",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+    },
+    {
+      "file": "native-18-menu-open-after.png",
+      "family": "menu-open",
+      "phase": "after",
+      "raw_image_unchanged": true,
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/mixer-channel-menu.png",
+      "sha256": "a3b00ff8042263c9c1c55a25a79877bc36857676a44a5b01698a3a7d61c234b7",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    }
+  ],
+  "baseline": {
+    "at": "2026-11-01T11:03:19.271774+00:00",
+    "source_head": "5d11e98df09737f45aade2f5fb8fac3d1122f52d",
+    "parent_confirmation": "Target debug remains final PR21 build12; production unchanged by final harness/docs commit and merge.",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/baseline-binaries/rill",
+        "sha256": "a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/baseline-binaries/daw-plugin-host",
+        "sha256": "ef6b60253368d9ca9fa60baf7ca5881d0f0846ecfc836806d7339d54ee09f4a8"
+      }
+    ],
+    "fixtures": [
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/fixtures/long-name.rill",
+        "copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixtures/long-name.rill",
+        "sha256": "7744a502324516702df3b589626d6ab9857fe8302c5d7e6b91569e01fb63ecfe"
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/fixtures/audio.rill",
+        "copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixtures/audio.rill",
+        "sha256": "75b5a135ec307321f25a9dd00b1b6e189d568e9a717baa1c7374eeda8f801c01"
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/fixtures/automation.rill",
+        "copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixtures/automation.rill",
+        "sha256": "9cc3f171ae121f9d59f0baaa11c94f12c87488dc07f5b2805603d163ace519e9"
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/fixtures/midi.rill",
+        "copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixtures/midi.rill",
+        "sha256": "a751bf4ff13ee956554f9e94dafe2196d240c67a29cb5e4a3d9735db7947ea5c"
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/fixtures/source.rill",
+        "copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixtures/source.rill",
+        "sha256": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3"
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/fixtures/takes.rill",
+        "copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixtures/takes.rill",
+        "sha256": "fd3597ef3390b6944b4d889d776c13f02ba738a22a0931b13a147ccf92a68739"
+      }
+    ],
+    "infrastructure_copied_from": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01",
+    "original_projects_read_only": true
+  },
+  "after_build": {
+    "at": "2026-11-01T11:21:13.917790+00:00",
+    "parent_signal": "BUILDREADY2; rename Area fade disabled for immediate opacity, knob f32 annotation without appearance change. Parent reports59shared targets pass.",
+    "revision_status": "coordinated build2; seven retained AFTER comparisons; Routing uses the separately recorded build4 follow-up",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/after-binaries-z/rill",
+        "sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/after-binaries-z/daw-plugin-host",
+        "sha256": "721326206129f3c3fc058bc870dbfdbb0d8bf98bc5e8922363650bee6c85c5c0"
+      }
+    ]
+  },
+  "core_matrix": [
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/automation-curve.png",
+      "sha256": "b4c03acd12b56b6e6b42571ba19cf7e2cc7d94a800eb674b4f53bb3f8758c13a",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/arrangement.png",
+      "sha256": "d9bdc18fbaf267c24a95fa6a9acab021cf39eef5d43d00e1ef474ab65554bba2",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/midi.png",
+      "sha256": "892d0019ca866cc12e621ef930fce3f80d61ee686c00aeccbb527afaf88eedb3",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/audio.png",
+      "sha256": "6d9b8c909d34736fd8a2e84442f4be51e7ad48f610d1a74083d8abd8a5f612d3",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/mixer.png",
+      "sha256": "45d678d47952702208d52efdb91f54d780e8086674b3be1b448d5de22620b389",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/channel.png",
+      "sha256": "7fcfcbf4c0a3b078696db50dffab99feb21353aba63539f9b062ffd14cfb2017",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/routing.png",
+      "sha256": "7f9cde76031c7be1775c5e79a66bffc257ebca823e4e353268e537b3dd80dcac",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/effects.png",
+      "sha256": "57d48bcc02fb1835a16b08ac1547b6b6bbf081b26a46dcf47a39b6ad0cca253f",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/instrument.png",
+      "sha256": "9e6032c232bb5d71bb7e298ce2a956c357943c127634602ce5fd9809aec59efb",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/properties.png",
+      "sha256": "0bf99f4e093e57c99e3892416b9ef1c8031349a2e325c17636ba18d9aea49928",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/library.png",
+      "sha256": "685c7551c44da9bd300f9a58dcf10931c9da59a4374dd10d017a09287fd79e2a",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/setup.png",
+      "sha256": "335ef59fa6feaa3834ed654863898759feb0240e644673793aa54b92b5300e1d",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/automation.png",
+      "sha256": "5c37b94e36719b723eec69b6c29c1fe71aa91a3a87c93c8a5d02bdb380206b3e",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/crossfade.png",
+      "sha256": "cea89d28ae4d99d350b02d6192a2d48f6a26f7e84ab7e5ff4dc105d29be243ae",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/join.png",
+      "sha256": "3bd52badc4adf699efe1155360ed2014e01f58066f7219bfb030dbf6fde1c25b",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/assistant.png",
+      "sha256": "14989f2abf5972f1ed41ddb52a56440322576e4b37a59ec3162a8382095f567f",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/automation-curve.png",
+      "sha256": "d468c44a1b82a8bac3a484ef6a86a8b870f306827bf083526d30dd411f07c6e4",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/arrangement.png",
+      "sha256": "704480131d2ab7c12293e93fc230c3c5cf8c4f84496074ebaac71874bcba94f6",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/midi.png",
+      "sha256": "6e1c7a3fb719d8a5883e41535c45e6ecb6922e6371d0ddfbea75e5bd20b1c770",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/audio.png",
+      "sha256": "9f4067147e80649466f1846f3cf73b1818337f79377046e578361d2435e81ade",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/mixer.png",
+      "sha256": "4236a1481310af2c31eb4c6832e2a2f22e35037de0de30bba11628079d812d55",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/channel.png",
+      "sha256": "f46716ab3276e4ae91f507e75ba2c733cee9a9d1e4ba6ee7c8139ba8ae663d8e",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/routing.png",
+      "sha256": "67cc3f2ee503e6884e6f3947aaafaa575a93ab1f4d94f63562a306707b29fe2d",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/effects.png",
+      "sha256": "6c00a52d90d9ab3c777c699a0f89765f95ad71e7f6b90174082b6988fe6fd30c",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/instrument.png",
+      "sha256": "92dad9893050906cdad1361ca2ffc24276dc638cbe0ae4889a426e2bb59c5473",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/properties.png",
+      "sha256": "3c32c298b733b68a741a8d5a41df2eeb3bc2cae45edb153874d35adfda12dd9f",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/library.png",
+      "sha256": "aec492113adf01448e73d0dd561865d86fbf4131a8d8c83baf5ba70dc3aeee37",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/setup.png",
+      "sha256": "65e68cd56a1e0f4275ec8e0e5703081a23d388c78b292622582f5a8cf8bc5f33",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/automation.png",
+      "sha256": "4d5fe20f79b3cdc8c3e86289e418474498b3d98f6fc16666836e5c54831aeb3f",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/crossfade.png",
+      "sha256": "b25a52004dbbd418f01fc6b938c27953e9c9b0a995aee874df05d14d782ce20e",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/join.png",
+      "sha256": "5b2c3b32440e7f148dd2fff923f31e473d1bd3df7331991afa36d199dab7cf42",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/assistant.png",
+      "sha256": "628e167886695cf4776aaf155827cdf51157559a759be958aaf914a3c5e2d559",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/automation-curve.png",
+      "sha256": "791006b1113d1f4e940948511875a8424bee2573cf0806b38755f845549ec507",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/arrangement.png",
+      "sha256": "0b723958cd500ee765b20412b6fbdf818f3ada03e6202cf1e79e583f87bdafd5",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/midi.png",
+      "sha256": "17b32a6e1cd21c78b4df9b129e3a727d9eb79c5a092882d11bc8f3de814e49d7",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/audio.png",
+      "sha256": "0e554a2174065863ef3ae79257f26bc3fc2814783495c47e458c4304a5bd9830",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/mixer.png",
+      "sha256": "afd23e4f6c7a24a9ded08ea123da36f7e17d309aa1f76b7df589a7bd44595c1a",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/channel.png",
+      "sha256": "04d099fe04ef352e3e05cc538bbaa17e1443cd904f1b65352b08b06e3eb583d5",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/routing.png",
+      "sha256": "01ae6340f0376fec9f8755cadefb12196127e1d34b272b8544c13e0db374e9bb",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/effects.png",
+      "sha256": "973db76e57ecb3c5629f04d6bceacb099377b21187aac62bb732094aeff37083",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/instrument.png",
+      "sha256": "84f8333f8d5f0142a37a47391e69a2a894875b83325c1132be57841254e0ae50",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/properties.png",
+      "sha256": "d753be9ea39bf3c8953088d3d67501cba2a7ec6d54963066b6d664cb97a41b5c",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/library.png",
+      "sha256": "f56d602f12918fb55bf059c48f39da77c7e4e9dbb5be055582bfeb4275ad3fec",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/setup.png",
+      "sha256": "ecda815407b8e30c3f6e2c011d6997657c539bf00f863c6f61e2b1cffc13507c",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/automation.png",
+      "sha256": "76a15012836f6a019f6ab674f24b6e1f8577260622ea4a4a49041c2e9ce4246f",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/crossfade.png",
+      "sha256": "1d84cb5b59710f40098f2b029e8b238bb01c1c21860c1272fbba8e85c2bb83dc",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/join.png",
+      "sha256": "8e7e273e81ea17e0fe8aa55b92e2973ac7e0783128158285f9508aa738515aa4",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/assistant.png",
+      "sha256": "357a8b111dff4b8219a4eb90eedbf4516a6d89723d69a0e71c4b79e4c64dee69",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/automation-curve.png",
+      "sha256": "d9884e21ba215caf354e5caf553179aa5a9c31b13d23dde8bf677f1356731cf0",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/arrangement.png",
+      "sha256": "47a5c40aff822fd934972f72ffda0cb74a6fe656c43e583ac38f9b3d66cdd193",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/midi.png",
+      "sha256": "8218872fc776814a50374e56de1915e99dd548f9b798acd75867686afdb67405",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/audio.png",
+      "sha256": "3cfe706202e64192c82358353c076b1d562ca7e2eaed00ccc3a14f8f22278fcf",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/mixer.png",
+      "sha256": "048bec6224866abf1f993ee8a7ca0a3a9f17a3280856e7b8698270cb36142199",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/channel.png",
+      "sha256": "477bd7e0e86cb3b5f3476cd3f1cf53bce22c7ebc21a6f2535e38a7bb98f65b83",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/routing.png",
+      "sha256": "f3774471b9a194ad4a69c593c9beca2db01bd16c9b9a123d45940e12ef1a6acb",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/effects.png",
+      "sha256": "a47378123c371ed8a0c24fb55ad2d95772463056f84940f452bc11fad7659815",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/instrument.png",
+      "sha256": "dc22bdec5959a240a5446d6472dc6b7a63656be8494b989308f6a3b64cca0816",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/properties.png",
+      "sha256": "b523e47f69b95e29c4859bc4ed8ac438e23bf7026d19356c8af9acea2888609a",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/library.png",
+      "sha256": "8f8df4cd61f6ee22fbc6b8a68530649505491425205d872792962592f57cbe7b",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/setup.png",
+      "sha256": "0823ae956633c6f8e48a69119c0b238b63492f467bffe7d9874874a642284f1e",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/automation.png",
+      "sha256": "013dbfb1a28288c4d0f18cb6eb0586ae03b5e334b4a1c2b7b1c31558471ec472",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/crossfade.png",
+      "sha256": "cf9c06d70f19e49bf3394d0f510761f63621c6f7b5b7158cf204009043a8976c",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/join.png",
+      "sha256": "70cd31f6378c9bb1ec2fdd964195dd6a68a8e9fbe32cf68257e4d4e8dc9f03db",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/assistant.png",
+      "sha256": "73edeaa60fb21914112b91a9a05c324856854f6d0d7f1b37b173daa68ca936b7",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+    }
+  ],
+  "core_matrix_build": {
+    "at": "2026-11-01T11:17:41.799134+00:00",
+    "parent_signal": "BUILDREADY1 draft; production fixes built; shared new test-fixture assertions under diagnosis, no known production failure.",
+    "revision_status": "draft1",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/after-binaries-a/rill",
+        "sha256": "408e07fba75438d1e3611d4f99c84d146f5217781606b16df8286f508e4717a5"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/after-binaries-a/daw-plugin-host",
+        "sha256": "721326206129f3c3fc058bc870dbfdbb0d8bf98bc5e8922363650bee6c85c5c0"
+      }
+    ]
+  },
+  "additional_mouse_evidence": [
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/mixer-pan-keypad.png",
+      "sha256": "b73e2bcb169acd68672ac4bfb9e8b6661ffa74f9fe1feceffcb0a8948eccf0c8",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/mixer-pan-cancelled.png",
+      "sha256": "40c590933d41799a2050c9e3d97b31e9ea4f3797bd55edbd2e91c64744b5e567",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/mixer-pan-keypad.png",
+      "sha256": "fd1f4364f00f969936bf0655e6e2916ae6d54c06c4cd19b8be41f5e6f16d3cfb",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/mixer-pan-cancelled.png",
+      "sha256": "c49658e2d34a049bdea8f20bd2ddb0a7b6def5a2f1f0d9bc3dd1e7023974ec98",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-silence-cancelled.png",
+      "sha256": "6327fa48ce2e2c35ef665c635d61974a7dc4921674e6f3fa25560afce46cc8f8",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/long-silence-cancelled.png",
+      "sha256": "b9c1fc697fbc8cde01c30ec68554dd719bbb44b61b6eec48673ca641923c602c",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-name-keyboard-gap-click.png",
+      "sha256": "8ec249e50e830103cbabbeb5588381156e5743358ab3bfae446046e9f81465ee",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/long-name-keyboard-gap-click.png",
+      "sha256": "5e26a9845f2d1526f6664b5c5a388dced2b97f92ff438356204a2eeee02e49d0",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-1/long-name-keyboard-gap-click.png",
+      "sha256": "9d7188aba9a0c5bc761bd642cb86346a093892f05d2285b54f09b320d6bf808d",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-2/long-name-keyboard-gap-click.png",
+      "sha256": "b5eb6a7375294f307b9eacbd2729ddc8957ccf700c84f2084175d1739ddc99cb",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-3/routing-keypad.png",
+      "sha256": "4325af6fe96538c4e39ed138eadf9efe3ac0ec09a7aff352e49c7d75aae058ee",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-4/routing-keypad.png",
+      "sha256": "66b74d03543878a102fa2c9bd4fca1d2f6d46fb992f125527a50aba90cc40e24",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-first-observed.png",
+      "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    },
+    {
+      "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-first-observed.png",
+      "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36"
+    }
+  ],
+  "raw_capture_root": "/workspace/scratch/rill-final-ui-2026-11-01/native",
+  "original_sources": [
+    {
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-1/arc pulse.rill",
+      "expected": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e",
+      "actual": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e",
+      "unchanged": true
+    },
+    {
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-2/glass current.rill",
+      "expected": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35",
+      "actual": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35",
+      "unchanged": true
+    },
+    {
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-3/sine circuit.rill",
+      "expected": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "actual": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true
+    }
+  ],
+  "fixture_provenance": [
+    "/workspace/scratch/rill-final-ui-2026-11-01/native/automated-send-fixture-provenance.json",
+    "/workspace/scratch/rill-final-ui-2026-11-01/native/automation-fixture-provenance.json",
+    "/workspace/scratch/rill-final-ui-2026-11-01/native/fixture-provenance.json",
+    "/workspace/scratch/rill-final-ui-2026-11-01/native/long-name-fixture-provenance.json",
+    "/workspace/scratch/rill-final-ui-2026-11-01/native/long-silence-fixture-provenance.json",
+    "/workspace/scratch/rill-final-ui-2026-11-01/native/supplemental-fixture-provenance.json"
+  ],
+  "initial_fixture_hashes_unchanged": true,
+  "cleanup": {
+    "live_owned_processes": [],
+    "case_records": [
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/a/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/a-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/a-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/awide-supplemental/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/awide-supplemental/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/b/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/b/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/b/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/b/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bls-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bls-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bpan-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bpan-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/brg-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/brg-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/brgw-supplemental/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/brgw-supplemental/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bwide-supplemental/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bwide-supplemental/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bwm-supplemental/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/bwm-supplemental/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4wide-supplemental/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "original_sources_unchanged": true
+      }
+    ],
+    "owned_executable_and_server_process_scan": []
+  },
+  "script_hashes": {
+    "audit.py": "0ea0b3f4034db534556b8eab95a888e9c53a18948ce4ad87a062dc0272c405ba",
+    "audio.py": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a",
+    "supplemental.py": "874d5c9daa7bff36c2eafa1c77c86e41d9b9bdd51bf39fba3444f52b7f52012c",
+    "curate.py": "61e2c6199c9ff9e8d249a32856447c4e7f371d87bb4e75144e331ea52e4fb326",
+    "finalize-routing.py": "73076966982ef0838915c481b0c266d48d62a83a81893b5db22e56585efda6c6"
+  },
+  "findings": {
+    "phase": "after build2 reviewed",
+    "findings": [
+      {
+        "id": "inline-rename-toolbar-bleed",
+        "severity": "visual overlap",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/long-name-keyboard.png",
+        "description": "Underlying Snap text and dropdown arrow remain visible between inline rename controls at 800x600.",
+        "reported_to": [
+          "root",
+          "spacing_workspaces"
+        ],
+        "status": "resolved; opaque card covers background in compact and wide views; mouse gap checks preserve blocking",
+        "after_evidence": [
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-name-keyboard.png",
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-2/long-name-keyboard.png"
+        ]
+      },
+      {
+        "id": "long-strip-silence-title",
+        "severity": "inaccessible actions",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/bls-supplemental/case-3/long-silence-dialog.png",
+        "description": "A copied audio clip with a 512-character name makes Strip silence title start above the viewport and Apply/Cancel extend below 600px.",
+        "reported_to": [
+          "root",
+          "spacing_utilities"
+        ],
+        "status": "resolved; title bounded to two lines, all fields and Apply/Cancel fit; native Cancel succeeds in both compact themes",
+        "after_evidence": [
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-silence-dialog.png",
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/long-silence-dialog.png"
+        ]
+      },
+      {
+        "id": "small-knob-captions",
+        "severity": "requested visual cleanup",
+        "sources": [
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/routing-knobs-initial.png",
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/b-supplemental/case-3/mixer-knobs-scrolled.png"
+        ],
+        "description": "Send unity caption lies within lower ring; endpoints and mixer pan L/R captions add text around small knobs.",
+        "reported_to": [
+          "root",
+          "spacing_controls"
+        ],
+        "status": "resolved; small controls use pure rings, external values remain visible; Pan and Send keypads remain reachable",
+        "after_evidence": [
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/mixer-knobs-scrolled.png",
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/routing-knobs-initial.png"
+        ]
+      },
+      {
+        "id": "duplicate-plugin-unit",
+        "severity": "minor display polish observation",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/b/case-2/instrument-parameters.png",
+        "description": "Provider-formatted 50.0% is followed by a second percent unit: 50.0% \u00b7 %.",
+        "reported_to": [
+          "spacing_utilities"
+        ],
+        "status": "resolved; provider-formatted percent unit appears once",
+        "after_evidence": [
+          "/workspace/scratch/rill-final-ui-2026-11-01/native/z/case-2/instrument-parameters.png"
+        ]
+      }
+    ],
+    "passed_examples": [
+      "Mixer Pan contextual exact editor, keypad and Cancel reachable in compact dark/light.",
+      "Channel and Routing lower controls reachable by wheel in compact viewport.",
+      "Compact Notes Velocity and Audio Grid zero crossing controls visible/reachable.",
+      "Final nested scale choice reachable with mouse in compact dark case.",
+      "Long Properties title and Automation Exp inspector fit in reviewed compact captures."
+    ],
+    "limits": [
+      "No audio audition/playback.",
+      "Original study files immutable; fixture transforms only in private copies.",
+      "Not all possible application state combinations are represented. Wide menu locator misses are retained and selectively rerun; screenshots are labelled with actual source/build."
+    ],
+    "after_build_sha256": "3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36",
+    "rename_gap_checks": [
+      {
+        "before_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-name-keyboard.png",
+        "after_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-3/long-name-keyboard-gap-click.png",
+        "byte_identical": true
+      },
+      {
+        "before_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/long-name-keyboard.png",
+        "after_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/z-supplemental/case-4/long-name-keyboard-gap-click.png",
+        "byte_identical": true
+      },
+      {
+        "before_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-1/long-name-keyboard.png",
+        "after_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-1/long-name-keyboard-gap-click.png",
+        "byte_identical": true
+      },
+      {
+        "before_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-2/long-name-keyboard.png",
+        "after_gap_click": "/workspace/scratch/rill-final-ui-2026-11-01/native/zwide-supplemental/case-2/long-name-keyboard-gap-click.png",
+        "byte_identical": true
+      }
+    ],
+    "early_native_rename": [
+      {
+        "samples": [
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-0.png",
+            "start_seconds_after_release": 2.8559996280819178e-05,
+            "end_seconds_after_release": 0.10088798099604901,
+            "sha256": "e9759916f262fb777a5f066038f2a95fccc9bc41da55548d5b1b3c4f87a207f2"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-1.png",
+            "start_seconds_after_release": 0.11120118100370746,
+            "end_seconds_after_release": 0.2036541639972711,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-2.png",
+            "start_seconds_after_release": 0.21398690600472037,
+            "end_seconds_after_release": 0.3422590030095307,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-3.png",
+            "start_seconds_after_release": 0.3525363020016812,
+            "end_seconds_after_release": 0.480275977999554,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-4.png",
+            "start_seconds_after_release": 0.49058313900604844,
+            "end_seconds_after_release": 0.6049007950059604,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-5.png",
+            "start_seconds_after_release": 0.6151703060022555,
+            "end_seconds_after_release": 0.7235427730047377,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-6.png",
+            "start_seconds_after_release": 0.73394669200934,
+            "end_seconds_after_release": 0.8476810800057137,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-7.png",
+            "start_seconds_after_release": 0.8580210890067974,
+            "end_seconds_after_release": 0.9706710879981983,
+            "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+          }
+        ],
+        "first_observed_rename": {
+          "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-3/long-name-opening-1.png",
+          "start_seconds_after_release": 0.11120118100370746,
+          "end_seconds_after_release": 0.2036541639972711,
+          "sha256": "c34fda47911207082d6b5ce6cb83705a87ec37591c10940dcbe916027a7d189b"
+        },
+        "scope": "First visible native capture, not an exact renderer-first-frame assertion."
+      },
+      {
+        "samples": [
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-0.png",
+            "start_seconds_after_release": 3.775898949243128e-05,
+            "end_seconds_after_release": 0.1047174389968859,
+            "sha256": "aa2f2a53824005e608a552722e4f440e9116bb34437ecbe87cf72dd26b2d7f7c"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-1.png",
+            "start_seconds_after_release": 0.11505885999940801,
+            "end_seconds_after_release": 0.2017484519892605,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-2.png",
+            "start_seconds_after_release": 0.21208267100155354,
+            "end_seconds_after_release": 0.31101147999288514,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-3.png",
+            "start_seconds_after_release": 0.32130347000202164,
+            "end_seconds_after_release": 0.42764367000199854,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-4.png",
+            "start_seconds_after_release": 0.4397839769953862,
+            "end_seconds_after_release": 0.5313252999912947,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-5.png",
+            "start_seconds_after_release": 0.5416121750022285,
+            "end_seconds_after_release": 0.6285981080000056,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-6.png",
+            "start_seconds_after_release": 0.6388810420030495,
+            "end_seconds_after_release": 0.7210291779920226,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          },
+          {
+            "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-7.png",
+            "start_seconds_after_release": 0.7313682439998956,
+            "end_seconds_after_release": 0.8184820649912581,
+            "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+          }
+        ],
+        "first_observed_rename": {
+          "path": "/workspace/scratch/rill-final-ui-2026-11-01/native/ze-supplemental/case-4/long-name-opening-1.png",
+          "start_seconds_after_release": 0.11505885999940801,
+          "end_seconds_after_release": 0.2017484519892605,
+          "sha256": "06a84fb4c0935a3e40a8b8ad16903a905936e682fda386eefb43a24bf80ea206"
+        },
+        "scope": "First visible native capture, not an exact renderer-first-frame assertion."
+      }
+    ],
+    "early_native_scope": "First observed native rename surfaces are opaque; these captures are not exact renderer-first-frame assertions. The shared regression test covers that precise boundary."
+  },
+  "limits": [
+    "No audio audition or playback. No project saves.",
+    "Original study projects are read-only; fixture transformations are confined to private copies.",
+    "Native captures use scale 1 in dark/light at 1440x1000 and 800x600. Other density checks and gallery validation are owned by the parent.",
+    "All 64 primary view captures were refreshed; only changed controls and relevant mouse journeys were repeated after the baseline utility audit.",
+    "Rename background bleed was confirmed. Baseline native gap clicks did not prove click-through; after checks verify input blocking remains intact.",
+    "OS and plug-in-owned editor chrome are outside RILL-owned styling."
+  ],
+  "validation_summary": {
+    "at": "2026-11-01T11:45:17.804812+00:00",
+    "curated_images": 18,
+    "all_curated_hashes_match_raw": true,
+    "core_matrix_draft1_views": 64,
+    "native_mouse_evidence_images": 14,
+    "rename_gap_checks_byte_identical": 4,
+    "early_capture_scope": "First observed native frames only; exact first-render opacity is covered by shared regression tests.",
+    "owned_app_host_audio_display_processes": [],
+    "original_projects_unchanged": true,
+    "independent_review": "Read-only child reviewed compact/wide rename and compact dark/light Strip silence; no new regression found.",
+    "retained_after_revisions": {
+      "build2": 7,
+      "build4_routing": 2
+    },
+    "build4_native_keyboard_and_mouse_exact_checks": 4,
+    "build4_automated_ring_themes": [
+      "Dark",
+      "Light"
+    ],
+    "other_16_curated_images_unchanged": true
+  },
+  "routing_followup_build": {
+    "at": "2026-11-01T11:38:09.206269+00:00",
+    "parent_signal": "BUILDREADY4; centered Routing allocation preserves ring-first Tab order, compact automated context decoration omitted while adjacent exact/status controls retain decoration. Shared knob/surface new tests pass.",
+    "revision_status": "Routing and compact automation final follow-up",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/after-binaries-r4/rill",
+        "sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-final-ui-2026-11-01/native/after-binaries-r4/daw-plugin-host",
+        "sha256": "9a826c234504f43616336b3353ff74fead7b512e3513eb4e71b42fddff680795"
+      }
+    ]
+  },
+  "routing_followup_native": {
+    "at": "2026-11-01T11:45:17.712649+00:00",
+    "status": "complete",
+    "retained_images_refreshed": [
+      "native-04-send-compact-after.png",
+      "native-06-send-wide-after.png"
+    ],
+    "other_16_retained_images_unchanged": true,
+    "evidence": [
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-3/automated-routing-ring.png",
+        "sha256": "0207ba894837a8e8afaabe82e84652aa0abae4d92c8aeeee00f22ec13748edb5",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Dark",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-3/automated-routing-exact.png",
+        "sha256": "0a316e2fda9e8b67167ab7754db9c5e86b8200a3809d1a719d17df3f5c3a3ef4",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Dark",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-3/routing-tab-enter-exact.png",
+        "sha256": "8dd65bf3d3473ed318e238eec5d06633eac7f5181272d280568fbef84360588d",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Dark",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-3/routing-mouse-exact.png",
+        "sha256": "27c88cb1860303af4a19cce4913832086facd5267008da57a4da3b13483b5ddb",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Dark",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-3/routing-mouse-cancelled.png",
+        "sha256": "01ae6340f0376fec9f8755cadefb12196127e1d34b272b8544c13e0db374e9bb",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Dark",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-4/automated-routing-ring.png",
+        "sha256": "c145224bb03ba71b1183d46772cad28f330b92ac88de83f9164301c9112c68ba",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Light",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4-supplemental/case-4/automated-routing-exact.png",
+        "sha256": "ca28c93af71804917542d25ed73c1e54435d8eafd0170fe8be9b52f511649483",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Light",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-4/routing-tab-enter-exact.png",
+        "sha256": "eed6a2730f9b0af3eaa3bf00e1400c19ea11d36021a02158e77f2a89fd58a9b1",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Light",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-4/routing-mouse-exact.png",
+        "sha256": "f8a24da21ff76a3ab6f961110d63cb0fae372d9953fa032524c1f78a91efc9fe",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Light",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      },
+      {
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-4/routing-mouse-cancelled.png",
+        "sha256": "f3774471b9a194ad4a69c593c9beca2db01bd16c9b9a123d45940e12ef1a6acb",
+        "pixels": [
+          800,
+          600
+        ],
+        "theme": "Light",
+        "logical_viewport": [
+          800,
+          600
+        ],
+        "scale": 1.0,
+        "rill_sha256": "1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307"
+      }
+    ],
+    "native_assertions": [
+      {
+        "at": "2026-11-01T11:41:08.958465+00:00",
+        "event": "assertion-pass",
+        "check": "Ring then Tab then Enter opens contextual exact entry",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-3/routing-tab-enter-exact.png"
+      },
+      {
+        "at": "2026-11-01T11:41:13.436240+00:00",
+        "event": "assertion-pass",
+        "check": "Visible send value opens contextual exact entry",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-3/routing-mouse-exact.png"
+      },
+      {
+        "at": "2026-11-01T11:41:21.700655+00:00",
+        "event": "assertion-pass",
+        "check": "Ring then Tab then Enter opens contextual exact entry",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-4/routing-tab-enter-exact.png"
+      },
+      {
+        "at": "2026-11-01T11:41:25.231101+00:00",
+        "event": "assertion-pass",
+        "check": "Visible send value opens contextual exact entry",
+        "source": "/workspace/scratch/rill-final-ui-2026-11-01/native/r4key-supplemental/case-4/routing-mouse-exact.png"
+      }
+    ],
+    "findings": [
+      "Manual and automated compact send rings contain no text or automation rectangle. The exact button and adjacent Automated menu retain automation status.",
+      "Manual send ring click, Tab, then Enter opens contextual Send level exact entry in both compact themes. The visible numeric button also opens the same editor by mouse.",
+      "The wide light Routing ring is centered beside the two detail rows."
+    ],
+    "probe_scope": "Bare Xvfb has no window manager to assign keyboard focus. The first probe was inconclusive; the repeated r4key probe explicitly assigns X11 focus before sending keys and passes. Initial r4-supplemental keyboard-probe images are retained as raw history and excluded from positive keyboard evidence. Build2 numeric-keypad journeys remain the recorded keypad coverage."
+  }
+}

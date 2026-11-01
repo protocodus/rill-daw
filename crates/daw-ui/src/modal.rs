@@ -12,7 +12,10 @@ pub fn modal<R>(
     title: &str,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> ModalResponse<R> {
-    modal_with_title_rows(ctx, id, title, None, contents)
+    // Imported names can exceed the inline keyboard's limit. Reserve a bounded
+    // heading so the decision body and actions retain their compact layout;
+    // bounded_block keeps the complete source text and exposes it on hover.
+    modal_with_title_rows(ctx, id, title, Some(2), contents)
 }
 
 pub(crate) fn modal_with_title_rows<R>(

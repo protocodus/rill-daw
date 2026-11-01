@@ -356,29 +356,23 @@ impl DawApp {
             .clamp(120.0, 320.0)
             .min((content.width() - trailing_width).max(120.0));
         let keyboard_open = daw_ui::name_keyboard_open(ctx, state_id().with("field"));
-        let editor_width = (width + trailing_width).max(if keyboard_open {
-            daw_ui::name_keyboard_width(ctx)
-        } else {
-            0.0
-        });
-        let height = if keyboard_open {
-            daw_ui::tokens::CONTROL_HEIGHT + daw_ui::name_keyboard_height(ctx)
-        } else {
-            daw_ui::tokens::CONTROL_HEIGHT
-        };
+        let editor_size = daw_ui::inline_name_editor_size(ctx, width, keyboard_open);
         let position = egui::pos2(
             anchor.left().clamp(
                 content.left(),
-                (content.right() - editor_width).max(content.left()),
+                (content.right() - editor_size.x).max(content.left()),
             ),
             (anchor.center().y - daw_ui::tokens::CONTROL_HEIGHT * 0.5).clamp(
                 content.top(),
-                (content.bottom() - height).max(content.top()),
+                (content.bottom() - editor_size.y).max(content.top()),
             ),
         );
         let field_id = state_id().with("field");
         let response = egui::Area::new(state_id().with("area"))
             .order(egui::Order::Foreground)
+            // The editor replaces content at its anchor; its surface must be
+            // opaque from the first visible frame, including between controls.
+            .fade_in(false)
             .fixed_pos(position)
             .show(ctx, |ui| {
                 daw_ui::inline_name_editor(

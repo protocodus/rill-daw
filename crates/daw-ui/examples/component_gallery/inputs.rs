@@ -148,6 +148,17 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             });
             ui.add_space(controls::tokens::SPACE_MD);
             controls::switch(ui, &mut state.enabled, "Enable monitoring");
+            ui.allocate_ui_with_layout(
+                egui::vec2(230.0, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    controls::switch(
+                        ui,
+                        &mut state.enabled,
+                        "Monitor the selected channel while recording a new performance",
+                    );
+                },
+            );
             controls::checkbox(ui, &mut state.monitor, "Arm on selection");
             ui.add_space(controls::tokens::SPACE_MD);
             ui.horizontal(|ui| {
@@ -166,8 +177,13 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                             .compact()
                             .diameter(64.0)
                             .perceptual_gain()
+                            .text("Send level")
                             .suffix("×"),
-                    );
+                    )
+                    .on_hover_text(format!(
+                        "Send to Room · {}×\nDrag up/right to increase; down/left to decrease. Shift adjusts finely. Use the value field for exact entry.",
+                        controls::parameter_value_text(state.send_gain),
+                    ));
                     let (_, exact) = controls::automatable_parameter_value_button(
                         ui,
                         "gallery_send_exact",

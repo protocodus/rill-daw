@@ -314,7 +314,10 @@ floating-point unit conversion while still recognizing exact external changes.
 Include any storage quantization or automation conversion in the callback;
 do not hide external changes with a blanket numerical tolerance.
 
-`inline_name_editor` offers **Keyboard** beside its ordinary text field. The
+`inline_name_editor` offers **Keyboard** beside its ordinary text field. Its
+opaque shared surface keeps underlying controls out of the gaps, with 13-point
+insets around the field, actions, and optional keyboard. Anchored hosts use
+`inline_name_editor_size` to reserve the complete surface within the viewport. The
 optional `name_keyboard` pad uses the field's Unicode character selection and
 cursor, supports upper/lowercase letters, digits, spaces, punctuation, Backspace,
 Select all and Clear, and limits new names to 128 characters. **Caps** keeps
@@ -412,9 +415,10 @@ the value, while preserving an unchanged typing draft. A slider's
 automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
 and a muted dash for Bypassed, without covering the center index or captions.
 
-`knob` / `Knob::new` provides a calibrated 270-degree rotary control with
-minimum/maximum captions, a visible value index and, by default, a shared
-numeric editor. Dragging is relative: up or right increases, down or left
+`knob` / `Knob::new` provides a 270-degree rotary control with a shared numeric
+editor. Detailed dials retain minimum/maximum captions and a visible value index;
+dials below 64 points use a plain track and value arc, with their name and numeric
+editor outside the ring. Dragging is relative: up or right increases, down or left
 decreases, and pressing a different part of the dial never jumps the value.
 An owned drag includes movement delivered with the final button release, so
 its result does not depend on the last held-pointer sample.
@@ -422,8 +426,8 @@ Shift makes a drag ten times finer; the numeric field provides the same precisio
 without a modifier. Click the number to type and click elsewhere to commit.
 `step_by` quantizes intentional edits, while `.clamping(SliderClamping::Edits)`
 (the default) preserves existing values when rendering. Values outside the
-editing range remain readable and show **Outside range**. The arc uses halves,
-fifths or tenths according to diameter, always retaining its midpoint.
+editing range remain readable and show **Outside range**. Detailed scales use
+fifths or tenths according to diameter, retaining their midpoint.
 
 Use `.text`, `.suffix`, `.endpoint_labels`, and decimal builders to state the
 parameter's actual units. `.automation(Some(state))` colors the arc and displays
@@ -436,20 +440,23 @@ Native plug-in values are normalized; a 0–100% knob must be labelled as such
 unless the host supplies an actual physical-unit conversion.
 
 Use `.compact().diameter(48.0)` for a dial inside an existing parameter row.
-Compact mode keeps the endpoint labels inside the dial and retains its center
-tick, position index and relative drag behavior. It omits the separate numeric
-editor, label and status rows; the caller supplies a current-value caption,
-hover guidance and exact-entry context menu. `KnobGeometry.number` is
-`Rect::NOTHING` in this mode. The default plug-in parameter knob keeps its
-visible numeric editor.
+Compact mode draws only the track and value arc, without text, a filled face,
+ticks, or an index line. Its square target retains relative dragging and uses
+the ring itself to indicate keyboard focus. `compact_height(diameter)` reserves
+that square; the caller supplies a name, current-value readout, unit-aware hover
+guidance, and exact-entry context menu. `.text(...)` remains its accessible name.
+`KnobGeometry.number` is `Rect::NOTHING`, `ticks` is empty, and `index` identifies
+the value arc endpoint. Small noncompact dials retain the same numeric field
+identity and typing draft when resized across the detailed-scale threshold.
 
 `.perceptual_gain()` gives a nonnegative gain knob continuous travel through
 silence using `ln(1 + gain / 0.01)`, with an inverse mapping for edits. This is a
 control taper: the stored gain and automation mapping remain linear. When the
-range contains unity, the dial paints a hollow landmark and **1× unity** label;
-`KnobGeometry.unity` exposes that position. Routing uses a 64-point compact
-send dial over the existing 0–16× range, with a separate live value button for
-exact entry and the usual Shift fine adjustment.
+range contains unity, detailed dials paint a hollow landmark and **1× unity**
+label; `KnobGeometry.unity` exposes that painted position. Rings omit the landmark.
+Routing uses a 64-point compact ring over the existing 0–16× range, centered beside
+its measured detail rows, with a separate live value button for exact entry and
+the usual Shift fine adjustment.
 
 `assistant(ui, prompt, state, options)` provides a bounded, selectable conversation,
 captured-context label, optional progress, multiline **AI prompt**, and fixed
@@ -586,12 +593,13 @@ Each group wraps intact at narrow widths, without changing playback or history.
 
 `quiet_button`, `quiet_toggle` and the quiet menu variants remove only the idle
 box. They retain full 34-point targets, hover/focus surfaces, accessible labels,
-native popup behavior and selected-state feedback. Use these secondary controls
+native popup behavior and selected-state feedback. Menu openers retain their
+open surface and accent border while focus moves into the popup. Use these secondary controls
 in persistent toolbars; keep explicit filled actions for primary tasks and
 confirmation. `command_group` supplies one rounded surface, five-point padding
 and complete-group wrapping, without taking input itself.
 
-`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
+`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows measure their title/detail stack with 13-point insets and a 5-point text gap. They reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
 `device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections and producers. `filter_chip` shows an active filter and removes it when clicked; pair it with a **Clear filters** action.
 
@@ -754,7 +762,7 @@ then **Output** and auxiliary sends. `mixer_fader` applies the shared slider's
 mixer skin: a recessed vertical rail, a clear rectangular handle and calibrated
 dB landmarks. `mixer_pan` uses the shared compact rotary knob in the same
 55-point parameter row, retaining relative dragging, exact-value context entry
-and automation actions. Its 48-point dial shows L/R and a fixed center tick;
+and automation actions. Its 48-point ring contains no text or ticks;
 the adjacent caption shows **Pan C**, **Pan L…** or **Pan R…**. The complete row
 is an exact-entry context target, and `knob_geometry` returns the actual dial
 geometry through its response ID. The full-height volume fader remains separate.
@@ -867,7 +875,7 @@ Undo/Redo restores the affected clip/note selection and explicit phrase span.
 Presentation snapshots follow the retained project history IDs and use a
 separate 8 MiB budget; they contain no audio samples.
 
-`modal(ctx, id, title, contents)` creates a bounded, centered decision dialog using the shared typography, border and shadow. The caller owns the decision and cancellation policy; backdrop clicks never approve an action. Keep decisions short and block background shortcuts and dropped files while they are pending.
+`modal(ctx, id, title, contents)` creates a bounded, centered decision dialog using the shared typography, border and shadow. Ordinary titles are bounded to two lines, with full source text retained for accessibility and hover, so long imported names cannot displace actions. The caller owns the decision and cancellation policy; backdrop clicks never approve an action. Keep decisions short and block background shortcuts and dropped files while they are pending.
 
 New, Open, recovery and Quit check native plugin state before deciding whether the document has unsaved changes. **Save changes?** offers Save, Don't save and Cancel; Escape cancels and retains the current workspace. Canceling the native save picker keeps the decision open. Save waits for the final native snapshot and successful file write before continuing; failures keep the project and show an error in the dialog. Ctrl/Cmd+S, Ctrl/Cmd+Shift+S and Ctrl/Cmd+O remain available from focused utility views.
 
@@ -881,7 +889,7 @@ The original Rill outline icon pack uses a 24-unit vector grid and a consistent 
 
 Disable a group with `ui.add_enabled_ui(false, |ui| ...)`, or use `ui.add_enabled(enabled, button_widget(...))`. Disabled components do not change values from pointer or keyboard input. Scope repeated rows using `ui.push_id(model_id, ...)`; repeated labels alone are not sufficient persistent identity for every control.
 
-Native buttons, checkboxes, radio choices, text fields, dropdowns, and numeric controls retain egui's keyboard behavior. The custom visual switch exposes a labelled checkbox role and selected state through `WidgetInfo`; its whole label/track area accepts clicks, and Space or Enter activates it when focused. It paints a visible focus ring. Supply a descriptive label, including for icon-only controls, through their response's accessibility/widget metadata where the visual label cannot describe the action.
+Native buttons, checkboxes, radio choices, text fields, dropdowns, and numeric controls retain egui's keyboard behavior. The custom visual switch exposes a labelled checkbox role and selected state through `WidgetInfo`; its whole label/track area accepts clicks, and Space or Enter activates it when focused. Wrapped labels retain eight-point vertical insets; single-line switches keep their 34-point target. It paints a visible focus ring. Supply a descriptive label, including for icon-only controls, through their response's accessibility/widget metadata where the visual label cannot describe the action.
 
 The library's headless interaction tests exercise pointer activation on a switch label, focus and keyboard activation, disabled input, choice change reporting, Unicode text entry, dropdown selection, compact button/numeric-control layout isolation, and hidden popups. These test behavior without coupling application views to widget internals.
 

@@ -57,6 +57,19 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
     if !ui.is_rect_visible(response.rect) {
         return;
     }
+    // Compact rings already encode automation on their value arc. A generic
+    // rectangular badge would put text back inside the text-free control.
+    // Wider caption rows and separate value buttons retain their own markers.
+    if crate::knob_geometry(ui.ctx(), response.id).is_some_and(|knob| {
+        knob.divisions == 0
+            && knob.number == egui::Rect::NOTHING
+            && knob
+                .dial
+                .expand(1.0 / ui.ctx().pixels_per_point())
+                .contains_rect(response.rect)
+    }) {
+        return;
+    }
     let rect = response.rect;
     let color = state.color(ui.ctx());
     ui.painter().rect_stroke(

@@ -100,7 +100,7 @@ fn assert_knob_paint(state: &Value, id: u64, expected: f64) {
     let knob = &channel["pan_knob"];
     assert!(knob.is_object(), "Missing rotary geometry");
     assert_eq!(knob["range"], json!([-1.0, 1.0]));
-    assert_eq!(knob["divisions"], 2);
+    assert_eq!(knob["divisions"], 0);
     assert!(
         knob["number"].is_null(),
         "The compact row uses its shared exact-value context menu"
@@ -116,7 +116,7 @@ fn assert_knob_paint(state: &Value, id: u64, expected: f64) {
     near(dial_max[1] - dial_min[1], 48.0);
     near(
         row_max[1] - row_min[1],
-        f64::from(daw_ui::Knob::compact_height(48.0)),
+        f64::from(daw_ui::Knob::compact_height(48.0).max(daw_ui::tokens::PARAMETER_ROW_HEIGHT)),
     );
     assert!(dial_min[0] >= row_min[0] && dial_min[1] >= row_min[1]);
     assert!(dial_max[0] <= row_max[0] && dial_max[1] <= row_max[1]);
@@ -128,34 +128,6 @@ fn assert_knob_paint(state: &Value, id: u64, expected: f64) {
     assert!(distance(point(&knob["max_position"]), maximum) < 0.6);
     assert!(distance(point(&knob["index"]), index) < 0.6);
 
-    let lines = state["painted_lines"].as_array().unwrap();
-    let has_line = |a: [f64; 2], b: [f64; 2], width: f64| {
-        lines.iter().any(|line| {
-            let actual_a = point(&line["points"][0]);
-            let actual_b = point(&line["points"][1]);
-            ((distance(actual_a, a) < 0.6 && distance(actual_b, b) < 0.6)
-                || (distance(actual_a, b) < 0.6 && distance(actual_b, a) < 0.6))
-                && (line["stroke_width"].as_f64().unwrap() - width).abs() < 0.1
-        })
-    };
-    assert!(
-        has_line(
-            radial(center, radius * 0.18, (expected + 1.0) * 0.5),
-            index,
-            2.0
-        ),
-        "The painted rotary index must point to the effective pan value"
-    );
-    for fraction in [0.0, 0.5, 1.0] {
-        assert!(
-            has_line(
-                radial(center, radius + 3.0, fraction),
-                radial(center, radius + 5.0, fraction),
-                1.0
-            ),
-            "Missing calibrated rotary tick {fraction}"
-        );
-    }
     assert!(
         state["painted_paths"]
             .as_array()
@@ -171,19 +143,39 @@ fn assert_knob_paint(state: &Value, id: u64, expected: f64) {
         "The complete rotary scale must be painted between its endpoints"
     );
     assert!(
-        state["painted_circles"]
+        state["painted_paths"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|circle| {
-                distance(point(&circle["center"]), center) < 0.6
-                    && circle["radius"].as_f64().unwrap() > radius * 0.6
-                    && circle["radius"].as_f64().unwrap() < radius
+            .any(|path| {
+                let points = path["points"].as_array().unwrap();
+                path["closed"] == false
+                    && !points.is_empty()
+                    && (path["stroke_width"].as_f64().unwrap() - 2.5).abs() < 0.1
+                    && distance(point(points.first().unwrap()), minimum) < 0.6
+                    && distance(point(points.last().unwrap()), index) < 0.6
             }),
-        "The dial needs a visible body around its index"
+        "The ring's active arc must end at the effective pan value"
     );
-    caption_in_row(state, &channel["pan"], "L");
-    caption_in_row(state, &channel["pan"], "R");
+    assert!(
+        !state["painted_circles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|circle| distance(point(&circle["center"]), center) < 0.6),
+        "The compact ring has no dial face or center cap"
+    );
+    for label in state["label_rects"].as_array().unwrap() {
+        let a = point(&label["min"]);
+        let b = point(&label["max"]);
+        assert!(
+            b[0] <= dial_min[0]
+                || a[0] >= dial_max[0]
+                || b[1] <= dial_min[1]
+                || a[1] >= dial_max[1],
+            "The compact dial must be text-free: {label}"
+        );
+    }
     caption_in_row(
         state,
         &channel["pan"],

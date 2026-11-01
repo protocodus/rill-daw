@@ -6,6 +6,10 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
 fn fixture(reverse: bool, ghost: bool) -> (Harness, u64) {
+    named_fixture(reverse, ghost, "Quiet spaces")
+}
+
+fn named_fixture(reverse: bool, ghost: bool, name: &str) -> (Harness, u64) {
     let mut app = Harness::new();
     let path = app.directory.path().join("silence-source.wav");
     AudioData {
@@ -27,7 +31,7 @@ fn fixture(reverse: bool, ghost: bool) -> (Harness, u64) {
     let mut project = Project::new();
     let track = project.add_audio_track("Silence editing");
     project.track_mut(track).unwrap().gain = 1.0;
-    let mut clip = Clip::audio("Quiet spaces", 1.0, 4.0, path.to_string_lossy());
+    let mut clip = Clip::audio(name, 1.0, 4.0, path.to_string_lossy());
     if let ClipContent::Audio { reverse: value, .. } = &mut clip.content {
         *value = reverse;
     }
@@ -39,7 +43,7 @@ fn fixture(reverse: bool, ghost: bool) -> (Harness, u64) {
     let path = app.directory.path().join("silence.json");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
-    app.click("Quiet spaces");
+    app.click(name);
     app.click("Window");
     app.click("Clip Editor");
     (app, id)
@@ -128,6 +132,60 @@ fn compact_silence_feedback_keeps_apply_and_cancel_targets_fixed() {
         let canceled = app.click("Cancel");
         assert!(canceled["audio_silence"].is_null());
         app.quit();
+    }
+}
+
+#[test]
+fn imported_long_clip_names_keep_silence_controls_and_cancel_reachable() {
+    let name = format!("{} · 夜の音楽", "W".repeat(512));
+    for dark in [false, true] {
+        for density in [1.0, 1.25, 2.0] {
+            let (mut app, _) = named_fixture(false, false, &name);
+            app.command(json!({"command":"system_theme","dark":dark}));
+            app.command(
+                json!({"command":"viewport","width":800,"height":600,"pixels_per_point":density}),
+            );
+            let before = open(&mut app);
+            for control in before["audio_silence"]["controls"].as_array().unwrap() {
+                assert!(control[0].as_f64().unwrap() >= 0.0);
+                assert!(control[1].as_f64().unwrap() >= 0.0);
+                assert!(control[2].as_f64().unwrap() <= 800.0);
+                assert!(control[3].as_f64().unwrap() <= 600.0);
+            }
+            let title = format!("Strip silence · {name}");
+            let mut actions = Vec::new();
+            for text in [title.as_str(), "Apply strip silence", "Cancel"] {
+                let label = before["label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|label| label["text"] == text)
+                    .unwrap_or_else(|| panic!("Missing {text}"));
+                assert!(label["min"][1].as_f64().unwrap() >= 0.0);
+                assert!(label["max"][1].as_f64().unwrap() <= 600.0);
+                if text != title.as_str() {
+                    actions.push(label.clone());
+                }
+            }
+            let changed = number(&mut app, 1, 2000.0);
+            for action in actions {
+                let after = changed["label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|label| label["text"] == action["text"])
+                    .unwrap();
+                assert_eq!(
+                    after, &action,
+                    "Analysis must keep the footer targets fixed"
+                );
+            }
+            assert_eq!(changed["project"], before["project"]);
+            let canceled = app.click("Cancel");
+            assert!(canceled["audio_silence"].is_null());
+            assert_eq!(canceled["project"], before["project"]);
+            app.quit();
+        }
     }
 }
 

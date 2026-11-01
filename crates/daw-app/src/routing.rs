@@ -297,16 +297,34 @@ impl DawApp {
                                         track: track_id,
                                         bus: send.target_bus,
                                     };
-                                    let response = ui.add(
-                                        widgets::knob(&mut gain, parameter.range())
-                                            .compact()
-                                            .diameter(64.0)
-                                            .perceptual_gain()
-                                            .clamping(egui::SliderClamping::Edits)
-                                            .automation(state.map(|(_, status, _)| status))
-                                            .suffix("×")
-                                            .text("Level"),
-                                    ).on_hover_text(format!(
+                                    // Both native detail rows fit the supported minimum
+                                    // width. Reserve their measured height before the ring
+                                    // so visual order and native Tab order stay the same.
+                                    let font = egui::TextStyle::Button.resolve(ui.style());
+                                    let row_height = (ui.fonts_mut(|fonts| fonts.row_height(&font))
+                                        + 2.0 * ui.spacing().button_padding.y)
+                                        .max(widgets::tokens::CONTROL_HEIGHT);
+                                    let density = ui.ctx().pixels_per_point();
+                                    let row_height = (row_height * density).ceil() / density;
+                                    let send_row_height = (2.0 * row_height + ui.spacing().item_spacing.y)
+                                        .max(widgets::Knob::compact_height(64.0));
+                                    ui.set_row_height(send_row_height);
+                                    let response = ui.push_id("send_level_knob", |ui| {
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(64.0, send_row_height),
+                                            egui::Layout::left_to_right(egui::Align::Center),
+                                            |ui| ui.add(
+                                                widgets::knob(&mut gain, parameter.range())
+                                                    .compact()
+                                                    .diameter(64.0)
+                                                    .perceptual_gain()
+                                                    .clamping(egui::SliderClamping::Edits)
+                                                    .automation(state.map(|(_, status, _)| status))
+                                                    .suffix("×")
+                                                    .text("Level"),
+                                            ),
+                                        ).inner
+                                    }).inner.on_hover_text(format!(
                                         "{name}: {}×\nDrag up/right to increase; down/left to decrease. Shift for fine adjustment. Click the value for exact entry.",
                                         daw_ui::parameter_value_text(f64::from(gain)),
                                     ));
@@ -321,7 +339,7 @@ impl DawApp {
                                             "×",
                                             &name,
                                         );
-                                    let (action, exact) = ui.vertical(|ui| {
+                                    let details = ui.vertical(|ui| {
                                         let entry = ui.horizontal_wrapped(|ui| {
                                     widgets::text::label(ui, "Level");
                                     daw_ui::automatable_parameter_value_button(
@@ -379,7 +397,8 @@ impl DawApp {
                                     }
                                         });
                                         entry
-                                    }).inner;
+                                    });
+                                    let (action, exact) = details.inner;
                                     let action = action.or(context_action);
                                     let exact = exact.or(context_exact);
                                     if let Some(action) = action {

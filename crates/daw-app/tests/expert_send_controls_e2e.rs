@@ -108,38 +108,76 @@ fn routing(app: &mut Harness) -> Value {
     app.click("Routing")
 }
 
-/// Locate the actual painted body, independently of a diagnostic that could
-/// describe a knob while the application still renders a straight rail.
+/// Locate the complete painted 270-degree ring, independently of diagnostics.
+/// Its progress arc, relative drag target and exact readout remain distinct.
 fn send_dial(state: &Value) -> (f64, f64) {
     let (level_x, level_y) = center(label(state, "Level"));
-    let circle = state["painted_circles"]
+    state["painted_paths"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|circle| {
-            let radius = circle["radius"].as_f64().unwrap();
-            let x = circle["center"][0].as_f64().unwrap();
-            let y = circle["center"][1].as_f64().unwrap();
-            (15.0..=25.0).contains(&radius)
-                && (x - level_x).abs() < 130.0
-                && (y - level_y).abs() < 65.0
+        .find_map(|path| {
+            let points = path["points"].as_array().unwrap();
+            if path["closed"] != false || points.len() < 32 {
+                return None;
+            }
+            let minimum = points.iter().fold([f64::INFINITY; 2], |minimum, point| {
+                [
+                    minimum[0].min(point[0].as_f64().unwrap()),
+                    minimum[1].min(point[1].as_f64().unwrap()),
+                ]
+            });
+            let right = points
+                .iter()
+                .map(|point| point[0].as_f64().unwrap())
+                .fold(f64::NEG_INFINITY, f64::max);
+            let radius = (right - minimum[0]) * 0.5;
+            let x = minimum[0] + radius;
+            let y = minimum[1] + radius;
+            if !(23.0..=26.0).contains(&radius)
+                || x >= level_x
+                || level_x - x > 130.0
+                || (y - level_y).abs() > 80.0
+            {
+                return None;
+            }
+            let endpoint = radius * std::f64::consts::FRAC_1_SQRT_2;
+            let first = points.first().unwrap();
+            let last = points.last().unwrap();
+            if (first[0].as_f64().unwrap() - (x - endpoint)).abs() > 0.6
+                || (first[1].as_f64().unwrap() - (y + endpoint)).abs() > 0.6
+                || (last[0].as_f64().unwrap() - (x + endpoint)).abs() > 0.6
+                || (last[1].as_f64().unwrap() - (y + endpoint)).abs() > 0.6
+            {
+                return None;
+            }
+            Some((x, y))
         })
-        .max_by(|a, b| {
-            a["radius"]
-                .as_f64()
-                .unwrap()
-                .total_cmp(&b["radius"].as_f64().unwrap())
-        })
-        .unwrap_or_else(|| {
-            panic!(
-                "Missing visible rotary send control: {}",
-                state["visible_labels"]
-            )
-        });
-    (
-        circle["center"][0].as_f64().unwrap(),
-        circle["center"][1].as_f64().unwrap(),
-    )
+        .unwrap_or_else(|| panic!("Missing visible send ring: {}", state["visible_labels"]))
+}
+
+fn assert_send_row(state: &Value) {
+    let (x, y) = send_dial(state);
+    let first = center(label(state, "Level")).1;
+    let last = ["Pre", "Post", "Automation", "Automated", "Overridden"]
+        .iter()
+        .filter(|text| visible(state, text))
+        .map(|text| center(label(state, text)).1)
+        .fold(first, f64::max);
+    assert!(
+        (y - (first + last) * 0.5).abs() < 0.75,
+        "The ring must center on the measured detail rows: y={y}, first={first}, last={last}"
+    );
+    for caption in state["label_rects"].as_array().unwrap() {
+        let left = caption["min"][0].as_f64().unwrap();
+        let top = caption["min"][1].as_f64().unwrap();
+        let right = caption["max"][0].as_f64().unwrap();
+        let bottom = caption["max"][1].as_f64().unwrap();
+        assert!(
+            right <= x - 32.0 || left >= x + 32.0 || bottom <= y - 32.0 || top >= y + 32.0,
+            "The small send ring must be text-free: {caption}"
+        );
+    }
 }
 
 fn send_readout(state: &Value) -> &Value {
@@ -211,8 +249,9 @@ fn send_small_rotary_adjustments_remain_below_unity_and_the_readout_tracks_live_
         app.command(json!({"command":"viewport", "width":1100, "height":850,
             "pixels_per_point":density}));
         let baseline = routing(&mut app);
-        label(&baseline, "1× unity");
+        assert!(!visible(&baseline, "1× unity"));
         let painted = app.command(json!({"command":"inspect", "paint":true}));
+        assert_send_row(&painted);
         let (x, y) = send_dial(&painted);
         unchanged(
             &app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y})),
@@ -245,6 +284,47 @@ fn send_small_rotary_adjustments_remain_below_unity_and_the_readout_tracks_live_
             assert_eq!(shown_gain(&app.inspect()), 0.25);
         }
         app.quit();
+    }
+}
+
+#[test]
+fn send_ring_stays_centered_and_tab_reaches_its_adjacent_exact_value() {
+    for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
+        for automated in [false, true] {
+            let mut app = Harness::new();
+            fixture(&mut app, 0.25, automated);
+            app.command(json!({"command":"system_theme", "dark":dark}));
+            app.command(json!({"command":"viewport", "width":800, "height":600,
+                "pixels_per_point":density}));
+            let original = routing(&mut app);
+            for (width, height) in [(800, 600), (1100, 850)] {
+                app.command(json!({"command":"viewport", "width":width, "height":height,
+                    "pixels_per_point":density}));
+                let state = app.command(json!({"command":"inspect", "paint":true}));
+                unchanged(&state, &original);
+                assert_send_row(&state);
+                let status = if automated { "Automated" } else { "Automation" };
+                assert!(
+                    (center(label(&state, status)).1 - center(label(&state, "Pre")).1).abs() < 0.75,
+                    "The supported popup width must retain both complete detail rows"
+                );
+                let (x, y) = send_dial(&state);
+                unchanged(
+                    &app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y})),
+                    &original,
+                );
+                // Native focus follows the visual ring → adjacent exact value
+                // order, before the second-row mode and automation actions.
+                app.key("Tab");
+                let opened = app.key("Enter");
+                label(&opened, SEND_TITLE);
+                label(&opened, "Apply value");
+                unchanged(&opened, &original);
+                let cancelled = app.click("Cancel");
+                unchanged(&cancelled, &original);
+            }
+            app.quit();
+        }
     }
 }
 

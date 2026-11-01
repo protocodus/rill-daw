@@ -1,0 +1,18 @@
+Independent native final-UI audit
+
+18 unmodified PNGs form nine matched before/after pairs: compact mixer pan, compact and wide send knobs, long-name Strip silence in both themes, compact and wide inline Rename, the parameter-unit row, and an open Channel menu. Seven retained AFTER images use coordinated build2; the compact and wide Routing AFTER images use final build4. The 64-view matrix remains separately identified as draft1. Every image records its actual binary hash, theme, viewport, source path, and raw-image hash in native-manifest.json.
+
+The draft-1 native matrix refreshes all 64 primary view captures in dark/light at 1440x1000 and 800x600. Focused mouse checks cover compact Pan exact entry, keypad and Cancel, send numeric keypad access, long-name Strip silence Cancel, and inline Rename keyboard/gap clicks in compact and wide views. Original baseline utility captures remain in the raw evidence; unrelated intermediate utilities were not repeated.
+
+The baseline demonstrates small-knob text clutter, underlying toolbar/clip text visible through inline Rename gaps, long Strip silence titles pushing actions beyond the viewport, and a repeated plug-in percent unit. Final screenshots and review-findings.json document the corrected results. Baseline gap clicks did not demonstrate click-through; native checks preserve that distinction.
+
+No playback, audio audition, or project saves. Original study projects and initial copied fixtures retain their hashes. The extra long-silence fixture changes only a copied clip name; a separate automated-send fixture adds a send-gain lane to a private copy without changing asset bytes. Each capture uses private configuration, cache, scratch files, a null audio server, display, and owned process group. All owned sessions are stopped and display sockets removed.
+
+Raw evidence: /workspace/scratch/rill-final-ui-2026-11-01/native
+Baseline binary: a964dd218624312ba725193ed39c343c50bacbe6314b14125c6b36a9c925a72f
+Build2 comparison binary: 3e31dffd5b794c509b5db14eb753de3496602df53900985fe0ad1342b5f61c36
+Build4 Routing binary: 1ee592af0b52653d6ba461d0ad1e79c86c9c68dc5338019270642c28120ef307
+
+Early native Rename captures in both themes show an opaque surface at the first observed sample (about 0.11–0.20 seconds after mouse release). These are not exact renderer-first-frame measurements; the shared test owns that assertion. All four settled Rename gap-click pairs are byte-identical. No new clipping or unreachable control was found in the focused final checks.
+
+Final build4 Routing follow-up: compact dark/light automated sends have pure rings and adjacent automation status. Clicking the manual ring, pressing Tab, then Enter opens contextual Send level exact entry in both compact themes; direct numeric-button mouse entry also passes. The bare-Xvfb probe needed explicit X11 window focus, and only the corrected r4key evidence supports the keyboard result. The two Routing AFTER images were refreshed; the other 16 retained PNGs remain byte-identical. All new sessions are stopped and their display sockets removed.

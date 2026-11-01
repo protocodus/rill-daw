@@ -253,7 +253,7 @@ Drag either visible endpoint of the strip to adjust the loop directly. The drag 
 
 Mixer channels read from top to bottom: source, **Effects** and inserts, volume
 and pan, **Mute**/**Solo**, stereo **Level**, then **Output** and sends. The fader
-has a calibrated dB scale. Pan uses a compact rotary knob: drag up or right to
+has a calibrated dB scale. Pan uses a simple ring with a separate readout: drag up or right to
 move toward R, down or left toward L; Shift makes adjustments finer. Pressing
 the dial does not jump its value. Its readout shows **C** at center and **L/R**
 percentages elsewhere. Right-click anywhere in the Pan row for exact percentage
@@ -277,8 +277,8 @@ An empty channel's own **Add send…** opens the same destination choices direct
 The menu names its source, so you can add a send without changing the selected
 channel. Click an existing send summary to edit its settings in Routing.
 
-Routing gives each send a larger level knob, a **1× unity** mark and a clickable
-value beside **Level**. Drag up or right to increase the send, down or left to
+Routing gives each send a text-free level ring and a clickable value beside
+**Level**. Drag up or right to increase the send, down or left to
 decrease it; Shift makes adjustments finer. The taper gives quieter sends more
 useful travel while retaining the 0–16× gain range. Click the value for named
 exact entry and **123** mouse digits. The value readout follows the dial.
@@ -343,8 +343,9 @@ automation** holds the current value without deleting the curve; **Resume
 automation** returns to the saved curve at the current playhead. Applying a new
 value to an automated control creates the same visible override as dragging it.
 
-The plug-in parameter browser uses a knob with a visible range, position index,
-and editable number. Drag vertically or horizontally to adjust it; Shift makes
+The plug-in parameter browser keeps the parameter name and editable number
+outside the dial. Small dials use simple rings; larger dials retain a detailed
+scale and position index. Drag vertically or horizontally to adjust it; Shift makes
 dragging finer. Right-click the knob for exact entry with **Apply value** and
 **Cancel**, or open **123** there for mouse-only digit entry. Its value is
 explicitly a normalized percentage, because plug-in

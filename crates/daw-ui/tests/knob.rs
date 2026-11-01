@@ -124,8 +124,8 @@ fn gain_taper_gives_sub_unity_adjustments_room_and_keeps_silence_and_full_range(
     let (_, geometry, output) = gain_frame(&ctx, &mut value, vec![]);
     assert_eq!(value, 0.25);
     assert_eq!(geometry.range, [0.0, 16.0]);
-    assert!(geometry.unity.is_some());
-    assert!(labels(&output).contains(&"1× unity"));
+    assert!(geometry.unity.is_none());
+    assert!(labels(&output).is_empty());
     let start = geometry.center;
     gain_frame(
         &ctx,
@@ -208,7 +208,7 @@ fn arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density() {
                 Modifiers::NONE,
                 vec![],
             );
-            for (diameter, divisions) in [(48.0, 2), (84.0, 5), (140.0, 10)] {
+            for (diameter, divisions) in [(48.0, 0), (84.0, 5), (140.0, 10)] {
                 let options = Options {
                     diameter,
                     ..Default::default()
@@ -225,11 +225,12 @@ fn arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density() {
                     let expected = geometry.center + egui::Vec2::angled(angle) * geometry.radius;
                     assert!(geometry.index.distance(expected) < 0.001);
                     let middle = geometry.center - vec2(0.0, geometry.radius);
-                    assert!(
+                    assert_eq!(
                         geometry
                             .ticks
                             .iter()
-                            .any(|point| point.distance(middle) < 0.001)
+                            .any(|point| point.distance(middle) < 0.001),
+                        diameter >= 64.0,
                     );
                     assert!(geometry.dial.contains(geometry.minimum));
                     assert!(geometry.dial.contains(geometry.maximum));
@@ -254,8 +255,10 @@ fn arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density() {
                         diameter
                     );
                     let rendered = labels(&output);
-                    assert!(rendered.contains(&"0 %"));
-                    assert!(rendered.contains(&"100 %"));
+                    if diameter >= 64.0 {
+                        assert!(rendered.contains(&"0 %"));
+                        assert!(rendered.contains(&"100 %"));
+                    }
                     if actual == 12.3456789 {
                         assert!(
                             rendered.iter().any(|label| label.contains("12.3456789")),
@@ -264,11 +267,17 @@ fn arc_endpoints_midpoint_ticks_and_exact_number_agree_at_every_density() {
                     }
                     assert!(
                         output.shapes.iter().any(|shape| match &shape.shape {
-                            egui::Shape::LineSegment { points, stroke } =>
+                            egui::Shape::LineSegment { points, stroke } if diameter >= 64.0 =>
                                 stroke.width == 2.0 && points[1].distance(expected) < 0.001,
+                            egui::Shape::Path(path) if diameter < 64.0 =>
+                                path.stroke.width == 2.5
+                                    && path
+                                        .points
+                                        .last()
+                                        .is_some_and(|point| point.distance(expected) < 0.001),
                             _ => false,
                         }),
-                        "the visible index must point at the actual value"
+                        "the visible arc or index must end at the actual value"
                     );
                 }
             }
@@ -640,7 +649,7 @@ fn compact_frame(
 }
 
 #[test]
-fn compact_knob_reserves_its_captions_without_removing_the_default_numeric_editor() {
+fn compact_knob_is_text_free_without_removing_the_default_numeric_editor() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
     let mut value = 140.123_456_789;
@@ -660,17 +669,10 @@ fn compact_knob_reserves_its_captions_without_removing_the_default_numeric_edito
     assert_eq!(value, 140.123_456_789);
     assert!(geometry.index.distance(geometry.maximum) < 0.001);
     let rendered = labels(&output);
-    assert!(rendered.contains(&"L") && rendered.contains(&"R"));
-    for omitted in [
-        "Normalized value",
-        AutomationState::Read.label(),
-        "Outside range",
-    ] {
-        assert!(
-            !rendered.contains(&omitted),
-            "compact presentation must not add {omitted} rows"
-        );
-    }
+    assert!(
+        rendered.is_empty(),
+        "Compact knobs paint no labels: {rendered:?}"
+    );
     let (full_after, geometry_after, output) = compact_frame(&ctx, &mut value, false, vec![]);
     assert_eq!(full_after.rect.size(), full_before.rect.size());
     assert_eq!(geometry_after.number.size(), geometry_before.number.size());
@@ -682,73 +684,293 @@ fn compact_knob_reserves_its_captions_without_removing_the_default_numeric_edito
 }
 
 #[test]
-fn compact_scale_captions_keep_edge_and_tick_clearance_at_display_scales() {
-    for scale in [1.0, 1.25, 2.0] {
-        for diameter in [48.0, 64.0] {
-            for enabled in [true, false] {
-                let ctx = Context::default();
-                daw_ui::theme::apply(&ctx);
-                ctx.set_pixels_per_point(scale);
-                let mut value = 0.25;
-                let mut result = None;
-                let output = ctx.run(
-                    RawInput {
-                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(440.0, 420.0))),
-                        ..Default::default()
-                    },
-                    |ctx| {
-                        egui::CentralPanel::default().show(ctx, |ui| {
-                            let response = ui.add_enabled(
-                                enabled,
-                                daw_ui::knob(&mut value, 0.0..=16.0)
-                                    .compact()
-                                    .diameter(diameter)
-                                    .perceptual_gain()
-                                    .suffix("×"),
+fn compact_rings_keep_clearance_focus_and_automation_without_faces_ticks_or_text() {
+    for appearance in [
+        daw_ui::theme::Appearance::Light,
+        daw_ui::theme::Appearance::Dark,
+    ] {
+        for scale in [1.0, 1.25, 2.0] {
+            for diameter in [48.0, 64.0] {
+                for enabled in [true, false] {
+                    for automation in [
+                        None,
+                        Some(AutomationState::Read),
+                        Some(AutomationState::Bypassed),
+                        Some(AutomationState::Overridden),
+                    ] {
+                        let ctx = Context::default();
+                        daw_ui::theme::apply(&ctx);
+                        daw_ui::theme::set_appearance(&ctx, appearance);
+                        ctx.set_pixels_per_point(scale);
+                        let mut value = 0.25;
+                        let mut draw = |events| {
+                            let mut result = None;
+                            let output = ctx.run(
+                                RawInput {
+                                    screen_rect: Some(Rect::from_min_size(
+                                        Pos2::ZERO,
+                                        vec2(440.0, 420.0),
+                                    )),
+                                    events,
+                                    ..Default::default()
+                                },
+                                |ctx| {
+                                    egui::CentralPanel::default().show(ctx, |ui| {
+                                        let response = ui.add_enabled(
+                                            enabled,
+                                            daw_ui::knob(&mut value, 0.0..=16.0)
+                                                .compact()
+                                                .diameter(diameter)
+                                                .perceptual_gain()
+                                                .suffix("×")
+                                                .text("Send level")
+                                                .automation(automation),
+                                        );
+                                        daw_ui::automatable_parameter_value_context_named(
+                                            ui,
+                                            &response,
+                                            daw_ui::AutomationControl::Send { track: 1, bus: 2 },
+                                            automation.map(|state| (3, state)),
+                                            value,
+                                            0.0..=16.0,
+                                            "×",
+                                            "Send level",
+                                        );
+                                        let geometry =
+                                            daw_ui::knob_geometry(ctx, response.id).unwrap();
+                                        result = Some((response, geometry));
+                                    });
+                                },
                             );
-                            let geometry = daw_ui::knob_geometry(ctx, response.id).unwrap();
-                            result = Some((response, geometry));
-                        });
-                    },
-                );
-                let (response, geometry) = result.unwrap();
-                assert_eq!(geometry.dial.size(), vec2(diameter, diameter));
-                assert_eq!(
-                    response.rect.height(),
-                    daw_ui::Knob::compact_height(diameter)
-                );
-                let tick_bottom = geometry
-                    .ticks
-                    .iter()
-                    .map(|tick| {
-                        let direction = (*tick - geometry.center).normalized();
-                        (geometry.center + direction * (geometry.radius + 5.0)).y + 0.5
-                    })
-                    .fold(f32::NEG_INFINITY, f32::max);
-                let mut captions = 0;
-                for shape in &output.shapes {
-                    if let egui::Shape::Text(text) = &shape.shape
-                        && ["0×", "16×"].contains(&text.galley.text())
-                    {
-                        let bounds = text.galley.rect.translate(text.pos.to_vec2());
-                        assert!(
-                            response
-                                .rect
-                                .shrink(daw_ui::tokens::SPACE_XS - 0.1)
-                                .contains_rect(bounds)
-                        );
-                        assert!(bounds.top() - tick_bottom >= daw_ui::tokens::SPACE_XS - 0.1);
-                        captions += 1;
+                            let (response, geometry) = result.unwrap();
+                            (response, geometry, output)
+                        };
+                        draw(vec![]);
+                        for focused in [false, true] {
+                            // Native keyboard focus emits accessibility metadata
+                            // during this frame. Programmatic focus between
+                            // frames is already focused at frame start and does
+                            // not produce a new FocusGained event.
+                            let events = if focused && enabled {
+                                vec![Event::Key {
+                                    key: egui::Key::Tab,
+                                    physical_key: None,
+                                    pressed: true,
+                                    repeat: false,
+                                    modifiers: Modifiers::NONE,
+                                }]
+                            } else {
+                                vec![]
+                            };
+                            let (response, geometry, output) = draw(events);
+                            assert_eq!(geometry.dial.size(), vec2(diameter, diameter));
+                            assert_eq!(response.rect.size(), vec2(diameter, diameter));
+                            assert_eq!(geometry.number, Rect::NOTHING);
+                            assert_eq!(geometry.divisions, 0);
+                            assert!(geometry.ticks.is_empty() && geometry.unity.is_none());
+                            assert!(labels(&output).is_empty());
+                            let mut arcs = Vec::new();
+                            for shape in &output.shapes {
+                                match &shape.shape {
+                                    egui::Shape::Circle(_)
+                                    | egui::Shape::LineSegment { .. }
+                                    | egui::Shape::Text(_) => {
+                                        panic!(
+                                            "A compact ring must not paint a face, pointer, tick, or text"
+                                        );
+                                    }
+                                    egui::Shape::Path(path) => {
+                                        assert!(
+                                            !path.closed && path.fill == egui::Color32::TRANSPARENT
+                                        );
+                                        for point in &path.points {
+                                            assert!(
+                                                (point.distance(geometry.center) - geometry.radius)
+                                                    .abs()
+                                                    < 0.002
+                                            );
+                                        }
+                                        let bounds = shape.shape.visual_bounding_rect();
+                                        assert!(
+                                            geometry
+                                                .dial
+                                                .shrink(daw_ui::tokens::SPACE_XS - 0.1)
+                                                .contains_rect(bounds)
+                                        );
+                                        assert!(shape.clip_rect.contains_rect(bounds));
+                                        arcs.push(path);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            assert_eq!(arcs.len(), 2, "Only the track and value arcs are painted");
+                            assert_eq!(
+                                arcs[0].stroke.width,
+                                if focused && enabled { 3.0 } else { 2.0 }
+                            );
+                            assert_eq!(arcs[1].stroke.width, 2.5);
+                            assert!(
+                                arcs[1].points.last().unwrap().distance(geometry.index) < 0.001
+                            );
+                            if enabled {
+                                let color = automation
+                                    .map_or(daw_ui::theme::palette(&ctx).accent, |state| {
+                                        state.color(&ctx)
+                                    });
+                                assert_eq!(
+                                    arcs[1].stroke.color,
+                                    egui::epaint::ColorMode::Solid(color)
+                                );
+                                assert_eq!(response.has_focus(), focused);
+                                if focused {
+                                    assert!(
+                                        output.platform_output.events.iter().any(|event| {
+                                            let info = event.widget_info();
+                                            info.typ == egui::WidgetType::Slider
+                                                && info.label.as_deref() == Some("Send level")
+                                                && info.value == Some(0.25)
+                                        }),
+                                        "A text-free ring retains its accessible identity and value"
+                                    );
+                                }
+                            }
+                        }
+                        assert_eq!(value, 0.25, "Presentation never changes the stored value");
                     }
                 }
-                assert_eq!(captions, 2);
-                assert_eq!(
-                    value, 0.25,
-                    "Spacing and disabled presentation never change values"
-                );
             }
         }
     }
+}
+
+#[test]
+fn shrinking_a_detailed_knob_keeps_its_exact_numeric_draft_without_an_empty_caption_row() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let mut value = 50.0;
+    let options = Options::default();
+    let (_, geometry, _) = frame(&ctx, &mut value, options, Modifiers::NONE, vec![]);
+    for pressed in [true, false] {
+        frame(
+            &ctx,
+            &mut value,
+            options,
+            Modifiers::NONE,
+            pointer(
+                geometry.number.center(),
+                PointerButton::Primary,
+                pressed,
+                Modifiers::NONE,
+            ),
+        );
+    }
+    frame(
+        &ctx,
+        &mut value,
+        options,
+        Modifiers::NONE,
+        vec![Event::Text("37.12500".into())],
+    );
+    let focused_number = ctx
+        .memory(|memory| memory.focused())
+        .expect("The exact field is focused");
+    for diameter in [48.0, 63.0, 64.0, 96.0, 48.0] {
+        let (_, geometry, output) = frame(
+            &ctx,
+            &mut value,
+            Options {
+                diameter,
+                ..options
+            },
+            Modifiers::NONE,
+            vec![],
+        );
+        assert_eq!(ctx.memory(|memory| memory.focused()), Some(focused_number));
+        let rendered = labels(&output);
+        assert!(
+            rendered.contains(&"37.12500"),
+            "Resizing keeps the exact native draft: {rendered:?}"
+        );
+        assert!(rendered.contains(&"Normalized value"));
+        assert!(geometry.number.is_positive());
+        assert_eq!(value, 37.125);
+        if diameter < 64.0 {
+            assert!(!rendered.contains(&"0 %") && !rendered.contains(&"100 %"));
+            assert!(
+                (geometry.number.top() - geometry.dial.bottom() - daw_ui::tokens::SPACE_MD).abs()
+                    <= 1.0
+            );
+            assert!(geometry.ticks.is_empty() && geometry.unity.is_none());
+            assert!(
+                !output.shapes.iter().any(|shape| match &shape.shape {
+                    egui::Shape::Circle(circle) => geometry.dial.contains(circle.center),
+                    egui::Shape::LineSegment { points, .. } =>
+                        points.iter().all(|point| geometry.dial.contains(*point)),
+                    egui::Shape::Text(text) => geometry
+                        .dial
+                        .intersects(text.galley.rect.translate(text.pos.to_vec2())),
+                    _ => false,
+                }),
+                "The small dial itself is only arcs; its editable number stays outside"
+            );
+        }
+    }
+}
+
+#[test]
+fn automation_keeps_markers_on_wide_pan_rows_and_separate_value_buttons() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let mut pan = 0.25_f32;
+    let mut geometry = None;
+    let output = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(440.0, 420.0))),
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let response = daw_ui::mixer_pan(ui, &mut pan, 180.0);
+                geometry = daw_ui::knob_geometry(ctx, response.id);
+                daw_ui::paint_automation_control(ui, &response, AutomationState::Read);
+                daw_ui::automatable_parameter_value_button(
+                    ui,
+                    "external_value",
+                    "0.25×",
+                    daw_ui::AutomationControl::Send { track: 1, bus: 2 },
+                    Some((3, AutomationState::Read)),
+                    0.25,
+                    0.0..=16.0,
+                    "×",
+                    "Send level",
+                );
+            });
+        },
+    );
+    let dial = geometry.unwrap().dial;
+    let markers: Vec<_> = output
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text() == "A" => {
+                Some(text.galley.rect.translate(text.pos.to_vec2()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        markers.len(),
+        2,
+        "Both external automation targets retain their state marker"
+    );
+    assert!(markers.iter().all(|marker| !dial.intersects(*marker)));
+    assert!(
+        labels(&output)
+            .iter()
+            .any(|label| label.starts_with("Pan R"))
+    );
+    assert!(labels(&output).contains(&"0.25×"));
+    assert_eq!(pan, 0.25);
 }
 
 #[test]
