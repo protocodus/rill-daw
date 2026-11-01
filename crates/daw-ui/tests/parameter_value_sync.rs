@@ -17,6 +17,8 @@ struct Harness {
     origin: Pos2,
     destination: Pos2,
     changed: bool,
+    range: std::ops::RangeInclusive<f64>,
+    round_trip: Option<fn(f64) -> f64>,
 }
 
 impl Harness {
@@ -31,6 +33,8 @@ impl Harness {
             origin: Pos2::ZERO,
             destination: Pos2::ZERO,
             changed: false,
+            range: 0.0..=16.0,
+            round_trip: None,
         }
     }
 
@@ -47,25 +51,29 @@ impl Harness {
                     ui.spacing_mut().slider_width = 200.0;
                     match self.kind {
                         Control::Slider => {
-                            let response = ui.add(
-                                daw_ui::slider(&mut self.value, 0.0..=16.0)
-                                    .min_decimals(2)
-                                    .max_decimals(6)
-                                    .smart_aim(false)
-                                    .suffix("×"),
-                            );
+                            let mut slider = daw_ui::slider(&mut self.value, self.range.clone())
+                                .min_decimals(2)
+                                .max_decimals(6)
+                                .smart_aim(false)
+                                .suffix("×");
+                            if let Some(convert) = self.round_trip {
+                                slider = slider.display_round_trip(convert);
+                            }
+                            let response = ui.add(slider);
                             let geometry = daw_ui::slider_scale_geometry(ctx, response.id).unwrap();
                             self.origin = geometry.handle;
                             self.destination = geometry.minimum.lerp(geometry.maximum, 0.25);
                             self.changed = response.changed();
                         }
                         Control::Knob => {
-                            let response = ui.add(
-                                daw_ui::knob(&mut self.value, 0.0..=16.0)
-                                    .min_decimals(2)
-                                    .max_decimals(6)
-                                    .suffix("×"),
-                            );
+                            let mut knob = daw_ui::knob(&mut self.value, self.range.clone())
+                                .min_decimals(2)
+                                .max_decimals(6)
+                                .suffix("×");
+                            if let Some(convert) = self.round_trip {
+                                knob = knob.display_round_trip(convert);
+                            }
+                            let response = ui.add(knob);
                             let geometry = daw_ui::knob_geometry(ctx, response.id).unwrap();
                             self.number = geometry.number;
                             self.origin = geometry.center;
@@ -160,6 +168,157 @@ fn painted_number(output: &FullOutput, number: Rect) -> f64 {
             _ => None,
         })
         .expect("a numeric value is visibly painted in the number field")
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PercentStorage {
+    NormalizedF64,
+    PanF32,
+}
+
+impl PercentStorage {
+    fn store(self, percent: f64) -> f64 {
+        match self {
+            Self::NormalizedF64 => percent / 100.0,
+            Self::PanF32 => f64::from(percent as f32 / 100.0),
+        }
+    }
+
+    fn display(self, normalized: f64) -> f64 {
+        match self {
+            Self::NormalizedF64 => normalized * 100.0,
+            Self::PanF32 => f64::from(normalized as f32 * 100.0),
+        }
+    }
+
+    fn conversion(self) -> fn(f64) -> f64 {
+        match self {
+            Self::NormalizedF64 => |value| value / 100.0 * 100.0,
+            Self::PanF32 => |value| f64::from(value as f32 / 100.0 * 100.0),
+        }
+    }
+}
+
+struct PercentHarness {
+    widget: Harness,
+    stored: f64,
+    storage: PercentStorage,
+}
+
+impl PercentHarness {
+    fn new(kind: Control, storage: PercentStorage) -> Self {
+        let mut widget = Harness::new(kind);
+        widget.range = 0.0..=100.0;
+        widget.round_trip = Some(storage.conversion());
+        Self {
+            widget,
+            stored: storage.store(0.25),
+            storage,
+        }
+    }
+
+    fn frame(&mut self, events: Vec<Event>) -> FullOutput {
+        self.widget.value = self.storage.display(self.stored);
+        let output = self.widget.frame(events);
+        if self.widget.changed {
+            self.stored = self.storage.store(self.widget.value);
+        }
+        output
+    }
+
+    fn focus(&mut self) -> Id {
+        self.frame(vec![]);
+        let center = self.widget.number.center();
+        self.frame(pointer(center, true));
+        self.frame(pointer(center, false));
+        self.frame(vec![]);
+        self.widget.ctx.memory(|memory| memory.focused()).unwrap()
+    }
+}
+
+#[test]
+fn normalized_model_round_trips_retain_typed_digits_caret_and_real_external_updates() {
+    for kind in [Control::Slider, Control::Knob] {
+        for (storage, draft) in [
+            (PercentStorage::NormalizedF64, "61.234500"),
+            (PercentStorage::PanF32, "14.1400"),
+        ] {
+            let mut app = PercentHarness::new(kind, storage);
+            let id = app.focus();
+            app.frame(vec![Event::Text(draft.into())]);
+            let stored = app.stored;
+            app.frame(key(Key::ArrowLeft));
+            let insertion = caret(&app.widget.ctx, id);
+            for _ in 0..4 {
+                app.frame(vec![]);
+                assert_eq!(
+                    app.widget.text(id).as_deref(),
+                    Some(draft),
+                    "{kind:?} {storage:?}"
+                );
+                assert_eq!(caret(&app.widget.ctx, id), insertion);
+                assert_eq!(app.stored.to_bits(), stored.to_bits());
+                assert!(
+                    !app.widget.changed,
+                    "a model acknowledgement is not an edit"
+                );
+            }
+
+            // Replacing the entire value with the same numeric draft still
+            // requests a write; preserve its zeros after the owner converts it.
+            app.frame(vec![Event::Key {
+                key: Key::A,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Modifiers::COMMAND,
+            }]);
+            app.frame(vec![Event::Text(draft.into())]);
+            assert_eq!(app.stored.to_bits(), stored.to_bits());
+            app.frame(vec![]);
+            assert_eq!(app.widget.text(id).as_deref(), Some(draft));
+            assert!(!app.widget.changed);
+
+            // A one-representable-step model update must not disappear inside
+            // an epsilon, even if both values have the same short formatting.
+            let displayed = app.storage.display(app.stored);
+            loop {
+                app.stored = match storage {
+                    PercentStorage::NormalizedF64 => f64::from_bits(app.stored.to_bits() + 1),
+                    PercentStorage::PanF32 => {
+                        f64::from(f32::from_bits((app.stored as f32).to_bits() + 1))
+                    }
+                };
+                if app.storage.display(app.stored).to_bits() != displayed.to_bits() {
+                    break;
+                }
+            }
+            let external = app.stored;
+            app.frame(vec![]);
+            assert_ne!(
+                app.widget.text(id).as_deref(),
+                Some(draft),
+                "a genuine upstream update refreshes the field"
+            );
+            assert_eq!(app.stored.to_bits(), external.to_bits());
+            assert!(!app.widget.changed);
+
+            // The sibling rail/dial also remains authoritative while a field
+            // is focused; conversion-aware ownership must not retain old text.
+            let origin = app.widget.origin;
+            let destination = app.widget.destination;
+            app.frame(pointer(origin, true));
+            app.frame(vec![Event::PointerMoved(destination)]);
+            app.frame(pointer(destination, false));
+            assert_ne!(app.stored.to_bits(), external.to_bits());
+            let output = app.frame(vec![]);
+            assert!(
+                (painted_number(&output, app.widget.number) - storage.display(app.stored)).abs()
+                    < 0.00001
+            );
+            assert!(!app.widget.changed);
+        }
+    }
 }
 
 #[test]

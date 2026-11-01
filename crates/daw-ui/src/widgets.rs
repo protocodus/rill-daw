@@ -95,11 +95,17 @@ pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
 }
 
 pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
-    ui.add(
-        button_widget(label)
-            .small()
-            .min_size(egui::vec2(0.0, tokens::COMPACT_HEIGHT)),
-    )
+    compact_button(ui, button_widget(label))
+}
+
+// Compact actions save horizontal space while retaining normal label padding
+// and target height. Keep the widget in the parent Ui so wrapping stays native.
+fn compact_button(ui: &mut Ui, button: crate::IconButton) -> Response {
+    let padding = ui.spacing().button_padding;
+    ui.spacing_mut().button_padding = egui::vec2(tokens::SPACE_SM, tokens::BUTTON_PADDING_Y);
+    let response = ui.add(button.min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)));
+    ui.spacing_mut().button_padding = padding;
+    response
 }
 
 /// Reserve trailing actions before laying out a flexible label or control.
@@ -157,9 +163,32 @@ pub fn menu_button<R>(
 }
 
 /// Keep full-size commands reachable with the mouse in a short window.
+pub fn command_menu_button<R>(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<Option<R>> {
+    menu_button(ui, label, contents)
+}
+
+/// Bound a command list to the viewport, including its frame and outer spacing.
 pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> R {
-    let max_height = (ui.ctx().content_rect().height() - 72.0).max(tokens::CONTROL_HEIGHT * 2.0);
+    // Legacy callers may explicitly bound contents inside a shared menu.
+    // Each popup owns one scroll pane; nested submenus have their own layer.
+    let scope_id = ui.layer_id().id.with("command_menu_scroll_scope");
+    if ui.ctx().data(|data| data.get_temp::<bool>(scope_id)) == Some(true) {
+        return contents(ui);
+    }
+    // Popup chooses its position from the previous frame's size. A capacity
+    // derived from that moving position feeds back into placement, making a
+    // submenu shrink after a wheel gesture has already reached its end. Keep
+    // the capacity stable and let the native popup constrain the whole frame.
+    let max_height = (ui.ctx().content_rect().height()
+        - ui.spacing().menu_margin.sum().y
+        - 2.0 * tokens::SPACE_SM)
+        .max(tokens::CONTROL_HEIGHT);
     let frame = ui.ctx().cumulative_frame_nr();
+    let pass = ui.ctx().cumulative_pass_nr();
     let seen_id = ui.id().with("command_menu_seen");
     let newly_open = ui
         .ctx()
@@ -168,26 +197,39 @@ pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R
     let mut area = egui::ScrollArea::vertical()
         .id_salt(ui.id().with("command_menu_scroll"))
         .max_height(max_height)
+        // Popup areas remember the previous frame's height. Reserve capacity
+        // before auto-shrinking to content, or reopening a longer menu can
+        // inherit a short viewport even when the screen has ample space.
+        .min_scrolled_height(max_height)
         .auto_shrink([true, true]);
     if newly_open {
         area = area.vertical_scroll_offset(0.0);
     }
+    ui.ctx().data_mut(|data| data.insert_temp(scope_id, true));
     let scroll = area.show(ui, contents);
     ui.ctx().data_mut(|data| {
+        data.remove::<bool>(scope_id);
         data.insert_temp(seen_id, frame);
-        data.insert_temp(
-            egui::Id::new("command_menu_scroll_rect"),
-            (frame, scroll.inner_rect),
-        );
+        // Submenus finish before their parent. Retain the innermost scroll
+        // viewport for mouse automation, refreshing it on every layout pass.
+        let diagnostic_id = egui::Id::new("command_menu_scroll_rect");
+        if !data
+            .get_temp::<(u64, u64, egui::Rect)>(diagnostic_id)
+            .is_some_and(|(_, drawn_pass, _)| drawn_pass == pass)
+        {
+            data.insert_temp(diagnostic_id, (frame, pass, scroll.inner_rect));
+        }
     });
     scroll.inner
 }
 
 pub fn command_menu_scroll_rect(ctx: &egui::Context) -> Option<egui::Rect> {
     let frame = ctx.cumulative_frame_nr();
-    ctx.data(|data| data.get_temp::<(u64, egui::Rect)>(egui::Id::new("command_menu_scroll_rect")))
-        .filter(|(drawn, _)| frame <= drawn.saturating_add(1))
-        .map(|(_, rect)| rect)
+    ctx.data(|data| {
+        data.get_temp::<(u64, u64, egui::Rect)>(egui::Id::new("command_menu_scroll_rect"))
+    })
+    .filter(|(drawn, _, _)| frame <= drawn.saturating_add(1))
+    .map(|(_, _, rect)| rect)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -408,7 +450,7 @@ fn semantic_picker<R>(
         }
         SubMenu::default()
             .config(config)
-            .show(ui, &response, contents)
+            .show(ui, &response, |ui| command_menu_contents(ui, contents))
     } else {
         egui::Popup::menu(&response)
             .close_behavior(config.close_behavior)
@@ -417,7 +459,7 @@ fn semantic_picker<R>(
                 egui::UiStackInfo::new(egui::UiKind::Menu)
                     .with_tag_value(MenuConfig::MENU_CONFIG_TAG, config),
             )
-            .show(contents)
+            .show(|ui| command_menu_contents(ui, contents))
     };
     (response, inner)
 }
@@ -429,7 +471,7 @@ fn native_menu_button<'a, R>(
 ) -> InnerResponse<Option<R>> {
     use egui::containers::menu::{MenuConfig, MenuState, SubMenu, SubMenuButton};
     if !egui::containers::menu::is_in_menu(ui) {
-        return ui.menu_button(atoms, add_contents);
+        return ui.menu_button(atoms, |ui| command_menu_contents(ui, add_contents));
     }
     let submenu = SubMenuButton::new(atoms);
     let id = ui.next_auto_id();
@@ -452,7 +494,7 @@ fn native_menu_button<'a, R>(
     let inner = submenu
         .sub_menu
         .config(config)
-        .show(ui, &response, add_contents);
+        .show(ui, &response, |ui| command_menu_contents(ui, add_contents));
     InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
@@ -600,10 +642,7 @@ pub fn selectable(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> 
 /// collection or producer. Selection and filtering stay with the caller.
 pub fn count_item(ui: &mut Ui, selected: bool, label: &str, count: usize) -> Response {
     let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(
-            ui.available_width(),
-            tokens::COMPACT_HEIGHT + tokens::SPACE_SM,
-        ),
+        egui::vec2(ui.available_width(), tokens::CONTROL_HEIGHT),
         egui::Sense::click(),
     );
     response.widget_info(|| {
@@ -662,11 +701,9 @@ pub fn count_item(ui: &mut Ui, selected: bool, label: &str, count: usize) -> Res
 
 /// An active filter shown as a compact chip; clicking it removes the filter.
 pub fn filter_chip(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
-    ui.add(
-        crate::IconButton::with_icon(crate::Icon::Close, label)
-            .small()
-            .selected(true)
-            .min_size(egui::vec2(0.0, tokens::COMPACT_HEIGHT)),
+    compact_button(
+        ui,
+        crate::IconButton::with_icon(crate::Icon::Close, label).selected(true),
     )
     .on_hover_text("Remove filter")
 }
@@ -751,7 +788,7 @@ pub fn picker_at<R>(
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> (Response, Option<InnerResponse<R>>) {
     let response = button_at(ui, rect, id_salt, label);
-    let inner = egui::Popup::menu(&response).show(contents);
+    let inner = egui::Popup::menu(&response).show(|ui| command_menu_contents(ui, contents));
     (response, inner)
 }
 
@@ -1149,7 +1186,7 @@ pub fn inset(ctx: &egui::Context) -> Frame {
             tokens::BORDER_WIDTH,
             colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
         ))
-        .inner_margin(tokens::SPACE_SM)
+        .inner_margin(tokens::SPACE_MD)
         .corner_radius(tokens::SURFACE_RADIUS)
 }
 
@@ -1180,7 +1217,27 @@ pub fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
 /// On-demand property/utility window with the same surfaces and spacing as the
 /// main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
 pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
+    use egui::emath::GuiRounding as _;
+
     let available = popup_bounds(ctx);
+    let body_size = popup_body_size(ctx);
+    let style = ctx.style();
+    let title = title.into().fallback_text_style(egui::TextStyle::Heading);
+    let mut job =
+        (*title.into_layout_job(&style, egui::TextStyle::Heading.into(), egui::Align::Center))
+            .clone();
+    let title_height = ctx
+        .fonts_mut(|fonts| job.font_height(fonts))
+        .max(style.spacing.interact_size.y);
+    // Native Window reserves a symmetric icon lane around its centered title.
+    // It also relays ordinary text with infinite width, making long names an
+    // unbounded minimum window width. A prelaid galley retains its full source
+    // text for window identity/accessibility while bounding its painted row.
+    let icon_width = style.spacing.icon_width.min(title_height);
+    let icon_padding = ((title_height - icon_width) * 0.5).round_ui();
+    let controls_width = 2.0 * (icon_padding + icon_width + style.spacing.item_spacing.x);
+    job.wrap = egui::text::TextWrapping::truncate_at_width((body_size.x - controls_width).max(0.0));
+    let title = ctx.fonts_mut(|fonts| fonts.layout_job(job));
     egui::Window::new(title)
         .frame(
             panel(ctx)
@@ -1191,7 +1248,7 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .default_width(480.0)
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(available.center())
-        .max_size(popup_body_size(ctx))
+        .max_size(body_size)
         .constrain_to(available)
         .movable(false)
         .scroll([false, true])
@@ -1207,10 +1264,16 @@ pub fn popup_scroll_body<R>(
     footer_height: f32,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> R {
+    // An auto-sized window can be shorter than its initial request. Subtracting
+    // the footer from that last frame's height repeatedly collapses the body
+    // when the footer reservation is even slightly larger than its contents.
+    // Use the viewport-derived capacity, retaining the actual header offset.
+    let header_height = (ui.cursor().top() - ui.max_rect().top()).max(0.0);
+    let body_height = (popup_body_size(ui.ctx()).y - header_height - footer_height).max(0.0);
     egui::ScrollArea::vertical()
         .id_salt(id)
-        .max_height((ui.available_height() - footer_height).max(tokens::COMPACT_HEIGHT))
-        .min_scrolled_height(tokens::COMPACT_HEIGHT)
+        .max_height(body_height)
+        .min_scrolled_height(body_height.min(tokens::COMPACT_HEIGHT))
         .auto_shrink([false, true])
         .show(ui, contents)
         .inner

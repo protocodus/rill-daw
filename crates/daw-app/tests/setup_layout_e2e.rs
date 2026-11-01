@@ -14,15 +14,17 @@ fn visible_rect<'a>(state: &'a Value, label: &str) -> &'a Value {
 }
 
 fn accessible(state: &Value, labels: &[&str]) {
+    let width = state["viewport"][0].as_f64().unwrap();
+    let height = state["viewport"][1].as_f64().unwrap();
     for label in labels {
         let rect = visible_rect(state, label);
         assert!(rect["min"][0].as_f64().unwrap() >= 0.0, "{label}: {rect}");
+        assert!(rect["max"][0].as_f64().unwrap() <= width, "{label}: {rect}");
+        assert!(rect["min"][1].as_f64().unwrap() >= 120.0, "{label}: {rect}");
         assert!(
-            rect["max"][0].as_f64().unwrap() <= 1100.0,
+            rect["max"][1].as_f64().unwrap() <= height - f64::from(daw_ui::tokens::POPUP_MARGIN),
             "{label}: {rect}"
         );
-        assert!(rect["min"][1].as_f64().unwrap() >= 120.0, "{label}: {rect}");
-        assert!(rect["max"][1].as_f64().unwrap() <= 696.0, "{label}: {rect}");
     }
 }
 
@@ -140,9 +142,13 @@ fn many_long_scan_folders_keep_apply_and_cancel_visible_without_scrolling() {
             folder
         })
         .collect();
-    for (density, dark) in [(1.0, false), (2.0, true)] {
+    for (width, height, density, dark) in [
+        (800, 600, 1.0, false),
+        (800, 600, 1.25, false),
+        (1440, 1000, 2.0, true),
+    ] {
         app.command(
-            json!({"command":"viewport","width":1100,"height":720,"pixels_per_point":density}),
+            json!({"command":"viewport","width":width,"height":height,"pixels_per_point":density}),
         );
         app.command(json!({"command":"system_theme","dark":dark}));
         setup(&mut app);

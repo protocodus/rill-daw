@@ -62,36 +62,61 @@ impl DawApp {
         let redo: Vec<_> = self.history.redo_labels().map(str::to_owned).collect();
         daw_ui::popup("History", ctx)
             .open(&mut open)
+            .vscroll(false)
             .show(ctx, |ui| {
                 ui.set_min_width(320.0);
-                ui.label(format!("{} undo · {} redo", undo.len(), redo.len()));
-                egui::ScrollArea::vertical()
-                    .max_height(440.0)
-                    .show(ui, |ui| {
-                        ui.add_enabled_ui(!self.state_sync_pending(), |ui| {
-                            for (index, label) in redo.iter().enumerate().rev() {
-                                if daw_ui::button(ui, format!("Redo · {label}")).clicked() {
-                                    jump = Some((true, index + 1));
-                                }
+                daw_ui::text::body(ui, format!("{} undo · {} redo", undo.len(), redo.len()));
+                let footer_height = ui.text_style_height(&egui::TextStyle::Small)
+                    + daw_ui::tokens::SPACE_LG
+                    + 2.0 * ui.spacing().item_spacing.y;
+                daw_ui::popup_scroll_body(ui, "history_steps", footer_height, |ui| {
+                    ui.add_enabled_ui(!self.state_sync_pending(), |ui| {
+                        for (index, label) in redo.iter().enumerate().rev() {
+                            if ui
+                                .add_sized(
+                                    egui::vec2(
+                                        ui.available_width(),
+                                        daw_ui::tokens::CONTROL_HEIGHT,
+                                    ),
+                                    daw_ui::button_widget(format!("Redo · {label}")).truncate(),
+                                )
+                                .on_hover_text(label)
+                                .clicked()
+                            {
+                                jump = Some((true, index + 1));
                             }
-                            if !redo.is_empty() {
-                                ui.separator();
+                        }
+                        if !redo.is_empty() {
+                            ui.separator();
+                        }
+                        for (index, label) in undo.iter().enumerate() {
+                            if ui
+                                .add_sized(
+                                    egui::vec2(
+                                        ui.available_width(),
+                                        daw_ui::tokens::CONTROL_HEIGHT,
+                                    ),
+                                    daw_ui::button_widget(format!("Undo · {label}")).truncate(),
+                                )
+                                .on_hover_text(label)
+                                .clicked()
+                            {
+                                jump = Some((false, index + 1));
                             }
-                            for (index, label) in undo.iter().enumerate() {
-                                if daw_ui::button(ui, format!("Undo · {label}")).clicked() {
-                                    jump = Some((false, index + 1));
-                                }
-                            }
-                        });
-                        if undo.is_empty() && redo.is_empty() {
-                            ui.label("No edits yet");
                         }
                     });
-                ui.separator();
-                ui.small(format!(
-                    "Up to 128 steps · {:.1} / 128 MiB",
-                    self.history.memory_bytes() as f64 / 1_048_576.0
-                ));
+                    if undo.is_empty() && redo.is_empty() {
+                        ui.label("No edits yet");
+                    }
+                });
+                ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
+                daw_ui::text::note(
+                    ui,
+                    format!(
+                        "Up to 128 steps · {:.1} / 128 MiB",
+                        self.history.memory_bytes() as f64 / 1_048_576.0
+                    ),
+                );
             });
         self.history_open &= open;
         if let Some((redo, steps)) = jump {

@@ -108,15 +108,27 @@ fn setup_tabs_selects_and_folder_input_stay_accessible_and_cancel_discards_draft
             );
 
             let state = app.click("Audio");
-            accessible(
-                &state,
-                &[
-                    "System default",
-                    "48000 Hz",
-                    "High quality",
-                    "Refresh devices",
-                ],
-            );
+            accessible(&state, &["System default", "48000 Hz", "High quality"]);
+            let apply = text_rect(&state, "Apply");
+            let cancel = text_rect(&state, "Cancel");
+            let setup = state["window_rects"].as_array().unwrap().last().unwrap();
+            let x = setup["max"][0].as_f64().unwrap() - 2.0 * f64::from(daw_ui::tokens::SPACE_LG);
+            let y = (text_rect(&state, "Audio")["max"][1].as_f64().unwrap()
+                + apply["min"][1].as_f64().unwrap())
+                * 0.5;
+            // The audio form has its own scroll body; its actions stay pinned.
+            app.command(json!({"command":"scroll","x":x,"y":y,"delta":-1000.0}));
+            for _ in 0..20 {
+                app.inspect();
+            }
+            let lower = app.inspect();
+            accessible(&lower, &["Refresh devices", "Apply", "Cancel"]);
+            assert_eq!(text_rect(&lower, "Apply"), apply);
+            assert_eq!(text_rect(&lower, "Cancel"), cancel);
+            app.command(json!({"command":"scroll","x":x,"y":y,"delta":1000.0}));
+            for _ in 0..20 {
+                app.inspect();
+            }
             app.click("48000 Hz");
             accessible(&app.inspect(), &["44100 Hz", "96000 Hz"]);
             assert_eq!(app.click("96000 Hz")["setup_draft"]["sample_rate"], 96_000);
@@ -237,14 +249,16 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             app.click("Instruments");
             app.click("Effects");
             accessible(
-                &app.inspect(),
+                &common::reveal_library_filter(&mut app, "All developers"),
                 &["Search effects", "All developers", "Manage"],
             );
             app.click("Search effects");
             app.command(json!({"command":"text","text":"Rill Fixture FX"}));
             common::wait_library_device(&mut app, "Rill Fixture FX");
+            common::reveal_library_filter(&mut app, "All developers");
             app.click("All developers");
-            let filtered = front(&mut app, "000 Rill component tests");
+            common::reveal_library_filter(&mut app, "000 Rill component tests");
+            let filtered = app.click("000 Rill component tests");
             accessible(
                 &filtered,
                 &["Rill Fixture FX", "Add to effect chain", "More"],
@@ -362,7 +376,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             app.click("Catalog item 000");
             app.command(json!({"command":"key","key":"A","cmd":true}));
             app.command(json!({"command":"text","text":"Catalog item"}));
-            let before = app.inspect();
+            let before = common::reveal_library_filter(&mut app, "All developers");
             accessible(
                 &before,
                 &[

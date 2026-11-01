@@ -28,6 +28,7 @@ pub fn effect_slot<T: Send + Sync + 'static, R>(
     actions: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<(Response, R)> {
     let result = crate::card(ui.ctx()).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = tokens::SPACE_MD;
         let status = if *enabled { "Active" } else { "Bypassed" };
         let header = crate::action_row(
             ui,

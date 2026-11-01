@@ -186,8 +186,8 @@ impl DawApp {
                     ui,
                     "Existing musical fades stay intact. Only selected occurrences change.",
                 );
-                ui.add_space(daw_ui::tokens::SPACE_MD);
-                ui.horizontal(|ui| {
+                ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+                ui.horizontal_wrapped(|ui| {
                     cancel = daw_ui::button(ui, "Cancel").clicked();
                     remove = daw_ui::button(ui, "Remove boundary fades").clicked();
                     apply = daw_ui::button(ui, "Apply boundary fades").clicked();

@@ -608,6 +608,91 @@ fn recording_pause_finalizes_once_and_input_failure_recovers_the_captured_audio(
 }
 
 #[test]
+fn compact_recording_failure_keeps_a_complete_input_target_and_all_take_actions_visible() {
+    let mut app = fixture(false, true);
+    let mut p = project(&app.inspect());
+    let track = p.tracks[0].id;
+    let first = p.tracks[0].clips[0].id;
+    let alternate = Clip::audio(
+        "Alternative",
+        0.0,
+        4.0,
+        app.directory.path().join("Backing.wav").to_string_lossy(),
+    );
+    let second = alternate.id;
+    p.tracks[0].clips.push(alternate);
+    p.group_audio_takes(track, &[first, second]).unwrap();
+    load(&mut app, &p, "recording-spacing-takes.rill");
+    app.click("Backing");
+    arm(&mut app, "Mono 1");
+    recording(&mut app);
+    app.click("Off");
+    app.click("On");
+    wait(&mut app, |state| state["recording"]["input_ready"] == true);
+    app.command(json!({"command":"input_error"}));
+    wait(&mut app, |state| state["error"] == true);
+    app.click("Dismiss");
+    for density in [1.0, 1.25, 2.0] {
+        let mut state = app.command(
+            json!({"command":"viewport", "width":800, "height":600, "pixels_per_point":density}),
+        );
+        // Returning from Setup may restore the previously focused monitor
+        // control lower in this scroll body. Reveal its first row with actual
+        // wheel input; a collapsed viewport cannot pass the full-label check.
+        let title = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == "Recording · Capture")
+            .unwrap();
+        let x = (title["min"][0].as_f64().unwrap() + title["max"][0].as_f64().unwrap()) * 0.5;
+        let y = title["max"][1].as_f64().unwrap()
+            + f64::from(daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_MD);
+        for _ in 0..3 {
+            state = app.command(json!({"command":"scroll", "x":x, "y":y, "delta":1000.0}));
+        }
+        for text in [
+            "Audio setup…",
+            "Pre-count",
+            "Click level",
+            "Record",
+            "Retry input",
+            "Edit recording",
+            "Takes…",
+        ] {
+            let bounds = state["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .rev()
+                .find(|label| label["text"] == text)
+                .unwrap_or_else(|| panic!("Missing {text}: {}", state["visible_labels"]));
+            assert!(
+                bounds["min"][0].as_f64().unwrap() >= 0.0,
+                "{text}: {bounds}"
+            );
+            assert!(
+                bounds["max"][0].as_f64().unwrap() <= 800.0,
+                "{text}: {bounds}"
+            );
+            assert!(
+                bounds["max"][1].as_f64().unwrap() <= 600.0,
+                "{text}: {bounds}"
+            );
+            assert!(
+                bounds["max"][1].as_f64().unwrap() - bounds["min"][1].as_f64().unwrap()
+                    >= f64::from(daw_ui::tokens::FONT_BODY) - 1.0,
+                "The complete {text} label must fit, not just a clipped sliver: {bounds}"
+            );
+        }
+        let setup = app.click("Audio setup…");
+        assert_eq!(setup["popups"]["setup"], true);
+        assert_eq!(app.key("Escape")["popups"]["recording"], true);
+    }
+    app.quit();
+}
+
+#[test]
 fn input_selection_can_be_cleared_without_mutating_existing_recordings() {
     let mut app = fixture(false, true);
     let state = app.inspect();

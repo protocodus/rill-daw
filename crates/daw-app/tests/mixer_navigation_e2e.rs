@@ -4,13 +4,10 @@ use common::Harness;
 use daw_core::Project;
 use serde_json::{Value, json};
 
-fn label_rect<'a>(state: &'a Value, text: &str) -> &'a Value {
-    state["label_rects"]
-        .as_array()
+fn channel_left(state: &Value, channel: usize) -> f64 {
+    state["mixer"]["channels"][channel]["strip"]["min"][0]
+        .as_f64()
         .unwrap()
-        .iter()
-        .find(|rect| rect["text"] == text)
-        .unwrap_or_else(|| panic!("Missing {text}: {}", state["visible_labels"]))
 }
 
 fn paint(app: &mut Harness) -> Value {
@@ -23,6 +20,35 @@ fn fader(state: &Value, channel: usize) -> Value {
 
 fn pan_dial(state: &Value, channel: usize) -> Value {
     state["mixer"]["channels"][channel]["pan_knob"]["dial"].clone()
+}
+
+fn reveal_control(app: &mut Harness, target: fn(&Value, usize) -> Value, channel: usize) -> Value {
+    let state = paint(app);
+    let rect = target(&state, channel);
+    let viewport = &state["mixer"]["reorder_viewport"];
+    let top = viewport["min"][1].as_f64().unwrap();
+    let bottom = viewport["max"][1].as_f64().unwrap();
+    if rect["min"][1].as_f64().unwrap() < top + 8.0
+        || rect["max"][1].as_f64().unwrap() > bottom - 8.0
+    {
+        let center = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+        app.command(
+            json!({"command":"scroll", "x":viewport["max"][0].as_f64().unwrap() - 5.0,
+            "y":(top + bottom) * 0.5, "delta":(top + bottom) * 0.5 - center}),
+        );
+        for _ in 0..20 {
+            app.inspect();
+        }
+    }
+    let visible = paint(app);
+    let rect = target(&visible, channel);
+    let viewport = &visible["mixer"]["reorder_viewport"];
+    assert!(rect["min"][1].as_f64().unwrap() >= viewport["min"][1].as_f64().unwrap());
+    assert!(rect["max"][1].as_f64().unwrap() <= viewport["max"][1].as_f64().unwrap());
+    for field in ["project", "history", "selected_track"] {
+        assert_eq!(visible[field], state[field]);
+    }
+    visible
 }
 
 #[test]
@@ -44,13 +70,13 @@ fn middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edi
         );
         app.command(json!({"command":"system_theme","dark":dark}));
         app.click("Mixer");
-        let original = paint(&mut app);
+        let original = reveal_control(&mut app, fader, 2);
         let rail = fader(&original, 2);
         let x = (rail["min"][0].as_f64().unwrap() + rail["max"][0].as_f64().unwrap()) * 0.5;
         // Start far from the gain handle: even the takeover frame must not
         // change its value, before any scrolling movement has occurred.
         let y = rail["min"][1].as_f64().unwrap() * 0.7 + rail["max"][1].as_f64().unwrap() * 0.3;
-        let initial_left = label_rect(&original, "Bus 3")["min"][0].as_f64().unwrap();
+        let initial_left = channel_left(&original, 3);
         let unchanged = |state: &Value| {
             assert_eq!(state["project"], original["project"]);
             assert_eq!(state["history"], original["history"]);
@@ -62,7 +88,7 @@ fn middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edi
         unchanged(&down);
         let pressed = paint(&mut app);
         assert_eq!(
-            label_rect(&pressed, "Bus 3")["min"][0].as_f64().unwrap(),
+            channel_left(&pressed, 3),
             initial_left,
             "Arriving at the fader and pressing middle must not jump the viewport"
         );
@@ -76,10 +102,10 @@ fn middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edi
         unchanged(&up);
         let panned = paint(&mut app);
         unchanged(&panned);
-        let final_left = label_rect(&panned, "Bus 3")["min"][0].as_f64().unwrap();
+        let final_left = channel_left(&panned, 3);
         assert_eq!(
             final_left,
-            label_rect(&up, "Bus 3")["min"][0].as_f64().unwrap(),
+            channel_left(&up, 3),
             "Middle-button release must not fling the viewport"
         );
         assert!(
@@ -91,18 +117,15 @@ fn middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edi
         // horizontal offset, then the compact pane overflows again.
         app.command(json!({"command":"viewport","width":2400,"height":760}));
         app.command(json!({"command":"viewport","width":800,"height":600}));
-        let before_pan = paint(&mut app);
+        let before_pan = reveal_control(&mut app, pan_dial, 2);
         let dial = pan_dial(&before_pan, 2);
         let x = (dial["min"][0].as_f64().unwrap() + dial["max"][0].as_f64().unwrap()) * 0.5;
         let y = (dial["min"][1].as_f64().unwrap() + dial["max"][1].as_f64().unwrap()) * 0.5;
-        let left_before = label_rect(&before_pan, "Bus 3")["min"][0].as_f64().unwrap();
+        let left_before = channel_left(&before_pan, 3);
         let down =
             app.command(json!({"command":"pointer","phase":"down","button":"middle","x":x,"y":y}));
         unchanged(&down);
-        assert_eq!(
-            label_rect(&down, "Bus 3")["min"][0].as_f64().unwrap(),
-            left_before
-        );
+        assert_eq!(channel_left(&down, 3), left_before);
         let held = app.command(
             json!({"command":"pointer","phase":"move","button":"middle","x":x-80.0,"y":y-10.0}),
         );
@@ -113,19 +136,16 @@ fn middle_drag_over_mixer_faders_pans_without_editing_and_primary_drag_still_edi
         unchanged(&up);
         let panned = paint(&mut app);
         unchanged(&panned);
-        let left_after = label_rect(&panned, "Bus 3")["min"][0].as_f64().unwrap();
+        let left_after = channel_left(&panned, 3);
         assert!(
             left_after < left_before - 60.0,
             "Middle drag over the pan control must scroll too"
         );
-        assert_eq!(
-            left_after,
-            label_rect(&up, "Bus 3")["min"][0].as_f64().unwrap()
-        );
+        assert_eq!(left_after, channel_left(&up, 3));
 
         // A regular primary fader edit still changes the level and undoes once.
         app.command(json!({"command":"viewport","width":2400,"height":760}));
-        let reset = paint(&mut app);
+        let reset = reveal_control(&mut app, fader, 2);
         let rail = fader(&reset, 2);
         let x = (rail["min"][0].as_f64().unwrap() + rail["max"][0].as_f64().unwrap()) * 0.5;
         let y = rail["min"][1].as_f64().unwrap() * 0.5 + rail["max"][1].as_f64().unwrap() * 0.5;

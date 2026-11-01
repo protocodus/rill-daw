@@ -1,7 +1,38 @@
 //! Optional pointer text entry. The caller owns the draft and its transaction.
+use crate::tokens;
 use egui::{Context, Id, Ui};
 
 pub const NAME_MAX_CHARS: usize = 128;
+
+/// Ten full key targets, their gaps and the keyboard frame, rounded outward
+/// at the current density so an anchored keyboard never loses its final key.
+pub fn name_keyboard_width(ctx: &Context) -> f32 {
+    let key = (tokens::CONTROL_HEIGHT * ctx.pixels_per_point()).ceil() / ctx.pixels_per_point();
+    10.0 * key
+        + 9.0 * tokens::SPACE_SM
+        + crate::panel(ctx)
+            .inner_margin(tokens::SPACE_MD)
+            .total_margin()
+            .sum()
+            .x
+}
+
+/// Height added below the name field, including its gap and keyboard frame.
+/// Keep the anchored editor inside the viewport before its first visible frame.
+pub fn name_keyboard_height(ctx: &Context) -> f32 {
+    let frame = crate::panel(ctx).inner_margin(tokens::SPACE_MD);
+    let font = egui::TextStyle::Button.resolve(&ctx.style());
+    let row_height =
+        ctx.fonts_mut(|fonts| fonts.row_height(&font)) + 2.0 * tokens::BUTTON_PADDING_Y;
+    let row_height = (row_height.max(tokens::CONTROL_HEIGHT) * ctx.pixels_per_point()).ceil()
+        / ctx.pixels_per_point();
+    tokens::SPACE_MD
+        + ctx.style().spacing.item_spacing.y
+        + 6.0 * row_height
+        + 5.0 * tokens::SPACE_SM
+        + tokens::SPACE_XS
+        + frame.total_margin().sum().y
+}
 
 #[derive(Clone, Default)]
 struct KeyboardState {
@@ -38,49 +69,55 @@ pub fn name_keyboard(ui: &mut Ui, field: Id, value: &mut String) -> bool {
     let mut backspace = false;
     let mut clear = false;
     let mut select_all = false;
-    ui.add_space(crate::tokens::SPACE_SM);
-    crate::panel(ui.ctx()).show(ui, |ui| {
-        ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-        for row in [
-            "1234567890",
-            "qwertyuiop",
-            "asdfghjkl",
-            "zxcvbnm",
-            "-_.!'()?&+",
-        ] {
-            ui.horizontal(|ui| {
-                for character in row.chars() {
-                    let text = if state.uppercase {
-                        character.to_ascii_uppercase()
-                    } else {
-                        character
+    ui.add_space(tokens::SPACE_MD);
+    crate::panel(ui.ctx())
+        .inner_margin(tokens::SPACE_MD)
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
+            // Single-character keys keep full targets without a word button's
+            // horizontal padding widening the uppercase QWERTY row.
+            ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
+            for row in [
+                "1234567890",
+                "qwertyuiop",
+                "asdfghjkl",
+                "zxcvbnm",
+                "-_.!'()?&+",
+            ] {
+                ui.horizontal(|ui| {
+                    for character in row.chars() {
+                        let text = if state.uppercase {
+                            character.to_ascii_uppercase()
+                        } else {
+                            character
+                        }
+                        .to_string();
+                        if ui
+                            .add(
+                                crate::button_widget(&text)
+                                    .min_size(egui::Vec2::splat(tokens::CONTROL_HEIGHT)),
+                            )
+                            .clicked()
+                        {
+                            insert = Some(text);
+                        }
                     }
-                    .to_string();
-                    if ui
-                        .add(
-                            crate::button_widget(&text)
-                                .min_size(egui::vec2(34.0, crate::tokens::CONTROL_HEIGHT)),
-                        )
-                        .clicked()
-                    {
-                        insert = Some(text);
+                    if row == "zxcvbnm" {
+                        crate::view_toggle(ui, &mut state.uppercase, "Caps")
+                            .on_hover_text("Keep letters uppercase until Caps is turned off");
                     }
-                }
-                if row == "zxcvbnm" {
-                    crate::view_toggle(ui, &mut state.uppercase, "Caps")
-                        .on_hover_text("Keep letters uppercase until Caps is turned off");
-                }
-            });
-        }
-        ui.horizontal(|ui| {
-            if crate::button(ui, "Space").clicked() {
-                insert = Some(" ".into());
+                });
             }
-            backspace = crate::button(ui, "Backspace").clicked();
-            select_all = crate::button(ui, "Select all").clicked();
-            clear = crate::button(ui, "Clear").clicked();
+            ui.add_space(tokens::SPACE_XS);
+            ui.horizontal(|ui| {
+                if crate::button(ui, "Space").clicked() {
+                    insert = Some(" ".into());
+                }
+                backspace = crate::button(ui, "Backspace").clicked();
+                select_all = crate::button(ui, "Select all").clicked();
+                clear = crate::button(ui, "Clear").clicked();
+            });
         });
-    });
     ui.ctx()
         .data_mut(|data| data.insert_temp(field.with("keyboard"), state));
     if insert.is_none() && !backspace && !clear && !select_all {

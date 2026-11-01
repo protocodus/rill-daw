@@ -59,7 +59,7 @@ impl TrackHeaderLayout {
         );
         let reorder = end_slot(identity, tokens::SPACE_MD);
         let icon = start_slot(identity, tokens::SPACE_MD);
-        let name_left = (icon.right() + tokens::SPACE_XS).min(reorder.left());
+        let name_left = (icon.right() + tokens::SPACE_SM).min(reorder.left());
         let name_right = (reorder.left() - tokens::SPACE_SM).max(name_left);
         let name = Rect::from_min_max(
             egui::pos2(name_left, identity.top()),
@@ -78,7 +78,7 @@ impl TrackHeaderLayout {
         };
         let mix_top = identity.bottom()
             + if rect.height() >= TRACK_HEADER_COMPACT_HEIGHT {
-                tokens::SPACE_XS * 2.0
+                tokens::SPACE_SM
             } else {
                 tokens::SPACE_XS
             };
@@ -94,7 +94,7 @@ impl TrackHeaderLayout {
         let expanded = body_fits && rect.height() >= TRACK_HEADER_HEIGHT;
         let routing = expanded.then(|| {
             Rect::from_min_size(
-                egui::pos2(left, mix_top + mix_height + tokens::SPACE_SM),
+                egui::pos2(left, mix_top + mix_height + tokens::SPACE_MD),
                 egui::vec2(body_right - left, tokens::COMPACT_HEIGHT),
             )
         });
@@ -149,7 +149,7 @@ impl TrackHeaderLayout {
             self.icon = self
                 .icon
                 .translate(egui::vec2(tokens::SPACE_MD + tokens::SPACE_XS, 0.0));
-            self.name.min.x = self.icon.right() + tokens::SPACE_XS;
+            self.name.min.x = self.icon.right() + tokens::SPACE_SM;
         }
         self
     }
@@ -164,7 +164,14 @@ impl TrackHeaderLayout {
             + tokens::SPACE_SM
             + tokens::SPACE_XL
             + tokens::SPACE_SM;
-        let folder_name_start = self.identity.left() + (tokens::SPACE_MD + tokens::SPACE_XS) * 2.0;
+        // The related disclosure/icon pair uses a five-point gap; the title
+        // keeps eight. Its extra slot is narrower than one hierarchy step,
+        // so a child title remains visibly indented beyond its folder title.
+        let folder_name_start = self.identity.left()
+            + tokens::SPACE_MD
+            + tokens::SPACE_XS
+            + tokens::SPACE_MD
+            + tokens::SPACE_SM;
         let common_limit =
             (self.identity.right() - possible_actions - tokens::SPACE_LG).max(folder_name_start);
         let name_limit = (self.name.right() - tokens::SPACE_LG).min(common_limit);
@@ -303,7 +310,7 @@ pub fn track_header_link_at(
                 },
             ));
         }
-        let inner = rect.shrink2(egui::vec2(3.0, 0.0));
+        let inner = rect.shrink2(egui::vec2(tokens::SPACE_XS, 0.0));
         let icon_rect = start_slot(inner, tokens::SPACE_MD);
         icon.paint(
             &painter,
@@ -316,7 +323,7 @@ pub fn track_header_link_at(
             centered_icon(chevron, tokens::SPACE_MD),
             colors.muted,
         );
-        let label_left = icon_rect.right() + tokens::SPACE_XS;
+        let label_left = icon_rect.right() + tokens::SPACE_SM;
         let label_width = (tokens::CONTROL_HEIGHT * 2.0)
             .min((inner.width() * (1.0 - tokens::GOLDEN_RATIO_INVERSE)).max(0.0));
         let label_rect = Rect::from_min_max(
@@ -333,8 +340,8 @@ pub fn track_header_link_at(
             colors.muted,
             section,
         );
-        let value_left = (label_rect.right() + tokens::SPACE_XS).min(chevron.left());
-        let value_right = (chevron.left() - tokens::SPACE_XS).max(value_left);
+        let value_left = (label_rect.right() + tokens::SPACE_SM).min(chevron.left());
+        let value_right = (chevron.left() - tokens::SPACE_SM).max(value_left);
         text::paint_single_line(
             &painter,
             Rect::from_min_max(

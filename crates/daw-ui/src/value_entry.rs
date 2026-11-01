@@ -77,8 +77,10 @@ pub(crate) fn synchronize_number(ui: &Ui, id: Id, current: f64) {
     }
 }
 
-pub(crate) fn remember_number_value(ui: &Ui, id: Id, current: f64) {
-    ui.data_mut(|data| data.insert_temp(id.with("number_current_value"), current));
+/// Remember either the untouched input or the owner's exact acknowledged
+/// display after a write. Incoming changes still use an exact bit comparison.
+pub(crate) fn remember_number_value(ui: &Ui, id: Id, expected: f64) {
+    ui.data_mut(|data| data.insert_temp(id.with("number_current_value"), expected));
 }
 
 /// Active exact-entry input, available to application interaction diagnostics.
@@ -428,36 +430,40 @@ enum NumericKey {
 /// emit keyboard events or apply an intermediate numeric value to the owner.
 fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) -> bool {
     let mut pressed = None;
-    ui.add_space(tokens::SPACE_XS);
-    let key_width =
-        ((ui.available_width() - 2.0 * tokens::SPACE_XS) / 3.0).max(tokens::CONTROL_HEIGHT);
-    for row in ["789", "456", "123", "±0."] {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
-            for character in row.chars() {
-                if ui
-                    .add_sized(
-                        egui::vec2(key_width, tokens::CONTROL_HEIGHT),
-                        crate::button_widget(character.to_string()),
-                    )
-                    .clicked()
-                {
-                    pressed = Some(if character == '±' {
-                        NumericKey::Sign
-                    } else {
-                        NumericKey::Insert(character)
-                    });
+    // The parent already leaves a 13 pt field-to-keypad gap. Keep the first
+    // key at the scroll origin so a one-row viewport exposes its full target.
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
+        let key_width =
+            ((ui.available_width() - 2.0 * tokens::SPACE_SM) / 3.0).max(tokens::CONTROL_HEIGHT);
+        for row in ["789", "456", "123", "±0."] {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
+                for character in row.chars() {
+                    if ui
+                        .add_sized(
+                            egui::vec2(key_width, tokens::CONTROL_HEIGHT),
+                            crate::button_widget(character.to_string()),
+                        )
+                        .clicked()
+                    {
+                        pressed = Some(if character == '±' {
+                            NumericKey::Sign
+                        } else {
+                            NumericKey::Insert(character)
+                        });
+                    }
                 }
+            });
+        }
+        ui.horizontal(|ui| {
+            if crate::button(ui, "Backspace").clicked() {
+                pressed = Some(NumericKey::Backspace);
+            }
+            if crate::button(ui, "Clear").clicked() {
+                pressed = Some(NumericKey::Clear);
             }
         });
-    }
-    ui.horizontal(|ui| {
-        if crate::button(ui, "Backspace").clicked() {
-            pressed = Some(NumericKey::Backspace);
-        }
-        if crate::button(ui, "Clear").clicked() {
-            pressed = Some(NumericKey::Clear);
-        }
     });
     let Some(pressed) = pressed else {
         return false;

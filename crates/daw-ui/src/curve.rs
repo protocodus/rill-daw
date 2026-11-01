@@ -248,11 +248,28 @@ fn curve_editor_inner(
 ) -> CurveResponse {
     let mut start = view.start.max(0.0);
     let mut end = view.end.max(start + 0.01);
+    let musical = timeline.is_some();
+    let top_inset = crate::tokens::SPACE_MD
+        + if musical {
+            crate::tokens::TIMELINE_RULER_HEIGHT
+        } else {
+            0.0
+        };
+    let bottom_inset = if musical {
+        crate::tokens::SPACE_MD
+    } else {
+        crate::tokens::SPACE_XL
+    };
+    // A bounded utility can surrender canvas space to its inspector rows.
+    // Keep the ruler, labels and a nonzero plot rather than imposing 120 px.
+    let minimum_height = top_inset + bottom_inset + crate::tokens::SPACE_LG;
     let (rect, mut response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width().max(180.0), view.height.max(120.0)),
+        Vec2::new(
+            ui.available_width().max(180.0),
+            view.height.max(minimum_height),
+        ),
         Sense::click(),
     );
-    let musical = timeline.is_some();
     let keyboard_active = timeline
         .as_ref()
         .is_some_and(|(_, timeline)| timeline.keyboard_active);
@@ -299,14 +316,10 @@ fn curve_editor_inner(
     let plot = Rect::from_min_max(
         rect.min
             + Vec2::new(
-                46.0,
-                if musical {
-                    crate::tokens::TIMELINE_RULER_HEIGHT + 12.0
-                } else {
-                    12.0
-                },
+                crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_MD,
+                top_inset,
             ),
-        rect.max - Vec2::new(14.0, if musical { 12.0 } else { 28.0 }),
+        rect.max - Vec2::new(crate::tokens::SPACE_MD, bottom_inset),
     );
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 4.0, theme::palette(ui.ctx()).bg);
@@ -375,8 +388,16 @@ fn curve_editor_inner(
     });
     let editing =
         !navigation.navigating && !navigation.changed && !egui::Popup::is_any_open(ui.ctx());
-    for index in 0..=4 {
-        let value = index as f32 / 4.0;
+    // Keep endpoint labels at every height, and add intermediate percentages
+    // only when their measured rows retain a clear gap at the active scale.
+    let tick_font = FontId::monospace(crate::tokens::FONT_CANVAS);
+    let tick_spacing = ui.fonts_mut(|fonts| fonts.row_height(&tick_font)) + crate::tokens::SPACE_XS;
+    let tick_intervals = [4, 2, 1]
+        .into_iter()
+        .find(|intervals| plot.height() / *intervals as f32 >= tick_spacing)
+        .unwrap_or(1);
+    for index in 0..=tick_intervals {
+        let value = index as f32 / tick_intervals as f32;
         let y = plot.bottom() - value * plot.height();
         painter.line_segment(
             [Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)],
@@ -385,8 +406,8 @@ fn curve_editor_inner(
         painter.text(
             Pos2::new(plot.left() - 6.0, y),
             Align2::RIGHT_CENTER,
-            format!("{}%", index * 25),
-            FontId::monospace(crate::tokens::FONT_CANVAS),
+            format!("{}%", index * 100 / tick_intervals),
+            tick_font.clone(),
             theme::palette(ui.ctx()).muted,
         );
     }

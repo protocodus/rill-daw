@@ -77,8 +77,38 @@ fn song_tool(app: &mut Harness, name: &str, arguments: Value) -> Value {
 }
 
 fn insert_example(app: &mut Harness, item: &PromptExample) -> Value {
-    app.click("Examples");
-    app.click(item.category.label());
+    let scroll = |app: &mut Harness, state: &Value, delta: f64| {
+        // Aim between the fixed tabs and composer, inside the real browsing
+        // body. Later examples may require a wheel gesture at generous gaps.
+        let prompt = &state["assistant"]["prompt_rect"];
+        let x = (prompt["min"][0].as_f64().unwrap() + prompt["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (label(state, "Tips")["max"][1].as_f64().unwrap()
+            + prompt["min"][1].as_f64().unwrap())
+            * 0.5;
+        let scrolled = app.command(json!({"command":"scroll","x":x,"y":y,"delta":delta}));
+        assert_eq!(
+            scrolled["assistant"]["prompt_rect"], *prompt,
+            "Browsing examples must not displace the composer"
+        );
+        scrolled
+    };
+    let mut state = app.click("Examples");
+    if !visible(&state, item.category.label()) {
+        state = scroll(app, &state, 10_000.0);
+        assert!(visible(&state, item.category.label()));
+    }
+    state = app.click(item.category.label());
+    for _ in 0..24 {
+        if visible(&state, item.title) {
+            break;
+        }
+        state = scroll(app, &state, -96.0);
+    }
+    assert!(
+        visible(&state, item.title),
+        "Example was not reachable by mouse: {}",
+        item.title
+    );
     app.click(item.title)
 }
 

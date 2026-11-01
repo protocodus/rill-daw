@@ -1,0 +1,921 @@
+{
+  "at": "2026-11-01T09:04:32.385149+00:00",
+  "status": "complete",
+  "curated_count": 20,
+  "raw_capture_root": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01",
+  "images": [
+    {
+      "file": "native-01-arrangement-before.png",
+      "family": "arrangement",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-1/arrangement.png",
+      "sha256": "285687271579693b72d2546892c809a450988f32bafd3304f3f427b5da7dae78",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-02-arrangement-after.png",
+      "family": "arrangement",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-1/arrangement.png",
+      "sha256": "595be08b72484b0450d6561b5f1f17c59d5d9d8df5960d368af7b2c3d2ccc7cb",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-03-midi-before.png",
+      "family": "midi",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-2/midi.png",
+      "sha256": "6e4a261fb80445f6fce590b0b47f7d0e335d3f4dfbc19be89ee15e41ce394df6",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-04-midi-after.png",
+      "family": "midi",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-2/midi.png",
+      "sha256": "7da45c4ae258976bb60809103f8f0a7de77169f9539a80e2bf0674042aec8137",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        1440,
+        1000
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-05-audio-before.png",
+      "family": "audio",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-3/audio.png",
+      "sha256": "c68af66319e65aecaca6eab0df49bff07a8dcd00813cf196ebdde10ab874abc0",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-06-audio-after.png",
+      "family": "audio",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-3/audio.png",
+      "sha256": "dc8a5726b4710f2f665dc4d5baa6426c082b883e566a27d226989ea997eb78a3",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-07-mixer-before.png",
+      "family": "mixer",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-4/mixer.png",
+      "sha256": "d77fa907a7bdb162b4ddddddbd9e743b3a91f24b131a53c4444a812c2ccb1093",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-08-mixer-after.png",
+      "family": "mixer",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-4/mixer.png",
+      "sha256": "d295ecb7a9118525c5e2a606e287a0043cd55368bce5b7730e8dc38e851d6efb",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-09-routing-before.png",
+      "family": "routing",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-3/routing.png",
+      "sha256": "2b698b8669bef68d03eb8059b50e8d89bb558badb10afdca540691e0c8fcf0cd",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-10-routing-after.png",
+      "family": "routing",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-3/routing.png",
+      "sha256": "3c6abd9f47975e84f338569042282c8bd6521b4ae1036fb7194d8ab454b3778a",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-11-generate-before.png",
+      "family": "generate",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline-supplemental/case-3/generate.png",
+      "sha256": "201401b993cff3dfde3e1d0a9c7eed4cd3b0b334ce883e7331715d2adb162ded",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-12-generate-after.png",
+      "family": "generate",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/generate.png",
+      "sha256": "bf6caf1488063df4230cfea38b5c0bf602675ee12b3cdd85c5a1701e6cb63ead",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-13-automation-before.png",
+      "family": "automation",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-3/automation-curve.png",
+      "sha256": "30a8150de6534917ef1513f662086705caca1004c9cc9b872558f72690a11df7",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-14-automation-after.png",
+      "family": "automation",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-3/automation-curve.png",
+      "sha256": "8a4f974df90b0eb63c2bdc914a4fc3e9848785df10b53864d1a9ac934f0dd642",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-15-takes-before.png",
+      "family": "takes",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline-supplemental/case-3/takes.png",
+      "sha256": "558e447d7e501dd668cee4cbf965af52992920a282803fe3c5f434f118b23ea8",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-16-takes-after.png",
+      "family": "takes",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6-supplemental/case-3/takes.png",
+      "sha256": "8a0b00866f55ac8140498dce2f4cfa69a1a541bb2bf6c061f908b033e3994160",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "eb147d0b6132f4f501a84f03f6169300afd249072b51617fcbb425f456507a4a",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-17-long-properties-before.png",
+      "family": "long-properties",
+      "phase": "before",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bfinal-supplemental/case-3/long-properties.png",
+      "sha256": "a93cf5bae3549cd59d8d265fefebef825f36acb4d0dec856a1e15b0f212c4c2a",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "1cb1fdd1821e595087fea278d09286016569b2fddfe03e393f61482769fe91e3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-18-long-properties-after.png",
+      "family": "long-properties",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/long-properties.png",
+      "sha256": "2969f52ca743300538eb5f671d1337ebddd45a0f395d5875bfdf4f32247808e4",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-19-notes-velocity-after.png",
+      "family": "notes-velocity",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/midi-notes-velocity-scrolled.png",
+      "sha256": "7666a4da4ecc2bec9bf7c462d1806160c010a525711b62f2cc7540d5add6c288",
+      "pixels": [
+        800,
+        600
+      ],
+      "theme": "Dark",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.0,
+      "rill_sha256": "8b04a1cb81cb848a9fd86656e5dec21265cf83e3f661a76df73bcd2cf780febe",
+      "raw_image_unchanged": true
+    },
+    {
+      "file": "native-20-library-scale125-after.png",
+      "family": "library-scale125",
+      "phase": "after",
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f8scale125/case-4/library.png",
+      "sha256": "226f79cf2e69908889ab354b323c906f60f6bcd572cf93fa2f17bb4dcf38cb52",
+      "pixels": [
+        1000,
+        750
+      ],
+      "theme": "Light",
+      "logical_viewport": [
+        800,
+        600
+      ],
+      "scale": 1.25,
+      "rill_sha256": "760c37cf5000926bca581c457373204ac7562469b7d22be55c511049aa19f529",
+      "raw_image_unchanged": true
+    }
+  ],
+  "original_sources": [
+    {
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-1/arc pulse.rill",
+      "expected": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e",
+      "actual": "c277a42824d03c4394c6bc7bab72b63960305e3f4eb861e385330af8c425655e",
+      "unchanged": true
+    },
+    {
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-2/glass current.rill",
+      "expected": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35",
+      "actual": "ee10c5f795b00eff0d5d3a9db18e96a67e0bdbb4fbb95784c64f5a01be867b35",
+      "unchanged": true
+    },
+    {
+      "source": "/workspace/scratch/rill-expert-review-2026-11-01/session-3/sine circuit.rill",
+      "expected": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "actual": "fa73a3273caf542c5c15621e7ae6b5c1a14733f7d666af2aa02c97a5b53af6c3",
+      "unchanged": true
+    }
+  ],
+  "full_matrix_build": {
+    "at": "2026-11-01T08:37:42.617167+00:00",
+    "parent_signal": "BUILDREADY FINAL draft5; shared menus, bounded titles, curve and precision layout; diagnostic-only test follow-up pending",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-final5/rill",
+        "sha256": "5ef3ee3f59a42b8026b76217c0e8c6ac5feb95e3f98fb1b3dea248a4af324ca3"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-final5/daw-plugin-host",
+        "sha256": "dc3ef803acac61b4bf14b07f6b556fe42b9787a64bbe5af03dc3a899458f2be4"
+      }
+    ]
+  },
+  "final_menu_build": {
+    "at": "2026-11-01T09:02:23.225527+00:00",
+    "parent_signal": "BUILDREADY9; final stable viewport menu capacity, shared nested tests six of six passed; native targeted menus only",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-f9/rill",
+        "sha256": "8b04a1cb81cb848a9fd86656e5dec21265cf83e3f661a76df73bcd2cf780febe"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-f9/daw-plugin-host",
+        "sha256": "4ce112847b96ac099913f7b26307678e7e00479b83ee5d199ad9667847952b79"
+      }
+    ]
+  },
+  "library_build": {
+    "at": "2026-11-01T08:57:14.009262+00:00",
+    "parent_signal": "BUILDREADY8; final Library body capacity, 34pt sidebar, plugin return viewport reset; synthetic submenu test follow-up owned by parent",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-f8/rill",
+        "sha256": "760c37cf5000926bca581c457373204ac7562469b7d22be55c511049aa19f529"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-f8/daw-plugin-host",
+        "sha256": "d47c52db065387b99c00b94e90da005aa0a39d0cbf7a626a3957846ee496d3dd"
+      }
+    ]
+  },
+  "followup_build": {
+    "at": "2026-11-01T08:48:21.650052+00:00",
+    "parent_signal": "BUILDREADY draft6; menu capacity, shared AudioGrid, TakeLane89, compact Library inline identity, foreground nested diagnostics",
+    "binaries": [
+      {
+        "source": "/workspace/rill-daw/target/debug/rill",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-followup6/rill",
+        "sha256": "eb147d0b6132f4f501a84f03f6169300afd249072b51617fcbb425f456507a4a"
+      },
+      {
+        "source": "/workspace/rill-daw/target/debug/daw-plugin-host",
+        "copy": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-binaries-followup6/daw-plugin-host",
+        "sha256": "d756aba5c775ab580b0da23672c56823f1223ed06d92cb508edf2c0b96cdb190"
+      }
+    ]
+  },
+  "library_idle_comparison": [
+    {
+      "stage": "f8",
+      "case": 3,
+      "size": [
+        800,
+        600
+      ],
+      "three_second_idle_pixels_identical": true,
+      "changed_bounds": null
+    },
+    {
+      "stage": "f8scale125",
+      "case": 4,
+      "size": [
+        1000,
+        750
+      ],
+      "three_second_idle_pixels_identical": true,
+      "changed_bounds": null
+    }
+  ],
+  "capture_script_current_hashes": {
+    "audit.py": "5fe034dfa2c2435ae390ef319c08b660d40feea5a0ad299dfc0395b2096905ad",
+    "supplemental.py": "db1f2f02aef9139d3b71045a976a47014124bc07d0f8cfd5a4786f03f1353031",
+    "audio.py": "18ed4ed13c518b21bf111dca06e7e73a5feed9ee29e602e3536c86bde5f6394a"
+  },
+  "source_fixture_provenance": [
+    "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/automation-fixture-provenance.json",
+    "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/fixture-provenance.json",
+    "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/long-name-fixture-provenance.json",
+    "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/supplemental-fixture-provenance.json"
+  ],
+  "native_matrix": {
+    "themes": [
+      "Dark",
+      "Light"
+    ],
+    "logical_viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        800,
+        600
+      ]
+    ],
+    "scales": [
+      1.0,
+      1.25
+    ],
+    "scale125_physical_viewport": [
+      1000,
+      750
+    ],
+    "full_case_directories": [
+      "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-1",
+      "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-2",
+      "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-3",
+      "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-4"
+    ]
+  },
+  "additional_reviewed_views": {
+    "audio_tools": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/audio-tool-fade-out.png",
+      "exists": true
+    },
+    "midi_multi_draw": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/midi-tool-multi.png",
+      "exists": true
+    },
+    "midi_quantize": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/midi-quantize.png",
+      "exists": true
+    },
+    "draw_settings_nested": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/draw-length-choices.png",
+      "exists": true
+    },
+    "color_picker": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/color-picker.png",
+      "exists": true
+    },
+    "long_name_keyboard": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-4/long-name-keyboard.png",
+      "exists": true
+    },
+    "recording_failed_input": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/failed-input-result.png",
+      "exists": true
+    },
+    "error_details": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-4/error-details.png",
+      "exists": true
+    },
+    "curve_exp_interaction": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/curve-inspector-exp.png",
+      "exists": true
+    },
+    "assistant_tools": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/assistant-tools.png",
+      "exists": true
+    },
+    "setup_plugins": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-4/setup-plugins.png",
+      "exists": true
+    },
+    "keypad": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-3/routing-keypad.png",
+      "exists": true
+    },
+    "instrument_parameters": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-1/instrument-parameters.png",
+      "exists": true
+    },
+    "library": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f8/case-3/library.png",
+      "exists": true
+    },
+    "audio_grid": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/audio-grid-choice.png",
+      "exists": true
+    },
+    "repeated_notes_menu": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/midi-notes-velocity-reopened.png",
+      "exists": true
+    },
+    "nested_choices": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/midi-draw-length-nested.png",
+      "exists": true
+    },
+    "file_recent_exports": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/file-recent-exports.png",
+      "exists": true
+    },
+    "audio_grid_zero_crossings": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/audio-grid-zero-crossings-on.png",
+      "exists": true
+    },
+    "compact_clip_menu": {
+      "source": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6-supplemental/case-3/audio-clip-menu-scrolled.png",
+      "exists": true
+    }
+  },
+  "cleanup": {
+    "live_owned_processes": [],
+    "all_original_hash_checks_passed": true,
+    "all_display_sockets_removed": true,
+    "case_records": [
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2n-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2n-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bfinal-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2f-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f8scale125/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6scale125/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d3tools-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f8/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft4-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft4-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2m-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2m-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2-failure-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft4/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2f2-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f6-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/f9-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final-scale125/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2-name-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/final/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/bcur/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current/case-1/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current/case-2/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/current/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d3midi-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft3-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft3-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline-supplemental/case-4/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/baseline-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/btools-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/draft2-scale125/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      },
+      {
+        "path": "/workspace/scratch/rill-fibonacci-spacing/native-audit-01/d2f3-supplemental/case-3/cleanup.json",
+        "display_socket_removed": true,
+        "originals_unchanged": true
+      }
+    ],
+    "live_owned_app_host_audio_processes": []
+  },
+  "limits": [
+    "No audio audition. No playback. Recording diagnostics use an unarmed validation failure or deliberately unavailable input in isolated configuration.",
+    "Original study sources are unchanged; only copied fixture manifests and disposable in-memory app state are changed.",
+    "Raw native captures only; no image editing, compositing, or window-manager decoration.",
+    "OS file-picker and native plug-in editor chrome are outside RILL-owned styling; app-owned Instrument/parameter browser are included.",
+    "Scale 2 geometry is covered by the parent tests, not this screenshot set."
+  ],
+  "selection_note": "Nine before/after pairs plus final Notes-scroll and 1.25x typography samples. Complete native family coverage remains in the raw capture directories.",
+  "validation_summary": {
+    "base_matrix_images": 64,
+    "base_matrix_cases": 4,
+    "curated_images": 20,
+    "curated_hashes_verified": true,
+    "additional_reviewed_paths_all_exist": true,
+    "final_menu_revision": 9
+  }
+}

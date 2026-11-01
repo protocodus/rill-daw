@@ -100,6 +100,7 @@ pub struct Knob<'a> {
     show_automation_label: bool,
     compact: bool,
     perceptual_gain: bool,
+    display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
 }
 
 pub fn knob<T: egui::emath::Numeric>(value: &mut T, range: RangeInclusive<T>) -> Knob<'_> {
@@ -129,6 +130,7 @@ impl<'a> Knob<'a> {
             show_automation_label: true,
             compact: false,
             perceptual_gain: false,
+            display_round_trip: None,
         }
     }
 
@@ -138,6 +140,14 @@ impl<'a> Knob<'a> {
     }
     pub fn suffix(mut self, suffix: impl ToString) -> Self {
         self.suffix = suffix.to_string();
+        self
+    }
+    /// Predict the display value the owner will return after accepting an edit,
+    /// including its storage type and unit conversion. This preserves native
+    /// drafts across an exact model round trip without tolerating real changes.
+    /// Called only when this control requests a write; idle input stays exact.
+    pub fn display_round_trip(mut self, convert: impl Fn(f64) -> f64 + 'a) -> Self {
+        self.display_round_trip = Some(Box::new(convert));
         self
     }
     pub fn endpoint_labels(
@@ -154,12 +164,22 @@ impl<'a> Knob<'a> {
         }
         self
     }
-    /// A dial-only control for compact rows. Endpoint captions stay inside the
-    /// dial; the caller provides a readout and exact-value context action.
+    /// A compact dial with a separate endpoint-caption band. The caller
+    /// provides a readout and exact-value context action.
     /// Hidden numeric geometry is `Rect::NOTHING`. The default knob is unchanged.
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
+    }
+    /// Full compact target height, including breathing room for scale labels.
+    /// Hosts can reserve this before centering adjacent controls in the row.
+    pub fn compact_height(diameter: f32) -> f32 {
+        let diameter = if diameter.is_finite() {
+            diameter.clamp(48.0, 180.0)
+        } else {
+            84.0
+        };
+        diameter + tokens::SPACE_MD
     }
     /// An audio gain taper with continuous silence, useful travel below unity,
     /// and the caller's unchanged linear gain range and stored values.
@@ -253,8 +273,16 @@ impl<'a> Knob<'a> {
     fn add_contents(&mut self, ui: &mut Ui, width: f32) -> Response {
         ui.set_width(width);
         let label = (!self.compact && !self.text.is_empty()).then(|| text::label(ui, &self.text));
-        let (dial, mut response) =
-            ui.allocate_exact_size(Vec2::splat(self.diameter), egui::Sense::click_and_drag());
+        let height = if self.compact {
+            Self::compact_height(self.diameter)
+        } else {
+            self.diameter
+        };
+        let (target, mut response) = ui.allocate_exact_size(
+            egui::vec2(self.diameter, height),
+            egui::Sense::click_and_drag(),
+        );
+        let dial = Rect::from_min_size(target.min, Vec2::splat(self.diameter));
         let valid_range = self.range.start().is_finite()
             && self.range.end().is_finite()
             && (self.range.end() - self.range.start()).is_finite();
@@ -391,8 +419,11 @@ impl<'a> Knob<'a> {
         });
         let labels_rect = if self.compact {
             Rect::from_min_max(
-                egui::pos2(dial.left() + 1.0, dial.bottom() - tokens::FONT_SCALE - 1.0),
-                dial.right_bottom() - egui::vec2(1.0, 1.0),
+                egui::pos2(
+                    target.left() + tokens::SPACE_XS,
+                    target.bottom() - tokens::SPACE_XS - tokens::SPACE_MD,
+                ),
+                target.right_bottom() - egui::Vec2::splat(tokens::SPACE_XS),
             )
         } else {
             ui.allocate_exact_size(
@@ -461,7 +492,15 @@ impl<'a> Knob<'a> {
                     response.mark_changed();
                 }
             }
-            crate::value_entry::remember_number_value(ui, numeric_id, (self.value)(None));
+            let current = (self.value)(None);
+            let expected = if response.changed() || numeric.changed() {
+                self.display_round_trip
+                    .as_ref()
+                    .map_or(current, |convert| convert(current))
+            } else {
+                current
+            };
+            crate::value_entry::remember_number_value(ui, numeric_id, expected);
             if numeric.has_focus() || numeric.gained_focus() || numeric.lost_focus() {
                 response = numeric.clone().union(response);
             } else {
@@ -637,13 +676,33 @@ impl Widget for Knob<'_> {
                 .x
                 + ui.spacing().button_padding.x * 2.0
                 + 2.0;
-            self.diameter.max(112.0).max(number_width)
+            let label_width = ui
+                .painter()
+                .layout_no_wrap(
+                    self.text.clone(),
+                    text::TextRole::Label.font(),
+                    theme::palette(ui.ctx()).text,
+                )
+                .size()
+                .x
+                + 2.0 * tokens::SPACE_XS;
+            self.diameter
+                .max(112.0)
+                .max(number_width)
+                .max(label_width.min(ui.available_width().max(0.0)))
         };
         let response = ui.allocate_ui_with_layout(
             // Reserve the dial height before a horizontal host centers this
             // child. A zero-height child would be centered first, then grow
             // downward and make a compact parameter row taller than requested.
-            egui::vec2(width, if self.compact { self.diameter } else { 0.0 }),
+            egui::vec2(
+                width,
+                if self.compact {
+                    Self::compact_height(self.diameter)
+                } else {
+                    0.0
+                },
+            ),
             egui::Layout::top_down(egui::Align::Center),
             |ui| self.add_contents(ui, width),
         );

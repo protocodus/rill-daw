@@ -170,6 +170,123 @@ fn quiet_action_menu_opens_by_mouse_runs_once_and_dismisses_without_losing_its_t
 }
 
 #[test]
+fn long_shared_menus_scroll_to_the_final_mouse_action_in_short_viewports() {
+    for scale in [1.0, 1.25, 2.0] {
+        for role in 0..9 {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            ctx.set_pixels_per_point(scale);
+            let mut invoked = 0;
+            let mut draw = |events| {
+                let mut opener = None;
+                let mut final_action = None;
+                let mut submenu = None;
+                let _ = ctx.run(input(events, 800.0), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.add_space(300.0);
+                        let contents = |ui: &mut Ui| {
+                            // Explicit legacy bounds must reuse the wrapper's
+                            // scroll pane, rather than creating nested scrollers.
+                            controls::command_menu_contents(ui, |ui| {
+                                for index in 0..16 {
+                                    let _ = controls::button(ui, format!("Command {index}"));
+                                }
+                                let response = controls::button(ui, "Final action");
+                                if response.clicked() {
+                                    invoked += 1;
+                                    ui.close();
+                                }
+                                final_action = Some(response);
+                            });
+                        };
+                        let response = match role {
+                            0 => controls::menu_button(ui, "Notes", contents).response,
+                            1 => controls::action_menu(ui, "Notes", contents).response,
+                            2 => controls::quiet_action_menu(ui, "Notes", contents).response,
+                            3 => controls::choice_menu(ui, "Notes", contents).response,
+                            4 => controls::quiet_picker_button(ui, "Notes", contents).0,
+                            5 => controls::view_menu(ui, "Notes", contents).response,
+                            6 => controls::quiet_view_menu(ui, "Notes", contents).response,
+                            7 => controls::compact_action_menu(ui, "Notes", contents).response,
+                            _ => {
+                                controls::menu_button(ui, "Notes", |ui| {
+                                    submenu = Some(
+                                        controls::menu_button(ui, "More notes", contents).response,
+                                    );
+                                })
+                                .response
+                            }
+                        };
+                        opener = Some(response);
+                    });
+                });
+                (opener.unwrap(), final_action, invoked, submenu)
+            };
+            let target = draw(vec![]).0.rect.center();
+            draw(pointer(target, true));
+            draw(pointer(target, false));
+            for _ in 0..3 {
+                draw(vec![]);
+            }
+            if role == 8 {
+                let submenu = draw(vec![]).3.unwrap().rect.center();
+                draw(pointer(submenu, true));
+                draw(pointer(submenu, false));
+                for _ in 0..3 {
+                    draw(vec![]);
+                }
+            }
+            let clip = controls::command_menu_scroll_rect(&ctx).unwrap();
+            assert!(clip.top() >= 0.0 && clip.bottom() <= 600.0);
+            assert!(
+                clip.height() >= 160.0,
+                "A long menu must not inherit a collapsed prior area: {clip:?}"
+            );
+            draw(vec![
+                Event::PointerMoved(clip.center()),
+                Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::vec2(0.0, -10000.0),
+                    modifiers: Modifiers::NONE,
+                },
+            ]);
+            let mut frame = draw(vec![]);
+            // Smooth wheel motion and submenu positioning can outlast a
+            // fixed handful of frames. Wait for the actual target geometry,
+            // with a bounded deadline, before asserting or clicking it.
+            for _ in 0..90 {
+                let clip = controls::command_menu_scroll_rect(&ctx).unwrap();
+                if frame
+                    .1
+                    .as_ref()
+                    .is_some_and(|last| clip.expand(1.0 / scale).contains_rect(last.rect))
+                {
+                    break;
+                }
+                frame = draw(vec![]);
+            }
+            let last = frame.1.expect("The menu remains open while scrolling");
+            let clip = controls::command_menu_scroll_rect(&ctx).unwrap();
+            assert!(
+                // Scroll content is rounded to physical pixels, while the
+                // parent viewport can retain fractional logical coordinates.
+                clip.expand(1.0 / scale).contains_rect(last.rect),
+                "Final action must be reachable at scale {scale}, role {role}: {:?} in {clip:?}",
+                last.rect
+            );
+            draw(pointer(last.rect.center(), true));
+            draw(pointer(last.rect.center(), false));
+            let closed = draw(vec![]);
+            assert_eq!(closed.2, 1);
+            assert!(
+                closed.1.is_none(),
+                "Choosing the final action dismisses its menu"
+            );
+        }
+    }
+}
+
+#[test]
 fn settings_menus_keep_toggles_open_support_keyboard_and_dismiss_on_accept_or_escape() {
     for menu in SettingsMenu::ALL {
         let ctx = Context::default();

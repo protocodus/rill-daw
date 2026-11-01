@@ -2,6 +2,7 @@
 mod common;
 use common::Harness;
 use daw_core::AudioData;
+use eframe::egui;
 use serde_json::{Value, json};
 
 fn has(state: &Value, label: &str) -> bool {
@@ -62,6 +63,89 @@ fn assert_keyboard_fits(state: &Value, width: f64, height: f64) {
             "{label}: {rect}"
         );
     }
+}
+
+#[test]
+fn long_clip_name_near_the_right_edge_keeps_complete_inline_actions_at_every_density() {
+    let mut app = Harness::new();
+    let mut project = daw_core::Project::new();
+    let track = project.add_midi_track("Naming geometry");
+    project
+        .track_mut(track)
+        .unwrap()
+        .clips
+        .push(daw_core::Clip::midi(
+            "A long current clip name with expressive musical detail and several descriptive words",
+            4.0,
+            4.0,
+            vec![daw_core::Note::new(60, 0.0, 1.0, 90)],
+        ));
+    let path = app.directory.path().join("naming-geometry.rill");
+    project.save(&path).unwrap();
+    let original = app.command(json!({"command":"open", "path":path}));
+    for dark in [false, true] {
+        for density in [1.0, 1.25, 2.0] {
+            app.command(json!({"command":"viewport", "width":800, "height":600, "pixels_per_point":density}));
+            let state = app.command(json!({"command":"system_theme", "dark":dark}));
+            let clip = &state["timeline"]["clips"][0]["visible_rect"];
+            app.command(json!({"command":"pointer", "phase":"click",
+                "x":(clip["min"][0].as_f64().unwrap()+clip["max"][0].as_f64().unwrap())*0.5,
+                "y":(clip["min"][1].as_f64().unwrap()+clip["max"][1].as_f64().unwrap())*0.5}));
+            let properties = menu(&mut app, "Window", "Properties");
+            // The utility retains its scroll position across display changes.
+            // Reveal the name row with the mouse before opening its keyboard.
+            let tab = properties["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|rect| rect["text"] == "Clip")
+                .unwrap();
+            let window = properties["window_rects"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap();
+            let x = window["max"][0].as_f64().unwrap() - 2.0 * f64::from(daw_ui::tokens::SPACE_LG);
+            let y = tab["max"][1].as_f64().unwrap()
+                + f64::from(daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_MD);
+            for _ in 0..3 {
+                app.command(json!({"command":"scroll", "x":x, "y":y, "delta":1000.0}));
+            }
+            let keyboard = app.click("Keyboard…");
+            assert_keyboard_fits(&keyboard, 800.0, 600.0);
+            // The driver reports clipped glyph rectangles. Compare to the full
+            // measured label as well as viewport bounds so a sliced Cancel
+            // label cannot masquerade as an in-bounds action.
+            let ctx = egui::Context::default();
+            daw_ui::theme::apply(&ctx);
+            ctx.set_pixels_per_point(density);
+            let _ = ctx.run(egui::RawInput::default(), |_| {});
+            let font = egui::TextStyle::Button.resolve(&ctx.style());
+            for text in ["Keyboard", "Apply name", "Cancel"] {
+                let expected = ctx.fonts_mut(|fonts| {
+                    fonts
+                        .layout_no_wrap(text.to_owned(), font.clone(), egui::Color32::WHITE)
+                        .rect
+                        .width()
+                });
+                let rect = keyboard["label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|rect| rect["text"] == text)
+                    .unwrap();
+                let actual = rect["max"][0].as_f64().unwrap() - rect["min"][0].as_f64().unwrap();
+                assert!(
+                    actual >= f64::from(expected - 1.0 / density),
+                    "Clipped {text}: {rect}, expected {expected}"
+                );
+            }
+            let cancelled = app.click("Cancel");
+            assert_eq!(cancelled["project"], original["project"]);
+            assert_eq!(cancelled["history"], original["history"]);
+        }
+    }
+    app.quit();
 }
 
 #[test]

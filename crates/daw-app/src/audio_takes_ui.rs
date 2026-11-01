@@ -378,7 +378,8 @@ impl DawApp {
             }
         }
         let mut open = true;
-        daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).show(ctx, |ui| {
+        daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).vscroll(false).show(ctx, |ui| {
+            let body_top = ui.next_widget_position().y;
             ui.horizontal_wrapped(|ui| {
                 daw_ui::view_menu(ui, "View", crate::spectrogram::view_options);
                 if groups.len() > 1 {
@@ -431,10 +432,15 @@ impl DawApp {
                 }
             });
             daw_ui::text::note(ui, "Choose a take, then use it for the whole clip or just your time selection.");
-            ui.add_space(6.0);
+            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
             self.audio_takes_ui.rows.clear();
-            let list_height = (ui.available_height() - 230.0).clamp(86.0, 320.0);
-            egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(list_height).show(ui, |ui| {
+            // Take lanes and their range/crossfade settings share the scroll
+            // body. Only commit actions stay pinned, leaving a useful lane
+            // viewport even beneath the wrapped transport at 800×600.
+            let footer_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG;
+            let header_height = ui.next_widget_position().y - body_top;
+            let list_height = (daw_ui::popup_body_size(ctx).y - header_height - footer_height).max(0.0);
+            egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(list_height).min_scrolled_height(0.0).auto_shrink([false, false]).show(ui, |ui| {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));
                     let detail = format!("{:.2} beats · {}", clip.length, if in_comp || group.is_none() { "In comp" } else { "Alternative" });
@@ -465,8 +471,7 @@ impl DawApp {
                     self.audio_takes_ui.rows.push((clip.id, response.rect));
                     if response.clicked() { self.audio_takes_ui.source = Some(clip.id); }
                 }
-            });
-            ui.separator();
+            ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
             ui.horizontal_wrapped(|ui| {
                 let mut use_range = self.audio_takes_ui.range.is_some();
                 if daw_ui::checkbox(ui, &mut use_range, "Time selection").changed() {
@@ -485,18 +490,26 @@ impl DawApp {
                 ui.add(daw_ui::number(&mut self.audio_takes_ui.crossfade_ms).range(0.0..=500.0).speed(1.0).suffix(" ms"))
                     .on_hover_text("Smooth complementary fades, limited to available audio handles. Edit the spline in Crossfade after choosing a take.");
             });
-            ui.add_space(6.0);
             let selection_valid = selected.as_ref().is_some_and(|take| self.audio_takes_ui.range.is_none_or(|(start, end)| start >= take.start && end <= take.end() && end > start));
-            if !selection_valid && let Some(take) = &selected {
-                ui.horizontal_wrapped(|ui| {
-                    daw_ui::text::note(ui, format!("Selection outside this take · Available beats {:.2}–{:.2}", take.start + 1.0, take.end() + 1.0));
-                    if daw_ui::button(ui, "Fit selection to take").clicked() {
-                        let (start, end) = self.audio_takes_ui.range.unwrap_or((take.start, take.end()));
-                        let overlap = (start.max(take.start), end.min(take.end()));
-                        self.audio_takes_ui.range = Some(if overlap.1 > overlap.0 { overlap } else { (take.start, take.end()) });
+            // Feedback belongs to the scrolling options, so even a long
+            // validation message cannot displace the pinned commit actions.
+            ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT);
+                if !selection_valid && let Some(take) = &selected {
+                    daw_ui::action_row(ui, |ui| {
+                        if daw_ui::button(ui, "Fit selection to take").clicked() {
+                            let (start, end) = self.audio_takes_ui.range.unwrap_or((take.start, take.end()));
+                            let overlap = (start.max(take.start), end.min(take.end()));
+                            self.audio_takes_ui.range = Some(if overlap.1 > overlap.0 { overlap } else { (take.start, take.end()) });
+                        }
+                    }, |ui| {
+                        daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, format!("Selection outside this take · Available beats {:.2}–{:.2}", take.start + 1.0, take.end() + 1.0), 2);
+                    });
                     }
-                });
-            }
+            });
+            });
+            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+            let selection_valid = selected.as_ref().is_some_and(|take| self.audio_takes_ui.range.is_none_or(|(start, end)| start >= take.start && end <= take.end() && end > start));
             ui.horizontal_wrapped(|ui| {
                 ui.add_enabled_ui(!busy && group.is_some() && selection_valid, |ui| {
                     if daw_ui::primary_button(ui, if self.audio_takes_ui.range.is_some() { "Use selection" } else { "Use whole take" }).clicked() {

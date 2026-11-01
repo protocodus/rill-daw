@@ -246,30 +246,42 @@ impl DawApp {
                 state.error = None;
                 state.requested = Some(Instant::now());
             }
-            ui.add_space(daw_ui::tokens::SPACE_MD);
+            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
             let busy = state.pending.is_some() || state.requested.is_some();
-            if busy {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    daw_ui::text::note(ui, "Analyzing source…");
-                });
-            }
-            if let Some(preview) = &state.preview {
-                let retained: f64 = preview.iter().map(|(start, end)| end - start).sum();
-                let removed =
-                    ((state.range.1 - state.range.0 - retained) * 60.0 / state.tempo).max(0.0);
-                daw_ui::text::body(
-                    ui,
-                    format!("Keep {} region(s) · remove {removed:.2} s", preview.len()),
-                );
-                daw_ui::text::note(
-                    ui,
-                    "Tinted regions stay. Source files and other occurrences stay intact.",
-                );
-            }
-            if let Some(error) = &state.error {
-                daw_ui::text::note(ui, error);
-            }
+            // Analysis results and errors share a reserved feedback area so
+            // the Apply/Cancel targets stay in place when the job completes.
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT * 2.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT * 2.0);
+                    if busy {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            daw_ui::text::note(ui, "Analyzing source…");
+                        });
+                    } else if let Some(error) = &state.error {
+                        daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 3)
+                            .on_hover_text(error);
+                    } else if let Some(preview) = &state.preview {
+                        let retained: f64 = preview.iter().map(|(start, end)| end - start).sum();
+                        let removed = ((state.range.1 - state.range.0 - retained) * 60.0
+                            / state.tempo)
+                            .max(0.0);
+                        daw_ui::text::body(
+                            ui,
+                            format!("Keep {} region(s) · remove {removed:.2} s", preview.len()),
+                        );
+                        daw_ui::text::bounded_block(
+                            ui,
+                            daw_ui::text::TextRole::Note,
+                            "Tinted regions stay. Source files and other occurrences stay intact.",
+                            2,
+                        );
+                    }
+                },
+            );
+            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
             ui.horizontal(|ui| {
                 let changes = state
                     .preview

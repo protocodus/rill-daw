@@ -967,9 +967,21 @@ impl DawApp {
             .map(|track| format!("Recording · {}", track.name))
             .unwrap_or_else(|| "Recording".into());
         let mut open = true;
-        daw_ui::popup(title, ctx).id(egui::Id::new("recording_popup")).open(&mut open).default_width(460.0).default_height(560.0).vscroll(false).show(ctx, |ui| {
+        daw_ui::popup(title, ctx).id(egui::Id::new("recording_popup")).open(&mut open)
+            .default_width(610.0).min_width(daw_ui::popup_body_size(ctx).x.min(610.0))
+            .default_height(560.0).vscroll(false).show(ctx, |ui| {
             let busy = self.recording_busy();
-            daw_ui::popup_scroll_body(ui, "recording_inputs", 200.0, |ui| {
+            let gap = ui.spacing().item_spacing.y;
+            // The calibrated click-level slider has its own caption row. Leave
+            // room for wrapped retry/editor actions, including the wider Stop
+            // recording label, rather than hiding Record below the viewport.
+            let action_rows = if ui.available_width() < 610.0
+                && self.recording.failed_input && self.selected().is_some() { 2.0 } else { 1.0 };
+            let timing_height = 2.0 * daw_ui::tokens::CONTROL_HEIGHT
+                + daw_ui::tokens::PARAMETER_ROW_HEIGHT + 2.0 * gap;
+            let footer_height = timing_height + action_rows * daw_ui::tokens::CONTROL_HEIGHT
+                + daw_ui::tokens::SPACE_LG + (action_rows + 2.0) * gap;
+            daw_ui::popup_scroll_body(ui, "recording_inputs", footer_height, |ui| {
             if let Some(track) = &track {
                 let midi = track.kind == TrackKind::Midi;
                 ui.add_enabled_ui(!busy, |ui| {
@@ -1048,9 +1060,9 @@ impl DawApp {
                     daw_ui::text::note(ui, "Dry monitoring follows channel and output-bus levels. Inserts and sends are bypassed; recorded audio stays unchanged.");
                     if self.project.loop_enabled { daw_ui::text::note(ui, "Loop recording keeps each pass as a separate take."); }
                 }
-                ui.separator();
             } else { daw_ui::text::note(ui, "Select an audio or MIDI track to choose its input."); }
             });
+            ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
             let (mut precount, mut click, mut gain) = (self.project.precount_bars, self.project.metronome_enabled, self.project.metronome_gain);
             if daw_ui::recording_timing_controls(ui, &mut precount, &mut click, &mut gain, !busy) {
                 self.begin_edit(); self.project.precount_bars = precount; self.project.metronome_enabled = click; self.project.metronome_gain = gain;

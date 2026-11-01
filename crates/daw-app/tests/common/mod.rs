@@ -383,6 +383,47 @@ pub fn wait_library_device(app: &mut Harness, name: &str) {
     }
 }
 
+/// Reach a filter through the sidebar's own mouse scroll, independently of
+/// the device catalog. Require room for the complete count-item target.
+pub fn reveal_library_filter(app: &mut Harness, label: &str) -> Value {
+    let mut state = app.inspect();
+    let sidebar = &state["library"]["sidebar"];
+    let x = (sidebar["min"][0].as_f64().unwrap() + sidebar["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (sidebar["min"][1].as_f64().unwrap() + sidebar["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"scroll","x":x,"y":y,"delta":10000.0}));
+    for _ in 0..20 {
+        state = app.inspect();
+    }
+    for _ in 0..40 {
+        let sidebar = &state["library"]["sidebar"];
+        let top = sidebar["min"][1].as_f64().unwrap();
+        let bottom = sidebar["max"][1].as_f64().unwrap();
+        let half_target = f64::from(daw_ui::tokens::CONTROL_HEIGHT) * 0.5;
+        let complete = state["label_rects"].as_array().unwrap().iter().any(|rect| {
+            let min = rect["min"][1].as_f64().unwrap();
+            let max = rect["max"][1].as_f64().unwrap();
+            let center = (min + max) * 0.5;
+            rect["text"] == label
+                && rect["min"][0].as_f64().unwrap() >= sidebar["min"][0].as_f64().unwrap()
+                && rect["max"][0].as_f64().unwrap() <= sidebar["max"][0].as_f64().unwrap()
+                && max - min >= f64::from(daw_ui::tokens::FONT_BODY)
+                && center - half_target >= top - 1.0
+                && center + half_target <= bottom + 1.0
+        });
+        if complete {
+            return state;
+        }
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-55.0}));
+        for _ in 0..20 {
+            state = app.inspect();
+        }
+    }
+    panic!(
+        "Library filter {label:?} is unreachable: {}",
+        state["label_rects"]
+    );
+}
+
 pub fn wait_until(app: &mut Harness, condition: impl Fn(&Value) -> bool) -> Value {
     let deadline = Instant::now() + Duration::from_secs(35);
     loop {

@@ -135,6 +135,7 @@ impl DawApp {
             .default_height(0.0)
             .vscroll(false)
             .show(ctx, |ui| {
+                let body_top = ui.next_widget_position().y;
                 ui.set_min_width(400.0);
                 let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {
                     daw_ui::text::note(ui, "Select an audio or MIDI track.");
@@ -142,9 +143,20 @@ impl DawApp {
                 };
                 let busy = self.join_ui.pending();
                 daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
+                let feedback_height =
+                    ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::text::TextRole::Note.font()));
+                let footer_height = feedback_height
+                    + daw_ui::tokens::CONTROL_HEIGHT
+                    + daw_ui::tokens::COMPACT_HEIGHT
+                    + ui.spacing().item_spacing.y * 3.0
+                    + daw_ui::tokens::SPACE_SM;
+                let header_height = ui.next_widget_position().y - body_top;
+                let list_height = (daw_ui::popup_body_size(ctx).y - header_height - footer_height)
+                    .clamp(0.0, 300.0);
                 ui.add_enabled_ui(!busy, |ui| {
                     egui::ScrollArea::vertical()
-                        .max_height(300.0)
+                        .max_height(list_height)
+                        .min_scrolled_height(0.0)
                         .show(ui, |ui| {
                             let mut clips: Vec<_> = track
                                 .clips
@@ -197,10 +209,12 @@ impl DawApp {
                     None
                 };
                 if let Some(error) = &error {
-                    daw_ui::text::note(ui, error);
+                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
+                        .on_hover_text(error);
                 } else {
                     daw_ui::text::note(ui, format!("{} clips → one editable clip", ids.len()));
                 }
+                ui.add_space(daw_ui::tokens::SPACE_SM);
                 ui.horizontal(|ui| {
                     if ui
                         .add_enabled(!busy && error.is_none(), daw_ui::button_widget("Join"))

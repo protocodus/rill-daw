@@ -319,9 +319,40 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     // Hover the actual fader after scrolling settles; shared padding can move
     // it without changing the control. Its stacked value/volume/automation
     // hints must let the first press reach the output target underneath.
+    // Leave a full control-height portion of the fader visible above Output;
+    // the raw diagnostic rectangle can otherwise sit behind the fixed header.
+    let viewport = &scrolled["mixer"]["reorder_viewport"];
+    let delta = (viewport["min"][1].as_f64().unwrap() + f64::from(daw_ui::tokens::CONTROL_HEIGHT)
+        - scrolled["mixer"]["channels"][0]["fader"]["max"][1]
+            .as_f64()
+            .unwrap())
+    .max(0.0);
+    if delta > 0.0 {
+        app.command(
+            json!({"command":"scroll", "x":viewport["max"][0].as_f64().unwrap() - 5.0,
+            "y":(viewport["min"][1].as_f64().unwrap() + viewport["max"][1].as_f64().unwrap()) * 0.5,
+            "delta":delta}),
+        );
+        for _ in 0..20 {
+            scrolled = app.inspect();
+        }
+    }
     let fader = &scrolled["mixer"]["channels"][0]["fader"];
+    let viewport = &scrolled["mixer"]["reorder_viewport"];
     let x = (fader["min"][0].as_f64().unwrap() + fader["max"][0].as_f64().unwrap()) * 0.5;
-    let y = (fader["min"][1].as_f64().unwrap() + fader["max"][1].as_f64().unwrap()) * 0.5;
+    let visible_top = fader["min"][1]
+        .as_f64()
+        .unwrap()
+        .max(viewport["min"][1].as_f64().unwrap());
+    let visible_bottom = fader["max"][1]
+        .as_f64()
+        .unwrap()
+        .min(viewport["max"][1].as_f64().unwrap());
+    assert!(visible_bottom - visible_top >= f64::from(daw_ui::tokens::CONTROL_HEIGHT) - 1.0);
+    let y = (visible_top + visible_bottom) * 0.5;
+    let output = &scrolled["mixer"]["channels"][0]["target"];
+    assert!(output["min"][1].as_f64().unwrap() >= viewport["min"][1].as_f64().unwrap());
+    assert!(output["max"][1].as_f64().unwrap() <= viewport["max"][1].as_f64().unwrap());
     assert!((0.0..800.0).contains(&x) && (0.0..600.0).contains(&y));
     app.command(json!({"command":"pointer","phase":"move","x":x,"y":y}));
     for _ in 0..20 {

@@ -97,6 +97,41 @@ fn near(actual: f64, expected: f64) {
 }
 
 #[test]
+fn compact_silence_feedback_keeps_apply_and_cancel_targets_fixed() {
+    for dark in [false, true] {
+        let (mut app, _) = fixture(false, false);
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.command(json!({"command":"viewport","width":800,"height":600}));
+        let before = open(&mut app);
+        let targets = |state: &Value| {
+            ["Apply strip silence", "Cancel"].map(|label| {
+                let rect = state["label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|rect| rect["text"] == label)
+                    .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
+                assert!(rect["min"][0].as_f64().unwrap() >= 0.0);
+                assert!(rect["max"][0].as_f64().unwrap() <= 800.0);
+                assert!(rect["max"][1].as_f64().unwrap() <= 600.0);
+                (rect["min"].clone(), rect["max"].clone())
+            })
+        };
+        let original = targets(&before);
+        let changed = number(&mut app, 1, 2000.0);
+        assert_eq!(
+            targets(&changed),
+            original,
+            "Analysis moved the footer targets"
+        );
+        assert_eq!(changed["project"], before["project"]);
+        let canceled = app.click("Cancel");
+        assert!(canceled["audio_silence"].is_null());
+        app.quit();
+    }
+}
+
+#[test]
 fn preview_apply_keeps_ghost_and_source_audio_with_one_undo_and_portable_recall() {
     let (mut app, id) = fixture(false, true);
     let before = app.inspect()["project"].clone();

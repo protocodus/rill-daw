@@ -1656,7 +1656,10 @@ impl DawApp {
                     .as_ref()
                     .is_some_and(|report| report.status == self.status && report.audio_setup);
         egui::TopBottomPanel::bottom("status")
-            .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
+            .frame(daw_ui::panel(ctx).inner_margin(egui::Margin::symmetric(
+                daw_ui::tokens::SPACE_MD as i8,
+                daw_ui::tokens::SPACE_SM as i8,
+            )).corner_radius(0))
             .show(ctx, |ui| {
                 if kind == NoticeKind::Error && busy {
                     daw_ui::notice(ui, NoticeKind::Busy, &busy_message, |_| {});
@@ -2073,7 +2076,10 @@ impl DawApp {
     }
     fn transport(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("transport")
-            .frame(daw_ui::panel(ctx).inner_margin(8).corner_radius(0))
+            .frame(daw_ui::panel(ctx).inner_margin(egui::Margin::symmetric(
+                daw_ui::tokens::SPACE_MD as i8,
+                daw_ui::tokens::SPACE_SM as i8,
+            )).corner_radius(0))
             .show(ctx, |ui| {
                 // Account for the full mouse targets beside tempo while keeping
                 // complete control groups together at smaller window sizes.
@@ -2334,13 +2340,16 @@ impl DawApp {
 
     fn menus(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("application-menu")
-            .frame(daw_ui::panel(ctx).inner_margin(6).corner_radius(0))
+            .frame(daw_ui::panel(ctx).inner_margin(egui::Margin::symmetric(
+                daw_ui::tokens::SPACE_MD as i8,
+                daw_ui::tokens::SPACE_SM as i8,
+            )).corner_radius(0))
             .show(ctx, |ui| {
                 if self.document_guard.is_some() { ui.disable(); }
                 daw_ui::menu_bar(ui, |ui| {
                     daw_ui::brand_lockup(ui, daw_ui::BrandSize::Compact);
                     ui.separator();
-                    daw_ui::menu_button(ui, "File", |ui| {
+                    daw_ui::command_menu_button(ui, "File", |ui| {
                         if daw_ui::button(ui, "New").clicked() {
                             self.request_document_transition(crate::document_ui::DocumentTransition::New);
                             ui.close();
@@ -2386,8 +2395,7 @@ impl DawApp {
                             ui.close();
                         }
                     });
-                    daw_ui::menu_button(ui, "Edit", |ui| {
-                        daw_ui::command_menu_contents(ui, |ui| {
+                    daw_ui::command_menu_button(ui, "Edit", |ui| {
                         if ui
                             .add_enabled(
                                 self.history.can_undo() && !self.state_sync_pending() && !self.recording_busy(),
@@ -2567,9 +2575,8 @@ impl DawApp {
                             ui.close();
                         }
                     });
-                        });
                     self.track_menu(ui);
-                    daw_ui::menu_button(ui, "Window", |ui| {
+                    daw_ui::command_menu_button(ui, "Window", |ui| {
                         if daw_ui::button(ui, "Assistant").clicked() {
                             self.open_global_assistant();
                             ui.close();
@@ -2635,7 +2642,7 @@ impl DawApp {
                             ui.close();
                         }
                     });
-                    daw_ui::menu_button(ui, "Help", |ui| {
+                    daw_ui::command_menu_button(ui, "Help", |ui| {
                         if daw_ui::button(ui, "About RILL").clicked() {
                             self.open_popup(PopupKind::About);
                             ui.close();
@@ -2674,10 +2681,10 @@ impl DawApp {
             .open(&mut open)
             .show(ctx, |ui| {
                 daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero);
-                ui.add_space(daw_ui::tokens::SPACE_MD);
+                ui.add_space(daw_ui::tokens::SPACE_LG);
                 daw_ui::text::body(ui, "Audio workstation");
                 daw_ui::text::note(ui, format!("Version {}", env!("CARGO_PKG_VERSION")));
-                ui.add_space(daw_ui::tokens::SPACE_MD);
+                ui.add_space(daw_ui::tokens::SPACE_LG);
                 close = daw_ui::button(ui, "Close").clicked();
             });
         self.about_open = open && !close;
@@ -2769,7 +2776,7 @@ impl DawApp {
     }
 
     fn track_menu(&mut self, ui: &mut egui::Ui) {
-        daw_ui::menu_button(ui, "Track", |ui| {
+        daw_ui::command_menu_button(ui, "Track", |ui| {
             if daw_ui::button(ui, "Add instrument…").clicked() {
                 self.open_instrument_chooser(false);
                 ui.close();
@@ -2885,9 +2892,10 @@ impl DawApp {
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Plugins, "Plug-ins");
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Ai, "AI");
             });
-            ui.separator();
-            ui.add_space(8.0);
-            daw_ui::popup_scroll_body(ui, "setup_body", 76.0, |ui| { match self.setup_page {
+            ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
+            let footer_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG
+                + 2.0 * ui.spacing().item_spacing.y;
+            daw_ui::popup_scroll_body(ui, "setup_body", footer_height, |ui| { match self.setup_page {
                 SetupPage::Ai => self.ai_setup(ui),
                 SetupPage::Appearance => {
                     daw_ui::form_grid(ui, "appearance_settings", |ui| {
@@ -2947,12 +2955,14 @@ impl DawApp {
                     let rate = self.setup_draft.sample_rate.max(1) as f64;
                     ui.label(RichText::new(format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate)).small().color(palette(ui.ctx()).muted))
                         .on_hover_text(format!("The render queue adds up to {:.1} ms. Device and plug-in latency may add more.", self.setup_draft.buffer_frames.saturating_mul(2).max(512) as f64 * 1000.0 / rate));
-                    ui.add_space(8.0);
+                    ui.add_space(daw_ui::tokens::SPACE_MD);
                     if daw_ui::button(ui, "Refresh devices").clicked() { self.refresh_devices(); }
                 }
                 SetupPage::Storage => {
                     label(ui, "SCRATCH DIRECTORY");
-                    ui.label(self.setup_draft.scratch_dir.display().to_string()).on_hover_text("Recovery snapshots are saved here every 30 seconds while editing.");
+                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Body, self.setup_draft.scratch_dir.display().to_string())
+                        .on_hover_text("Recovery snapshots are saved here every 30 seconds while editing.");
+                    ui.add_space(daw_ui::tokens::SPACE_MD);
                     ui.horizontal(|ui| {
                         if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) { self.setup_draft.scratch_dir = path; }
                         if daw_ui::button(ui, "Recover session").clicked() {
@@ -2966,10 +2976,10 @@ impl DawApp {
                     let mut remove = None;
                     // Keep the wrapped folder field/actions and Apply/Cancel
                     // outside the scrolling list even in a small viewport.
-                    let controls_height = 3.0 * daw_ui::tokens::CONTROL_HEIGHT
-                        + daw_ui::tokens::SPACE_LG + 6.0 * daw_ui::tokens::SPACE_SM;
+                    let controls_height = 2.0 * daw_ui::tokens::CONTROL_HEIGHT
+                        + 3.0 * ui.spacing().item_spacing.y;
                     let list_height = (ui.available_height() - controls_height)
-                        .clamp(daw_ui::tokens::COMPACT_HEIGHT, 220.0);
+                        .clamp(daw_ui::tokens::COMPACT_HEIGHT, 233.0);
                     egui::ScrollArea::vertical().max_height(list_height)
                         .min_scrolled_height(daw_ui::tokens::COMPACT_HEIGHT).show(ui, |ui| {
                         for (index, path) in self.setup_draft.vst_dirs.iter().enumerate() {
@@ -2998,8 +3008,7 @@ impl DawApp {
                 }
             }
             });
-            ui.add_space(16.0);
-            ui.separator();
+            ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
             ui.horizontal(|ui| {
                 if daw_ui::primary_button(ui, "Apply").clicked() && self.prepare_ai_settings() {self.request_settings_apply();}
                 if daw_ui::button(ui, "Cancel").clicked() { self.setup_open = false; }

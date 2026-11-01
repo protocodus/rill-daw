@@ -226,6 +226,9 @@ impl DawApp {
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
+                let footer_height = 2.0 * daw_ui::tokens::CONTROL_HEIGHT
+                    + daw_ui::tokens::SPACE_LG + 3.0 * ui.spacing().item_spacing.y;
+                daw_ui::popup_scroll_body(ui, "export_summary", footer_height, |ui| {
                 daw_ui::text::body(ui, duration).on_hover_text(
                     if self.export_include_effect_tails {
                         "The file includes releases and effect tails beyond this arrangement duration."
@@ -238,16 +241,16 @@ impl DawApp {
                     f64::from(self.settings.sample_rate) / 1000.0,
                 )).on_hover_text("Change the sample rate in Window → Setup → Audio.");
                 if !missing_instruments.is_empty() {
-                    ui.add_space(daw_ui::tokens::SPACE_MD);
+                    ui.add_space(daw_ui::tokens::SPACE_LG);
                     daw_ui::notice(ui, daw_ui::NoticeKind::Warning, "MIDI notes need an instrument", |_| {});
                     daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Body,
                         format!("No instrument: {missing_instruments}"), 3);
                     daw_ui::text::body(ui, "These notes will be silent in the WAV. Choose instruments on their tracks, or continue without them.");
                 }
-                ui.add_space(daw_ui::tokens::SPACE_SM);
+                });
                 daw_ui::checkbox(ui, &mut self.export_include_effect_tails, "Include effect tails")
                     .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary.");
-                ui.add_space(daw_ui::tokens::SPACE_MD);
+                ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
                 ui.horizontal(|ui| {
                     export = daw_ui::primary_button(ui, "Export…").clicked();
                     cancel = daw_ui::button(ui, "Cancel").clicked();

@@ -4,7 +4,7 @@ use egui::{Align2, FontId, Rect, Response, Sense, SliderClamping, Stroke, Ui, Ve
 
 /// Includes the calibrated dB captions to the left of the native fader target.
 pub const MIXER_FADER_WIDTH: f32 = 52.0 + crate::tokens::SPACE_XL + crate::tokens::SPACE_XS;
-pub const MIXER_LEVEL_METER_HEIGHT: f32 = 40.0;
+pub const MIXER_LEVEL_METER_HEIGHT: f32 = crate::tokens::PARAMETER_ROW_HEIGHT;
 
 /// Linear 0..=1.5 channel gain with an external dB scale. Existing values are
 /// never clamped merely by displaying the fader. The returned native response
@@ -71,15 +71,16 @@ pub fn mixer_fader(ui: &mut Ui, gain: &mut f32, height: f32) -> Response {
 }
 
 /// Relative stereo-balance dial with a fixed center tick and an adjacent
-/// current-value caption. The whole 55-point row exposes the same context menu;
+/// current-value caption. The whole row exposes the same context menu;
 /// clicking it never jumps the value to an absolute pointer position.
 pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
+    let height = crate::Knob::compact_height(48.0).max(crate::tokens::PARAMETER_ROW_HEIGHT);
     let row = ui.allocate_ui_with_layout(
-        Vec2::new(width, crate::tokens::PARAMETER_ROW_HEIGHT),
+        Vec2::new(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.set_min_size(Vec2::new(width, crate::tokens::PARAMETER_ROW_HEIGHT));
-            ui.set_row_height(crate::tokens::PARAMETER_ROW_HEIGHT);
+            ui.set_min_size(Vec2::new(width, height));
+            ui.set_row_height(height);
             ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_SM;
             let response = ui.add(
                 crate::knob(pan, -1.0..=1.0)
@@ -222,8 +223,11 @@ pub fn mixer_level_meter(ui: &mut Ui, peaks: [f32; 2], width: f32) -> Response {
     let rail_right = rect.right();
     let rail_width = (rail_right - rail_left).max(0.0);
     for (index, peak) in peaks.into_iter().enumerate() {
-        let y = rect.top() + 14.0 + index as f32 * 8.0;
-        let rail = Rect::from_min_size(egui::pos2(rail_left, y), Vec2::new(rail_width, 5.0));
+        let y = rect.top() + crate::tokens::SPACE_LG + index as f32 * crate::tokens::SPACE_MD;
+        let rail = Rect::from_min_size(
+            egui::pos2(rail_left, y),
+            Vec2::new(rail_width, crate::tokens::SPACE_XS),
+        );
         painter.text(
             egui::pos2(rect.left(), rail.center().y),
             Align2::LEFT_CENTER,

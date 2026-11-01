@@ -147,6 +147,15 @@ pub fn assistant(
     let mut reuse_last = false;
     let mut inserted_example = None;
     let mut inserted_tool = None;
+    let compact_layout = ui.available_height() < tokens::CONTROL_HEIGHT * 13.0;
+    let blocked = match options.submit_state {
+        AssistantSubmitState::Blocked(reason) if !options.busy => Some(reason),
+        _ => None,
+    };
+    let show_status = options.busy
+        || blocked.is_some()
+        || options.failure.is_some()
+        || options.status.is_some_and(|status| !status.is_empty());
     if options.failure.is_none() {
         state.reset_failure_reveal();
     }
@@ -198,10 +207,31 @@ pub fn assistant(
         },
         |ui| {
             let scope = format!("Scope · {}", bounded(options.scope, 2_048));
-            text::truncated(ui, text::TextRole::Label, scope);
+            text::truncated(ui, text::TextRole::Label, scope)
+                .on_hover_text(bounded(options.context, 2_048));
         },
     );
-    if !options.context.is_empty() {
+    // Status shares the header's context line. Keeping it out of the fixed
+    // composer leaves room for readable diagnostics on a short display.
+    // The complete musical context remains available on the scope label.
+    if show_status {
+        ui.horizontal(|ui| {
+            if options.busy {
+                ui.spinner();
+            }
+            let message = if let Some(reason) = blocked {
+                reason
+            } else if options.failure.is_some() {
+                "Request interrupted · details in Conversation"
+            } else {
+                options
+                    .status
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Working…")
+            };
+            text::truncated(ui, text::TextRole::Note, bounded(message, 512));
+        });
+    } else if !compact_layout && !options.context.is_empty() {
         text::truncated(ui, text::TextRole::Note, bounded(options.context, 2_048));
     }
     ui.horizontal_wrapped(|ui| {
@@ -216,7 +246,9 @@ pub fn assistant(
             }
         }
     });
-    ui.separator();
+    if !compact_layout {
+        ui.separator();
+    }
     ui.add_space(tokens::SPACE_SM);
 
     // Reserve every fixed control after measuring the actual header rows. All
@@ -225,30 +257,21 @@ pub fn assistant(
     // Browsing needs room for choices, while the conversation benefits from a
     // taller composer. A short popup keeps one editable line and scrolls the
     // complete draft without displacing the scope or fixed actions.
-    let compact_composer = state.page != AssistantPage::Conversation
+    let compact_composer = compact_layout
+        || state.page != AssistantPage::Conversation
         || ui.available_height() < tokens::CONTROL_HEIGHT * 9.0;
     let composer_height = tokens::CONTROL_HEIGHT * if compact_composer { 1.0 } else { 2.0 };
-    let blocked = match options.submit_state {
-        AssistantSubmitState::Blocked(reason) if !options.busy => Some(reason),
-        _ => None,
-    };
-    let show_status = options.busy
-        || blocked.is_some()
-        || options.failure.is_some()
-        || options.status.is_some_and(|status| !status.is_empty());
-    let status_height = if show_status {
-        // The optional row also contributes its native item gap and explicit
-        // inset. Reserve both before giving the transcript its scroll height.
-        tokens::CONTROL_HEIGHT + ui.spacing().item_spacing.y + tokens::SPACE_XS
-    } else {
+    let label_height = if compact_layout {
         0.0
+    } else {
+        ui.fonts_mut(|fonts| fonts.row_height(&text::TextRole::Label.font()))
     };
     let body_height = (ui.available_height()
         - composer_height
-        - status_height
         - tokens::CONTROL_HEIGHT
-        - tokens::FONT_BODY * 1.5
-        - tokens::SPACE_SM * 5.0)
+        - label_height
+        - ui.spacing().item_spacing.y * if compact_layout { 2.0 } else { 3.0 }
+        - tokens::SPACE_SM * 2.0)
         .clamp(0.0, 460.0);
     if body_height > 0.0 {
         let page = state.page;
@@ -295,27 +318,6 @@ pub fn assistant(
             });
         ui.add_space(tokens::SPACE_SM);
     }
-    if show_status {
-        ui.horizontal(|ui| {
-            if options.busy {
-                ui.spinner();
-            }
-            let message = if let Some(reason) = blocked {
-                reason
-            } else if options.failure.is_some() {
-                "Request interrupted · details in Conversation"
-            } else {
-                options
-                    .status
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or("Working…")
-            };
-            text::truncated(ui, text::TextRole::Note, bounded(message, 512));
-        });
-        ui.add_space(tokens::SPACE_XS);
-    }
-
-    let label = text::label(ui, "AI prompt");
     let prompt_id = ui.make_persistent_id("assistant_prompt");
     let can_send = options.submit_state == AssistantSubmitState::Ready
         && !options.busy
@@ -327,28 +329,40 @@ pub fn assistant(
             input.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)
                 || input.consume_key(egui::Modifiers::CTRL, egui::Key::Enter)
         });
-    let prompt_response = egui::ScrollArea::vertical()
-        .id_salt("assistant_composer_scroll")
-        .max_height(composer_height)
-        .min_scrolled_height(composer_height)
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            ui.add(
-                egui::TextEdit::multiline(prompt)
-                    .id(prompt_id)
-                    .hint_text("Describe the music or edit…")
-                    .desired_width(ui.available_width())
-                    .desired_rows(if compact_composer { 1 } else { 3 })
-                    .char_limit(ASSISTANT_PROMPT_LIMIT)
-                    .font(text::TextRole::Body.font())
-                    .margin(egui::vec2(
-                        tokens::BUTTON_PADDING_X,
-                        tokens::BUTTON_PADDING_Y,
-                    )),
-            )
-            .labelled_by(label.id)
+    let mut composer = |ui: &mut Ui, label_id| {
+        egui::ScrollArea::vertical()
+            .id_salt("assistant_composer_scroll")
+            .max_height(composer_height)
+            .min_scrolled_height(composer_height)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(prompt)
+                        .id(prompt_id)
+                        .hint_text("Describe the music or edit…")
+                        .desired_width(ui.available_width())
+                        .desired_rows(if compact_composer { 1 } else { 3 })
+                        .char_limit(ASSISTANT_PROMPT_LIMIT)
+                        .font(text::TextRole::Body.font())
+                        .margin(egui::vec2(
+                            tokens::BUTTON_PADDING_X,
+                            tokens::BUTTON_PADDING_Y,
+                        )),
+                )
+                .labelled_by(label_id)
+            })
+            .inner
+    };
+    let prompt_response = if compact_layout {
+        ui.horizontal(|ui| {
+            let label = text::label(ui, "AI prompt");
+            composer(ui, label.id)
         })
-        .inner;
+        .inner
+    } else {
+        let label = text::label(ui, "AI prompt");
+        composer(ui, label.id)
+    };
     if inserted_example.is_some() || inserted_tool.is_some() || reuse_last {
         prompt_response.request_focus();
         if let Some(mut edit_state) = egui::TextEdit::load_state(ui.ctx(), prompt_id) {
@@ -564,50 +578,50 @@ fn tool_browser(
 ) -> Option<String> {
     let tools = &tools[..tools.len().min(TOOL_LIMIT)];
     truncate_chars(&mut state.tool_query, 256);
-    let filtered: Vec<_> = ui
-        .horizontal(|ui| {
-            let label = text::label(ui, "Find a tool");
-            crate::text_field(
-                ui,
-                &mut state.tool_query,
-                "Search tools…",
-                (ui.available_width() - 148.0).max(60.0),
-            )
-            .labelled_by(label.id);
-            if crate::small_button(ui, "Clear").clicked() {
-                state.tool_query.clear();
+    let clear = crate::action_row(
+        ui,
+        |ui| crate::small_button(ui, "Clear").clicked(),
+        |ui| {
+            ui.horizontal(|ui| {
+                let label = text::label(ui, "Find a tool");
+                crate::text_field(
+                    ui,
+                    &mut state.tool_query,
+                    "Search tools…",
+                    ui.available_width().max(0.0),
+                )
+                .labelled_by(label.id);
+            })
+        },
+    )
+    .inner
+    .0;
+    if clear {
+        state.tool_query.clear();
+    }
+    truncate_chars(&mut state.tool_query, 256);
+    let words: Vec<_> = state
+        .tool_query
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    let filtered: Vec<_> = tools
+        .iter()
+        .filter(|tool| {
+            words.is_empty() || {
+                let haystack = format!(
+                    "{} {} {} {}",
+                    bounded(tool.name, 128),
+                    bounded(tool.title, 160),
+                    bounded(tool.description, 4_096),
+                    bounded(tool.contexts, 512),
+                )
+                .to_lowercase();
+                words.iter().all(|word| haystack.contains(word))
             }
-            truncate_chars(&mut state.tool_query, 256);
-            let words: Vec<_> = state
-                .tool_query
-                .to_lowercase()
-                .split_whitespace()
-                .map(str::to_owned)
-                .collect();
-            let filtered: Vec<_> = tools
-                .iter()
-                .filter(|tool| {
-                    words.is_empty() || {
-                        let haystack = format!(
-                            "{} {} {} {}",
-                            bounded(tool.name, 128),
-                            bounded(tool.title, 160),
-                            bounded(tool.description, 4_096),
-                            bounded(tool.contexts, 512),
-                        )
-                        .to_lowercase();
-                        words.iter().all(|word| haystack.contains(word))
-                    }
-                })
-                .collect();
-            let noun = if filtered.len() == 1 { "tool" } else { "tools" };
-            crate::hover_text(
-                text::note(ui, format!("{} {noun}", filtered.len())),
-                "Available in this scope",
-            );
-            filtered
         })
-        .inner;
+        .collect();
     if !filtered
         .iter()
         .any(|tool| state.selected_tool.as_deref() == Some(tool.name))
@@ -626,62 +640,71 @@ fn tool_browser(
         return None;
     }
     let mut inserted = None;
-    ui.columns(2, |columns| {
-        let list = &mut columns[0];
-        for tool in &filtered {
-            list.push_id(tool.name, |ui| {
-                if crate::selectable(
-                    ui,
-                    state.selected_tool.as_deref() == Some(tool.name),
-                    bounded(tool.title, 160),
-                )
-                .clicked()
-                {
-                    state.selected_tool = Some(tool.name.to_owned());
-                }
-                text::truncated(ui, text::TextRole::Note, bounded(tool.name, 128));
-            });
-        }
-        let detail = &mut columns[1];
-        if let Some(tool) = filtered
-            .iter()
-            .find(|tool| state.selected_tool.as_deref() == Some(tool.name))
-        {
-            let separator = if prompt.is_empty() { "" } else { "\n\n" };
-            let fits = !tool.prompt.is_empty()
-                && prompt.chars().count() + separator.len() + tool.prompt.chars().count()
-                    <= ASSISTANT_PROMPT_LIMIT;
-            let use_tool = crate::action_row(
-                detail,
-                |ui| {
-                    ui.add_enabled_ui(fits, |ui| crate::button(ui, "Use tool"))
-                        .inner
-                },
-                |ui| text::truncated(ui, text::TextRole::Label, bounded(tool.title, 160)),
-            )
-            .inner
-            .0;
-            let hint = if fits {
-                "Add an editable request to the draft. Review it, then Send."
-            } else if tool.prompt.is_empty() {
-                "This tool has no suggested prompt. Describe its use in the draft."
-            } else {
-                "This request would exceed the prompt limit. Shorten the draft first."
-            };
-            if crate::hover_text(use_tool, hint).clicked() {
-                prompt.push_str(separator);
-                prompt.push_str(tool.prompt);
-                inserted = Some(tool.name.to_owned());
-                state.page = AssistantPage::Conversation;
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_LG;
+        ui.columns(2, |columns| {
+            let list = &mut columns[0];
+            let noun = if filtered.len() == 1 { "tool" } else { "tools" };
+            crate::hover_text(
+                text::note(list, format!("{} {noun}", filtered.len())),
+                "Available in this scope",
+            );
+            for tool in &filtered {
+                list.push_id(tool.name, |ui| {
+                    ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
+                    if crate::selectable(
+                        ui,
+                        state.selected_tool.as_deref() == Some(tool.name),
+                        bounded(tool.title, 160),
+                    )
+                    .clicked()
+                    {
+                        state.selected_tool = Some(tool.name.to_owned());
+                    }
+                    text::truncated(ui, text::TextRole::Note, bounded(tool.name, 128));
+                });
             }
-            text::body(detail, bounded(tool.description, 4_096));
-            if !tool.contexts.is_empty() {
-                text::note(
+            let detail = &mut columns[1];
+            if let Some(tool) = filtered
+                .iter()
+                .find(|tool| state.selected_tool.as_deref() == Some(tool.name))
+            {
+                let separator = if prompt.is_empty() { "" } else { "\n\n" };
+                let fits = !tool.prompt.is_empty()
+                    && prompt.chars().count() + separator.len() + tool.prompt.chars().count()
+                        <= ASSISTANT_PROMPT_LIMIT;
+                let use_tool = crate::action_row(
                     detail,
-                    format!("Available in · {}", bounded(tool.contexts, 512)),
-                );
+                    |ui| {
+                        ui.add_enabled_ui(fits, |ui| crate::button(ui, "Use tool"))
+                            .inner
+                    },
+                    |ui| text::truncated(ui, text::TextRole::Label, bounded(tool.title, 160)),
+                )
+                .inner
+                .0;
+                let hint = if fits {
+                    "Add an editable request to the draft. Review it, then Send."
+                } else if tool.prompt.is_empty() {
+                    "This tool has no suggested prompt. Describe its use in the draft."
+                } else {
+                    "This request would exceed the prompt limit. Shorten the draft first."
+                };
+                if crate::hover_text(use_tool, hint).clicked() {
+                    prompt.push_str(separator);
+                    prompt.push_str(tool.prompt);
+                    inserted = Some(tool.name.to_owned());
+                    state.page = AssistantPage::Conversation;
+                }
+                text::body(detail, bounded(tool.description, 4_096));
+                if !tool.contexts.is_empty() {
+                    text::note(
+                        detail,
+                        format!("Available in · {}", bounded(tool.contexts, 512)),
+                    );
+                }
             }
-        }
+        });
     });
     inserted
 }

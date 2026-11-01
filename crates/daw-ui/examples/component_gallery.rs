@@ -314,8 +314,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Rill shared UI components")
-            .with_inner_size([1120.0, if capturing { 720.0 } else { 800.0 }])
-            .with_min_inner_size([1120.0, if capturing { 720.0 } else { 800.0 }])
+            // Leave room for every example after applying the shared spacing.
+            .with_inner_size([1120.0, if capturing { 987.0 } else { 800.0 }])
+            .with_min_inner_size([1120.0, if capturing { 987.0 } else { 800.0 }])
             .with_resizable(!capturing),
         renderer: eframe::Renderer::Glow,
         ..Default::default()

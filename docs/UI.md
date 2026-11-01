@@ -186,6 +186,26 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 
 Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light, with a muted sage accent. Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. Primary actions gain a small blurred shadow; selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
 
+Use the spacing scale consistently:
+
+| Relationship | Space |
+| --- | --- |
+| Tight caption/detail separation | 5 |
+| Related controls and compact toolbar groups | 8 |
+| Ordinary sibling rows, form rows, card/menu/inset padding | 13 |
+| Separate sections, pane gutters, horizontal window padding | 21 |
+| Major workspace separation | 34 |
+
+Windows use 21-point horizontal and 13-point vertical padding. Standard actions
+retain 34-point targets and 13 × 8 padding; compact actions reduce horizontal
+padding to 8 without shrinking the target. Toolbars retain 8-point control gaps
+and vertical padding so small windows leave room for the musical canvas.
+Label bands must reserve their measured height and a deliberate gap: empty
+space inside a font's line box is not a substitute for component padding.
+Derive list strides, scroll-body heights, and pinned footer reservations from
+the same geometry used to paint them. Extra spacing must not push actions out
+of a compact viewport or move them when asynchronous feedback changes.
+
 Choose controls by what they change:
 
 | Role | Behavior | Shared treatment |
@@ -215,7 +235,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Quiet page navigation | `tab_choice`, `IconButton::tab` |
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
-| Application and contextual menus | `menu_bar`, `menu_button` |
+| Application and contextual menus | `menu_bar`, `command_menu_button`, `menu_button` |
 | Toolbar command, choice, and presentation menus | `action_menu`, `choice_menu`, `view_menu` |
 | Isolated plugin context menus | `NativeContextMenu`, `NativeMenuItem`, `native_context_menu_ui`, `show_native_context_menu` (macOS/Windows) |
 | Focused workspace structure | `workspace_header`, `workspace_header_with_context`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
@@ -284,6 +304,13 @@ buttons disable when their result would exceed the range. Merely displaying an
 existing out-of-range value never clamps it. Use it for important musical timing
 fields and tempo rather than adding controls to every compact readout.
 
+For `Slider` or `Knob` fields whose caller converts display units before storage,
+use `.display_round_trip(...)` to describe the exact value returned on the next
+frame after a requested edit. This preserves an active draft and caret through
+floating-point unit conversion while still recognizing exact external changes.
+Include any storage quantization or automation conversion in the callback;
+do not hide external changes with a blanket numerical tolerance.
+
 `inline_name_editor` offers **Keyboard** beside its ordinary text field. The
 optional `name_keyboard` pad uses the field's Unicode character selection and
 cursor, supports upper/lowercase letters, digits, spaces, punctuation, Backspace,
@@ -326,7 +353,7 @@ viewport without adding a hit target, changing focus, or persisting state.
 Arranger trims use it to show the applied end time and clip duration in seconds
 and beats, including snapping and source limits, and hide it on release.
 
-Standard controls use 13-point horizontal and eight-point vertical padding; canvas-owned controls retain their compact geometry. Popups use 21-point horizontal and eight-point vertical inner margins and scroll within the available viewport. The shorter native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows use a φ-point border with a 21-point blurred shadow; menus use a smaller 13-point shadow. Blur and shadows add depth without changing native hit targets or focus behavior.
+Standard controls use 13-point horizontal and eight-point vertical padding; canvas-owned controls retain their compact geometry. Popups use 21-point horizontal and 13-point vertical inner margins and scroll within the available viewport. The native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows use a φ-point border with a 21-point blurred shadow; menus use a smaller 13-point shadow. Blur and shadows add depth without changing native hit targets or focus behavior.
 
 `slider` retains native dragging, keyboard focus and exact numeric entry, with
 minimum/maximum captions and a value marker inside its handle. Minimum shows a
@@ -558,7 +585,7 @@ Each group wraps intact at narrow widths, without changing playback or history.
 box. They retain full 34-point targets, hover/focus surfaces, accessible labels,
 native popup behavior and selected-state feedback. Use these secondary controls
 in persistent toolbars; keep explicit filled actions for primary tasks and
-confirmation. `command_group` supplies one rounded surface, four-point padding
+confirmation. `command_group` supplies one rounded surface, five-point padding
 and complete-group wrapping, without taking input itself.
 
 `mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows reserve the same preview space while thumbnails are loading so names and actions remain aligned.
@@ -981,6 +1008,10 @@ The menu worker announces readiness before receiving its model. On macOS this le
 
 `parameter_browser(ui, id, state, items, height, details)` shares the device library's list-and-details layout. Search matches words across names and units, ranks exact/prefix matches first, and handles Unicode. **All**, **Automated**, and **Last touched** narrow the results. Cards show normalized percentages, unit metadata, automation/touch markers, and compact value bars. Up/Down chooses a result; Enter or double-click creates its lane or reopens the existing one. Cmd/Ctrl+F returns focus to search; Clear restores results. An empty result list clears selection, so Enter cannot automate a stale parameter. Browsing does not alter plugin values. The caller supplies detail controls; the list virtualizes large parameter sets and both panes stay bounded and scroll independently.
 
+Set `ParameterBrowserState::reset_details` when a nested editor should return to
+the top of its detail pane. The browser consumes this flag once; it preserves
+the parameter list, search, and ordinary detail scrolling.
+
 
 ## Typography and international names
 
@@ -1130,6 +1161,9 @@ input responses expose change state, focus and precise interaction rectangles.
 the first frame. **Add notes**, **Next range**, and **Cancel**/**Done** retain
 their positions through repeated additions and validation errors; bounded status
 text exposes its full value on hover. The caller owns validation and edits.
+`generation_footer_with_preview` shares that status row with Preview and Fit
+controls in short windows, keeping at least 89 points for scrollable generation
+parameters. The compact range summary remains available from Length's hover.
 
 Generation previews stay in the live piano roll. Draw the ordinary canvas, then
 `paint_generation_backdrop`, `paint_generation_range` and

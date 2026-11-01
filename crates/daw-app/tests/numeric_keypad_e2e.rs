@@ -103,6 +103,49 @@ fn unchanged(state: &Value, before: &Value) {
     }
 }
 
+#[test]
+fn nested_properties_keypad_keeps_its_footer_stable_in_short_fractional_density_viewports() {
+    let mut app = fixture(800, false);
+    app.click("Keypad phrase");
+    for dark in [false, true] {
+        for (width, height) in [(800, 600), (1440, 1000)] {
+            for density in [1.0, 1.25, 2.0] {
+                app.command(json!({"command":"viewport", "width":width, "height":height, "pixels_per_point":density}));
+                app.command(json!({"command":"system_theme", "dark":dark}));
+                app.click("Window");
+                let before = app.click("Properties");
+                let opened = open_keypad(&mut app, "Duration");
+                for text in ["7", "0", "Backspace", "Clear", "Apply value", "Cancel"] {
+                    let bounds = label(&opened, text);
+                    assert!(
+                        bounds["min"][0].as_f64().unwrap() >= 0.0,
+                        "{text}: {bounds}"
+                    );
+                    assert!(
+                        bounds["max"][0].as_f64().unwrap() <= f64::from(width),
+                        "{text}: {bounds}"
+                    );
+                    assert!(
+                        bounds["min"][1].as_f64().unwrap() >= 0.0,
+                        "{text}: {bounds}"
+                    );
+                    assert!(
+                        bounds["max"][1].as_f64().unwrap() <= f64::from(height),
+                        "{text}: {bounds}"
+                    );
+                }
+                let apply = center(&label(&opened, "Apply value"));
+                let cleared = app.click("Clear");
+                assert_eq!(center(&label(&cleared, "Apply value")), apply);
+                unchanged(&cleared, &before);
+                unchanged(&app.click("Cancel"), &before);
+                app.key("Escape");
+            }
+        }
+    }
+    app.quit();
+}
+
 fn enter_mouse(app: &mut Harness, number: &str, before: &Value) -> Value {
     unchanged(&app.click("Clear"), before);
     let mut state = app.inspect();

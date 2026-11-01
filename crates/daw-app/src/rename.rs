@@ -349,21 +349,27 @@ impl DawApp {
         let Some(anchor) = anchor.filter(|anchor| anchor.is_positive()) else {
             return;
         };
-        let content = ctx.content_rect().shrink(4.0);
+        let content = ctx.content_rect().shrink(daw_ui::tokens::SPACE_SM);
+        let trailing_width = daw_ui::inline_name_editor_width(ctx, 0.0);
         let width = anchor
             .width()
             .clamp(120.0, 320.0)
-            .min((content.width() - 300.0).max(120.0));
+            .min((content.width() - trailing_width).max(120.0));
         let keyboard_open = daw_ui::name_keyboard_open(ctx, state_id().with("field"));
+        let editor_width = (width + trailing_width).max(if keyboard_open {
+            daw_ui::name_keyboard_width(ctx)
+        } else {
+            0.0
+        });
         let height = if keyboard_open {
-            340.0
+            daw_ui::tokens::CONTROL_HEIGHT + daw_ui::name_keyboard_height(ctx)
         } else {
             daw_ui::tokens::CONTROL_HEIGHT
         };
         let position = egui::pos2(
             anchor.left().clamp(
                 content.left(),
-                (content.right() - width - 300.0).max(content.left()),
+                (content.right() - editor_width).max(content.left()),
             ),
             (anchor.center().y - daw_ui::tokens::CONTROL_HEIGHT * 0.5).clamp(
                 content.top(),

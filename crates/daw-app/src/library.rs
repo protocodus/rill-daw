@@ -466,6 +466,10 @@ impl DawApp {
             .default_height(760.0)
             .vscroll(false)
             .show(ctx, |ui| {
+                // Share selected identity with the action row on short screens
+                // so the catalogue still has room for a complete card.
+                let compact_footer = daw_ui::popup_body_size(ctx).y
+                    < daw_ui::tokens::CONTROL_HEIGHT * 13.0;
                 ui.horizontal(|ui| {
                     let mut kind = state.kind;
                     daw_ui::selectable_value(ui, &mut kind, DeviceKind::Instrument, "Instruments");
@@ -591,7 +595,7 @@ impl DawApp {
                         }
                     });
                 }
-                ui.add_space(SPACE_SM);
+                if !compact_footer { ui.add_space(SPACE_SM); }
                 let filter = self.plugin_filter.to_lowercase();
                 // A filtered-out device needs a different next step from an
                 // inventory with no instruments/effects of the requested type.
@@ -702,7 +706,18 @@ impl DawApp {
                 // Includes separator spacing, the selected name and action row.
                 // A reserve smaller than their total feeds window growth back
                 // into this available-height calculation on every frame.
-                let body_height = (ui.available_height() - 84.0).max(0.0);
+                let label_height = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::text::TextRole::Label.font()));
+                let footer_separator = if compact_footer { SPACE_MD } else { daw_ui::tokens::SPACE_LG };
+                let footer_height = footer_separator
+                    + daw_ui::tokens::CONTROL_HEIGHT
+                    + ui.spacing().item_spacing.y * 2.0
+                    + if compact_footer { 0.0 } else { label_height + ui.spacing().item_spacing.y };
+                // Use the requested viewport capacity, not last frame's
+                // auto-sized window: fractional frame rounding otherwise feeds
+                // back into the catalogue height on every idle frame.
+                let header_height = (ui.cursor().top() - ui.max_rect().top()).max(0.0);
+                let body_height = (daw_ui::popup_body_size(ctx).y.min(760.0)
+                    - header_height - footer_height).max(0.0);
                 let mut grid = None;
                 let mut sidebar_rect = None;
                 let mut details_rect = None;
@@ -717,7 +732,7 @@ impl DawApp {
                     0 => {
                         sidebar_rect = Some(ui.max_rect());
                         egui::ScrollArea::vertical().id_salt("library_sidebar").auto_shrink([false, false]).show(ui, |ui| {
-                            ui.spacing_mut().item_spacing.y = 2.0;
+                            ui.spacing_mut().item_spacing.y = SPACE_SM;
                             daw_ui::theme::label(ui, "LIBRARY");
                             for collection in Collection::ALL {
                                 let count = kind_items.iter().filter(|item| collection.accepts(item)).count();
@@ -731,7 +746,7 @@ impl DawApp {
                                     state.collection = collection;
                                 }
                             }
-                            ui.add_space(SPACE_MD);
+                            ui.add_space(daw_ui::tokens::SPACE_LG - SPACE_SM);
                             daw_ui::theme::label(ui, "DEVELOPERS");
                             if daw_ui::count_item(ui, state.developer.is_empty(), "All developers", kind_items.len()).clicked() {
                                 state.developer.clear();
@@ -867,20 +882,28 @@ impl DawApp {
                         egui::ScrollArea::vertical().id_salt("library_details").auto_shrink([false, false]).show(ui, |ui| {
                             let width = ui.available_width();
                             let texture = entry.thumbnail.as_ref().and_then(|path| state.previews.request(ctx, &entry.fingerprint, path));
-                            daw_ui::device_preview(ui, texture.as_ref(), icon, egui::vec2(width, width * 0.6));
+                            // Reserve identity and editable categories before
+                            // fitting the optional image into a short pane.
+                            let text_height = ui.fonts_mut(|fonts| {
+                                2.0 * fonts.row_height(&daw_ui::text::TextRole::Title.font())
+                                    + 3.0 * fonts.row_height(&daw_ui::text::TextRole::Note.font())
+                                    + fonts.row_height(&daw_ui::text::TextRole::Label.font())
+                            });
+                            let identity_height = text_height
+                                + 2.0 * daw_ui::tokens::CONTROL_HEIGHT
+                                + 7.0 * ui.spacing().item_spacing.y
+                                + SPACE_SM;
+                            let preview_height = (body_height - identity_height).clamp(0.0, width * 0.6);
+                            if preview_height > 0.0 {
+                                daw_ui::device_preview(ui, texture.as_ref(), icon, egui::vec2(width, preview_height));
+                            }
                             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, &entry.plugin.name, 2);
                             daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, if entry.plugin.vendor.is_empty() { "Unknown developer" } else { &entry.plugin.vendor });
+                            daw_ui::text::note(ui, kind_label(&entry.plugin));
                             let mut favorite = item.favorite;
                             if daw_ui::favorite_toggle(ui, &mut favorite).changed() {
                                 edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), favorite));
                             }
-                            ui.add_space(SPACE_SM);
-                            daw_ui::theme::label(ui, "INSTALL PATH");
-                            daw_ui::path_row(ui, &entry.plugin.path, |ui| {
-                                if daw_ui::button(ui, "Copy path").clicked() {
-                                    copy = Some(entry.plugin.path.display().to_string());
-                                }
-                            });
                             ui.add_space(SPACE_SM);
                             daw_ui::theme::label(ui, "CATEGORIES");
                             if let Some(CategoryDraft { text: draft, .. }) = &mut state.category_draft {
@@ -908,14 +931,20 @@ impl DawApp {
                                 "From the plug-in"
                             });
                             ui.add_space(SPACE_SM);
-                            egui::Grid::new("library_device_details").num_columns(2).min_col_width(88.0).min_row_height(0.0).spacing(egui::vec2(SPACE_MD, daw_ui::tokens::SPACE_XS)).show(ui, |ui| {
+                            daw_ui::theme::label(ui, "INSTALL PATH");
+                            daw_ui::path_row(ui, &entry.plugin.path, |ui| {
+                                if daw_ui::button(ui, "Copy path").clicked() {
+                                    copy = Some(entry.plugin.path.display().to_string());
+                                }
+                            });
+                            ui.add_space(SPACE_SM);
+                            egui::Grid::new("library_device_details").num_columns(2).min_col_width(88.0).min_row_height(daw_ui::tokens::COMPACT_HEIGHT).spacing(egui::vec2(SPACE_MD, SPACE_SM)).show(ui, |ui| {
                                 let mut row = |label: &str, value: String| {
                                     daw_ui::text::note(ui, label);
                                     daw_ui::text::body(ui, value);
                                     ui.end_row();
                                 };
                                 row("Format", "VST3".into());
-                                row("Kind", kind_label(&entry.plugin).into());
                                 row("Version", if entry.plugin.version.is_empty() { "Unknown".into() } else { entry.plugin.version.clone() });
                                 row("Architecture", if entry.plugin.architectures.is_empty() { "Unknown".into() } else { entry.plugin.architectures.join(", ") });
                                 row("Preview image", match &entry.status {
@@ -938,13 +967,15 @@ impl DawApp {
                 for card in &mut cards {
                     card["selected"] = serde_json::json!(card["fingerprint"].as_str() == state.selected.as_deref());
                 }
-                ui.separator();
+                ui.add(egui::Separator::default().spacing(footer_separator));
                 let footer_start = ui.cursor().min;
                 let selected = state.selected.as_ref().and_then(|selected| matches.iter().find(|item| &item.entry.fingerprint == selected)).copied();
-                if let Some(item) = selected {
-                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, &item.entry.plugin.name);
-                } else {
-                    ui.add_space(daw_ui::tokens::FONT_BODY + SPACE_SM);
+                if !compact_footer {
+                    if let Some(item) = selected {
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, &item.entry.plugin.name);
+                    } else {
+                        ui.allocate_exact_size(egui::vec2(ui.available_width(), label_height), egui::Sense::hover());
+                    }
                 }
                 let primary_label = match primary {
                     DeviceAction::Instrument => "Add instrument track",
@@ -998,7 +1029,11 @@ impl DawApp {
                             }
                         });
                     });
-                    if state.kind == DeviceKind::Instrument {
+                    if let Some(item) = selected.filter(|_| compact_footer) {
+                        let name = &item.entry.plugin.name;
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, name)
+                            .on_hover_text(name);
+                    } else if state.kind == DeviceKind::Instrument {
                         let context = if assign {
                             assignment_target.and_then(|id| self.project.track(id))
                                 .map(|track| format!("Assign to {}", track.name))
@@ -1021,7 +1056,7 @@ impl DawApp {
                     "sidebar": sidebar_rect.map(rect), "details": details_rect.map(rect),
                     "scroll_offset": grid.scroll_offset,
                     "selected": state.selected, "columns": grid.layout.columns,
-                    "card_size": [grid.layout.card_width, grid.layout.row_height - if state.list { daw_ui::tokens::SPACE_XS } else { daw_ui::tokens::SPACE_MD }],
+                    "card_size": [grid.layout.card_width, grid.layout.row_height - if state.list { daw_ui::tokens::SPACE_SM } else { daw_ui::tokens::SPACE_MD }],
                     "view": if state.list { "list" } else { "grid" },
                     "collection": state.collection.label(), "developer": state.developer,
                     "category": state.category, "sort": state.sort.label(),

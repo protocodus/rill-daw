@@ -334,7 +334,27 @@ fn deliberately_reentering_the_rounded_display_applies_the_requested_exact_value
     );
     let opened = app.open();
     app.click(&opened, "123");
-    let keypad = app.frame(vec![]);
+    let mut keypad = app.frame(vec![]);
+    let keys = visible_text(&keypad, "7")
+        .expect("first keypad row")
+        .center();
+    for _ in 0..8 {
+        if visible_text(&keypad, "Clear").is_some() {
+            break;
+        }
+        keypad = app.frame(vec![
+            Event::PointerMoved(keys),
+            Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: vec2(0.0, -40.0),
+                modifiers: Modifiers::NONE,
+            },
+        ]);
+    }
+    assert!(
+        visible_text(&keypad, "Clear").is_some(),
+        "mouse scrolling reaches Clear"
+    );
     let mut output = app.click(&keypad, "Clear");
     for key in ["1", ".", "2", "5"] {
         output = app.click(&output, key);

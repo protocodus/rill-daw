@@ -42,6 +42,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             ui.add_space(tokens::SPACE_SM);
             let mut endpoints = Vec::new();
             ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
                 for (index, (name, kind, color, peaks)) in [
                     (
                         "Rhythm",
@@ -72,12 +73,13 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         Some(color),
                         index == 1,
                         |ui| {
+                            let width = ui.available_width();
                             if index == 2 {
-                                ui::mixer_bus_button(ui, name, 136.0, color);
+                                ui::mixer_bus_button(ui, name, width, color);
                             } else {
-                                ui::mixer_channel_button(ui, name, 136.0, color);
+                                ui::mixer_channel_button(ui, name, width, color);
                             }
-                            ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
+                            ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
                             text::note(ui, format!("Input · {kind}"));
                             let mut db = ui::channel_gain_to_db(state.gain[index]);
                             if ui.add(ui::channel_gain_number(&mut db)).changed() {
@@ -86,14 +88,14 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                             ui.vertical_centered(|ui| {
                                 ui::mixer_fader(ui, &mut state.gain[index], 116.0);
                             });
-                            ui::mixer_pan(ui, &mut state.pan[index], 136.0);
+                            ui::mixer_pan(ui, &mut state.pan[index], width);
                             ui::mixer_mute_solo(
                                 ui,
                                 &mut state.muted[index],
                                 &mut state.solo[index],
-                                136.0,
+                                width,
                             );
-                            ui::mixer_level_meter(ui, peaks, 136.0);
+                            ui::mixer_level_meter(ui, peaks, width);
                             ui::view_button(ui, if index == 2 { "Master" } else { "Music bus" });
                         },
                     );
