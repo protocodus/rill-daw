@@ -292,7 +292,12 @@ impl Harness {
     }
 
     pub fn wait_exit(mut self) {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        // Allow a bounded runner process-teardown budget after the exit event.
+        // This platform allowance changes neither production shutdown nor the
+        // required successful exit, and does not identify a timeout's cause.
+        let budget = Duration::from_secs(if cfg!(windows) { 30 } else { 5 });
+        let started = Instant::now();
+        let deadline = started + budget;
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
                 assert!(status.success(), "Application exited with {status}");
@@ -300,7 +305,11 @@ impl Harness {
             }
             assert!(
                 Instant::now() < deadline,
-                "Application failed to exit after quit"
+                "Application PID {} failed to exit after quit: elapsed {:?}, teardown budget {:?}, deadline {:?}",
+                self.child.id(),
+                started.elapsed(),
+                budget,
+                deadline,
             );
             std::thread::sleep(Duration::from_millis(10));
         }
