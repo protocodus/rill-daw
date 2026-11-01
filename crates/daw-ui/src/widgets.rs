@@ -44,6 +44,31 @@ pub fn view_button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
     .presentation()
 }
 
+pub fn ai_button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
+    button_widget(label).ai()
+}
+pub fn ai_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
+    ui.add(ai_button_widget(label))
+}
+pub fn automation_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
+    ui.add(button_widget(label).automation())
+}
+
+/// Tint the controls of an automation editor without changing their geometry.
+pub fn automation_control_style(ui: &mut Ui) {
+    let color = theme::palette(ui.ctx()).automation;
+    ui.visuals_mut().override_text_color = Some(color);
+    let visuals = &mut ui.visuals_mut().widgets;
+    for widget in [
+        &mut visuals.inactive,
+        &mut visuals.hovered,
+        &mut visuals.active,
+        &mut visuals.open,
+    ] {
+        widget.fg_stroke.color = color;
+    }
+}
+
 pub fn view_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(view_button_widget(label))
 }
@@ -87,7 +112,11 @@ pub fn tool_value<T: PartialEq>(
 }
 
 pub fn primary_button_widget(ui: &Ui, label: impl Into<WidgetText>) -> crate::IconButton {
-    button_widget(label).fill(theme::palette(ui.ctx()).track_selected)
+    button_widget(label).fill(
+        theme::palette(ui.ctx())
+            .panel
+            .lerp_to_gamma(theme::palette(ui.ctx()).action, 0.18),
+    )
 }
 
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
@@ -224,9 +253,9 @@ pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R
         // Submenus finish before their parent. Retain the innermost scroll
         // viewport for mouse automation, refreshing it on every layout pass.
         let diagnostic_id = egui::Id::new("command_menu_scroll_rect");
-        if !data
+        if data
             .get_temp::<(u64, u64, egui::Rect)>(diagnostic_id)
-            .is_some_and(|(_, drawn_pass, _)| drawn_pass == pass)
+            .is_none_or(|(_, drawn_pass, _)| drawn_pass != pass)
         {
             data.insert_temp(diagnostic_id, (frame, pass, scroll.inner_rect));
         }
@@ -376,6 +405,11 @@ fn semantic_picker<R>(
     let visuals = &mut ui.visuals_mut().widgets;
     match role {
         MenuRole::Action => {
+            visuals.inactive.fg_stroke.color = colors.action;
+            visuals.hovered.fg_stroke.color = colors.action;
+            visuals.active.fg_stroke.color = colors.action;
+            visuals.open.fg_stroke.color = colors.action;
+            visuals.inactive.weak_bg_fill = colors.panel.lerp_to_gamma(colors.action, 0.12);
             visuals.inactive.bg_stroke = egui::Stroke::new(
                 tokens::BORDER_WIDTH,
                 colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
@@ -391,6 +425,9 @@ fn semantic_picker<R>(
             visuals.hovered.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.accent);
         }
         _ => unreachable!("quiet menu roles normalize before styling"),
+    }
+    if role == MenuRole::Action {
+        ui.visuals_mut().override_text_color = Some(colors.action);
     }
     let nested_open = if nested {
         let next_id = ui.next_auto_id();
@@ -1287,10 +1324,10 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .default_pos(available.center())
         .max_size(body_size)
         .constrain_to(available)
-        .movable(false)
+        .movable(true)
         .scroll([false, true])
         .collapsible(false)
-        .resizable(false)
+        .resizable(true)
 }
 
 /// Scroll a popup's content while keeping the actions below it visible. Use
@@ -1321,9 +1358,12 @@ pub fn popup_scroll_body<R>(
 pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
     popup(title, ctx)
         .pivot(egui::Align2::LEFT_TOP)
-        .fixed_pos(popup_bounds(ctx).min)
-        .fixed_size(popup_body_size(ctx))
-        .movable(false)
+        .default_pos(popup_bounds(ctx).min)
+        .default_size(popup_body_size(ctx))
+        // Keep a usable canvas after a display-scale/viewport change. Native
+        // resize state can otherwise retain the transient tiny viewport and
+        // scroll the editor's toolbar away while keeping its plot focused.
+        .min_size(popup_body_size(ctx).min(egui::vec2(640.0, 360.0)))
 }
 
 /// A dedicated drag affordance keeps row switches and editor buttons clickable.

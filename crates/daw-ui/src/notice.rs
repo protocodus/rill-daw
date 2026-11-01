@@ -28,7 +28,7 @@ pub fn notice<R>(
             let (icon, color) = if kind == NoticeKind::Success {
                 (Icon::Check, colors.accent)
             } else {
-                (Icon::Warning, colors.orange)
+                (Icon::Warning, colors.warning)
             };
             icon.paint(ui.painter(), rect, color);
         }

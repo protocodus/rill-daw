@@ -57,6 +57,7 @@ pub const FONT_CANVAS: f32 = FONT_CAPTION;
 pub const FONT_SCALE: f32 = SPACE_SM + 3.0 * GOLDEN_RATIO_INVERSE;
 /// Two proportional label rows with clear space between their glyph bounds.
 pub const TIMELINE_RULER_HEIGHT: f32 = SPACE_XL + SPACE_XS;
+pub const TIMELINE_LOOP_HEIGHT: f32 = SPACE_LG;
 pub const TIMELINE_LOOP_STRIP_HEIGHT: f32 = 5.0;
 /// Keep loop feedback below both ruler label rows, with a clear gap.
 pub const TIMELINE_LOOP_RULER_HEIGHT: f32 =

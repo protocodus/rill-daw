@@ -154,7 +154,7 @@ pub fn mixer_mute_solo(
 
 fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bool) -> Response {
     let colors = crate::theme::palette(ui.ctx());
-    let accent = if mute { colors.orange } else { colors.accent };
+    let accent = colors.action;
     let stroke = if *value {
         accent
     } else {
@@ -241,9 +241,9 @@ pub fn mixer_level_meter(ui: &mut Ui, peaks: [f32; 2], width: f32) -> Response {
                 Rect::from_min_size(rail.min, Vec2::new(rail.width() * fraction, rail.height())),
                 1.0,
                 if peak >= 1.0 {
-                    colors.orange
+                    colors.warning
                 } else {
-                    colors.accent
+                    colors.guide
                 },
             );
         }

@@ -1,4 +1,4 @@
-//! New arranger tracks receive distinct colors without recoloring existing work.
+//! New arranger tracks start neutral without recoloring existing work.
 mod common;
 
 use common::Harness;
@@ -35,15 +35,12 @@ fn assert_new_color(previous: &BTreeMap<u64, [u8; 3]>, state: &Value) -> BTreeMa
         .find(|(id, _)| !previous.contains_key(id))
         .unwrap()
         .1;
-    assert!(
-        !previous.values().any(|color| color == added),
-        "New track reused an occupied color before the palette was exhausted"
-    );
+    assert_eq!(*added, [148, 153, 162]);
     current
 }
 
 #[test]
-fn arranger_additions_advance_colors_and_survive_undo_redo_and_project_reopen() {
+fn arranger_additions_start_neutral_and_survive_undo_redo_and_project_reopen() {
     let mut app = Harness::new();
     let mut assigned = BTreeMap::new();
     let mut before_last = BTreeMap::new();
@@ -66,10 +63,7 @@ fn arranger_additions_advance_colors_and_survive_undo_redo_and_project_reopen() 
             app.key("Escape");
         }
     }
-    assert_eq!(
-        assigned.values().collect::<HashSet<_>>().len(),
-        assigned.len()
-    );
+    assert_eq!(assigned.values().collect::<HashSet<_>>().len(), 1);
     let undone = menu(&mut app, "Edit", "Undo");
     assert_eq!(colors(&undone), before_last);
     let redone = menu(&mut app, "Edit", "Redo");
@@ -91,7 +85,7 @@ fn arranger_additions_advance_colors_and_survive_undo_redo_and_project_reopen() 
 }
 
 #[test]
-fn audio_drops_and_instrument_creation_advance_colors_but_existing_tracks_keep_theirs() {
+fn audio_drops_and_instrument_creation_start_neutral_but_existing_tracks_keep_theirs() {
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
     let mut project = Project::new();

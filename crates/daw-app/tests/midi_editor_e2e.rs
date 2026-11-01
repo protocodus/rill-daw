@@ -4,6 +4,92 @@ use common::Harness;
 use daw_core::{Clip, Note, Project};
 use serde_json::{Value, json};
 
+#[test]
+fn double_click_places_notes_exactly_at_pointer_in_select_and_cursor_tools() {
+    let mut app = open(Vec::new());
+    for (tool, beat, pitch) in [("Q", 1.13, 64), ("P", 4.63, 67)] {
+        let before = app.key(tool);
+        let at = point(&before, beat, pitch);
+        let state = pointer(&mut app, "double_click", at, None);
+        let created = notes(&state)
+            .into_iter()
+            .find(|note| note["pitch"] == pitch)
+            .expect("double-click creates a note");
+        assert!(
+            (created["start"].as_f64().unwrap() - beat).abs() < 1e-5,
+            "{created}"
+        );
+    }
+    app.quit();
+}
+
+#[test]
+fn unselected_notes_move_and_trim_at_either_edge_even_with_cursor_tool() {
+    let first = Note::new(64, 1.0, 2.0, 100);
+    let second = Note::new(67, 4.0, 2.0, 100);
+    let mut app = open(vec![first, second.clone()]);
+    let mut expected = (4.0, 2.0);
+    for (edge, delta) in [(-1, 0.25), (1, 0.5), (0, 0.75)] {
+        let before = app.key("Q");
+        pointer(&mut app, "click", point(&before, 1.5, 64), None);
+        let before = app.key("P");
+        let rect = note_rect(&before, second.id);
+        let left = rect["min"][0].as_f64().unwrap();
+        let right = rect["max"][0].as_f64().unwrap();
+        let x = if edge < 0 {
+            left + 2.0
+        } else if edge > 0 {
+            right - 2.0
+        } else {
+            (left + right) / 2.0
+        };
+        let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) / 2.0;
+        let ppb = before["midi_editor"]["pixels_per_beat"].as_f64().unwrap();
+        let edited = pointer(&mut app, "drag", (x, y), Some((x + delta * ppb, y)));
+        if edge < 0 {
+            expected.0 += delta;
+            expected.1 -= delta;
+        } else if edge > 0 {
+            expected.1 += delta;
+        } else {
+            expected.0 += delta;
+        }
+        let note = notes(&edited)
+            .into_iter()
+            .find(|note| note["id"] == second.id)
+            .unwrap();
+        assert!(
+            (note["start"].as_f64().unwrap() - expected.0).abs() < 1e-5,
+            "{note}"
+        );
+        assert!(
+            (note["length"].as_f64().unwrap() - expected.1).abs() < 1e-5,
+            "{note}"
+        );
+    }
+    app.quit();
+}
+
+#[test]
+fn overlapping_note_body_does_not_hide_another_notes_resize_edge() {
+    let first = Note::new(64, 1.0, 3.0, 100);
+    let second = Note::new(64, 2.0, 3.0, 100);
+    let mut app = open(vec![first.clone(), second.clone()]);
+    let state = app.key("Q");
+    let rect = note_rect(&state, first.id);
+    let at = (
+        rect["max"][0].as_f64().unwrap() - 2.0,
+        (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) / 2.0,
+    );
+    let ppb = state["midi_editor"]["pixels_per_beat"].as_f64().unwrap();
+    let edited = pointer(&mut app, "drag", at, Some((at.0 + ppb * 0.5, at.1)));
+    let notes = notes(&edited);
+    assert_eq!(notes[0]["length"], 3.5);
+    assert_eq!(notes[1]["start"], second.start);
+    assert_eq!(notes[1]["length"], second.length);
+    app.quit();
+}
+
 fn open(notes: Vec<Note>) -> Harness {
     open_instrument(notes, false)
 }

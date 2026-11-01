@@ -93,7 +93,7 @@ fn toolbar_keys(app: &mut Harness, editor: &str) {
     unchanged(&minus, &fitted);
     app.key("Plus");
     let fit = app.key("F");
-    assert_eq!(framing(&fit, editor), framing(&fitted, editor));
+    assert_eq!(framing(&fit, editor), framing(&fitted, editor), "{editor}");
     unchanged(&fit, &fitted);
     if editor == "midi_editor" {
         let selection = |state: &Value| {

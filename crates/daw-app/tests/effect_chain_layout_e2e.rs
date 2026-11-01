@@ -50,7 +50,7 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
         let count = label(&mixer, "12");
         let action = label(&mixer, "Effects");
         let summary = label(&mixer, "First insert");
-        label(&mixer, "+11");
+        assert_eq!(mixer["mixer_devices"].as_array().unwrap().len(), 12);
         assert!(summary["min"][1].as_f64().unwrap() >= action["max"][1].as_f64().unwrap());
         assert!(
             summary["max"][0].as_f64().unwrap()

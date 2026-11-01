@@ -55,7 +55,7 @@ fn loop_indicator_clears_ruler_labels_without_shifting_the_canvas_when_toggled()
             } else {
                 daw_ui::theme::LIGHT
             };
-            let fill = json!(palette.accent.gamma_multiply(0.6).to_array());
+            let fill = json!(palette.guide.gamma_multiply(0.6).to_array());
             let canvas_top = on["timeline"]["canvas"]["min"][1].as_f64().unwrap();
             let strip = on["painted_rects"]
                 .as_array()
@@ -507,5 +507,136 @@ fn loop_strip_endpoint_drag_is_disabled_during_recording() {
     }
     app.click("Stop");
     wait_phase(&mut app, "idle");
+    app.quit();
+}
+
+#[test]
+fn audio_and_midi_editor_loop_lanes_use_arrangement_time_without_editing_content() {
+    let mut app = Harness::new();
+    let source = app.directory.path().join("editor-loop.wav");
+    daw_core::AudioData {
+        sample_rate: 48_000,
+        channels: 1,
+        samples: vec![0.1; 96_000],
+    }
+    .write_wav(&source)
+    .unwrap();
+    let mut project = daw_core::Project::new();
+    project.loop_start = 4.0;
+    project.loop_end = 6.0;
+    let audio = project.add_audio_track("Audio");
+    project
+        .track_mut(audio)
+        .unwrap()
+        .clips
+        .push(daw_core::Clip::audio(
+            "Audio loop",
+            4.0,
+            4.0,
+            source.to_string_lossy(),
+        ));
+    let midi = project.add_midi_track("MIDI");
+    project
+        .track_mut(midi)
+        .unwrap()
+        .clips
+        .push(daw_core::Clip::midi("MIDI loop", 8.0, 8.0, Vec::new()));
+    let path = app.directory.path().join("editor-loops.daw.json");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.click("Audio loop");
+    app.click("Window");
+    let state = app.click("Clip Editor");
+    let lane = &state["audio_editor"]["loop_lane"];
+    let x = lane["min"][0].as_f64().unwrap()
+        + (6.75 - state["audio_editor"]["start_beat"].as_f64().unwrap())
+            * state["audio_editor"]["pixels_per_beat"].as_f64().unwrap();
+    let y = (lane["min"][1].as_f64().unwrap() + lane["max"][1].as_f64().unwrap()) / 2.0;
+    let changed = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_range(&changed, 4.0, 6.75, true);
+    assert_eq!(
+        changed["audio_editor"]["cursor"],
+        state["audio_editor"]["cursor"]
+    );
+    assert_eq!(changed["project"]["tracks"], state["project"]["tracks"]);
+    app.click("Back");
+    app.click("MIDI loop");
+    app.click("Window");
+    let state = app.click("Clip Editor");
+    let lane = &state["midi_editor"]["loop_lane"];
+    let x = lane["min"][0].as_f64().unwrap()
+        + (1.0 - state["midi_editor"]["start_beat"].as_f64().unwrap())
+            * state["midi_editor"]["pixels_per_beat"].as_f64().unwrap();
+    let y = (lane["min"][1].as_f64().unwrap() + lane["max"][1].as_f64().unwrap()) / 2.0;
+    let changed = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_range(&changed, 4.0, 9.0, true);
+    assert_eq!(
+        changed["midi_editor"]["cursor"],
+        state["midi_editor"]["cursor"]
+    );
+    assert_eq!(changed["project"]["tracks"], state["project"]["tracks"]);
+    app.quit();
+}
+
+fn lane_point(state: &Value, beat: f64) -> (f64, f64) {
+    let timeline = &state["timeline"];
+    let lane = &timeline["loop_lane"];
+    (
+        lane["min"][0].as_f64().unwrap()
+            + (beat - timeline["start_beat"].as_f64().unwrap())
+                * timeline["pixels_per_beat"].as_f64().unwrap(),
+        (lane["min"][1].as_f64().unwrap() + lane["max"][1].as_f64().unwrap()) / 2.0,
+    )
+}
+
+fn drag_lane(app: &mut Harness, start: f64, end: f64, shift: bool) -> Value {
+    let state = app.inspect();
+    let from = lane_point(&state, start);
+    let to = lane_point(&state, end);
+    app.command(json!({"command":"pointer","phase":"drag","x":from.0,"y":from.1,"to_x":to.0,"to_y":to.1,"shift":shift}))
+}
+
+#[test]
+fn timeline_click_resize_move_draw_snap_and_seek_have_independent_history() {
+    let mut app = Harness::new();
+    // Start with a visible loop and no project edits before the gesture tests.
+    let mut project = daw_core::Project::new();
+    project.loop_start = 2.0;
+    project.loop_end = 6.0;
+    let path = app.directory.path().join("timeline-loop.daw.json");
+    project.save(&path).unwrap();
+    let initial = app.command(json!({"command":"open","path":path}));
+    let cursor = initial["timeline"]["cursor"].clone();
+    let point = lane_point(&initial, 1.12);
+    let clicked = app.command(json!({"command":"pointer","phase":"click","x":point.0,"y":point.1}));
+    assert_range(&clicked, 1.0, 6.0, true);
+    assert_eq!(clicked["timeline"]["cursor"], cursor);
+    assert_eq!(clicked["history"]["undo"].as_array().unwrap().len(), 1);
+    assert_range(&edit(&mut app, "Undo"), 2.0, 6.0, false);
+    assert_range(&edit(&mut app, "Redo"), 1.0, 6.0, true);
+    assert_range(&drag_lane(&mut app, 6.0, 7.37, false), 1.0, 7.25, true);
+    let fine = drag_lane(&mut app, 1.0, 2.13, true);
+    assert!((fine["project"]["loop_start"].as_f64().unwrap() - 2.13).abs() < 1e-5);
+    assert_eq!(fine["project"]["loop_end"], 7.25);
+    let moved = drag_lane(&mut app, 4.0, 5.0, false);
+    let moved_start = moved["project"]["loop_start"].as_f64().unwrap();
+    let moved_end = moved["project"]["loop_end"].as_f64().unwrap();
+    assert!((moved_start - 3.25).abs() < 1e-5);
+    assert!((moved_end - moved_start - (7.25 - 2.13)).abs() < 1e-5);
+    let drawn = drag_lane(&mut app, 10.0, 8.5, false);
+    assert_range(&drawn, 8.5, 10.0, true);
+    assert_eq!(drawn["timeline"]["cursor"], cursor);
+    assert_range(&edit(&mut app, "Undo"), moved_start, moved_end, true);
+    assert_range(&edit(&mut app, "Redo"), 8.5, 10.0, true);
+    let state = app.inspect();
+    let point = lane_point(&state, 4.0);
+    let seek =
+        app.command(json!({"command":"pointer","phase":"click","x":point.0,"y":point.1-24.0}));
+    assert_eq!(seek["timeline"]["cursor"], 4.0);
+    assert_range(&seek, 8.5, 10.0, true);
+    let archive = app.directory.path().join("timeline-loop.rill");
+    app.command(json!({"command":"save","path":archive}));
+    let recalled = app.command(json!({"command":"open","path":archive}));
+    assert_range(&recalled, 8.5, 10.0, true);
     app.quit();
 }

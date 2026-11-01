@@ -229,6 +229,7 @@ pub struct DawApp {
     pub(crate) waveform_warning: Option<String>,
     pub drop_target: Option<(Option<u64>, f64)>,
     pub vst_paths: Vec<PathBuf>,
+    pub(crate) plugin_scan_roots: Option<Vec<PathBuf>>,
     pub vst_catalog: Vec<daw_plugins::catalog::CatalogEntry>,
     /// Scans, indexes and captures previews in the background; the catalog
     /// above is its latest snapshot.
@@ -370,6 +371,7 @@ impl DawApp {
             waveform_warning: None,
             drop_target: None,
             vst_paths: Vec::new(),
+            plugin_scan_roots: None,
             vst_catalog: Vec::new(),
             plugin_sync: daw_plugins::sync::CatalogSync::new(
                 daw_plugins::PluginCatalog::default(),
@@ -2648,7 +2650,7 @@ impl DawApp {
                             ui.close();
                         }
                     });
-                    if daw_ui::button(ui,"AI").on_hover_text("Assistant · current song").clicked() {self.open_global_assistant();}
+                    if daw_ui::ai_button(ui,"AI").on_hover_text("Assistant · current song").clicked() {self.open_global_assistant();}
                     if self.assistant.busy() && daw_ui::small_button(ui,"Stop AI").clicked() {self.assistant.stop();}
                     ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width().max(0.0), daw_ui::tokens::CONTROL_HEIGHT),
@@ -2723,6 +2725,7 @@ impl DawApp {
             }
         }
         if changed {
+            self.render_context.stop_dragging();
             self.restore_history_selection();
             self.assistant.known_parameters.clear();
             self.song_session.bump();
@@ -2874,7 +2877,10 @@ impl DawApp {
     /// background, then capture missing previews when automatic capture is on.
     /// The library shows the previous index until the scan finishes.
     pub(crate) fn refresh_plugins(&mut self) {
-        let mut dirs = daw_plugins::default_locations();
+        let mut dirs = self
+            .plugin_scan_roots
+            .clone()
+            .unwrap_or_else(daw_plugins::default_locations);
         dirs.extend(self.settings.vst_dirs.clone());
         self.plugin_scan_reported = false;
         self.plugin_sync.sync(dirs, self.automatic_plugin_previews);
@@ -3465,7 +3471,14 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                     && a.instrument_parameters == b.instrument_parameters
                     && a.latency_samples == b.latency_samples
                     && a.automation == b.automation
-                    && a.inserts == b.inserts
+                    && a.inserts.len() == b.inserts.len()
+                    && a.inserts.iter().zip(&b.inserts).all(|(a, b)| {
+                        a.id == b.id
+                            && a.enabled == b.enabled
+                            && a.effect == b.effect
+                            && a.state == b.state
+                            && a.parameters == b.parameters
+                    })
                     && a.sends == b.sends
                     && a.output_bus == b.output_bus
                     && a.parent_folder == b.parent_folder

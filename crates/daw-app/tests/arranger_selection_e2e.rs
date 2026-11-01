@@ -520,7 +520,7 @@ fn leading_rests_stop_at_zero_and_undo_abandons_a_held_audio_gesture() {
         );
         assert_ne!(
             edited["project"], before["project"],
-            "The held gesture really edited audio"
+            "The held gesture really edited audio (slip={slip})"
         );
         let restored = undo(&mut app, false);
         assert_eq!(restored["project"], before["project"]);

@@ -34,6 +34,9 @@ enum Edit {
     Collapse(u64),
     DeleteTrack(u64),
     TransferGroup(u64),
+    Fades(u64, u64, f64, f64, FadeCurve, FadeCurve),
+    Crossfade(u64, u64, Option<AudioCrossfade>),
+    Automation(u64, crate::arranger_automation::AutomationEdit),
     Folder(Option<u64>),
     Parent(u64, Option<u64>),
 }
@@ -560,6 +563,7 @@ impl DawApp {
         let mut arm_toggles = Vec::new();
         let mut open_editor = false;
         let mut clip_diagnostics = Vec::new();
+        let mut automation_diagnostics = Vec::new();
         let mut selection_items = Vec::new();
         let mut selection_rows = Vec::new();
         let mut clicked_clip = false;
@@ -675,6 +679,13 @@ impl DawApp {
             viewport,
             self.project.tempo,
             self.project.beats_per_bar,
+        );
+        let loop_response = self.timeline_loop_ui(
+            ui,
+            "arrangement_loop",
+            loop_lane,
+            viewport,
+            can_change_loop && !navigation.navigating,
         );
         let loop_drag_id = egui::Id::new("arrangement_loop_endpoint_drag");
         let cancel_loop_drag = !self.project.loop_enabled
@@ -858,6 +869,7 @@ impl DawApp {
             && let Some(pos) = ruler_response.interact_pointer_pos()
             && pos.x >= grid_left
             && pos.x <= canvas.right()
+            && !loop_lane.contains(pos)
         {
             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
         }
@@ -1044,6 +1056,7 @@ impl DawApp {
                                 TrackKind::Midi => {
                                     let instrument = match &track.instrument {
                                         Instrument::None => "Choose…".to_owned(),
+                                        Instrument::Vst3 { .. } if !track.instrument_name.is_empty() => track.instrument_name.clone(),
                                         Instrument::Vst3 { path, class_id } => self.vst_catalog.iter()
                                             .find(|entry| entry.plugin.path == std::path::Path::new(path)
                                                 && entry.plugin.class_id == *class_id)
@@ -1262,45 +1275,15 @@ impl DawApp {
                         }
                     });
                     if let Some(lane) = &track.automation {
-                        let left = grid_left.max(ui.clip_rect().left());
-                        let right = canvas.right().min(ui.clip_rect().right());
-                        if right > left {
-                            let curve_rect = Rect::from_min_max(
-                                Pos2::new(left, row.top() + 10.0),
-                                Pos2::new(right, row.bottom() - 10.0),
-                            );
-                            let start = ((left - origin) / self.zoom) as f64;
-                            let end = ((right - origin) / self.zoom) as f64;
-                            let curve_color = palette(ui.ctx()).automation;
-                            daw_ui::paint_curve(
-                                &p,
-                                curve_rect,
-                                start,
-                                end,
-                                if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { curve_color },
-                                |beat| lane.value_at(beat).unwrap_or(0.5),
-                            );
-                            if let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
-                                daw_ui::paint_curve(&p, curve_rect, start, end, palette(ui.ctx()).automation_override, |_| *value);
-                            }
-                            for point in &lane.points {
-                                let x = origin + point.beat as f32 * self.zoom;
-                                if x >= left && x <= right {
-                                    p.circle_filled(
-                                        Pos2::new(
-                                            x,
-                                            curve_rect.bottom() - point.value * curve_rect.height(),
-                                        ),
-                                        3.0,
-                                        curve_color,
-                                    );
-                                }
-                            }
-                        }
-                        if !navigation.navigating && row_response.double_clicked() {
-                            self.selected_track = Some(track.id);
-                            self.selected_clip = None;
-                            popup = Some(PopupKind::Automation);
+                        let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
+                        let response = crate::arranger_automation::automation_lane(ui, crate::arranger_automation::LaneView {
+                            track: track.id, rect, viewport, snap: self.snap, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
+                        }, lane, &mut self.selected_clip);
+                        if response.interacted { self.selected_track = Some(track.id); }
+                        edits.extend(response.edits.into_iter().map(|edit| Edit::Automation(track.id, edit)));
+                        automation_diagnostics.push(response.diagnostic);
+                        if let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
+                            daw_ui::paint_curve(&p, rect, viewport.start_beat, viewport.beat_at(rect, rect.right()), palette(ui.ctx()).automation_override, |_| *value);
                         }
                     }
                     if !navigation.navigating && (background_double
@@ -1407,6 +1390,30 @@ impl DawApp {
                                 ))
                                 .flatten()
                         });
+                        let clip_view = daw_ui::TimelineViewport { start_beat: clip.start, ..viewport };
+                        let fades = if matches!(clip.content, ClipContent::Audio { .. }) {
+                            let fade_canvas = Rect::from_min_max(Pos2::new(rect.left(), surface.content.top()), Pos2::new(rect.right(), surface.content.bottom()));
+                            daw_ui::paint_clip_fades(&p, fade_canvas, clip_view, clip.start, clip.end(), |beat| clip.audio_envelope_gain(beat - clip.start));
+                            let mut fade_ui = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
+                            fade_ui.set_clip_rect(p.clip_rect().intersect(rect));
+                            Some(daw_ui::clip_fade_handles(&mut fade_ui, ui.id().with(("clip_fades", clip.id)), fade_canvas, clip_view,
+                                crate::audio_editor::audio_fade_bounds(clip), !navigation.navigating))
+                        } else { None };
+                        if let Some((edge, beat)) = fades.as_ref().and_then(|fades| fades.edit) {
+                            let beat = beat.clamp(clip.start, clip.end());
+                            let (fi, fo, fic, foc) = crate::audio_editor::audio_fade_handle_edit(clip, edge, beat);
+                            edits.push(Edit::SelectOnly(track.id, clip.id));
+                            edits.push(Edit::Fades(track.id, clip.id, fi, fo, fic, foc));
+                        }
+                        let editing_fade = fades.as_ref().is_some_and(|fades| fades.interacting);
+                        let pressed_fade = editing_fade && primary_press.is_some();
+                        if let Some(diagnostic) = clip_diagnostics.last_mut() {
+                            diagnostic["fade_handles"] = serde_json::json!(fades.as_ref().map(|fades| fades.handles.map(|handle| handle.map(rect_json))));
+                            if let Some(fades) = &fades {
+                                diagnostic["fade_in_handle"] = serde_json::json!(fades.handles[0].map(rect_json));
+                                diagnostic["fade_out_handle"] = serde_json::json!(fades.handles[1].map(rect_json));
+                            }
+                        }
                         if let Some((position, modifiers)) = primary_press
                             && visible_clip.contains(position) {
                             self.arranger_selection.press_shift = Some((clip.id, modifiers.shift));
@@ -1421,37 +1428,6 @@ impl DawApp {
                         }
                         let press_shift = self.arranger_selection.press_shift
                             .filter(|(id, _)| *id == clip.id).map_or_else(|| ui.input(|input| input.modifiers.shift), |(_, shift)| shift);
-                        let mut editing_fade = false;
-                        let mut pressed_fade = false;
-                        if is_selected && self.tool == daw_ui::EditorTool::Select && rect.width() >= 28.0
-                            && let ClipContent::Audio { fade_in, fade_out, envelope, .. } = &clip.content
-                        {
-                            let offset = envelope.map_or(0.0, |envelope| envelope.offset);
-                            let length = envelope.map_or(clip.source_length(), |envelope| envelope.length);
-                            let fades = [
-                                (true, ((*fade_in - offset) / clip.source_rate).clamp(0.0, clip.length)),
-                                (false, ((length - *fade_out - offset) / clip.source_rate).clamp(0.0, clip.length)),
-                            ];
-                            for (incoming, local) in fades {
-                                let center = Pos2::new((rect.left() + local as f32 * self.zoom).clamp(rect.left() + 7.0, rect.right() - 7.0),
-                                    (rect.top() + 26.0).min(rect.bottom() - 7.0));
-                                let handle = daw_ui::audio_fade_handle(ui, ui.id().with((clip.id, incoming, "fade")), center,
-                                    visible_clip, col, incoming);
-                                if let Some(diagnostic) = clip_diagnostics.last_mut() {
-                                    diagnostic[if incoming { "fade_in_handle" } else { "fade_out_handle" }] = rect_json(handle.rect);
-                                }
-                                pressed_fade |= primary_press.is_some_and(|(position, _)| handle.rect.contains(position));
-                                editing_fade |= handle.drag_started_by(egui::PointerButton::Primary) || handle.dragged_by(egui::PointerButton::Primary);
-                                if !navigation.navigating && handle.drag_started_by(egui::PointerButton::Primary) {
-                                    let at = ((center.x - origin) / self.zoom) as f64;
-                                    edits.push(Edit::AudioStart(track.id, clip.id, crate::arranger_selection::ArrangeAudioMode::Fade(incoming), at));
-                                }
-                                if !navigation.navigating && handle.dragged_by(egui::PointerButton::Primary) && let Some(position) = handle.interact_pointer_pos() {
-                                    let at = ((position.x - origin) / self.zoom) as f64;
-                                    edits.push(Edit::AudioMotion(at));
-                                }
-                            }
-                        }
                         if !navigation.navigating && self.tool == daw_ui::EditorTool::Slip && matches!(clip.content, ClipContent::Audio { .. }) {
                             if response.drag_started_by(egui::PointerButton::Primary) && let Some(source_beats) = self.audio_source_beats(clip) {
                                 let pressed = ui.input(|input| input.pointer.press_origin()).unwrap_or(rect.center());
@@ -1736,7 +1712,7 @@ impl DawApp {
                         });
                     }
                     if track.kind == TrackKind::Audio && let Ok(schedule) = daw_core::AudioSchedule::new(&track.clips) {
-                        for fade in schedule.crossfades {
+                        for fade in &schedule.crossfades {
                             let rect = Rect::from_min_max(
                                 Pos2::new(origin + fade.start as f32 * self.zoom, row.top() + 31.0),
                                 Pos2::new(origin + fade.end as f32 * self.zoom, row.bottom() - 8.0),
@@ -1746,6 +1722,30 @@ impl DawApp {
                                 daw_ui::paint_crossfade(&p.with_clip_rect(visible), rect, daw_ui::CrossfadeCurve {
                                     control1: fade.curve.control1, control2: fade.curve.control2,
                                 });
+                            }
+                        }
+                        for overlap in &schedule.overlaps {
+                            let incoming = &track.clips[overlap.incoming];
+                            let ClipContent::Audio { crossfade, .. } = incoming.content else { continue; };
+                            let lane = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(row.right(), row.bottom() - 8.0));
+                            let handle = daw_ui::crossfade_duration_handle(ui, ui.id().with(("overlap_handle", incoming.id)), lane, viewport,
+                                daw_ui::CrossfadeBounds { start: overlap.start, end: overlap.end, duration: crossfade.map_or(0.0, |config| config.duration) }, !navigation.navigating);
+                            if handle.open_curve {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(incoming.id);
+                                popup = Some(PopupKind::Crossfade);
+                            }
+                            if let Some(duration) = handle.duration {
+                                let end = if ui.input(|input| input.modifiers.shift) { overlap.start + duration } else { self.snapped(overlap.start + duration) };
+                                let duration = (end - overlap.start).clamp(0.0, overlap.end - overlap.start);
+                                edits.push(Edit::Crossfade(track.id, incoming.id, (duration > 0.0).then_some(AudioCrossfade {
+                                    duration, curve: crossfade.map_or(CrossfadeCurve::LINEAR, |config| config.curve),
+                                })));
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(incoming.id);
+                            }
+                            if let Some(diagnostic) = clip_diagnostics.iter_mut().find(|value| value["id"] == incoming.id) {
+                                diagnostic["crossfade_handle"] = handle.handle.map(|rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})).into();
                             }
                         }
                     }
@@ -2058,7 +2058,9 @@ impl DawApp {
                     "placement":format!("{:?}",preview.intent.placement),"indicator":rect_json(preview.indicator)})
             }));
             diagnostics["ruler"] = rect_json(label_ruler);
-            diagnostics["loop_lane"] = rect_json(loop_lane);
+            diagnostics["automation"] = serde_json::json!(automation_diagnostics);
+            diagnostics["loop_lane"] = rect_json(loop_response.lane);
+            diagnostics["loop_handles"] = serde_json::json!(loop_response.handles.map(|handle| handle.map(rect_json)));
             diagnostics["loop_indicator"] = serde_json::json!(loop_indicator.map(rect_json));
             diagnostics["loop_start_handle"] = serde_json::json!(loop_handles[0].map(rect_json));
             diagnostics["loop_end_handle"] = serde_json::json!(loop_handles[1].map(rect_json));
@@ -2131,6 +2133,19 @@ impl DawApp {
                 self.begin_edit();
             }
             let result = match edit {
+                Edit::Automation(track, edit) => self.apply_arranger_automation(track, edit),
+                Edit::Fades(t, c, fi, fo, fic, foc) => {
+                    if self.project.clip(t, c).is_some_and(|clip| matches!(clip.content, ClipContent::Audio { fade_in, fade_out, fade_in_curve, fade_out_curve, .. }
+                        if (fade_in, fade_out, fade_in_curve, fade_out_curve) == (fi, fo, fic, foc))) { continue; }
+                    self.edit_label = Some("Edit clip fades".into());
+                    self.project.set_audio_fades(t, c, fi, fo, fic, foc)
+                }
+                Edit::Crossfade(t, c, config) => {
+                    if self.project.clip(t, c).is_some_and(|clip| matches!(clip.content, ClipContent::Audio { crossfade, .. } if crossfade == config)) { continue; }
+                    self.edit_label = Some("Edit crossfade".into());
+                    self.project.set_audio_crossfade(t, c, config)
+                }
+
                 Edit::Rename(track, clip) => {
                     self.arranger_select_clips([(track, clip)], None);
                     self.start_inline_rename(ui.ctx());
@@ -3011,5 +3026,45 @@ impl DawApp {
             self.changed();
         }
         navigation
+    }
+}
+
+impl DawApp {
+    pub(crate) fn timeline_loop_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: &str,
+        lane: Rect,
+        view: daw_ui::TimelineViewport,
+        enabled: bool,
+    ) -> daw_ui::TimelineLoopResponse {
+        let mut range = daw_ui::TimelineLoop {
+            start: self.project.loop_start,
+            end: self.project.loop_end,
+            enabled: self.project.loop_enabled,
+        };
+        // Canvas overlays must not advance the parent's layout cursor.
+        let mut controls = ui.new_child(egui::UiBuilder::new().max_rect(lane));
+        if !enabled || self.recording_busy() {
+            controls.disable();
+        }
+        let response = daw_ui::timeline_loop_editor(
+            &mut controls,
+            egui::Id::new(id),
+            lane,
+            view,
+            &mut range,
+            self.snap,
+            MAX_BEAT,
+        );
+        if response.changed {
+            self.begin_edit();
+            self.project.loop_start = range.start;
+            self.project.loop_end = range.end;
+            self.project.loop_enabled = range.enabled;
+            self.edit_label = Some("Edit loop range".into());
+            self.changed();
+        }
+        response
     }
 }

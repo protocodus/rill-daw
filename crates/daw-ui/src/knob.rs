@@ -631,7 +631,7 @@ impl<'a> Knob<'a> {
             ui.label(
                 text::TextRole::Note
                     .rich(ui.ctx(), "Outside range")
-                    .color(colors.orange),
+                    .color(colors.warning),
             );
         }
         response.widget_info(|| WidgetInfo::slider(ui.is_enabled(), current, &self.text));

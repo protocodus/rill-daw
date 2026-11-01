@@ -1078,3 +1078,26 @@ the navigation.
 ```sh
 cargo test --locked -p daw-app --test empty_workspace_e2e --test novice_clip_e2e -- --test-threads=1
 ```
+
+The feedback interaction suites run without a desktop or audio device:
+
+```sh
+cargo test --locked -p daw-app --test clip_fades_e2e --test loop_e2e --test arranger_automation_e2e --test device_feedback_e2e --test midi_editor_e2e -- --test-threads=1
+```
+
+They exercise real pointer gestures for fades, crossfades, ruler loops, inline
+arranger points and reusable/ghost automation patterns, window moving/resizing,
+plugin diagnostics, direct mixer access, device naming and piano-roll creation,
+movement and both resize edges. Audio tests compare exported samples against
+independent analytic gains and verify unchanged source bytes. Recall and Undo
+checks cover the saved model and gesture grouping.
+
+Headless discovery uses only `VST3_PATH` and explicitly configured plug-in folders,
+keeping installed system devices out of fixture inventories. Display-density
+commands supply native pixels per point while retaining logical viewport bounds;
+they do not simulate UI zoom or temporarily shrink resizable utility windows.
+
+`semantic_colors_e2e` exercises neutral track creation and painted action, view,
+AI, guide and automation colors in both appearances, retaining user colors in
+saved songs. `mixer_sections_e2e` checks painted processing sections and direct
+mouse editing through their frames.

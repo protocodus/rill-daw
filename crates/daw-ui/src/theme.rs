@@ -38,7 +38,12 @@ pub struct Palette {
     pub popup_scrim: Color32,
     pub text: Color32,
     pub muted: Color32,
+    /// Neutral selection and view controls.
     pub accent: Color32,
+    pub action: Color32,
+    pub ai: Color32,
+    pub guide: Color32,
+    pub warning: Color32,
     pub orange: Color32,
     /// Playback/edit position stays distinct from selection and track colors.
     pub cursor: Color32,
@@ -70,65 +75,73 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 pub const DARK: Palette = Palette {
-    bg: rgb(22, 25, 30),
-    panel: rgb(30, 34, 40),
-    raised: rgb(38, 43, 50),
-    line: rgb(55, 62, 71),
-    window_border: rgb(87, 99, 111),
+    bg: rgb(25, 27, 31),
+    panel: rgb(34, 37, 42),
+    raised: rgb(42, 45, 51),
+    line: rgb(66, 70, 78),
+    window_border: rgb(91, 96, 106),
     popup_scrim: Color32::from_black_alpha(104),
-    text: rgb(233, 237, 241),
-    muted: rgb(174, 184, 196),
-    accent: rgb(145, 190, 177),
-    orange: rgb(221, 176, 126),
-    cursor: rgb(255, 215, 80),
-    cursor_outline: rgb(30, 22, 8),
-    automation: rgb(255, 155, 74),
-    automation_override: rgb(255, 122, 132),
-    track_selected: rgb(42, 61, 61),
-    track_alternate: rgb(26, 30, 36),
-    grid_minor: rgb(34, 40, 48),
-    grid_bar: rgb(55, 65, 77),
-    control_fill: rgb(43, 49, 58),
-    control_hover: rgb(53, 62, 72),
-    piano_black: rgb(27, 32, 38),
-    piano_white: rgb(38, 43, 50),
-    note: rgb(83, 156, 238),
-    note_selected: rgb(146, 207, 255),
-    note_text: rgb(12, 23, 35),
-    piano_rows_black: [rgb(27, 32, 38), rgb(27, 37, 35), rgb(28, 39, 35)],
-    piano_rows_white: [rgb(38, 43, 50), rgb(37, 48, 45), rgb(38, 50, 45)],
-    piano_notes: [rgb(51, 103, 162), rgb(104, 179, 255)],
+    text: rgb(225, 228, 233),
+    muted: rgb(172, 180, 191),
+    action: rgb(120, 182, 240),
+    ai: rgb(229, 160, 202),
+    guide: rgb(140, 203, 158),
+    warning: rgb(239, 129, 134),
+    accent: rgb(183, 190, 200),
+    orange: rgb(233, 174, 114),
+    cursor: rgb(140, 203, 158),
+    cursor_outline: rgb(18, 32, 23),
+    automation: rgb(233, 174, 114),
+    automation_override: rgb(255, 207, 155),
+    track_selected: rgb(52, 56, 63),
+    track_alternate: rgb(29, 31, 36),
+    grid_minor: rgb(45, 48, 54),
+    grid_bar: rgb(65, 69, 77),
+    control_fill: rgb(48, 52, 59),
+    control_hover: rgb(59, 64, 72),
+    piano_black: rgb(31, 34, 39),
+    piano_white: rgb(41, 44, 49),
+    note: rgb(145, 153, 164),
+    note_selected: rgb(203, 210, 220),
+    note_text: rgb(19, 23, 28),
+    piano_rows_black: [rgb(31, 34, 39), rgb(31, 40, 35), rgb(31, 43, 36)],
+    piano_rows_white: [rgb(41, 44, 49), rgb(40, 51, 45), rgb(40, 54, 46)],
+    piano_notes: [rgb(79, 87, 99), rgb(184, 194, 207)],
     piano_notes_outside_scale: [rgb(151, 75, 79), rgb(241, 125, 129)],
 };
 pub const LIGHT: Palette = Palette {
-    bg: rgb(247, 248, 250),
-    panel: rgb(238, 241, 245),
+    bg: rgb(236, 238, 240),
+    panel: rgb(244, 245, 246),
     raised: rgb(255, 255, 255),
-    line: rgb(202, 210, 220),
-    window_border: rgb(151, 166, 183),
+    line: rgb(200, 204, 209),
+    window_border: rgb(147, 153, 162),
     popup_scrim: Color32::from_black_alpha(64),
-    text: rgb(34, 43, 56),
-    muted: rgb(78, 93, 111),
-    accent: rgb(47, 105, 90),
-    orange: rgb(139, 83, 31),
-    cursor: rgb(169, 70, 0),
+    text: rgb(37, 41, 46),
+    muted: rgb(85, 94, 106),
+    action: rgb(27, 80, 136),
+    ai: rgb(135, 38, 97),
+    guide: rgb(49, 119, 80),
+    warning: rgb(174, 50, 55),
+    accent: rgb(78, 86, 97),
+    orange: rgb(130, 65, 10),
+    cursor: rgb(49, 119, 80),
     cursor_outline: rgb(255, 255, 255),
-    automation: rgb(170, 61, 10),
-    automation_override: rgb(177, 39, 55),
-    track_selected: rgb(216, 233, 228),
-    track_alternate: rgb(237, 240, 244),
-    grid_minor: rgb(226, 231, 238),
-    grid_bar: rgb(183, 195, 209),
-    control_fill: rgb(226, 232, 240),
-    control_hover: rgb(214, 224, 234),
+    automation: rgb(130, 65, 10),
+    automation_override: rgb(184, 91, 18),
+    track_selected: rgb(218, 222, 227),
+    track_alternate: rgb(231, 233, 236),
+    grid_minor: rgb(216, 220, 224),
+    grid_bar: rgb(184, 190, 198),
+    control_fill: rgb(229, 231, 234),
+    control_hover: rgb(215, 219, 224),
     piano_black: rgb(235, 237, 240),
     piano_white: rgb(245, 247, 250),
-    note: rgb(34, 105, 183),
-    note_selected: rgb(18, 78, 145),
+    note: rgb(105, 115, 129),
+    note_selected: rgb(70, 79, 93),
     note_text: rgb(255, 255, 255),
     piano_rows_black: [rgb(235, 237, 240), rgb(231, 239, 233), rgb(229, 239, 231)],
     piano_rows_white: [rgb(245, 247, 250), rgb(237, 249, 242), rgb(234, 249, 239)],
-    piano_notes: [rgb(155, 185, 220), rgb(34, 105, 183)],
+    piano_notes: [rgb(175, 183, 195), rgb(78, 88, 104)],
     piano_notes_outside_scale: [rgb(220, 170, 174), rgb(184, 65, 76)],
 };
 
@@ -161,7 +174,11 @@ impl Palette {
     /// Quietly desaturate content outside a clip toward its surrounding canvas.
     /// Light canvases remain light instead of receiving a fixed black veil.
     pub fn inactive_clip_tint(self) -> Color32 {
-        self.bg.gamma_multiply(0.32)
+        if self.bg.r() > 128 {
+            self.raised.gamma_multiply(0.32)
+        } else {
+            self.bg.gamma_multiply(0.32)
+        }
     }
 
     /// Velocity changes brightness without making the label's background transparent.
@@ -192,13 +209,13 @@ impl Palette {
     pub fn piano_key_fill(self, black: bool, highlight: u8, active: bool) -> Color32 {
         let base = self.piano_row(black, highlight);
         if active {
-            base.lerp_to_gamma(self.accent, 0.35)
+            base.lerp_to_gamma(self.guide, 0.35)
         } else {
             base
         }
     }
 
-    /// Blue notes strengthen with velocity; an optional red hue marks pitches
+    /// Neutral notes strengthen with velocity; an optional red hue marks pitches
     /// outside the scale. Selection deliberately never changes this fill.
     pub fn piano_note_fill(self, velocity: u8, out_of_scale: bool) -> Color32 {
         let [soft, strong] = if out_of_scale {
@@ -256,9 +273,9 @@ pub fn apply(ctx: &egui::Context) {
         style.visuals.weak_text_color = Some(colors.muted);
         style.visuals.text_edit_bg_color = Some(colors.bg);
         style.visuals.code_bg_color = colors.bg;
-        style.visuals.hyperlink_color = colors.accent;
-        style.visuals.warn_fg_color = colors.orange;
-        style.visuals.text_cursor.stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.accent);
+        style.visuals.hyperlink_color = colors.action;
+        style.visuals.warn_fg_color = colors.warning;
+        style.visuals.text_cursor.stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.guide);
         style.visuals.selection.bg_fill = colors.track_selected;
         style.visuals.selection.stroke = Stroke::new(1.0_f32, colors.accent);
         style.visuals.window_shadow = egui::epaint::Shadow {
@@ -452,7 +469,11 @@ mod tests {
                     if out_of_scale {
                         assert!(fill.r() > fill.b() + 40);
                     } else {
-                        assert!(fill.b() > fill.r() + 50);
+                        let rgb = [fill.r(), fill.g(), fill.b()];
+                        assert!(
+                            rgb.iter().max().unwrap() - rgb.iter().min().unwrap() <= 30,
+                            "default notes remain neutral"
+                        );
                     }
                     let selection = colors.piano_note_stroke(true, fill);
                     assert_eq!(selection.width, 2.0);

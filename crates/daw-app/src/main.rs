@@ -1,6 +1,7 @@
 mod app;
 mod application_tools;
 mod arrangement;
+mod arranger_automation;
 mod arranger_selection;
 mod assistant;
 mod audio_batch;

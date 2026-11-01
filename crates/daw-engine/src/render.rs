@@ -301,7 +301,9 @@ fn active_automation_lane(
         let lane = candidate.automation.as_ref()?;
         (lane.target.track == track
             && lane.target.parameter == parameter
-            && (!lane.points.is_empty() || lane.override_value.is_some())
+            && (!lane.points.is_empty()
+                || lane.clips.iter().any(|clip| !clip.points.is_empty())
+                || lane.override_value.is_some())
             && lane_enabled(project, candidate))
         .then_some(lane)
     })
@@ -324,6 +326,7 @@ struct PluginAutomation {
     lane: AutomationLane,
     previous: Option<f32>,
     action_sequence: u64,
+    manual: Option<f32>,
 }
 
 fn plugin_automation(project: &Project, track: u64, effect: Option<u64>) -> Vec<PluginAutomation> {
@@ -339,12 +342,30 @@ fn plugin_automation(project: &Project, track: u64, effect: Option<u64>) -> Vec<
             };
             (lane.target.track == track
                 && target == effect
-                && (!lane.points.is_empty() || lane.override_value.is_some()))
+                && (!lane.points.is_empty()
+                    || lane.override_value.is_some()
+                    || lane.clips.iter().any(|clip| !clip.points.is_empty())))
             .then(|| PluginAutomation {
                 id,
                 lane: lane.clone(),
                 previous: None,
                 action_sequence: 0,
+                manual: project.track(track).and_then(|track| {
+                    let values = match effect {
+                        Some(effect) => {
+                            &track
+                                .inserts
+                                .iter()
+                                .find(|slot| slot.id == effect)?
+                                .parameters
+                        }
+                        None => &track.instrument_parameters,
+                    };
+                    values
+                        .iter()
+                        .find(|parameter| parameter.id == id)
+                        .map(|parameter| parameter.value as f32)
+                }),
             })
         })
         .collect();
@@ -355,13 +376,46 @@ fn plugin_automation(project: &Project, track: u64, effect: Option<u64>) -> Vec<
     parameters
 }
 
+fn initialize_automation_defaults(
+    parameters: &mut [PluginAutomation],
+    read: impl FnOnce() -> Result<Vec<daw_plugins::ParameterInfo>>,
+) -> Result<()> {
+    if !parameters.iter().any(|parameter| {
+        parameter.manual.is_none()
+            && parameter.lane.points.is_empty()
+            && !parameter.lane.clips.is_empty()
+    }) {
+        return Ok(());
+    }
+    let defaults = read()?;
+    for parameter in parameters.iter_mut().filter(|parameter| {
+        parameter.manual.is_none()
+            && parameter.lane.points.is_empty()
+            && !parameter.lane.clips.is_empty()
+    }) {
+        parameter.manual = Some(
+            defaults
+                .iter()
+                .find(|info| info.id == parameter.id)
+                .with_context(|| {
+                    format!(
+                        "Plugin does not expose the default value for automated parameter {}",
+                        parameter.id
+                    )
+                })?
+                .value as f32,
+        );
+    }
+    Ok(())
+}
+
 fn apply_plugin_automation(
     parameters: &mut [PluginAutomation],
     beat: f64,
     mut set: impl FnMut(u32, f64) -> Result<()>,
 ) -> Result<()> {
     for parameter in parameters {
-        if let Some(value) = parameter.lane.effective_value_at(beat)
+        if let Some(value) = parameter.lane.effective_value_at(beat).or(parameter.manual)
             && parameter.previous != Some(value)
         {
             set(parameter.id, f64::from(value))?;
@@ -389,6 +443,7 @@ fn apply_plugin_parameter_change(
     }
     set(id, value)?;
     for parameter in parameters.iter_mut().filter(|parameter| parameter.id == id) {
+        parameter.manual = Some(value as f32);
         if let Some(sequence) = override_sequence {
             parameter.lane.override_value = Some(value as f32);
             parameter.previous = Some(value as f32);
@@ -1080,6 +1135,10 @@ impl Renderer {
                 }
                 _ => (Processor::None, 0),
             };
+            let mut instrument_automation = plugin_automation(project, track.id, None);
+            if let Processor::Vst(plugin) = &processor {
+                initialize_automation_defaults(&mut instrument_automation, || plugin.parameters())?;
+            }
             let control =
                 |parameter, manual| AutomatedValue::new(project, track.id, parameter, manual);
             let event_capacity = content.events.len() + content.notes.len() + 4;
@@ -1114,10 +1173,12 @@ impl Renderer {
                         check_cancelled()?;
                         latency = latency.saturating_add(effect.latency_samples());
                         local_tail += (effect.tail_samples() as u64).min(sample_rate as u64 * 30);
+                        let mut parameters = plugin_automation(project, track.id, Some(slot.id));
+                        initialize_automation_defaults(&mut parameters, || effect.parameters())?;
                         Insert::Vst {
                             id: slot.id,
                             effect: Box::new(effect),
-                            parameters: plugin_automation(project, track.id, Some(slot.id)),
+                            parameters,
                         }
                     }
                 });
@@ -1178,7 +1239,7 @@ impl Renderer {
                 mix_right: vec![0.0; BLOCK],
                 gain: control(AutomationParameter::TrackGain, track.gain),
                 pan: control(AutomationParameter::TrackPan, track.pan),
-                instrument_automation: plugin_automation(project, track.id, None),
+                instrument_automation,
                 delay: CompensationDelay::new(track.latency_samples as usize),
                 latency,
                 input_latency: 0,

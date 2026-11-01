@@ -114,6 +114,18 @@ impl DawApp {
                                         })
                                         .response
                                         .on_hover_text("Insert actions");
+                                        let Effect::Vst3 { path, class_id } = &slot.effect;
+                                        let model = crate::library::plugin_model(
+                                            &self.vst_catalog,
+                                            path,
+                                            class_id,
+                                        );
+                                        widgets::text::truncated(
+                                            ui,
+                                            widgets::text::TextRole::Note,
+                                            &model,
+                                        )
+                                        .on_hover_text(&model);
                                     },
                                 );
                                 let Effect::Vst3 { path, .. } = &slot.effect;
@@ -529,8 +541,17 @@ pub fn visible_tracks(project: &Project) -> Vec<(usize, usize)> {
             return;
         }
         for (index, track) in project.tracks.iter().enumerate() {
-            if track.parent_folder == parent {
+            if track.parent_folder == parent && track.kind != TrackKind::Automation {
                 out.push((index, depth));
+                for (automation_index, automation) in project.tracks.iter().enumerate() {
+                    if automation
+                        .automation
+                        .as_ref()
+                        .is_some_and(|lane| lane.target.track == track.id)
+                    {
+                        out.push((automation_index, depth + 1));
+                    }
+                }
                 if track.kind == TrackKind::Folder && !track.collapsed {
                     visit(project, Some(track.id), depth + 1, out);
                 }

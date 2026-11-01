@@ -9,6 +9,7 @@ mod audio_processing;
 mod audio_silence;
 mod audio_takes;
 mod automation;
+mod automation_clips;
 mod boundary_fades;
 mod chords;
 mod clip_links;

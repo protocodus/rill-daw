@@ -5,6 +5,7 @@ use daw_core::{
 
 fn curve(interpolation: Interpolation, points: &[(f64, f32)]) -> AutomationLane {
     AutomationLane {
+        clips: Vec::new(),
         target: AutomationTarget {
             track: 1,
             parameter: Parameter::TrackGain,
@@ -16,6 +17,92 @@ fn curve(interpolation: Interpolation, points: &[(f64, f32)]) -> AutomationLane 
         interpolation,
         override_value: None,
     }
+}
+
+#[test]
+fn per_point_shapes_and_clip_precedence_fall_through_at_exclusive_ends() {
+    let mut lane = curve(Interpolation::Linear, &[(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
+    lane.points[0].interpolation = Some(Interpolation::Smooth);
+    assert!((lane.value_at(0.5).unwrap() - 0.75).abs() < 1e-6);
+    assert!((lane.value_at(1.5).unwrap() - 0.5).abs() < 1e-6);
+    for (start, length, value) in [(0.25, 1.0, 0.2), (0.5, 0.25, 0.8), (0.5, 0.25, 0.9)] {
+        lane.clips.push(daw_core::AutomationClip {
+            id: new_id(),
+            name: "Pattern".into(),
+            start,
+            length,
+            offset: 0.0,
+            link_group: None,
+            points: vec![AutomationPoint::new(0.0, value)],
+            interpolation: Interpolation::Linear,
+        });
+    }
+    assert_eq!(lane.value_at(0.4), Some(0.2));
+    assert_eq!(lane.value_at(0.6), Some(0.9));
+    assert_eq!(lane.value_at(0.75), Some(0.2));
+    assert!((lane.value_at(1.25).unwrap() - 0.75).abs() < 1e-6);
+    lane.points.clear();
+    assert_eq!(lane.value_at(1.25), None);
+    assert_eq!(lane.value_at(0.6), Some(0.9));
+    lane.validate().unwrap();
+}
+
+#[test]
+fn ghost_patterns_share_points_but_copies_and_placements_are_independent() {
+    let (mut project, _, track) = fixture();
+    let first = project.create_automation_clip(track, 1.0, 2.0).unwrap();
+    let ghost = project
+        .copy_automation_clip(track, first, 5.0, true)
+        .unwrap();
+    let derived = project
+        .copy_automation_clip(track, first, 8.0, false)
+        .unwrap();
+    project
+        .edit_automation_pattern(track, Some(first), |lane| lane.upsert_point(0.75, 0.9))
+        .unwrap();
+    let clips = &project.automation_lane(track).unwrap().clips;
+    assert_eq!(clips[0].points.len(), 3);
+    assert_eq!(clips[1].points.len(), 3);
+    assert_eq!(clips[2].points.len(), 2);
+    assert_ne!(clips[0].points[1].id, clips[1].points[1].id);
+    let before = project.clone();
+    project
+        .edit_automation_pattern(track, Some(first), |lane| lane.upsert_point(0.75, 0.9))
+        .unwrap();
+    assert_eq!(
+        project, before,
+        "Holding a ghost edit still must preserve IDs and saved state"
+    );
+    let ghost_ids: Vec<_> = project.automation_lane(track).unwrap().clips[1]
+        .points
+        .iter()
+        .map(|point| point.id)
+        .collect();
+    project
+        .edit_automation_pattern(track, Some(first), |lane| lane.upsert_point(0.75, 0.8))
+        .unwrap();
+    assert_eq!(
+        project.automation_lane(track).unwrap().clips[1]
+            .points
+            .iter()
+            .map(|point| point.id)
+            .collect::<Vec<_>>(),
+        ghost_ids
+    );
+    project
+        .set_automation_clip_bounds(track, ghost, 6.0, 1.5, 0.5)
+        .unwrap();
+    assert_eq!(project.automation_lane(track).unwrap().clips[0].start, 1.0);
+    project
+        .make_automation_clip_independent(track, ghost)
+        .unwrap();
+    project
+        .edit_automation_pattern(track, Some(derived), |lane| lane.upsert_point(0.75, 0.1))
+        .unwrap();
+    project.validate().unwrap();
+    let recalled: Project =
+        serde_json::from_str(&serde_json::to_string(&project).unwrap()).unwrap();
+    assert_eq!(recalled, project);
 }
 
 fn fixture() -> (Project, u64, u64) {

@@ -1,6 +1,67 @@
 use super::*;
 use daw_core::{AutomationTarget, Clip, EffectSlot, PluginParameterValue};
 
+#[test]
+fn plugin_automation_patterns_restore_manual_value_at_clip_end_and_after_seek() -> Result<()> {
+    let target = AutomationTarget {
+        track: 1,
+        parameter: AutomationParameter::VstParameter {
+            effect: Some(2),
+            id: 7,
+        },
+    };
+    let pattern = daw_core::AutomationClip {
+        id: 3,
+        name: "Pattern".into(),
+        start: 1.0,
+        length: 2.0,
+        offset: 0.0,
+        link_group: None,
+        points: vec![daw_core::AutomationPoint::new(0.0, 0.9)],
+        interpolation: daw_core::Interpolation::Linear,
+    };
+    let mut parameters = vec![PluginAutomation {
+        id: 7,
+        previous: None,
+        manual: Some(0.25),
+        action_sequence: 0,
+        lane: daw_core::AutomationLane {
+            override_value: None,
+            target,
+            points: Vec::new(),
+            interpolation: daw_core::Interpolation::Linear,
+            clips: vec![pattern],
+        },
+    }];
+    let mut sent = Vec::new();
+    for beat in [0.0, 0.5, 1.0, 2.5, 3.0, 4.0, 1.5, 0.0] {
+        apply_plugin_automation(&mut parameters, beat, |id, value| {
+            sent.push((id, value));
+            Ok(())
+        })?;
+    }
+    assert_eq!(
+        sent.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        vec![7; 5]
+    );
+    for ((_, actual), expected) in sent.iter().zip([0.25, 0.9, 0.25, 0.9, 0.25]) {
+        assert!((actual - expected).abs() < 1e-6);
+    }
+    parameters[0]
+        .lane
+        .points
+        .push(daw_core::AutomationPoint::new(0.0, 0.6));
+    parameters[0].manual = None;
+    initialize_automation_defaults(&mut parameters, || {
+        panic!("Arranger points already provide the fallback; no metadata query is needed")
+    })?;
+    apply_plugin_automation(&mut parameters, 4.0, |_, value| {
+        assert!((value - 0.6).abs() < 1e-6);
+        Ok(())
+    })?;
+    Ok(())
+}
+
 fn level(samples: &[[f32; 2]], channel: usize) -> f64 {
     (samples
         .iter()

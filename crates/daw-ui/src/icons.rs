@@ -567,6 +567,8 @@ pub struct IconButton {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ButtonRole {
     Action,
+    Ai,
+    Automation,
     Tool,
     ToolChoice,
     View,
@@ -635,6 +637,19 @@ impl IconButton {
         self.role = ButtonRole::View;
         self.frame(true).frame_when_inactive(true)
     }
+    /// A content command can share its icon with a presentation control.
+    pub fn action(mut self) -> Self {
+        self.role = ButtonRole::Action;
+        self
+    }
+    pub fn ai(mut self) -> Self {
+        self.role = ButtonRole::Ai;
+        self
+    }
+    pub fn automation(mut self) -> Self {
+        self.role = ButtonRole::Automation;
+        self
+    }
     /// Secondary commands share the toolbar surface until hovered or focused.
     /// Apply after `selected` so active choices retain their state fill.
     pub fn quiet(mut self) -> Self {
@@ -677,7 +692,25 @@ impl IconButton {
             id,
             selected: false,
             accessible_label: None,
-            role: ButtonRole::Action,
+            role: if icon == Some(Icon::Automation) {
+                ButtonRole::Automation
+            } else if matches!(
+                icon,
+                Some(
+                    Icon::Back
+                        | Icon::View
+                        | Icon::Mixer
+                        | Icon::Routing
+                        | Icon::Editor
+                        | Icon::Library
+                        | Icon::History
+                        | Icon::Settings
+                )
+            ) {
+                ButtonRole::View
+            } else {
+                ButtonRole::Action
+            },
             disclosure,
             frame: None,
             frame_when_inactive: true,
@@ -746,6 +779,43 @@ impl Widget for IconButton {
             );
         }
         let colors = crate::theme::palette(ui.ctx());
+        let inherited = ui.visuals().override_text_color.filter(|color| {
+            *color == colors.automation
+                || *color == colors.automation_override
+                || *color == colors.ai
+        });
+        let purpose = match self.role {
+            ButtonRole::View | ButtonRole::Tab => colors.text,
+            ButtonRole::Ai => colors.ai,
+            ButtonRole::Automation => colors.automation,
+            ButtonRole::Tool if matches!(self.icon, Some(Icon::Select | Icon::Cursor)) => {
+                colors.text
+            }
+            _ => inherited.unwrap_or(colors.action),
+        };
+        let colored = purpose == colors.action
+            || purpose == colors.ai
+            || purpose == colors.automation
+            || purpose == colors.automation_override;
+        ui.visuals_mut().override_text_color = Some(purpose);
+        let visuals = &mut ui.visuals_mut().widgets;
+        for visuals in [
+            &mut visuals.inactive,
+            &mut visuals.hovered,
+            &mut visuals.active,
+            &mut visuals.open,
+        ] {
+            visuals.fg_stroke.color = purpose;
+        }
+        if colored {
+            let visuals = &mut ui.visuals_mut().widgets;
+            visuals.inactive.weak_bg_fill = colors.panel.lerp_to_gamma(purpose, 0.12);
+            visuals.hovered.weak_bg_fill = colors.panel.lerp_to_gamma(purpose, 0.20);
+            visuals.active.weak_bg_fill = colors.panel.lerp_to_gamma(purpose, 0.28);
+            visuals.open.weak_bg_fill = colors.panel.lerp_to_gamma(purpose, 0.20);
+            visuals.active.bg_stroke.color = purpose;
+            visuals.hovered.bg_stroke.color = purpose;
+        }
         let selected_mode = self.selected
             && matches!(
                 self.role,
@@ -844,7 +914,7 @@ impl Widget for IconButton {
                     ui.painter(),
                     rect,
                     crate::tokens::RADIUS,
-                    colors.accent,
+                    if colored { purpose } else { colors.accent },
                 );
             }
             ui.painter().rect_stroke(
@@ -861,10 +931,10 @@ impl Widget for IconButton {
             );
         }
         if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {
-            let color = if self.selected {
-                ui.visuals().selection.stroke.color
+            let color = if output.response.enabled() {
+                purpose
             } else {
-                ui.style().interact(&output.response).text_color()
+                colors.muted
             };
             icon.paint(ui.painter(), rect, color);
         }

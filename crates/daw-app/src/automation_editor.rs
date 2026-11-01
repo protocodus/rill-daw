@@ -166,6 +166,7 @@ impl DawApp {
                 .vscroll(false)
         };
         popup.open(&mut open).show(ctx, |ui| {
+            daw_ui::automation_control_style(ui);
             if editing {
                 self.edit_automation_curve(ui, &mut state);
             } else {
@@ -518,7 +519,8 @@ impl DawApp {
             } else if ui
                 .add_enabled(
                     automation_state != daw_ui::AutomationState::Bypassed
-                        && !lane.points.is_empty(),
+                        && (!lane.points.is_empty()
+                            || lane.clips.iter().any(|clip| !clip.points.is_empty())),
                     daw_ui::button_widget("Override automation"),
                 )
                 .on_hover_text("Hold the current curve value manually until Resume automation")
@@ -783,6 +785,18 @@ impl DawApp {
                             self.project.remove_automation_point(id, point).map(|_| ())
                         })
                         .map(|_| state.point = None)
+                }
+                CurveEdit::Interpolation { id: point, mode } => {
+                    self.project.set_automation_point_interpolation(
+                        id,
+                        None,
+                        point,
+                        match mode {
+                            daw_ui::CurveInterpolation::Step => Interpolation::Step,
+                            daw_ui::CurveInterpolation::Linear => Interpolation::Linear,
+                            daw_ui::CurveInterpolation::Smooth => Interpolation::Smooth,
+                        },
+                    )
                 }
             };
             if result.is_ok() {

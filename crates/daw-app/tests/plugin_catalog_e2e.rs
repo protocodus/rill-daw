@@ -189,10 +189,14 @@ fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_reques
     for label in ["Format", "2.5", "x86_64-linux", "Captured"] {
         assert!(readable_detail(&details, label), "Clipped detail {label}");
     }
-    let library = scroll_details(&mut app, 10000.0);
+    scroll_details(&mut app, 10000.0);
 
     // Selecting the unverified bundle captures it on demand; More refreshes it.
-    let selected = pointer(&mut app, card(&library, "Mystery Box"), "click");
+    app.click("Unverified");
+    let unknown = app.inspect();
+    let selected = pointer(&mut app, card(&unknown, "Mystery Box"), "click");
+    assert!(visible(&selected, "Device details"));
+    app.click("Close");
     assert!(selected["project"]["tracks"].as_array().unwrap().is_empty());
     let state = wait_until(&mut app, |state| {
         settled(state) && entry(state, "Mystery Box")["status"] == "Ready"

@@ -196,7 +196,7 @@ pub fn assistant(
                 }
             });
             settings = ui
-                .add_enabled_ui(!options.busy, |ui| crate::view_button(ui, "AI settings"))
+                .add_enabled_ui(!options.busy, |ui| crate::ai_button(ui, "AI settings"))
                 .inner
                 .on_hover_text(if options.configured {
                     format!("{} · Connected", bounded(options.provider, 120))
@@ -387,7 +387,7 @@ pub fn assistant(
                 && !prompt.trim().is_empty();
             let send = ui
                 .add_enabled_ui(can_send || setup_required, |ui| {
-                    crate::primary_button(ui, if setup_required { "Connect AI" } else { "Send" })
+                    crate::ai_button(ui, if setup_required { "Connect AI" } else { "Send" })
                 })
                 .inner;
             crate::hover_text(
@@ -553,7 +553,7 @@ fn welcome(
 /// captures the target identity and opens the corresponding assistant scope.
 pub fn contextual_ai_button(ui: &mut Ui, scope: &str) -> Response {
     crate::hover_text(
-        crate::view_button(ui, "AI for this context"),
+        crate::ai_button(ui, "AI for this context"),
         format!("Open AI scoped to {}", bounded(scope, 2_048)),
     )
 }
@@ -562,7 +562,7 @@ pub fn contextual_ai_button(ui: &mut Ui, scope: &str) -> Response {
 /// the same scope explanation without taking space from the musical identity.
 pub fn contextual_ai_button_compact(ui: &mut Ui, scope: &str) -> Response {
     crate::hover_text(
-        ui.add(crate::button_widget("AI").presentation()),
+        ui.add(crate::ai_button_widget("AI")),
         format!(
             "AI for this context · Open AI scoped to {}",
             bounded(scope, 2_048)

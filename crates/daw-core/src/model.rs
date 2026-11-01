@@ -71,6 +71,8 @@ pub struct Track {
     pub mute: bool,
     pub solo: bool,
     pub instrument: Instrument,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub instrument_name: String,
     /// Opaque VST3 state captured by the isolated native editor.
     #[serde(default)]
     pub instrument_state: Vec<u8>,
@@ -355,13 +357,7 @@ impl Track {
             id: new_id(),
             name: name.into(),
             kind,
-            color: match kind {
-                TrackKind::Audio => [80, 184, 195],
-                TrackKind::Midi => [169, 132, 255],
-                TrackKind::Bus => [227, 164, 95],
-                TrackKind::Folder => [131, 143, 166],
-                TrackKind::Automation => [234, 185, 96],
-            },
+            color: crate::track_colors::DEFAULT_TRACK_COLOR,
             gain: if matches!(kind, TrackKind::Bus | TrackKind::Folder) {
                 1.0
             } else {
@@ -371,6 +367,7 @@ impl Track {
             mute: false,
             solo: false,
             instrument: Instrument::None,
+            instrument_name: String::new(),
             instrument_state: Vec::new(),
             instrument_parameters: Vec::new(),
             clips: Vec::new(),
@@ -561,6 +558,13 @@ impl Project {
             .flat_map(|t| &t.clips)
             .filter(|clip| !clip.is_take_source())
             .map(Clip::end)
+            .chain(
+                self.tracks
+                    .iter()
+                    .filter_map(|track| track.automation.as_ref())
+                    .flat_map(|lane| &lane.clips)
+                    .map(crate::AutomationClip::end),
+            )
             .fold(0.0, f64::max)
     }
 
@@ -868,6 +872,12 @@ impl Project {
                 for point in &lane.points {
                     check_id(point.id)?;
                 }
+                for clip in &lane.clips {
+                    check_id(clip.id)?;
+                    for point in &clip.points {
+                        check_id(point.id)?;
+                    }
+                }
             } else {
                 ensure!(
                     track.kind != TrackKind::Automation,
@@ -1084,6 +1094,12 @@ impl Project {
             if let Some(lane) = &track.automation {
                 for point in &lane.points {
                     max_id = max_id.max(point.id);
+                }
+                for clip in &lane.clips {
+                    max_id = max_id.max(clip.id).max(clip.link_group.unwrap_or(0));
+                    for point in &clip.points {
+                        max_id = max_id.max(point.id);
+                    }
                 }
             }
             if resolve_plugin_paths && let Instrument::Vst3 { path, .. } = &mut track.instrument {

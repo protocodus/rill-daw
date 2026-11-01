@@ -258,7 +258,13 @@ fn every_arranger_track_kind_reorders_by_mouse_with_one_history_entry_and_portab
                 + usize::from(placement == "After");
             expected.insert(index, source);
             assert_eq!(ids(&after), expected);
-            assert_eq!(visible_order(&after, View::Arrangement), expected);
+            let mut visible = expected.clone();
+            visible.retain(|id| *id != automation);
+            visible.insert(
+                visible.iter().position(|id| *id == audio).unwrap() + 1,
+                automation,
+            );
+            assert_eq!(visible_order(&after, View::Arrangement), visible);
             assert_eq!(tracks(&after), content, "Only order may change");
             undo_redo(&mut app, &before, &after);
         }
@@ -374,7 +380,7 @@ fn folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles() {
 fn mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing_sound_data() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
-        let (mut project, [audio, midi, bus, _, _]) = fixture();
+        let (mut project, [audio, midi, bus, _, automation]) = fixture();
         let last = project.add_audio_track("Last channel");
         open(&mut app, &project, dark, density);
         let mixer = app.click("Mixer");
@@ -395,7 +401,13 @@ fn mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing
             let redone = undo_redo(&mut app, &before, &after);
             assert_eq!(visible_order(&redone, View::Mixer), order);
             let arranger = app.click("Arranger");
-            assert_eq!(visible_order(&arranger, View::Arrangement), ids(&arranger));
+            let mut visible = ids(&arranger);
+            visible.retain(|id| *id != automation);
+            visible.insert(
+                visible.iter().position(|id| *id == audio).unwrap() + 1,
+                automation,
+            );
+            assert_eq!(visible_order(&arranger, View::Arrangement), visible);
             app.click("Mixer");
         }
         let (before, _, to) = start_drag(&mut app, View::Mixer, audio, midi, "Before");

@@ -639,9 +639,9 @@ pub fn stereo_meter(ui: &mut Ui, peaks: [f32; 2], size: egui::Vec2) -> Response 
                 ),
                 1.0,
                 if peak >= 1.0 {
-                    colors.orange
+                    colors.warning
                 } else {
-                    colors.accent
+                    colors.guide
                 },
             );
         }

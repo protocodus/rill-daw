@@ -109,6 +109,7 @@ enum Edit {
     Gain(f32),
     Processing(AudioProcessing),
     Fades(f64, f64, FadeCurve, FadeCurve),
+    Crossfade(Option<AudioCrossfade>),
     Reverse,
     Split(f64),
     Trim(f64, f64),
@@ -151,6 +152,69 @@ pub(crate) fn reset_audio_editor(ctx: &egui::Context) {
         data.remove::<AudioView>(egui::Id::new("audio_editor_state"));
         data.remove::<serde_json::Value>(egui::Id::new("audio_editor_diagnostics"));
     });
+}
+
+pub(crate) fn audio_fade_bounds(clip: &Clip) -> daw_ui::ClipFadeBounds {
+    let ClipContent::Audio {
+        fade_in,
+        fade_out,
+        envelope,
+        ..
+    } = clip.content
+    else {
+        unreachable!("audio fade handles require an audio clip")
+    };
+    let region = envelope.unwrap_or(AudioEnvelope {
+        offset: 0.0,
+        length: clip.source_length(),
+    });
+    daw_ui::ClipFadeBounds {
+        start: clip.start,
+        end: clip.end(),
+        fade_in_end: clip.start + (fade_in - region.offset) / clip.source_rate,
+        fade_out_start: clip.start + (region.length - region.offset - fade_out) / clip.source_rate,
+    }
+}
+
+/// Match the existing fade tools: independent clips reanchor explicitly edited
+/// fades, while ghost clips keep the source envelope shared across instances.
+pub(crate) fn audio_fade_handle_edit(
+    clip: &Clip,
+    edge: daw_ui::ClipFadeEdge,
+    beat: f64,
+) -> (f64, f64, FadeCurve, FadeCurve) {
+    let ClipContent::Audio {
+        fade_in,
+        fade_out,
+        fade_in_curve,
+        fade_out_curve,
+        envelope,
+        ..
+    } = clip.content
+    else {
+        unreachable!("audio fade handles require an audio clip")
+    };
+    let local = AudioEnvelope {
+        offset: 0.0,
+        length: clip.source_length(),
+    };
+    let region = if clip.link_group.is_some() {
+        envelope.unwrap_or(local)
+    } else {
+        local
+    };
+    let position = region.offset + (beat - clip.start) * clip.source_rate;
+    let (attack, release) = match edge {
+        daw_ui::ClipFadeEdge::In => (
+            position.clamp(0.0, region.length),
+            fade_out.min(region.length),
+        ),
+        daw_ui::ClipFadeEdge::Out => (
+            fade_in.min(region.length),
+            (region.length - position).clamp(0.0, region.length),
+        ),
+    };
+    (attack, release, fade_in_curve, fade_out_curve)
 }
 
 /// Explicit cue navigation keeps the current scale and tool. Analysis remains
@@ -559,6 +623,7 @@ impl DawApp {
             reverse,
             envelope,
             processing,
+            crossfade,
             ..
         } = &clip.content
         else {
@@ -588,6 +653,7 @@ impl DawApp {
             state.preview_source = None;
         }
         let mut edit = None;
+        let mut open_crossfade = false;
         let mut clipboard_action = None;
         let mut nudge = 0;
         if let Some(pending) = state.pending.clone() {
@@ -1158,7 +1224,14 @@ impl DawApp {
                 whole.top() + daw_ui::tokens::TIMELINE_RULER_HEIGHT,
             ),
         );
-        let canvas = Rect::from_min_max(Pos2::new(whole.left(), ruler.bottom()), whole.max);
+        let loop_lane = Rect::from_min_max(
+            Pos2::new(whole.left(), ruler.bottom()),
+            Pos2::new(
+                whole.right(),
+                ruler.bottom() + daw_ui::tokens::TIMELINE_LOOP_HEIGHT,
+            ),
+        );
+        let canvas = Rect::from_min_max(Pos2::new(whole.left(), loop_lane.bottom()), whole.max);
         let data = self.waveforms.get(path);
         crate::spectrogram::prioritize(ui.ctx(), path, data);
         let channels = data.map_or(1, |audio| audio.channels.min(2));
@@ -1289,7 +1362,7 @@ impl DawApp {
             let x = state.view.x_at(canvas, beat);
             painter.with_clip_rect(canvas).line_segment(
                 [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
-                Stroke::new(1.0_f32, palette(ui.ctx()).orange),
+                Stroke::new(1.0_f32, palette(ui.ctx()).guide),
             );
         }
         if let Some((start, end)) = state.range {
@@ -1303,11 +1376,91 @@ impl DawApp {
             clip.end(),
             palette(ui.ctx()).accent,
         );
+        daw_ui::paint_clip_fades(
+            &painter,
+            canvas,
+            state.view,
+            clip.start,
+            clip.end(),
+            |beat| clip.audio_envelope_gain(beat - clip.start),
+        );
+        let fades = daw_ui::clip_fade_handles(
+            ui,
+            ui.id().with(("audio_fades", clip.id)),
+            canvas,
+            state.view,
+            audio_fade_bounds(&clip),
+            !navigation.navigating && !strip_open,
+        );
+        if let Some((edge, beat)) = fades.edit {
+            let beat = beat.clamp(clip.start, clip.end());
+            let (fi, fo, fic, foc) = audio_fade_handle_edit(&clip, edge, beat);
+            edit = Some(Edit::Fades(fi, fo, fic, foc));
+        }
+        let overlap = self.project.track(track).and_then(|channel| {
+            let schedule = AudioSchedule::new(&channel.clips).ok()?;
+            schedule
+                .overlaps
+                .iter()
+                .find(|overlap| channel.clips[overlap.incoming].id == clip.id)
+                .map(|overlap| (overlap.start, overlap.end))
+        });
+        let blend = overlap.map(|(start, end)| {
+            if let Some(config) = crossfade {
+                let rect = Rect::from_min_max(
+                    Pos2::new(state.view.x_at(canvas, start), canvas.top() + 24.0),
+                    Pos2::new(
+                        state.view.x_at(canvas, (start + config.duration).min(end)),
+                        canvas.bottom(),
+                    ),
+                );
+                daw_ui::paint_crossfade(
+                    &painter.with_clip_rect(canvas),
+                    rect,
+                    daw_ui::CrossfadeCurve {
+                        control1: config.curve.control1,
+                        control2: config.curve.control2,
+                    },
+                );
+            }
+            let handle = daw_ui::crossfade_duration_handle(
+                ui,
+                ui.id().with(("audio_crossfade", clip.id)),
+                canvas,
+                state.view,
+                daw_ui::CrossfadeBounds {
+                    start,
+                    end,
+                    duration: crossfade.map_or(0.0, |config| config.duration),
+                },
+                !navigation.navigating && !strip_open,
+            );
+            open_crossfade = handle.open_curve;
+            if let Some(duration) = handle.duration {
+                let end_beat = if ui.input(|input| input.modifiers.shift) {
+                    start + duration
+                } else {
+                    self.snapped(start + duration)
+                };
+                let duration = (end_beat - start).clamp(0.0, end - start);
+                edit = Some(Edit::Crossfade((duration > 0.0).then_some(
+                    AudioCrossfade {
+                        duration,
+                        curve: crossfade.map_or(CrossfadeCurve::LINEAR, |config| config.curve),
+                    },
+                )));
+            }
+            handle
+        });
         let response = ui
             .interact(
                 canvas,
                 ui.id().with("audio_edit_canvas"),
-                if navigation.navigating || strip_open {
+                if navigation.navigating
+                    || strip_open
+                    || fades.interacting
+                    || blend.as_ref().is_some_and(|handle| handle.interacting)
+                {
                     Sense::hover()
                 } else {
                     Sense::click_and_drag()
@@ -1559,7 +1712,7 @@ impl DawApp {
             let x = state.view.x_at(canvas, beat);
             painter.with_clip_rect(canvas).line_segment(
                 [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
-                Stroke::new(2.0_f32, palette(ui.ctx()).orange),
+                Stroke::new(2.0_f32, palette(ui.ctx()).guide),
             );
         }
         daw_ui::paint_timeline_cursor(
@@ -1569,6 +1722,11 @@ impl DawApp {
             state.view.x_at(canvas, self.cursor),
         );
         let edit = edit.filter(|edit| match edit {
+            Edit::Fades(fi, fo, fic, foc) => {
+                (*fi, *fo, *fic, *foc) != (*fade_in, *fade_out, *fade_in_curve, *fade_out_curve)
+                    || (clip.link_group.is_none() && envelope.is_some())
+            }
+            Edit::Crossfade(config) => config != crossfade,
             Edit::Bounds(original, start, length, stretch) => {
                 clip.start != *start
                     || clip.length != *length
@@ -1611,9 +1769,15 @@ impl DawApp {
                     self.project
                         .set_audio_processing(track, clip.id, processing)
                 }
-                Edit::Fades(fi, fo, fic, foc) => self
-                    .project
-                    .set_audio_fades(track, clip.id, fi, fo, fic, foc),
+                Edit::Fades(fi, fo, fic, foc) => {
+                    self.edit_label = Some("Edit clip fades".into());
+                    self.project
+                        .set_audio_fades(track, clip.id, fi, fo, fic, foc)
+                }
+                Edit::Crossfade(config) => {
+                    self.edit_label = Some("Edit crossfade".into());
+                    self.project.set_audio_crossfade(track, clip.id, config)
+                }
                 Edit::Reverse => self.project.reverse_audio_clip(track, clip.id),
                 Edit::Trim(start, length) => self.project.trim_clip(track, clip.id, start, length),
                 Edit::Split(beat) => self.project.split_clip(track, clip.id, beat).map(|id| {
@@ -1744,12 +1908,27 @@ impl DawApp {
             }
         }
         let nudge_unit = format!("{:?}", daw_ui::NudgeUnit::load(ui.ctx()));
+        let loop_response = self.timeline_loop_ui(
+            ui,
+            "audio_editor_loop",
+            loop_lane,
+            state.view,
+            !navigation.navigating && !strip_open,
+        );
         ui.ctx().data_mut(|d| {
             d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
+                "ruler":{"min":[ruler.min.x,ruler.min.y],"max":[ruler.max.x,ruler.max.y]},
+                "fade_handles":fades.handles.map(|handle|handle.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))),
+                "crossfade_handle":blend.as_ref().and_then(|handle|handle.handle).map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]})),
+                "loop_lane":{"min":[loop_response.lane.min.x,loop_response.lane.min.y],"max":[loop_response.lane.max.x,loop_response.lane.max.y]},
+                "loop_handles":loop_response.handles.map(|handle|handle.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))),
                 "range":state.range,"snap_target":snap_target,"snap_edges":state.snap_edges,"snap_transients":state.snap_transients,"snap_zero_crossings":state.snap_zero_crossings,"nudge_unit":nudge_unit,"show_markers":state.show_markers,"show_neighbours":state.show_neighbours,"grid_preview":grid_points,"grid_slice_open":state.grid_slice_open,
                 "start_handle":edges.start.map(|r| [r.left(),r.top(),r.right(),r.bottom()]),"end_handle":edges.end.map(|r| [r.left(),r.top(),r.right(),r.bottom()])}));
             d.insert_temp(id, state);
         });
+        if open_crossfade {
+            self.open_popup(crate::app::PopupKind::Crossfade);
+        }
     }
 }
 

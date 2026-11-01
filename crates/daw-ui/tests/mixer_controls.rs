@@ -675,7 +675,7 @@ fn level_meter_uses_decibel_travel_and_never_fabricates_or_overflows_signal() {
                 .iter()
                 .filter_map(|shape| match &shape.shape {
                     egui::Shape::Rect(rect)
-                        if rect.fill == colors.accent || rect.fill == colors.orange =>
+                        if rect.fill == colors.guide || rect.fill == colors.warning =>
                     {
                         Some(rect)
                     }
@@ -703,9 +703,9 @@ fn level_meter_uses_decibel_travel_and_never_fabricates_or_overflows_signal() {
                     assert_eq!(
                         fill.fill,
                         if peaks[index] >= 1.0 {
-                            colors.orange
+                            colors.warning
                         } else {
-                            colors.accent
+                            colors.guide
                         }
                     );
                 }

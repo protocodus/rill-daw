@@ -296,6 +296,7 @@ struct Harness {
     focused: bool,
     system_theme: egui::Theme,
     size: Vec2,
+    pixels_per_point: f32,
 }
 
 impl Harness {
@@ -342,6 +343,13 @@ impl Harness {
             ..app.settings.clone()
         };
         app.setup_draft = app.settings.clone();
+        // Subprocess tests discover only explicitly supplied fixtures; installed
+        // system plug-ins must not change their inventory or launch real code.
+        app.plugin_scan_roots = Some(
+            std::env::var_os("VST3_PATH")
+                .map(|paths| std::env::split_paths(&paths).collect())
+                .unwrap_or_default(),
+        );
         app.refresh_plugins();
         let mut harness = Self {
             ctx,
@@ -367,6 +375,7 @@ impl Harness {
             focused: true,
             system_theme: egui::Theme::Dark,
             size: SIZE,
+            pixels_per_point: 1.0,
         };
         harness.settle();
         Ok(harness)
@@ -375,6 +384,11 @@ impl Harness {
     fn frame(&mut self, mut input: RawInput) {
         self.time += 1.0 / 60.0;
         input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, self.size));
+        input
+            .viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .native_pixels_per_point = Some(self.pixels_per_point);
         input.time = Some(self.time);
         input.focused = self.focused;
         input.system_theme = Some(self.system_theme);
@@ -1094,7 +1108,10 @@ impl Harness {
                     "Invalid test viewport"
                 );
                 self.size = Vec2::new(width, height);
-                self.ctx.set_pixels_per_point(pixels_per_point);
+                // Density is a native display property, not an egui UI zoom.
+                // Zoom briefly rescales the logical viewport and permanently
+                // clamps a resizable window to that transient smaller area.
+                self.pixels_per_point = pixels_per_point;
                 self.settle();
             }
             Command::Inspect { paint } => {
@@ -1564,6 +1581,10 @@ impl Harness {
         state["popups"]["audio_takes"] = json!(self.app.audio_takes_open);
         state["error_details"] = self.app.error_details_diagnostics();
         state["document_guard"] = self.app.document_guard_diagnostics();
+        state["mixer_devices"] = self
+            .ctx
+            .data(|data| data.get_temp::<Value>(egui::Id::new("mixer_device_diagnostics")))
+            .unwrap_or(Value::Null);
         state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());
         state["project_title"] = json!(self.app.document_title());
         state["file_dialog_defaults"] = json!({

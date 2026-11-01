@@ -110,9 +110,9 @@ fn out_of_range_values_have_visible_direction_markers_and_remain_unchanged() {
             assert_eq!(value, stored);
             assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
                 egui::Shape::Text(text) if text.galley.text() == caption)));
-            let orange = daw_ui::theme::palette(&ctx).orange;
+            let warning = daw_ui::theme::palette(&ctx).warning;
             assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
-                egui::Shape::Path(path) if path.closed && path.points.len() == 3 && path.fill == orange
+                egui::Shape::Path(path) if path.closed && path.points.len() == 3 && path.fill == warning
                     && path.points.iter().all(|point| geometry.rail.contains(*point)))));
         }
     }

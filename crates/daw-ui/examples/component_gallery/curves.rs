@@ -4,6 +4,7 @@ use egui::{Id, Sense, Ui, vec2};
 pub struct State {
     points: Vec<CurvePoint>,
     selected: Option<u64>,
+    shapes: std::collections::HashMap<u64, daw_ui::CurveInterpolation>,
     fade: daw_ui::CrossfadeCurve,
 }
 
@@ -38,6 +39,7 @@ impl Default for State {
                 },
             ],
             selected: Some(3),
+            shapes: Default::default(),
             fade: daw_ui::CrossfadeCurve {
                 control1: [0.20, 0.64],
                 control2: [0.76, 0.90],
@@ -46,7 +48,11 @@ impl Default for State {
     }
 }
 
-fn sample(points: &[CurvePoint], at: f64) -> f32 {
+fn sample(
+    points: &[CurvePoint],
+    shapes: &std::collections::HashMap<u64, daw_ui::CurveInterpolation>,
+    at: f64,
+) -> f32 {
     let Some(first) = points.first() else {
         return 0.0;
     };
@@ -56,6 +62,11 @@ fn sample(points: &[CurvePoint], at: f64) -> f32 {
     for pair in points.windows(2) {
         if at <= pair[1].x {
             let amount = ((at - pair[0].x) / (pair[1].x - pair[0].x).max(f64::EPSILON)) as f32;
+            let amount = match shapes.get(&pair[0].id) {
+                Some(daw_ui::CurveInterpolation::Step) => 0.0,
+                Some(daw_ui::CurveInterpolation::Smooth) => amount * amount * (3.0 - 2.0 * amount),
+                _ => amount,
+            };
             return egui::lerp(pair[0].value..=pair[1].value, amount);
         }
     }
@@ -80,7 +91,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 snap: 0.25,
                 height: 270.0,
             },
-            |at| sample(&points, at),
+            |at| sample(&points, &state.shapes, at),
         );
         match response.edit {
             Some(CurveEdit::Add { x, value }) => {
@@ -94,6 +105,9 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 }
             }
             Some(CurveEdit::Delete { id }) => state.points.retain(|point| point.id != id),
+            Some(CurveEdit::Interpolation { id, mode }) => {
+                state.shapes.insert(id, mode);
+            }
             None => {}
         }
         state.points.sort_by(|a, b| a.x.total_cmp(&b.x));
@@ -122,7 +136,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             0.0,
             8.0,
             color,
-            |at| sample(&state.points, at),
+            |at| sample(&state.points, &state.shapes, at),
         );
         daw_ui::text::note(&mut columns[1], "paint_crossfade");
         let width = columns[1].available_width();

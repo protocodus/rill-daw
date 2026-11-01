@@ -14,7 +14,7 @@ use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, 
 use std::collections::{HashMap, HashSet};
 
 const KEYS: f32 = 60.0;
-const RULER: f32 = daw_ui::tokens::TIMELINE_RULER_HEIGHT;
+const RULER: f32 = daw_ui::tokens::TIMELINE_RULER_HEIGHT + daw_ui::tokens::TIMELINE_LOOP_HEIGHT;
 const VELOCITY: f32 = 96.0;
 const MIN_NOTE: f64 = 1.0 / 64.0;
 
@@ -1243,14 +1243,21 @@ impl DawApp {
             ui.available_width().max(100.0),
             ui.available_height().max(200.0),
         );
+        // Keep an octave and its context visible when tool options and the
+        // loop strip share a short workspace. The velocity lane can give up
+        // a little height before sacrificing more piano rows.
+        let velocity_height = VELOCITY.min((available.y - RULER - 16.0 * 18.0).max(64.0));
         let (canvas, response) = ui.allocate_exact_size(available, Sense::click_and_drag());
         let plot = Rect::from_min_max(
             canvas.min + Vec2::new(KEYS, RULER),
-            Pos2::new(canvas.right(), canvas.bottom() - VELOCITY),
+            Pos2::new(canvas.right(), canvas.bottom() - velocity_height),
         );
         let ruler = Rect::from_min_max(
             Pos2::new(plot.left(), canvas.top()),
-            Pos2::new(plot.right(), plot.top()),
+            Pos2::new(
+                plot.right(),
+                canvas.top() + daw_ui::tokens::TIMELINE_RULER_HEIGHT,
+            ),
         );
         let velocity_rect = Rect::from_min_max(
             Pos2::new(plot.left(), plot.bottom() + 24.0),
@@ -1688,6 +1695,16 @@ impl DawApp {
         .on_hover_text(
             "Clip-local bars and beats. The workspace header shows this clip's span in the song.",
         );
+        let loop_response = self.timeline_loop_ui(
+            ui,
+            "midi_editor_loop",
+            Rect::from_min_max(ruler.left_bottom(), plot.right_top()),
+            TimelineViewport {
+                start_beat: view.start_beat + clip_start,
+                ..view
+            },
+            state.generate.is_none() && state.transform.is_none() && !navigation.navigating,
+        );
 
         let end_x = view.x_at(plot, clip_length);
         let outside_clip = daw_ui::paint_clip_tail(&row_painter, plot, end_x);
@@ -1768,7 +1785,20 @@ impl DawApp {
                     );
                 }
                 if hit_pointer.is_some_and(|p| plot.contains(p) && rect.contains(p)) {
-                    note_hit = Some((note.clone(), rect));
+                    // An edge remains reachable when another note's body
+                    // overlaps it, independently of the current selection.
+                    let distance =
+                        |rect: Rect, x: f32| (x - rect.left()).abs().min((x - rect.right()).abs());
+                    let x = hit_pointer.unwrap().x;
+                    let edge = daw_ui::piano_note_edge(rect, x) != 0 && distance(rect, x) <= 2.5;
+                    let replace = note_hit.as_ref().is_none_or(|(_, previous)| {
+                        let previous_edge = daw_ui::piano_note_edge(*previous, x) != 0
+                            && distance(*previous, x) <= 2.5;
+                        !previous_edge || edge && distance(rect, x) <= distance(*previous, x)
+                    });
+                    if replace {
+                        note_hit = Some((note.clone(), rect));
+                    }
                 }
             }
             let marker = Rect::from_min_max(
@@ -1901,6 +1931,9 @@ impl DawApp {
                 }
             } else if plot.contains(pos) {
                 if let Some((note, rect)) = &note_hit {
+                    if self.tool == Tool::Cursor {
+                        self.seek(clip_start + beat_at(pos));
+                    }
                     match self.tool {
                         Tool::Erase => actions.push(NoteEdit::Delete(note.id)),
                         Tool::Cut => {
@@ -1915,7 +1948,6 @@ impl DawApp {
                                 ));
                             }
                         }
-                        Tool::Cursor => self.seek(clip_start + beat_at(pos)),
                         _ => {
                             let deselect_on_click = (press_shift
                                 && self.selected_notes.contains(&note.id))
@@ -2009,10 +2041,11 @@ impl DawApp {
                     {
                         actions.push(NoteEdit::Delete(note.id));
                     }
-                } else if self.tool == Tool::Select {
+                } else if matches!(self.tool, Tool::Select | Tool::Cursor) {
+                    let start = view.beat_at(plot, pos.x).max(0.0);
                     actions.push(NoteEdit::Add(vec![Note::new(
                         pitch_at(pos),
-                        clip_offset + beat_at(pos),
+                        clip_offset + start,
                         drawing_length,
                         state.velocity,
                     )]));
@@ -2279,6 +2312,7 @@ impl DawApp {
             "clip_global_start":clip_start,"clip_global_end":clip_start+clip_length,"local_cursor":self.cursor-clip_start,
             "outside_clip":outside_clip.map(rect_json),"clip_end_label":clip_end_label.map(rect_json),
             "draw_length":state.draw_length.label(),"drawing_length_beats":drawing_length,
+            "loop_lane":rect_json(loop_response.lane), "loop_handles":loop_response.handles.map(|handle| handle.map(rect_json)),
             "start_beat":view.start_beat,"pixels_per_beat":view.pixels_per_beat,"row_offset":view.row_offset,"row_height":view.row_height,
             "visible_pitches":rows.pitches(),"highlight_scale":state.highlight_scale,"highlight_chord":state.highlight_chord,"only_scale_keys":state.only_scale_keys,
             "hidden_notes":notes.iter().filter(|note| rows.row(note.pitch).is_none()).count(),

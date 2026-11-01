@@ -88,6 +88,7 @@ pub fn mixer_sends_button(ui: &mut Ui, width: f32, sends: &[MixerSend<'_>]) -> R
     let response = ui.add_sized(
         Vec2::new(width, tokens::CONTROL_HEIGHT),
         crate::IconButton::with_icon(crate::Icon::Routing, egui::RichText::new(label).small())
+            .action()
             .truncate(),
     );
     if let [send] = sends {

@@ -227,6 +227,7 @@ fn snapshot_bytes(project: &Project) -> usize {
     for track in &project.tracks {
         bytes += size_of_val(track)
             + track.name.len()
+            + track.instrument_name.len()
             + track.instrument_state.len()
             + track.instrument_parameters.len() * size_of::<crate::PluginParameterValue>()
             + track.sends.len() * size_of::<crate::Send>();
@@ -243,6 +244,10 @@ fn snapshot_bytes(project: &Project) -> usize {
         }
         if let Some(lane) = &track.automation {
             bytes += lane.points.len() * size_of::<crate::AutomationPoint>();
+            bytes += lane.clips.len() * size_of::<crate::AutomationClip>();
+            for clip in &lane.clips {
+                bytes += clip.name.len() + clip.points.len() * size_of::<crate::AutomationPoint>();
+            }
         }
         for clip in &track.clips {
             bytes += size_of_val(clip) + clip.name.len();

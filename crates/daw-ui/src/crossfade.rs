@@ -94,8 +94,11 @@ fn paint_gain_curves(painter: &egui::Painter, plot: Rect, curve: CrossfadeCurve,
         incoming.push(screen(plot, point));
         outgoing.push(screen(plot, [point[0], 1.0 - point[1]]));
     }
-    painter.add(Shape::line(outgoing, Stroke::new(width, colors.muted)));
-    painter.add(Shape::line(incoming, Stroke::new(width, colors.accent)));
+    painter.add(Shape::line(outgoing, Stroke::new(width, colors.orange)));
+    painter.add(Shape::line(
+        incoming,
+        Stroke::new(width, colors.automation_override),
+    ));
 }
 
 /// Paint a noninteractive timeline crossfade overlay without changing layout.
@@ -251,8 +254,8 @@ pub fn crossfade_editor(ui: &mut Ui, id: Id, curve: &mut CrossfadeCurve) -> Cros
     painter.rect_filled(rect, tokens::RADIUS, colors.bg);
     let font = FontId::proportional(tokens::FONT_CAPTION);
     for (index, label, color) in [
-        (0, "Outgoing", colors.muted),
-        (1, "Incoming", colors.accent),
+        (0, "Outgoing", colors.orange),
+        (1, "Incoming", colors.automation_override),
     ] {
         let x = plot.left() + index as f32 * 112.0;
         let y = rect.top() + 14.0;

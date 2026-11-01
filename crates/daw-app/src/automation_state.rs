@@ -68,7 +68,9 @@ pub(crate) fn capture_manual_parameter_changes(
             if explicit_lanes.contains(&track.id)
                 || lane.target != old_lane.target
                 || lane.override_value != old_lane.override_value
-                || (lane.points.is_empty() && lane.override_value.is_none())
+                || (lane.points.is_empty()
+                    && lane.clips.iter().all(|clip| clip.points.is_empty())
+                    && lane.override_value.is_none())
                 || !lane_enabled(candidate, track.id)
             {
                 return None;
@@ -102,7 +104,9 @@ impl DawApp {
         lane: &AutomationLane,
     ) -> (u64, daw_ui::AutomationState, f32) {
         let enabled = lane_enabled(&self.project, id)
-            && (!lane.points.is_empty() || lane.override_value.is_some());
+            && (!lane.points.is_empty()
+                || lane.clips.iter().any(|clip| !clip.points.is_empty())
+                || lane.override_value.is_some());
         let state = if !enabled {
             daw_ui::AutomationState::Bypassed
         } else if lane.override_value.is_some() {
@@ -115,7 +119,8 @@ impl DawApp {
         } else {
             manual_value(&self.project, lane.target)
         }
-        .unwrap_or_else(|| lane.value_at(self.cursor).unwrap_or(0.5));
+        .or_else(|| manual_value(&self.project, lane.target))
+        .unwrap_or(0.5);
         (id, state, value)
     }
 
@@ -133,7 +138,9 @@ impl DawApp {
         let Some((id, lane)) = self.project.automation_for_target(target) else {
             return false;
         };
-        if (lane.points.is_empty() && lane.override_value.is_none())
+        if (lane.points.is_empty()
+            && lane.clips.iter().all(|clip| clip.points.is_empty())
+            && lane.override_value.is_none())
             || !lane_enabled(&self.project, id)
             || lane.override_value == Some(value)
         {

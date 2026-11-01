@@ -80,7 +80,10 @@ fn ambient_wash_lifts_dark_surfaces_and_gently_tints_light_surfaces() {
             assert!(strongest.color.a() <= 10);
         }
         let rgba = strongest.color.to_srgba_unmultiplied();
-        assert!(rgba[1] > rgba[0], "tint should remain quietly sage");
+        assert!(
+            rgba[..3].iter().max().unwrap() - rgba[..3].iter().min().unwrap() <= 32,
+            "ambient tint stays neutral"
+        );
         for (after, before) in composite.to_array()[..3]
             .iter()
             .zip(&colors.panel.to_array()[..3])

@@ -150,6 +150,8 @@ pub struct AutomationPoint {
     /// later extension, but endpoint holding never uses it.
     #[serde(default)]
     pub curve: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interpolation: Option<Interpolation>,
 }
 
 impl AutomationPoint {
@@ -159,6 +161,7 @@ impl AutomationPoint {
             beat,
             value,
             curve: 0.0,
+            interpolation: None,
         }
     }
 }
@@ -172,6 +175,44 @@ pub struct AutomationLane {
     /// Unlike lane bypass, an override is the same for native and VST targets.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub override_value: Option<f32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clips: Vec<AutomationClip>,
+}
+
+/// A reusable source pattern. Placement and trim are independent; ghost copies
+/// share points through `link_group`, while ordinary copies can be derived.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AutomationClip {
+    pub id: u64,
+    pub name: String,
+    pub start: f64,
+    pub length: f64,
+    #[serde(default)]
+    pub offset: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_group: Option<u64>,
+    pub points: Vec<AutomationPoint>,
+    pub interpolation: Interpolation,
+}
+
+impl AutomationClip {
+    pub fn end(&self) -> f64 {
+        self.start + self.length
+    }
+    pub fn value_at(&self, beat: f64) -> Option<f32> {
+        (beat >= self.start && beat < self.end())
+            .then(|| {
+                AutomationLane::curve_value_at(
+                    &self.points,
+                    self.interpolation,
+                    beat - self.start + self.offset,
+                )
+            })
+            .flatten()
+    }
+    pub fn curve_value_at(&self, local: f64) -> Option<f32> {
+        AutomationLane::curve_value_at(&self.points, self.interpolation, local)
+    }
 }
 
 impl AutomationLane {
@@ -187,29 +228,48 @@ impl AutomationLane {
     /// Empty lanes do not override the manual parameter. Otherwise endpoints
     /// hold indefinitely. Evaluation uses binary search and never allocates.
     pub fn value_at(&self, beat: f64) -> Option<f32> {
+        self.clips
+            .iter()
+            .enumerate()
+            .filter(|(_, clip)| beat >= clip.start && beat < clip.end() && !clip.points.is_empty())
+            .max_by(|(ai, a), (bi, b)| a.start.total_cmp(&b.start).then(ai.cmp(bi)))
+            .and_then(|(_, clip)| clip.value_at(beat))
+            .or_else(|| self.arrangement_value_at(beat))
+    }
+
+    pub fn arrangement_value_at(&self, beat: f64) -> Option<f32> {
+        Self::curve_value_at(&self.points, self.interpolation, beat)
+    }
+
+    fn curve_value_at(
+        points: &[AutomationPoint],
+        interpolation: Interpolation,
+        beat: f64,
+    ) -> Option<f32> {
         if beat.is_nan() {
             return None;
         }
-        let first = self.points.first()?;
+        let first = points.first()?;
         if beat <= first.beat {
             return Some(first.value);
         }
-        let index = self.points.partition_point(|point| point.beat <= beat);
-        if index == self.points.len() {
-            return self.points.last().map(|point| point.value);
+        let index = points.partition_point(|point| point.beat <= beat);
+        if index == points.len() {
+            return points.last().map(|point| point.value);
         }
-        let a = &self.points[index - 1];
-        let b = &self.points[index];
-        if self.interpolation == Interpolation::Step {
+        let a = &points[index - 1];
+        let b = &points[index];
+        let interpolation = a.interpolation.unwrap_or(interpolation);
+        if interpolation == Interpolation::Step {
             return Some(a.value);
         }
         let width = b.beat - a.beat;
         let t = (beat - a.beat) / width;
         let linear = f64::from(a.value) + t * (f64::from(b.value) - f64::from(a.value));
-        if self.interpolation == Interpolation::Linear {
+        if interpolation == Interpolation::Linear {
             return Some(linear as f32);
         }
-        if self.interpolation == Interpolation::Spline {
+        if interpolation == Interpolation::Spline {
             // A cubic Bézier with linear x coordinates. Its y control points
             // move continuously from the straight line toward (0, 0) for an
             // exponential rise, or (1, 1) for a logarithmic rise. This convex
@@ -224,8 +284,8 @@ impl AutomationLane {
             let value = f64::from(a.value) + progress * (f64::from(b.value) - f64::from(a.value));
             return Some((value as f32).clamp(a.value.min(b.value), a.value.max(b.value)));
         }
-        let start_slope = self.slope(index - 1);
-        let end_slope = self.slope(index);
+        let start_slope = Self::slope(points, index - 1);
+        let end_slope = Self::slope(points, index);
         let t2 = t * t;
         let t3 = t2 * t;
         let smooth = (2.0 * t3 - 3.0 * t2 + 1.0) * f64::from(a.value)
@@ -238,14 +298,14 @@ impl AutomationLane {
         Some(value.clamp(a.value.min(b.value), a.value.max(b.value)))
     }
 
-    fn slope(&self, index: usize) -> f64 {
+    fn slope(points: &[AutomationPoint], index: usize) -> f64 {
         let interval = |left: usize| {
-            let a = &self.points[left];
-            let b = &self.points[left + 1];
+            let a = &points[left];
+            let b = &points[left + 1];
             let width = b.beat - a.beat;
             (width, (f64::from(b.value) - f64::from(a.value)) / width)
         };
-        if self.points.len() == 2 {
+        if points.len() == 2 {
             return interval(0).1;
         }
         if index == 0 {
@@ -253,7 +313,7 @@ impl AutomationLane {
             let (h1, d1) = interval(1);
             return endpoint_slope(h0, h1, d0, d1);
         }
-        if index + 1 == self.points.len() {
+        if index + 1 == points.len() {
             let (h0, d0) = interval(index - 1);
             let (h1, d1) = interval(index - 2);
             return endpoint_slope(h0, h1, d0, d1);
@@ -272,9 +332,59 @@ impl AutomationLane {
         if let Some(value) = self.override_value {
             validate_value(value)?;
         }
+        Self::validate_points(&self.points)?;
+        let mut ids = HashSet::new();
+        let mut groups: std::collections::HashMap<u64, &AutomationClip> =
+            std::collections::HashMap::new();
+        for clip in &self.clips {
+            ensure!(
+                clip.id > 0 && clip.id < u64::MAX && ids.insert(clip.id),
+                "Invalid automation clip ID"
+            );
+            ensure!(
+                !clip.name.trim().is_empty()
+                    && clip.start.is_finite()
+                    && clip.start >= 0.0
+                    && clip.length.is_finite()
+                    && clip.length > 0.0
+                    && clip.end() <= MAX_BEAT
+                    && clip.offset.is_finite()
+                    && clip.offset >= 0.0
+                    && clip.offset + clip.length <= MAX_BEAT,
+                "Invalid automation clip bounds"
+            );
+            Self::validate_points(&clip.points)?;
+            if let Some(group) = clip.link_group {
+                ensure!(
+                    group > 0 && group < u64::MAX,
+                    "Invalid automation pattern group"
+                );
+                if let Some(source) = groups.insert(group, clip) {
+                    ensure!(
+                        source.name == clip.name
+                            && source.interpolation == clip.interpolation
+                            && source
+                                .points
+                                .iter()
+                                .map(|p| (p.beat, p.value, p.curve, p.interpolation))
+                                .eq(clip.points.iter().map(|p| (
+                                    p.beat,
+                                    p.value,
+                                    p.curve,
+                                    p.interpolation
+                                ))),
+                        "Linked automation patterns differ"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_points(points: &[AutomationPoint]) -> Result<()> {
         let mut ids = HashSet::new();
         let mut previous = None;
-        for point in &self.points {
+        for point in points {
             validate_position(point.beat, point.value)?;
             validate_curve(point.curve)?;
             ensure!(
@@ -300,6 +410,7 @@ impl AutomationLane {
             .find(|point| point.id == id)
             .context("Automation point not found")?;
         point.curve = curve;
+        point.interpolation = None;
         self.interpolation = Interpolation::Spline;
         Ok(())
     }
@@ -416,6 +527,7 @@ impl Project {
         );
         if channel.instrument != instrument {
             channel.instrument = instrument;
+            channel.instrument_name.clear();
             channel.instrument_state.clear();
             channel.instrument_parameters.clear();
             candidate.tracks.retain(|lane_track| {
@@ -460,6 +572,7 @@ impl Project {
         );
         let mut track = Track::new(name, TrackKind::Automation);
         track.automation = Some(AutomationLane {
+            clips: Vec::new(),
             target,
             points: vec![
                 AutomationPoint::new(0.0, value),

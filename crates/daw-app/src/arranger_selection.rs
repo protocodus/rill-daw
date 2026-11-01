@@ -41,7 +41,6 @@ pub(crate) struct SelectionGesture {
 #[derive(Clone, Copy)]
 pub(crate) enum ArrangeAudioMode {
     Slip(f64),
-    Fade(bool),
 }
 
 #[derive(Clone)]
@@ -534,14 +533,6 @@ impl DawApp {
                 beat - drag.origin,
                 source_beats,
             ),
-            ArrangeAudioMode::Fade(incoming) => {
-                let Some((fi, fo, fic, foc)) =
-                    crate::audio_editor::fade_parameters_at(&drag.original, beat, incoming)
-                else {
-                    return;
-                };
-                next.set_audio_fades(drag.track, drag.original.id, fi, fo, fic, foc)
-            }
         };
         if let Err(error) = result {
             self.message(Err(error), "");
@@ -552,14 +543,7 @@ impl DawApp {
         }
         self.begin_edit();
         self.project = next;
-        self.edit_label = Some(
-            match drag.mode {
-                ArrangeAudioMode::Slip(_) => "Slip audio contents",
-                ArrangeAudioMode::Fade(true) => "Fade in",
-                ArrangeAudioMode::Fade(false) => "Fade out",
-            }
-            .into(),
-        );
+        self.edit_label = Some("Slip audio contents".into());
         self.changed();
     }
 

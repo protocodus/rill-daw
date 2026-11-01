@@ -41,6 +41,7 @@ enum DeviceKind {
     #[default]
     Instrument,
     Effect,
+    Unknown,
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -155,8 +156,11 @@ pub(crate) enum LibraryEdit {
 impl DeviceKind {
     fn accepts(self, entry: &CatalogEntry) -> bool {
         match self {
-            Self::Instrument => entry.plugin.is_instrument() != Some(false),
-            Self::Effect => entry.plugin.is_effect() != Some(false),
+            Self::Instrument => entry.plugin.is_instrument() == Some(true),
+            Self::Effect => entry.plugin.is_effect() == Some(true),
+            Self::Unknown => {
+                entry.plugin.is_instrument() != Some(true) && entry.plugin.is_effect() != Some(true)
+            }
         }
     }
 }
@@ -441,6 +445,7 @@ impl DawApp {
         let mut refresh = false;
         let mut edit = None;
         let mut copy = None;
+        let mut diagnostic_request = None;
         let mut open = true;
         let search_focused = state
             .search_id
@@ -468,12 +473,13 @@ impl DawApp {
             .show(ctx, |ui| {
                 // Share selected identity with the action row on short screens
                 // so the catalogue still has room for a complete card.
-                let compact_footer = daw_ui::popup_body_size(ctx).y
+                let compact_footer = ui.max_rect().height()
                     < daw_ui::tokens::CONTROL_HEIGHT * 13.0;
                 ui.horizontal(|ui| {
                     let mut kind = state.kind;
                     daw_ui::selectable_value(ui, &mut kind, DeviceKind::Instrument, "Instruments");
                     daw_ui::selectable_value(ui, &mut kind, DeviceKind::Effect, "Effects");
+                    daw_ui::selectable_value(ui, &mut kind, DeviceKind::Unknown, "Unverified");
                     if kind != state.kind {
                         state.kind = kind;
                         state.selected = None;
@@ -546,10 +552,10 @@ impl DawApp {
                         let search = daw_ui::text_field(
                             ui,
                             &mut self.plugin_filter,
-                            if state.kind == DeviceKind::Instrument {
-                                "Search instruments"
-                            } else {
-                                "Search effects"
+                            match state.kind {
+                                DeviceKind::Instrument => "Search instruments",
+                                DeviceKind::Effect => "Search effects",
+                                DeviceKind::Unknown => "Search unverified devices",
                             },
                             ui.available_width().min(460.0),
                         );
@@ -647,10 +653,12 @@ impl DawApp {
                     DeviceKind::Instrument => DeviceAction::Instrument,
                     DeviceKind::Effect if matches!(self.library_target, LibraryTarget::Send(_)) => DeviceAction::Send,
                     DeviceKind::Effect => DeviceAction::Insert,
+                    DeviceKind::Unknown => DeviceAction::Instrument,
                 };
                 let enabled = match state.kind {
                     DeviceKind::Instrument => !assign || assignment_target.is_some(),
                     DeviceKind::Effect => source.is_some(),
+                    DeviceKind::Unknown => false,
                 };
                 let width = ui.available_width();
                 let sidebar = if width >= SIDEBAR_WIDTH + PANE_GAP + CATALOG_MIN_WIDTH { SIDEBAR_WIDTH } else { 0.0 };
@@ -712,11 +720,10 @@ impl DawApp {
                     + daw_ui::tokens::CONTROL_HEIGHT
                     + ui.spacing().item_spacing.y * 2.0
                     + if compact_footer { 0.0 } else { label_height + ui.spacing().item_spacing.y };
-                // Use the requested viewport capacity, not last frame's
-                // auto-sized window: fractional frame rounding otherwise feeds
-                // back into the catalogue height on every idle frame.
+                // Respect the resized inner bounds. Round down to avoid fractional
+                // content growth feeding back into the next window size.
                 let header_height = (ui.cursor().top() - ui.max_rect().top()).max(0.0);
-                let body_height = (daw_ui::popup_body_size(ctx).y.min(760.0)
+                let body_height = (ui.max_rect().height().floor().min(daw_ui::popup_body_size(ctx).y).min(760.0)
                     - header_height - footer_height).max(0.0);
                 let mut grid = None;
                 let mut sidebar_rect = None;
@@ -784,6 +791,7 @@ impl DawApp {
                             }
                             if card.response.clicked() {
                                 state.selected = Some(entry.fingerprint.clone());
+                                if state.kind == DeviceKind::Unknown { diagnostic_request = Some(device_diagnostics(entry)); }
                             }
                             card.response.context_menu(|ui| {
                                 let label = if item.favorite { "Remove from favorites" } else { "Add to favorites" };
@@ -984,23 +992,35 @@ impl DawApp {
                     DeviceAction::Send => "Create send track",
                 };
                 ui.horizontal(|ui| {
+                    if state.kind == DeviceKind::Unknown && daw_ui::view_button(ui, "Inspect device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                    if state.kind != DeviceKind::Unknown {
                     ui.add_enabled_ui(enabled && selected.is_some(), |ui| {
                         if daw_ui::primary_button(ui, primary_label).clicked()
                             && let Some(item) = selected
                         { action = Some((item.entry.plugin.clone(), primary)); }
                     });
+                    }
+                    if daw_ui::view_button(ui, "Device details").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
                     ui.add_enabled_ui(selected.is_some(), |ui| {
                         daw_ui::action_menu(ui, "More", |ui| {
                             let Some(item) = selected else { return; };
                             let entry = item.entry;
                             ui.set_max_width(360.0);
+                            if state.kind == DeviceKind::Unknown {
+                                if daw_ui::button(ui, "Try as instrument").on_hover_text("Type is unverified; the isolated host will validate the device").clicked() {
+                                    action = Some((entry.plugin.clone(), DeviceAction::Instrument)); ui.close();
+                                }
+                                if source.is_some() && daw_ui::button(ui, "Try as effect").clicked() {
+                                    action = Some((entry.plugin.clone(), DeviceAction::Insert)); ui.close();
+                                }
+                            }
                             if state.kind == DeviceKind::Instrument {
                                 let can_assign = self.selected_track.and_then(|id| self.project.track(id)).is_some_and(|track| track.kind == TrackKind::Midi);
                                 if !assign && can_assign && daw_ui::button(ui, "Assign to selected track").clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Assign));
                                     ui.close();
                                 }
-                            } else if source.is_some() {
+                            } else if state.kind == DeviceKind::Effect && source.is_some() {
                                 let (label, alternate) = if primary == DeviceAction::Send { ("Add to effect chain", DeviceAction::Insert) } else { ("Create send track", DeviceAction::Send) };
                                 if daw_ui::button(ui, label).clicked() {
                                     action = Some((entry.plugin.clone(), alternate));
@@ -1069,6 +1089,18 @@ impl DawApp {
                     },
                 })));
             });
+        if let Some(window) = ctx.memory(|memory| memory.area_rect(egui::Id::new("library"))) {
+            ctx.data_mut(|data| {
+                let id = egui::Id::new("library_diagnostics");
+                if let Some(mut diagnostic) = data.get_temp::<serde_json::Value>(id) {
+                    diagnostic["window"] = serde_json::json!({"min":[window.min.x,window.min.y],"max":[window.max.x,window.max.y]});
+                    data.insert_temp(id, diagnostic);
+                }
+            });
+        }
+        if let Some((summary, report)) = diagnostic_request {
+            self.show_error_details("Device details", summary, report);
+        }
         self.library_open &= open;
         if folders {
             self.open_popup(PopupKind::Setup);
@@ -1215,6 +1247,99 @@ impl DawApp {
             },
         );
     }
+}
+
+pub(crate) fn plugin_model(
+    catalog: &[CatalogEntry],
+    path: &str,
+    class_id: &Option<String>,
+) -> String {
+    catalog
+        .iter()
+        .find(|entry| {
+            entry.plugin.path == std::path::Path::new(path) && entry.plugin.class_id == *class_id
+        })
+        .map(|entry| {
+            if entry.plugin.vendor.is_empty() {
+                entry.plugin.name.clone()
+            } else {
+                format!("{} · {}", entry.plugin.vendor, entry.plugin.name)
+            }
+        })
+        .unwrap_or_else(|| {
+            format!(
+                "VST3 · {}",
+                std::path::Path::new(path)
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+            )
+        })
+}
+
+fn device_diagnostics(entry: &CatalogEntry) -> (String, String) {
+    let plugin = &entry.plugin;
+    let kind = if plugin.is_instrument() == Some(true) {
+        "Instrument"
+    } else if plugin.is_effect() == Some(true) {
+        "Effect"
+    } else {
+        "Unverified"
+    };
+    let metadata = [
+        plugin.path.join("Contents/Resources/moduleinfo.json"),
+        plugin.path.join("moduleinfo.json"),
+    ]
+    .into_iter()
+    .find(|path| path.is_file());
+    let metadata_status = metadata.as_ref().map_or_else(|| "No moduleinfo.json found. The bundle name is used as a fallback; its type and developer cannot be verified without valid metadata.".into(), |path| {
+        match std::fs::metadata(path).and_then(|info| if info.len() <= 16 * 1024 * 1024 { std::fs::read_to_string(path) } else { Err(std::io::Error::other("Metadata exceeds 16 MiB")) }) {
+            Ok(contents) => match serde_json::from_str::<serde_json::Value>(&contents) {
+                Ok(_) => format!("Metadata parsed: {}", path.display()),
+                Err(error) => format!("Invalid JSON in {}: {error}", path.display()),
+            },
+            Err(error) => format!("Cannot read {}: {error}", path.display()),
+        }
+    });
+    let preview = match &entry.status {
+        ThumbnailStatus::Missing => {
+            "No preview has been captured. Use More → Capture preview.".into()
+        }
+        ThumbnailStatus::Ready => format!(
+            "Preview captured: {}",
+            entry.thumbnail.as_ref().map_or_else(
+                || "Cached image is missing".into(),
+                |path| path.display().to_string()
+            )
+        ),
+        ThumbnailStatus::Failed { message } => format!(
+            "Preview capture failed:\n{message}\n\nUse More → Capture preview to retry after correcting the error. A missing isolation helper requires reinstalling Rill (development builds: cargo build --workspace)."
+        ),
+    };
+    let summary = if kind == "Unverified" {
+        "This bundle does not declare a verified instrument or effect type."
+    } else {
+        "Plugin metadata and preview diagnostics."
+    };
+    (
+        summary.into(),
+        format!(
+            "Device: {}\nDeveloper: {}\nType: {kind}\nDeclared categories: {}\nProcessor class: {}\nBundle: {}\n\n{metadata_status}\n\n{preview}\n\nMissing metadata does not prove a plugin is broken. Install or update the vendor's VST3 build, then Scan again. Unverified devices are kept separate from Instruments and Effects; More offers an explicit manual loading attempt.",
+            plugin.name,
+            if plugin.vendor.is_empty() {
+                "Not declared"
+            } else {
+                &plugin.vendor
+            },
+            if plugin.category.is_empty() {
+                "Not declared"
+            } else {
+                &plugin.category
+            },
+            plugin.class_id.as_deref().unwrap_or("Not declared"),
+            plugin.path.display()
+        ),
+    )
 }
 
 #[cfg(test)]

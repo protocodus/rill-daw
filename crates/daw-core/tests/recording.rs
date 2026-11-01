@@ -190,7 +190,7 @@ fn incomplete_only_loop_uses_longest_coverage_and_latest_tie_without_losing_shor
 }
 
 #[test]
-fn overdub_layer_keeps_original_arrangement_routes_and_folder_and_uses_distinct_color() {
+fn overdub_layer_keeps_original_arrangement_routes_and_folder_and_starts_neutral() {
     let mut project = Project::new();
     let bus = project.add_bus("Vocals bus");
     let folder = project.add_folder("Vocals");
@@ -224,7 +224,7 @@ fn overdub_layer_keeps_original_arrangement_routes_and_folder_and_uses_distinct_
     assert_eq!(layer.gain, before.gain);
     assert_eq!(layer.pan, before.pan);
     assert!(layer.inserts.is_empty() && layer.sends.is_empty());
-    assert_ne!(layer.color, before.color);
+    assert_eq!(layer.color, [148, 153, 162]);
     assert_eq!(project.track(track), Some(&before));
     assert_eq!(audible_path(&project, track, 2.0), Some("lead.wav"));
     assert_eq!(

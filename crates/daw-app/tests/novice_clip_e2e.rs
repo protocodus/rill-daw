@@ -232,7 +232,7 @@ fn add_pattern_uses_the_selected_midi_lane_and_cursor_and_can_create_a_track() {
     assert_eq!(drawn["project"]["tracks"][0]["clips"][0]["length"], 4.0);
     assert_eq!(undo(&mut app, false)["project"], state["project"]);
 
-    let y = canvas["min"][1].as_f64().unwrap() - 16.0;
+    let y = center(&state["timeline"]["ruler"]).1;
     app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
     let added = app.click("Add pattern");
     assert_eq!(added["project"]["tracks"].as_array().unwrap().len(), 1);

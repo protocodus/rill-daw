@@ -184,11 +184,14 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
         let drum_channel = channel(&state, drums);
         let summary = Bounds::from(&drum_channel["insert_summary"]);
         assert!(summary.contains(Bounds::from(label(&state, "Compressor"))));
-        assert!(
-            summary.contains(Bounds::from(label(&state, "+1"))),
-            "Insert count outside summary: {summary:?}, {}",
-            label(&state, "+1")
-        );
+        let devices: Vec<_> = state["mixer_devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|device| device["track"] == drums)
+            .map(|device| device["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(devices, ["Compressor", "Tape"]);
         assert!(
             summary.top >= Bounds::from(&drum_channel["effects"]).bottom
                 && summary.bottom <= Bounds::from(&drum_channel["gain"]).top,

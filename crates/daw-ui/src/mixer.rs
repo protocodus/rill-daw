@@ -99,7 +99,7 @@ pub fn mixer_bus_input_summary<'a>(
 pub fn mixer_effects_button(ui: &mut Ui, width: f32, count: usize, active: usize) -> Response {
     let response = ui.add_sized(
         Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
-        crate::button_widget("Effects"),
+        crate::view_button_widget("Effects"),
     );
     if response.rect.width() >= 144.0 && ui.is_rect_visible(response.rect) {
         let colors = crate::theme::palette(ui.ctx());
@@ -357,4 +357,69 @@ pub fn mixer_route_lane(
             target_clipped,
         }),
     }
+}
+
+/// Signal-flow sections share the strip's existing control geometry. Paint the
+/// frames before their controls, so borders never obscure fields or hit targets.
+#[derive(Clone, Copy)]
+pub enum MixerSection {
+    Source,
+    Inserts,
+    Level,
+    Output,
+}
+
+impl MixerSection {
+    pub const ALL: [Self; 4] = [Self::Source, Self::Inserts, Self::Level, Self::Output];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Source => "Source",
+            Self::Inserts => "Inserts",
+            Self::Level => "Volume & pan",
+            Self::Output => "Output & sends",
+        }
+    }
+    pub fn fill(self, ctx: &egui::Context) -> Color32 {
+        let colors = crate::theme::palette(ctx);
+        match self {
+            Self::Source | Self::Level => colors.bg.gamma_multiply(0.55),
+            Self::Inserts | Self::Output => colors.raised.gamma_multiply(0.8),
+        }
+    }
+}
+
+pub fn mixer_sections<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> (R, [Rect; 4])) -> R {
+    let background = ui.painter().add(egui::Shape::Noop);
+    let (value, sections) = contents(ui);
+    let colors = crate::theme::palette(ui.ctx());
+    let mut shapes = Vec::with_capacity(11);
+    for (section, bounds) in MixerSection::ALL.into_iter().zip(sections) {
+        let rect = bounds.expand2(egui::vec2(crate::tokens::SPACE_XS, 2.0));
+        shapes.push(egui::Shape::rect_filled(
+            rect,
+            crate::tokens::RADIUS,
+            section.fill(ui.ctx()),
+        ));
+        shapes.push(egui::Shape::rect_stroke(
+            rect,
+            crate::tokens::RADIUS,
+            egui::Stroke::new(crate::tokens::BORDER_WIDTH, colors.line),
+            egui::StrokeKind::Inside,
+        ));
+    }
+    for pair in sections.windows(2) {
+        let center = egui::pos2(pair[0].center().x, (pair[0].bottom() + pair[1].top()) * 0.5);
+        let radius = crate::tokens::SPACE_XS * 0.5;
+        shapes.push(egui::Shape::convex_polygon(
+            vec![
+                center + egui::vec2(-radius, -radius * 0.5),
+                center + egui::vec2(radius, -radius * 0.5),
+                center + egui::vec2(0.0, radius),
+            ],
+            colors.muted,
+            egui::Stroke::NONE,
+        ));
+    }
+    ui.painter().set(background, egui::Shape::Vec(shapes));
+    value
 }

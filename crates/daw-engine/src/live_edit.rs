@@ -653,9 +653,15 @@ fn automation_edit_compatible(before: &Project, after: &Project, a: &Track, b: &
                 // curve and override changes retain the same loaded instance.
                 let enabled = |project: &Project, track: &Track, lane: &AutomationLane| {
                     lane_enabled(project, track)
-                        && (!lane.points.is_empty() || lane.override_value.is_some())
+                        && (!lane.points.is_empty()
+                            || lane.clips.iter().any(|clip| !clip.points.is_empty())
+                            || lane.override_value.is_some())
                 };
                 enabled(before, a, old) == enabled(after, b, new)
+                    // A clip-only lane needs the preset's original value in its
+                    // gaps. Reload once when removing the arranger fallback so
+                    // that value can be read before automation touches the plug-in.
+                    && (old.points.is_empty() == new.points.is_empty() || new.clips.is_empty())
             } else {
                 true
             }
@@ -683,10 +689,14 @@ fn swap_plugin_automation(
             .or_else(|| current.iter().find(|old| old.id == new.id))
         {
             new.previous = old.previous;
+            if new.manual.is_none() {
+                new.manual = old.manual;
+            }
             if old.action_sequence > sequence {
                 // An immediate override made after this project snapshot must
                 // survive both its prepared preview and its final refinement.
                 new.lane.override_value = old.lane.override_value;
+                new.manual = old.manual;
                 new.action_sequence = old.action_sequence;
             }
         }

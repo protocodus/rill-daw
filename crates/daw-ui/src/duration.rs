@@ -99,7 +99,7 @@ pub fn paint_loop_region(
     beats_per_bar: u8,
 ) {
     let colors = crate::theme::palette(painter.ctx());
-    let fill = colors.accent.gamma_multiply(0.6);
+    let fill = colors.guide.gamma_multiply(0.6);
     let painter = painter.with_clip_rect(rect);
     painter.rect_filled(rect, 2.0, fill);
     let meter = f64::from(beats_per_bar.max(1));
@@ -189,7 +189,7 @@ pub fn loop_endpoint_handle(
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
     }
     let colors = crate::theme::palette(ui.ctx());
-    let ink = crate::theme::contrast_text(colors.accent.gamma_multiply(0.6));
+    let ink = crate::theme::contrast_text(colors.guide.gamma_multiply(0.6));
     let grip_x = x.clamp(lane.left() + 1.0, lane.right() - 1.0);
     ui.painter().with_clip_rect(lane).vline(
         grip_x,

@@ -6,6 +6,109 @@ use std::hash::Hash;
 
 pub const DEVICE_CARD_HEIGHT: f32 = 208.0;
 pub const DEVICE_CARD_MIN_WIDTH: f32 = 196.0;
+pub const DEVICE_IDENTITY_HEIGHT: f32 = tokens::CONTROL_HEIGHT + 2.0 * tokens::SPACE_XS;
+
+pub struct DeviceIdentity<'a> {
+    pub name: &'a str,
+    pub model: &'a str,
+    pub preview: Option<&'a egui::TextureHandle>,
+    pub enabled: bool,
+}
+
+/// A bounded single-line selection summary. Its height stays identical while
+/// previews load or a resizable library reflows, keeping insertion actions still.
+pub fn device_summary_row(ui: &mut Ui, name: &str, metadata: &str) -> Response {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(
+            ui.available_width(),
+            ui.text_style_height(&egui::TextStyle::Body),
+        ),
+        egui::Sense::hover(),
+    );
+    let painter = ui.painter_at(rect);
+    let middle = rect.center().x;
+    crate::text::paint_row(
+        &painter,
+        Rect::from_min_max(
+            rect.min,
+            egui::pos2(middle - tokens::SPACE_XS, rect.bottom()),
+        ),
+        TextRole::Label,
+        name,
+    );
+    crate::text::paint_row(
+        &painter,
+        Rect::from_min_max(egui::pos2(middle + tokens::SPACE_XS, rect.top()), rect.max),
+        TextRole::Note,
+        metadata,
+    );
+    response.on_hover_text(format!("{name}\n{metadata}"))
+}
+
+/// Compact direct-access device row for mixer strips and other narrow views.
+/// Custom identity is primary; the manufacturer's model remains recognizable.
+pub fn device_identity_button(
+    ui: &mut Ui,
+    id: Id,
+    width: f32,
+    device: DeviceIdentity<'_>,
+) -> Response {
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(width, DEVICE_IDENTITY_HEIGHT),
+        egui::Sense::hover(),
+    );
+    let response = ui.interact(rect, id, egui::Sense::click());
+    let colors = theme::palette(ui.ctx());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(
+        rect,
+        tokens::RADIUS,
+        if response.hovered() {
+            colors.control_hover
+        } else {
+            colors.control_fill
+        },
+    );
+    let mut text = rect.shrink2(egui::vec2(tokens::SPACE_SM, 3.0));
+    if let Some(preview) = device.preview {
+        let image = Rect::from_min_size(text.min, egui::Vec2::splat(32.0));
+        painter.image(
+            preview.id(),
+            image,
+            Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+        text.min.x = image.right() + tokens::SPACE_SM;
+    }
+    crate::text::paint_single_line(
+        &painter,
+        Rect::from_min_max(text.min, egui::pos2(text.right(), text.top() + 19.0)),
+        egui::FontId::proportional(tokens::FONT_CAPTION),
+        if device.enabled {
+            colors.text
+        } else {
+            colors.muted
+        },
+        device.name,
+    );
+    crate::text::paint_single_line(
+        &painter,
+        Rect::from_min_max(egui::pos2(text.left(), text.top() + 19.0), text.max),
+        egui::FontId::proportional(tokens::FONT_CANVAS),
+        colors.muted,
+        device.model,
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), device.name)
+    });
+    response.on_hover_text(format!(
+        "{}\n{}{}\nOpen device",
+        device.name,
+        device.model,
+        if device.enabled { "" } else { " · Bypassed" }
+    ))
+}
+
 const MIN_CARD_HEIGHT: f32 = 144.0;
 const NAME_HEIGHT: f32 = 2.0 * tokens::SPACE_LG;
 const PRODUCER_HEIGHT: f32 = tokens::SPACE_LG;

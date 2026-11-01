@@ -379,6 +379,7 @@ fn automate(
 ) -> u64 {
     let mut track = Track::new("Automation", TrackKind::Automation);
     track.automation = Some(AutomationLane {
+        clips: Vec::new(),
         override_value: None,
         target: AutomationTarget {
             track: target,

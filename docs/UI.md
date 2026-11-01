@@ -184,7 +184,7 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
 | Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
 
-Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light, with a muted sage accent. Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. Primary actions gain a small blurred shadow; selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
+Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light. Blue identifies actions, pink AI, green guides, and orange automation; view controls stay gray. Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. Primary actions gain a small blurred shadow; selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
 
 Use the spacing scale consistently:
 
@@ -554,7 +554,7 @@ fn interpolation(ui: &mut egui::Ui, selected: &mut usize) {
 }
 ```
 
-Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. The native close control remains visible. It supplies a common frame, spacing, and initial width, with fixed sizing and no collapse triangle. Callers may override width, `.resizable(true)`, or `.fixed_pos(...)`; the default pivot is the center. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
+Use `popup(title, ctx).open(&mut open).show(ctx, ...)` for utility windows. The builder initially centers them below the transport, bounds their size to the viewport, and scrolls long content vertically. Drag the titlebar to move and the edges or lower corner to resize. Native egui state retains the geometry when reopened; the close control remains visible. The common frame, spacing, and initial width have no collapse triangle. `workspace_popup` initially fills the available workspace and remains movable and resizable too. Surfaces `panel(ctx)`, `card(ctx)`, and `inset(ctx)` use the same resolved palette. An `open = false` popup renders no content.
 
 When actions must stay visible, use `.vscroll(false)` and `popup_scroll_body(ui, id, reserved_footer_height, contents)`. Setup keeps Apply/Cancel below this scrolling body; Recording keeps timing and Record controls below its input choices. Reserve spacing as well as the footer controls so narrow windows remain usable. `popup_body_size(ctx)` supplies the available utility content bounds when a view needs an explicit minimum height. Routing uses this bound to keep a useful send viewport below its navigation and AI actions as display density changes; long send lists and output choices scroll together.
 
@@ -663,7 +663,7 @@ names remain intact, including an intentionally named **New instrument**.
 
 Arrangement **Add pattern** creates a four-beat pattern at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
 
-New tracks advance through a shared palette of distinct colors, preferring unused colors before reusing one. This applies to menu additions, imported tracks, and instrument or send creation. Existing and manually chosen colors remain unchanged; undo/redo and saved projects retain each assignment.
+New tracks start neutral gray, including menu additions, imports, instruments and sends. Users choose identity colors; existing colors remain unchanged, and Undo/Redo and saved projects retain each assignment.
 
 Click the color strip at the left of an arranger track header to open its color picker. Edits update the shared track color used by its clips and mixer channel; other tracks retain their colors. Mixer channel names use the exact track color with contrasting text, and the full strip carries a quiet tint of that color in both themes. Master stays neutral. The strip remains usable on compact tracks and folders, and opening the picker does not change selection or collapse a folder. Color changes support Undo/Redo and project recall.
 
@@ -957,11 +957,48 @@ state and handle rectangles for application undo and interaction tests.
 `paint_crossfade` reuses the same curve drawing in a timeline region without
 adding layout or input targets.
 
+Every audio clip exposes orange fade-in/out handles below its title in the
+arranger and above its waveform in Clip Editor, including unselected, compact,
+reversed and stretched clips. Drag to change duration continuously;
+double-click removes that fade. Orange gain envelopes use the same source
+coordinates and curves as playback. Orange overlap diamonds edit crossfade
+duration, including from zero; double-click opens the spline editor. Crossfade
+gain curves use distinct orange tones, separate from the waveform. Fades change saved
+metadata without modifying source files, clip placement, trim or stretch; each
+drag is one Undo step.
+
 The transport's **Loop** toggle enables repetition. **Range** opens Start beat and
 End beat controls; both use one-based beat numbers, and the end is exclusive.
 The current range remains visible beside the picker. Range edits and enabling
 Loop are undoable and saved with the project. WAV export renders the complete
 song regardless of the transport loop.
+
+The arranger and both clip editors expose the same narrow loop lane below the
+bar/time ruler. Click to set the nearest boundary, drag an edge to resize, drag
+the band to move, or drag empty space in either direction to draw a new loop.
+Edits enable looping; Shift bypasses snap. The disabled range remains visible.
+Ordinary ruler clicks retain cursor placement, and loop gestures leave clips,
+notes and the playback cursor unchanged.
+
+Automation lanes always follow their target channel in the arranger, including
+inside folders. Click directly in a lane to add points; drag points to move them
+and right-click each point for Linear, Smooth or Step segment shape and Delete.
+Shapes belong to the segment leaving that point, with older sessions inheriting
+the lane's default interpolation. The on-demand Automation editor offers these
+same point shape choices.
+
+Right-click empty lane space for **Create automation clip**, deriving a
+four-beat pattern from the underlying arranger curve at that position. Edit its
+points directly in its body. Drag its header to move, or either header edge to
+trim; Shift bypasses snap. The header menu offers Copy pattern, Paste automation
+clip (on lane space), Duplicate pattern, Ghost pattern, Make pattern independent,
+and Delete pattern. Independent copies can be derived without changing their
+source; ghost patterns share point edits while retaining their placement and
+trim. Clip automation takes precedence inside its bounds, then arranger points,
+then the manual parameter value. Overlapping patterns use the latest start and
+later stored pattern for ties. Ends are exclusive. Clearing arranger points
+retains patterns and restores the manual value outside them, including VST
+parameters. Patterns, shapes and source links persist in project archives and Undo.
 
 File → **Export WAV…** shows the arrangement duration and **Include effect
 tails**, initially enabled. Turn it off for a WAV that ends exactly at the last
@@ -985,7 +1022,19 @@ primary notice, and the last-WAV re-export command keeps its own destination.
 
 ## Device library and effect chains
 
-**Window → Library** opens a large card grid with Instruments and Effects tabs. Each card shows a cached native editor preview, the device name, and its developer. Names wrap to two lines; full text remains in the tooltip. Missing previews use a quiet instrument/effect icon. The grid adapts its columns to the available width and scrolls independently of the selected device's fixed action footer. Click to select, double-click or press Enter to insert/assign, and use arrow keys to move between cards. Left/Right remain text-editing keys while search has focus.
+**Window → Library** opens a movable, resizable card grid with Instruments,
+Effects, and Unverified tabs. Instrument and effect lists require a declared
+matching type. Bundles with missing, malformed, or unrecognized metadata remain
+in Unverified. Selecting one opens Device details with its bundle path, class,
+developer, metadata parsing result, preview capture status and available error.
+The report can be copied and gives repair/retry guidance. Verified devices offer
+the same **Device details** action. **More** retains Capture/Refresh preview and
+explicit Try as instrument/effect actions for unverified bundles. The selected
+device's model/category and preview availability appear in its details pane. Search,
+developer filter and actions remain visible while cards scroll. Click selects;
+double-click or Enter activates the contextual action. Arrow keys move the
+selection; Left/Right remain text-editing keys while search has focus. Preview
+loading preserves the action footer's position.
 
 Empty inventory explains that instruments/effects must be installed as VST3,
 offers **Plug-in folders**, and points to **Scan**. When instruments are absent it also
@@ -1002,6 +1051,20 @@ Plugin discovery stays metadata-only. After discovery, one isolated helper at a 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
 
 Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The **Channel** menu also provides **Open channel**, Instrument, Effects, and Routing actions where applicable. Channel, Effects, Instrument, and Routing share navigation links that keep the same channel selected. The links omit the current destination, whose context is already shown in the title; closing a utility returns to its caller. Each channel shows its own horizontal post-fader/pan stereo meter below Mute/Solo and above Output; Master shows the final stereo output meter. Readings come from the running engine.
+
+Each mixer strip lists its instrument and inserts directly above the fader.
+Click a device to open that instance; right-click **Effects** for **+ Insert**
+to open that channel's effect chooser. Long chains scroll within their reserved area; channel/master faders
+stay aligned. Device rows show a custom name above subtle producer/model text.
+Instrument and effect overviews expose **Device name** and an optional mouse
+keyboard; renaming is undoable and
+saved, and keeps the model visible without restarting audio or native editors.
+
+Piano-roll double-clicks with Select or Cursor create notes exactly at the
+pointer's time and pitch, including between grid lines. Drag any note's body to
+move and either edge to trim, including an unselected note with Cursor active.
+Resize edges take priority over overlapping note bodies. Explicit Cut and Erase
+tools retain their actions; Shift bypasses snap during edge edits.
 
 Instrument opens a concise device overview with the native **Open editor** action. **Automate…** opens a large parameter browser with automatic loading and focused search. Effect rows expose **Automate…** directly, without opening a native editor first. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
 
@@ -1180,7 +1243,7 @@ Generation previews stay in the live piano roll. Draw the ordinary canvas, then
 `paint_generation_backdrop`, `paint_generation_range` and
 `paint_generation_note`, followed by the shared movable utility window. The light
 scrim preserves musical context; the ruler and roll share the active range, and
-violet outlined draft notes differ from existing blue notes in both themes.
+violet outlined draft notes differ from existing neutral notes in both themes.
 Additional voices use nearby distinct preview shades. These painters do not
 create input targets, note IDs or project edits. The application owns generation,
 validation, cancellation and the single undoable confirmation.
@@ -1357,3 +1420,23 @@ popups use a one-line composer that scrolls the complete draft; Conversation
 uses a taller composer when space allows. Scope, browsing actions, and the
 primary and any available Stop/recovery or Undo actions remain reachable at
 compact window sizes.
+
+Shared direct editing controls live in `daw-ui`: `clip_fade_handles` and
+`crossfade_duration_handle` return source-independent gesture edits;
+`paint_clip_fades` paints the evaluated gain envelope. `timeline_loop_editor`
+returns loop bounds and handle geometry without advancing layout.
+`automation_canvas_at` returns point edits and per-point interpolation choices.
+`device_identity_button` shows a custom name, quiet model, and optional thumbnail.
+Application views own coordinate mapping, document validation and Undo.
+
+Mixer strips use shared `mixer_sections` frames around Source, Inserts, Volume &
+pan, and Output & sends. Alternating neutral surfaces, boundaries and downward
+connectors make processing order visible while retaining aligned control rows.
+
+The default palette is neutral gray. Blue identifies actions, gray identifies
+view and presentation choices, pink identifies AI features, green identifies
+indicators and guides (including playhead, loop and scale guides), and orange
+identifies automation. `ai_button`, `ai_button_widget`, `automation_button` and
+`automation_control_style` reuse shared native controls with those meanings.
+New channels start gray; user colors remain saved and tint their mixer strips
+and arranger clips. Existing project colors are preserved on load and Undo.

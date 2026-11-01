@@ -270,6 +270,7 @@ fn plugin_curves_emit_held_endpoints_and_override_resume_values_without_allocati
         lane,
         previous: None,
         action_sequence: 0,
+        manual: None,
     }];
     let mut emitted = [(0_u32, 0.0_f64); 4];
     let mut count = 0;

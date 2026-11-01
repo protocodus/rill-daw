@@ -167,10 +167,17 @@ fn ruler_label<'a>(
             state["timeline"]["ruler"]["min"][1].as_f64().unwrap(),
             state["timeline"]["ruler"]["max"][1].as_f64().unwrap(),
         ),
-        Editor::Midi | Editor::Audio => (
-            plot[1] - f64::from(daw_ui::tokens::TIMELINE_RULER_HEIGHT),
-            plot[1],
-        ),
+        Editor::Midi | Editor::Audio => {
+            let view = if matches!(editor, Editor::Midi) {
+                "midi_editor"
+            } else {
+                "audio_editor"
+            };
+            (
+                state[view]["ruler"]["min"][1].as_f64().unwrap(),
+                state[view]["ruler"]["max"][1].as_f64().unwrap(),
+            )
+        }
         Editor::Automation => (
             plot[1] - 12.0 - f64::from(daw_ui::tokens::TIMELINE_RULER_HEIGHT),
             plot[1] - 12.0,

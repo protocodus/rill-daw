@@ -377,11 +377,34 @@ pub fn wait_library_device(app: &mut Harness, name: &str) {
     let deadline = Instant::now() + Duration::from_secs(35);
     loop {
         let state = app.inspect();
-        if state["library"]["cards"]
-            .as_array()
-            .is_some_and(|cards| cards.iter().any(|card| card["name"] == name))
-        {
+        let catalog = &state["library"]["catalog"];
+        let top = catalog["min"][1].as_f64().unwrap_or(0.0);
+        let bottom = catalog["max"][1].as_f64().unwrap_or(0.0);
+        if state["label_rects"].as_array().is_some_and(|labels| {
+            labels.iter().any(|label| {
+                label["text"] == name
+                    && label["min"][1].as_f64().unwrap_or(-1.0) >= top
+                    && label["max"][1].as_f64().unwrap_or(f64::INFINITY) <= bottom
+            })
+        }) {
             return;
+        }
+        if let Some(index) = state["library"]["order"]
+            .as_array()
+            .and_then(|order| order.iter().position(|item| item == name))
+        {
+            let columns = state["library"]["columns"].as_u64().unwrap_or(1).max(1) as usize;
+            let row_height = state["library"]["card_size"][1].as_f64().unwrap_or(208.0)
+                + f64::from(daw_ui::tokens::SPACE_MD);
+            let target = ((index / columns) as f64 * row_height - (bottom - top) * 0.25).max(0.0);
+            let offset = state["library"]["scroll_offset"].as_f64().unwrap_or(0.0);
+            if (target - offset).abs() > 1.0 {
+                let x = (catalog["min"][0].as_f64().unwrap() + catalog["max"][0].as_f64().unwrap())
+                    * 0.5;
+                app.command(
+                    json!({"command":"scroll","x":x,"y":(top+bottom)*0.5,"delta":offset-target}),
+                );
+            }
         }
         assert!(
             Instant::now() < deadline,

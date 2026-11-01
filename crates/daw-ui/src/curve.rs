@@ -32,6 +32,14 @@ pub enum CurveEdit {
     Add { x: f64, value: f32 },
     Move { id: u64, x: f64, value: f32 },
     Delete { id: u64 },
+    Interpolation { id: u64, mode: CurveInterpolation },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CurveInterpolation {
+    Step,
+    Linear,
+    Smooth,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -613,6 +621,16 @@ fn curve_editor_inner(
         }
         if !navigation.navigating {
             point_response.context_menu(|ui| {
+                for (mode, label) in [
+                    (CurveInterpolation::Linear, "Linear segment"),
+                    (CurveInterpolation::Smooth, "Smooth segment"),
+                    (CurveInterpolation::Step, "Step segment"),
+                ] {
+                    if crate::button(ui, label).clicked() {
+                        edit = Some(CurveEdit::Interpolation { id: point.id, mode });
+                        ui.close();
+                    }
+                }
                 let selected_point = selection.contains(&point.id);
                 if crate::selection_membership_action(ui, selected_point) {
                     if selected_point {

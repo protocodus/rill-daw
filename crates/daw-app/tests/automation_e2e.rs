@@ -76,7 +76,12 @@ fn bounded_actions(state: &Value, names: &[&str]) {
             .unwrap()
             .iter()
             .find(|label| label["text"] == *name)
-            .unwrap_or_else(|| panic!("Missing {name}: {}", state["visible_labels"]));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Missing {name}: {} windows={} view={}",
+                    state["visible_labels"], state["window_rects"], state["automation_editor"]
+                )
+            });
         assert!(rect["min"][0].as_f64().unwrap() >= 0.0);
         assert!(rect["max"][0].as_f64().unwrap() <= 1100.0);
         assert!(rect["max"][1].as_f64().unwrap() <= 720.0);

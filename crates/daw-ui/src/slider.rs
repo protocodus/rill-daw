@@ -331,7 +331,7 @@ fn paint_slider_index(ui: &Ui, geometry: &SliderScaleGeometry) {
                 ]
                 .map(|point| point.clamp(geometry.rail.min, geometry.rail.max))
                 .to_vec(),
-                colors.orange,
+                colors.warning,
                 Stroke::NONE,
             ));
         }

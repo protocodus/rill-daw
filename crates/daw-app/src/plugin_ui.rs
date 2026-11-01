@@ -937,8 +937,23 @@ impl DawApp {
                         choose = daw_ui::primary_button(ui, "Choose instrument").clicked();
                     }
                     Instrument::Vst3 { path, class_id } => {
-                        let device_name = effect_name
+                        let name_draft_id =
+                            ui.id()
+                                .with(("device_name", track_id, target.effect, path, class_id));
+                        let stored_name = effect_name.clone().unwrap_or_else(|| {
+                            self.project
+                                .track(track_id)
+                                .map(|track| track.instrument_name.clone())
+                                .unwrap_or_default()
+                        });
+                        let mut device_name = effect_name
                             .clone()
+                            .or_else(|| {
+                                self.project
+                                    .track(track_id)
+                                    .map(|track| track.instrument_name.clone())
+                                    .filter(|name| !name.is_empty())
+                            })
                             .or_else(|| {
                                 self.vst_catalog
                                     .iter()
@@ -955,12 +970,69 @@ impl DawApp {
                                     .to_string_lossy()
                                     .into_owned()
                             });
+                        if let Some((text, saved)) = ui
+                            .ctx()
+                            .data(|data| data.get_temp::<(String, String)>(name_draft_id))
+                            && saved == stored_name
+                        {
+                            device_name = text;
+                        }
                         if !self.instrument_ui.parameters_open {
-                            daw_ui::text::bounded_block(
+                            let label = daw_ui::text::label(ui, "Device name");
+                            let (keyboard, field) = daw_ui::action_row(
                                 ui,
-                                daw_ui::text::TextRole::Subtitle,
-                                &device_name,
-                                2,
+                                |ui| {
+                                    daw_ui::small_button(ui, "Keyboard…")
+                                        .on_hover_text("Name this device with the mouse")
+                                        .clicked()
+                                },
+                                |ui| {
+                                    daw_ui::text_field(
+                                        ui,
+                                        &mut device_name,
+                                        "Device name",
+                                        ui.available_width(),
+                                    )
+                                    .labelled_by(label.id)
+                                },
+                            )
+                            .inner;
+                            if keyboard {
+                                daw_ui::set_name_keyboard_open(
+                                    ui.ctx(),
+                                    field.id,
+                                    !daw_ui::name_keyboard_open(ui.ctx(), field.id),
+                                );
+                            }
+                            let keyboard_changed =
+                                daw_ui::name_keyboard(ui, field.id, &mut device_name);
+                            if field.changed() || keyboard_changed {
+                                self.begin_edit();
+                                let track = self.project.track_mut(track_id).unwrap();
+                                if let Some(effect) = target.effect {
+                                    track
+                                        .inserts
+                                        .iter_mut()
+                                        .find(|slot| slot.id == effect)
+                                        .unwrap()
+                                        .name = device_name.clone();
+                                } else {
+                                    track.instrument_name = device_name.clone();
+                                }
+                                self.edit_label = Some("Rename device".into());
+                                self.changed();
+                            }
+                            let saved_name = if field.changed() || keyboard_changed {
+                                device_name.clone()
+                            } else {
+                                stored_name.clone()
+                            };
+                            ui.ctx().data_mut(|data| {
+                                data.insert_temp(name_draft_id, (device_name.clone(), saved_name))
+                            });
+                            daw_ui::text::note(
+                                ui,
+                                crate::library::plugin_model(&self.vst_catalog, path, class_id),
                             );
                             daw_ui::toolbar(ui, |ui| {
                                 launch = ui
