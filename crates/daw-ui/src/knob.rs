@@ -63,7 +63,7 @@ pub struct KnobGeometry {
     pub radius: f32,
     pub minimum: Pos2,
     pub maximum: Pos2,
-    /// Tip of the value index, exactly on the calibrated arc.
+    /// End of the value arc, and tip of the index on detailed dials.
     pub index: Pos2,
     pub range: [f64; 2],
     pub value: f64,
@@ -164,26 +164,25 @@ impl<'a> Knob<'a> {
         }
         self
     }
-    /// A compact dial with a separate endpoint-caption band. The caller
-    /// provides a readout and exact-value context action.
+    /// A text-free ring. The caller provides its label, unit-aware hover,
+    /// readout, and exact-value context action.
     /// Hidden numeric geometry is `Rect::NOTHING`. The default knob is unchanged.
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
     }
-    /// Full compact target height, including breathing room for scale labels.
+    /// Full compact target height. Rings use a square hit target.
     /// Hosts can reserve this before centering adjacent controls in the row.
     pub fn compact_height(diameter: f32) -> f32 {
-        let diameter = if diameter.is_finite() {
+        if diameter.is_finite() {
             diameter.clamp(48.0, 180.0)
         } else {
             84.0
-        };
-        diameter + tokens::SPACE_MD
+        }
     }
     /// An audio gain taper with continuous silence, useful travel below unity,
     /// and the caller's unchanged linear gain range and stored values.
-    /// A labelled unity landmark is painted when 1.0 lies inside the range.
+    /// Detailed dials paint a unity landmark when 1.0 lies inside the range.
     pub fn perceptual_gain(mut self) -> Self {
         self.perceptual_gain =
             *self.range.start() >= 0.0 && *self.range.end() > *self.range.start();
@@ -272,6 +271,7 @@ impl<'a> Knob<'a> {
 
     fn add_contents(&mut self, ui: &mut Ui, width: f32) -> Response {
         ui.set_width(width);
+        let ring_only = self.compact || self.diameter < 64.0;
         let label = (!self.compact && !self.text.is_empty()).then(|| text::label(ui, &self.text));
         let height = if self.compact {
             Self::compact_height(self.diameter)
@@ -417,45 +417,38 @@ impl<'a> Knob<'a> {
                 format!("{}{}", self.range.end(), self.suffix),
             ]
         });
-        let labels_rect = if self.compact {
-            Rect::from_min_max(
-                egui::pos2(
-                    target.left() + tokens::SPACE_XS,
-                    target.bottom() - tokens::SPACE_XS - tokens::SPACE_MD,
-                ),
-                target.right_bottom() - egui::Vec2::splat(tokens::SPACE_XS),
-            )
-        } else {
-            ui.allocate_exact_size(
-                egui::vec2(width, tokens::FONT_SMALL + tokens::SPACE_XS),
-                egui::Sense::hover(),
-            )
-            .0
-        };
         let colors = theme::palette(ui.ctx());
-        for (position, align, value) in [
-            (
-                labels_rect.left_center(),
-                egui::Align2::LEFT_CENTER,
-                &labels[0],
-            ),
-            (
-                labels_rect.right_center(),
-                egui::Align2::RIGHT_CENTER,
-                &labels[1],
-            ),
-        ] {
-            ui.painter().text(
-                position,
-                align,
-                value,
-                egui::FontId::proportional(if self.compact {
-                    tokens::FONT_SCALE
-                } else {
-                    tokens::FONT_CANVAS
-                }),
-                colors.muted,
-            );
+        if !ring_only {
+            let labels_rect = ui
+                .allocate_exact_size(
+                    egui::vec2(width, tokens::FONT_SMALL + tokens::SPACE_XS),
+                    egui::Sense::hover(),
+                )
+                .0;
+            for (position, align, value) in [
+                (
+                    labels_rect.left_center(),
+                    egui::Align2::LEFT_CENTER,
+                    &labels[0],
+                ),
+                (
+                    labels_rect.right_center(),
+                    egui::Align2::RIGHT_CENTER,
+                    &labels[1],
+                ),
+            ] {
+                ui.painter().text(
+                    position,
+                    align,
+                    value,
+                    egui::FontId::proportional(tokens::FONT_CANVAS),
+                    colors.muted,
+                );
+            }
+        } else if !self.compact {
+            // Keep the native Number ID stable when resizing across the small
+            // dial threshold, without reserving an empty caption row or gap.
+            ui.skip_ahead_auto_ids(1);
         }
 
         let numeric = if self.compact {
@@ -513,17 +506,24 @@ impl<'a> Knob<'a> {
         }
         let current = (self.value)(None);
         let fraction = self.normalized(current);
-        let radius =
-            (self.diameter * 0.38).min(self.diameter * 0.5 - if self.compact { 10.0 } else { 9.0 });
+        let radius = (self.diameter * 0.38).min(
+            self.diameter * 0.5
+                - if ring_only {
+                    tokens::SPACE_XS + 1.5
+                } else {
+                    9.0
+                },
+        );
         let center = dial.center();
-        let divisions = if self.diameter >= 100.0 {
+        let divisions = if ring_only {
+            0
+        } else if self.diameter >= 100.0 {
             10
-        } else if self.diameter >= 64.0 {
-            5
         } else {
-            2
+            5
         };
         let mut tick_fractions: Vec<f32> = (0..=divisions)
+            .filter(|_| !ring_only)
             .map(|index| index as f32 / divisions as f32)
             .collect();
         if divisions == 5 {
@@ -550,7 +550,7 @@ impl<'a> Knob<'a> {
                     center + samples[(*fraction * ARC_STEPS as f32).round() as usize] * radius
                 })
                 .collect(),
-            unity: (self.perceptual_gain && self.range.contains(&1.0)).then(|| {
+            unity: (!ring_only && self.perceptual_gain && self.range.contains(&1.0)).then(|| {
                 center + Vec2::angled(START_ANGLE + ARC_ANGLE * self.normalized(1.0)) * radius
             }),
         };
@@ -563,12 +563,22 @@ impl<'a> Knob<'a> {
             } else {
                 colors.muted
             };
-            let visuals = ui.style().interact(&dial_response);
-            ui.painter()
-                .circle(center, radius * 0.75, visuals.bg_fill, visuals.bg_stroke);
+            if !ring_only {
+                let visuals = ui.style().interact(&dial_response);
+                ui.painter()
+                    .circle(center, radius * 0.75, visuals.bg_fill, visuals.bg_stroke);
+            }
+            let focused_ring = ring_only && ui.is_enabled() && dial_response.has_focus();
             ui.painter().add(egui::Shape::line(
                 samples.iter().map(|unit| center + *unit * radius).collect(),
-                Stroke::new(2.0_f32, colors.line),
+                Stroke::new(
+                    if focused_ring { 3.0_f32 } else { 2.0_f32 },
+                    if focused_ring {
+                        colors.text
+                    } else {
+                        colors.line
+                    },
+                ),
             ));
             let end = (fraction * ARC_STEPS as f32).floor() as usize;
             let mut fill: Vec<Pos2> = samples[..=end]
@@ -584,16 +594,7 @@ impl<'a> Knob<'a> {
                 ui.painter().line_segment(
                     [
                         center + unit * (radius + 3.0),
-                        center
-                            + unit
-                                * (radius
-                                    + if self.compact {
-                                        if major { 5.0 } else { 4.0 }
-                                    } else if major {
-                                        8.0
-                                    } else {
-                                        6.0
-                                    }),
+                        center + unit * (radius + if major { 8.0 } else { 6.0 }),
                     ],
                     Stroke::new(1.0_f32, colors.muted),
                 );
@@ -609,11 +610,13 @@ impl<'a> Knob<'a> {
                     colors.muted,
                 );
             }
-            ui.painter().line_segment(
-                [center + index_direction * radius * 0.18, geometry.index],
-                Stroke::new(2.0_f32, colors.text),
-            );
-            ui.painter().circle_filled(center, 2.0, active);
+            if !ring_only {
+                ui.painter().line_segment(
+                    [center + index_direction * radius * 0.18, geometry.index],
+                    Stroke::new(2.0_f32, colors.text),
+                );
+                ui.painter().circle_filled(center, 2.0, active);
+            }
         }
         if !self.compact
             && self.show_automation_label

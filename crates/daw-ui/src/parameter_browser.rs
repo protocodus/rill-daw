@@ -214,7 +214,7 @@ fn parameter_row(ui: &mut Ui, item: &ParameterItem<'_>, selected: bool) -> Respo
         0.0
     };
     let mut detail = format!("{:.1}%", value * 100.0);
-    if !item.unit.is_empty() {
+    if !item.unit.is_empty() && item.unit.trim() != "%" {
         detail.push_str(" · ");
         detail.push_str(item.unit);
     }

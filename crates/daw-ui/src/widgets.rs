@@ -392,7 +392,7 @@ fn semantic_picker<R>(
         }
         _ => unreachable!("quiet menu roles normalize before styling"),
     }
-    if nested {
+    let nested_open = if nested {
         let next_id = ui.next_auto_id();
         let open = MenuState::from_ui(ui, |state, _| {
             state.open_item == Some(SubMenu::id_from_widget_id(next_id))
@@ -400,7 +400,10 @@ fn semantic_picker<R>(
         if open {
             ui.visuals_mut().widgets.inactive = ui.visuals().widgets.open;
         }
-    }
+        open
+    } else {
+        false
+    };
     // Keep the native frame's padding and hit target. Only its paint is replaced;
     // `frame(false)` would also remove the button's horizontal breathing room.
     let background = ui.painter().add(egui::Shape::Noop);
@@ -414,9 +417,23 @@ fn semantic_picker<R>(
         .corner_radius(tokens::RADIUS)
         .wrap_mode(egui::TextWrapMode::Truncate)
         .atom_ui(ui);
-    let visuals = ui.style().interact(&button.response);
+    // The opener remains visibly engaged while focus moves into its popup.
+    // Native popup memory, rather than pointer/focus state, owns that lifetime.
+    let open = button.response.enabled()
+        && (nested_open
+            || (!nested
+                && egui::Popup::is_id_open(
+                    ui.ctx(),
+                    egui::Popup::default_response_id(&button.response),
+                )));
+    let visuals = if open {
+        &ui.visuals().widgets.open
+    } else {
+        ui.style().interact(&button.response)
+    };
     let color = visuals.text_color();
-    let engaged = button.response.hovered()
+    let engaged = open
+        || button.response.hovered()
         || button.response.is_pointer_button_down_on()
         || button.response.has_focus();
     if has_frame && (!quiet || engaged) {
@@ -430,7 +447,7 @@ fn semantic_picker<R>(
                 visuals.bg_stroke,
                 crate::ComponentMaterial {
                     elevated: false,
-                    active: button.response.enabled() && button.response.has_focus(),
+                    active: button.response.enabled() && (open || button.response.has_focus()),
                 },
             ),
         );
@@ -561,7 +578,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
     };
     let desired = egui::vec2(
         tokens::SWITCH_WIDTH + gap + galley.size().x,
-        tokens::CONTROL_HEIGHT.max(galley.size().y),
+        tokens::CONTROL_HEIGHT.max(galley.size().y + 2.0 * tokens::BUTTON_PADDING_Y),
     );
     let (rect, mut response) = ui.allocate_exact_size(desired, egui::Sense::click());
     if response.clicked() {
@@ -1085,11 +1102,33 @@ pub fn catalog_item(
     detail: &str,
     thumbnail: Option<&egui::TextureHandle>,
 ) -> Response {
-    let height = if detail.is_empty() { 38.0 } else { 58.0 };
-    let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width(), height),
-        egui::Sense::click(),
-    );
+    let width = ui.available_width();
+    let inner_width = (width - 2.0 * tokens::SPACE_MD).max(0.0);
+    let preview_width = (tokens::SPACE_XL + tokens::SPACE_LG)
+        .min((inner_width - tokens::SPACE_MD - tokens::CONTROL_HEIGHT).max(0.0));
+    let preview_gap = if preview_width > 0.0 {
+        tokens::SPACE_MD
+    } else {
+        0.0
+    };
+    let text_width = (inner_width - preview_width - preview_gap).max(0.0);
+    let colors = theme::palette(ui.ctx());
+    let layout = |value: &str, role: crate::text::TextRole, color| {
+        let mut job =
+            egui::text::LayoutJob::simple(value.to_owned(), role.font(), color, text_width);
+        job.wrap.max_rows = 1;
+        job.wrap.break_anywhere = true;
+        ui.painter().layout_job(job)
+    };
+    let title_galley = layout(title, crate::text::TextRole::Label, colors.text);
+    let detail_galley =
+        (!detail.is_empty()).then(|| layout(detail, crate::text::TextRole::Note, colors.muted));
+    let text_height = title_galley.size().y
+        + detail_galley
+            .as_ref()
+            .map_or(0.0, |galley| tokens::SPACE_XS + galley.size().y);
+    let height = text_height.max(tokens::CONTROL_HEIGHT) + 2.0 * tokens::SPACE_MD;
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
@@ -1103,20 +1142,20 @@ pub fn catalog_item(
         rect,
         tokens::RADIUS,
         if selected {
-            theme::palette(ui.ctx()).track_selected
+            colors.track_selected
         } else if response.hovered() {
-            theme::palette(ui.ctx()).raised
+            colors.raised
         } else {
-            theme::palette(ui.ctx()).panel
+            colors.panel
         },
     );
-    let image_x = rect.left() + tokens::SPACE_MD;
-    let image_size = egui::vec2(58.0, height - 8.0);
-    if let Some(texture) = thumbnail {
+    let inner = rect.shrink(tokens::SPACE_MD);
+    let image_size = egui::vec2(preview_width, inner.height());
+    if let Some(texture) = thumbnail.filter(|_| preview_width > 0.0) {
         let original = texture.size_vec2();
         let scale = (image_size.x / original.x).min(image_size.y / original.y);
         let image_rect = egui::Rect::from_center_size(
-            egui::pos2(image_x + image_size.x * 0.5, rect.center().y),
+            egui::pos2(inner.left() + image_size.x * 0.5, rect.center().y),
             original * scale,
         );
         painter.image(
@@ -1126,37 +1165,13 @@ pub fn catalog_item(
             egui::Color32::WHITE,
         );
     }
-    let x = image_x + image_size.x + tokens::SPACE_MD;
-    crate::text::paint_row(
-        &painter,
-        egui::Rect::from_min_max(
-            egui::pos2(x, rect.top() + tokens::SPACE_XS),
-            egui::pos2(
-                rect.right() - tokens::SPACE_MD,
-                rect.top()
-                    + if detail.is_empty() {
-                        height - tokens::SPACE_XS
-                    } else {
-                        30.0
-                    },
-            ),
-        ),
-        crate::text::TextRole::Label,
-        title,
-    );
-    if !detail.is_empty() {
-        crate::text::paint_row(
-            &painter,
-            egui::Rect::from_min_max(
-                egui::pos2(x, rect.top() + 30.0),
-                egui::pos2(
-                    rect.right() - tokens::SPACE_MD,
-                    rect.bottom() - tokens::SPACE_XS,
-                ),
-            ),
-            crate::text::TextRole::Note,
-            detail,
-        );
+    let x = inner.left() + preview_width + preview_gap;
+    let top = rect.center().y - text_height * 0.5;
+    let detail_top = top + title_galley.size().y + tokens::SPACE_XS;
+    let text_painter = painter.with_clip_rect(inner);
+    text_painter.galley(egui::pos2(x, top), title_galley, colors.text);
+    if let Some(detail) = detail_galley {
+        text_painter.galley(egui::pos2(x, detail_top), detail, colors.muted);
     }
     if response.has_focus() {
         painter.rect_stroke(

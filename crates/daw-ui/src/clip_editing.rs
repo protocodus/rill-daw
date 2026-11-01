@@ -215,7 +215,7 @@ pub struct InlineNameResponse {
     pub action: InlineNameAction,
 }
 
-/// Full row width for a name field's requested text width and its three actions.
+/// Full surface width for a name field's requested text width and its three actions.
 /// Native TextEdit adds its margins outside `desired_width`; measure the action
 /// labels and icons before anchoring the row near a viewport edge.
 pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
@@ -244,11 +244,60 @@ pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
         + 2.0 * crate::tokens::BUTTON_PADDING_X
         + actions
         + 3.0 * style.spacing.item_spacing.x
+        + crate::card(ctx).total_margin().sum().x
+}
+
+/// Measured opaque editor bounds, including the optional pointer keyboard.
+/// Anchored hosts reserve this complete surface before placing it at an edge.
+pub fn inline_name_editor_size(ctx: &egui::Context, text_width: f32, keyboard: bool) -> egui::Vec2 {
+    let margin = crate::card(ctx).total_margin().sum();
+    let style = ctx.style();
+    let font = egui::TextStyle::Button.resolve(&style);
+    let row =
+        ctx.fonts_mut(|fonts| fonts.row_height(&font)) + 2.0 * crate::tokens::BUTTON_PADDING_Y;
+    let row = (row.max(crate::tokens::CONTROL_HEIGHT) * ctx.pixels_per_point()).ceil()
+        / ctx.pixels_per_point();
+    egui::vec2(
+        inline_name_editor_width(ctx, text_width).max(if keyboard {
+            crate::name_keyboard_width(ctx) + margin.x
+        } else {
+            0.0
+        }),
+        row + margin.y
+            + if keyboard {
+                crate::name_keyboard_height(ctx)
+            } else {
+                0.0
+            },
+    )
 }
 
 /// Single-line naming in the existing item context. The caller owns its draft,
 /// anchor and transaction; Enter/focus loss commits and Escape discards it.
 pub fn inline_name_editor(
+    ui: &mut Ui,
+    id: Id,
+    value: &mut String,
+    hint: &str,
+    width: f32,
+    initial_focus: bool,
+) -> InlineNameResponse {
+    let size = inline_name_editor_size(ui.ctx(), width, crate::name_keyboard_open(ui.ctx(), id));
+    // Register the complete surface before its children: gaps consume pointer
+    // input without stealing the field, action buttons, or keyboard targets.
+    ui.interact(
+        egui::Rect::from_min_size(ui.next_widget_position(), size),
+        id.with("surface"),
+        egui::Sense::CLICK,
+    );
+    crate::card(ui.ctx())
+        .show(ui, |ui| {
+            inline_name_editor_contents(ui, id, value, hint, width, initial_focus)
+        })
+        .inner
+}
+
+fn inline_name_editor_contents(
     ui: &mut Ui,
     id: Id,
     value: &mut String,

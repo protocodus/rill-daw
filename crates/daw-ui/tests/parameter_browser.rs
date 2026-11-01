@@ -119,7 +119,7 @@ fn focused_search_ranks_tokens_and_keyboard_activates_only_visible_selection() {
     for _ in 0..3 {
         frame(&ctx, &mut state, &items, vec![]);
     }
-    let (_, result) = frame(
+    let (output, result) = frame(
         &ctx,
         &mut state,
         &items,
@@ -131,6 +131,7 @@ fn focused_search_ranks_tokens_and_keyboard_activates_only_visible_selection() {
         Some(10),
         "token search matches names and units"
     );
+    text_rect(&output, "50.0% · Hz");
     let (_, result) = frame(
         &ctx,
         &mut state,
@@ -168,6 +169,19 @@ fn focused_search_ranks_tokens_and_keyboard_activates_only_visible_selection() {
         Some(11),
         "name-prefix matches rank ahead of later substrings"
     );
+    let mut percentage_items = items.clone();
+    for unit in ["%", " % "] {
+        percentage_items[3].unit = unit;
+        state.query = "%".into();
+        let (output, result) = frame(&ctx, &mut state, &percentage_items, vec![]);
+        assert_eq!(result.inner, Some(13), "Unit metadata remains searchable");
+        assert_eq!(percentage_items[3].unit, unit);
+        text_rect(&output, "30.0% · Automated");
+        assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Text(text) if text.galley.text().contains("% · %")
+                || text.galley.text().contains("% ·  %")
+        )));
+    }
 }
 
 #[test]

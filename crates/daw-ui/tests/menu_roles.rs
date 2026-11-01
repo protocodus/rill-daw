@@ -36,6 +36,7 @@ fn pointer(pos: egui::Pos2, pressed: bool) -> Vec<Event> {
 
 #[derive(Clone, Copy)]
 enum SettingsMenu {
+    QuietAction,
     Choice,
     View,
     QuietChoice,
@@ -47,6 +48,7 @@ impl SettingsMenu {
 
     fn label(self) -> &'static str {
         match self {
+            Self::QuietAction => "Notes",
             Self::Choice | Self::QuietChoice => "C · Major",
             Self::View | Self::QuietView => "View 🎹",
         }
@@ -85,6 +87,9 @@ fn menu_frame(
                     accept = Some(response);
                 };
                 let result = match menu {
+                    SettingsMenu::QuietAction => {
+                        controls::quiet_action_menu(ui, menu.label(), contents)
+                    }
                     SettingsMenu::View => controls::view_menu(ui, menu.label(), contents),
                     SettingsMenu::Choice => controls::choice_menu(ui, menu.label(), contents),
                     SettingsMenu::QuietView => {
@@ -342,6 +347,80 @@ fn disabled_settings_menus_ignore_pointer_and_keyboard() {
         initial.opener.request_focus();
         assert!(!menu_frame(&ctx, key(Key::Enter, true), menu, false, &mut value).open);
         assert!(!value);
+    }
+}
+
+#[test]
+fn open_menu_frames_remain_visible_after_focus_and_pointer_move_into_the_popup() {
+    fn open_frame(output: &FullOutput, rect: Rect, colors: theme::Palette) -> bool {
+        fn visit(shape: &Shape, rect: Rect, colors: theme::Palette, found: &mut [bool; 2]) {
+            match shape {
+                Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        visit(shape, rect, colors, found);
+                    }
+                }
+                Shape::Rect(shape) if shape.rect == rect && shape.blur_width == 0.0 => {
+                    found[0] |= shape.fill == colors.track_selected;
+                    found[1] |= !shape.stroke.is_empty() && shape.stroke.color == colors.accent;
+                }
+                _ => {}
+            }
+        }
+        let mut found = [false; 2];
+        for shape in &output.shapes {
+            visit(&shape.shape, rect, colors, &mut found);
+        }
+        found.into_iter().all(|found| found)
+    }
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for scale in [1.0, 1.25, 2.0] {
+            for menu in SettingsMenu::ALL
+                .into_iter()
+                .chain([SettingsMenu::QuietAction])
+            {
+                let ctx = Context::default();
+                theme::apply(&ctx);
+                theme::set_appearance(&ctx, appearance);
+                ctx.set_pixels_per_point(scale);
+                let mut value = false;
+                let idle = menu_frame(&ctx, vec![], menu, true, &mut value);
+                let target = idle.opener.rect.center();
+                menu_frame(&ctx, pointer(target, true), menu, true, &mut value);
+                menu_frame(&ctx, pointer(target, false), menu, true, &mut value);
+                let opened = menu_frame(&ctx, vec![], menu, true, &mut value);
+                assert!(opened.open);
+                opened.setting.unwrap().request_focus();
+                let away = vec![Event::PointerMoved(egui::pos2(600.0, 550.0))];
+                let active = menu_frame(&ctx, away.clone(), menu, true, &mut value);
+                assert!(active.open);
+                assert!(active.setting.unwrap().has_focus());
+                assert!(!active.opener.has_focus() && !active.opener.hovered());
+                assert_eq!(
+                    (active.opener.id, active.opener.rect),
+                    (idle.opener.id, idle.opener.rect)
+                );
+                assert!(open_frame(
+                    &active.output,
+                    active.opener.rect,
+                    theme::palette(&ctx)
+                ));
+                menu_frame(&ctx, key(Key::Escape, true), menu, true, &mut value);
+                menu_frame(&ctx, key(Key::Escape, false), menu, true, &mut value);
+                ctx.memory_mut(|memory| memory.surrender_focus(idle.opener.id));
+                let closed = menu_frame(&ctx, away, menu, true, &mut value);
+                assert!(!closed.open);
+                assert!(!open_frame(
+                    &closed.output,
+                    closed.opener.rect,
+                    theme::palette(&ctx)
+                ));
+                assert!(
+                    !value,
+                    "Opening and inspecting the menu must not change its setting"
+                );
+            }
+        }
     }
 }
 

@@ -266,6 +266,31 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
                 before_view["midi_editor"]["highlight_scale"]
             );
             unchanged(&highlighted, &before_view);
+            app.key("Tab");
+            let open_view = paint(&mut app);
+            let target = &background(&open_view, "View")
+                .expect("An open View menu retains its frame away from the pointer")["rect"];
+            let colors = if dark {
+                daw_ui::theme::DARK
+            } else {
+                daw_ui::theme::LIGHT
+            };
+            let frames: Vec<_> = open_view["painted_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|shape| &shape["rect"] == target)
+                .collect();
+            assert!(
+                frames
+                    .iter()
+                    .any(|shape| shape["fill"] == json!(colors.track_selected.to_array()))
+            );
+            assert!(
+                frames
+                    .iter()
+                    .any(|shape| shape["stroke"] == json!(colors.accent.to_array()))
+            );
             let folded = app.click("Only scale keys");
             assert_eq!(folded["midi_editor"]["only_scale_keys"], true);
             assert_eq!(folded["midi_editor"]["hidden_notes"], 1);

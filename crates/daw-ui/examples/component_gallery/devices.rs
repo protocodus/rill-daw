@@ -3,6 +3,7 @@ use egui::{Id, Ui};
 
 pub struct State {
     selected: usize,
+    catalog_selected: usize,
     browser: ParameterBrowserState,
 }
 
@@ -10,6 +11,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             selected: 0,
+            catalog_selected: 0,
             browser: ParameterBrowserState {
                 selected: Some(11),
                 ..Default::default()
@@ -82,6 +84,25 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 },
             ],
         );
+        left.add_space(daw_ui::tokens::SPACE_LG);
+        daw_ui::text::subtitle(left, "Compact catalog rows");
+        daw_ui::text::note(left, "catalog_item · identity and metadata insets");
+        for (index, (title, detail)) in [
+            ("Expressive grand piano", "Instrument · Piano"),
+            (
+                "Vintage studio dynamics — Collection 2026",
+                "Effect · Compressor",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if daw_ui::catalog_item(left, state.catalog_selected == index, title, detail, None)
+                .clicked()
+            {
+                state.catalog_selected = index;
+            }
+        }
 
         let right = &mut columns[1];
         daw_ui::text::subtitle(right, "Parameter browser");

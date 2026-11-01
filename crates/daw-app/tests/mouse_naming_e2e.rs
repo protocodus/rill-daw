@@ -65,6 +65,113 @@ fn assert_keyboard_fits(state: &Value, width: f64, height: f64) {
     }
 }
 
+fn assert_rename_surface_and_gap_input(app: &mut Harness, dark: bool) {
+    let state = app.command(json!({"command":"inspect", "paint":true}));
+    let bounds = |rect: &Value| {
+        [
+            rect["min"][0].as_f64().unwrap(),
+            rect["min"][1].as_f64().unwrap(),
+            rect["max"][0].as_f64().unwrap(),
+            rect["max"][1].as_f64().unwrap(),
+        ]
+    };
+    let label = |text: &str| {
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == text)
+            .unwrap()
+    };
+    let contains = |outer: [f64; 4], inner: [f64; 4]| {
+        outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3]
+    };
+    let fill = if dark {
+        daw_ui::theme::DARK.raised
+    } else {
+        daw_ui::theme::LIGHT.raised
+    };
+    let surface = state["painted_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|shape| {
+            let rect = bounds(&shape["rect"]);
+            shape["fill"] == json!(fill.to_array())
+                && ["Keyboard", "Apply name", "Cancel", "q", "p", "Clear"]
+                    .iter()
+                    .all(|text| contains(rect, bounds(label(text))))
+        })
+        .expect("The complete rename row and keyboard need one opaque surface");
+    let surface = bounds(&surface["rect"]);
+    assert!(
+        surface[0] >= 0.0 && surface[1] >= 0.0 && surface[2] <= 800.0 && surface[3] <= 600.0,
+        "{surface:?}"
+    );
+    let button = |text: &str| {
+        state["painted_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|shape| bounds(&shape["rect"]))
+            .filter(|rect| {
+                contains(*rect, bounds(label(text)))
+                    && rect[3] - rect[1] >= 33.0
+                    && rect[3] - rect[1] <= 55.0
+            })
+            .min_by(|a, b| {
+                ((a[2] - a[0]) * (a[3] - a[1])).total_cmp(&((b[2] - b[0]) * (b[3] - b[1])))
+            })
+            .unwrap()
+    };
+    let keyboard = button("Keyboard");
+    let apply = button("Apply name");
+    assert!(apply[0] - keyboard[2] >= 5.0);
+    let x = (keyboard[2] + apply[0]) * 0.5;
+    let y = (keyboard[1] + keyboard[3]) * 0.5;
+    app.command(json!({"command":"pointer", "phase":"move", "x":x, "y":y}));
+    let after = app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
+    assert_eq!(after["project"], state["project"]);
+    assert_eq!(after["history"], state["history"]);
+    assert!(has(&after, "Apply name") && has(&after, "Clear"));
+    let foreground_labels = |state: &Value| {
+        state["menu_label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|label| label["text"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        foreground_labels(&after),
+        foreground_labels(&state),
+        "Clicking an editor gap must not introduce a menu from the toolbar underneath"
+    );
+    // Native TextEdit can move its internal text by a pixel when its caret
+    // loses focus. The surrounding editor and keyboard targets must stay fixed.
+    for text in [
+        "Keyboard",
+        "Apply name",
+        "Cancel",
+        "q",
+        "p",
+        "Caps",
+        "Clear",
+    ] {
+        let current = after["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == text)
+            .unwrap();
+        assert_eq!(
+            bounds(current),
+            bounds(label(text)),
+            "Gap click moved {text}"
+        );
+    }
+}
+
 #[test]
 fn long_clip_name_near_the_right_edge_keeps_complete_inline_actions_at_every_density() {
     let mut app = Harness::new();
@@ -113,6 +220,7 @@ fn long_clip_name_near_the_right_edge_keeps_complete_inline_actions_at_every_den
             }
             let keyboard = app.click("Keyboard…");
             assert_keyboard_fits(&keyboard, 800.0, 600.0);
+            assert_rename_surface_and_gap_input(&mut app, dark);
             // The driver reports clipped glyph rectangles. Compare to the full
             // measured label as well as viewport bounds so a sliced Cancel
             // label cannot masquerade as an in-bounds action.

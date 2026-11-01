@@ -70,8 +70,8 @@ pub fn mixer_fader(ui: &mut Ui, gain: &mut f32, height: f32) -> Response {
     )
 }
 
-/// Relative stereo-balance dial with a fixed center tick and an adjacent
-/// current-value caption. The whole row exposes the same context menu;
+/// Text-free relative stereo-balance ring with an adjacent current-value
+/// caption. The whole row exposes the same context menu;
 /// clicking it never jumps the value to an absolute pointer position.
 pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
     let height = crate::Knob::compact_height(48.0).max(crate::tokens::PARAMETER_ROW_HEIGHT);
@@ -87,8 +87,7 @@ pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
                     .compact()
                     .diameter(48.0)
                     .text("Pan")
-                    .clamping(SliderClamping::Edits)
-                    .endpoint_labels("L", "R"),
+                    .clamping(SliderClamping::Edits),
             );
             let caption = format!("Pan {}", crate::channel_pan_label(*pan));
             let label = ui.add(

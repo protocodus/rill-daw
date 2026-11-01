@@ -202,7 +202,7 @@ fn mixer_fader_secondary_middle_and_disabled_input_never_edit_values() {
 }
 
 #[test]
-fn compact_pan_preserves_values_and_paints_its_real_index_in_a_bounded_row() {
+fn compact_pan_preserves_values_and_paints_its_ring_in_a_bounded_row() {
     for dark in [false, true] {
         let ctx = Context::default();
         daw_ui::theme::apply(&ctx);
@@ -232,8 +232,11 @@ fn compact_pan_preserves_values_and_paints_its_real_index_in_a_bounded_row() {
             assert_eq!(geometry.dial.size(), vec2(48.0, 48.0));
             assert!((response.rect.width() - 180.0).abs() < 0.1);
             assert!(
-                (response.rect.height() - daw_ui::Knob::compact_height(48.0)).abs() < 0.1,
-                "compact pan row must include its endpoint caption clearance: {:?}, dial {:?}",
+                (response.rect.height()
+                    - daw_ui::Knob::compact_height(48.0).max(daw_ui::tokens::PARAMETER_ROW_HEIGHT))
+                .abs()
+                    < 0.1,
+                "compact pan ring and adjacent value must share a bounded row: {:?}, dial {:?}",
                 response.rect,
                 geometry.dial
             );
@@ -243,36 +246,18 @@ fn compact_pan_preserves_values_and_paints_its_real_index_in_a_bounded_row() {
                 + egui::Vec2::angled(std::f32::consts::PI * (0.75 + 1.5 * fraction))
                     * geometry.radius;
             assert!(geometry.index.distance(expected) < 0.001);
-            let center_reference = geometry.center - vec2(0.0, geometry.radius);
-            assert!(
-                geometry
-                    .ticks
-                    .iter()
-                    .any(|tick| tick.distance(center_reference) < 0.001)
-            );
-            assert!(
-                output.shapes.iter().any(|shape| matches!(&shape.shape,
-                egui::Shape::LineSegment { points, stroke }
-                    if stroke.width == 2.0 && points[1].distance(geometry.index) < 0.001)),
-                "visible index must end at the actual stored pan"
-            );
-            assert!(
-                output.shapes.iter().any(|shape| matches!(&shape.shape,
-                egui::Shape::LineSegment { points, stroke }
-                    if stroke.width == 1.0
-                        && (points[0].x - geometry.center.x).abs() < 0.001
-                        && (points[1].x - geometry.center.x).abs() < 0.001
-                        && points.iter().all(|point| point.y < center_reference.y))),
-                "fixed center tick stays visible away from center pan"
-            );
+            assert!(geometry.ticks.is_empty());
+            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Path(path) if path.stroke.width == 2.5
+                    && path.points.last().is_some_and(|point| point.distance(geometry.index) < 0.001)
+            )), "The active arc ends at the actual stored pan");
             let labels = text_labels(&output);
-            for caption in [
-                "L".to_owned(),
-                "R".to_owned(),
-                format!("Pan {}", daw_ui::channel_pan_label(original)),
-            ] {
-                assert!(labels.contains(&caption), "missing {caption}: {labels:?}");
-            }
+            let caption = format!("Pan {}", daw_ui::channel_pan_label(original));
+            assert!(labels.contains(&caption), "missing {caption}: {labels:?}");
+            assert!(!labels.iter().any(|label| label == "L" || label == "R"));
+            assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Text(text) if geometry.dial.intersects(text.galley.rect.translate(text.pos.to_vec2()))
+            )), "Compact knob artwork contains no text");
         }
     }
 }
