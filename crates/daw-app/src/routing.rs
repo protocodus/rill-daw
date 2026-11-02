@@ -32,6 +32,7 @@ impl DawApp {
             .id(egui::Id::new("effects"))
             .open(&mut open)
             .default_width(620.0)
+            .default_height(620.0)
             .vscroll(false)
             .show(ctx, |ui| {
                 if self.channel_navigation(ui, ChannelDestination::Effects) {

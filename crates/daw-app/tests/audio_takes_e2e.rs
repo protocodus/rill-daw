@@ -253,14 +253,14 @@ fn comp_time_selection_keeps_outer_audio_and_smooths_both_boundaries() {
 }
 
 #[test]
-fn layer_overdub_creates_independent_colored_channel_with_same_output() {
+fn layer_overdub_creates_independent_neutral_channel_with_same_output() {
     let (mut app, alternate) = fixture(false);
     import(&mut app, &alternate);
     let state = app.click("Layer as overdub");
     let p = project(&state);
     p.validate().unwrap();
     assert_eq!(p.tracks.len(), 2);
-    assert_ne!(p.tracks[0].color, p.tracks[1].color);
+    assert_eq!(p.tracks[1].color, [148, 153, 162]);
     assert_eq!(p.tracks[0].output_bus, p.tracks[1].output_bus);
     assert!(p.tracks[1].clips[0].audio_take.is_none());
     assert!(p.tracks[1].clips[0].link_group.is_none());

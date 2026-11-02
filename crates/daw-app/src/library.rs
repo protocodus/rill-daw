@@ -111,6 +111,7 @@ struct LibraryUi {
     collection: Collection,
     developer: String,
     category: String,
+    category_query: String,
     sort: Sort,
     list: bool,
     selected: Option<String>,
@@ -409,6 +410,7 @@ impl DawApp {
             state.selected = None;
             state.developer.clear();
             state.category.clear();
+            state.category_query.clear();
             state.grid_filter = None;
         }
         // The chooser owns its assignment destination. A native preview or
@@ -485,6 +487,7 @@ impl DawApp {
                         state.selected = None;
                         state.developer.clear();
                         state.category.clear();
+                        state.category_query.clear();
                         self.plugin_filter.clear();
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -537,16 +540,15 @@ impl DawApp {
                                     daw_ui::selectable_value(ui, &mut state.sort, sort, sort.label());
                                 }
                             });
-                        daw_ui::select(
+                        daw_ui::searchable_select(
+                            ui,
                             "library_category",
-                            if state.category.is_empty() { "All categories" } else { &state.category },
-                        )
-                        .show_ui(ui, |ui| {
-                            daw_ui::selectable_value(ui, &mut state.category, String::new(), "All categories");
-                            for category in categories {
-                                daw_ui::selectable_value(ui, &mut state.category, category.clone(), category);
-                            }
-                        });
+                            &mut state.category,
+                            &mut state.category_query,
+                            "All categories",
+                            "Search categories",
+                            categories,
+                        );
                     },
                     |ui| {
                         let search = daw_ui::text_field(
@@ -569,7 +571,7 @@ impl DawApp {
                         if search.changed() {
                             state.selected = None;
                         }
-                        search
+                        search.on_hover_text("Search names, categories and developers")
                     },
                 )
                 .inner
@@ -597,6 +599,7 @@ impl DawApp {
                             state.collection = Collection::All;
                             state.developer.clear();
                             state.category.clear();
+                            state.category_query.clear();
                             self.plugin_filter.clear();
                         }
                     });
@@ -860,6 +863,7 @@ impl DawApp {
                                             state.collection = Collection::All;
                                             state.developer.clear();
                                             state.category.clear();
+                                            state.category_query.clear();
                                             state.selected = None;
                                             state.grid_filter = None;
                                             self.plugin_search_focus = true;

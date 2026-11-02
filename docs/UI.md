@@ -159,7 +159,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities retain crisp, inactive context beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers use the same light scrim so surrounding notes and values remain readable. Explicit modal decisions retain stronger dimming and native-renderer blur. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -179,7 +179,7 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Token family | Values |
 | --- | --- |
 | Spacing | `SPACE_XS` 5, `SPACE_SM` 8, `SPACE_MD` 13, `SPACE_LG` 21, `SPACE_XL` 34 |
-| Controls | `CONTROL_HEIGHT` 34, `COMPACT_HEIGHT` 21, `SELECT_WIDTH` 144; button padding 13 × 8 |
+| Controls | `CONTROL_HEIGHT` 34, `COMPACT_HEIGHT` 21, `SELECT_WIDTH` 144, `SEARCH_CHOICE_WIDTH` 233; button padding 13 × 8 |
 | Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
 | Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
 | Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
@@ -233,6 +233,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | --- | --- |
 | Standard actions | `button`, `primary_button`, `primary_button_widget`, `small_button` |
 | Secondary toolbar actions | `quiet_button`, `quiet_button_widget`, `quiet_toggle`, `quiet_action_menu`, `quiet_view_menu`, `quiet_picker_button` |
+| Searchable choice lists | `searchable_select` (query, mouse selection and empty state) |
 | Presentation commands | `view_button`, `view_button_widget` |
 | Exclusive interaction modes | `tool_value`, `IconButton::tool` |
 | Quiet page navigation | `tab_choice`, `IconButton::tab` |
@@ -481,7 +482,7 @@ must never include it in diagnostic or conversation text.
 
 For a modal opened above a menu or another modal, `ViewBackdrop::capture_dialog_context` also retains foreground content. Call it before drawing the new dialog. It omits existing shared popup and modal scrims so the new modal dims the complete retained caller once; replay still creates no controls or accessibility targets.
 
-Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one light, theme-aware scrim below the active window or native menu/picker, including submenus, without submitting blur. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the stronger palette scrim through its native input-blocking backdrop. Confirmation dialogs retain the previous view. For these explicit modals, the native app's shared `glow-backdrop` renderer uses two low-resolution Gaussian passes to soften the inactive context before dimming. Each of two GPU targets is capped at 512 × 512 pixels (2 MiB combined). There is no CPU pixel readback, animation, extra hit target, or repaint request. Unsupported graphics contexts retain dimming. Call `enable_backdrop_blur` after renderer creation and `destroy_backdrop_blur` while its context is current at shutdown.
+Call `paint_popup_backdrop(ctx, utility_open)` once after drawing the workspace and utilities. It paints one light, theme-aware scrim below the active window or native menu/picker, including submenus, over one bounded background blur. Retained backgrounds exclude this layer so nested navigation cannot compound the dimming. The shared `modal` uses the stronger palette scrim through its native input-blocking backdrop. Confirmation dialogs retain the previous view. The native app's shared `glow-backdrop` renderer uses two low-resolution Gaussian passes to soften the inactive context before dimming. Each of two GPU targets is capped at 512 × 512 pixels (2 MiB combined). There is no CPU pixel readback, animation, extra hit target, or repaint request. Unsupported graphics contexts retain dimming. Call `enable_backdrop_blur` after renderer creation and `destroy_backdrop_blur` while its context is current at shutdown.
 
 `scroll_body` inside a window with `.vscroll(false)` lets short utility content fit naturally while long chains remain bounded and scrollable. Use a stable height for tabbed forms and reserve footer space before sizing inner lists.
 
@@ -1440,3 +1441,9 @@ identifies automation. `ai_button`, `ai_button_widget`, `automation_button` and
 `automation_control_style` reuse shared native controls with those meanings.
 New channels start gray; user colors remain saved and tint their mixer strips
 and arranger clips. Existing project colors are preserved on load and Undo.
+
+Popup windows retain their requested width and height even for short forms.
+Footer scroll bodies budget within the resized window; passive pointer movement
+never resizes it. Native close icons change color and stroke weight on hover.
+The VST category picker supports case-insensitive category search, an empty
+result, and clearing the search without changing the chosen category.

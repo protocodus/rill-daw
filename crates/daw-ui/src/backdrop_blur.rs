@@ -1,5 +1,4 @@
-//! Bounded GPU softening for explicit modal decisions. Routine utilities and
-//! anchored popovers preserve sharp source context. No CPU pixel readback,
+//! Bounded GPU softening behind utilities, menus and modal decisions. No CPU pixel readback,
 //! animation, repaint requests, or changes to interaction are involved.
 use egui::{Context, Id, Painter, Rect};
 #[cfg(feature = "glow-backdrop")]

@@ -309,11 +309,13 @@ pub fn apply(ctx: &egui::Context) {
                 .line
                 .lerp_to_gamma(colors.accent, tokens::GOLDEN_RATIO_INVERSE),
         );
-        style.visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, colors.text);
+        // Native window close controls paint only this stroke, without a fill.
+        // Keep their hover/press feedback visible as well as shared buttons'.
+        style.visuals.widgets.hovered.fg_stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.action);
         style.visuals.widgets.active.bg_fill = colors.track_selected;
         style.visuals.widgets.active.weak_bg_fill = colors.track_selected;
         style.visuals.widgets.active.bg_stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.accent);
-        style.visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, colors.text);
+        style.visuals.widgets.active.fg_stroke = Stroke::new(tokens::FOCUS_WIDTH, colors.action);
         style.visuals.widgets.open.bg_fill = colors.track_selected;
         style.visuals.widgets.open.weak_bg_fill = colors.track_selected;
         style.visuals.widgets.open.bg_stroke = Stroke::new(1.0_f32, colors.accent);

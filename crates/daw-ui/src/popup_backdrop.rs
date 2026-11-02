@@ -10,8 +10,7 @@ pub(crate) fn is_popup_backdrop_layer(layer: LayerId) -> bool {
 }
 
 /// A quiet focus cue for routine menus, parameter editors and utility windows.
-/// Preserve readable source values and musical detail; explicit decision
-/// dialogs use the stronger modal scrim and blur instead.
+/// Explicit decision dialogs use a stronger scrim with the same bounded blur.
 pub fn popup_backdrop_color(ctx: &Context) -> Color32 {
     crate::theme::palette(ctx)
         .popup_scrim
@@ -26,6 +25,10 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
     crate::backdrop_blur::begin_blur_frame(ctx);
     let native_popup = egui::Popup::is_any_open(ctx);
     if !utility_open && !native_popup {
+        return;
+    }
+    // A modal already owns the focus layer. Never blur or dim it a second time.
+    if !crate::backdrop_blur::backdrop_blur_info(ctx).is_empty() {
         return;
     }
     let layer = backdrop_layer(if native_popup {
@@ -49,5 +52,6 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
         }
     }
     let painter = ctx.layer_painter(layer);
+    crate::backdrop_blur::paint_modal_blur(ctx, &painter);
     painter.rect_filled(ctx.content_rect(), 0.0, popup_backdrop_color(ctx));
 }

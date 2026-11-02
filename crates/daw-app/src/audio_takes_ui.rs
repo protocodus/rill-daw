@@ -379,7 +379,6 @@ impl DawApp {
         }
         let mut open = true;
         daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).vscroll(false).show(ctx, |ui| {
-            let body_top = ui.next_widget_position().y;
             ui.horizontal_wrapped(|ui| {
                 daw_ui::view_menu(ui, "View", crate::spectrogram::view_options);
                 if groups.len() > 1 {
@@ -438,8 +437,7 @@ impl DawApp {
             // body. Only commit actions stay pinned, leaving a useful lane
             // viewport even beneath the wrapped transport at 800×600.
             let footer_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG;
-            let header_height = ui.next_widget_position().y - body_top;
-            let list_height = (daw_ui::popup_body_size(ctx).y - header_height - footer_height).max(0.0);
+            let list_height = daw_ui::popup_scroll_height(ui, footer_height);
             egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(list_height).min_scrolled_height(0.0).auto_shrink([false, false]).show(ui, |ui| {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));

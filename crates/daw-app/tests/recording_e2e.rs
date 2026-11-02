@@ -546,7 +546,7 @@ fn overdub_layer_preserves_existing_playback_and_routes_new_audio_independently(
     assert_eq!(p.tracks.len(), 2);
     assert_eq!(p.tracks[0].clips[0].name, "Backing");
     assert_eq!(p.tracks[1].clips.len(), 1);
-    assert_ne!(p.tracks[0].color, p.tracks[1].color);
+    assert_eq!(p.tracks[1].color, [148, 153, 162]);
     assert_eq!(p.tracks[0].output_bus, p.tracks[1].output_bus);
     assert!(p.tracks[1].clips[0].audio_take.is_none());
     assert_eq!(

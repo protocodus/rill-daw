@@ -155,14 +155,23 @@ impl DawApp {
             .and_then(|id| self.project.track(id))
             .is_some_and(|t| t.kind == TrackKind::Automation);
         let editing = existing && !state.creating;
+        let parameter_page = state
+            .source
+            .and_then(|id| self.project.track(id))
+            .is_some_and(|track| state.parameter >= 2 + track.sends.len());
         let mut open = true;
         let mut cancel = false;
         let popup = if editing {
             daw_ui::workspace_popup("Automation", ctx).id(egui::Id::new("automation_editor"))
         } else {
             daw_ui::popup("Add automation", ctx)
-                .id(egui::Id::new("automation_create"))
+                .id(egui::Id::new(if parameter_page {
+                    "automation_create_parameters"
+                } else {
+                    "automation_create"
+                }))
                 .default_width(880.0)
+                .default_height(if parameter_page { 620.0 } else { 0.0 })
                 .vscroll(false)
         };
         popup.open(&mut open).show(ctx, |ui| {

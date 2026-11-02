@@ -47,10 +47,15 @@ fn dim_layers(state: &Value) -> Vec<usize> {
 
 fn assert_backdrop(state: &Value, foreground: &str) {
     assert_focus_layer(state, foreground, false);
-    assert_eq!(
-        state["backdrop_blur"],
-        json!([]),
-        "Routine editing must retain sharp source context"
+    let blur = state["backdrop_blur"].as_array().unwrap();
+    assert_eq!(blur.len(), 1, "{foreground} needs one background blur");
+    assert_eq!(bounds(&blur[0]["rect"]), [0.0, 0.0, WIDTH, HEIGHT]);
+    assert!(
+        blur[0]["target_size"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|side| side.as_u64().unwrap() <= 512)
     );
 }
 

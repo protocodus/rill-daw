@@ -334,7 +334,7 @@ fn routing_gradients_connect_both_directions_and_master_without_gaps() {
 }
 
 #[test]
-fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work() {
+fn routine_context_blurs_and_stays_inert_while_foreground_input_and_escape_work() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let mut project = Project::new();
@@ -356,17 +356,17 @@ fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work(
         assert_eq!(source["backdrop_blur"], json!([]));
         app.click("Window");
         app.click("Effects");
-        let assert_crisp = |state: &Value| {
+        let assert_blurred = |state: &Value| {
             assert_eq!(
-                state["backdrop_blur"],
-                json!([]),
-                "Routine utilities and menus must keep source detail readable"
+                state["backdrop_blur"].as_array().unwrap().len(),
+                1,
+                "Routine utilities and menus need one background blur"
             );
             unchanged(state, &baseline);
         };
         let utility = painted(&mut app);
         assert_eq!(utility["popup_context"]["interactive"], false);
-        assert_crisp(&utility);
+        assert_blurred(&utility);
         let stable = painted(&mut app);
         assert_eq!(stable["backdrop_blur"], utility["backdrop_blur"]);
         // The long fixture exposes part of its visible clip outside the centered
@@ -407,11 +407,11 @@ fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work(
         app.command(json!({"command":"pointer", "phase":"drag_batched",
             "x":start[0], "y":start[1], "to_x":end[0], "to_y":end[1]}));
         let blocked = app.key("Delete");
-        assert_crisp(&blocked);
+        assert_blurred(&blocked);
         assert_eq!(blocked["popups"], utility["popups"]);
         assert_eq!(blocked["selected_clip"], source["selected_clip"]);
         assert_eq!(blocked["selected_clips"], source["selected_clips"]);
-        // A real foreground action still works above the legible, inert caller.
+        // A real foreground action still works above the softened, inert caller.
         app.click("+ Insert");
         let nested = painted(&mut app);
         assert!(
@@ -420,11 +420,11 @@ fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work(
                 .unwrap()
                 .contains(&json!("Device library"))
         );
-        assert_crisp(&nested);
+        assert_blurred(&nested);
         app.key("Escape");
         app.click("File");
         let menu = painted(&mut app);
-        assert_crisp(&menu);
+        assert_blurred(&menu);
         assert!(
             menu["visible_labels"]
                 .as_array()
@@ -432,7 +432,7 @@ fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work(
                 .contains(&json!("New"))
         );
         app.key("Escape");
-        assert_crisp(&painted(&mut app));
+        assert_blurred(&painted(&mut app));
         app.key("Escape");
         let restored = painted(&mut app);
         assert_eq!(restored["backdrop_blur"], json!([]));
@@ -443,7 +443,7 @@ fn routine_context_stays_sharp_and_inert_while_foreground_input_and_escape_work(
 
 #[test]
 #[ignore = "requires a native desktop or xvfb-run with OpenGL"]
-fn native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_themes() {
+fn native_utilities_and_modals_blur_background_in_both_themes() {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
 
@@ -509,8 +509,7 @@ fn native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_them
         assert_eq!(captures[0].dimensions(), captures[1].dimensions());
         assert_eq!(captures[0].dimensions(), captures[2].dimensions());
         let detail = |image: &image::RgbImage, [left, top, right, bottom]: [u32; 4]| {
-            // Normalize by image variance so dimming alone cannot pass either
-            // the sharp-context or the explicit-modal blur assertion.
+            // Normalize by image variance so dimming alone cannot pass blur.
             let mut sum = 0.0;
             let mut squared = 0.0;
             let mut differences = 0.0;
@@ -533,13 +532,13 @@ fn native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_them
             assert!(variance > 1.0, "Inactive caller must remain visible");
             (differences / count / variance).sqrt()
         };
-        // Track names, routing captions and scale marks remain useful source
-        // context outside the routine utility's centered active surface.
+        // Real background text and scale marks lose fine detail outside the
+        // routine utility's active surface, rather than merely getting darker.
         let sharp = detail(&captures[0], [24, 220, 220, 700]);
         let routine = detail(&captures[1], [24, 220, 220, 700]);
         assert!(
-            routine > sharp * 0.9,
-            "{appearance} routine utility must preserve source detail: sharp {sharp:.3}, routine {routine:.3}"
+            routine < sharp * 0.8,
+            "{appearance} routine utility must blur source detail: sharp {sharp:.3}, routine {routine:.3}"
         );
         // The unsaved-changes preview begins before a retained workspace exists.
         // Its menu bar is the same real painted source in both views; use that

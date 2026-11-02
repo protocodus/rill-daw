@@ -132,10 +132,9 @@ impl DawApp {
         daw_ui::popup("Join clips", ctx)
             .open(&mut open)
             .default_width(440.0)
-            .default_height(0.0)
+            .default_height(520.0)
             .vscroll(false)
             .show(ctx, |ui| {
-                let body_top = ui.next_widget_position().y;
                 ui.set_min_width(400.0);
                 let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {
                     daw_ui::text::note(ui, "Select an audio or MIDI track.");
@@ -150,9 +149,7 @@ impl DawApp {
                     + daw_ui::tokens::COMPACT_HEIGHT
                     + ui.spacing().item_spacing.y * 3.0
                     + daw_ui::tokens::SPACE_SM;
-                let header_height = ui.next_widget_position().y - body_top;
-                let list_height = (daw_ui::popup_body_size(ctx).y - header_height - footer_height)
-                    .clamp(0.0, 300.0);
+                let list_height = daw_ui::popup_scroll_height(ui, footer_height).min(300.0);
                 ui.add_enabled_ui(!busy, |ui| {
                     egui::ScrollArea::vertical()
                         .max_height(list_height)

@@ -942,6 +942,70 @@ pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> Combo
         .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
 }
 
+/// A bounded, searchable choice list. Editing its query never accepts a choice;
+/// only clicking a row changes the value and dismisses the popup.
+pub fn searchable_select(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    selected: &mut String,
+    query: &mut String,
+    empty_label: &str,
+    search_hint: &str,
+    choices: impl IntoIterator<Item = impl AsRef<str>>,
+) -> Response {
+    ui.push_id(id_salt, |ui| {
+        let previous = selected.clone();
+        let label = if selected.is_empty() {
+            empty_label
+        } else {
+            selected.as_str()
+        }
+        .to_owned();
+        let (mut response, _) = picker_button(ui, label, |ui| {
+            ui.set_width(tokens::SEARCH_CHOICE_WIDTH);
+            let can_clear = !query.is_empty();
+            let mut clear = false;
+            action_row(
+                ui,
+                |ui| {
+                    clear = ui
+                        .add_enabled(can_clear, view_button_widget("Clear").small())
+                        .clicked();
+                },
+                |ui| {
+                    text_field(ui, query, search_hint, ui.available_width());
+                },
+            );
+            if clear {
+                query.clear();
+            }
+            if selectable_value(ui, selected, String::new(), empty_label).clicked() {
+                ui.close();
+            }
+            let filter = query.trim().to_lowercase();
+            let mut count = 0;
+            for choice in choices {
+                let label = choice.as_ref();
+                if !label.to_lowercase().contains(&filter) {
+                    continue;
+                }
+                count += 1;
+                if selectable_value(ui, selected, label.to_owned(), label).clicked() {
+                    ui.close();
+                }
+            }
+            if count == 0 {
+                crate::text::note(ui, "No matches");
+            }
+        });
+        if *selected != previous {
+            response.mark_changed();
+        }
+        response
+    })
+    .inner
+}
+
 pub fn select_labeled(
     label: impl Into<WidgetText>,
     selected_text: impl Into<WidgetText>,
@@ -1285,7 +1349,9 @@ pub fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
     let margin = tokens::WINDOW_MARGIN.sum();
     let frame = margin + egui::Vec2::splat(2.0 * tokens::WINDOW_BORDER_WIDTH);
     let title = tokens::CONTROL_HEIGHT + margin.y + tokens::WINDOW_BORDER_WIDTH;
-    (popup_bounds(ctx).size() - frame - egui::vec2(0.0, title)).max(egui::vec2(160.0, 120.0))
+    (popup_bounds(ctx).size() - frame - egui::vec2(0.0, title))
+        .max(egui::vec2(160.0, 120.0))
+        .floor()
 }
 
 /// On-demand property/utility window with the same surfaces and spacing as the
@@ -1310,7 +1376,9 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
     let icon_width = style.spacing.icon_width.min(title_height);
     let icon_padding = ((title_height - icon_width) * 0.5).round_ui();
     let controls_width = 2.0 * (icon_padding + icon_width + style.spacing.item_spacing.x);
-    job.wrap = egui::text::TextWrapping::truncate_at_width((body_size.x - controls_width).max(0.0));
+    job.wrap = egui::text::TextWrapping::truncate_at_width(
+        (body_size.x.min(tokens::WINDOW_TITLE_WIDTH) - controls_width).max(0.0),
+    );
     let title = ctx.fonts_mut(|fonts| fonts.layout_job(job));
     egui::Window::new(title)
         .frame(
@@ -1328,6 +1396,18 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .scroll([false, true])
         .collapsible(false)
         .resizable(true)
+        // Window disables Resize's own handles. Following its desired size
+        // keeps short forms resizable instead of collapsing back to content.
+        .resize(|resize| resize.with_stroke(true))
+}
+
+/// Scroll height inside the actual popup body, with subpixel layout clearance.
+pub fn popup_scroll_height(ui: &Ui, footer_height: f32) -> f32 {
+    // Round down with a small clearance: fractional font and scroll geometry
+    // must not feed an extra fraction of a point into Window on every frame.
+    (ui.available_height() - footer_height - tokens::BORDER_WIDTH)
+        .floor()
+        .max(0.0)
 }
 
 /// Scroll a popup's content while keeping the actions below it visible. Use
@@ -1338,17 +1418,14 @@ pub fn popup_scroll_body<R>(
     footer_height: f32,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> R {
-    // An auto-sized window can be shorter than its initial request. Subtracting
-    // the footer from that last frame's height repeatedly collapses the body
-    // when the footer reservation is even slightly larger than its contents.
-    // Use the viewport-derived capacity, retaining the actual header offset.
-    let header_height = (ui.cursor().top() - ui.max_rect().top()).max(0.0);
-    let body_height = (popup_body_size(ui.ctx()).y - header_height - footer_height).max(0.0);
+    // Window retains the user's requested size. Budget within that body rather
+    // than the whole screen, so scrolling cannot force a resized window open.
+    let body_height = popup_scroll_height(ui, footer_height);
     egui::ScrollArea::vertical()
         .id_salt(id)
         .max_height(body_height)
         .min_scrolled_height(body_height.min(tokens::COMPACT_HEIGHT))
-        .auto_shrink([false, true])
+        .auto_shrink([false, false])
         .show(ui, contents)
         .inner
 }

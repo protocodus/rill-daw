@@ -20,6 +20,7 @@ pub const CONTROL_HEIGHT: f32 = 34.0;
 pub const PARAMETER_ROW_HEIGHT: f32 = 55.0;
 pub const COMPACT_HEIGHT: f32 = 21.0;
 pub const SELECT_WIDTH: f32 = 144.0;
+pub const SEARCH_CHOICE_WIDTH: f32 = 233.0;
 pub const RADIUS: u8 = 5;
 pub const SURFACE_RADIUS: u8 = 8;
 pub const BORDER_WIDTH: f32 = 1.0;
@@ -44,6 +45,8 @@ pub const WINDOW_MARGIN: egui::Margin = egui::Margin {
     bottom: SPACE_MD as i8,
 };
 pub const WINDOW_BORDER_WIDTH: f32 = FOCUS_WIDTH;
+/// Long titles must not become a window's minimum viewport-wide body size.
+pub const WINDOW_TITLE_WIDTH: f32 = 377.0;
 /// Two persistent control rows, their panel padding, and a comfortable gap.
 pub const POPUP_TOP: f32 = CONTROL_HEIGHT * 2.0 + SPACE_MD * 2.0 + POPUP_MARGIN;
 pub const FONT_CAPTION: f32 = 13.0;

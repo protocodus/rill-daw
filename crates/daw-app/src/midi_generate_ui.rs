@@ -181,6 +181,7 @@ impl GenerateDialog {
                     - egui::vec2(daw_ui::tokens::POPUP_MARGIN, -daw_ui::tokens::SPACE_MD),
             )
             .default_width(if compact { 620.0 } else { 360.0 })
+            .default_height(680.0)
             .min_width(if compact {
                 620.0_f32.min(daw_ui::popup_body_size(ctx).x)
             } else {
@@ -190,7 +191,6 @@ impl GenerateDialog {
             .movable(true)
             .open(&mut open)
             .show(ctx, |ui| {
-                let body_top = ui.next_widget_position().y;
                 let scope = format!("Clip composition · {clip_name}");
                 if compact {
                     let ai = daw_ui::action_row(
@@ -259,9 +259,7 @@ impl GenerateDialog {
                     + ui.spacing().item_spacing.y * if compact { 3.0 } else { 4.0 }
                     + extra_actions as f32
                         * (daw_ui::tokens::CONTROL_HEIGHT + ui.spacing().item_spacing.y);
-                let header_height = ui.next_widget_position().y - body_top;
-                let form_height =
-                    (daw_ui::popup_body_size(ctx).y - header_height - footer_height).max(0.0);
+                let form_height = daw_ui::popup_scroll_height(ui, footer_height);
                 let form = egui::ScrollArea::vertical()
                     .id_salt("generate_options")
                     .max_height(form_height)

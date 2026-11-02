@@ -25,7 +25,7 @@ fn blur_targets_remain_bounded_at_high_density_and_wide_viewports() {
 }
 
 #[test]
-fn routine_utility_keeps_frozen_workspace_sharp_under_one_light_scrim() {
+fn routine_utility_blurs_frozen_workspace_under_one_light_scrim() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
     let mut backdrop = ViewBackdrop::default();
@@ -51,7 +51,9 @@ fn routine_utility_keeps_frozen_workspace_sharp_under_one_light_scrim() {
             });
             daw_ui::paint_popup_backdrop(ctx, true);
         });
-        assert!(backdrop_blur_info(&ctx).is_empty());
+        let blur = backdrop_blur_info(&ctx);
+        assert_eq!(blur.len(), 1);
+        assert_eq!(blur[0].bounds, ctx.content_rect());
         let scrim = daw_ui::popup_backdrop_color(&ctx);
         assert!(scrim.a() > 0 && scrim.a() < 64);
         assert_eq!(
@@ -70,7 +72,7 @@ fn routine_utility_keeps_frozen_workspace_sharp_under_one_light_scrim() {
             output.shapes.iter().any(|shape| {
                 matches!(&shape.shape, egui::Shape::Mesh(_)) && shape.clip_rect.intersects(bounds)
             }),
-            "The crisp frozen workspace remains painted"
+            "The frozen workspace remains painted beneath the blur"
         );
         if frame > 0 {
             assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.job.text == "Foreground")));

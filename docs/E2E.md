@@ -145,16 +145,16 @@ cargo test --locked -p daw-app --test assistant_guidance_e2e --test assistant_e2
 
 `visual_polish_e2e` selects clips and channels through real mouse actions and
 checks bounded halo meshes, continuous routing attachment, source/destination
-color gradients, and readable, inert context behind routine utilities and menus
+color gradients, and softened, inert context behind routine utilities and menus
 without song edits. It exercises both appearances. The opt-in native pixel test
-`native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_themes`
-measures normalized image detail to distinguish the light routine scrim from
-blur behind an explicit modal decision. Headless paint-order checks alone do
+`native_utilities_and_modals_blur_background_in_both_themes`
+measures normalized image detail to verify GPU blur behind routine utilities
+and explicit modal decisions independently of their dimming. Headless paint-order checks alone do
 not establish the native renderer's visual result.
 
 ```sh
 cargo test --locked -p daw-app --test visual_polish_e2e --test mixer_flow_e2e -- --test-threads=1
-xvfb-run -a -s '-screen 0 1600x1200x24' cargo test --locked -p daw-app --test visual_polish_e2e native_routine_context_retains_detail_while_explicit_modal_blurs_in_both_themes -- --ignored --test-threads=1
+xvfb-run -a -s '-screen 0 1600x1200x24' cargo test --locked -p daw-app --test visual_polish_e2e native_utilities_and_modals_blur_background_in_both_themes -- --ignored --test-threads=1
 ```
 
 `track_reorder_e2e` drives real title/grip drags in Arrangement and Mixer, including
@@ -357,13 +357,13 @@ selection, Undo, stretched ghosts, untouched imported overlaps and saving during
 a held draw. Chords and partial overlaps remain distinct.
 
 `popup_backdrop_e2e` inspects actual paint order to require one light,
-theme-aware scrim behind routine popups, with no blur submission, and a stronger
+theme-aware scrim over one bounded blur behind routine popups, and a stronger
 scrim for the unsaved-project confirmation. It covers utilities, nested
 navigation, menu-bar and context menus, output and color pickers, and combo
 boxes over both workspaces and utilities. Closing or cancelling restores the
 caller and removes the scrim when no popup remains; both appearances are
 exercised. Shared `popup_backdrop` and `backdrop_blur` tests cover layer placement
-and the distinction between routine and explicit-modal rendering.
+and the dimming distinction between routine and explicit-modal rendering.
 
 `parameter_search_e2e` exercises instrument/effect parameter search, keyboard and double-click activation, empty-result safety, automated/last-touched filters, instance-specific initial values, lane reuse, Undo/Redo, and project recall. It compiles a test-only Rust metadata host and points only its child app at that host through `DAW_PLUGIN_HOST`. The app uses its production asynchronous sandbox protocol; the fixture provides metadata and saved values, with no DSP or native editor. It requires no installed plugins, display, or audio device and works in containers. Third-party compatibility and native editor coverage remain in the opt-in installed-plugin tests.
 
@@ -1101,3 +1101,10 @@ they do not simulate UI zoom or temporarily shrink resizable utility windows.
 AI, guide and automation colors in both appearances, retaining user colors in
 saved songs. `mixer_sections_e2e` checks painted processing sections and direct
 mouse editing through their frames.
+
+`popup_interactions_e2e` resizes 11 real utility forms in both directions, sweeps
+mouse hover without allowing geometry changes, checks native close-icon color
+feedback, and closes with the mouse. It runs in both themes and display densities.
+`library_category_search_e2e` types category queries, selects results, clears
+queries, handles empty matches and checks instrument/effect separation without
+creating devices. Both suites run headlessly in containers.

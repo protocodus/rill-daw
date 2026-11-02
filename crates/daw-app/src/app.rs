@@ -2679,6 +2679,7 @@ impl DawApp {
         daw_ui::popup("About RILL", ctx)
             .id(egui::Id::new("about_rill"))
             .default_width(340.0)
+            .default_height(0.0)
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
