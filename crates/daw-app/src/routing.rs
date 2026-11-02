@@ -51,125 +51,120 @@ impl DawApp {
                     inserts.iter().filter(|slot| slot.enabled).count(),
                 );
                 ui.add_space(widgets::tokens::SPACE_SM);
-                widgets::popup_scroll_body(
-                    ui,
-                    "effects_body",
-                    widgets::tokens::CONTROL_HEIGHT + widgets::tokens::SPACE_LG,
-                    |ui| {
-                        let mut remove = None;
-                        let mut move_up = None;
-                        let mut move_down = None;
-                        let mut dragged = None;
-                        let mut changed = false;
-                        let track = self.project.track_mut(track_id).unwrap();
-                        let count = track.inserts.len();
-                        for (index, slot) in track.inserts.iter_mut().enumerate() {
-                            ui.push_id(slot.id, |ui| {
-                                let row = widgets::effect_slot(
-                                    ui,
-                                    (track_id, slot.id),
-                                    index,
-                                    &slot.name,
-                                    &mut slot.enabled,
-                                    |ui| {
-                                        if widgets::small_button(ui, "Open editor")
-                                            .on_hover_text("Open native effect editor")
+                let mut footer = widgets::popup_footer(ui, "effects_actions");
+                let window_ui = ui;
+                let ui = footer.body();
+                widgets::popup_scroll_body(ui, "effects_body", 0.0, |ui| {
+                    let mut remove = None;
+                    let mut move_up = None;
+                    let mut move_down = None;
+                    let mut dragged = None;
+                    let mut changed = false;
+                    let track = self.project.track_mut(track_id).unwrap();
+                    let count = track.inserts.len();
+                    for (index, slot) in track.inserts.iter_mut().enumerate() {
+                        ui.push_id(slot.id, |ui| {
+                            let row = widgets::effect_slot(
+                                ui,
+                                (track_id, slot.id),
+                                index,
+                                &slot.name,
+                                &mut slot.enabled,
+                                |ui| {
+                                    if widgets::small_button(ui, "Open editor")
+                                        .on_hover_text("Open native effect editor")
+                                        .clicked()
+                                    {
+                                        edit_effect = Some(slot.id);
+                                    }
+                                    if widgets::small_button(ui, "Automate…")
+                                        .on_hover_text("Search this effect's automation parameters")
+                                        .clicked()
+                                    {
+                                        automate_effect = Some(slot.id);
+                                    }
+                                    widgets::action_menu(ui, "More", |ui| {
+                                        if ui
+                                            .add_enabled(index > 0, widgets::button_widget("Up"))
                                             .clicked()
                                         {
-                                            edit_effect = Some(slot.id);
+                                            move_up = Some(index);
+                                            ui.close();
                                         }
-                                        if widgets::small_button(ui, "Automate…")
-                                            .on_hover_text(
-                                                "Search this effect's automation parameters",
+                                        if ui
+                                            .add_enabled(
+                                                index + 1 < count,
+                                                widgets::button_widget("Down"),
                                             )
                                             .clicked()
                                         {
-                                            automate_effect = Some(slot.id);
+                                            move_down = Some(index);
+                                            ui.close();
                                         }
-                                        widgets::action_menu(ui, "More", |ui| {
-                                            if ui
-                                                .add_enabled(
-                                                    index > 0,
-                                                    widgets::button_widget("Up"),
-                                                )
-                                                .clicked()
-                                            {
-                                                move_up = Some(index);
-                                                ui.close();
-                                            }
-                                            if ui
-                                                .add_enabled(
-                                                    index + 1 < count,
-                                                    widgets::button_widget("Down"),
-                                                )
-                                                .clicked()
-                                            {
-                                                move_down = Some(index);
-                                                ui.close();
-                                            }
-                                            ui.separator();
-                                            if widgets::button(ui, "Remove insert").clicked() {
-                                                remove = Some(index);
-                                                ui.close();
-                                            }
-                                        })
-                                        .response
-                                        .on_hover_text("Insert actions");
-                                        let Effect::Vst3 { path, class_id } = &slot.effect;
-                                        let model = crate::library::plugin_model(
-                                            &self.vst_catalog,
-                                            path,
-                                            class_id,
-                                        );
-                                        widgets::text::truncated(
-                                            ui,
-                                            widgets::text::TextRole::Note,
-                                            &model,
-                                        )
-                                        .on_hover_text(&model);
-                                    },
-                                );
-                                let Effect::Vst3 { path, .. } = &slot.effect;
-                                changed |= row.inner.0.on_hover_text(path).changed();
-                                if let Some(payload) =
-                                    widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
-                                    && payload.0 == track_id
-                                    && payload.1 != slot.id
-                                {
-                                    dragged = Some((payload.1, index));
-                                }
-                            });
-                        }
-                        if let Some(index) = remove {
-                            track.inserts.remove(index);
-                            changed = true;
-                        } else if let Some(index) = move_up {
-                            track.inserts.swap(index, index - 1);
-                            changed = true;
-                        } else if let Some(index) = move_down {
-                            track.inserts.swap(index, index + 1);
-                            changed = true;
-                        }
-                        if let Some((id, destination)) = dragged
-                            && let Some(source) =
-                                track.inserts.iter().position(|slot| slot.id == id)
-                        {
-                            let slot = track.inserts.remove(source);
-                            track.inserts.insert(destination, slot);
-                            changed = true;
-                        }
-                        if track.inserts.is_empty() {
-                            widgets::empty_effect_chain(ui);
-                        }
-                        if changed {
-                            self.changed();
-                        }
-                    },
-                );
-                ui.add_space(widgets::tokens::SPACE_SM);
-                add_effect = widgets::primary_button(ui, "+ Insert")
-                    .on_hover_text("Add an effect to the end of this chain")
-                    .clicked();
+                                        ui.separator();
+                                        if widgets::button(ui, "Remove insert").clicked() {
+                                            remove = Some(index);
+                                            ui.close();
+                                        }
+                                    })
+                                    .response
+                                    .on_hover_text("Insert actions");
+                                    let Effect::Vst3 { path, class_id } = &slot.effect;
+                                    let model = crate::library::plugin_model(
+                                        &self.vst_catalog,
+                                        path,
+                                        class_id,
+                                    );
+                                    widgets::text::truncated(
+                                        ui,
+                                        widgets::text::TextRole::Note,
+                                        &model,
+                                    )
+                                    .on_hover_text(&model);
+                                },
+                            );
+                            let Effect::Vst3 { path, .. } = &slot.effect;
+                            changed |= row.inner.0.on_hover_text(path).changed();
+                            if let Some(payload) =
+                                widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
+                                && payload.0 == track_id
+                                && payload.1 != slot.id
+                            {
+                                dragged = Some((payload.1, index));
+                            }
+                        });
+                    }
+                    if let Some(index) = remove {
+                        track.inserts.remove(index);
+                        changed = true;
+                    } else if let Some(index) = move_up {
+                        track.inserts.swap(index, index - 1);
+                        changed = true;
+                    } else if let Some(index) = move_down {
+                        track.inserts.swap(index, index + 1);
+                        changed = true;
+                    }
+                    if let Some((id, destination)) = dragged
+                        && let Some(source) = track.inserts.iter().position(|slot| slot.id == id)
+                    {
+                        let slot = track.inserts.remove(source);
+                        track.inserts.insert(destination, slot);
+                        changed = true;
+                    }
+                    if track.inserts.is_empty() {
+                        widgets::empty_effect_chain(ui);
+                    }
+                    if changed {
+                        self.changed();
+                    }
+                });
+                add_effect = footer
+                    .show(window_ui, |ui| {
+                        widgets::primary_button(ui, "+ Insert")
+                            .on_hover_text("Add an effect to the end of this chain")
+                            .clicked()
+                    })
+                    .inner;
             });
         if !open {
             self.effects_open = false;
@@ -243,7 +238,7 @@ impl DawApp {
             // resized by a live display-density change. Shorter viewports can
             // still scroll the sends; the window remains bounded horizontally.
             .min_width(widgets::popup_body_size(ctx).x.min(377.0))
-            .default_height(440.0)
+            .default_height(620.0)
             // Keep a useful send viewport below navigation and contextual AI.
             // Otherwise a remembered compact size can collapse the scrolling
             // body to its heading when the appearance or display scale changes.
@@ -259,6 +254,9 @@ impl DawApp {
                     return;
                 }
                 ui.add_space(widgets::tokens::SPACE_SM);
+                let mut footer = widgets::popup_footer(ui, "routing_actions");
+                let window_ui = ui;
+                let ui = footer.body();
                 widgets::scroll_body(ui, "routing_body", |ui| {
                     label(ui, "SENDS");
                     let mut remove = None;
@@ -479,8 +477,6 @@ impl DawApp {
                         self.message(result, "Send added");
                     }
 
-                    create_send = widgets::button(ui, "Create send track").clicked();
-
                 ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
                     label(ui, "OUTPUT");
                     let current = self.project.track(track_id).unwrap().output_bus;
@@ -510,6 +506,7 @@ impl DawApp {
                         self.message(result, "Output routing updated");
                     }
                 });
+                footer.show(window_ui, |ui| { create_send = widgets::button(ui, "Create send track").clicked(); });
             });
         if !open {
             self.routing_open = false;

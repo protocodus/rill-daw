@@ -260,6 +260,7 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
     menu(&mut app, "Window", "Mixer");
     app.click("Warm piano");
     front(&mut app, "Keyboard…");
+    common::wait_visible(&mut app, "Clear");
     app.click("Clear");
     for letter in ["p", "a", "d"] {
         front(&mut app, letter);

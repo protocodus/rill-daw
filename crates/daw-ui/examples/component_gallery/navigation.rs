@@ -197,6 +197,9 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         .resizable(false)
         .vscroll(false)
         .show(&context, |ui| {
+            let mut footer = controls::popup_footer(ui, "clip_properties_actions");
+            let window_ui = ui;
+            let ui = footer.body();
             controls::form_grid(ui, "clip-properties", |ui| {
                 text::label(ui, "Name");
                 controls::text_field(ui, &mut state.clip, "Clip name", 180.0);
@@ -209,14 +212,15 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 ui.end_row();
                 controls::duration::timing_summary(ui, state.start - 1.0, state.length, 112.0, 4);
             });
-            ui.add_space(controls::tokens::SPACE_MD);
-            controls::action_row(
-                ui,
-                |ui| {
-                    controls::primary_button(ui, "Apply");
-                    controls::button(ui, "Cancel");
-                },
-                |ui| text::note(ui, "One focused utility."),
-            );
+            footer.show(window_ui, |ui| {
+                controls::action_row(
+                    ui,
+                    |ui| {
+                        controls::primary_button(ui, "Apply");
+                        controls::button(ui, "Cancel");
+                    },
+                    |ui| text::note(ui, "One focused utility."),
+                )
+            });
         });
 }

@@ -2679,16 +2679,20 @@ impl DawApp {
         daw_ui::popup("About RILL", ctx)
             .id(egui::Id::new("about_rill"))
             .default_width(340.0)
-            .default_height(0.0)
+            .default_height(320.0)
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
+                let mut footer = daw_ui::popup_footer(ui, "about_actions");
+                let window_ui = ui;
+                let ui = footer.body();
                 daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero);
                 ui.add_space(daw_ui::tokens::SPACE_LG);
                 daw_ui::text::body(ui, "Audio workstation");
                 daw_ui::text::note(ui, format!("Version {}", env!("CARGO_PKG_VERSION")));
-                ui.add_space(daw_ui::tokens::SPACE_LG);
-                close = daw_ui::button(ui, "Close").clicked();
+                close = footer
+                    .show(window_ui, |ui| daw_ui::button(ui, "Close").clicked())
+                    .inner;
             });
         self.about_open = open && !close;
     }
@@ -2900,9 +2904,10 @@ impl DawApp {
                 daw_ui::selectable_value(ui, &mut self.setup_page, SetupPage::Ai, "AI");
             });
             ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
-            let footer_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG
-                + 2.0 * ui.spacing().item_spacing.y;
-            daw_ui::popup_scroll_body(ui, "setup_body", footer_height, |ui| { match self.setup_page {
+            let mut footer = daw_ui::popup_footer(ui, "setup_actions");
+            let window_ui = ui;
+            let ui = footer.body();
+            daw_ui::popup_scroll_body(ui, "setup_body", 0.0, |ui| { match self.setup_page {
                 SetupPage::Ai => self.ai_setup(ui),
                 SetupPage::Appearance => {
                     daw_ui::form_grid(ui, "appearance_settings", |ui| {
@@ -3015,11 +3020,10 @@ impl DawApp {
                 }
             }
             });
-            ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
-            ui.horizontal(|ui| {
+            footer.show(window_ui, |ui| ui.horizontal(|ui| {
                 if daw_ui::primary_button(ui, "Apply").clicked() && self.prepare_ai_settings() {self.request_settings_apply();}
                 if daw_ui::button(ui, "Cancel").clicked() { self.setup_open = false; }
-            });
+            }));
         });
         self.setup_open &= open;
     }

@@ -1447,3 +1447,10 @@ Footer scroll bodies budget within the resized window; passive pointer movement
 never resizes it. Native close icons change color and stroke weight on hover.
 The VST category picker supports case-insensitive category search, an empty
 result, and clearing the search without changing the chosen category.
+
+Dialog action rows use the shared `popup_footer(ui, id)` component. Reserve it
+before laying out content, draw content through `footer.body()`, then call
+`footer.show(window_ui, actions)`. The body scrolls within its own rectangle;
+the footer measures wrapped rows and stays against the dialog's bottom padding.
+Body growth and status changes cannot push actions down or enlarge the window.
+Use `popup_scroll_body` with a zero footer reservation inside this body.

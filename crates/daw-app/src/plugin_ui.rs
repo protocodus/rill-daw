@@ -890,7 +890,7 @@ impl DawApp {
             .id(egui::Id::new(("instrument_editor", parameter_page)))
             .open(&mut open)
             .default_width(if parameter_page { 920.0 } else { 600.0 })
-            .default_height(if parameter_page { 520.0 } else { 0.0 })
+            .default_height(if parameter_page { 520.0 } else { 400.0 })
             .vscroll(false)
             .show(ctx, |ui| {
                 let scope = match target.effect {
@@ -927,14 +927,15 @@ impl DawApp {
                     return;
                 }
                 ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
-                match &instrument {
+                let mut footer =
+                    (!parameter_page).then(|| daw_ui::popup_footer(ui, "device_actions"));
+                let mut body = |ui: &mut egui::Ui| match &instrument {
                     Instrument::None => {
                         daw_ui::text::subtitle(ui, "No instrument assigned");
                         daw_ui::text::note(
                             ui,
                             "This MIDI track is silent until you choose a VST3 instrument.",
                         );
-                        choose = daw_ui::primary_button(ui, "Choose instrument").clicked();
                     }
                     Instrument::Vst3 { path, class_id } => {
                         let name_draft_id =
@@ -997,6 +998,8 @@ impl DawApp {
                                 },
                             )
                             .inner;
+                            let reveal_keyboard =
+                                keyboard && !daw_ui::name_keyboard_open(ui.ctx(), field.id);
                             if keyboard {
                                 daw_ui::set_name_keyboard_open(
                                     ui.ctx(),
@@ -1004,8 +1007,23 @@ impl DawApp {
                                     !daw_ui::name_keyboard_open(ui.ctx(), field.id),
                                 );
                             }
+                            let keyboard_top = ui.next_widget_position();
                             let keyboard_changed =
                                 daw_ui::name_keyboard(ui, field.id, &mut device_name);
+                            if reveal_keyboard {
+                                // Reveal the keyboard inside the scroll body;
+                                // opening it must not resize the dialog or footer.
+                                ui.scroll_to_rect(
+                                    egui::Rect::from_min_size(
+                                        keyboard_top,
+                                        egui::vec2(
+                                            ui.available_width(),
+                                            daw_ui::name_keyboard_height(ui.ctx()),
+                                        ),
+                                    ),
+                                    Some(egui::Align::BOTTOM),
+                                );
+                            }
                             if field.changed() || keyboard_changed {
                                 self.begin_edit();
                                 let track = self.project.track_mut(track_id).unwrap();
@@ -1034,7 +1052,53 @@ impl DawApp {
                                 ui,
                                 crate::library::plugin_model(&self.vst_catalog, path, class_id),
                             );
-                            daw_ui::toolbar(ui, |ui| {
+                        } else {
+                            let actions = self.plugin_parameter_browser(ui, target, &device_name);
+                            fetch |= actions.refresh;
+                            update = actions.update;
+                            automate = actions.automate;
+                            resume = actions.resume;
+                        }
+                        if !self.instrument_ui.parameters_open
+                            && let Some(error) = &self.instrument_ui.error
+                        {
+                            daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 2)
+                                .on_hover_text(error);
+                        }
+                    }
+                };
+                if let Some(footer) = &mut footer {
+                    daw_ui::scroll_body(footer.body(), "device_overview", body);
+                } else {
+                    body(ui);
+                }
+                if let Some(footer) = footer {
+                    footer.show(ui, |ui| match &instrument {
+                        Instrument::None => {
+                            choose = daw_ui::primary_button(ui, "Choose instrument").clicked();
+                        }
+                        Instrument::Vst3 { .. } => {
+                            let device_name = title.clone();
+                            if let Some(parameter) =
+                                self.instrument_ui.last_touched.and_then(|id| {
+                                    self.instrument_ui
+                                        .parameters
+                                        .iter()
+                                        .find(|p| p.id == id && !p.read_only)
+                                })
+                                && daw_ui::button(
+                                    ui,
+                                    format!("Automate last touched · {}", parameter.name),
+                                )
+                                .clicked()
+                            {
+                                automate = Some((parameter.id, parameter.value));
+                            }
+
+                            if self.instrument_ui.error.is_some() {
+                                self.plugin_error_details_button(ui, target, &device_name);
+                            }
+                            ui.horizontal_wrapped(|ui| {
                                 launch = ui
                                     .add_enabled_ui(
                                         self.instrument_ui.session.is_none()
@@ -1070,41 +1134,8 @@ impl DawApp {
                                     choose = daw_ui::button(ui, "Change instrument").clicked();
                                 }
                             });
-                        } else {
-                            let actions = self.plugin_parameter_browser(ui, target, &device_name);
-                            fetch |= actions.refresh;
-                            update = actions.update;
-                            automate = actions.automate;
-                            resume = actions.resume;
                         }
-                        if !self.instrument_ui.parameters_open {
-                            if let Some(parameter) =
-                                self.instrument_ui.last_touched.and_then(|id| {
-                                    self.instrument_ui
-                                        .parameters
-                                        .iter()
-                                        .find(|p| p.id == id && !p.read_only)
-                                })
-                                && daw_ui::button(
-                                    ui,
-                                    format!("Automate last touched · {}", parameter.name),
-                                )
-                                .clicked()
-                            {
-                                automate = Some((parameter.id, parameter.value));
-                            }
-                            if let Some(error) = &self.instrument_ui.error {
-                                daw_ui::text::bounded_block(
-                                    ui,
-                                    daw_ui::text::TextRole::Note,
-                                    error,
-                                    2,
-                                )
-                                .on_hover_text(error);
-                                self.plugin_error_details_button(ui, target, &device_name);
-                            }
-                        }
-                    }
+                    });
                 }
             });
         self.instrument_open &= open;

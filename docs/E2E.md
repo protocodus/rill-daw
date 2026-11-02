@@ -1108,3 +1108,10 @@ feedback, and closes with the mouse. It runs in both themes and display densitie
 `library_category_search_e2e` types category queries, selects results, clears
 queries, handles empty matches and checks instrument/effect separation without
 creating devices. Both suites run headlessly in containers.
+
+`popup_footer_e2e` checks Join, Generate and Audio takes action rows against the
+real dialog bottom in large and compact viewports, including generator mode
+changes. `popup_interactions_e2e` also checks each utility's actions, including the
+Assistant, before and after mouse resizing. The shared `popup_footer` test checks
+scrolling body growth, wrapped actions, resizing and real clicks without moving
+footer targets.

@@ -712,22 +712,11 @@ impl DawApp {
                     action = Some((item.entry.plugin.clone(), primary));
                 }
                 let icon = if state.kind == DeviceKind::Instrument { daw_ui::Icon::Instrument } else { daw_ui::Icon::Effect };
-                // A fixed footer keeps the insertion target stable as previews
-                // arrive, filters change, and long device names wrap on cards.
-                // Includes separator spacing, the selected name and action row.
-                // A reserve smaller than their total feeds window growth back
-                // into this available-height calculation on every frame.
                 let label_height = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::text::TextRole::Label.font()));
-                let footer_separator = if compact_footer { SPACE_MD } else { daw_ui::tokens::SPACE_LG };
-                let footer_height = footer_separator
-                    + daw_ui::tokens::CONTROL_HEIGHT
-                    + ui.spacing().item_spacing.y * 2.0
-                    + if compact_footer { 0.0 } else { label_height + ui.spacing().item_spacing.y };
-                // Respect the resized inner bounds. Round down to avoid fractional
-                // content growth feeding back into the next window size.
-                let header_height = (ui.cursor().top() - ui.max_rect().top()).max(0.0);
-                let body_height = (ui.max_rect().height().floor().min(daw_ui::popup_body_size(ctx).y).min(760.0)
-                    - header_height - footer_height).max(0.0);
+                let mut footer_slot = daw_ui::popup_footer(ui, "library_actions");
+                let window_ui = ui;
+                let ui = footer_slot.body();
+                let body_height = daw_ui::popup_scroll_height(ui, 0.0).min(760.0);
                 let mut grid = None;
                 let mut sidebar_rect = None;
                 let mut details_rect = None;
@@ -979,8 +968,7 @@ impl DawApp {
                 for card in &mut cards {
                     card["selected"] = serde_json::json!(card["fingerprint"].as_str() == state.selected.as_deref());
                 }
-                ui.add(egui::Separator::default().spacing(footer_separator));
-                let footer_start = ui.cursor().min;
+                let footer = footer_slot.show(window_ui, |ui| {
                 let selected = state.selected.as_ref().and_then(|selected| matches.iter().find(|item| &item.entry.fingerprint == selected)).copied();
                 if !compact_footer {
                     if let Some(item) = selected {
@@ -1073,7 +1061,7 @@ impl DawApp {
                         daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, context);
                     }
                 });
-                let footer = egui::Rect::from_min_max(footer_start, ui.min_rect().max);
+                }).response.rect;
                 let rect = |rect: egui::Rect| serde_json::json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]});
                 ctx.data_mut(|data| data.insert_temp(egui::Id::new("library_diagnostics"), serde_json::json!({
                     "catalog": rect(grid.rect), "footer": rect(footer),

@@ -436,8 +436,10 @@ impl DawApp {
             // Take lanes and their range/crossfade settings share the scroll
             // body. Only commit actions stay pinned, leaving a useful lane
             // viewport even beneath the wrapped transport at 800×600.
-            let footer_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG;
-            let list_height = daw_ui::popup_scroll_height(ui, footer_height);
+            let mut footer = daw_ui::popup_footer(ui, "take_actions");
+            let window_ui = ui;
+            let ui = footer.body();
+            let list_height = daw_ui::popup_scroll_height(ui, 0.0);
             egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(list_height).min_scrolled_height(0.0).auto_shrink([false, false]).show(ui, |ui| {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));
@@ -506,9 +508,8 @@ impl DawApp {
                     }
             });
             });
-            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
             let selection_valid = selected.as_ref().is_some_and(|take| self.audio_takes_ui.range.is_none_or(|(start, end)| start >= take.start && end <= take.end() && end > start));
-            ui.horizontal_wrapped(|ui| {
+            footer.show(window_ui, |ui| ui.horizontal_wrapped(|ui| {
                 ui.add_enabled_ui(!busy && group.is_some() && selection_valid, |ui| {
                     if daw_ui::primary_button(ui, if self.audio_takes_ui.range.is_some() { "Use selection" } else { "Use whole take" }).clicked() {
                         self.use_audio_take(track_id, group.unwrap(), selected.as_ref().unwrap().id, self.audio_takes_ui.range);
@@ -526,7 +527,7 @@ impl DawApp {
                         self.view = WorkspaceView::Clip;
                     }
                 }
-            });
+            }));
         });
         self.audio_takes_open &= open;
     }

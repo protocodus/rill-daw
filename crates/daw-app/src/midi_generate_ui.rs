@@ -235,31 +235,10 @@ impl GenerateDialog {
                 if !compact {
                     ui.separator();
                 }
-                // On short displays preview shares the status row, while
-                // variation settings join the parameters in the scroll body.
-                // Range and commit actions stay pinned.
-                let extra_actions = if compact {
-                    0
-                } else {
-                    usize::from(
-                        self.settings.kind == GenerateKind::Melody
-                            || self.settings.kind == GenerateKind::Arpeggio
-                                && self.settings.arp == ArpeggioPattern::Random,
-                    ) + usize::from(matches!(self.settings.harmony, GenerateHarmony::Scale(_)))
-                };
-                // Budget from the viewport-derived maximum, not this auto-sized
-                // window's current available height: subtracting the footer
-                // from the latter repeatedly shrinks the options each frame.
-                // The measured header accounts for wrapped transport without
-                // forcing a 100-point scroll minimum. Native row spacing keeps
-                // the three pinned rows apart without doubled gaps.
-                let footer_height = daw_ui::tokens::CONTROL_HEIGHT
-                    * if compact { 2.0 } else { 3.0 }
-                    + daw_ui::tokens::SPACE_LG
-                    + ui.spacing().item_spacing.y * if compact { 3.0 } else { 4.0 }
-                    + extra_actions as f32
-                        * (daw_ui::tokens::CONTROL_HEIGHT + ui.spacing().item_spacing.y);
-                let form_height = daw_ui::popup_scroll_height(ui, footer_height);
+                let mut footer_slot = daw_ui::popup_footer(ui, "generation_actions");
+                let window_ui = ui;
+                let ui = footer_slot.body();
+                let form_height = daw_ui::popup_scroll_height(ui, 0.0);
                 let form = egui::ScrollArea::vertical()
                     .id_salt("generate_options")
                     .max_height(form_height)
@@ -504,76 +483,77 @@ impl GenerateDialog {
                         }
                     });
                 self.controls["options"] = rect_json(form.inner_rect);
-                if !compact
-                    && (self.settings.kind == GenerateKind::Melody
-                        || self.settings.kind == GenerateKind::Arpeggio
-                            && self.settings.arp == ArpeggioPattern::Random)
-                    && daw_ui::button(ui, "New variation").clicked()
-                {
-                    self.settings.seed = self.settings.seed.wrapping_add(1);
-                }
-                if !compact && matches!(self.settings.harmony, GenerateHarmony::Scale(_)) {
-                    let response = daw_ui::button(ui, "Use scale for grid")
-                        .on_hover_text("Use this root and scale for the editor's visual guide");
-                    self.controls["use_grid_scale"] = rect_json(response.rect);
-                    action.grid_scale = response.clicked();
-                }
-                self.refresh(meter);
-                ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
-                // View-only controls are grouped apart from generation actions.
-                if !compact {
-                    ui.horizontal(|ui| {
-                        daw_ui::checkbox(ui, &mut self.preview, "Preview");
-                        action.fit = daw_ui::view_button(ui, "Fit preview").clicked();
-                        daw_ui::text::note(ui, format!("{} notes", self.notes.len()));
-                    });
-                }
-                let status = self.error.clone().unwrap_or_else(|| {
-                    if self.added_notes == 0 {
-                        if compact {
-                            format!("Preview only · {} notes", self.notes.len())
-                        } else {
-                            "Preview only".into()
-                        }
-                    } else if self.already_added() {
-                        format!("Added {} notes · Next range to continue", self.added_notes)
-                    } else {
-                        format!("Added {} notes · preview ready", self.added_notes)
+                footer_slot.show(window_ui, |ui| {
+                    if !compact
+                        && (self.settings.kind == GenerateKind::Melody
+                            || self.settings.kind == GenerateKind::Arpeggio
+                                && self.settings.arp == ArpeggioPattern::Random)
+                        && daw_ui::button(ui, "New variation").clicked()
+                    {
+                        self.settings.seed = self.settings.seed.wrapping_add(1);
                     }
-                });
-                let next_start = self.next_start_bar(meter);
-                let can_add =
-                    self.error.is_none() && !self.notes.is_empty() && !self.already_added();
-                let footer = if compact {
-                    let (footer, fit) = daw_ui::generation_footer_with_preview(
-                        ui,
-                        &status,
-                        can_add,
-                        next_start.is_some(),
-                        self.added_notes > 0,
-                        &mut self.preview,
-                    );
-                    action.fit = fit;
-                    footer
-                } else {
-                    daw_ui::generation_footer(
-                        ui,
-                        &status,
-                        can_add,
-                        next_start.is_some(),
-                        self.added_notes > 0,
-                    )
-                };
-                self.controls["status"] = rect_json(footer.status);
-                self.controls["add_notes"] = rect_json(footer.add.rect);
-                self.controls["next_range"] = rect_json(footer.next.rect);
-                self.controls["close"] = rect_json(footer.close.rect);
-                action.apply = footer.add.clicked();
-                if footer.next.clicked() {
-                    self.start_bar = next_start.unwrap();
+                    if !compact && matches!(self.settings.harmony, GenerateHarmony::Scale(_)) {
+                        let response = daw_ui::button(ui, "Use scale for grid")
+                            .on_hover_text("Use this root and scale for the editor's visual guide");
+                        self.controls["use_grid_scale"] = rect_json(response.rect);
+                        action.grid_scale = response.clicked();
+                    }
                     self.refresh(meter);
-                }
-                action.cancel = footer.close.clicked();
+                    // View-only controls are grouped apart from generation actions.
+                    if !compact {
+                        ui.horizontal(|ui| {
+                            daw_ui::checkbox(ui, &mut self.preview, "Preview");
+                            action.fit = daw_ui::view_button(ui, "Fit preview").clicked();
+                            daw_ui::text::note(ui, format!("{} notes", self.notes.len()));
+                        });
+                    }
+                    let status = self.error.clone().unwrap_or_else(|| {
+                        if self.added_notes == 0 {
+                            if compact {
+                                format!("Preview only · {} notes", self.notes.len())
+                            } else {
+                                "Preview only".into()
+                            }
+                        } else if self.already_added() {
+                            format!("Added {} notes · Next range to continue", self.added_notes)
+                        } else {
+                            format!("Added {} notes · preview ready", self.added_notes)
+                        }
+                    });
+                    let next_start = self.next_start_bar(meter);
+                    let can_add =
+                        self.error.is_none() && !self.notes.is_empty() && !self.already_added();
+                    let footer = if compact {
+                        let (footer, fit) = daw_ui::generation_footer_with_preview(
+                            ui,
+                            &status,
+                            can_add,
+                            next_start.is_some(),
+                            self.added_notes > 0,
+                            &mut self.preview,
+                        );
+                        action.fit = fit;
+                        footer
+                    } else {
+                        daw_ui::generation_footer(
+                            ui,
+                            &status,
+                            can_add,
+                            next_start.is_some(),
+                            self.added_notes > 0,
+                        )
+                    };
+                    self.controls["status"] = rect_json(footer.status);
+                    self.controls["add_notes"] = rect_json(footer.add.rect);
+                    self.controls["next_range"] = rect_json(footer.next.rect);
+                    self.controls["close"] = rect_json(footer.close.rect);
+                    action.apply = footer.add.clicked();
+                    if footer.next.clicked() {
+                        self.start_bar = next_start.unwrap();
+                        self.refresh(meter);
+                    }
+                    action.cancel = footer.close.clicked();
+                });
             });
         action.cancel |= !open;
         action

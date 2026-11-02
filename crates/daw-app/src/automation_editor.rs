@@ -171,7 +171,7 @@ impl DawApp {
                     "automation_create"
                 }))
                 .default_width(880.0)
-                .default_height(if parameter_page { 620.0 } else { 0.0 })
+                .default_height(if parameter_page { 620.0 } else { 180.0 })
                 .vscroll(false)
         };
         popup.open(&mut open).show(ctx, |ui| {
@@ -201,6 +201,9 @@ impl DawApp {
 
     fn create_automation_lane(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> bool {
         let back = if state.creating { "Back" } else { "Cancel" };
+        let mut footer = daw_ui::popup_footer(ui, "automation_create_actions");
+        let window_ui = ui;
+        let ui = footer.body();
         let tracks: Vec<_> = self
             .project
             .tracks
@@ -213,8 +216,9 @@ impl DawApp {
         }
         let Some(source) = state.source else {
             ui.label("Add an audio, instrument, or bus track first.");
-            ui.add_space(daw_ui::tokens::SPACE_LG);
-            return daw_ui::button(ui, back).clicked();
+            return footer
+                .show(window_ui, |ui| daw_ui::button(ui, back).clicked())
+                .inner;
         };
         let mut selected_source = Some(source);
         let control_width =
@@ -375,7 +379,6 @@ impl DawApp {
                 format!("{label} · ID {}", state.vst_id)
             };
         }
-        ui.add_space(daw_ui::tokens::SPACE_LG);
         let vst_parameter = matches!(parameter, AutomationParameter::VstParameter { .. });
         let ready = !vst_parameter
             || state.manual_id
@@ -399,16 +402,33 @@ impl DawApp {
         } else {
             "Add automation track"
         };
-        let (activate, cancel) = daw_ui::action_row(
-            ui,
-            |ui| {
-                ui.add_enabled_ui(ready, |ui| daw_ui::primary_button(ui, action))
-                    .inner
-                    .clicked()
-            },
-            |ui| daw_ui::button(ui, back).clicked(),
-        )
-        .inner;
+        if vst_parameter && state.manual_id {
+            // Diagnostics stay in the body; the separate footer keeps action
+            // targets fixed when asynchronous metadata finishes.
+            ui.allocate_ui(
+                egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT),
+                |ui| {
+                    if let Some(error) = &state.load_error {
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
+                            .on_hover_text(error);
+                    }
+                },
+            );
+        }
+        let (activate, cancel) = footer
+            .show(window_ui, |ui| {
+                daw_ui::action_row(
+                    ui,
+                    |ui| {
+                        ui.add_enabled_ui(ready, |ui| daw_ui::primary_button(ui, action))
+                            .inner
+                            .clicked()
+                    },
+                    |ui| daw_ui::button(ui, back).clicked(),
+                )
+                .inner
+            })
+            .inner;
         if ready && (activate || browser_activate) {
             if let Some(id) = existing {
                 self.selected_track = Some(id);
@@ -433,19 +453,6 @@ impl DawApp {
                 }
                 Err(error) => self.message(Err(error), ""),
             }
-        }
-        if vst_parameter && state.manual_id {
-            // Diagnostics arrive asynchronously; keep them after the action so
-            // a pending pointer press cannot lose its target when loading ends.
-            ui.allocate_ui(
-                egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT),
-                |ui| {
-                    if let Some(error) = &state.load_error {
-                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
-                            .on_hover_text(error);
-                    }
-                },
-            );
         }
         cancel
     }
@@ -926,9 +933,7 @@ fn plugin_parameters(
             last_touched: last_touched == Some(parameter.id),
         })
         .collect::<Vec<_>>();
-    let footer =
-        daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_LG + 2.0 * daw_ui::tokens::SPACE_SM;
-    let height = (ui.available_height() - footer).clamp(0.0, 400.0);
+    let height = ui.available_height().clamp(0.0, 400.0);
     let mut selected_id = state.vst_id;
     let previous_selected = state.browser.selected;
     let mut initial = state.initial;

@@ -226,9 +226,10 @@ impl DawApp {
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                let footer_height = 2.0 * daw_ui::tokens::CONTROL_HEIGHT
-                    + daw_ui::tokens::SPACE_LG + 3.0 * ui.spacing().item_spacing.y;
-                daw_ui::popup_scroll_body(ui, "export_summary", footer_height, |ui| {
+                let mut footer = daw_ui::popup_footer(ui, "export_actions");
+                let window_ui = ui;
+                let ui = footer.body();
+                daw_ui::popup_scroll_body(ui, "export_summary", 0.0, |ui| {
                 daw_ui::text::body(ui, duration).on_hover_text(
                     if self.export_include_effect_tails {
                         "The file includes releases and effect tails beyond this arrangement duration."
@@ -248,12 +249,13 @@ impl DawApp {
                     daw_ui::text::body(ui, "These notes will be silent in the WAV. Choose instruments on their tracks, or continue without them.");
                 }
                 });
+                footer.show(window_ui, |ui| {
                 daw_ui::checkbox(ui, &mut self.export_include_effect_tails, "Include effect tails")
                     .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary.");
-                ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
                 ui.horizontal(|ui| {
                     export = daw_ui::primary_button(ui, "Export…").clicked();
                     cancel = daw_ui::button(ui, "Cancel").clicked();
+                });
                 });
             });
         self.export_open = open && !cancel;

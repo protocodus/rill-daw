@@ -251,9 +251,6 @@ pub fn assistant(
     }
     ui.add_space(tokens::SPACE_SM);
 
-    // Reserve every fixed control after measuring the actual header rows. All
-    // pages share this bounded viewport, so long tips, tools and examples cannot
-    // push the composer or transport actions below the window.
     // Browsing needs room for choices, while the conversation benefits from a
     // taller composer. A short popup keeps one editable line and scrolls the
     // complete draft without displacing the scope or fixed actions.
@@ -261,18 +258,11 @@ pub fn assistant(
         || state.page != AssistantPage::Conversation
         || ui.available_height() < tokens::CONTROL_HEIGHT * 9.0;
     let composer_height = tokens::CONTROL_HEIGHT * if compact_composer { 1.0 } else { 2.0 };
-    let label_height = if compact_layout {
-        0.0
-    } else {
-        ui.fonts_mut(|fonts| fonts.row_height(&text::TextRole::Label.font()))
-    };
-    let body_height = (ui.available_height()
-        - composer_height
-        - tokens::CONTROL_HEIGHT
-        - label_height
-        - ui.spacing().item_spacing.y * if compact_layout { 2.0 } else { 3.0 }
-        - tokens::SPACE_SM * 2.0)
-        .clamp(0.0, 460.0);
+    let prompt_id = ui.make_persistent_id("assistant_prompt");
+    let mut footer = crate::popup_footer(ui, "assistant_composer");
+    let window_ui = ui;
+    let ui = footer.body();
+    let body_height = ui.available_height().max(0.0);
     if body_height > 0.0 {
         let page = state.page;
         egui::ScrollArea::vertical()
@@ -316,140 +306,142 @@ pub fn assistant(
                     }
                 }
             });
-        ui.add_space(tokens::SPACE_SM);
     }
-    let prompt_id = ui.make_persistent_id("assistant_prompt");
-    let can_send = options.submit_state == AssistantSubmitState::Ready
-        && !options.busy
-        && !prompt.trim().is_empty();
-    let shortcut = can_send
-        && ui.is_enabled()
-        && ui.memory(|memory| memory.has_focus(prompt_id))
-        && ui.input_mut(|input| {
-            input.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)
-                || input.consume_key(egui::Modifiers::CTRL, egui::Key::Enter)
-        });
-    let mut composer = |ui: &mut Ui, label_id| {
-        egui::ScrollArea::vertical()
-            .id_salt("assistant_composer_scroll")
-            .max_height(composer_height)
-            .min_scrolled_height(composer_height)
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(prompt)
-                        .id(prompt_id)
-                        .hint_text("Describe the music or edit…")
-                        .desired_width(ui.available_width())
-                        .desired_rows(if compact_composer { 1 } else { 3 })
-                        .char_limit(ASSISTANT_PROMPT_LIMIT)
-                        .font(text::TextRole::Body.font())
-                        .margin(egui::vec2(
-                            tokens::BUTTON_PADDING_X,
-                            tokens::BUTTON_PADDING_Y,
-                        )),
-                )
-                .labelled_by(label_id)
-            })
-            .inner
-    };
-    let prompt_response = if compact_layout {
-        ui.horizontal(|ui| {
-            let label = text::label(ui, "AI prompt");
-            composer(ui, label.id)
-        })
-        .inner
-    } else {
-        let label = text::label(ui, "AI prompt");
-        composer(ui, label.id)
-    };
-    if inserted_example.is_some() || inserted_tool.is_some() || reuse_last {
-        prompt_response.request_focus();
-        if let Some(mut edit_state) = egui::TextEdit::load_state(ui.ctx(), prompt_id) {
-            edit_state
-                .cursor
-                .set_char_range(Some(egui::text::CCursorRange::one(
-                    egui::text::CCursor::new(prompt.chars().count()),
-                )));
-            edit_state.store(ui.ctx(), prompt_id);
-        }
-    }
-    ui.add_space(tokens::SPACE_SM);
-    let setup_required =
-        options.submit_state == AssistantSubmitState::SetupRequired && !options.busy;
-    let recover_prompt =
-        options.recover_prompt && options.can_reuse && prompt.is_empty() && !options.busy;
-    let (send_button, (stop_button, undo_button)) = crate::action_row(
-        ui,
-        |ui| {
+    footer
+        .show(window_ui, |ui| {
             let can_send = options.submit_state == AssistantSubmitState::Ready
                 && !options.busy
                 && !prompt.trim().is_empty();
-            let send = ui
-                .add_enabled_ui(can_send || setup_required, |ui| {
-                    crate::ai_button(ui, if setup_required { "Connect AI" } else { "Send" })
+            let shortcut = can_send
+                && ui.is_enabled()
+                && ui.memory(|memory| memory.has_focus(prompt_id))
+                && ui.input_mut(|input| {
+                    input.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)
+                        || input.consume_key(egui::Modifiers::CTRL, egui::Key::Enter)
+                });
+            let mut composer = |ui: &mut Ui, label_id| {
+                egui::ScrollArea::vertical()
+                    .id_salt("assistant_composer_scroll")
+                    .max_height(composer_height)
+                    .min_scrolled_height(composer_height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(prompt)
+                                .id(prompt_id)
+                                .hint_text("Describe the music or edit…")
+                                .desired_width(ui.available_width())
+                                .desired_rows(if compact_composer { 1 } else { 3 })
+                                .char_limit(ASSISTANT_PROMPT_LIMIT)
+                                .font(text::TextRole::Body.font())
+                                .margin(egui::vec2(
+                                    tokens::BUTTON_PADDING_X,
+                                    tokens::BUTTON_PADDING_Y,
+                                )),
+                        )
+                        .labelled_by(label_id)
+                    })
+                    .inner
+            };
+            let prompt_response = if compact_layout {
+                ui.horizontal(|ui| {
+                    let label = text::label(ui, "AI prompt");
+                    composer(ui, label.id)
                 })
-                .inner;
-            crate::hover_text(
-                send,
-                if setup_required {
-                    "Choose a provider in AI settings. Your draft stays here."
-                } else {
-                    "Send prompt · Ctrl/Cmd+Enter"
+                .inner
+            } else {
+                let label = text::label(ui, "AI prompt");
+                composer(ui, label.id)
+            };
+            if inserted_example.is_some() || inserted_tool.is_some() || reuse_last {
+                prompt_response.request_focus();
+                if let Some(mut edit_state) = egui::TextEdit::load_state(ui.ctx(), prompt_id) {
+                    edit_state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::one(
+                            egui::text::CCursor::new(prompt.chars().count()),
+                        )));
+                    edit_state.store(ui.ctx(), prompt_id);
+                }
+            }
+            ui.add_space(tokens::SPACE_SM);
+            let setup_required =
+                options.submit_state == AssistantSubmitState::SetupRequired && !options.busy;
+            let recover_prompt =
+                options.recover_prompt && options.can_reuse && prompt.is_empty() && !options.busy;
+            let (send_button, (stop_button, undo_button)) = crate::action_row(
+                ui,
+                |ui| {
+                    let can_send = options.submit_state == AssistantSubmitState::Ready
+                        && !options.busy
+                        && !prompt.trim().is_empty();
+                    let send = ui
+                        .add_enabled_ui(can_send || setup_required, |ui| {
+                            crate::ai_button(ui, if setup_required { "Connect AI" } else { "Send" })
+                        })
+                        .inner;
+                    crate::hover_text(
+                        send,
+                        if setup_required {
+                            "Choose a provider in AI settings. Your draft stays here."
+                        } else {
+                            "Send prompt · Ctrl/Cmd+Enter"
+                        },
+                    )
+                },
+                |ui| {
+                    let stop = if options.busy || recover_prompt {
+                        crate::button(
+                            ui,
+                            if recover_prompt {
+                                "Edit last prompt"
+                            } else {
+                                "Stop"
+                            },
+                        )
+                    } else {
+                        hidden_action(ui)
+                    };
+                    let stop = crate::hover_text(
+                        stop,
+                        if recover_prompt {
+                            "Restore the last request for editing. Nothing is sent."
+                        } else {
+                            "Stop further assistant work. Keep edits already made."
+                        },
+                    );
+                    let undo = if options.can_undo && !options.busy {
+                        crate::button(ui, "Undo")
+                    } else {
+                        hidden_action(ui)
+                    };
+                    (stop, undo)
                 },
             )
-        },
-        |ui| {
-            let stop = if options.busy || recover_prompt {
-                crate::button(
-                    ui,
-                    if recover_prompt {
-                        "Edit last prompt"
-                    } else {
-                        "Stop"
-                    },
-                )
-            } else {
-                hidden_action(ui)
-            };
-            let stop = crate::hover_text(
-                stop,
-                if recover_prompt {
-                    "Restore the last request for editing. Nothing is sent."
-                } else {
-                    "Stop further assistant work. Keep edits already made."
-                },
-            );
-            let undo = if options.can_undo && !options.busy {
-                crate::button(ui, "Undo")
-            } else {
-                hidden_action(ui)
-            };
-            (stop, undo)
-        },
-    )
-    .inner;
-    if setup_required && send_button.clicked() {
-        settings = true;
-    }
-    if recover_prompt && stop_button.clicked() {
-        reuse_last = true;
-        state.page = AssistantPage::Conversation;
-    }
-    AssistantResponse {
-        send: shortcut || (!setup_required && send_button.clicked()),
-        stop: !recover_prompt && stop_button.clicked(),
-        undo: undo_button.clicked(),
-        settings,
-        new_chat,
-        reuse_last,
-        inserted_example,
-        inserted_tool,
-        prompt: prompt_response,
-        send_button,
-        stop_button,
-        undo_button,
-    }
+            .inner;
+            if setup_required && send_button.clicked() {
+                settings = true;
+            }
+            if recover_prompt && stop_button.clicked() {
+                reuse_last = true;
+                state.page = AssistantPage::Conversation;
+            }
+            AssistantResponse {
+                send: shortcut || (!setup_required && send_button.clicked()),
+                stop: !recover_prompt && stop_button.clicked(),
+                undo: undo_button.clicked(),
+                settings,
+                new_chat,
+                reuse_last,
+                inserted_example,
+                inserted_tool,
+                prompt: prompt_response,
+                send_button,
+                stop_button,
+                undo_button,
+            }
+        })
+        .inner
 }
 
 // Keep response IDs available to hosts without showing unavailable actions or

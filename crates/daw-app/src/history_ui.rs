@@ -66,10 +66,10 @@ impl DawApp {
             .show(ctx, |ui| {
                 ui.set_min_width(320.0);
                 daw_ui::text::body(ui, format!("{} undo · {} redo", undo.len(), redo.len()));
-                let footer_height = ui.text_style_height(&egui::TextStyle::Small)
-                    + daw_ui::tokens::SPACE_LG
-                    + 2.0 * ui.spacing().item_spacing.y;
-                daw_ui::popup_scroll_body(ui, "history_steps", footer_height, |ui| {
+                let mut footer = daw_ui::popup_footer(ui, "history_status");
+                let window_ui = ui;
+                let ui = footer.body();
+                daw_ui::popup_scroll_body(ui, "history_steps", 0.0, |ui| {
                     ui.add_enabled_ui(!self.state_sync_pending(), |ui| {
                         for (index, label) in redo.iter().enumerate().rev() {
                             if ui
@@ -109,14 +109,15 @@ impl DawApp {
                         ui.label("No edits yet");
                     }
                 });
-                ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
-                daw_ui::text::note(
-                    ui,
-                    format!(
-                        "Up to 128 steps · {:.1} / 128 MiB",
-                        self.history.memory_bytes() as f64 / 1_048_576.0
-                    ),
-                );
+                footer.show(window_ui, |ui| {
+                    daw_ui::text::note(
+                        ui,
+                        format!(
+                            "Up to 128 steps · {:.1} / 128 MiB",
+                            self.history.memory_bytes() as f64 / 1_048_576.0
+                        ),
+                    )
+                });
             });
         self.history_open &= open;
         if let Some((redo, steps)) = jump {

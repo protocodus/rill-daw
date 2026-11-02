@@ -65,6 +65,38 @@ fn resize(app: &mut Harness, rect: [f64; 4], dx: f64, dy: f64) -> Value {
     settle(app)
 }
 
+fn assert_actions_at_bottom(state: &Value, dialog: &str) {
+    let action = match dialog {
+        "Instrument" => "Choose instrument",
+        "Effects" => "+ Insert",
+        "Routing" => "Create send track",
+        "Automation" | "Setup" | "Export WAV…" => "Cancel",
+        "Library" => "More",
+        "Recording" => "Record",
+        "About RILL" => "Close",
+        "Assistant" => "Connect AI",
+        _ => return,
+    };
+    let [left, top, right, bottom] = window(state);
+    let rect = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|label| {
+            label["text"] == action && {
+                let [x0, y0, x1, y1] = bounds(label);
+                x0 >= left && x1 <= right && y0 >= top && y1 <= bottom
+            }
+        })
+        .unwrap_or_else(|| panic!("Missing {action} in {dialog}"));
+    let gap = bottom - bounds(rect)[3];
+    assert!(
+        (16.0..=30.0).contains(&gap),
+        "{dialog}: {action} floats {gap:.2} points above the dialog bottom"
+    );
+}
+
 #[test]
 fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
@@ -97,6 +129,7 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
             ("Window", "Library"),
             ("Window", "Setup"),
             ("Window", "Recording"),
+            ("Window", "Assistant"),
             ("Edit", "History…"),
             ("Help", "About RILL"),
             ("File", "Export WAV…"),
@@ -104,6 +137,7 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
             app.click(menu);
             app.click(label);
             let initial = settle(&mut app);
+            assert_actions_at_bottom(&initial, label);
             let before = window(&initial);
             for (fx, fy) in [(0.1, 0.2), (0.8, 0.7), (0.3, 0.9), (0.5, 0.05), (0.1, 0.2)] {
                 app.command(json!({"command":"pointer","phase":"move","x":before[0]+(before[2]-before[0])*fx,"y":before[1]+(before[3]-before[1])*fy}));
@@ -117,6 +151,7 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                 }
             }
             let enlarged = resize(&mut app, before, 70.0, 60.0);
+            assert_actions_at_bottom(&enlarged, label);
             let large = window(&enlarged);
             assert!(
                 large[2] - large[0] > before[2] - before[0] + 45.0,
@@ -127,6 +162,7 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                 "{label} ignores vertical resize: {before:?} -> {large:?}"
             );
             let shrunk = resize(&mut app, large, -70.0, -60.0);
+            assert_actions_at_bottom(&shrunk, label);
             let small = window(&shrunk);
             assert!(
                 small[2] - small[0] < large[2] - large[0] - 45.0,

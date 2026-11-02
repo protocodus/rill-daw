@@ -142,14 +142,10 @@ impl DawApp {
                 };
                 let busy = self.join_ui.pending();
                 daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
-                let feedback_height =
-                    ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::text::TextRole::Note.font()));
-                let footer_height = feedback_height
-                    + daw_ui::tokens::CONTROL_HEIGHT
-                    + daw_ui::tokens::COMPACT_HEIGHT
-                    + ui.spacing().item_spacing.y * 3.0
-                    + daw_ui::tokens::SPACE_SM;
-                let list_height = daw_ui::popup_scroll_height(ui, footer_height).min(300.0);
+                let mut footer = daw_ui::popup_footer(ui, "join_actions");
+                let window_ui = ui;
+                let ui = footer.body();
+                let list_height = daw_ui::popup_scroll_height(ui, 0.0).min(300.0);
                 ui.add_enabled_ui(!busy, |ui| {
                     egui::ScrollArea::vertical()
                         .max_height(list_height)
@@ -205,37 +201,39 @@ impl DawApp {
                 } else {
                     None
                 };
-                if let Some(error) = &error {
-                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
-                        .on_hover_text(error);
-                } else {
-                    daw_ui::text::note(ui, format!("{} clips → one editable clip", ids.len()));
-                }
-                ui.add_space(daw_ui::tokens::SPACE_SM);
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(!busy && error.is_none(), daw_ui::button_widget("Join"))
-                        .clicked()
-                    {
-                        submit = Some((track.id, ids, track.kind));
+                footer.show(window_ui, |ui| {
+                    if let Some(error) = &error {
+                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
+                            .on_hover_text(error);
+                    } else {
+                        daw_ui::text::note(ui, format!("{} clips → one editable clip", ids.len()));
                     }
-                    cancel = daw_ui::button(ui, "Cancel").clicked();
-                });
-                // Reserve the activity row so asynchronous completion cannot
-                // move Join/Cancel between pointer-down and pointer-up.
-                ui.horizontal(|ui| {
-                    ui.set_min_height(daw_ui::tokens::COMPACT_HEIGHT);
-                    if busy {
-                        ui.spinner();
-                        daw_ui::text::note(
-                            ui,
-                            if self.join_ui.canceling() {
-                                "Canceling…"
-                            } else {
-                                "Rendering audio…"
-                            },
-                        );
-                    }
+                    // Reserve the activity row so asynchronous completion cannot
+                    // move Join/Cancel between pointer-down and pointer-up.
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(daw_ui::tokens::COMPACT_HEIGHT);
+                        if busy {
+                            ui.spinner();
+                            daw_ui::text::note(
+                                ui,
+                                if self.join_ui.canceling() {
+                                    "Canceling…"
+                                } else {
+                                    "Rendering audio…"
+                                },
+                            );
+                        }
+                    });
+                    ui.add_space(daw_ui::tokens::SPACE_SM);
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add_enabled(!busy && error.is_none(), daw_ui::button_widget("Join"))
+                            .clicked()
+                        {
+                            submit = Some((track.id, ids, track.kind));
+                        }
+                        cancel = daw_ui::button(ui, "Cancel").clicked();
+                    });
                 });
             });
         self.join_open &= open && !cancel;

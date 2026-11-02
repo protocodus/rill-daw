@@ -30,7 +30,8 @@ fn scroll(app: &mut Harness, direction: f64) -> Value {
     let state = app.inspect();
     let window = &state["window_rects"][0];
     let x = (window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5;
-    let y = window["max"][1].as_f64().unwrap() - 50.0;
+    // Wheel over the scrolling body, above the fixed action row.
+    let y = window["max"][1].as_f64().unwrap() - 100.0;
     app.command(json!({"command":"scroll","x":x,"y":y,"delta":direction * 10000.0}));
     for _ in 0..12 {
         app.inspect();
