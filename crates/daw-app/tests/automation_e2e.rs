@@ -574,7 +574,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     menu(&mut app, "+ Insert", "Rill Fixture FX");
     app.click("Add to effect chain");
     menu(&mut app, "Window", "Routing");
-    menu(&mut app, "+ Send", "Bus 1");
+    menu(&mut app, "Add send…", "Bus 1");
     let state = app.inspect();
     let target = state["project"]["tracks"][0]["id"].clone();
     let effect = state["project"]["tracks"][0]["inserts"][0]["id"].clone();
@@ -631,7 +631,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     let state = menu(&mut app, "Edit", "Undo");
     assert_eq!(state["project"], before);
     menu(&mut app, "Window", "Routing");
-    let state = app.click("×");
+    let state = app.click("Remove send");
     assert!(
         state["project"]["tracks"][0]["sends"]
             .as_array()
