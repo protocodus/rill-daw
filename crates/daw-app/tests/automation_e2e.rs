@@ -227,7 +227,8 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));
-    app.command(json!({"command":"text","text":"45"}));
+    // Bar 12, beat 1 in 4/4 is beat 45 counted from one.
+    app.command(json!({"command":"text","text":"12.1"}));
     let typed = app.key("Enter");
     assert_eq!(
         typed["project"]["tracks"][1]["automation"]["points"][1]["beat"],

@@ -933,6 +933,22 @@ with every output sample matching the edited song. Native egui clipboard-event
 coverage complements the keyboard-driven E2Es. See
 [audio editor coverage](AUDIO_EDITOR.md) for controls and remaining advanced tools.
 
+### Clip editor toolbars, snap and canvas stability
+
+```sh
+cargo test -p daw-app --test audio_editor_e2e --test midi_note_entry_e2e --test piano_toolbar_e2e -- --test-threads=1
+```
+
+`audio_toolbar_is_one_row_and_tools_and_drawers_never_move_the_canvas` checks
+that the audio toolbar uses one row when wide enough and at most two otherwise,
+that Nudge lives in the Clip menu, that Select, Fade in, Fade out, Cut and Slip
+leave the canvas rect unchanged, that fade options stay in the tool row, and
+that the transient drawer opens below the canvas without moving its top.
+`piano_roll_snap_and_length_choosers_set_the_pencil_grid_by_mouse` chooses
+**Snap 1/8** and **Length 1/8 note** by mouse and draws notes on that grid.
+The piano toolbar and toolbar stability suites check that Snap, Length and Key
+keep their positions across tools and widths.
+
 ### Spectral waveform previews
 
 ```sh

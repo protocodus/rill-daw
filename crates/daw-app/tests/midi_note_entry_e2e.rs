@@ -123,9 +123,15 @@ fn undo_redo(app: &mut Harness, before: &Value, after: &Value) {
 
 fn choose_length(app: &mut Harness, choice: &str) -> Value {
     let state = app.inspect();
-    let selected = state["midi_editor"]["draw_length"].as_str().unwrap();
-    app.click("Draw settings");
-    app.click(&format!("Length · {selected}"));
+    let chooser = state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|label| label.starts_with("Length "))
+        .expect("Length chooser beside Snap")
+        .to_owned();
+    app.click(&chooser);
     app.click(choice)
 }
 
@@ -186,7 +192,7 @@ fn clicks_drags_and_double_clicks_extend_only_the_selected_stretched_ghost_bound
 fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
     let (mut app, _, selected) = open(false, 3);
     let baseline = app.inspect();
-    let drawing = app.click("Draw settings");
+    let drawing = app.click("Length last");
     assert_eq!(drawing["project"], baseline["project"]);
     assert_eq!(drawing["history"], baseline["history"]);
     assert!(
@@ -194,7 +200,7 @@ fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| label == "Grid scale")
+            .any(|label| label == "1/16 note")
     );
     app.key("Escape");
     let choice = choose_length(&mut app, "1 bar");
@@ -225,5 +231,37 @@ fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
     choose_length(&mut app, "Last note");
     let state = enter(&mut app, "click", 16.0, 67, None);
     near(&note(&state, selected, 67, 16.0)["length"], 1.0);
+    app.quit();
+}
+
+#[test]
+fn piano_roll_snap_and_length_choosers_set_the_pencil_grid_by_mouse() {
+    let (mut app, _, selected) = open(false, 4);
+    let baseline = app.inspect();
+    let snap = app.click("Snap 1/16");
+    assert_eq!(snap["project"], baseline["project"]);
+    let chosen = app.click("1/8");
+    assert_eq!(
+        chosen["history"], baseline["history"],
+        "Snap is a view choice"
+    );
+    assert!(
+        chosen["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Snap 1/8"),
+        "{}",
+        chosen["visible_labels"]
+    );
+    app.click("Length last");
+    let length = app.click("1/8 note");
+    assert_eq!(length["midi_editor"]["draw_length"], "1/8 note");
+    app.click("Pencil");
+    // 1.2 rounds to 1.0 on the 1/8 grid; on the old 1/16 grid it would be 1.25.
+    let drawn = enter(&mut app, "click", 1.2, 64, None);
+    near(&note(&drawn, selected, 64, 1.0)["length"], 0.5);
+    let drawn = enter(&mut app, "click", 2.35, 65, None);
+    near(&note(&drawn, selected, 65, 2.5)["length"], 0.5);
     app.quit();
 }

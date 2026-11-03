@@ -197,20 +197,19 @@ fn audio_parameter_groups_wrap_together_and_keep_precise_edits_undoable() {
         app.command(json!({"command":"system_theme","dark":dark}));
         for width in (800..=1400).step_by(25) {
             let state = app.command(json!({"command":"viewport","width":width,"height":760.0,"pixels_per_point":density}));
+            // The caption is a prefix inside the field, never a separate bold label.
             let label = state["label_rects"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .find(|rect| rect["text"] == "Gain")
-                .expect("clip gain label");
+                .find(|rect| rect["text"].as_str().unwrap().starts_with("Gain "))
+                .expect("clip gain field");
             let input = &state["audio_editor"]["gain_rect"];
-            let label_center =
-                (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) * 0.5;
-            assert!(
-                (input[1].as_f64().unwrap()..=input[3].as_f64().unwrap()).contains(&label_center),
-                "Gain label separated from its input at width {width}: {label}, {input}"
-            );
-            assert!(input[0].as_f64().unwrap() >= label["max"][0].as_f64().unwrap());
+            for (axis, edge) in [(0, "min"), (1, "min")] {
+                assert!(label[edge][axis].as_f64().unwrap() >= input[axis].as_f64().unwrap() - 0.5);
+            }
+            assert!(label["max"][0].as_f64().unwrap() <= input[2].as_f64().unwrap() + 0.5);
+            assert!(input[0].as_f64().unwrap() >= 0.0);
             assert!(input[2].as_f64().unwrap() <= f64::from(width));
             assert_eq!(state["project"], original);
         }
@@ -403,5 +402,85 @@ fn audio_pan_zoom_and_fit_reset_both_axes_without_changing_clip() {
         initial_reference * 10.0_f64.powf(0.3),
     );
     assert_eq!(fitted["project"], changed["project"]);
+    app.quit();
+}
+
+fn label_rect<'a>(state: &'a Value, name: &str) -> &'a Value {
+    state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["text"] == name)
+        .unwrap_or_else(|| panic!("Missing {name}: {}", state["visible_labels"]))
+}
+
+fn center_y(rect: &Value) -> f64 {
+    (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5
+}
+
+#[test]
+fn audio_toolbar_is_one_row_and_tools_and_drawers_never_move_the_canvas() {
+    let mut app = open(4.0, true);
+    for width in [1280.0, 1680.0, 1920.0] {
+        let state = app.command(json!({"command":"viewport","width":width,"height":800.0}));
+        let row = center_y(label_rect(&state, "Select"));
+        // The trailing view cluster joins the tool row whenever it fits and
+        // otherwise moves as one unit to a single second row.
+        let trailing = center_y(label_rect(&state, "Tool help"));
+        assert!(trailing - row < 50.0, "At most two toolbar rows at {width}");
+        if width > 1900.0 {
+            assert!((trailing - row).abs() < 1.0, "One toolbar row at {width}");
+        }
+        for name in ["Snap 1/16", "Clip", "Process"] {
+            assert!(
+                (center_y(label_rect(&state, name)) - row).abs() < 1.0,
+                "{name} left the tool row at {width}"
+            );
+        }
+        for name in ["View", "Fit"] {
+            assert!(
+                (center_y(label_rect(&state, name)) - trailing).abs() < 1.0,
+                "{name} left the view cluster at {width}"
+            );
+        }
+        assert!(
+            !state["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label == "Nudge"),
+            "Nudge lives in the Clip menu"
+        );
+    }
+    let select = app.click("Select");
+    let canvas = select["audio_editor"]["rect"].clone();
+    for tool in ["Fade in", "Fade out", "Cut", "Slip"] {
+        let state = app.click(tool);
+        assert_eq!(
+            state["audio_editor"]["rect"], canvas,
+            "{tool} moved the canvas"
+        );
+    }
+    let fade = app.click("Fade in");
+    assert!(
+        (center_y(label_rect(&fade, "Linear")) - center_y(label_rect(&fade, "Select"))).abs() < 1.0,
+        "Fade options stay inline with the tools"
+    );
+    app.click("Select");
+    app.click("Process");
+    let drawer = app.click("Transients");
+    let opened = &drawer["audio_editor"]["rect"];
+    assert_eq!(opened[0], canvas[0]);
+    assert_eq!(
+        opened[1], canvas[1],
+        "The transient drawer keeps the canvas top"
+    );
+    assert!(opened[3].as_f64().unwrap() < canvas[3].as_f64().unwrap());
+    assert!(
+        label_rect(&drawer, "Analyze")["min"][1].as_f64().unwrap() >= opened[3].as_f64().unwrap(),
+        "Analysis controls sit below the canvas"
+    );
+    let closed = app.click("Close transients");
+    assert_eq!(closed["audio_editor"]["rect"], canvas);
     app.quit();
 }

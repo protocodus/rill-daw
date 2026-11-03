@@ -201,7 +201,10 @@ fn midi_editor_mouse_nudge_scale_transpose_and_note_context_menu_and_audio_edito
     menu(&mut app, "Window", "Clip Editor");
     menu(&mut app, "Edit", "Select all notes");
 
-    let up_scale = menu(&mut app, "Notes", "+1 scale degree");
+    let up_scale = {
+        app.click("Notes");
+        menu(&mut app, "Transpose", "+1 scale degree")
+    };
     let midi_notes = |state: &Value| -> Vec<(u64, f64)> {
         state["project"]["tracks"][0]["clips"][0]["content"]["Midi"]["notes"]
             .as_array()
@@ -213,17 +216,32 @@ fn midi_editor_mouse_nudge_scale_transpose_and_note_context_menu_and_audio_edito
     // C4 (60) -> D4 (62), Eb4 (63) -> F4 (65) in C Minor.
     assert_eq!(midi_notes(&up_scale), vec![(62, 1.0), (65, 2.0)]);
 
-    let down_scale = menu(&mut app, "Notes", "-1 scale degree");
+    let down_scale = {
+        app.click("Notes");
+        menu(&mut app, "Transpose", "-1 scale degree")
+    };
     assert_eq!(midi_notes(&down_scale), vec![(60, 1.0), (63, 2.0)]);
 
-    let nudged_right = menu(&mut app, "Notes", "Nudge right");
+    let nudged_right = {
+        app.click("Notes");
+        menu(&mut app, "Nudge", "Nudge right")
+    };
     assert!(midi_notes(&nudged_right)[0].1 > 1.0);
-    let nudged_left = menu(&mut app, "Notes", "Nudge left");
+    let nudged_left = {
+        app.click("Notes");
+        menu(&mut app, "Nudge", "Nudge left")
+    };
     assert!((midi_notes(&nudged_left)[0].1 - 1.0).abs() < 1e-9);
 
-    let nudged_bar = menu(&mut app, "Notes", "Nudge right 1 bar");
+    let nudged_bar = {
+        app.click("Notes");
+        menu(&mut app, "Nudge", "Nudge right 1 bar")
+    };
     assert!((midi_notes(&nudged_bar)[0].1 - 5.0).abs() < 1e-9);
-    let back_bar = menu(&mut app, "Notes", "Nudge left 1 bar");
+    let back_bar = {
+        app.click("Notes");
+        menu(&mut app, "Nudge", "Nudge left 1 bar")
+    };
     assert!((midi_notes(&back_bar)[0].1 - 1.0).abs() < 1e-9);
 
     // Right-click the first note on the piano roll canvas -> Select only this note, then Duplicate, then Delete.

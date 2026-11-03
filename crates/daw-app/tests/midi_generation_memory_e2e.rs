@@ -98,7 +98,17 @@ fn number(app: &mut Harness, field: &str, value: &str) -> Value {
     // clicking the fixed range label accepts the edit without a shortcut.
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}));
     app.command(json!({"command":"text", "text":value}));
-    app.click("Start bar")
+    // The dialog title stays visible however far the form scrolls.
+    let state = app.inspect();
+    let title = state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|label| label.starts_with("Generate notes · "))
+        .expect("generator title")
+        .to_owned();
+    app.click(&title)
 }
 
 fn choice(app: &mut Harness, field: &str, label: &str) -> Value {
@@ -206,12 +216,10 @@ fn generator_remembers_each_clips_choices_after_cancel_and_add_without_editing_o
     );
     // Grid scale is visual/multi-draw context. Changing it must leave both the
     // accepted notes and the generator's independently chosen harmony intact.
-    app.click("Draw settings");
-    app.click("C · Natural minor");
+    app.click("Key C · Natural minor");
     app.click("Natural minor");
     app.click("Major");
-    app.click("Draw settings");
-    app.click("C · Major");
+    app.click("Key C · Major");
     app.click("C");
     app.click("F♯");
     let changed_grid = app.inspect();

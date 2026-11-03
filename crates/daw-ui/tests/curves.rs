@@ -77,6 +77,7 @@ fn short_timeline_preserves_a_usable_plot_and_room_for_inspector_actions() {
                         beats_per_bar: 4,
                         fit: true,
                         keyboard_active: false,
+                        value_label: daw_ui::percent_value_label,
                     },
                     |_| 0.5,
                 );
@@ -134,6 +135,7 @@ fn percent_ticks_follow_available_height_without_overlapping_at_display_scales()
                                 beats_per_bar: 4,
                                 fit: true,
                                 keyboard_active: false,
+                                value_label: daw_ui::percent_value_label,
                             },
                             |_| 0.5,
                         );
@@ -307,6 +309,7 @@ impl TimelineCurve {
                             beats_per_bar: 4,
                             fit,
                             keyboard_active: false,
+                            value_label: daw_ui::percent_value_label,
                         },
                         |_| 0.5,
                     ));

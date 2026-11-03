@@ -181,7 +181,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 columns[0].painter(),
                 key,
                 name,
-                black,
+                u8::from(black),
                 highlight,
                 index == 3,
             );

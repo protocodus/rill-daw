@@ -63,8 +63,14 @@ fn notes(state: &Value) -> &Vec<Value> {
 
 #[test]
 fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
-    let controls = ["Generate…", "Notes", "Draw settings"];
-    let draw_controls = ["Length ·", "Grid scale"];
+    let controls = [
+        "Snap 1/16",
+        "Length last",
+        "Key C · Natural minor",
+        "Generate…",
+        "Notes",
+    ];
+    let draw_controls = ["Root", "Natural minor"];
     for dark in [false, true] {
         let mut app = fixture(dark);
         let original = app.inspect();
@@ -78,12 +84,12 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                 .iter()
                 .map(|control| label_bounds(&before, control))
                 .collect();
-            let settings = app.click("Draw settings");
+            let settings = app.click("Key C · Natural minor");
             let draw_positions: Vec<_> = draw_controls
                 .iter()
                 .map(|control| label_bounds(&settings, control))
                 .collect();
-            unchanged(&app.click("Draw settings"), &original);
+            unchanged(&app.click("Key C · Natural minor"), &original);
             for (control, bounds) in controls.iter().zip(&positions) {
                 assert!(
                     bounds[0] >= 0.0 && bounds[1] >= 0.0,
@@ -127,7 +133,7 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                             );
                         }
                     }
-                    let settings = app.click("Draw settings");
+                    let settings = app.click("Key C · Natural minor");
                     unchanged(&settings, &original);
                     for (control, expected) in draw_controls.iter().zip(&draw_positions) {
                         let actual = label_bounds(&settings, control);
@@ -138,10 +144,10 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                             );
                         }
                     }
-                    app.click("Draw settings");
+                    app.click("Key C · Natural minor");
                     if !selected {
                         // The stable Notes menu keeps unavailable commands visible and inert.
-                        for command in ["Randomize...", "Quantize..."] {
+                        for command in ["Randomize…", "Quantize…"] {
                             app.click("Notes");
                             let state = app.click(command);
                             unchanged(&state, &original);
@@ -167,12 +173,12 @@ fn selection_commands_still_preview_apply_and_undo_from_the_pencil_tool() {
     app.command(json!({"command":"viewport", "width":1100, "height":760}));
     menu(&mut app, "Edit", "Select all notes");
     let before = app.click("Pencil");
-    let preview = menu(&mut app, "Notes", "Randomize...");
+    let preview = menu(&mut app, "Notes", "Randomize…");
     assert!(preview["midi_editor"]["randomize"].is_object());
     unchanged(&preview, &before);
     unchanged(&app.click("Cancel randomize"), &before);
 
-    let preview = menu(&mut app, "Notes", "Quantize...");
+    let preview = menu(&mut app, "Notes", "Quantize…");
     assert!(preview["midi_editor"]["quantize"].is_object());
     unchanged(&preview, &before);
     let applied = app.click("Apply quantize");

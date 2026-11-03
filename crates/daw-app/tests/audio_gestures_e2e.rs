@@ -285,12 +285,12 @@ fn audio_edge_magnets_and_view_options_are_independent_of_grid_and_document() {
     assert_eq!(hidden["audio_editor"]["show_neighbours"], false);
     assert_eq!(hidden["audio_editor"]["show_markers"], false);
     assert_eq!(hidden["project"], original);
-    app.click("Grid 0.25");
+    app.click("Snap 1/16");
     app.click("Off");
     let state = app.key("Q");
     assert_eq!(
         state["view"], "Clip",
-        "Grid selection must leave the editor open"
+        "Snap selection must leave the editor open"
     );
     assert_eq!(state["audio_editor"]["tool"], "Select");
     let moved = drag(&mut app, point(&state, 4.0), -0.62, false);
@@ -300,8 +300,13 @@ fn audio_edge_magnets_and_view_options_are_independent_of_grid_and_document() {
     let end_aligned = drag(&mut app, point(&state, 4.0), 0.38, false);
     near(&selected(&end_aligned)["start"], 2.37);
     undo(&mut app);
-    app.click("Grid off");
-    app.click("Clip edges");
+    app.click("Snap off");
+    assert_eq!(
+        app.click("Clip edges")["audio_editor"]["snap_edges"],
+        false,
+        "Snap target toggles keep the menu open"
+    );
+    app.key("Escape");
     let state = app.click("Fit");
     let moved = drag(&mut app, point(&state, 4.0), -0.62, false);
     near(&selected(&moved)["start"], 1.38);

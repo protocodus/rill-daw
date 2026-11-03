@@ -34,6 +34,18 @@ impl DrawNoteLength {
         }
     }
 
+    /// Compact current value for the toolbar chooser ("Length 1/16").
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Self::LastNote => "last",
+            Self::Sixteenth => "1/16",
+            Self::Eighth => "1/8",
+            Self::Quarter => "1/4",
+            Self::Half => "1/2",
+            Self::Bar => "1 bar",
+        }
+    }
+
     /// None retains the editor's remembered drawing length. Explicit choices
     /// are audible quarter-note beats; a bar follows the current meter.
     pub fn beats(self, beats_per_bar: u8) -> Option<f64> {
@@ -48,38 +60,26 @@ impl DrawNoteLength {
     }
 }
 
-/// Native, mouse-selectable length choice. Dragging a new note may override
+/// Current-value chooser shown beside Snap. Dragging a new note may override
 /// this initial duration; the application retains ownership of that gesture.
 pub fn drawing_note_length(ui: &mut Ui, length: &mut DrawNoteLength) -> Response {
-    if egui::containers::menu::is_in_menu(ui) {
-        return crate::choice_menu(ui, format!("Length · {}", length.label()), |ui| {
+    let before = *length;
+    let (response, _) =
+        crate::quiet_picker_button(ui, format!("Length {}", length.short_label()), |ui| {
+            ui.set_min_width(crate::tokens::SELECT_WIDTH);
             for choice in DrawNoteLength::ALL {
                 if crate::selectable_value(ui, length, choice, choice.label()).clicked() {
                     ui.close();
                 }
             }
-        })
-        .response
-        .on_hover_text("Initial length for new notes. Drag a new note to choose its end.");
+        });
+    let mut response = response.on_hover_text(
+        "Initial length for new notes. Last note starts at 1/16 and remembers the last drawn or selected length. Drag a new note to choose its end.",
+    );
+    if *length != before {
+        response.mark_changed();
     }
-    crate::select("drawing_note_length", format!("Length · {}", length.label()))
-        .width(146.0)
-        .height(
-            DrawNoteLength::ALL.len() as f32
-                * (crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_SM)
-                + 2.0 * crate::tokens::SPACE_SM,
-        )
-        .show_ui(ui, |ui| {
-            for choice in DrawNoteLength::ALL {
-                if crate::selectable_value(ui, length, choice, choice.label()).clicked() {
-                    ui.close();
-                }
-            }
-        })
-        .response
-        .on_hover_text(
-            "Initial length for new notes. Last note starts at 1/16 and remembers the last drawn or selected length. Drag a new note to choose its end.",
-        )
+    response
 }
 
 /// Label a visible clip end in the inactive roll area. This is paint-only;

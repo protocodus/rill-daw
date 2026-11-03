@@ -939,9 +939,9 @@ fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
     let selected = harness.app.selected_notes.clone();
     assert_eq!(selected.len(), 1);
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "Draw settings", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "Key C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
     harness.full_frame(RawInput {
         events: vec![Event::PointerMoved(
@@ -1117,7 +1117,7 @@ fn linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_ins
     let note = harness.notes()[0].id;
     harness.app.selected_notes.insert(note);
     let before = harness.app.project.clone();
-    let output = harness.menu("Notes", "Quantize...");
+    let output = harness.menu("Notes", "Quantize…");
     assert!(has_text(&output, "Quantize preview"));
     assert_eq!(harness.app.project, before);
     assert!(!harness.app.history.can_undo());
@@ -1127,7 +1127,7 @@ fn linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_ins
     assert_eq!(harness.app.project, before);
     assert!(!harness.app.history.can_undo());
 
-    let output = harness.menu("Notes", "Quantize...");
+    let output = harness.menu("Notes", "Quantize…");
     let apply = text_position(&output, "Apply quantize", 0.0) + Vec2::new(8.0, 8.0);
     harness.full_click(apply);
     assert!(!has_text(&harness.settle_full(), "Quantize preview"));

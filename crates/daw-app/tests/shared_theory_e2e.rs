@@ -215,7 +215,17 @@ fn generator_number(app: &mut Harness, field: &str, value: &str) -> Value {
     let (x, y) = center(&rect);
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":value}));
-    app.click("Start bar")
+    // The dialog title stays visible however far the form scrolls.
+    let state = app.inspect();
+    let title = state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|label| label.starts_with("Generate notes · "))
+        .expect("generator title")
+        .to_owned();
+    app.click(&title)
 }
 
 fn note_values(notes: &[Value]) -> Vec<Value> {
@@ -358,8 +368,7 @@ fn deep_scale_picker_highlights_filters_draws_and_generates_the_composer_scale()
 
     // This nested grid picker must remain reachable in a short window.
     app.command(json!({"command":"viewport","width":1440,"height":720}));
-    app.click("Draw settings");
-    app.click(format!("C · {}", Scale::Minor.name()).as_str());
+    app.click(format!("Key C · {}", Scale::Minor.name()).as_str());
     app.click(Scale::Minor.name());
     let (selected, scrolled) = choose_open_popup(&mut app, label);
     assert!(

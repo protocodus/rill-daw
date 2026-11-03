@@ -1,5 +1,6 @@
 //! Compact navigation and slicing controls shared by clip editors.
-use egui::Ui;
+use crate::{text::TextRole, tokens};
+use egui::{Ui, WidgetText};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClipStep {
@@ -7,8 +8,8 @@ pub enum ClipStep {
     Next,
 }
 
-/// The existing workspace header can host one-click navigation without taking
-/// another row from the editing canvas. Its pair has a bounded width.
+/// Previous/Next as two square chevrons for the slot right after Back.
+/// Their accessible names stay "Previous" and "Next".
 pub fn clip_navigation_header_controls(
     ui: &mut Ui,
     previous: bool,
@@ -17,61 +18,45 @@ pub fn clip_navigation_header_controls(
     if !previous && !next {
         return None;
     }
-    let compact = ui.ctx().content_rect().width() < 1000.0;
-    let width = (if compact { 160.0_f32 } else { 220.0_f32 }).min(ui.available_width());
-    let gap = crate::tokens::SPACE_XS;
-    // "Previous" needs more room than "Next" after icon and native padding.
-    let previous_width = ((width - gap) * if compact { 0.60 } else { 0.57 }).max(1.0);
-    let next_width = ((width - gap) - previous_width).max(1.0);
-    ui.allocate_ui_with_layout(
-        egui::vec2(width, crate::tokens::CONTROL_HEIGHT),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            ui.spacing_mut().item_spacing.x = gap;
-            let previous = ui
-                .add_enabled_ui(previous, |ui| {
+    let square = egui::Vec2::splat(tokens::CONTROL_HEIGHT);
+    let mut step = None;
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
+        for (enabled, icon, label, hint, value) in [
+            (
+                previous,
+                crate::Icon::Back,
+                "Previous",
+                "Previous clip · Shift+Tab",
+                ClipStep::Previous,
+            ),
+            (
+                next,
+                crate::Icon::ChevronRight,
+                "Next",
+                "Next clip · Tab",
+                ClipStep::Next,
+            ),
+        ] {
+            if ui
+                .add_enabled_ui(enabled, |ui| {
                     ui.add_sized(
-                        egui::vec2(previous_width, crate::tokens::CONTROL_HEIGHT),
-                        (if compact {
-                            crate::IconButton::new("Previous")
-                        } else {
-                            crate::IconButton::with_icon(crate::Icon::Back, "Previous")
-                        })
-                        .presentation()
-                        .quiet()
-                        .wrap_mode(egui::TextWrapMode::Extend),
+                        square,
+                        crate::IconButton::icon_only(icon, label)
+                            .presentation()
+                            .quiet(),
                     )
                 })
                 .inner
-                .on_hover_text("Previous clip · Shift+Tab")
-                .clicked();
-            let next = ui
-                .add_enabled_ui(next, |ui| {
-                    ui.add_sized(
-                        egui::vec2(next_width, crate::tokens::CONTROL_HEIGHT),
-                        (if compact {
-                            crate::IconButton::new("Next")
-                        } else {
-                            crate::IconButton::with_icon(crate::Icon::ChevronRight, "Next")
-                        })
-                        .presentation()
-                        .quiet()
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                    )
-                })
-                .inner
-                .on_hover_text("Next clip · Tab")
-                .clicked();
-            if previous {
-                Some(ClipStep::Previous)
-            } else if next {
-                Some(ClipStep::Next)
-            } else {
-                None
+                .on_hover_text(hint)
+                .clicked()
+            {
+                step = Some(value);
             }
-        },
-    )
-    .inner
+        }
+    });
+    step
 }
 
 /// Navigation changes the inspected clip, without changing its musical data.
@@ -109,4 +94,95 @@ pub fn audio_grid_slice_controls(ui: &mut Ui, grid: &mut f64, cuts: usize) -> bo
     ui.add_enabled(cuts > 0 && cuts <= 2048, crate::button_widget("Split grid"))
         .on_hover_text("Split at the previewed grid positions; keep every resulting cue selected")
         .clicked()
+}
+
+/// Which part of [`clip_workspace_header`] its contents closure is drawing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeaderSlot {
+    /// Trailing actions, laid out right to left from the right edge.
+    Actions,
+    /// The slot right after Back, for Previous/Next.
+    Navigation,
+}
+
+/// The Clip Editor and Mixer header: Back, a navigation slot, then the title
+/// in `TextRole::Subtitle` with an optional context line. The title keeps one
+/// size in both workspaces. `contents` runs once per [`HeaderSlot`] (actions
+/// first, so the identity truncates into the remaining width); one closure
+/// lets both slots borrow the same application state.
+pub fn clip_workspace_header<R>(
+    ui: &mut Ui,
+    title: impl Into<WidgetText>,
+    context: Option<&str>,
+    mut contents: impl FnMut(&mut Ui, HeaderSlot) -> R,
+) -> crate::WorkspaceHeaderResponse<R> {
+    let full_title = title.into().text().to_owned();
+    let row = crate::soft_surface(
+        ui,
+        egui::Frame::new().inner_margin(egui::Margin::symmetric(
+            tokens::SPACE_MD as i8,
+            tokens::SPACE_SM as i8,
+        )),
+        |ui| {
+            let height = context
+                .map_or(0.0, |_| {
+                    ui.fonts_mut(|fonts| {
+                        fonts.row_height(&TextRole::Subtitle.font())
+                            + tokens::SPACE_XS
+                            + fonts.row_height(&TextRole::Note.font())
+                    })
+                })
+                .max(tokens::CONTROL_HEIGHT);
+            ui.horizontal(|ui| {
+                ui.set_min_height(height);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.set_min_height(height);
+                    let inner = contents(ui, HeaderSlot::Actions);
+                    ui.add_space(tokens::SPACE_MD);
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_height(height);
+                        let back = crate::quiet_button(ui, "Back")
+                            .on_hover_text("Return to the previous workspace");
+                        ui.add_space(tokens::SPACE_XS);
+                        contents(ui, HeaderSlot::Navigation);
+                        ui.add_space(tokens::SPACE_XS);
+                        let (title, context) = ui
+                            .vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
+                                let title = ui
+                                    .add(
+                                        egui::Label::new(
+                                            TextRole::Subtitle.rich(ui.ctx(), &full_title),
+                                        )
+                                        .truncate()
+                                        .show_tooltip_when_elided(false),
+                                    )
+                                    .on_hover_text(&full_title);
+                                let context = context.map(|context| {
+                                    ui.add(
+                                        egui::Label::new(TextRole::Note.rich(ui.ctx(), context))
+                                            .truncate()
+                                            .show_tooltip_when_elided(false),
+                                    )
+                                });
+                                (title, context)
+                            })
+                            .inner;
+                        (back, title, context, inner)
+                    })
+                    .inner
+                })
+                .inner
+            })
+            .inner
+        },
+    );
+    let (back, title, context, inner) = row.inner;
+    crate::WorkspaceHeaderResponse {
+        back,
+        title,
+        context,
+        inner,
+        response: row.response,
+    }
 }

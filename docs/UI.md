@@ -277,8 +277,11 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `paint_track_header_sections`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_zoom_controls`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
 | Snap step shared by every timeline | `snap_choice`, `snap_label` (Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator) |
-| Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
-| MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
+| Piano keys, notes, and velocity | `PianoRows`, `piano_key` (keyboard: `raised` white keys, inset dark black keys, lines only at B/C and E/F), `piano_velocity_marker`, `piano_velocity_sibling_marker` (hollow chord sibling), `paint_velocity_lane`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
+| Beat grid behind piano roll, audio waveform and curves | `paint_beat_grid(painter, rect, view, snap, beats_per_bar)`, `beat_grid_level`: bar `grid_bar`, beat halfway to it, snap subdivision `grid_minor`; one physical pixel on pixel centers |
+| MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length` (current-value chooser **Length 1/16** beside Snap), `paint_clip_end_label` |
+| Clip editor toolbar end and analysis drawer | `editor_view_controls` (caption slot, zoom, View, Tool help; reservation measured from the controls), `editor_status_caption` (progress, errors, **Bar 3.2 – 4.1**), `editor_bottom_drawer` (fixed panel under the canvas), `clip_nudge_section` (Nudge inside a Clip menu) |
+| Clip Editor and Mixer header | `clip_workspace_header` (Back, `HeaderSlot::Navigation` chevron pair, Subtitle title and context line, right-to-left actions), `clip_navigation_header_controls` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
 | Automation state and segment shape | `AutomationState`, `AutomationControl`, `automation_badge`, `paint_automation_control`, `automatable_parameter_context`, `automatable_menu_contents`, `automation_parameter_context`, `automation_channel_menu`, `curve_timeline_editor_with_segments`, `CurveSegment`, `curve_segment_controls`, `curve_toolbar`, `curve_endpoint_summary`, `paint_curve_override` |
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
@@ -852,7 +855,7 @@ very high and low notes remain distinct and never cover the name. These helpers
 only paint; selection, dragging, trimming and ghost identity retain the clip's
 existing interaction target.
 
-The piano toolbar groups length, grid scale and multi-draw harmony under **Draw settings**; its tooltip shows the current values. `DrawNoteLength` supplies **Last note**, 1/16, 1/8, 1/4, 1/2 and one-bar drawing choices through `drawing_note_length`. Last note begins at 1/16 and remembers the last drawn or selected duration; the application converts audible beats to source time. `paint_clip_end_label` marks the visible **Clip end** without adding hit targets. Drawing beyond it extends the MIDI occurrence in the same Undo step as the note.
+The piano toolbar shows **Snap**, **Length** and **Key** as three current-value choosers right after the tool families: `snap_choice` sets the drawing and moving grid, `drawing_note_length` the initial note length, and **Key C · Natural minor** opens Root, Scale and Chord rows for the grid highlights and multi-draw harmony. `DrawNoteLength` supplies **Last note**, 1/16, 1/8, 1/4, 1/2 and one-bar drawing choices through `drawing_note_length`. Last note begins at 1/16 and remembers the last drawn or selected duration; the application converts audible beats to source time. `paint_clip_end_label` marks the visible **Clip end** without adding hit targets. Drawing beyond it extends the MIDI occurrence in the same Undo step as the note.
 
 ## State, focus, and accessibility
 
@@ -1206,7 +1209,11 @@ neither project history nor playback. Peak and geometry caches keep it bounded.
 
 ## Musical generation previews
 
-The piano-roll **Generate…** action opens a movable dialog over the current clip.
+The piano-roll **Generate…** action opens a movable dialog docked at the right of the
+current clip, `POPUP_WIDTH_SM` wide at every window size so the live preview stays
+visible beside it. `popup_tabs` switches Chord, Arpeggio and Melody with the AI
+button trailing; Start bar and Length are the first rows of the same form grid as
+every other setting.
 Start bar and Length initially cover only complete visible bars, in clip-local
 time. Choices, harmony, preview state and range are remembered per clip for the
 app session after apply or cancel; New/Open clears that memory. **Next range**
@@ -1214,7 +1221,7 @@ advances by the current whole-bar length while retaining settings and is disable
 at an empty range or project bounds. Generator harmony stays independent of the
 editor's visual Grid scale. A view containing no full bar starts with zero length
 and requires an explicit range. The range stays fixed while changing settings or using **Fit
-preview**. Range and confirmation controls remain visible when parameters scroll.
+preview**. Confirmation controls remain visible when parameters scroll.
 
 **Chord** sustains the selected chord or scale across the range, with octave and
 voicing-shift controls. **Arpeggio** offers seven orders and an eighth-note-based
@@ -1230,20 +1237,21 @@ step, using the existing live playback edit path. The selected occurrence extend
 temporarily show all pitches so off-scale choices remain visible. Draft generation
 is cached by settings, bounded to 8,192 notes and never allocates project IDs.
 
-`generation_root_selector` exposes all twelve pitch classes in a three-column menu without scrolling. `generation_bar_range` edits a one-based **Start bar** and **Length** in whole bars
-using the shared `number_stepper` controls, and displays the inclusive active bar
+`generation_root_selector` exposes all twelve pitch classes in a three-column menu without scrolling. `generation_bar_range` adds two rows to the caller's `form_grid`: a one-based **Start bar** and **Length** in whole bars
+using the shared `number_stepper` controls; Length's hover shows the inclusive bar
 range. Dragging, typing, whole-bar steps and the shared exact-value keypad all
 edit the same bounded values. Zero length represents a view with no complete
 bars; the caller disables confirmation until a valid range is chosen. Returned
 input responses expose change state, focus and precise interaction rectangles.
 
-`generation_footer` reserves two lines for draft, success or error feedback from
-the first frame. **Add notes**, **Next range**, and **Cancel**/**Done** retain
-their positions through repeated additions and validation errors; bounded status
-text exposes its full value on hover. The caller owns validation and edits.
-`generation_footer_with_preview` shares that status row with Preview and Fit
-controls in short windows, keeping at least 89 points for scrollable generation
-parameters. The compact range summary remains available from Length's hover.
+`generation_footer` follows the `dialog_actions` convention: **Add notes**
+(primary) at the right edge, then **Cancel**/**Done** (one fixed width), then
+**Next range**. A fixed status line above the actions holds draft, success or
+error feedback, truncated with its full text on hover, so every target keeps its
+position through repeated additions and validation errors. The caller owns
+validation and edits. `generation_footer_with_preview` starts that status line
+with the view-only Preview toggle and **Fit preview**. **New variation** and
+**Use scale for grid** stay pinned above that status line whenever they apply.
 
 Generation previews stay in the live piano roll. Draw the ordinary canvas, then
 `paint_generation_backdrop`, `paint_generation_range` and
@@ -1277,13 +1285,18 @@ can still be cut, trimmed, moved, stretched, duplicated, or joined.
 the same output bus/folder. Imported alternatives and newly recorded loop passes
 share this take editor. **Track → Audio takes…** recovers alternatives even after every
 comp piece was deleted or joined, and a group picker appears for multiple groups.
-**Takes → Keep comp only** discards the retained project alternatives without
+**Keep comp only** discards the retained project alternatives without
 modifying source files; Undo restores them.
 
 `paint_timeline_selection` and `paint_audio_clip_edges` provide shared selection
 painting and visible edge targets. Offscreen boundaries never become phantom
 trim handles. `audio_take_lane` is a reusable, keyboard-focusable waveform choice
-with a name, short detail, selection tint, and a common normalized time range.
+89 points tall: the name and its right-aligned detail share one identity line above
+a `SPACE_XL` waveform plot, on a fill-only row that gains an outline only when
+selected or focused, with a selection tint and a common normalized time range.
+The takes popup draws each take as a mono sum (the louder channel per column) and
+uses `daw_ui::toolbar` with its commands leading and **View** trailing; the range
+fields read and accept bar.beat positions (`musical_position_field`).
 The app uses `audio_take_lane_with_waveform` to render the same progressive source
 preview as the arranger and editor. Its callback is clipped to the waveform plot;
 source span mapping and selection remain with the caller.
@@ -1459,3 +1472,11 @@ before laying out content, draw content through `footer.body()`, then call
 the footer measures wrapped rows and stays against the dialog's bottom padding.
 Body growth and status changes cannot push actions down or enlarge the window.
 Use `popup_scroll_body` with a zero footer reservation inside this body.
+
+### Clip editor toolbars and canvases
+
+Both clip editors use one toolbar skeleton: tools, **Snap**, editor choosers or menus, then `editor_view_controls` with zoom, **View** and Tool help at the trailing edge. The audio editor keeps one fixed slot after Pitch for the active tool's options (fade length and curve) or, otherwise, the gesture caption and status, so changing tools never changes how the row wraps and the ruler and canvas never move. Nudge is a section of the audio **Clip** menu. Transient detection and grid slicing open in `editor_bottom_drawer` below the canvas. Gain is a number field with a **Gain** prefix rather than a separate bold label.
+
+The audio canvas starts after a `PIANO_KEYS_WIDTH` gutter holding the **L**/**R** labels, so audio and MIDI canvases share one left edge. Channels are separated by a 1 px `line`, quiet −6 dB guides use `grid_minor`, the waveform takes the track color (selection keeps the accent) and the spectrogram is drawn per channel band with a neutral tint. Fade handles are 13-point rounded squares with a `bg` ring, inset `SPACE_SM` from the top, with a dotted guide while hovered; the gain envelope is inset `SPACE_XS` so unity stays visible as a quiet line.
+
+The piano roll keys sit flush with the grid behind a 1 px divider. Note names use `TextRole::Note` and appear only when they fit, notes use `NOTE_RADIUS` corners, and the velocity lane (`VELOCITY_LANE_HEIGHT`) has its own background, 25/50/75/100 % guides and bar lines. **Local** sits on the ruler's clock baseline. The **Notes** menu is grouped by separators: edit, timing (Quantize…, Nudge, Legato), pitch and transform, then a Velocity `parameter_row`.
