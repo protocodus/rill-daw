@@ -184,7 +184,7 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
 | Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
 | Forms and windows | `FORM_LABEL_WIDTH` 144, `FORM_FIELD_WIDTH` 233; `POPUP_WIDTH_SM` 377, `POPUP_WIDTH_MD` 610, `POPUP_WIDTH_LG` 987 |
-| Mixer and editors | `MIXER_STRIP_WIDTH` 180, `MIXER_SCALE_GUTTER` 34, `MIXER_FADER_MIN` 120, `MIXER_METER_WIDTH` 13; `PIANO_KEYS_WIDTH` 60, `VELOCITY_LANE_HEIGHT` 89, `NOTE_RADIUS` 3 |
+| Mixer and editors | `MIXER_STRIP_WIDTH` 180 (superseded by `MIXER_CHANNEL_WIDTH` 144 in `mixer.rs`), `MIXER_SCALE_GUTTER` 34, `MIXER_FADER_MIN` 120, `MIXER_METER_WIDTH` 13; `PIANO_KEYS_WIDTH` 60, `VELOCITY_LANE_HEIGHT` 89, `NOTE_RADIUS` 3 |
 
 Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light. Blue identifies commands that change the document, pink AI, green guides, and orange automation. Tools and view controls stay neutral text, so a toolbar reads as quiet text with a few blue commands; the active tool keeps its glowing border. Recording is red, an active Mute is yellow and an active Solo is green (`Palette::recording`, `mute`, `solo`). Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. The single primary action of a toolbar or dialog footer uses a solid action fill with contrasting text and a small blurred shadow; secondary commands keep the tinted fill. Selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
 
@@ -248,9 +248,9 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Focused workspace structure | `workspace_header`, `workspace_header_with_context`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
-| Mixer parameter controls and output level | `mixer_fader`, `mixer_pan`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `mixer_level_meter` |
+| Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_readout` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
-| Mixer identity, inserts and routing | `mixer_master_title`, `mixer_effects_button`, `mixer_insert_summary`, `mixer_bus_input_summary`, `paint_mixer_fader_scale`, `mixer_output_button`, `mixer_sends_button`, `MixerSend` |
+| Mixer identity, inserts and routing | `mixer_name_plate`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Boolean button | `toggle` |
@@ -605,7 +605,7 @@ in persistent toolbars; keep explicit filled actions for primary tasks and
 confirmation. `command_group` supplies one rounded surface, five-point padding
 and complete-group wrapping, without taking input itself.
 
-`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical channel with a stable ID, optional thin track-color marker, and a subtle divider. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows measure their title/detail stack with 13-point insets and a 5-point text gap. They reserve the same preview space while thumbnails are loading so names and actions remain aligned.
+`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical, fill-only channel card with a stable ID, a quiet wash of the track color and 8-point margins; the selected strip adds a glow and outline. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows measure their title/detail stack with 13-point insets and a 5-point text gap. They reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
 `device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections and producers. `filter_chip` shows an active filter and removes it when clicked; pair it with a **Clear filters** action.
 
@@ -762,27 +762,40 @@ Master peak is a readout rather than a gain field. Its engine-provided peaks
 measure the actual output mix and retain brief transients with a sample-rate-based
 release, including across silent callbacks; pause and stop clear the meters.
 
-Mixer follows signal order from top to bottom: source/channel settings, Effects
-and insert summary, volume and pan, **Mute**/**Solo**, horizontal stereo **Level**,
-then **Output** and auxiliary sends. `mixer_fader` applies the shared slider's
-mixer skin: a recessed vertical rail, a clear rectangular handle and calibrated
-dB landmarks. `mixer_pan` uses the shared compact rotary knob in the same
-55-point parameter row, retaining relative dragging, exact-value context entry
-and automation actions. Its 48-point ring contains no text or ticks;
-the adjacent caption shows **Pan C**, **Pan L…** or **Pan R…**. The complete row
-is an exact-entry context target, and `knob_geometry` returns the actual dial
-geometry through its response ID. The full-height volume fader remains separate.
+Mixer follows signal order from top to bottom: the name plate, the source
+("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), Effects and its inserts,
+pan with **Mute**/**Solo**, the gain and peak readouts over the fader unit, then
+the output and sends. Strips are 144-point fill-only cards with 8-point margins
+(`MIXER_CHANNEL_WIDTH`); only the selected strip is outlined. Rows of one section
+sit `MIXER_ROW_GAP` (5) apart and sections `MIXER_SECTION_GAP` (13) apart: space
+alone separates them, without frames or rules. The name plate, Effects row,
+"+ Insert" slot, output, send and **Add send…** rows share the quiet `mixer_row`
+(no surface until hover, a focus ring on keyboard focus, text inset 8 points,
+an optional 3-point destination rail). Inside a strip only the gain field, the
+pan and fader troughs and the meter troughs carry an outline.
+
+`mixer_fader` and `Knob::perceptual_gain` share `gain_taper`: 0 dB at 75 % of the
+travel, −10/−20/−30 dB evenly spaced, linear in amplitude below −30 dB, +3.5 dB at
+the top of the 0..1.5 model range. Gain dials move at the fader's rate however far
+their range extends. `paint_mixer_scale` paints the labelled dB stops (+3.5, 0,
+−6, −12, −20, −30, −∞) and minor ticks (−3, −9, −18, −24, −40) on the scale side
+only; 0 dB keeps its hollow-circle landmark on the cap. The fader unit
+`[scale 34][rail 21][gap 5][meter 13]` is centered on the strip and pixel
+snapped: one 5-point trough, a 21×13 cap, and `channel_meter`, a vertical stereo
+peak meter on the same scale with a 1.5 s peak hold and a clip latch (warning
+color) that a click resets. `channel_meter_readout` shows the held peak above the
+meter in FONT_CAPTION; the gain field ("−∞ dB" at silence) sits left of it.
+`mixer_pan` is a 21-point horizontal rail in the same skin with a center detent:
+pointer edits within 3 % of center land on C, arrow keys keep their fine steps. Its
+value caption ("C", "L15", "R100") sits right of the rail in FONT_CAPTION. The
+complete row is an exact-entry and automation context target.
 Strip height follows the window rather than transient notices or the number of
-sends. The height calculation reserves two routing lanes (main output and one
-send) plus space for an ordinary notice, keeping that overview visible at the
-reviewed 1440×1000 viewport. Faders retain their usable minimum height; shorter
-windows and additional lanes remain accessible by scrolling. Notices and added
-routing lanes keep existing controls in place. The viewport still clamps
-scroll offsets at the content boundaries when its visible area changes.
-`mixer_mute_solo` gives the two independent switches equal-width, full-height
-buttons with explicit selected states. `mixer_level_meter` shows separate L/R
-peaks on a fixed −60..0 dBFS scale after all processing controls; it reads engine
-peaks without adding smoothing or audio state.
+sends. The height calculation reserves two 34-point routing lanes (main output
+and one send) plus space for an ordinary notice. Faders retain their usable
+minimum height; shorter windows and additional lanes remain accessible by
+scrolling. Notices and added routing lanes keep existing controls in place.
+`mixer_mute_solo` gives the two independent switches equal-width, fill-only
+buttons; active Mute and Solo take `Palette::mute` and `Palette::solo`.
 
 The toolbar places **Add send…** beside **Add bus**. Its send menu uses the
 selected audio, MIDI or bus channel and requires an explicit eligible destination;
@@ -792,9 +805,11 @@ selected channel, the send action is disabled.
 Generic bus creation chooses the first unused **Bus 1**, **Bus 2**, and so on,
 checking all existing channel names. Existing names remain unchanged, and bus
 destinations stay distinct from the **New bus and send** creation command.
-The output control carries the destination's color. Each strip's separate send
-action names a single destination or shows the send count; hover lists every
-destination, pre/post position and level. An empty strip's **Add send…** opens
+The output row names the destination only ("Master", "Drum bus") beside its
+color rail; Master's output row opens Setup › Audio. Up to two compact send
+rows follow (destination rail, name, "PRE" when pre-fader, level in dB), then
+"+N more", then **Add send…**; every strip reserves the same send area so
+controls never move when a send is added. An empty strip's **Add send…** opens
 the same destination choices directly, with a caption naming that strip's source.
 Opening or cancelling preserves selection, workspace and project state; a choice
 creates one undoable send. Existing send summaries open Routing for editing.
@@ -1056,11 +1071,24 @@ Plugin discovery stays metadata-only. After discovery, one isolated helper at a 
 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
 
-Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The **Channel** menu also provides **Open channel**, Instrument, Effects, and Routing actions where applicable. Channel, Effects, Instrument, and Routing share navigation links that keep the same channel selected. The links omit the current destination, whose context is already shown in the title; closing a utility returns to its caller. Each channel shows its own horizontal post-fader/pan stereo meter below Mute/Solo and above Output; Master shows the final stereo output meter. Readings come from the running engine.
+Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The name plate's context menu provides **Open channel**, Instrument, Effects, and Routing where applicable; the source row's Automation menu holds the channel's automation actions. Channel, Instrument, Effects, and Routing share `utility_header`: one row with the page links in a fixed order (Channel · Instrument · Effects · Routing · Mixer, the current window shown as the selected tab) leading and **AI for this context** trailing, then a 21-point gap, so every body starts at the same height. Closing a utility returns to its caller. Each channel's vertical meter stands beside its fader on the fader's dB scale; Master shows the final stereo output on the same scale. Readings come from the running engine.
 
-Each mixer strip lists its instrument and inserts directly above the fader.
-Click a device to open that instance; right-click **Effects** for **+ Insert**
-to open that channel's effect chooser. Long chains scroll within their reserved area; channel/master faders
+Routing follows the strip's signal order: **Output** first, then **Sends**, with
+pre-fader sends above post-fader ones. Each send is one `parameter_row`: the
+destination, a 55-point ring on the shared gain taper, the level in dB (exact
+entry from −60 to +24.08 dB, the model's 0..16 range), **Pre**/**Post**, the
+Automation menu and a quiet remove icon. **Add send…** lists eligible buses and
+**New bus and send**; the footer offers **New return with effect…**.
+
+The Effects window heads its chain with **Inserts** and the active count (the
+processing order is in the count's tooltip). Each insert shows its name on the
+enable switch with the plug-in model beneath it and one non-wrapping action row.
+Bypass reads the same on every surface: a muted name, a gray rail and a tooltip.
+
+Each mixer strip names its instrument in the source row and lists its inserts
+under **Effects**. Click a device to open that instance; an empty chain shows a
+quiet **+ Insert** row that opens that channel's effect chooser (right-click
+**Effects** offers the same). Long chains scroll within their reserved area; channel/master faders
 stay aligned. Device rows show a custom name above subtle producer/model text.
 Instrument and effect overviews expose **Device name** and an optional mouse
 keyboard; renaming is undoable and
@@ -1435,9 +1463,9 @@ returns loop bounds and handle geometry without advancing layout.
 `device_identity_button` shows a custom name, quiet model, and optional thumbnail.
 Application views own coordinate mapping, document validation and Undo.
 
-Mixer strips use shared `mixer_sections` frames around Source, Inserts, Volume &
-pan, and Output & sends. Alternating neutral surfaces, boundaries and downward
-connectors make processing order visible while retaining aligned control rows.
+Mixer strip sections (Source, Effects, Volume & pan, Output & sends) are told
+apart by `MIXER_SECTION_GAP` alone; their names appear in tooltips and
+diagnostics, not as frames.
 
 The default palette is neutral gray. Blue identifies actions, gray identifies
 view and presentation choices, pink identifies AI features, green identifies
