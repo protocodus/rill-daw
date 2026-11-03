@@ -520,12 +520,8 @@ fn dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat(
     let mut harness = Harness::new(0.0);
     let output = harness.settle_full();
     let label = text_position(&output, "Drop audio here · Double-click for MIDI", 0.0);
-    // The hint is inset SPACE_LG from the canvas edge; beat 0 sits SPACE_SM in.
-    let pos = label
-        + Vec2::new(
-            harness.app.zoom * 3.0 - daw_ui::tokens::SPACE_LG + daw_ui::tokens::SPACE_SM,
-            5.0,
-        );
+    // The hint is inset SPACE_LG from the canvas edge, where beat 0 sits.
+    let pos = label + Vec2::new(harness.app.zoom * 3.0 - daw_ui::tokens::SPACE_LG, 5.0);
     harness.drop_wav(pos, &path);
     assert_eq!(harness.app.project.tracks.len(), 2);
     let track = harness.app.project.tracks.last().unwrap();

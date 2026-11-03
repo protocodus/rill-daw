@@ -129,10 +129,7 @@ fn loop_label_uses_the_caption_font_and_stays_clear_of_the_playhead() {
     let origin = x_at(timeline, 0.0);
     let header = timeline["header_width"].as_f64().unwrap();
     assert!(
-        origin
-            >= timeline["canvas"]["min"][0].as_f64().unwrap().max(header)
-                + f64::from(tokens::SPACE_SM)
-                - 0.5,
+        origin >= header + f64::from(tokens::SPACE_SM) - 0.5,
         "beat 0 keeps a gutter from the header edge"
     );
     let text = "1.1 – 5.1 · 0:08";

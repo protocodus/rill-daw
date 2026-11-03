@@ -378,7 +378,12 @@ impl DawApp {
             daw_ui::tokens::TIMELINE_RULER_HEIGHT + daw_ui::tokens::TIMELINE_LOOP_HEIGHT;
         let canvas = Rect::from_min_max(
             ui.available_rect_before_wrap().min
-                + Vec2::new(header_width, ruler_height + ui.spacing().item_spacing.y),
+                // A leading gutter keeps beat 0, the playhead and the first
+                // clip edge off the header border.
+                + Vec2::new(
+                    header_width + daw_ui::tokens::SPACE_SM,
+                    ruler_height + ui.spacing().item_spacing.y,
+                ),
             ui.available_rect_before_wrap().max - Vec2::new(12.0 + right_inset, 0.0),
         );
         if let Some((track, clip)) = self.arranger_selection.reveal.take() {
@@ -666,15 +671,8 @@ impl DawApp {
         )
         .0
         .on_hover_text("Organize tracks and folders");
-        let grid_left = ruler.left() + header_width;
-        // A leading gutter keeps beat 0, the playhead and the first clip edge
-        // off the header border. `view` is the painted mapping; `viewport`
-        // stays the stored navigation state.
-        let view = daw_ui::TimelineViewport {
-            start_beat: viewport.start_beat
-                - f64::from(daw_ui::tokens::SPACE_SM / viewport.pixels_per_beat),
-            ..viewport
-        };
+        let grid_left = ruler.left() + header_width + daw_ui::tokens::SPACE_SM;
+        let view = viewport;
         let origin = grid_left - (view.start_beat * self.zoom as f64) as f32;
         let first_beat = (((grid_left - origin) / self.zoom).floor().max(0.0)) as usize;
         let last_beat = (((canvas.right() - origin) / self.zoom).ceil().max(0.0) as usize + 1)
@@ -1920,8 +1918,11 @@ impl DawApp {
             viewport.row_height = height;
         }
         let header_gutter = Rect::from_min_max(
-            Pos2::new(grid_left - 8.0, ruler.top()),
-            Pos2::new(grid_left - 1.0, scroll.inner_rect.bottom()),
+            Pos2::new(grid_left - daw_ui::tokens::SPACE_SM - 8.0, ruler.top()),
+            Pos2::new(
+                grid_left - daw_ui::tokens::SPACE_SM - 1.0,
+                scroll.inner_rect.bottom(),
+            ),
         );
         let header_resize_id = ui.id().with("track_label_width");
         daw_ui::resize_value_at(
@@ -1950,9 +1951,7 @@ impl DawApp {
             data.insert_temp(header_id, header_width);
             let rect_json = |rect: Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
             let mut diagnostics = serde_json::json!({
-                // The painted mapping, gutter included: canvas.min.x is this beat.
-                "start_beat": viewport.start_beat - f64::from(daw_ui::tokens::SPACE_SM / viewport.pixels_per_beat),
-                "view_start_beat": viewport.start_beat, "pixels_per_beat": viewport.pixels_per_beat,
+                "start_beat": viewport.start_beat, "pixels_per_beat": viewport.pixels_per_beat,
                 "row_offset": viewport.row_offset, "row_height": viewport.row_height,
                 "canvas": {"min": [canvas.min.x, canvas.min.y], "max": [canvas.max.x, canvas.max.y]},
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
