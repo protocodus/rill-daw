@@ -890,14 +890,23 @@ impl DawApp {
                                     + 3.0 * fonts.row_height(&daw_ui::text::TextRole::Note.font())
                                     + fonts.row_height(&daw_ui::text::TextRole::Label.font())
                             });
-                            let identity_height = text_height
+                            let identity_estimate = text_height
                                 + 2.0 * daw_ui::tokens::CONTROL_HEIGHT
                                 + 7.0 * ui.spacing().item_spacing.y
                                 + SPACE_SM;
+                            // The identity, categories and install path must stay
+                            // above the fold; the previous frame's measurement
+                            // sizes the image, the estimate covers the first one.
+                            let identity_id = ui.id().with("library_details_identity");
+                            let identity_height = ui
+                                .ctx()
+                                .data(|data| data.get_temp::<f32>(identity_id))
+                                .unwrap_or(identity_estimate);
                             let preview_height = (body_height - identity_height).clamp(0.0, width * 0.6);
                             if preview_height > 0.0 {
                                 daw_ui::device_preview(ui, texture.as_ref(), icon, egui::vec2(width, preview_height));
                             }
+                            let identity_top = ui.next_widget_position().y;
                             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, &entry.plugin.name, 2);
                             daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, if entry.plugin.vendor.is_empty() { "Unknown developer" } else { &entry.plugin.vendor });
                             daw_ui::text::note(ui, kind_label(&entry.plugin));
@@ -939,6 +948,11 @@ impl DawApp {
                                 }
                             });
                             ui.add_space(SPACE_SM);
+                            let measured = ui.next_widget_position().y - identity_top;
+                            if (measured - identity_height).abs() > 0.5 {
+                                ui.ctx().data_mut(|data| data.insert_temp(identity_id, measured));
+                                ui.ctx().request_repaint();
+                            }
                             egui::Grid::new("library_device_details").num_columns(2).min_col_width(89.0).min_row_height(daw_ui::tokens::COMPACT_HEIGHT).spacing(egui::vec2(SPACE_MD, SPACE_SM)).show(ui, |ui| {
                                 let mut row = |label: &str, value: String| {
                                     daw_ui::text::note(ui, label);
