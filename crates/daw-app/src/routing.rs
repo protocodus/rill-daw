@@ -167,9 +167,17 @@ impl DawApp {
                 });
                 add_effect = footer
                     .show(window_ui, |ui| {
-                        widgets::primary_button(ui, "+ Insert")
-                            .on_hover_text("Add an effect to the end of this chain")
-                            .clicked()
+                        widgets::dialog_actions(
+                            ui,
+                            |ui| {
+                                widgets::primary_button(ui, "+ Insert")
+                                    .on_hover_text("Add an effect to the end of this chain")
+                                    .clicked()
+                            },
+                            |_| {},
+                        )
+                        .inner
+                        .0
                     })
                     .inner;
             });
@@ -240,16 +248,10 @@ impl DawApp {
         widgets::popup(format!("Routing of {track_name}"), ctx)
             .id(egui::Id::new("routing"))
             .open(&mut open)
-            .default_width(620.0)
-            // Keep both send-setting rows intact when a remembered window is
-            // resized by a live display-density change. Shorter viewports can
-            // still scroll the sends; the window remains bounded horizontally.
-            .min_width(widgets::popup_body_size(ctx).x.min(377.0))
-            .default_height(620.0)
-            // Keep a useful send viewport below navigation and contextual AI.
-            // Otherwise a remembered compact size can collapse the scrolling
-            // body to its heading when the appearance or display scale changes.
-            .min_height(widgets::popup_body_size(ctx).y.min(360.0))
+            .default_width(widgets::tokens::POPUP_WIDTH_MD)
+            // A send row is one unwrapped parameter_row; keep it whole. The
+            // height hugs the content and the body scrolls in short windows.
+            .min_width(widgets::popup_body_size(ctx).x.min(widgets::tokens::POPUP_WIDTH_MD))
             .vscroll(false)
             .show(ctx, |ui| {
                 let scope = daw_tools::ToolScope::Routing { track_id };
@@ -267,6 +269,8 @@ impl DawApp {
                 let window_ui = ui;
                 let ui = footer.body();
                 widgets::scroll_body(ui, "routing_body", |ui| {
+                    // One vertical list: headings, the output and send rows.
+                    ui.spacing_mut().item_spacing.y = widgets::tokens::SPACE_MD;
                     // Signal order, as on the strip: the main output, then sends
                     // (pre-fader above post-fader).
                     widgets::text::section_heading(ui, "Output");
@@ -340,6 +344,7 @@ impl DawApp {
                                             .compact()
                                             .diameter(SEND_KNOB_DIAMETER)
                                             .perceptual_gain()
+                                            .pointer()
                                             .clamping(egui::SliderClamping::Edits)
                                             .automation(state.map(|(_, status, _)| status))
                                             .text("Send level"),

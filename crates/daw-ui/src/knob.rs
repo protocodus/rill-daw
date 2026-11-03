@@ -100,6 +100,7 @@ pub struct Knob<'a> {
     show_automation_label: bool,
     compact: bool,
     perceptual_gain: bool,
+    pointer: bool,
     display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
 }
 
@@ -130,6 +131,7 @@ impl<'a> Knob<'a> {
             show_automation_label: true,
             compact: false,
             perceptual_gain: false,
+            pointer: false,
             display_round_trip: None,
         }
     }
@@ -186,6 +188,12 @@ impl<'a> Knob<'a> {
     pub fn perceptual_gain(mut self) -> Self {
         self.perceptual_gain =
             *self.range.start() >= 0.0 && *self.range.end() > *self.range.start();
+        self
+    }
+    /// A compact dial with a filled body and a pointer, so a small ring
+    /// still reads as a control rather than a bare arc.
+    pub fn pointer(mut self) -> Self {
+        self.pointer = true;
         self
     }
     pub fn min_decimals(mut self, decimals: usize) -> Self {
@@ -572,6 +580,17 @@ impl<'a> Knob<'a> {
                 let visuals = ui.style().interact(&dial_response);
                 ui.painter()
                     .circle(center, radius * 0.75, visuals.bg_fill, visuals.bg_stroke);
+            } else if self.pointer {
+                // Fill only: the ring itself is the body's edge.
+                ui.painter().circle_filled(
+                    center,
+                    radius - 3.0,
+                    if dial_response.hovered() {
+                        colors.control_hover
+                    } else {
+                        colors.control_fill
+                    },
+                );
             }
             let focused_ring = ring_only && ui.is_enabled() && dial_response.has_focus();
             ui.painter().add(egui::Shape::line(
@@ -580,6 +599,8 @@ impl<'a> Knob<'a> {
                     if focused_ring { 3.0_f32 } else { 2.0_f32 },
                     if focused_ring {
                         colors.text
+                    } else if self.pointer {
+                        colors.line.lerp_to_gamma(colors.muted, 0.5)
                     } else {
                         colors.line
                     },
@@ -608,7 +629,7 @@ impl<'a> Knob<'a> {
                 ui.painter()
                     .circle_stroke(unity, 3.0, Stroke::new(1.5_f32, colors.text));
             }
-            if !ring_only {
+            if !ring_only || self.pointer {
                 ui.painter().line_segment(
                     [center + index_direction * radius * 0.18, geometry.index],
                     Stroke::new(2.0_f32, colors.text),

@@ -77,7 +77,9 @@ pub fn effect_slot<T: Send + Sync + 'static, R>(
 
 /// Empty insert chains keep their purpose and insertion action discoverable.
 pub fn empty_effect_chain(ui: &mut Ui) -> Response {
+    // Fill only: the inset's own outline would be a second boundary.
     crate::inset(ui.ctx())
+        .stroke(egui::Stroke::NONE)
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             text::label(ui, "No effects");
