@@ -104,7 +104,12 @@ fn device_library_can_move_and_resize_without_changing_the_project() {
         resized_window["max"][0].as_f64().unwrap() < after["max"][0].as_f64().unwrap() - 80.0,
         "{after} -> {resized_window}"
     );
-    assert!(resized_window["max"][1].as_f64().unwrap() < after["max"][1].as_f64().unwrap() - 50.0);
+    // Window height hugs the content up to its budget; only the width follows
+    // the user's resize, so the catalogue never leaves a blank band below.
+    assert!(
+        (resized_window["max"][1].as_f64().unwrap() - after["max"][1].as_f64().unwrap()).abs()
+            <= 2.0
+    );
     assert!(visible(&resized, "Search instruments"));
     assert_eq!(resized["project"], before["project"]);
     assert_eq!(resized["history"], before["history"]);
