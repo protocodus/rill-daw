@@ -692,16 +692,15 @@ impl DawApp {
     }
 
     /// Related views retain this channel and restore their caller on Back/Escape.
-    pub(crate) fn channel_navigation(
-        &mut self,
-        ui: &mut egui::Ui,
+    /// The page links of the selected track's utility windows, in a fixed order.
+    pub(crate) fn channel_links(
+        &self,
         current: ChannelDestination,
-    ) -> bool {
+    ) -> Vec<daw_ui::ViewLink<ChannelDestination>> {
         use ChannelDestination::*;
         let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {
-            return false;
+            return Vec::new();
         };
-        let id = track.id;
         // The Channel page lives under the Properties tabs, which already name
         // it; its row only links onward.
         let mut links = Vec::new();
@@ -736,6 +735,22 @@ impl DawApp {
                 enabled: true,
             },
         ]);
+        links
+    }
+
+    pub(crate) fn channel_navigation(
+        &mut self,
+        ui: &mut egui::Ui,
+        current: ChannelDestination,
+    ) -> bool {
+        use ChannelDestination::*;
+        let Some(id) = self
+            .selected_track
+            .filter(|id| self.project.track(*id).is_some())
+        else {
+            return false;
+        };
+        let links = self.channel_links(current);
         let Some(destination) = daw_ui::view_links(ui, current, &links) else {
             return false;
         };

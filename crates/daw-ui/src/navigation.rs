@@ -34,6 +34,27 @@ pub fn view_links<T: Copy + PartialEq>(
     selected
 }
 
+/// Whether a row of tab links plus one trailing button fits on one line of
+/// this `ui`, so a caller can shorten the trailing label instead of wrapping.
+pub fn links_fit(ui: &Ui, labels: &[&str], trailing: &str) -> bool {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let spacing = ui.spacing().item_spacing.x;
+    let width = |label: &str| {
+        ui.ctx().fonts_mut(|fonts| {
+            fonts
+                .layout_no_wrap(label.to_owned(), font.clone(), egui::Color32::PLACEHOLDER)
+                .size()
+                .x
+        }) + 2.0 * crate::tokens::BUTTON_PADDING_X
+    };
+    let needed = labels
+        .iter()
+        .map(|label| width(label) + spacing)
+        .sum::<f32>()
+        + width(trailing);
+    needed <= ui.available_width()
+}
+
 /// The one header of channel utility windows (Channel, Instrument, Effects,
 /// Routing): page links leading, the contextual AI action trailing, on one
 /// row, then a uniform SPACE_LG gap so every body starts at the same height.

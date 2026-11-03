@@ -51,7 +51,9 @@ fn assert_header(state: &Value, first_body_line: &str) -> f64 {
         );
     }
     assert!(left(label(state, "Mixer")) < left(label(state, "AI for this context")));
+    // Windows hug their content and sit centered, so measure from each one's top.
     label(state, first_body_line)["min"][1].as_f64().unwrap()
+        - state["window_rects"][0]["min"][1].as_f64().unwrap()
 }
 
 #[test]

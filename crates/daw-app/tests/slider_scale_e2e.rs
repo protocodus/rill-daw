@@ -288,7 +288,11 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
                 );
             }
         }
-        near(allocations[0], 120.0, 0.1);
+        near(
+            allocations[0],
+            f64::from(daw_ui::tokens::MIXER_FADER_MIN),
+            0.1,
+        );
         assert!(allocations[1] > allocations[0]);
         // Generous fixed control rows occupy more height before the fader
         // leaves its minimum. Once it grows, every additional strip point

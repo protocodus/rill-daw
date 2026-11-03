@@ -13,10 +13,27 @@ impl DawApp {
         current: ChannelDestination,
         ai_scope: Option<&str>,
     ) -> (bool, bool) {
+        // Five links and the full AI label overflow a medium window; the
+        // short AI label keeps the row on one line instead of wrapping.
+        let labels: Vec<&str> = self
+            .channel_links(current)
+            .iter()
+            .map(|link| link.label)
+            .collect();
+        let compact = !widgets::links_fit(ui, &labels, "AI for this context");
         widgets::utility_header(
             ui,
             |ui| self.channel_navigation(ui, current),
-            |ui| ai_scope.is_some_and(|scope| widgets::contextual_ai_button(ui, scope).clicked()),
+            |ui| {
+                ai_scope.is_some_and(|scope| {
+                    if compact {
+                        widgets::contextual_ai_button_compact(ui, scope)
+                    } else {
+                        widgets::contextual_ai_button(ui, scope)
+                    }
+                    .clicked()
+                })
+            },
         )
     }
 
