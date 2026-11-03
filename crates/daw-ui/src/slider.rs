@@ -15,8 +15,9 @@ pub enum SliderValueMarker {
 }
 
 /// Endpoints take precedence over zero; zero takes precedence over midpoint.
-/// A tiny relative tolerance accommodates f32 parameters without inventing a
-/// zero detent, or labelling a pinned out-of-range value as an endpoint.
+/// A small tolerance relative to the span accommodates f32 parameters and
+/// dB conversions without inventing a zero detent, or labelling a pinned
+/// out-of-range value as an endpoint.
 pub fn slider_value_marker(value: f64, range: RangeInclusive<f64>) -> Option<SliderValueMarker> {
     value_marker_with_zero(value, range, 0.0)
 }
@@ -34,9 +35,9 @@ fn value_marker_with_zero(
     if value < minimum || value > maximum {
         return None;
     }
-    let matches = |landmark: f64| {
-        (value - landmark).abs() <= f64::from(f32::EPSILON) * landmark.abs().min(maximum - minimum)
-    };
+    // Well under a pixel of travel: a value that round-tripped through an f32
+    // parameter or a dB conversion still lands on its landmark.
+    let matches = |landmark: f64| (value - landmark).abs() <= (maximum - minimum) * 1e-4;
     if matches(minimum) {
         Some(SliderValueMarker::Minimum)
     } else if matches(maximum) {
