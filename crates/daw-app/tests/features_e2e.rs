@@ -725,6 +725,14 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
     assert_only_popup(&state, "instrument");
     let original_clips = state["project"]["tracks"][0]["clips"].clone();
     common::wait_visible(&mut app, "Change instrument");
+    // The new track auto-launches its editor, which fails a moment later without a
+    // display. That error lands above the actions and moves the row, so let the
+    // startup settle before aiming the click.
+    common::wait_until(&mut app, |state| {
+        state["native_editor"]["opening"] == false
+            && (state["native_editor"]["open"] == true
+                || state["native_editor"]["error"].is_string())
+    });
     app.click("Change instrument");
     app.command(json!({"command":"text","text":"Fixture B"}));
     common::wait_visible(&mut app, "Rill Fixture B");
