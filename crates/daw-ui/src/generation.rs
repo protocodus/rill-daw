@@ -3,6 +3,13 @@
 use crate::{TimelineViewport, text, theme};
 use egui::{Color32, Painter, Pos2, Rect, Response, Stroke, StrokeKind, Ui};
 
+/// Range fields keep one width whatever their value, so nothing beside or
+/// below them moves when Next range advances the start bar.
+const RANGE_FIELD_SIZE: egui::Vec2 = egui::vec2(
+    2.0 * crate::tokens::SPACE_XL + crate::tokens::SPACE_LG,
+    crate::tokens::CONTROL_HEIGHT,
+);
+
 pub struct GenerationBarRangeResponse {
     pub start: Response,
     pub length: Response,
@@ -58,7 +65,8 @@ pub fn generation_bar_range(
                 1.0..=1_000_000.0,
                 "Start bar",
                 |ui, value| {
-                    ui.add(
+                    ui.add_sized(
+                        RANGE_FIELD_SIZE,
                         crate::number(value)
                             .range(1.0..=1_000_000.0)
                             .speed(0.1)
@@ -85,7 +93,8 @@ pub fn generation_bar_range(
                 0.0..=1024.0,
                 "Length",
                 |ui, value| {
-                    ui.add(
+                    ui.add_sized(
+                        RANGE_FIELD_SIZE,
                         crate::number(value)
                             .range(0.0..=1024.0)
                             .speed(0.1)

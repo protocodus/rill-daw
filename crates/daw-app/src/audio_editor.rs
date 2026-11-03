@@ -2526,7 +2526,11 @@ fn draw_waveform(
     );
     let generation = crate::spectrogram::waveform_generation(painter.ctx());
     let density = painter.ctx().pixels_per_point();
-    let channels = data.channels.min(2);
+    let source_channels = data.channels.min(2);
+    // Take rows are too short for two bands: they show one mono envelope,
+    // the louder channel per column.
+    let mono = spectrum_view == "takes";
+    let channels = if mono { 1 } else { source_channels };
     let center_color = daw_ui::theme::palette(painter.ctx()).line;
     let key = WaveformViewKey {
         generation,
@@ -2586,7 +2590,7 @@ fn draw_waveform(
                     WAVEFORM_RAW_COLUMNS
                 } as f32,
             ) as usize;
-        let mut columns = Vec::with_capacity(bins * channels);
+        let mut columns: Vec<WaveformColumn> = Vec::with_capacity(bins * channels);
         let mut sample_reads = reference_reads;
         let mut low = f32::INFINITY;
         let mut high = f32::NEG_INFINITY;
@@ -2598,7 +2602,7 @@ fn draw_waveform(
             let end = view.beat_at(rect, right).min(clip.end());
             let a = clip.audio_source_frame(start - clip.start, tempo, data.sample_rate);
             let b = clip.audio_source_frame(end - clip.start, tempo, data.sample_rate);
-            for channel in 0..channels {
+            for channel in 0..source_channels {
                 let (minimum, maximum) = if let Some(peaks) = &peaks {
                     // A clip's end is exclusive. Do not expose the next sample
                     // through the final bin (or the preceding sample in reverse).
@@ -2638,6 +2642,13 @@ fn draw_waveform(
                     (value / amplitude_reference).clamp(-f64::from(f32::MAX), f64::from(f32::MAX))
                         as f32
                 };
+                if mono && channel > 0 {
+                    if let Some(column) = columns.last_mut() {
+                        column.minimum = column.minimum.min(normalize(minimum));
+                        column.maximum = column.maximum.max(normalize(maximum));
+                    }
+                    continue;
+                }
                 columns.push(WaveformColumn {
                     beat: (start + end) * 0.5,
                     channel,
@@ -2794,7 +2805,12 @@ fn paint_audio_clip_scaled_in_view(
         start_beat: clip.start,
         pixels_per_beat: rect.width() / clip.length as f32,
         row_offset: 0.0,
-        row_height: rect.height() / (data.channels.min(2) * 2) as f32,
+        row_height: rect.height()
+            / (if view_name == "takes" {
+                2
+            } else {
+                data.channels.min(2) * 2
+            }) as f32,
     };
     draw_waveform(
         painter, rect, view, data, clip, tempo, 1.0, color, view_name, amplitude,

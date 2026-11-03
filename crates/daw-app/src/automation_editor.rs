@@ -663,14 +663,9 @@ impl DawApp {
             let mut value = lane.target.parameter.denormalize(point.value);
             let beat_response = ui
                 .add(
-                    daw_ui::number(&mut beat)
-                        .prefix("Position ")
+                    daw_ui::musical_position_field(&mut beat, beats_per_bar, "Position ")
                         .range(0.0..=daw_core::MAX_BEAT)
-                        .speed(self.snap.max(0.01))
-                        .custom_formatter(|beat, _| {
-                            daw_ui::time::musical_position_label(beat, beats_per_bar)
-                        })
-                        .custom_parser(|text| parse_musical_position(text, beats_per_bar)),
+                        .speed(self.snap.max(0.01)),
                 )
                 .on_hover_text("Bar.beat.sixteenth · drag or double-click to type, e.g. 12.1");
             point_beat_rect = Some(beat_response.rect);
@@ -1382,19 +1377,4 @@ fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {
         },
         AutomationParameter::VstParameter { .. } => |value| format!("{value:.2}"),
     }
-}
-
-/// Parse "bar.beat.sixteenth" (or "bar.beat", or "bar") into a zero-based beat.
-fn parse_musical_position(text: &str, beats_per_bar: u8) -> Option<f64> {
-    let mut parts = text
-        .trim()
-        .split('.')
-        .map(|part| part.trim().parse::<f64>());
-    let bar = parts.next()?.ok()?;
-    let beat = parts.next().transpose().ok()?.unwrap_or(1.0);
-    let sixteenth = parts.next().transpose().ok()?.unwrap_or(1.0);
-    if parts.next().is_some() || bar < 1.0 || beat < 1.0 || sixteenth < 1.0 {
-        return None;
-    }
-    Some((bar - 1.0) * f64::from(beats_per_bar.max(1)) + (beat - 1.0) + (sixteenth - 1.0) / 4.0)
 }

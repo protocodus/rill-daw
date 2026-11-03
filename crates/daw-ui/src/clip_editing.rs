@@ -521,3 +521,32 @@ pub fn clip_nudge_section(ui: &mut Ui, enabled: bool) -> i32 {
     ui.ctx().data_mut(|data| data.insert_temp(id, unit));
     direction
 }
+
+/// A zero-based beat edited as a one-based "bar.beat.sixteenth" position, the
+/// same notation as the rulers. Typing accepts "12", "12.3" or "12.3.2";
+/// the caller sets the range.
+pub fn musical_position_field<'a>(
+    beat: &'a mut f64,
+    beats_per_bar: u8,
+    prefix: &str,
+) -> crate::Number<'a> {
+    crate::number(beat)
+        .prefix(prefix)
+        .custom_formatter(move |beat, _| crate::time::musical_position_label(beat, beats_per_bar))
+        .custom_parser(move |text| parse_musical_position(text, beats_per_bar))
+}
+
+/// Parse "bar.beat.sixteenth" (or "bar.beat", or "bar") into a zero-based beat.
+pub fn parse_musical_position(text: &str, beats_per_bar: u8) -> Option<f64> {
+    let mut parts = text
+        .trim()
+        .split('.')
+        .map(|part| part.trim().parse::<f64>());
+    let bar = parts.next()?.ok()?;
+    let beat = parts.next().transpose().ok()?.unwrap_or(1.0);
+    let sixteenth = parts.next().transpose().ok()?.unwrap_or(1.0);
+    if parts.next().is_some() || bar < 1.0 || beat < 1.0 || sixteenth < 1.0 {
+        return None;
+    }
+    Some((bar - 1.0) * f64::from(beats_per_bar.max(1)) + (beat - 1.0) + (sixteenth - 1.0) / 4.0)
+}

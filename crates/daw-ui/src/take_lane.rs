@@ -1,6 +1,6 @@
 //! Compact waveform choices for take selection. Musical state stays in the caller.
 use crate::{text::TextRole, theme, tokens};
-use egui::{Color32, Rect, Response, Sense, Stroke, StrokeKind, Ui};
+use egui::{Color32, Rect, Response, Sense, Stroke, StrokeKind, Ui, emath::GuiRounding};
 
 pub struct TakeLane<'a> {
     pub name: &'a str,
@@ -59,9 +59,9 @@ pub fn audio_take_lane_with_waveform(
     lane: &TakeLane<'_>,
     waveform: impl FnOnce(&egui::Painter, Rect),
 ) -> Response {
-    // Three clear rows: identity, detail and waveform, with related-label
-    // gaps and equal top/bottom breathing room (89 points in total).
-    let height = 3.0 * tokens::SPACE_LG + 2.0 * tokens::SPACE_XS + 2.0 * tokens::SPACE_SM;
+    // One identity line (name, detail right-aligned) over a SPACE_XL plot,
+    // with SPACE_MD above and below: 89 points in total.
+    let height = 2.0 * tokens::SPACE_MD + tokens::SPACE_LG + tokens::SPACE_SM + tokens::SPACE_XL;
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::click());
     response.widget_info(|| {
@@ -82,49 +82,61 @@ pub fn audio_take_lane_with_waveform(
         } else {
             0.04
         });
-        painter.rect(
-            rect.shrink(1.0),
-            f32::from(tokens::RADIUS),
-            fill,
-            Stroke::new(
-                if lane.selected || response.has_focus() {
-                    1.5_f32
-                } else {
-                    1.0_f32
-                },
-                if lane.selected || response.has_focus() {
-                    lane.color
-                } else {
-                    colors.line
-                },
-            ),
-            StrokeKind::Inside,
-        );
+        // Rows are told apart by their fill and the gap between them; only
+        // the chosen (or focused) take gets an outline.
+        let ppp = ui.pixels_per_point();
+        let card = rect.round_to_pixels(ppp);
+        painter.rect_filled(card, f32::from(tokens::RADIUS), fill);
+        if lane.selected || response.has_focus() {
+            painter.rect_stroke(
+                card,
+                f32::from(tokens::RADIUS),
+                Stroke::new(1.0 / ppp, lane.color),
+                StrokeKind::Inside,
+            );
+        }
         let text_rect = Rect::from_min_max(
-            rect.min + egui::vec2(tokens::SPACE_MD, tokens::SPACE_SM),
+            rect.min + egui::vec2(tokens::SPACE_MD, tokens::SPACE_MD),
             egui::pos2(
                 rect.right() - tokens::SPACE_MD,
-                rect.top() + tokens::SPACE_SM + tokens::SPACE_LG,
+                rect.top() + tokens::SPACE_MD + tokens::SPACE_LG,
+            ),
+        );
+        let detail_width = painter
+            .layout_no_wrap(lane.detail.to_owned(), TextRole::Note.font(), colors.muted)
+            .size()
+            .x
+            .min(text_rect.width() * 0.5);
+        let (name_rect, detail_rect) = (
+            Rect::from_min_max(
+                text_rect.min,
+                egui::pos2(
+                    text_rect.right() - detail_width - tokens::SPACE_SM,
+                    text_rect.bottom(),
+                ),
+            ),
+            Rect::from_min_max(
+                egui::pos2(text_rect.right() - detail_width, text_rect.top()),
+                text_rect.max,
             ),
         );
         crate::text::paint_single_line(
             &painter,
-            text_rect,
+            name_rect,
             TextRole::Label.font(),
             colors.text,
             lane.name,
         );
-        let detail = text_rect.translate(egui::vec2(0.0, tokens::SPACE_LG + tokens::SPACE_XS));
         crate::text::paint_single_line(
             &painter,
-            detail,
+            detail_rect,
             TextRole::Note.font(),
             colors.muted,
             lane.detail,
         );
         let plot = Rect::from_min_max(
-            egui::pos2(text_rect.left(), detail.bottom() + tokens::SPACE_XS),
-            rect.max - egui::vec2(tokens::SPACE_MD, tokens::SPACE_SM),
+            egui::pos2(text_rect.left(), text_rect.bottom() + tokens::SPACE_SM),
+            rect.max - egui::vec2(tokens::SPACE_MD, tokens::SPACE_MD),
         );
         if let Some((a, b)) = lane.selection {
             painter.rect_filled(

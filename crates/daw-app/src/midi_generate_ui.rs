@@ -437,30 +437,30 @@ impl GenerateDialog {
                                 Accompaniment::None => {}
                             }
                         }
+                        // Result-changing helpers follow the settings they use.
+                        let variation = self.settings.kind == GenerateKind::Melody
+                            || self.settings.kind == GenerateKind::Arpeggio
+                                && self.settings.arp == ArpeggioPattern::Random;
+                        let scale = matches!(self.settings.harmony, GenerateHarmony::Scale(_));
+                        if variation || scale {
+                            ui.add_space(daw_ui::tokens::SPACE_SM);
+                            ui.horizontal(|ui| {
+                                if variation && daw_ui::button(ui, "New variation").clicked() {
+                                    self.settings.seed = self.settings.seed.wrapping_add(1);
+                                }
+                                if scale {
+                                    let response = daw_ui::button(ui, "Use scale for grid")
+                                        .on_hover_text(
+                                            "Use this root and scale for the editor's visual guide",
+                                        );
+                                    self.controls["use_grid_scale"] = rect_json(response.rect);
+                                    action.grid_scale = response.clicked();
+                                }
+                            });
+                        }
                     });
                 self.controls["options"] = rect_json(form.inner_rect);
                 footer_slot.show(window_ui, |ui| {
-                    // Seed and grid helpers stay pinned beside the actions, so
-                    // they remain reachable however far the form scrolls.
-                    let variation = self.settings.kind == GenerateKind::Melody
-                        || self.settings.kind == GenerateKind::Arpeggio
-                            && self.settings.arp == ArpeggioPattern::Random;
-                    let scale = matches!(self.settings.harmony, GenerateHarmony::Scale(_));
-                    if variation || scale {
-                        ui.horizontal(|ui| {
-                            if variation && daw_ui::button(ui, "New variation").clicked() {
-                                self.settings.seed = self.settings.seed.wrapping_add(1);
-                            }
-                            if scale {
-                                let response = daw_ui::button(ui, "Use scale for grid")
-                                    .on_hover_text(
-                                        "Use this root and scale for the editor's visual guide",
-                                    );
-                                self.controls["use_grid_scale"] = rect_json(response.rect);
-                                action.grid_scale = response.clicked();
-                            }
-                        });
-                    }
                     self.refresh(meter);
                     let status = self.error.clone().unwrap_or_else(|| {
                         if self.added_notes == 0 {

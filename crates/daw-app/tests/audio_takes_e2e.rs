@@ -458,7 +458,6 @@ fn keep_comp_only_preserves_rendered_audio_and_undo_restores_alternatives() {
     let comp = app.click("Use selection");
     let audio = export(&mut app, "before-detach.wav");
     takes(&mut app);
-    app.click("Takes");
     let detached = app.click("Keep comp only");
     assert_editor_comp(&detached);
     let p = project(&detached);
@@ -606,5 +605,56 @@ fn cancelled_and_invalid_imports_leave_project_and_history_unchanged() {
     assert_eq!(state["project"], before["project"]);
     assert_eq!(state["history"], before["history"]);
     app.click("Dismiss");
+    app.quit();
+}
+
+#[test]
+fn take_toolbar_leads_with_commands_and_rows_read_in_bars() {
+    let (mut app, alternate) = fixture(false);
+    let state = import(&mut app, &alternate);
+    let rect = |state: &Value, label: &str| {
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rect| rect["text"] == label)
+            .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]))
+            .clone()
+    };
+    let center_y =
+        |rect: &Value| (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    // Commands lead and View trails on one toolbar row; Keep comp only is a
+    // direct button, not a one-item menu.
+    let add = rect(&state, "Add takes…");
+    let keep = rect(&state, "Keep comp only");
+    let view = rect(&state, "View");
+    assert!((center_y(&add) - center_y(&keep)).abs() < 1.0);
+    assert!((center_y(&add) - center_y(&view)).abs() < 1.0);
+    assert!(add["max"][0].as_f64().unwrap() < keep["min"][0].as_f64().unwrap());
+    assert!(keep["max"][0].as_f64().unwrap() < view["min"][0].as_f64().unwrap());
+    assert!(
+        !state["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Takes")
+    );
+    // Each take row is one identity line over a waveform plot: 89 points.
+    for row in state["audio_takes"]["rows"].as_array().unwrap() {
+        let height = row["max"][1].as_f64().unwrap() - row["min"][1].as_f64().unwrap();
+        assert!((height - 89.0).abs() < 0.5, "Take row height {height}");
+    }
+    // The range fields use bar.beat positions, as the rulers do.
+    let range = app.click("Time selection");
+    assert!(
+        range["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|label| label.starts_with("From ") && label.matches('.').count() == 2),
+        "{}",
+        range["visible_labels"]
+    );
     app.quit();
 }

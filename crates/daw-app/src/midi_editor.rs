@@ -1351,7 +1351,8 @@ impl DawApp {
         // Keep an octave and its context visible when tool options and the
         // loop strip share a short workspace. The velocity lane can give up
         // a little height before sacrificing more piano rows.
-        let velocity_height = VELOCITY.min((available.y - RULER - 16.0 * 18.0).max(64.0));
+        let velocity_height =
+            VELOCITY.min((available.y - RULER - 16.0 * 18.0).max(daw_ui::tokens::SPACE_XL));
         let (canvas, response) = ui.allocate_exact_size(available, Sense::click_and_drag());
         let plot = Rect::from_min_max(
             canvas.min + Vec2::new(KEYS, RULER),

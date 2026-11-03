@@ -1251,7 +1251,7 @@ error feedback, truncated with its full text on hover, so every target keeps its
 position through repeated additions and validation errors. The caller owns
 validation and edits. `generation_footer_with_preview` starts that status line
 with the view-only Preview toggle and **Fit preview**. **New variation** and
-**Use scale for grid** stay pinned above that status line whenever they apply.
+**Use scale for grid** follow the form in the body whenever they apply.
 
 Generation previews stay in the live piano roll. Draw the ordinary canvas, then
 `paint_generation_backdrop`, `paint_generation_range` and

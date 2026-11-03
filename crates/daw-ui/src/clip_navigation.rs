@@ -106,7 +106,7 @@ pub enum HeaderSlot {
 }
 
 /// The Clip Editor and Mixer header: Back, a navigation slot, then the title
-/// in `TextRole::Subtitle` with an optional context line. The title keeps one
+/// in `TextRole::Subtitle` followed on the same line by an optional context. The title keeps one
 /// size in both workspaces. `contents` runs once per [`HeaderSlot`] (actions
 /// first, so the identity truncates into the remaining width); one closure
 /// lets both slots borrow the same application state.
@@ -124,15 +124,9 @@ pub fn clip_workspace_header<R>(
             tokens::SPACE_SM as i8,
         )),
         |ui| {
-            let height = context
-                .map_or(0.0, |_| {
-                    ui.fonts_mut(|fonts| {
-                        fonts.row_height(&TextRole::Subtitle.font())
-                            + tokens::SPACE_XS
-                            + fonts.row_height(&TextRole::Note.font())
-                    })
-                })
-                .max(tokens::CONTROL_HEIGHT);
+            // Title and context share one line, so the header costs one
+            // control height in every workspace.
+            let height = tokens::CONTROL_HEIGHT;
             ui.horizontal(|ui| {
                 ui.set_min_height(height);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -146,28 +140,42 @@ pub fn clip_workspace_header<R>(
                         ui.add_space(tokens::SPACE_XS);
                         contents(ui, HeaderSlot::Navigation);
                         ui.add_space(tokens::SPACE_XS);
-                        let (title, context) = ui
-                            .vertical(|ui| {
-                                ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
-                                let title = ui
-                                    .add(
-                                        egui::Label::new(
-                                            TextRole::Subtitle.rich(ui.ctx(), &full_title),
-                                        )
-                                        .truncate()
-                                        .show_tooltip_when_elided(false),
+                        // The context (the clip's song span) stays whole; a long
+                        // title truncates first.
+                        let context_width = context.map_or(0.0, |context| {
+                            ui.painter()
+                                .layout_no_wrap(
+                                    context.to_owned(),
+                                    TextRole::Note.font(),
+                                    egui::Color32::PLACEHOLDER,
+                                )
+                                .size()
+                                .x
+                                + tokens::SPACE_SM
+                        });
+                        let title_width = (ui.available_width() - context_width).max(0.0);
+                        let title = ui
+                            .scope(|ui| {
+                                ui.set_max_width(title_width);
+                                ui.add(
+                                    egui::Label::new(
+                                        TextRole::Subtitle.rich(ui.ctx(), &full_title),
                                     )
-                                    .on_hover_text(&full_title);
-                                let context = context.map(|context| {
-                                    ui.add(
-                                        egui::Label::new(TextRole::Note.rich(ui.ctx(), context))
-                                            .truncate()
-                                            .show_tooltip_when_elided(false),
-                                    )
-                                });
-                                (title, context)
+                                    .truncate()
+                                    .show_tooltip_when_elided(false),
+                                )
                             })
-                            .inner;
+                            .inner
+                            .on_hover_text(&full_title);
+                        let context = context.map(|context| {
+                            ui.add_space(tokens::SPACE_SM);
+                            ui.add(
+                                egui::Label::new(TextRole::Note.rich(ui.ctx(), context))
+                                    .truncate()
+                                    .show_tooltip_when_elided(false),
+                            )
+                            .on_hover_text(context)
+                        });
                         (back, title, context, inner)
                     })
                     .inner

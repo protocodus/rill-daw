@@ -377,10 +377,11 @@ impl DawApp {
                 }
             }
         }
+        let beats_per_bar = self.project.beats_per_bar;
         let mut open = true;
         daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).vscroll(false).show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                daw_ui::view_menu(ui, "View", crate::spectrogram::view_options);
+            // Commands lead in workflow order; View trails, as in the editors.
+            daw_ui::toolbar(ui, |ui| {
                 if groups.len() > 1 {
                     daw_ui::picker_button(ui, "Take group", |ui| {
                         for (id, source, name) in &groups {
@@ -406,29 +407,28 @@ impl DawApp {
                         }
                     }
                 }
-                if busy { ui.spinner(); daw_ui::text::note(ui, "Importing takes…"); }
-                if let Some(group) = group {
-                    daw_ui::menu_button(ui, "Takes", |ui| {
-                        if ui.add_enabled(!busy && !regions.is_empty(), daw_ui::button_widget("Keep comp only"))
-                            .on_hover_text("Remove retained alternatives from the project. Keep the audible comp and original files. Undo restores the takes.")
-                            .clicked()
-                        {
-                            let mut project = self.project.clone();
-                            match project.detach_audio_take_group(track_id, group) {
-                                Ok(()) => {
-                                    let clip = regions[0].id;
-                                    self.commit_take_project(project, "Keep audio comp only");
-                                    self.close_popup();
-                                    self.selected_track = Some(track_id);
-                                    self.selected_clip = Some(clip);
-                                    self.view = WorkspaceView::Clip;
-                                }
-                                Err(error) => self.message(Err(error), ""),
-                            }
-                            ui.close();
+                if let Some(group) = group
+                    && ui.add_enabled(!busy && !regions.is_empty(), daw_ui::button_widget("Keep comp only"))
+                        .on_hover_text("Remove retained alternatives from the project. Keep the audible comp and original files. Undo restores the takes.")
+                        .clicked()
+                {
+                    let mut project = self.project.clone();
+                    match project.detach_audio_take_group(track_id, group) {
+                        Ok(()) => {
+                            let clip = regions[0].id;
+                            self.commit_take_project(project, "Keep audio comp only");
+                            self.close_popup();
+                            self.selected_track = Some(track_id);
+                            self.selected_clip = Some(clip);
+                            self.view = WorkspaceView::Clip;
                         }
-                    });
+                        Err(error) => self.message(Err(error), ""),
+                    }
                 }
+                if busy { ui.spinner(); daw_ui::text::note(ui, "Importing takes…"); }
+                daw_ui::toolbar_trailing(ui, daw_ui::tokens::SPACE_XL * 2.0 + daw_ui::tokens::SPACE_LG, |ui| {
+                    daw_ui::view_menu(ui, "View", crate::spectrogram::view_options);
+                });
             });
             daw_ui::text::note(ui, "Choose a take, then use it for the whole clip or just your time selection.");
             ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
@@ -443,7 +443,7 @@ impl DawApp {
             egui::ScrollArea::vertical().id_salt("audio_take_lanes").max_height(list_height).min_scrolled_height(0.0).auto_shrink([false, false]).show(ui, |ui| {
                 for clip in &candidates {
                     let in_comp = regions.iter().any(|region| region.audio_take.as_ref().is_some_and(|membership| matches!(membership.role, daw_core::AudioTakeRole::Comp { source } if source == clip.id)));
-                    let detail = format!("{:.2} beats · {}", clip.length, if in_comp || group.is_none() { "In comp" } else { "Alternative" });
+                    let detail = format!("{} · {}", if (clip.length - clip.length.round()).abs() < 1e-6 { daw_ui::text::count(clip.length.round() as usize, "beat", "beats") } else { format!("{:.2} beats", clip.length) }, if in_comp || group.is_none() { "In comp" } else { "Alternative" });
                     let response = ui.push_id(clip.id, |ui| daw_ui::audio_take_lane_with_waveform(ui, &daw_ui::TakeLane {
                         name: &clip.name, detail: &detail,
                         selected: Some(clip.id) == self.audio_takes_ui.source,
@@ -479,11 +479,11 @@ impl DawApp {
                     self.audio_takes_ui.range = use_range.then_some((anchor.start, anchor.end()));
                 }
                 if let Some((a, b)) = &mut self.audio_takes_ui.range {
-                    let mut start_beat = *a + 1.0;
-                    let mut end_beat = *b + 1.0;
-                    ui.add(daw_ui::number(&mut start_beat).prefix("From beat ").range(1.0..=(end_beat - 0.001)).speed(0.25));
-                    ui.add(daw_ui::number(&mut end_beat).prefix("To beat ").range((start_beat + 0.001)..=daw_core::MAX_BEAT).speed(0.25));
-                    *a = start_beat - 1.0; *b = end_beat - 1.0;
+                    // Bar.beat positions, as on the rulers.
+                    let (mut start, mut end) = (*a, *b);
+                    ui.add(daw_ui::musical_position_field(&mut start, beats_per_bar, "From ").range(0.0..=(end - 0.001)).speed(0.25));
+                    ui.add(daw_ui::musical_position_field(&mut end, beats_per_bar, "To ").range((start + 0.001)..=daw_core::MAX_BEAT).speed(0.25));
+                    (*a, *b) = (start, end);
                 }
             });
             ui.horizontal_wrapped(|ui| {
@@ -505,7 +505,7 @@ impl DawApp {
                             self.audio_takes_ui.range = Some(if overlap.1 > overlap.0 { overlap } else { (take.start, take.end()) });
                         }
                     }, |ui| {
-                        daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, format!("Selection outside this take · Available beats {:.2}–{:.2}", take.start + 1.0, take.end() + 1.0), 2);
+                        daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, format!("Selection outside this take · Available {} – {}", daw_ui::time::musical_position_label(take.start, beats_per_bar), daw_ui::time::musical_position_label(take.end(), beats_per_bar)), 2);
                     });
                     }
             });
