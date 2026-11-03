@@ -62,43 +62,46 @@ impl DawApp {
         let redo: Vec<_> = self.history.redo_labels().map(str::to_owned).collect();
         daw_ui::popup("History", ctx)
             .open(&mut open)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
             .vscroll(false)
             .show(ctx, |ui| {
-                ui.set_min_width(320.0);
                 daw_ui::text::body(ui, format!("{} undo · {} redo", undo.len(), redo.len()));
                 let mut footer = daw_ui::popup_footer(ui, "history_status");
                 let window_ui = ui;
                 let ui = footer.body();
                 daw_ui::popup_scroll_body(ui, "history_steps", 0.0, |ui| {
+                    // A list of steps, newest first: undone steps (muted) above
+                    // the "Current" marker, applied steps below it. Clicking a
+                    // row returns the song to the state before that step.
+                    let muted = daw_ui::theme::palette(ui.ctx()).muted;
+                    let row = |ui: &mut egui::Ui, label: &str, color: Option<egui::Color32>| {
+                        let mut button = daw_ui::IconButton::tab(false, label).truncate();
+                        if let Some(color) = color {
+                            button = button.label_color(color);
+                        }
+                        ui.add_sized(
+                            egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT),
+                            button,
+                        )
+                    };
                     ui.add_enabled_ui(!self.state_sync_pending(), |ui| {
                         for (index, label) in redo.iter().enumerate().rev() {
-                            if ui
-                                .add_sized(
-                                    egui::vec2(
-                                        ui.available_width(),
-                                        daw_ui::tokens::CONTROL_HEIGHT,
-                                    ),
-                                    daw_ui::button_widget(format!("Redo · {label}")).truncate(),
-                                )
-                                .on_hover_text(label)
+                            if row(ui, label, Some(muted))
+                                .on_hover_text(format!("Redo through {label}"))
                                 .clicked()
                             {
                                 jump = Some((true, index + 1));
                             }
                         }
-                        if !redo.is_empty() {
-                            ui.separator();
+                        if !undo.is_empty() || !redo.is_empty() {
+                            ui.horizontal(|ui| {
+                                daw_ui::text::note(ui, "Current");
+                                ui.add(egui::Separator::default().horizontal());
+                            });
                         }
                         for (index, label) in undo.iter().enumerate() {
-                            if ui
-                                .add_sized(
-                                    egui::vec2(
-                                        ui.available_width(),
-                                        daw_ui::tokens::CONTROL_HEIGHT,
-                                    ),
-                                    daw_ui::button_widget(format!("Undo · {label}")).truncate(),
-                                )
-                                .on_hover_text(label)
+                            if row(ui, label, None)
+                                .on_hover_text(format!("Undo {label} and later steps"))
                                 .clicked()
                             {
                                 jump = Some((false, index + 1));
@@ -106,7 +109,7 @@ impl DawApp {
                         }
                     });
                     if undo.is_empty() && redo.is_empty() {
-                        ui.label("No edits yet");
+                        daw_ui::text::note(ui, "No edits yet");
                     }
                 });
                 footer.show(window_ui, |ui| {

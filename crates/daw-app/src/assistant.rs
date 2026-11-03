@@ -886,7 +886,7 @@ impl DawApp {
         let can_reuse = self.assistant.prompt.is_empty() && !self.assistant.last_prompt.is_empty();
         daw_ui::popup("Assistant", ctx)
             .open(&mut open)
-            .default_width(620.0)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
             .default_height(520.0)
             .vscroll(false)
             .show(ctx, |ui| {

@@ -639,7 +639,7 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!has_text(&output, "Properties"));
     let output = harness.menu("Window", "Properties");
     assert!(harness.app.inspector_open);
-    assert!(has_text(&output, "Properties of Pattern"));
+    assert!(has_text(&output, "Properties · Pattern"));
     // Global edit shortcuts must never delete the selected clip behind a popup.
     harness.full_key(egui::Key::Delete, egui::Modifiers::NONE);
     assert_eq!(harness.app.project, before);
@@ -836,7 +836,7 @@ fn leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the
     harness.full_click(note);
     harness.settle_full();
     assert_eq!(harness.app.selected_notes.len(), 1);
-    harness.menu("Window", "Arrangement");
+    harness.menu("Window", "Arranger");
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
     assert!(harness.app.selected_notes.is_empty());
     assert!(

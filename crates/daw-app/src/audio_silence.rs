@@ -255,7 +255,7 @@ impl DawApp {
                 state.error = None;
                 state.requested = Some(Instant::now());
             }
-            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+            daw_ui::section_gap(ui);
             let busy = state.pending.is_some() || state.requested.is_some();
             // Analysis results and errors share a reserved feedback area so
             // the Apply/Cancel targets stay in place when the job completes.
@@ -279,7 +279,7 @@ impl DawApp {
                             .max(0.0);
                         daw_ui::text::body(
                             ui,
-                            format!("Keep {} region(s) · remove {removed:.2} s", preview.len()),
+                            format!("Keep {} · remove {removed:.2} s", daw_ui::text::count(preview.len(), "region", "regions")),
                         );
                         daw_ui::text::bounded_block(
                             ui,

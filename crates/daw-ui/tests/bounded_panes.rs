@@ -110,7 +110,7 @@ fn bounded_context_titles_wrap_and_keep_full_source_within_row_limit() {
 }
 
 #[test]
-fn utility_scroll_body_retains_requested_window_size_without_moving_menu_controls() {
+fn utility_scroll_body_hugs_short_content_without_moving_menu_controls() {
     let ctx = Context::default();
     theme::apply(&ctx);
     let frame = |count: usize, events| {
@@ -161,8 +161,8 @@ fn utility_scroll_body_retains_requested_window_size_without_moving_menu_control
     }
     let short = frame(0, vec![]);
     assert!(
-        short.0.height() >= 420.0,
-        "utility retains its requested body height"
+        short.0.height() < 420.0,
+        "a utility hugs its short body instead of keeping a blank band"
     );
     assert!(short.1.height() < 100.0);
     let mut pressed = short;
@@ -186,13 +186,12 @@ fn utility_scroll_body_retains_requested_window_size_without_moving_menu_control
     frame(80, vec![]);
     frame(80, vec![]);
     let long = frame(80, vec![]);
-    assert_eq!(
-        long.0, short.0,
-        "late content scrolls within the requested size"
+    assert!(
+        long.0.height() > short.0.height(),
+        "late content grows the window up to the viewport, then scrolls"
     );
     assert!(long.0.top() >= daw_ui::tokens::POPUP_TOP);
     assert!(long.0.bottom() <= 720.0 - daw_ui::tokens::POPUP_MARGIN);
-    assert!(long.1.height() <= 420.0);
     for _ in 0..3 {
         frame(0, vec![]);
     }

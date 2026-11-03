@@ -131,7 +131,7 @@ impl DawApp {
         let mut cancel = false;
         daw_ui::popup("Join clips", ctx)
             .open(&mut open)
-            .default_width(440.0)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
             .default_height(520.0)
             .vscroll(false)
             .show(ctx, |ui| {

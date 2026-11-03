@@ -208,6 +208,14 @@ fn crossfade_popup_duration_presets_spline_drag_undo_and_archive_render() {
     let dragged = app.command(
         json!({"command":"pointer", "phase":"drag", "x":x, "y":y, "to_x":x, "to_y":target_y}),
     );
+    // A dragged curve leaves the presets and reads "Custom".
+    assert!(
+        dragged["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Custom")
+    );
     let curve = config(&dragged)["curve"].clone();
     let y1 = curve["control1"][1].as_f64().unwrap();
     assert!((y1 - 0.8).abs() < 0.02, "{curve}");

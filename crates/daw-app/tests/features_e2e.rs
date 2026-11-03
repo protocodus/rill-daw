@@ -912,7 +912,8 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     let state = click_header(&mut app, &first, "details");
     assert_only_popup(&state, "properties");
     assert_eq!(state["selected_track"], first);
-    let state = click_front(&mut app, "Instrument");
+    // Properties has one tab row; the channel's instrument opens from Window.
+    let state = menu(&mut app, "Window", "Instrument");
     assert_only_popup(&state, "instrument");
     assert!(visible(&state, "Rill Fixture A"));
     let state = app.click("Change instrument");
@@ -941,7 +942,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     assert_eq!(state["project"], replaced["project"]);
     menu(&mut app, "Window", "Arranger");
     click_header(&mut app, &first, "details");
-    click_front(&mut app, "Instrument");
+    menu(&mut app, "Window", "Instrument");
     assert!(visible(&app.inspect(), "Rill Fixture B"));
     app.quit();
 }

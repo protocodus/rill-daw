@@ -164,7 +164,7 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
             ("Effects", "Effects of Backdrop synth"),
             ("Routing", "Routing of Backdrop synth"),
             ("Automation", "Add automation"),
-            ("Properties", "Properties of Backdrop phrase"),
+            ("Properties", "Properties · Backdrop phrase"),
             ("Library", "Library"),
             ("Setup", "Setup"),
         ] {
@@ -299,7 +299,7 @@ fn save_confirmation_uses_one_dim_layer_and_restores_the_utility_on_cancel() {
     assert_eq!(blur[0]["gpu_available"], false);
     app.click("Cancel");
     let restored = painted(&mut app);
-    assert_backdrop(&restored, "Track · New audio");
+    assert_backdrop(&restored, "Properties · New audio");
     assert_eq!(restored["project"], original["project"]);
     assert_eq!(restored["popups"], original["popups"]);
     app.key("Escape");

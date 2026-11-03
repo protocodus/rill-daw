@@ -145,6 +145,12 @@ pub fn popup_tabs<T: PartialEq + Copy, R>(
     result
 }
 
+/// The gap between two groups of a popup body: SPACE_LG from the previous
+/// item's bottom to the next item's top, including the item spacing.
+pub fn section_gap(ui: &mut Ui) {
+    ui.add_space((tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+}
+
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(primary_button_widget(ui, label))
 }
@@ -300,7 +306,8 @@ pub fn command_menu_button<R>(
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
-    menu_button(ui, label, contents)
+    // Menu-bar titles are text only, so "Help" reads like its siblings.
+    native_menu_button(ui, label.into(), contents)
 }
 
 /// Bound a command list to the viewport, including its frame and outer spacing.
@@ -1074,7 +1081,15 @@ pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> Combo
     ComboBox::from_id_salt(id_salt)
         .selected_text(selected_text)
         .width(tokens::SELECT_WIDTH)
+        .icon(select_chevron)
         .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
+}
+
+/// The same 12 pt chevron as choice menus, so a select and a picker in one
+/// form share their disclosure affordance.
+fn select_chevron(ui: &Ui, rect: egui::Rect, visuals: &egui::style::WidgetVisuals, _open: bool) {
+    let rect = egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(12.0));
+    crate::Icon::ChevronDown.paint(ui.painter(), rect, visuals.fg_stroke.color);
 }
 
 /// A bounded, searchable choice list. Editing its query never accepts a choice;
@@ -1148,6 +1163,7 @@ pub fn select_labeled(
     ComboBox::from_label(label)
         .selected_text(selected_text)
         .width(tokens::SELECT_WIDTH)
+        .icon(select_chevron)
         .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
 }
 

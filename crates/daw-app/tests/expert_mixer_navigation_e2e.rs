@@ -177,9 +177,9 @@ fn clip_properties_workflow(audio: bool) {
         assert!(visible(
             &properties,
             if audio {
-                "Properties of Audio phrase"
+                "Properties · Audio phrase"
             } else {
-                "Properties of MIDI phrase"
+                "Properties · MIDI phrase"
             }
         ));
 

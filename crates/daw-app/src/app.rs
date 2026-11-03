@@ -2760,18 +2760,21 @@ impl DawApp {
         let mut close = false;
         daw_ui::popup("About RILL", ctx)
             .id(egui::Id::new("about_rill"))
-            .default_width(340.0)
-            .default_height(320.0)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .resizable(false)
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 let mut footer = daw_ui::popup_footer(ui, "about_actions");
                 let window_ui = ui;
                 let ui = footer.body();
-                daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero);
-                ui.add_space(daw_ui::tokens::SPACE_LG);
-                daw_ui::text::body(ui, "Audio workstation");
-                daw_ui::text::note(ui, format!("Version {}", env!("CARGO_PKG_VERSION")));
+                ui.set_width(daw_ui::tokens::POPUP_WIDTH_SM);
+                ui.vertical_centered(|ui| {
+                    daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero);
+                    ui.add_space(daw_ui::tokens::SPACE_LG);
+                    daw_ui::text::body(ui, "Audio workstation");
+                    daw_ui::text::note(ui, format!("Version {}", env!("CARGO_PKG_VERSION")));
+                });
                 close = footer
                     .show(window_ui, |ui| {
                         daw_ui::dialog_actions(
@@ -3046,7 +3049,7 @@ impl DawApp {
             return;
         }
         let mut open = true;
-        daw_ui::popup("Setup", ctx).open(&mut open).default_width(520.0).default_height(540.0).vscroll(false).show(ctx, |ui| {
+        daw_ui::popup("Setup", ctx).open(&mut open).default_width(daw_ui::tokens::POPUP_WIDTH_MD).vscroll(false).show(ctx, |ui| {
             daw_ui::popup_tabs(ui, &mut self.setup_page, &[
                 (SetupPage::Audio, "Audio"),
                 (SetupPage::Appearance, "Appearance"),

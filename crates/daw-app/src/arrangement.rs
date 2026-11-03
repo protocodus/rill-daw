@@ -2614,26 +2614,23 @@ impl DawApp {
         {
             self.inspector_page = InspectorPage::Track;
         }
-        let title = match self.inspector_page {
-            InspectorPage::Clip => self
-                .selected()
-                .map(|clip| format!("Properties of {}", clip.name)),
-            InspectorPage::Track => self
-                .selected_track
-                .and_then(|id| self.project.track(id))
-                .map(|track| format!("Track · {}", track.name)),
-            InspectorPage::Channel => self
-                .selected_track
-                .and_then(|id| self.project.track(id))
-                .map(|track| format!("Channel · {}", track.name)),
-        }
-        .unwrap_or_else(|| "Properties".into());
+        // One title on every tab: the clip when one is selected, else the track.
+        let title = self
+            .selected()
+            .map(|clip| clip.name.clone())
+            .or_else(|| {
+                self.selected_track
+                    .and_then(|id| self.project.track(id))
+                    .map(|track| track.name.clone())
+            })
+            .map(|subject| format!("Properties · {subject}"))
+            .unwrap_or_else(|| "Properties".into());
         let mut navigated = false;
         let mut name_keyboard = None;
         let mut automation_navigation = None;
         daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
-            .default_width(540.0)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
             .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 520.0 } else { 420.0 }))
             .vscroll(false)
             .open(&mut open)

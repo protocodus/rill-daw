@@ -26,7 +26,15 @@ fn named_history_jumps_saved_checkpoint_and_branching_work_through_ui() {
     app.click("Edit");
     let state = app.click("History…");
     assert_eq!(state["popups"]["history"], true);
-    let state = app.command(json!({"command":"click","label":"Undo · Add track","occurrence":1}));
+    // Steps are plain rows around a "Current" marker, not filled commands.
+    let labels = state["visible_labels"].as_array().unwrap();
+    assert!(labels.iter().any(|label| label == "Current"));
+    assert!(!labels.iter().any(|label| {
+        label
+            .as_str()
+            .is_some_and(|label| label.starts_with("Undo · "))
+    }));
+    let state = app.command(json!({"command":"click","label":"Add track","occurrence":1}));
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
     assert_eq!(
         state["modified"], false,

@@ -49,7 +49,7 @@ fn footer_stays_at_the_bottom_and_clickable_through_growth_wrapping_and_resize()
         daw_ui::theme::apply(&ctx);
         daw_ui::theme::set_appearance(&ctx, appearance);
         for width in [480.0, 280.0, 480.0] {
-            let mut stable = None;
+            let mut stable = std::collections::HashMap::new();
             for count in [1, 100, 1] {
                 let mut state = draw(&ctx, width, count, vec![]);
                 for _ in 0..5 {
@@ -61,11 +61,24 @@ fn footer_stays_at_the_bottom_and_clickable_through_growth_wrapping_and_resize()
                     "footer gap: {gap}, state: {state:?}"
                 );
                 assert!(state.0.contains_rect(state.1));
-                if let Some((window, action)) = stable {
-                    assert_eq!(state.0, window, "body growth must not resize the window");
-                    assert_eq!(state.1, action, "body growth must not move actions");
+                if count == 1 {
+                    assert!(state.0.height() < 250.0, "short body must hug: {state:?}");
                 }
-                stable = Some((state.0, state.1));
+                // The window hugs short content and returns to the same
+                // geometry once the long body shrinks again.
+                // A centered window may round its top by one point.
+                if let Some((window, action)) = stable.insert(count, (state.0, state.1)) {
+                    assert!(
+                        (state.0.height() - window.height()).abs() < 1.0
+                            && (state.0.top() - window.top()).abs() <= 1.0,
+                        "the same body must give the same window: {state:?} {window:?}"
+                    );
+                    assert!(
+                        ((state.1.top() - state.0.top()) - (action.top() - window.top())).abs()
+                            < 0.5,
+                        "the same body must give the same actions"
+                    );
+                }
                 let at = state.1.center();
                 for pressed in [true, false] {
                     let state = draw(

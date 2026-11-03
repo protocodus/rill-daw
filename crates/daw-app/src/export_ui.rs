@@ -222,7 +222,7 @@ impl DawApp {
         let missing_instruments = self.export_missing_instruments().join(", ");
         daw_ui::popup("Export WAV", ctx)
             .id(egui::Id::new("export_options"))
-            .default_width(360.0)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
