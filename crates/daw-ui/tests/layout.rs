@@ -787,14 +787,18 @@ fn take_lane_labels_keep_clearance_from_the_waveform_at_display_scales() {
                 }
             })
             .collect();
-        labels.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        // Name and detail share one identity line: name left, detail right.
+        labels.sort_by(|a, b| a.left().total_cmp(&b.left()));
         assert_eq!(labels.len(), 2);
         let tolerance = 1.0 / density;
         assert!(labels[0].left() - card.left() >= controls::tokens::SPACE_MD - tolerance);
-        assert!(labels[1].top() - labels[0].bottom() >= controls::tokens::SPACE_XS - tolerance);
-        assert!(plot.top() - labels[1].bottom() >= controls::tokens::SPACE_XS - tolerance);
-        assert!(plot.height() >= controls::tokens::SPACE_LG - tolerance);
-        assert!(card.bottom() - plot.bottom() >= controls::tokens::SPACE_SM - tolerance);
+        assert!(labels[1].left() - labels[0].right() >= controls::tokens::SPACE_SM - tolerance);
+        assert!(card.right() - labels[1].right() >= controls::tokens::SPACE_MD - tolerance);
+        assert!((labels[0].center().y - labels[1].center().y).abs() <= 1.0);
+        let identity_bottom = labels[0].bottom().max(labels[1].bottom());
+        assert!(plot.top() - identity_bottom >= controls::tokens::SPACE_XS - tolerance);
+        assert!(plot.height() >= controls::tokens::SPACE_XL - tolerance);
+        assert!(card.bottom() - plot.bottom() >= controls::tokens::SPACE_MD - tolerance);
         assert!((card.height() - 89.0).abs() <= tolerance);
     }
 }

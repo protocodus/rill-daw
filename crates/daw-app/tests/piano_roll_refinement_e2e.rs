@@ -297,12 +297,12 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
             "Glue",
             "Erase",
             "Cursor",
-            "Draw settings",
+            "Key C · Natural minor",
             "Notes",
         ],
     );
     unchanged(&narrow, &before);
-    let first = menu(&mut app, "Notes", "Randomize...");
+    let first = menu(&mut app, "Notes", "Randomize…");
     assert_eq!(first["midi_editor"]["randomize"]["velocity"], 16);
     assert_eq!(first["midi_editor"]["randomize"]["timing"], 0.0);
     assert_eq!(first["midi_editor"]["randomize"]["seed"], 1);
@@ -338,7 +338,7 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
     unchanged(&rerolled, &before);
     unchanged(&app.click("Cancel randomize"), &before);
 
-    menu(&mut app, "Notes", "Randomize...");
+    menu(&mut app, "Notes", "Randomize…");
     number(&mut app, "velocity_rect", "12");
     number(&mut app, "seed_rect", "42");
     let timed = number(&mut app, "timing_rect", "0.125");
@@ -417,12 +417,12 @@ fn visible_quantize_and_legato_preserve_scope_chords_and_source_mapping() {
             "Glue",
             "Erase",
             "Cursor",
-            "Draw settings",
+            "Key C · Natural minor",
             "Notes",
         ],
     );
     unchanged(&narrow, &before);
-    let preview = menu(&mut app, "Notes", "Quantize...");
+    let preview = menu(&mut app, "Notes", "Quantize…");
     unchanged(&preview, &before);
     let narrow = app.command(json!({"command":"viewport","width":900,"height":700}));
     assert_compact_editor(&narrow, &["Apply quantize", "Cancel quantize"]);
@@ -445,7 +445,7 @@ fn visible_quantize_and_legato_preserve_scope_chords_and_source_mapping() {
         );
     }
     unchanged(&app.click("Cancel quantize"), &before);
-    menu(&mut app, "Notes", "Quantize...");
+    menu(&mut app, "Notes", "Quantize…");
     let quantized = app.click("Apply quantize");
     assert_eq!(notes(&quantized), expected);
     assert_eq!(history_len(&quantized), history_len(&before) + 1);
@@ -466,7 +466,10 @@ fn visible_quantize_and_legato_preserve_scope_chords_and_source_mapping() {
     assert_eq!(automated["project"], quantized["project"]);
     menu(&mut app, "Edit", "Undo");
 
-    let legato = menu(&mut app, "Notes", "Legato");
+    let legato = {
+        app.click("Notes");
+        menu(&mut app, "Legato", "Legato to next note")
+    };
     for id in chosen {
         let edited = note(&legato, id);
         near(edited["length"].as_f64().unwrap(), 0.7);
@@ -513,7 +516,10 @@ fn top_to_bottom_legato_connects_voice_ranks_across_missing_chord_tones() {
     app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
     app.click("Remove from selection");
     let before = app.inspect();
-    let applied = menu(&mut app, "Notes", "Legato top to bottom");
+    let applied = {
+        app.click("Notes");
+        menu(&mut app, "Legato", "Legato top to bottom")
+    };
     for ((edited, original), length) in notes(&applied)
         .iter()
         .zip(notes(&before))
@@ -553,14 +559,14 @@ fn final_note_transform_previews_grow_the_original_clip_only_when_applied() {
     let (mut app, _, clip) = fixture_with_length(vec![last], false, 4.0);
     menu(&mut app, "Edit", "Select all notes");
     let before = app.inspect();
-    let preview = menu(&mut app, "Notes", "Quantize...");
+    let preview = menu(&mut app, "Notes", "Quantize…");
     unchanged(&preview, &before);
     near(
         preview_as_source(&preview)[0]["start"].as_f64().unwrap(),
         4.0,
     );
     unchanged(&app.click("Cancel quantize"), &before);
-    menu(&mut app, "Notes", "Quantize...");
+    menu(&mut app, "Notes", "Quantize…");
     let cleared = menu(&mut app, "Edit", "Clear note selection");
     unchanged(&cleared, &before);
     assert!(
@@ -607,7 +613,7 @@ fn final_note_transform_previews_grow_the_original_clip_only_when_applied() {
     let (mut app, _, clip) = fixture_with_clip(source_clip);
     menu(&mut app, "Edit", "Select all notes");
     let before = app.inspect();
-    menu(&mut app, "Notes", "Randomize...");
+    menu(&mut app, "Notes", "Randomize…");
     let mut preview = number(&mut app, "timing_rect", "0.25");
     // Audition variations until the final note moves later. This uses the
     // user's reroll action rather than duplicating the deterministic RNG.
@@ -662,7 +668,7 @@ fn editing_folded_notes_does_not_restore_the_hidden_old_selection_when_unfolding
     assert_eq!(folded["midi_editor"]["hidden_notes"], 1);
     assert_eq!(painted(&folded, inside_id)["selected"], true);
     unchanged(&folded, &before);
-    let preview = menu(&mut app, "Notes", "Randomize...");
+    let preview = menu(&mut app, "Notes", "Randomize…");
     unchanged(&preview, &before);
     let applied = app.click("Apply randomize");
     assert_eq!(note(&applied, outside_id), note(&before, outside_id));
@@ -684,7 +690,7 @@ fn quantize_overlap_keeps_the_existing_note_identity_and_velocity_in_one_undo() 
     let (mut app, _, _) = fixture(vec![destination, edited], false);
     select(&mut app, edited_id, false);
     let before = app.inspect();
-    let preview = menu(&mut app, "Notes", "Quantize...");
+    let preview = menu(&mut app, "Notes", "Quantize…");
     unchanged(&preview, &before);
     let applied = app.click("Apply quantize");
     assert_eq!(notes(&applied), vec![note(&before, destination_id)]);
@@ -706,7 +712,7 @@ fn velocity_only_randomize_preserves_an_existing_trimmed_note_tail() {
     let (mut app, _, _) = fixture_with_length(vec![held], false, 1.0);
     menu(&mut app, "Edit", "Select all notes");
     let before = app.inspect();
-    let preview = menu(&mut app, "Notes", "Randomize...");
+    let preview = menu(&mut app, "Notes", "Randomize…");
     unchanged(&preview, &before);
     assert_eq!(preview["midi_editor"]["randomize"]["timing"], 0.0);
     let expected = preview_as_source(&preview);

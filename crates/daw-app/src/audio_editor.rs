@@ -2,7 +2,7 @@
 use crate::{app::DawApp, theme::*};
 use daw_core::*;
 use daw_ui::{EditorTool, TimelineBounds, TimelinePane, TimelineViewport, WaveformColumn};
-use eframe::egui::{self, Pos2, Rect, Sense, Stroke, Vec2};
+use eframe::egui::{self, Pos2, Rect, Sense, Stroke, Vec2, emath::GuiRounding};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -746,7 +746,17 @@ impl DawApp {
                 daw_ui::ToolHintContext::Audio,
             );
             ui.add_space(daw_ui::tokens::SPACE_SM);
-            nudge = daw_ui::nudge_menu(ui, true);
+            daw_ui::snap_choice(
+                ui,
+                &mut self.snap,
+                self.project.beats_per_bar,
+                Some(&mut |ui: &mut egui::Ui| {
+                    daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
+                    daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
+                    daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
+                        .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
+                }),
+            );
             daw_ui::quiet_action_menu(ui, "Clip", |ui| {
                 daw_ui::command_menu_contents(ui, |ui| {
                     if daw_ui::button(ui, "Copy").clicked() {
@@ -792,6 +802,8 @@ impl DawApp {
                         clipboard_action = Some(AudioClipboardAction::Delete);
                         ui.close();
                     }
+                    ui.separator();
+                    nudge = daw_ui::clip_nudge_section(ui, true);
                     ui.separator();
                     if daw_ui::button(ui, "Clip start").clicked() {
                         self.seek(clip.start);
@@ -940,36 +952,115 @@ impl DawApp {
                     ui.close();
                 }
             });
-            daw_ui::toolbar_group_sized(ui, 145.0, |ui| {
-                let mut db = 20.0 * gain.max(0.00001).log10();
-                let label = daw_ui::text::label(ui, "Gain");
-                let response = ui
-                    .add(
-                        daw_ui::number(&mut db)
-                            .range(-100.0..=36.0)
-                            .clamp_existing_to_range(false)
-                            .speed(0.1)
-                            .max_decimals(1)
-                            .suffix(" dB"),
-                    )
-                    .labelled_by(label.id);
-                gain_rect = response.rect;
-                if response.changed() {
-                    edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
-                }
-            });
+            let mut db = 20.0 * gain.max(0.00001).log10();
+            // A fixed width keeps the field under the pointer when a click
+            // switches it to text entry.
+            let response = ui
+                .add_sized(
+                    Vec2::new(
+                        daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG,
+                        daw_ui::tokens::CONTROL_HEIGHT,
+                    ),
+                    daw_ui::number(&mut db)
+                        .range(-100.0..=36.0)
+                        .clamp_existing_to_range(false)
+                        .speed(0.1)
+                        .max_decimals(1)
+                        .prefix("Gain ")
+                        .suffix(" dB"),
+                )
+                .on_hover_text("Clip gain");
+            gain_rect = response.rect;
+            if response.changed() {
+                edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
+            }
             let mut processing = *processing;
             if audio_processing_menu(ui, &mut processing) {
                 edit = Some(Edit::Processing(processing));
             }
-            daw_ui::toolbar_trailing(ui, 530.0, |ui| {
-                daw_ui::editor_tool_help(ui, state.tool, daw_ui::ToolHintContext::Audio);
-                let zoom_action = daw_ui::timeline_zoom_controls(ui, true);
-                if zoom_action != daw_ui::TimelineViewAction::None {
-                    view_action = zoom_action;
-                    fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
-                }
-                daw_ui::quiet_view_menu(ui, "View", |ui| {
+            // Progress, errors and the selection readout share the caption
+            // slot, so completion never moves a pressed button or the canvas.
+            let status = if state.pending.is_some() {
+                "Analyzing…".to_owned()
+            } else if !state.error.is_empty() {
+                state.error.clone()
+            } else if let Some((start, end)) = state.range {
+                let bpb = self.project.beats_per_bar;
+                let position = |beat| {
+                    let label = daw_ui::time::musical_position_label(beat, bpb);
+                    label
+                        .strip_suffix(".1")
+                        .map_or(label.clone(), str::to_owned)
+                };
+                format!("Bar {} – {}", position(start), position(end))
+            } else {
+                String::new()
+            };
+            // One fixed slot after the clip controls holds the active tool's
+            // options (fade length and curve) or, otherwise, the gesture caption
+            // and status. The row therefore wraps identically for every tool,
+            // so choosing a tool never moves the ruler or the canvas.
+            let field_width = daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG;
+            let tool = state.tool;
+            daw_ui::toolbar_group_sized(
+                ui,
+                field_width + daw_ui::tokens::SELECT_WIDTH + daw_ui::tokens::SPACE_SM,
+                |ui| {
+                    if matches!(tool, EditorTool::FadeIn | EditorTool::FadeOut) {
+                        let (duration, curve) = if tool == EditorTool::FadeIn {
+                            (&mut fi, &mut fic)
+                        } else {
+                            (&mut fo, &mut foc)
+                        };
+                        let mut changed = false;
+                        changed |= ui
+                            .add_sized(
+                                Vec2::new(field_width, daw_ui::tokens::CONTROL_HEIGHT),
+                                daw_ui::number(duration)
+                                    .range(0.0..=fade_region.length / clip.source_rate)
+                                    .clamp_existing_to_range(false)
+                                    .speed(0.05)
+                                    .max_decimals(3)
+                                    .suffix(" beats"),
+                            )
+                            .on_hover_text(if tool == EditorTool::FadeIn {
+                                "Fade-in length"
+                            } else {
+                                "Fade-out length"
+                            })
+                            .changed();
+                        daw_ui::select("audio_fade_curve", curve.name())
+                            .width(daw_ui::tokens::SELECT_WIDTH)
+                            .show_ui(ui, |ui| {
+                                for value in FadeCurve::ALL {
+                                    changed |=
+                                        daw_ui::selectable_value(ui, curve, value, value.name())
+                                            .changed();
+                                }
+                            });
+                        if changed {
+                            // Only an intentional independent edit reanchors both
+                            // fades to this visible window; merely viewing never does.
+                            edit = Some(Edit::Fades(
+                                (fi * clip.source_rate).min(fade_region.length),
+                                (fo * clip.source_rate).min(fade_region.length),
+                                fic,
+                                foc,
+                            ));
+                        }
+                    } else if status.is_empty() {
+                        daw_ui::editor_tool_caption(ui, tool, daw_ui::ToolHintContext::Audio);
+                    } else {
+                        daw_ui::editor_status_caption(ui, &status);
+                    }
+                },
+            );
+            let zoom_action = daw_ui::editor_view_controls(
+                ui,
+                tool,
+                daw_ui::ToolHintContext::Audio,
+                true,
+                |ui| {
                     self.clip_navigation_controls(ui);
                     ui.separator();
                     view_action = daw_ui::timeline_selection_view_actions(ui, "audio", true);
@@ -977,96 +1068,20 @@ impl DawApp {
                     daw_ui::checkbox(ui, &mut state.show_markers, "Show transient markers");
                     daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips");
                     crate::spectrogram::view_options(ui);
-                });
-                daw_ui::choice_menu(
-                    ui,
-                    if self.snap > 0.0 {
-                        format!("Grid {}", self.snap)
-                    } else {
-                        "Grid off".into()
-                    },
-                    |ui| {
-                        daw_ui::text::label(ui, "Grid");
-                        for snap in [0.0, 0.125, 0.25, 0.5, 1.0] {
-                            if daw_ui::selectable_value(
-                                ui,
-                                &mut self.snap,
-                                snap,
-                                if snap == 0.0 {
-                                    "Off".into()
-                                } else {
-                                    format!("{snap} beat")
-                                },
-                            )
-                            .clicked()
-                            {
-                                ui.close();
-                            }
-                        }
-                        ui.separator();
-                        let mut changed =
-                            daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges").changed();
-                        changed |=
-                            daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers")
-                                .changed();
-                        changed |= daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
-                    .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.")
-                    .changed();
-                        if changed {
-                            ui.close();
-                        }
-                        daw_ui::text::note(ui, "Hold Shift to bypass snapping");
-                    },
-                );
-                daw_ui::editor_tool_caption(ui, state.tool, daw_ui::ToolHintContext::Audio);
-            });
+                },
+                |_| {},
+            );
+            if zoom_action != daw_ui::TimelineViewAction::None {
+                view_action = zoom_action;
+                fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
+            }
         });
-        if matches!(state.tool, EditorTool::FadeIn | EditorTool::FadeOut) {
-            daw_ui::toolbar(ui, |ui| {
-                let (duration, curve, label) = if state.tool == EditorTool::FadeIn {
-                    (&mut fi, &mut fic, "Fade in")
-                } else {
-                    (&mut fo, &mut foc, "Fade out")
-                };
-                let mut changed = false;
-                daw_ui::toolbar_group_sized(ui, 340.0, |ui| {
-                    let label = daw_ui::text::label(ui, label);
-                    changed |= ui
-                        .add(
-                            daw_ui::number(duration)
-                                .range(0.0..=fade_region.length / clip.source_rate)
-                                .clamp_existing_to_range(false)
-                                .speed(0.05)
-                                .max_decimals(3)
-                                .suffix(" beats"),
-                        )
-                        .labelled_by(label.id)
-                        .changed();
-                    daw_ui::select("audio_fade_curve", curve.name())
-                        .width(105.0)
-                        .show_ui(ui, |ui| {
-                            for value in FadeCurve::ALL {
-                                changed |= daw_ui::selectable_value(ui, curve, value, value.name())
-                                    .changed();
-                            }
-                        });
-                });
-                if changed {
-                    // Only an intentional independent edit reanchors both
-                    // fades to this visible window; merely viewing never does.
-                    edit = Some(Edit::Fades(
-                        (fi * clip.source_rate).min(fade_region.length),
-                        (fo * clip.source_rate).min(fade_region.length),
-                        fic,
-                        foc,
-                    ));
-                }
-            });
-        }
+        let drawer_id = egui::Id::new("audio_editor_drawer");
+        let mut drawer_height = 0.0;
         let mut grid_points = Vec::new();
         if state.grid_slice_open {
             grid_points = grid_slice_points(&clip, state.range, state.slice_grid);
-            daw_ui::toolbar(ui, |ui| {
+            drawer_height = daw_ui::editor_bottom_drawer(ui, drawer_id, |ui| {
                 if daw_ui::audio_grid_slice_controls(ui, &mut state.slice_grid, grid_points.len()) {
                     edit = Some(Edit::GridSlices(grid_points.clone()));
                 }
@@ -1080,10 +1095,10 @@ impl DawApp {
             });
         }
         if state.transients_open {
-            daw_ui::parameter_toolbar(ui, |ui| {
+            drawer_height = daw_ui::editor_bottom_drawer(ui, drawer_id, |ui| {
                 let previous = state.settings;
                 daw_ui::select("transient_algorithm", state.settings.algorithm.name())
-                    .width(135.0)
+                    .width(daw_ui::tokens::SELECT_WIDTH)
                     .show_ui(ui, |ui| {
                         for algorithm in TransientAlgorithm::ALL {
                             daw_ui::selectable_value(
@@ -1170,22 +1185,6 @@ impl DawApp {
                 }
             });
         }
-        // Async feedback occupies a stable row below all actions, so completion
-        // can never move a pressed button before the pointer is released.
-        let feedback = if state.pending.is_some() {
-            "Analyzing…".into()
-        } else if !state.error.is_empty() {
-            state.error.clone()
-        } else if let Some((start, end)) = state.range {
-            format!("{start:.2}–{end:.2} beats selected")
-        } else {
-            String::new()
-        };
-        ui.label(
-            egui::RichText::new(feedback)
-                .small()
-                .color(palette(ui.ctx()).muted),
-        );
         if let Some(transients) = analyze.filter(|_| state.pending.is_none()) {
             if ANALYSIS_RUNNING
                 .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -1245,24 +1244,31 @@ impl DawApp {
         }
         let width = ui.available_width().max(100.0);
         let (whole, _) = ui.allocate_exact_size(
-            Vec2::new(width, ui.available_height().max(150.0)),
+            Vec2::new(width, (ui.available_height() - drawer_height).max(150.0)),
             Sense::hover(),
         );
+        // A left gutter as wide as the piano keys gives audio and MIDI one
+        // canvas edge and holds the channel labels.
+        let left = whole.left() + daw_ui::tokens::PIANO_KEYS_WIDTH;
         let ruler = Rect::from_min_max(
-            whole.min,
+            Pos2::new(left, whole.top()),
             Pos2::new(
                 whole.right(),
                 whole.top() + daw_ui::tokens::TIMELINE_RULER_HEIGHT,
             ),
         );
         let loop_lane = Rect::from_min_max(
-            Pos2::new(whole.left(), ruler.bottom()),
+            Pos2::new(left, ruler.bottom()),
             Pos2::new(
                 whole.right(),
                 ruler.bottom() + daw_ui::tokens::TIMELINE_LOOP_HEIGHT,
             ),
         );
-        let canvas = Rect::from_min_max(Pos2::new(whole.left(), loop_lane.bottom()), whole.max);
+        let canvas = Rect::from_min_max(Pos2::new(left, loop_lane.bottom()), whole.max);
+        let gutter = Rect::from_min_max(
+            Pos2::new(whole.left(), canvas.top()),
+            Pos2::new(left, canvas.bottom()),
+        );
         let data = self.waveforms.get(path);
         crate::spectrogram::prioritize(ui.ctx(), path, data);
         let channels = data.map_or(1, |audio| audio.channels.min(2));
@@ -1332,6 +1338,58 @@ impl DawApp {
             self.project.tempo,
             self.project.beats_per_bar,
         );
+        let colors = palette(ui.ctx());
+        daw_ui::paint_beat_grid(
+            &painter.with_clip_rect(canvas),
+            canvas,
+            state.view,
+            self.snap,
+            self.project.beats_per_bar,
+        );
+        let ppp = ui.pixels_per_point();
+        let hairline = 1.0 / ppp;
+        let channel_painter = painter.with_clip_rect(canvas);
+        for channel in 0..channels {
+            let center = channel as f32 * 2.0 + 1.0;
+            // Quiet −6 dB guides, where half the full-scale amplitude lands.
+            let offset = 0.501 / headroom.max(0.001);
+            if offset <= 1.0 {
+                for row in [center - offset, center + offset] {
+                    channel_painter.hline(
+                        canvas.x_range(),
+                        state.view.y_at(canvas, row).round_to_pixel_center(ppp),
+                        Stroke::new(hairline, colors.grid_minor),
+                    );
+                }
+            }
+            if channel > 0 {
+                let y = state
+                    .view
+                    .y_at(canvas, channel as f32 * 2.0)
+                    .round_to_pixel_center(ppp);
+                painter.hline(whole.x_range(), y, Stroke::new(hairline, colors.line));
+            }
+            let y = state.view.y_at(canvas, center);
+            if gutter.y_range().contains(y) && channels > 1 {
+                painter.text(
+                    Pos2::new(gutter.right() - daw_ui::tokens::SPACE_SM, y),
+                    egui::Align2::RIGHT_CENTER,
+                    if channel == 0 { "L" } else { "R" },
+                    daw_ui::text::TextRole::Note.font(),
+                    colors.muted,
+                );
+            }
+        }
+        painter.vline(
+            gutter.right().round_to_pixel_center(ppp),
+            gutter.y_range(),
+            Stroke::new(hairline, colors.line),
+        );
+        // The editor's waveform takes its track's color, as the arranger clip
+        // does; the accent stays reserved for selection.
+        let track_color = self.project.track(track).map_or(colors.accent, |track| {
+            egui::Color32::from_rgb(track.color[0], track.color[1], track.color[2])
+        });
         let neighbours: Vec<_> = self
             .project
             .track(track)
@@ -1376,7 +1434,7 @@ impl DawApp {
                 &clip,
                 self.project.tempo,
                 headroom,
-                palette(ui.ctx()).accent,
+                track_color,
                 "audio_editor",
                 daw_ui::WaveformAmplitudeScale::Default,
             );
@@ -1405,7 +1463,8 @@ impl DawApp {
             state.view,
             clip.start,
             clip.end(),
-            palette(ui.ctx()).accent,
+            // Neutral text, so edges never read as the accent-tinted selection.
+            palette(ui.ctx()).text.gamma_multiply(0.8),
         );
         daw_ui::paint_clip_fades(
             &painter,
@@ -2419,19 +2478,43 @@ fn draw_waveform(
         Pos2::new(visible.left(), rect.top()),
         Pos2::new(visible.right(), rect.bottom()),
     );
-    crate::spectrogram::paint(
-        painter,
-        spectrum_rect,
-        clip,
-        tempo,
-        (
-            view.beat_at(rect, visible.left()),
-            view.beat_at(rect, visible.right()),
-        ),
-        color,
-        spectrum_view,
-        Some(data),
+    let beats = (
+        view.beat_at(rect, visible.left()),
+        view.beat_at(rect, visible.right()),
     );
+    if spectrum_view == "audio_editor" {
+        // Each channel band carries its own frequency axis, so low energy sits
+        // under the waveform it belongs to. A neutral tint keeps the track
+        // color for the waveform itself.
+        let tint = daw_ui::theme::palette(painter.ctx()).muted;
+        for channel in 0..data.channels.min(2) {
+            let band = Rect::from_x_y_ranges(
+                spectrum_rect.x_range(),
+                view.y_at(rect, channel as f32 * 2.0)..=view.y_at(rect, channel as f32 * 2.0 + 2.0),
+            );
+            crate::spectrogram::paint(
+                painter,
+                band,
+                clip,
+                tempo,
+                beats,
+                tint,
+                spectrum_view,
+                Some(data),
+            );
+        }
+    } else {
+        crate::spectrogram::paint(
+            painter,
+            spectrum_rect,
+            clip,
+            tempo,
+            beats,
+            color,
+            spectrum_view,
+            Some(data),
+        );
+    }
     let peaks = crate::spectrogram::waveform_peaks(
         painter.ctx(),
         path,
@@ -2444,7 +2527,11 @@ fn draw_waveform(
     );
     let generation = crate::spectrogram::waveform_generation(painter.ctx());
     let density = painter.ctx().pixels_per_point();
-    let channels = data.channels.min(2);
+    let source_channels = data.channels.min(2);
+    // Take rows are too short for two bands: they show one mono envelope,
+    // the louder channel per column.
+    let mono = spectrum_view == "takes";
+    let channels = if mono { 1 } else { source_channels };
     let center_color = daw_ui::theme::palette(painter.ctx()).line;
     let key = WaveformViewKey {
         generation,
@@ -2504,7 +2591,7 @@ fn draw_waveform(
                     WAVEFORM_RAW_COLUMNS
                 } as f32,
             ) as usize;
-        let mut columns = Vec::with_capacity(bins * channels);
+        let mut columns: Vec<WaveformColumn> = Vec::with_capacity(bins * channels);
         let mut sample_reads = reference_reads;
         let mut low = f32::INFINITY;
         let mut high = f32::NEG_INFINITY;
@@ -2516,7 +2603,7 @@ fn draw_waveform(
             let end = view.beat_at(rect, right).min(clip.end());
             let a = clip.audio_source_frame(start - clip.start, tempo, data.sample_rate);
             let b = clip.audio_source_frame(end - clip.start, tempo, data.sample_rate);
-            for channel in 0..channels {
+            for channel in 0..source_channels {
                 let (minimum, maximum) = if let Some(peaks) = &peaks {
                     // A clip's end is exclusive. Do not expose the next sample
                     // through the final bin (or the preceding sample in reverse).
@@ -2556,6 +2643,13 @@ fn draw_waveform(
                     (value / amplitude_reference).clamp(-f64::from(f32::MAX), f64::from(f32::MAX))
                         as f32
                 };
+                if mono && channel > 0 {
+                    if let Some(column) = columns.last_mut() {
+                        column.minimum = column.minimum.min(normalize(minimum));
+                        column.maximum = column.maximum.max(normalize(maximum));
+                    }
+                    continue;
+                }
                 columns.push(WaveformColumn {
                     beat: (start + end) * 0.5,
                     channel,
@@ -2712,7 +2806,12 @@ fn paint_audio_clip_scaled_in_view(
         start_beat: clip.start,
         pixels_per_beat: rect.width() / clip.length as f32,
         row_offset: 0.0,
-        row_height: rect.height() / (data.channels.min(2) * 2) as f32,
+        row_height: rect.height()
+            / (if view_name == "takes" {
+                2
+            } else {
+                data.channels.min(2) * 2
+            }) as f32,
     };
     draw_waveform(
         painter, rect, view, data, clip, tempo, 1.0, color, view_name, amplitude,

@@ -172,69 +172,33 @@ impl GenerateDialog {
         let mut open = true;
         self.controls = json!({});
         let bounds = ctx.available_rect();
-        let compact = ctx.content_rect().height() < 760.0;
+        // One right-docked layout at every size, narrow enough to keep the
+        // live preview on the piano roll visible beside it.
         daw_ui::popup(format!("Generate notes · {clip_name}"), ctx)
             .id(egui::Id::new("midi_generate_dialog"))
             .pivot(egui::Align2::RIGHT_TOP)
             .default_pos(
                 bounds.right_top()
-                    - egui::vec2(daw_ui::tokens::POPUP_MARGIN, -daw_ui::tokens::SPACE_MD),
+                    - egui::vec2(daw_ui::tokens::POPUP_MARGIN, -daw_ui::tokens::SPACE_XS),
             )
-            .default_width(if compact { 620.0 } else { 360.0 })
-            .default_height(680.0)
-            .min_width(if compact {
-                620.0_f32.min(daw_ui::popup_body_size(ctx).x)
-            } else {
-                0.0
-            })
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .min_width(daw_ui::tokens::POPUP_WIDTH_SM.min(daw_ui::popup_body_size(ctx).x))
+            .max_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .default_height(daw_ui::tokens::POPUP_WIDTH_LG)
             .vscroll(false)
             .movable(true)
             .open(&mut open)
             .show(ctx, |ui| {
                 let scope = format!("Clip composition · {clip_name}");
-                if compact {
-                    let ai = daw_ui::action_row(
-                        ui,
-                        |ui| daw_ui::contextual_ai_button_compact(ui, &scope),
-                        |ui| {
-                            ui.horizontal(|ui| {
-                                for kind in GenerateKind::ALL {
-                                    daw_ui::selectable_value(
-                                        ui,
-                                        &mut self.settings.kind,
-                                        kind,
-                                        kind.name(),
-                                    );
-                                }
-                            })
-                        },
-                    )
-                    .inner
-                    .0;
-                    self.controls["ai"] = rect_json(ai.rect);
-                    action.ai = ai.clicked();
-                } else {
-                    let ai = daw_ui::contextual_ai_button(ui, &scope);
-                    self.controls["ai"] = rect_json(ai.rect);
-                    action.ai = ai.clicked();
-                    ui.horizontal(|ui| {
-                        for kind in GenerateKind::ALL {
-                            daw_ui::selectable_value(
-                                ui,
-                                &mut self.settings.kind,
-                                kind,
-                                kind.name(),
-                            );
-                        }
-                    });
-                }
-                let range =
-                    daw_ui::generation_bar_range(ui, &mut self.start_bar, &mut self.length_bars);
-                self.controls["start_bar"] = rect_json(range.start.rect);
-                self.controls["length_bars"] = rect_json(range.length.rect);
-                if !compact {
-                    ui.separator();
-                }
+                let pages: Vec<_> = GenerateKind::ALL
+                    .iter()
+                    .map(|kind| (*kind, kind.name()))
+                    .collect();
+                let ai = daw_ui::popup_tabs(ui, &mut self.settings.kind, &pages, |ui| {
+                    daw_ui::contextual_ai_button_compact(ui, &scope)
+                });
+                self.controls["ai"] = rect_json(ai.rect);
+                action.ai = ai.clicked();
                 let mut footer_slot = daw_ui::popup_footer(ui, "generation_actions");
                 let window_ui = ui;
                 let ui = footer_slot.body();
@@ -249,6 +213,13 @@ impl GenerateDialog {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         daw_ui::form_grid(ui, "generate_fields", |ui| {
+                            let range = daw_ui::generation_bar_range(
+                                ui,
+                                &mut self.start_bar,
+                                &mut self.length_bars,
+                            );
+                            self.controls["start_bar"] = rect_json(range.start.rect);
+                            self.controls["length_bars"] = rect_json(range.length.rect);
                             daw_ui::text::label(ui, "Harmony");
                             let mut chord =
                                 matches!(self.settings.harmony, GenerateHarmony::Chord(_));
@@ -466,54 +437,36 @@ impl GenerateDialog {
                                 Accompaniment::None => {}
                             }
                         }
-                        if compact
-                            && (self.settings.kind == GenerateKind::Melody
-                                || self.settings.kind == GenerateKind::Arpeggio
-                                    && self.settings.arp == ArpeggioPattern::Random)
-                            && daw_ui::button(ui, "New variation").clicked()
-                        {
-                            self.settings.seed = self.settings.seed.wrapping_add(1);
-                        }
-                        if compact && matches!(self.settings.harmony, GenerateHarmony::Scale(_)) {
-                            let response = daw_ui::button(ui, "Use scale for grid").on_hover_text(
-                                "Use this root and scale for the editor's visual guide",
-                            );
-                            self.controls["use_grid_scale"] = rect_json(response.rect);
-                            action.grid_scale = response.clicked();
-                        }
                     });
                 self.controls["options"] = rect_json(form.inner_rect);
                 footer_slot.show(window_ui, |ui| {
-                    if !compact
-                        && (self.settings.kind == GenerateKind::Melody
-                            || self.settings.kind == GenerateKind::Arpeggio
-                                && self.settings.arp == ArpeggioPattern::Random)
-                        && daw_ui::button(ui, "New variation").clicked()
-                    {
-                        self.settings.seed = self.settings.seed.wrapping_add(1);
-                    }
-                    if !compact && matches!(self.settings.harmony, GenerateHarmony::Scale(_)) {
-                        let response = daw_ui::button(ui, "Use scale for grid")
-                            .on_hover_text("Use this root and scale for the editor's visual guide");
-                        self.controls["use_grid_scale"] = rect_json(response.rect);
-                        action.grid_scale = response.clicked();
-                    }
-                    self.refresh(meter);
-                    // View-only controls are grouped apart from generation actions.
-                    if !compact {
+                    // Related footer rows sit close, leaving the form its room.
+                    ui.spacing_mut().item_spacing.y = daw_ui::tokens::SPACE_XS;
+                    // Seed and grid helpers stay pinned above the status line, so
+                    // they remain reachable however far the form scrolls.
+                    let variation = self.settings.kind == GenerateKind::Melody
+                        || self.settings.kind == GenerateKind::Arpeggio
+                            && self.settings.arp == ArpeggioPattern::Random;
+                    let scale = matches!(self.settings.harmony, GenerateHarmony::Scale(_));
+                    if variation || scale {
                         ui.horizontal(|ui| {
-                            daw_ui::checkbox(ui, &mut self.preview, "Preview");
-                            action.fit = daw_ui::view_button(ui, "Fit preview").clicked();
-                            daw_ui::text::note(ui, format!("{} notes", self.notes.len()));
+                            if variation && daw_ui::button(ui, "New variation").clicked() {
+                                self.settings.seed = self.settings.seed.wrapping_add(1);
+                            }
+                            if scale {
+                                let response = daw_ui::button(ui, "Use scale for grid")
+                                    .on_hover_text(
+                                        "Use this root and scale for the editor's visual guide",
+                                    );
+                                self.controls["use_grid_scale"] = rect_json(response.rect);
+                                action.grid_scale = response.clicked();
+                            }
                         });
                     }
+                    self.refresh(meter);
                     let status = self.error.clone().unwrap_or_else(|| {
                         if self.added_notes == 0 {
-                            if compact {
-                                format!("Preview only · {} notes", self.notes.len())
-                            } else {
-                                "Preview only".into()
-                            }
+                            format!("Preview only · {} notes", self.notes.len())
                         } else if self.already_added() {
                             format!("Added {} notes · Next range to continue", self.added_notes)
                         } else {
@@ -523,26 +476,15 @@ impl GenerateDialog {
                     let next_start = self.next_start_bar(meter);
                     let can_add =
                         self.error.is_none() && !self.notes.is_empty() && !self.already_added();
-                    let footer = if compact {
-                        let (footer, fit) = daw_ui::generation_footer_with_preview(
-                            ui,
-                            &status,
-                            can_add,
-                            next_start.is_some(),
-                            self.added_notes > 0,
-                            &mut self.preview,
-                        );
-                        action.fit = fit;
-                        footer
-                    } else {
-                        daw_ui::generation_footer(
-                            ui,
-                            &status,
-                            can_add,
-                            next_start.is_some(),
-                            self.added_notes > 0,
-                        )
-                    };
+                    let (footer, fit) = daw_ui::generation_footer_with_preview(
+                        ui,
+                        &status,
+                        can_add,
+                        next_start.is_some(),
+                        self.added_notes > 0,
+                        &mut self.preview,
+                    );
+                    action.fit = fit;
                     self.controls["status"] = rect_json(footer.status);
                     self.controls["add_notes"] = rect_json(footer.add.rect);
                     self.controls["next_range"] = rect_json(footer.next.rect);

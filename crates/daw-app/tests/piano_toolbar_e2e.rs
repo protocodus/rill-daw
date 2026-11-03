@@ -102,7 +102,7 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
         for width in [800, 1100, 1480] {
             app.command(json!({"command":"viewport", "width":width, "height":720, "pixels_per_point":density}));
             let initial = app.click("Select");
-            let settings = label(&initial, "Draw settings").clone();
+            let settings = label(&initial, "Key C · Natural minor").clone();
             for name in [
                 "Select",
                 "Pencil",
@@ -114,7 +114,9 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 "Cursor",
                 "Generate…",
                 "Notes",
-                "Draw settings",
+                "Snap 1/16",
+                "Length last",
+                "Key C · Natural minor",
                 "Tool help",
                 "View",
                 "Fit",
@@ -185,7 +187,7 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 label(&chosen, name);
                 unchanged(&chosen, &before);
                 assert_eq!(
-                    label(&chosen, "Draw settings"),
+                    label(&chosen, "Key C · Natural minor"),
                     &settings,
                     "Direct tool selection keeps adjacent controls in place"
                 );
@@ -199,23 +201,23 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 unchanged(&shortcut, &before);
             }
             app.click("Select");
-            let drawing = app.click("Draw settings");
-            label(&drawing, "Length · Last note");
-            label(&drawing, "Grid scale");
-            label(&drawing, "C · Natural minor");
+            let drawing = app.click("Key C · Natural minor");
+            label(&drawing, "Root");
+            label(&drawing, "Scale");
+            label(&drawing, "Natural minor");
             unchanged(&drawing, &before);
             let dismissed = app.key("Escape");
             unchanged(&dismissed, &before);
             let notes = app.click("Notes");
-            label(&notes, "Quantize...");
-            label(&notes, "Randomize...");
-            let preview = app.click("Quantize...");
+            label(&notes, "Quantize…");
+            label(&notes, "Randomize…");
+            let preview = app.click("Quantize…");
             label(&preview, "Apply quantize");
             unchanged(&preview, &before);
             let cancelled = app.click("Cancel quantize");
             unchanged(&cancelled, &before);
             app.click("Notes");
-            let preview = app.click("Randomize...");
+            let preview = app.click("Randomize…");
             label(&preview, "Apply randomize");
             unchanged(&preview, &before);
             let cancelled = app.click("Cancel randomize");

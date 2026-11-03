@@ -3353,11 +3353,22 @@ impl DawApp {
                         ))
                     })
                     .flatten();
-                let header = daw_ui::workspace_header_with_context(ui, &title, clip_context.as_deref(), |ui| {
+                let header = daw_ui::clip_workspace_header(ui, &title, clip_context.as_deref(), |ui, slot| {
+                    if slot == daw_ui::HeaderSlot::Navigation {
+                        // Previous/Next belong to the clip identity, right after Back.
+                        if workspace == WorkspaceView::Clip {
+                            self.clip_navigation_header(ui);
+                        }
+                        return;
+                    }
                     // The first trailing command occupies the same slot for
                     // audio and MIDI, regardless of their other header tools.
                     if workspace == WorkspaceView::Clip
-                        && daw_ui::quiet_button(ui, "Properties")
+                        && ui
+                            .add(
+                                daw_ui::IconButton::with_icon(daw_ui::Icon::Settings, "Properties")
+                                    .quiet(),
+                            )
                             .on_hover_text("Clip position, duration, name and other properties")
                             .clicked()
                     {
@@ -3376,10 +3387,14 @@ impl DawApp {
                     };
                     if let Some(scope) = ai_scope {
                         let label = scope.label(&self.project);
-                        let response = if workspace == WorkspaceView::Clip
-                            && ui.ctx().content_rect().width() < 1000.0
-                        {
-                            daw_ui::contextual_ai_button_compact(ui, &label)
+                        let response = if workspace == WorkspaceView::Clip {
+                            // Quiet in the editor header; the pink text keeps its AI role.
+                            let compact = ui.ctx().content_rect().width() < 1000.0;
+                            ui.add(
+                                daw_ui::ai_button_widget(if compact { "AI" } else { "AI for this context" })
+                                    .quiet(),
+                            )
+                            .on_hover_text(format!("Open AI scoped to {label}"))
                         } else {
                             daw_ui::contextual_ai_button(ui, &label)
                         };
@@ -3401,14 +3416,19 @@ impl DawApp {
                             .filter(|track| track.kind == TrackKind::Midi)
                     {
                         let unassigned = track.instrument == Instrument::None;
-                        if daw_ui::button(ui, if unassigned { "Choose instrument…" } else { "Instrument" })
-                            .on_hover_text(if unassigned {
-                                "These MIDI notes are silent until an instrument is assigned"
-                            } else {
-                                "Open this track's instrument; return to the same notes and editing position"
-                            })
-                            .clicked()
-                        {
+                        let response = if unassigned {
+                            daw_ui::primary_button(ui, "Choose instrument…")
+                                .on_hover_text("These MIDI notes are silent until an instrument is assigned")
+                        } else {
+                            ui.add(
+                                daw_ui::IconButton::with_icon(daw_ui::Icon::Instrument, "Instrument")
+                                    .quiet(),
+                            )
+                            .on_hover_text(
+                                "Open this track's instrument; return to the same notes and editing position",
+                            )
+                        };
+                        if response.clicked() {
                             if unassigned {
                                 self.open_instrument_chooser(true);
                             } else {
@@ -3422,9 +3442,6 @@ impl DawApp {
                             .is_some_and(|clip| clip.link_group.is_some())
                     {
                         daw_ui::clip_label(ui, "Ghost", true);
-                    }
-                    if workspace == WorkspaceView::Clip {
-                        self.clip_navigation_header(ui);
                     }
                 });
                 ctx.data_mut(|data| {

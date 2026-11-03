@@ -286,7 +286,11 @@ fn duplicate_menu_names_the_active_audio_scope_and_matches_the_rendered_result()
         app.key("Escape");
         range(&mut app);
         let selection = app.click("Clip");
-        assert!(visible(&selection, "Duplicate selection"));
+        assert!(
+            visible(&selection, "Duplicate selection"),
+            "{}",
+            selection["visible_labels"]
+        );
         assert!(!visible(&selection, "Duplicate clip"));
         let cleared = app.click("Clear selection");
         assert!(cleared["audio_editor"]["range"].is_null());
@@ -352,7 +356,7 @@ fn zero_crossing_snap_changes_cursor_cut_and_trim_together_and_shift_bypasses() 
     let mut app = fixture(false, true);
     let original = app.inspect()["project"].clone();
     near(&at(&mut app, 2.0, false)["audio_editor"]["cursor"], 2.0);
-    app.click("Grid 0.25");
+    app.click("Snap 1/16");
     assert_eq!(
         app.click("Source zero crossings")["audio_editor"]["snap_zero_crossings"],
         true
@@ -397,7 +401,8 @@ fn zero_crossing_snap_changes_cursor_cut_and_trim_together_and_shift_bypasses() 
 fn nudge_uses_shared_sample_millisecond_and_grid_steps_in_both_workspaces() {
     let mut app = fixture(false, false);
     let original = app.inspect()["project"].clone();
-    app.click("Nudge");
+    // The audio editor keeps Nudge inside its Clip menu.
+    app.click("Clip");
     app.click("1 sample");
     dismiss_menu(&mut app);
     let nudged = chord(&mut app, "ArrowRight");
@@ -409,7 +414,7 @@ fn nudge_uses_shared_sample_millisecond_and_grid_steps_in_both_workspaces() {
         &source.samples[24000 * 2..24000 * 2 + 2048]
     );
     assert_eq!(chord(&mut app, "Z")["project"], original);
-    app.click("Nudge");
+    app.click("Clip");
     app.click("1 ms");
     dismiss_menu(&mut app);
     near(&selected(&chord(&mut app, "ArrowRight"))["start"], 1.002);
@@ -439,7 +444,7 @@ fn exposed_tools_and_common_controls_work_in_narrow_and_wide_audio_editors() {
             "Stretch",
             "Fade in",
             "Fade out",
-            "Nudge",
+            "Snap 1/16",
             "Clip",
             "View",
             "Tool help",
@@ -481,7 +486,7 @@ fn exposed_tools_and_common_controls_work_in_narrow_and_wide_audio_editors() {
             assert_eq!(keyed["project"], original["project"]);
             assert_eq!(keyed["history"], original["history"]);
         }
-        app.click("Nudge");
+        app.click("Clip");
         app.click("1 sample");
         dismiss_menu(&mut app);
         app.click("Clip");

@@ -1,6 +1,6 @@
 //! Shared piano-key and velocity-marker primitives for music editors.
-use crate::theme;
-use egui::{Align2, Color32, FontId, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2};
+use crate::{TimelineViewport, text::TextRole, theme, tokens};
+use egui::{Align2, Color32, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2, emath::GuiRounding};
 
 /// Ordered visible MIDI pitches, independent of the musical model. Every piano
 /// interaction uses this mapping so folding keys never changes hidden notes.
@@ -96,29 +96,149 @@ pub fn paint_clip_tail(painter: &Painter, plot: Rect, end_x: f32) -> Option<Rect
     Some(tail)
 }
 
+/// One key of a vertical keyboard, one pitch row tall. White keys are
+/// `raised`; a black key is a `bg` bar inset from the right, so the column
+/// reads as a keyboard rather than a stack of grid rows (`grid_bar` in the
+/// light theme, where `bg` is too close to white). Only the B/C and E/F
+/// boundaries get a line, as on a real keyboard. `pitch_class` is 0 for C.
 pub fn piano_key(
     painter: &Painter,
     rect: Rect,
     label: &str,
-    black: bool,
+    pitch_class: u8,
     highlight: u8,
     active: bool,
 ) {
     let colors = theme::palette(painter.ctx());
-    let fill = colors.piano_key_fill(black, highlight, active);
-    painter.rect_filled(rect, 2.0, fill);
-    painter.line_segment(
-        [rect.left_bottom(), rect.right_bottom()],
-        Stroke::new(1.0_f32, colors.line),
-    );
-    if !label.is_empty() && rect.height() >= 14.0 && painter.clip_rect().contains_rect(rect) {
+    let black = matches!(pitch_class, 1 | 3 | 6 | 8 | 10);
+    let plain = highlight == 0 && !active;
+    let white_fill = if plain {
+        colors.raised
+    } else {
+        colors.piano_key_fill(false, highlight, active)
+    };
+    painter.rect_filled(rect, 0.0, white_fill);
+    let label_fill = if black {
+        // Black keys stay dark so the column reads as a keyboard; scale
+        // highlights show on the white keys and on the grid rows.
+        let base = if painter.ctx().style().visuals.dark_mode {
+            colors.bg
+        } else {
+            colors.grid_bar
+        };
+        let fill = if active {
+            base.lerp_to_gamma(colors.guide, 0.35)
+        } else {
+            base
+        };
+        let key = Rect::from_min_max(
+            rect.min,
+            Pos2::new(rect.left() + rect.width() * 0.6, rect.bottom()),
+        );
+        painter.rect_filled(key, 0.0, fill);
+        fill
+    } else {
+        white_fill
+    };
+    if matches!(pitch_class, 0 | 5) {
+        let y = rect
+            .bottom()
+            .round_to_pixel_center(painter.pixels_per_point());
+        painter.hline(
+            rect.x_range(),
+            y,
+            Stroke::new(1.0 / painter.pixels_per_point(), colors.line),
+        );
+    }
+    let font = TextRole::Note.font();
+    if !label.is_empty() && rect.height() >= font.size && painter.clip_rect().contains_rect(rect) {
+        // Labels sit at the right edge, over white even on a black key's row.
+        let fill = if black { white_fill } else { label_fill };
         painter.text(
-            rect.right_center() - Vec2::new(6.0, 0.0),
+            rect.right_center() - Vec2::new(tokens::SPACE_XS, 0.0),
             Align2::RIGHT_CENTER,
             label,
-            FontId::monospace(crate::tokens::FONT_CANVAS),
+            font,
             theme::contrast_text(fill),
         );
+    }
+}
+
+/// Grid line weight for a beat: bars, then beats, then snap subdivisions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GridLevel {
+    Bar,
+    Beat,
+    Subdivision,
+}
+
+pub fn beat_grid_level(beat: f64, beats_per_bar: u8) -> GridLevel {
+    let near = |value: f64| (value - value.round()).abs() < 1e-6;
+    if near(beat / f64::from(beats_per_bar.max(1))) {
+        GridLevel::Bar
+    } else if near(beat) {
+        GridLevel::Beat
+    } else {
+        GridLevel::Subdivision
+    }
+}
+
+/// The three-level vertical grid shared by the piano roll, the audio editor
+/// and the automation curve. Lines are one physical pixel on pixel centers;
+/// subdivisions follow `snap` and are skipped when they would be crowded.
+pub fn paint_beat_grid(
+    painter: &Painter,
+    rect: Rect,
+    view: TimelineViewport,
+    snap: f64,
+    beats_per_bar: u8,
+) {
+    if !rect.is_positive() || view.pixels_per_beat <= 0.0 {
+        return;
+    }
+    let colors = theme::palette(painter.ctx());
+    let beat_color = colors.grid_minor.lerp_to_gamma(colors.grid_bar, 0.5);
+    let minimum = f64::from(tokens::SPACE_SM / view.pixels_per_beat);
+    let mut step = if snap > 0.0 { snap.min(1.0) } else { 1.0 };
+    while step < minimum {
+        step *= 2.0;
+    }
+    let ppp = painter.pixels_per_point();
+    let stroke = 1.0 / ppp;
+    let first = (view.start_beat / step).floor() as i64;
+    let last =
+        ((view.start_beat + f64::from(rect.width() / view.pixels_per_beat)) / step).ceil() as i64;
+    for index in first..=last.min(first + 4000) {
+        let beat = index as f64 * step;
+        let level = beat_grid_level(beat, beats_per_bar);
+        // Beats stay visible even when finer subdivisions are too dense.
+        let color = match level {
+            GridLevel::Bar => colors.grid_bar,
+            GridLevel::Beat => beat_color,
+            GridLevel::Subdivision => colors.grid_minor,
+        };
+        let x = view.x_at(rect, beat).round_to_pixel_center(ppp);
+        if (rect.left()..=rect.right()).contains(&x) {
+            painter.vline(x, rect.y_range(), Stroke::new(stroke, color));
+        }
+    }
+}
+
+/// The velocity lane's own surface: a quieter background, 25/50/75/100 %
+/// guides and the beat grid, so values and bars can be read without notes.
+pub fn paint_velocity_lane(
+    painter: &Painter,
+    rect: Rect,
+    view: TimelineViewport,
+    beats_per_bar: u8,
+) {
+    let colors = theme::palette(painter.ctx());
+    painter.rect_filled(rect, 0.0, colors.bg.lerp_to_gamma(colors.panel, 0.5));
+    paint_beat_grid(painter, rect, view, 0.0, beats_per_bar);
+    let ppp = painter.pixels_per_point();
+    for fraction in [0.25_f32, 0.5, 0.75, 1.0] {
+        let y = (rect.bottom() - fraction * rect.height()).round_to_pixel_center(ppp);
+        painter.hline(rect.x_range(), y, Stroke::new(1.0 / ppp, colors.grid_minor));
     }
 }
 
@@ -166,6 +286,25 @@ pub fn piano_velocity_marker(
         f32::from(velocity.min(127)) / 127.0,
         fill,
         stroke,
+    );
+}
+
+/// A chord sibling whose stem shares an x with a louder note: a hollow head,
+/// so the lane shows how many notes start there.
+pub fn piano_velocity_sibling_marker(
+    painter: &Painter,
+    bounds: Rect,
+    velocity: u8,
+    out_of_scale: bool,
+) {
+    let colors = theme::palette(painter.ctx());
+    let fill = colors.piano_note_fill(velocity, out_of_scale);
+    let y = bounds.bottom() - f32::from(velocity.min(127)) / 127.0 * bounds.height();
+    painter.rect_stroke(
+        Rect::from_center_size(Pos2::new(bounds.center().x, y), Vec2::new(7.0, 5.0)),
+        1.0,
+        Stroke::new(1.0_f32, fill),
+        StrokeKind::Inside,
     );
 }
 
@@ -218,6 +357,16 @@ mod tests {
         assert_eq!(rows.pitch_at(-500.0), 127);
         assert_eq!(rows.pitch_at(500.0), 0);
         assert_eq!(PianoRows::new(|_| false).pitches().len(), 128);
+    }
+
+    #[test]
+    fn grid_levels_distinguish_bars_beats_and_subdivisions() {
+        assert_eq!(beat_grid_level(0.0, 4), GridLevel::Bar);
+        assert_eq!(beat_grid_level(8.0, 4), GridLevel::Bar);
+        assert_eq!(beat_grid_level(3.0, 4), GridLevel::Beat);
+        assert_eq!(beat_grid_level(3.0, 3), GridLevel::Bar);
+        assert_eq!(beat_grid_level(2.25, 4), GridLevel::Subdivision);
+        assert_eq!(beat_grid_level(-1.5, 4), GridLevel::Subdivision);
     }
 
     #[test]

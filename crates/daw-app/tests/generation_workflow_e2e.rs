@@ -82,7 +82,9 @@ fn control(app: &mut Harness, field: &str) -> Value {
         let controls = &generator(&state)["controls"];
         let rect = &controls[field];
         assert!(!rect.is_null(), "Missing {field}: {controls}");
-        if ["start_bar", "length_bars"].contains(&field) {
+        // The grid-scale helper is pinned in the footer; range fields scroll
+        // with the rest of the form.
+        if field == "use_grid_scale" {
             return rect.clone();
         }
         let options = &controls["options"];
@@ -108,7 +110,17 @@ fn number(app: &mut Harness, field: &str, value: &str) -> Value {
     let (x, y) = center(&control(app, field));
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":value}));
-    app.click("Start bar")
+    // The dialog title stays visible however far the form scrolls.
+    let state = app.inspect();
+    let title = state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|label| label.starts_with("Generate notes · "))
+        .expect("generator title")
+        .to_owned();
+    app.click(&title)
 }
 
 fn choice(app: &mut Harness, field: &str, name: &str) -> Value {
@@ -248,9 +260,19 @@ fn open_generator_reflows_when_resized_to_a_short_viewport() {
             options["max"][1].as_f64().unwrap() - options["min"][1].as_f64().unwrap() >= 89.0,
             "{mode}: options need room for visible generation parameters: {options}"
         );
+        // One docked layout: the range fields lead the form column.
         assert!(
-            (center(&controls["start_bar"]).1 - center(&controls["length_bars"]).1).abs() < 1.0,
-            "{mode}: range fields did not reflow into the compact header"
+            (controls["start_bar"]["min"][0].as_f64().unwrap()
+                - controls["harmony"]["min"][0].as_f64().unwrap())
+            .abs()
+                < 1.0,
+            "{mode}: range fields share the form's field column"
+        );
+        assert!(center(&controls["start_bar"]).1 < center(&controls["length_bars"]).1);
+        assert!(
+            controls["options"]["max"][0].as_f64().unwrap() < 800.0
+                && controls["options"]["min"][0].as_f64().unwrap() > 300.0,
+            "{mode}: the generator stays docked right of the piano roll"
         );
         let targets = footer_rects(&state);
         assert_footer_stable(&app.inspect(), &targets, 800, 600);
@@ -522,13 +544,13 @@ fn all_roots_are_visible_and_scale_sync_is_explicit_and_view_only() {
     }
     let cancelled = app.click("Cancel");
     assert_eq!(cancelled["project"], before_sync["project"]);
-    let drawing = app.click("Draw settings");
+    let drawing = app.inspect();
     assert!(
         drawing["visible_labels"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| label == "D · Dorian")
+            .any(|label| label == "Key D · Dorian")
     );
     assert_eq!(drawing["project"], before_sync["project"]);
     assert_eq!(drawing["history"], before_sync["history"]);

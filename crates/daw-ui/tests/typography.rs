@@ -260,7 +260,7 @@ fn fixed_catalog_names_use_ellipsis_and_dense_piano_rows_hide_labels() {
                 ui.painter(),
                 Rect::from_min_size(egui::pos2(20.0, 60.0), Vec2::new(60.0, 10.0)),
                 "C4",
-                false,
+                0,
                 1,
                 false,
             );
@@ -273,7 +273,7 @@ fn fixed_catalog_names_use_ellipsis_and_dense_piano_rows_hide_labels() {
                 )),
                 Rect::from_min_size(egui::pos2(20.0, 100.0), Vec2::new(60.0, 18.0)),
                 "C5",
-                false,
+                0,
                 1,
                 false,
             );

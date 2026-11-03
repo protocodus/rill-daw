@@ -367,3 +367,202 @@ fn inline_name_editor_contents(
         action,
     }
 }
+
+/// Width reserved for the clip editors' view cluster before it has been
+/// measured once: four zoom squares, View and Tool help.
+const EDITOR_VIEW_CONTROLS_ESTIMATE: f32 =
+    crate::tokens::CONTROL_HEIGHT * 7.0 + crate::tokens::SPACE_SM * 4.0;
+
+/// The trailing end of a clip editor toolbar, left to right: caption slot,
+/// zoom controls, View and Tool help. The reservation is the width the controls
+/// used last frame, so the row wraps only when they genuinely do not fit.
+/// `caption` fills whatever remains between the leading tools and the zoom.
+pub fn editor_view_controls(
+    ui: &mut Ui,
+    tool: crate::EditorTool,
+    context: crate::ToolHintContext,
+    selection_available: bool,
+    view_menu: impl FnOnce(&mut Ui),
+    caption: impl FnOnce(&mut Ui),
+) -> crate::TimelineViewAction {
+    let id = Id::new(("editor_view_controls_width", context));
+    let reserved = ui
+        .ctx()
+        .data(|data| data.get_temp::<f32>(id))
+        .unwrap_or(EDITOR_VIEW_CONTROLS_ESTIMATE);
+    crate::toolbar_trailing(ui, reserved, |ui| {
+        // An absolute id keeps these widgets' ids (and open menus) stable
+        // when controls before them come and go.
+        ui.scope_builder(egui::UiBuilder::new().id(id.with("cluster")), |ui| {
+            view_cluster(
+                ui,
+                id,
+                tool,
+                context,
+                selection_available,
+                view_menu,
+                caption,
+            )
+        })
+        .inner
+    })
+    .inner
+}
+
+fn view_cluster(
+    ui: &mut Ui,
+    id: Id,
+    tool: crate::EditorTool,
+    context: crate::ToolHintContext,
+    selection_available: bool,
+    view_menu: impl FnOnce(&mut Ui),
+    caption: impl FnOnce(&mut Ui),
+) -> crate::TimelineViewAction {
+    {
+        let help = crate::editor_tool_help(ui, tool, context);
+        let view = crate::quiet_view_menu(ui, "View", view_menu).response;
+        let action = crate::timeline_zoom_controls(ui, selection_available);
+        // Everything placed so far, right to left: help, View, then zoom.
+        let left = ui.min_rect().left().min(view.rect.left()) - ui.spacing().item_spacing.x;
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(id, (help.rect.right() - left).ceil());
+        });
+        caption(ui);
+        action
+    }
+}
+
+/// Transient editor status (progress, errors, a selection readout) shown in
+/// the toolbar caption slot instead of a separate row above the canvas.
+pub fn editor_status_caption(ui: &mut Ui, status: &str) -> Option<Response> {
+    let available = ui.available_rect_before_wrap().intersect(ui.clip_rect());
+    if available.width() < crate::tokens::CONTROL_HEIGHT {
+        return None;
+    }
+    Some(
+        ui.allocate_ui_with_layout(
+            egui::vec2(available.width(), crate::tokens::CONTROL_HEIGHT),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                // Drop whole trailing clauses before truncating, so a narrow
+                // caption still reads "Click to add" rather than "Click to a…".
+                let font = crate::text::TextRole::Note.font();
+                let fits = |text: &str| {
+                    ui.painter()
+                        .layout_no_wrap(text.to_owned(), font.clone(), egui::Color32::PLACEHOLDER)
+                        .size()
+                        .x
+                        <= available.width()
+                };
+                let clauses: Vec<_> = status.split(" · ").collect();
+                let shown = (1..=clauses.len())
+                    .rev()
+                    .map(|count| clauses[..count].join(" · "))
+                    .find(|text| fits(text))
+                    .unwrap_or_else(|| clauses[0].to_owned());
+                ui.add(
+                    egui::Label::new(crate::text::TextRole::Note.rich(ui.ctx(), shown))
+                        .truncate()
+                        .selectable(false),
+                )
+            },
+        )
+        .inner,
+    )
+}
+
+/// A panel below a clip editor canvas for analysis tools (transients, grid
+/// slicing). Its height is taken from the bottom of the remaining area, so the
+/// ruler and canvas top never move when it opens, wraps or a tool changes.
+/// Returns the height the caller must leave free under its canvas.
+pub fn editor_bottom_drawer(ui: &mut Ui, id: Id, contents: impl FnOnce(&mut Ui)) -> f32 {
+    let height = ui
+        .ctx()
+        .data(|data| data.get_temp::<f32>(id))
+        .unwrap_or(crate::tokens::PARAMETER_ROW_HEIGHT + 2.0 * crate::tokens::SPACE_SM + 1.0);
+    let available = ui.available_rect_before_wrap();
+    let rect = egui::Rect::from_min_max(
+        egui::pos2(available.left(), available.bottom() - height),
+        available.max,
+    );
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+    let colors = crate::theme::palette(ui.ctx());
+    child.painter().hline(
+        rect.x_range(),
+        rect.top(),
+        egui::Stroke::new(1.0_f32, colors.line),
+    );
+    crate::parameter_toolbar(&mut child, contents);
+    let used = child.min_rect().height().ceil();
+    if (used - height).abs() > 0.5 {
+        ui.ctx().data_mut(|data| data.insert_temp(id, used));
+        ui.ctx().request_repaint();
+    }
+    height
+}
+
+/// Nudge commands as a section of a clip editor's Clip menu: the increment
+/// choice (shared with the arranger's Nudge menu) and both directions.
+pub fn clip_nudge_section(ui: &mut Ui, enabled: bool) -> i32 {
+    let id = Id::new("timeline_nudge_unit");
+    let mut unit = crate::NudgeUnit::load(ui.ctx());
+    let mut direction = 0;
+    ui.horizontal(|ui| {
+        crate::text::note(ui, "Nudge by");
+        for (value, label) in [
+            (crate::NudgeUnit::Grid, "Grid"),
+            (crate::NudgeUnit::Millisecond, "1 ms"),
+            (crate::NudgeUnit::Sample, "1 sample"),
+        ] {
+            crate::selectable_value(ui, &mut unit, value, label);
+        }
+    });
+    for (value, label, hint) in [
+        (-1, "Nudge left", "Move the clip left · Ctrl/Cmd+Left arrow"),
+        (
+            1,
+            "Nudge right",
+            "Move the clip right · Ctrl/Cmd+Right arrow",
+        ),
+    ] {
+        if ui
+            .add_enabled(enabled, crate::button_widget(label))
+            .on_hover_text(hint)
+            .clicked()
+        {
+            direction = value;
+            ui.close();
+        }
+    }
+    ui.ctx().data_mut(|data| data.insert_temp(id, unit));
+    direction
+}
+
+/// A zero-based beat edited as a one-based "bar.beat.sixteenth" position, the
+/// same notation as the rulers. Typing accepts "12", "12.3" or "12.3.2";
+/// the caller sets the range.
+pub fn musical_position_field<'a>(
+    beat: &'a mut f64,
+    beats_per_bar: u8,
+    prefix: &str,
+) -> crate::Number<'a> {
+    crate::number(beat)
+        .prefix(prefix)
+        .custom_formatter(move |beat, _| crate::time::musical_position_label(beat, beats_per_bar))
+        .custom_parser(move |text| parse_musical_position(text, beats_per_bar))
+}
+
+/// Parse "bar.beat.sixteenth" (or "bar.beat", or "bar") into a zero-based beat.
+pub fn parse_musical_position(text: &str, beats_per_bar: u8) -> Option<f64> {
+    let mut parts = text
+        .trim()
+        .split('.')
+        .map(|part| part.trim().parse::<f64>());
+    let bar = parts.next()?.ok()?;
+    let beat = parts.next().transpose().ok()?.unwrap_or(1.0);
+    let sixteenth = parts.next().transpose().ok()?.unwrap_or(1.0);
+    if parts.next().is_some() || bar < 1.0 || beat < 1.0 || sixteenth < 1.0 {
+        return None;
+    }
+    Some((bar - 1.0) * f64::from(beats_per_bar.max(1)) + (beat - 1.0) + (sixteenth - 1.0) / 4.0)
+}
