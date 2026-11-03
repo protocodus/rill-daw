@@ -1415,93 +1415,6 @@ impl DawApp {
             clip.end(),
             |beat| clip.audio_envelope_gain(beat - clip.start),
         );
-        let fades = daw_ui::clip_fade_handles(
-            ui,
-            ui.id().with(("audio_fades", clip.id)),
-            canvas,
-            state.view,
-            audio_fade_bounds(&clip),
-            !navigation.navigating && !strip_open,
-        );
-        if let Some((edge, beat)) = fades.edit {
-            let beat = beat.clamp(clip.start, clip.end());
-            let (fi, fo, fic, foc) = audio_fade_handle_edit(&clip, edge, beat);
-            edit = Some(Edit::Fades(fi, fo, fic, foc));
-        }
-        let overlap = self.project.track(track).and_then(|channel| {
-            let schedule = AudioSchedule::new(&channel.clips).ok()?;
-            schedule
-                .overlaps
-                .iter()
-                .find(|overlap| channel.clips[overlap.incoming].id == clip.id)
-                .map(|overlap| (overlap.start, overlap.end))
-        });
-        let blend = overlap.map(|(start, end)| {
-            if let Some(config) = crossfade {
-                let rect = Rect::from_min_max(
-                    Pos2::new(state.view.x_at(canvas, start), canvas.top() + 24.0),
-                    Pos2::new(
-                        state.view.x_at(canvas, (start + config.duration).min(end)),
-                        canvas.bottom(),
-                    ),
-                );
-                daw_ui::paint_crossfade(
-                    &painter.with_clip_rect(canvas),
-                    rect,
-                    daw_ui::CrossfadeCurve {
-                        control1: config.curve.control1,
-                        control2: config.curve.control2,
-                    },
-                );
-            }
-            let handle = daw_ui::crossfade_duration_handle(
-                ui,
-                ui.id().with(("audio_crossfade", clip.id)),
-                canvas,
-                state.view,
-                daw_ui::CrossfadeBounds {
-                    start,
-                    end,
-                    duration: crossfade.map_or(0.0, |config| config.duration),
-                },
-                !navigation.navigating && !strip_open,
-            );
-            open_crossfade = handle.open_curve;
-            if let Some(duration) = handle.duration {
-                let end_beat = if ui.input(|input| input.modifiers.shift) {
-                    start + duration
-                } else {
-                    self.snapped(start + duration)
-                };
-                let duration = (end_beat - start).clamp(0.0, end - start);
-                edit = Some(Edit::Crossfade((duration > 0.0).then_some(
-                    AudioCrossfade {
-                        duration,
-                        curve: crossfade.map_or(CrossfadeCurve::LINEAR, |config| config.curve),
-                    },
-                )));
-            }
-            handle
-        });
-        let response = ui
-            .interact(
-                canvas,
-                ui.id().with("audio_edit_canvas"),
-                if navigation.navigating
-                    || strip_open
-                    || fades.interacting
-                    || blend.as_ref().is_some_and(|handle| handle.interacting)
-                {
-                    Sense::hover()
-                } else {
-                    Sense::click_and_drag()
-                },
-            )
-            .on_hover_text(if state.tool == EditorTool::Cursor {
-                "Click to place the cursor · Drag to select time · Shift bypasses snap"
-            } else {
-                state.tool.hint()
-            });
         let shift = ui.input(|input| input.modifiers.shift);
         let mut snap_target = None;
         let marker_source = state
@@ -1546,6 +1459,103 @@ impl DawApp {
                 (beat, target)
             }
         };
+        let fades = daw_ui::clip_fade_handles(
+            ui,
+            ui.id().with(("audio_fades", clip.id)),
+            canvas,
+            state.view,
+            audio_fade_bounds(&clip),
+            !navigation.navigating && !strip_open,
+        );
+        if let Some((edge, beat)) = fades.edit {
+            let beat = if beat <= clip.start {
+                clip.start
+            } else if beat >= clip.end() {
+                clip.end()
+            } else {
+                let (snapped, target) = snap(beat);
+                snap_target = target;
+                snapped
+            }
+            .clamp(clip.start, clip.end());
+            let (fi, fo, fic, foc) = audio_fade_handle_edit(&clip, edge, beat);
+            edit = Some(Edit::Fades(fi, fo, fic, foc));
+        }
+        let overlap = self.project.track(track).and_then(|channel| {
+            let schedule = AudioSchedule::new(&channel.clips).ok()?;
+            schedule
+                .overlaps
+                .iter()
+                .find(|overlap| channel.clips[overlap.incoming].id == clip.id)
+                .map(|overlap| (overlap.start, overlap.end))
+        });
+        let blend = overlap.map(|(start, end)| {
+            if let Some(config) = crossfade {
+                let rect = Rect::from_min_max(
+                    Pos2::new(state.view.x_at(canvas, start), canvas.top() + 24.0),
+                    Pos2::new(
+                        state.view.x_at(canvas, (start + config.duration).min(end)),
+                        canvas.bottom(),
+                    ),
+                );
+                daw_ui::paint_crossfade(
+                    &painter.with_clip_rect(canvas),
+                    rect,
+                    daw_ui::CrossfadeCurve {
+                        control1: config.curve.control1,
+                        control2: config.curve.control2,
+                    },
+                );
+            }
+            let handle = daw_ui::crossfade_duration_handle(
+                ui,
+                ui.id().with(("audio_crossfade", clip.id)),
+                canvas,
+                state.view,
+                daw_ui::CrossfadeBounds {
+                    start,
+                    end,
+                    duration: crossfade.map_or(0.0, |config| config.duration),
+                },
+                !navigation.navigating && !strip_open,
+            );
+            open_crossfade = handle.open_curve;
+            if let Some(duration) = handle.duration {
+                let duration = if duration <= 0.0 {
+                    0.0
+                } else if duration >= end - start {
+                    end - start
+                } else {
+                    let (end_beat, target) = snap(start + duration);
+                    snap_target = target;
+                    (end_beat - start).clamp(0.0, end - start)
+                };
+                edit = Some(Edit::Crossfade((duration > 0.0).then_some(
+                    AudioCrossfade {
+                        duration,
+                        curve: crossfade.map_or(CrossfadeCurve::LINEAR, |config| config.curve),
+                    },
+                )));
+            }
+            handle
+        });
+        let handle_interacting =
+            fades.interacting || blend.as_ref().is_some_and(|handle| handle.interacting);
+        let response = ui
+            .interact(
+                canvas,
+                ui.id().with("audio_edit_canvas"),
+                if navigation.navigating || strip_open || handle_interacting {
+                    Sense::hover()
+                } else {
+                    Sense::click_and_drag()
+                },
+            )
+            .on_hover_text(if state.tool == EditorTool::Cursor {
+                "Click to place the cursor · Drag to select time · Shift bypasses snap"
+            } else {
+                state.tool.hint()
+            });
         let mut new_cursor = None;
         if response.secondary_clicked()
             && let Some(pointer) = response.interact_pointer_pos()
@@ -1612,6 +1622,7 @@ impl DawApp {
         }
         if !navigation.navigating
             && !strip_open
+            && !handle_interacting
             && response.hovered()
             && let Some(pointer) = response.hover_pos()
         {
@@ -1622,10 +1633,24 @@ impl DawApp {
                 {
                     egui::CursorIcon::ResizeHorizontal
                 }
-                EditorTool::Select | EditorTool::Slip => egui::CursorIcon::Grab,
-                EditorTool::Stretch => egui::CursorIcon::ResizeHorizontal,
-                _ => egui::CursorIcon::Crosshair,
+                EditorTool::Select | EditorTool::Slip => {
+                    if response.dragged() {
+                        egui::CursorIcon::Grabbing
+                    } else {
+                        egui::CursorIcon::Grab
+                    }
+                }
+                tool => tool.cursor_icon(),
             });
+        }
+        if ui.is_enabled()
+            && !navigation.navigating
+            && !strip_open
+            && !handle_interacting
+            && !egui::Popup::is_any_open(ui.ctx())
+            && ui.output(|output| output.cursor_icon == egui::CursorIcon::Default)
+        {
+            ui.ctx().set_cursor_icon(state.tool.cursor_icon());
         }
         if !navigation.navigating
             && !strip_open

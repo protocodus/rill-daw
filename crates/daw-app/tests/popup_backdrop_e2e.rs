@@ -59,6 +59,15 @@ fn assert_backdrop(state: &Value, foreground: &str) {
     );
 }
 
+fn assert_menu_backdrop(state: &Value, foreground: &str) {
+    assert_focus_layer(state, foreground, false);
+    let blur = state["backdrop_blur"].as_array().unwrap();
+    assert!(
+        blur.is_empty(),
+        "{foreground} menu must not blur the background"
+    );
+}
+
 fn assert_focus_layer(state: &Value, foreground: &str, modal: bool) {
     let dim = dim_layers(state);
     assert_eq!(dim.len(), 1, "{foreground} needs one full-window dim layer");
@@ -205,7 +214,7 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
     let original = assert_clear(&mut app)["project"].clone();
 
     app.click("File");
-    assert_backdrop(&painted(&mut app), "New");
+    assert_menu_backdrop(&painted(&mut app), "New");
     app.key("Escape");
     assert_clear(&mut app);
 
@@ -219,7 +228,7 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
     let [left, top, right, bottom] = bounds(routing);
     app.command(json!({"command":"pointer", "phase":"click",
         "x":(left+right)*0.5, "y":(top+bottom)*0.5}));
-    assert_backdrop(&painted(&mut app), "Master");
+    assert_menu_backdrop(&painted(&mut app), "Master");
     app.key("Escape");
     assert_clear(&mut app);
 
@@ -231,7 +240,7 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
         .find_map(|label| label.as_str().filter(|label| label.starts_with("Snap ")))
         .unwrap();
     app.click(snap);
-    assert_backdrop(&painted(&mut app), "1/32");
+    assert_menu_backdrop(&painted(&mut app), "1/32");
     app.command(json!({"command":"pointer", "phase":"click", "x":1090, "y":750}));
     assert_clear(&mut app);
 
@@ -244,7 +253,7 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
         .unwrap();
     let [left, top, _, bottom] = bounds(&strip["rect"]);
     app.command(json!({"command":"pointer", "phase":"click", "x":left+1.5, "y":(top+bottom)*0.5}));
-    assert_backdrop(&painted(&mut app), "Color of Backdrop synth");
+    assert_menu_backdrop(&painted(&mut app), "Color of Backdrop synth");
     app.key("Escape");
     assert_clear(&mut app);
 
@@ -255,13 +264,13 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
         json!({"command":"pointer", "phase":"click", "button":"secondary",
         "x":(left+right)*0.5, "y":(top+bottom)*0.5}),
     );
-    assert_backdrop(&painted(&mut app), "Ghost copy");
+    assert_menu_backdrop(&painted(&mut app), "Ghost copy");
     app.key("Escape");
     assert_clear(&mut app);
 
     app.click("Mixer");
     app.click("Channel");
-    assert_backdrop(&painted(&mut app), "Open channel");
+    assert_menu_backdrop(&painted(&mut app), "Open channel");
     app.click("Effects");
     assert_backdrop(&painted(&mut app), "Effects of Backdrop synth");
     app.key("Escape");

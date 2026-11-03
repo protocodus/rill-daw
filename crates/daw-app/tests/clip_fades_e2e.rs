@@ -276,3 +276,78 @@ fn overlap_handle_enables_resizes_and_removes_a_crossfade_without_moving_clips()
     assert_eq!(popup["popups"]["crossfade"], true);
     app.quit();
 }
+
+#[test]
+fn fade_and_crossfade_handles_respect_snap_settings_in_arranger_and_clip_editor() {
+    let mut app = Harness::new();
+    let outgoing = source(&app, "snap-outgoing.wav", 0.2);
+    let incoming = source(&app, "snap-incoming.wav", 0.4);
+    let mut project = Project::new();
+    let track = project.add_audio_track("Snap fades");
+    let first = Clip::audio("First", 0.0, 4.0, outgoing.to_string_lossy());
+    let first_id = first.id;
+    let second = Clip::audio("Second", 2.0, 4.0, incoming.to_string_lossy());
+    let second_id = second.id;
+    project
+        .track_mut(track)
+        .unwrap()
+        .clips
+        .extend([first, second]);
+    let state = open(&mut app, &project);
+    let ppb = state["timeline"]["pixels_per_beat"].as_f64().unwrap();
+
+    // Arranger fade-in handle snaps to the 0.25-beat grid when dragged by a non-grid amount (0.68 beats -> 0.75).
+    let fade_in_pt = center(&diagnostic(&state, first_id)["fade_handles"][0]);
+    let snapped_in = drag(&mut app, fade_in_pt, ppb * 0.68, false);
+    near(audio(&snapped_in, 0, 0)["fade_in"].as_f64().unwrap(), 0.75);
+    assert_eq!(undo(&mut app)["project"], state["project"]);
+
+    // Arranger fade-out handle snaps to the 0.25-beat grid (-0.68 beats -> 0.75 fade_out).
+    let fade_out_pt = center(&diagnostic(&state, second_id)["fade_handles"][1]);
+    let snapped_out = drag(&mut app, fade_out_pt, -ppb * 0.68, false);
+    near(
+        audio(&snapped_out, 0, 1)["fade_out"].as_f64().unwrap(),
+        0.75,
+    );
+    assert_eq!(undo(&mut app)["project"], state["project"]);
+
+    // Arranger crossfade handle snaps to the 0.25-beat grid (0.68 beats -> 0.75).
+    let xfade_pt = center(&diagnostic(&state, second_id)["crossfade_handle"]);
+    let snapped_xfade = drag(&mut app, xfade_pt, ppb * 0.68, false);
+    near(
+        audio(&snapped_xfade, 0, 1)["crossfade"]["duration"]
+            .as_f64()
+            .unwrap(),
+        0.75,
+    );
+    assert_eq!(undo(&mut app)["project"], state["project"]);
+
+    // Audio Clip Editor fade handles and crossfade handle also respect snap settings.
+    app.click("Second");
+    app.click("Window");
+    let editor = app.click("Clip Editor");
+    let editor_ppb = editor["audio_editor"]["pixels_per_beat"].as_f64().unwrap();
+    let editor_fade_in = center(&editor["audio_editor"]["fade_handles"][0]);
+    let editor_snapped_in = drag(&mut app, editor_fade_in, editor_ppb * 0.68, false);
+    near(
+        audio(&editor_snapped_in, 0, 1)["fade_in"].as_f64().unwrap(),
+        0.75,
+    );
+    let editor_fade_out = center(&editor_snapped_in["audio_editor"]["fade_handles"][1]);
+    let editor_snapped_out = drag(&mut app, editor_fade_out, -editor_ppb * 0.68, false);
+    near(
+        audio(&editor_snapped_out, 0, 1)["fade_out"]
+            .as_f64()
+            .unwrap(),
+        0.75,
+    );
+    let editor_xfade = center(&editor_snapped_out["audio_editor"]["crossfade_handle"]);
+    let editor_snapped_xfade = drag(&mut app, editor_xfade, editor_ppb * 0.68, false);
+    near(
+        audio(&editor_snapped_xfade, 0, 1)["crossfade"]["duration"]
+            .as_f64()
+            .unwrap(),
+        0.75,
+    );
+    app.quit();
+}

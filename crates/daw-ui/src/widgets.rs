@@ -372,6 +372,7 @@ fn semantic_picker<R>(
         role => (role, false),
     };
     let nested = egui::containers::menu::is_in_menu(ui);
+    let quiet = quiet || nested;
     let label = label.into();
     let icon = match role {
         MenuRole::View => Some(crate::Icon::View),
@@ -402,32 +403,48 @@ fn semantic_picker<R>(
     if horizontal_padding.is_some() {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
     }
-    let visuals = &mut ui.visuals_mut().widgets;
-    match role {
-        MenuRole::Action => {
-            visuals.inactive.fg_stroke.color = colors.action;
-            visuals.hovered.fg_stroke.color = colors.action;
-            visuals.active.fg_stroke.color = colors.action;
-            visuals.open.fg_stroke.color = colors.action;
-            visuals.inactive.weak_bg_fill = colors.panel.lerp_to_gamma(colors.action, 0.12);
-            visuals.inactive.bg_stroke = egui::Stroke::new(
-                tokens::BORDER_WIDTH,
-                colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
-            );
+    if nested {
+        let color = ui.visuals().override_text_color.unwrap_or(colors.text);
+        ui.visuals_mut().override_text_color = Some(color);
+        let visuals = &mut ui.visuals_mut().widgets;
+        for visuals in [
+            &mut visuals.inactive,
+            &mut visuals.hovered,
+            &mut visuals.active,
+            &mut visuals.open,
+        ] {
+            visuals.fg_stroke.color = color;
+            visuals.bg_stroke = egui::Stroke::NONE;
         }
-        MenuRole::Choice => {
-            visuals.inactive.weak_bg_fill = colors.bg;
-            visuals.inactive.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.line);
+        visuals.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+    } else {
+        let visuals = &mut ui.visuals_mut().widgets;
+        match role {
+            MenuRole::Action => {
+                visuals.inactive.fg_stroke.color = colors.action;
+                visuals.hovered.fg_stroke.color = colors.action;
+                visuals.active.fg_stroke.color = colors.action;
+                visuals.open.fg_stroke.color = colors.action;
+                visuals.inactive.weak_bg_fill = colors.panel.lerp_to_gamma(colors.action, 0.12);
+                visuals.inactive.bg_stroke = egui::Stroke::new(
+                    tokens::BORDER_WIDTH,
+                    colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
+                );
+            }
+            MenuRole::Choice => {
+                visuals.inactive.weak_bg_fill = colors.bg;
+                visuals.inactive.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.line);
+            }
+            MenuRole::View => {
+                visuals.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+                visuals.inactive.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.line);
+                visuals.hovered.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.accent);
+            }
+            _ => unreachable!("quiet menu roles normalize before styling"),
         }
-        MenuRole::View => {
-            visuals.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-            visuals.inactive.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.line);
-            visuals.hovered.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, colors.accent);
+        if role == MenuRole::Action {
+            ui.visuals_mut().override_text_color = Some(colors.action);
         }
-        _ => unreachable!("quiet menu roles normalize before styling"),
-    }
-    if role == MenuRole::Action {
-        ui.visuals_mut().override_text_color = Some(colors.action);
     }
     let nested_open = if nested {
         let next_id = ui.next_auto_id();
@@ -481,10 +498,16 @@ fn semantic_picker<R>(
                 button.response.rect,
                 tokens::RADIUS,
                 visuals.weak_bg_fill,
-                visuals.bg_stroke,
+                if nested {
+                    egui::Stroke::NONE
+                } else {
+                    visuals.bg_stroke
+                },
                 crate::ComponentMaterial {
                     elevated: false,
-                    active: button.response.enabled() && (open || button.response.has_focus()),
+                    active: !nested
+                        && button.response.enabled()
+                        && (open || button.response.has_focus()),
                 },
             ),
         );
@@ -580,7 +603,18 @@ pub fn picker_button<R>(
 /// Application command bar; menus use the same native focus and popup behavior
 /// as contextual menus throughout the app.
 pub fn menu_bar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
-    egui::MenuBar::new().ui(ui, contents)
+    egui::MenuBar::new().ui(ui, |ui| {
+        ui.spacing_mut().button_padding =
+            egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        let color = ui
+            .visuals()
+            .override_text_color
+            .unwrap_or(theme::palette(ui.ctx()).text);
+        ui.visuals_mut().widgets.hovered.fg_stroke.color = color;
+        ui.visuals_mut().widgets.active.fg_stroke.color = color;
+        contents(ui)
+    })
 }
 
 pub fn toggle(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Response {
@@ -933,6 +967,12 @@ pub fn number_at(
 fn menu_item_spacing(style: &mut egui::Style) {
     style.spacing.button_padding = egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
     style.spacing.item_spacing = egui::Vec2::splat(tokens::SPACE_SM);
+    let color = style
+        .visuals
+        .override_text_color
+        .unwrap_or(style.visuals.widgets.inactive.fg_stroke.color);
+    style.visuals.widgets.hovered.fg_stroke.color = color;
+    style.visuals.widgets.active.fg_stroke.color = color;
 }
 
 pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> ComboBox {

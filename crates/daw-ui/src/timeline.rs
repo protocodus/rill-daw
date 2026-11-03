@@ -107,6 +107,24 @@ impl EditorTool {
             }
         }
     }
+
+    pub fn cursor_icon(self) -> egui::CursorIcon {
+        match self {
+            Self::Select => egui::CursorIcon::Default,
+            Self::Slip => egui::CursorIcon::Grab,
+            Self::Stretch => egui::CursorIcon::ResizeHorizontal,
+            Self::Duplicate => egui::CursorIcon::Copy,
+            Self::Ghost => egui::CursorIcon::Alias,
+            Self::Glue => egui::CursorIcon::PointingHand,
+            Self::Pencil
+            | Self::MultiDraw
+            | Self::Cut
+            | Self::Erase
+            | Self::FadeIn
+            | Self::FadeOut
+            | Self::Cursor => egui::CursorIcon::Crosshair,
+        }
+    }
 }
 
 /// No shortcuts are claimed while a text field, menu, or another popup is editing.
@@ -114,6 +132,7 @@ pub fn editor_tool_shortcuts(ui: &mut Ui, tool: &mut EditorTool, supported: &[Ed
     if !ui.is_enabled() || ui.ctx().wants_keyboard_input() || egui::Popup::is_any_open(ui.ctx()) {
         return;
     }
+    let mut changed = false;
     ui.input_mut(|input| {
         if input.modifiers.any() {
             return;
@@ -121,9 +140,13 @@ pub fn editor_tool_shortcuts(ui: &mut Ui, tool: &mut EditorTool, supported: &[Ed
         for candidate in supported {
             if input.consume_key(egui::Modifiers::NONE, candidate.key()) {
                 *tool = *candidate;
+                changed = true;
             }
         }
     });
+    if changed {
+        ui.ctx().set_cursor_icon(tool.cursor_icon());
+    }
 }
 
 pub fn editor_tools(ui: &mut Ui, tool: &mut EditorTool, supported: &[EditorTool]) {
@@ -251,12 +274,17 @@ fn editor_tool_family(
         tools
             .iter()
             .map(|&candidate| {
-                crate::tool_value(ui, tool, candidate, label(candidate)).on_hover_text(format!(
-                    "{} tool · {}\n{}",
-                    label(candidate),
-                    candidate.key().name(),
-                    hint(candidate),
-                ))
+                let response = crate::tool_value(ui, tool, candidate, label(candidate))
+                    .on_hover_text(format!(
+                        "{} tool · {}\n{}",
+                        label(candidate),
+                        candidate.key().name(),
+                        hint(candidate),
+                    ));
+                if response.clicked() || response.hovered() {
+                    ui.ctx().set_cursor_icon(tool.cursor_icon());
+                }
+                response
             })
             .collect()
     })

@@ -1890,14 +1890,25 @@ impl DawApp {
             }
             note_diagnostics.push(serde_json::json!({"id":note.id,"pitch":note.pitch,"rect":rect_json(rect),"velocity_rect":rect_json(marker),"selected":selected,"velocity":note.velocity,"out_of_scale":out_of_scale,"fill_color":fill.to_array(),"stroke_color":stroke.color.to_array(),"stroke_width":stroke.width}));
         }
-        if let Some((_, rect)) = &note_hit {
-            ui.ctx().set_cursor_icon(
-                if pointer.is_some_and(|p| daw_ui::piano_note_edge(*rect, p.x) != 0) {
-                    egui::CursorIcon::ResizeHorizontal
-                } else {
-                    egui::CursorIcon::Grab
-                },
-            );
+        if !navigation.navigating && state.transform.is_none() && state.generate.is_none() {
+            if let Some((_, rect)) = &note_hit {
+                let icon = match self.tool {
+                    Tool::Select
+                        if pointer.is_some_and(|p| daw_ui::piano_note_edge(*rect, p.x) != 0) =>
+                    {
+                        egui::CursorIcon::ResizeHorizontal
+                    }
+                    Tool::Select => egui::CursorIcon::Grab,
+                    tool => tool.cursor_icon(),
+                };
+                ui.ctx().set_cursor_icon(icon);
+            } else if pointer.is_some_and(|pos| plot.contains(pos))
+                || (ui.is_enabled()
+                    && !egui::Popup::is_any_open(ui.ctx())
+                    && ui.output(|output| output.cursor_icon == egui::CursorIcon::Default))
+            {
+                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
+            }
         }
         if response.clicked()
             && owns_pointer

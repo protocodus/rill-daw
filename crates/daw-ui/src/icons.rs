@@ -770,7 +770,8 @@ impl Widget for IconButton {
         // Keep this native widget in its parent's layout: a nested `scope`
         // prevents horizontal_wrapped from wrapping individual buttons.
         let previous_style = ui.style().clone();
-        if egui::containers::menu::is_in_menu(ui) {
+        let in_menu = egui::containers::menu::is_in_menu(ui);
+        if in_menu {
             // Native menus install compact defaults after the shared theme.
             // Keep ordinary label padding on shared controls in those menus.
             ui.spacing_mut().button_padding = egui::vec2(
@@ -791,6 +792,7 @@ impl Widget for IconButton {
             ButtonRole::Tool if matches!(self.icon, Some(Icon::Select | Icon::Cursor)) => {
                 colors.text
             }
+            _ if in_menu => inherited.unwrap_or(colors.text),
             _ => inherited.unwrap_or(colors.action),
         };
         let colored = purpose == colors.action
@@ -821,16 +823,26 @@ impl Widget for IconButton {
                 self.role,
                 ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
             );
-        ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(
-            crate::tokens::BORDER_WIDTH,
-            colors
-                .line
-                .gamma_multiply(crate::tokens::GOLDEN_RATIO_INVERSE),
-        );
-        if self.role == ButtonRole::View {
-            ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-            ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
-            ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.accent);
+        if in_menu {
+            let visuals = &mut ui.visuals_mut().widgets;
+            visuals.inactive.weak_bg_fill = Color32::TRANSPARENT;
+            visuals.inactive.bg_stroke = Stroke::NONE;
+            visuals.hovered.bg_stroke = Stroke::NONE;
+            visuals.active.bg_stroke = Stroke::NONE;
+            visuals.open.bg_stroke = Stroke::NONE;
+            ui.visuals_mut().selection.stroke = Stroke::NONE;
+        } else {
+            ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(
+                crate::tokens::BORDER_WIDTH,
+                colors
+                    .line
+                    .gamma_multiply(crate::tokens::GOLDEN_RATIO_INVERSE),
+            );
+            if self.role == ButtonRole::View {
+                ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+                ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0_f32, colors.line);
+                ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.accent);
+            }
         }
         let native_event_index = self
             .accessible_label
@@ -838,28 +850,40 @@ impl Widget for IconButton {
             .map(|_| ui.output(|output| output.events.len()));
         let background = ui.painter().add(egui::Shape::Noop);
         let has_frame = self.frame.unwrap_or(ui.visuals().button_frame);
+        let frame_when_inactive = if in_menu {
+            self.selected
+        } else {
+            self.frame_when_inactive
+        };
         // Keep native frame padding and hit geometry, but paint its material in
         // the reserved slot beneath the native text, icons and accessibility.
         let output = self
             .button
+            .frame_when_inactive(true)
             .fill(Color32::TRANSPARENT)
             .stroke(Stroke::NONE)
             .frame(has_frame)
             .atom_ui(ui);
         let response = &output.response;
         if has_frame
-            && (self.frame_when_inactive
+            && (frame_when_inactive
                 || response.hovered()
                 || response.is_pointer_button_down_on()
                 || response.has_focus())
         {
             let visuals = ui.style().interact_selectable(response, self.selected);
             let fill = self.fill.unwrap_or(visuals.weak_bg_fill);
-            let stroke = self.stroke.unwrap_or(visuals.bg_stroke);
+            let stroke = if in_menu {
+                Stroke::NONE
+            } else {
+                self.stroke.unwrap_or(visuals.bg_stroke)
+            };
             let material = crate::surface::ComponentMaterial {
-                elevated: self.fill.is_some_and(|fill| fill != Color32::TRANSPARENT)
+                elevated: !in_menu
+                    && self.fill.is_some_and(|fill| fill != Color32::TRANSPARENT)
                     && ui.is_enabled(),
-                active: ui.is_enabled()
+                active: !in_menu
+                    && ui.is_enabled()
                     && !selected_mode
                     && (self.selected || response.has_focus()),
             };
@@ -905,7 +929,7 @@ impl Widget for IconButton {
                 }
             });
         }
-        if selected_mode {
+        if selected_mode && !in_menu {
             // Selection outlines the complete native target. The halo shares
             // the clip/channel treatment and never changes layout or hit areas.
             let rect = output.response.rect;

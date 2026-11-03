@@ -197,3 +197,137 @@ fn choice_text_has_its_own_padding_inside_a_compact_menu_frame() {
         }
     }
 }
+
+#[test]
+fn menu_bar_and_menu_items_have_padding_and_no_blue_borders_or_action_tints() {
+    fn visit_rects(shape: &Shape, rects: &mut Vec<egui::epaint::RectShape>) {
+        match shape {
+            Shape::Rect(rect) => rects.push(rect.clone()),
+            Shape::Vec(shapes) => {
+                for shape in shapes {
+                    visit_rects(shape, rects);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn text_color(output: &FullOutput, name: &str) -> egui::Color32 {
+        output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                Shape::Text(text) if text.galley.text() == name => Some(
+                    text.override_text_color
+                        .unwrap_or(text.galley.job.sections[0].format.color),
+                ),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("Missing rendered text {name}"))
+    }
+
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        theme::set_appearance(&ctx, appearance);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let colors = theme::palette(&ctx);
+        let draw = |events| {
+            let mut file_btn = None;
+            let mut edit_btn = None;
+            let mut ai_btn = None;
+            let mut undo_btn = None;
+            let mut redo_btn = None;
+            let output = ctx.run(input(events), |ctx| {
+                egui::TopBottomPanel::top("bar").show(ctx, |ui| {
+                    controls::menu_bar(ui, |ui| {
+                        file_btn = Some(
+                            controls::command_menu_button(ui, "File", |ui| {
+                                let _ = controls::button(ui, "New");
+                            })
+                            .response,
+                        );
+                        edit_btn = Some(
+                            controls::command_menu_button(ui, "Edit", |ui| {
+                                undo_btn =
+                                    Some(ui.add_enabled(false, controls::button_widget("Undo")));
+                                redo_btn = Some(controls::button(ui, "Redo"));
+                            })
+                            .response,
+                        );
+                        ai_btn = Some(controls::ai_button(ui, "AI"));
+                    });
+                });
+                egui::CentralPanel::default().show(ctx, |_| {});
+                controls::paint_popup_backdrop(ctx, false);
+            });
+            (
+                output,
+                file_btn.unwrap(),
+                edit_btn.unwrap(),
+                ai_btn.unwrap(),
+                undo_btn,
+                redo_btn,
+            )
+        };
+
+        let (idle_out, file, edit, ai, _, _) = draw(vec![]);
+        for (name, response) in [("File", &file), ("Edit", &edit), ("AI", &ai)] {
+            let text = label(&idle_out, name);
+            assert!(
+                text.left() - response.rect.left() >= tokens::BUTTON_PADDING_X - 1.0
+                    && response.rect.right() - text.right() >= tokens::BUTTON_PADDING_X - 1.0,
+                "{name} in menu_bar must have horizontal padding: text {text:?}, button {:?}",
+                response.rect
+            );
+        }
+
+        let target = edit.rect.center();
+        draw(click(target, true));
+        draw(click(target, false));
+        for _ in 0..3 {
+            draw(vec![]);
+        }
+        let (open_out, _, _, _, undo, redo) = draw(vec![]);
+        assert!(
+            controls::backdrop_blur_info(&ctx).is_empty(),
+            "Opening a menu must not blur the background"
+        );
+        let undo = undo.expect("Edit menu is open");
+        let redo = redo.expect("Edit menu is open");
+        assert_ne!(text_color(&open_out, "Undo"), colors.action);
+        assert_eq!(text_color(&open_out, "Redo"), colors.text);
+
+        let mut rects = Vec::new();
+        for shape in &open_out.shapes {
+            visit_rects(&shape.shape, &mut rects);
+        }
+        for item in [&undo, &redo] {
+            assert!(
+                !rects.iter().any(|rect| rect.rect == item.rect
+                    && (rect.fill != egui::Color32::TRANSPARENT || !rect.stroke.is_empty())),
+                "Idle menu items must not have boxes or borders: {:?}",
+                item.rect
+            );
+        }
+
+        let (hover_out, _, _, _, _, redo_hovered) =
+            draw(vec![Event::PointerMoved(redo.rect.center())]);
+        let redo_hovered = redo_hovered.unwrap();
+        let mut hover_rects = Vec::new();
+        for shape in &hover_out.shapes {
+            visit_rects(&shape.shape, &mut hover_rects);
+        }
+        assert!(
+            hover_rects
+                .iter()
+                .any(|rect| rect.rect == redo_hovered.rect && rect.fill == colors.control_hover),
+            "Hovered menu item should use flat control_hover fill"
+        );
+        assert!(
+            !hover_rects
+                .iter()
+                .any(|rect| rect.rect == redo_hovered.rect && !rect.stroke.is_empty()),
+            "Hovered menu item must not have a blue or box border"
+        );
+    }
+}

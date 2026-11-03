@@ -31,16 +31,21 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
     if !crate::backdrop_blur::backdrop_blur_info(ctx).is_empty() {
         return;
     }
-    let layer = backdrop_layer(if native_popup {
-        Order::Foreground
-    } else {
-        Order::Background
-    });
-    ctx.move_to_top(layer);
+    if utility_open {
+        let bg_layer = backdrop_layer(Order::Background);
+        ctx.move_to_top(bg_layer);
+        let bg_painter = ctx.layer_painter(bg_layer);
+        crate::backdrop_blur::paint_modal_blur(ctx, &bg_painter);
+        if !native_popup {
+            bg_painter.rect_filled(ctx.content_rect(), 0.0, popup_backdrop_color(ctx));
+        }
+    }
     if native_popup {
         // Place all current menus (including submenus) above a single scrim.
         // Sublayers preserve their native relative order, so a newly opened
         // menu or a previously visited window cannot end up under the scrim.
+        let layer = backdrop_layer(Order::Foreground);
+        ctx.move_to_top(layer);
         let popups = ctx.memory(|memory| {
             memory
                 .layer_ids()
@@ -50,8 +55,7 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
         for popup in popups {
             ctx.set_sublayer(layer, popup);
         }
+        let painter = ctx.layer_painter(layer);
+        painter.rect_filled(ctx.content_rect(), 0.0, popup_backdrop_color(ctx));
     }
-    let painter = ctx.layer_painter(layer);
-    crate::backdrop_blur::paint_modal_blur(ctx, &painter);
-    painter.rect_filled(ctx.content_rect(), 0.0, popup_backdrop_color(ctx));
 }

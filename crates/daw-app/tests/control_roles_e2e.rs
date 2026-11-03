@@ -175,6 +175,28 @@ fn tool_families_wrap_together_and_every_mode_remains_mouse_accessible() {
             ] {
                 let state = app.click(text);
                 mode(&state, expected);
+                let expected_cursor = match expected {
+                    "Select" => "Default",
+                    "Duplicate" => "Copy",
+                    "Glue" => "PointingHand",
+                    _ => "Crosshair",
+                };
+                assert_eq!(state["cursor_icon"], expected_cursor, "tool {text}");
+                unchanged(&state, &original);
+            }
+            for (key, expected, expected_cursor) in [
+                ("Q", "Select", "Default"),
+                ("W", "Pencil", "Crosshair"),
+                ("E", "Cut", "Crosshair"),
+                ("R", "Duplicate", "Copy"),
+                ("T", "Glue", "PointingHand"),
+                ("Z", "Erase", "Crosshair"),
+                ("U", "MultiDraw", "Crosshair"),
+                ("P", "Cursor", "Crosshair"),
+            ] {
+                let state = app.key(key);
+                mode(&state, expected);
+                assert_eq!(state["cursor_icon"], expected_cursor, "shortcut {key}");
                 unchanged(&state, &original);
             }
         }
@@ -332,6 +354,25 @@ fn workspace_tabs_keep_the_same_targets_and_persistent_glowing_selection() {
             for tab in ["Arranger", "Mixer"] {
                 assert_eq!(glowing_border(&state, tab, dark), tab == chosen);
             }
+        }
+        app.click("Arranger");
+        for (key, expected_cursor) in [
+            ("W", "Crosshair"),
+            ("E", "Crosshair"),
+            ("R", "Copy"),
+            ("G", "Alias"),
+            ("T", "PointingHand"),
+            ("Z", "Crosshair"),
+            ("S", "ResizeHorizontal"),
+            ("L", "Grab"),
+            ("P", "Crosshair"),
+            ("Q", "Default"),
+        ] {
+            let state = app.key(key);
+            assert_eq!(
+                state["cursor_icon"], expected_cursor,
+                "arranger shortcut {key}"
+            );
         }
         app.quit();
     }

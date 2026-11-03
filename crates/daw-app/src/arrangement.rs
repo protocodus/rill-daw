@@ -1410,7 +1410,16 @@ impl DawApp {
                                 crate::audio_editor::audio_fade_bounds(clip), !navigation.navigating))
                         } else { None };
                         if let Some((edge, beat)) = fades.as_ref().and_then(|fades| fades.edit) {
-                            let beat = beat.clamp(clip.start, clip.end());
+                            let beat = if beat <= clip.start {
+                                clip.start
+                            } else if beat >= clip.end() {
+                                clip.end()
+                            } else if ui.input(|input| input.modifiers.shift) {
+                                beat
+                            } else {
+                                self.snapped(beat)
+                            }
+                            .clamp(clip.start, clip.end());
                             let (fi, fo, fic, foc) = crate::audio_editor::audio_fade_handle_edit(clip, edge, beat);
                             edits.push(Edit::SelectOnly(track.id, clip.id));
                             edits.push(Edit::Fades(track.id, clip.id, fi, fo, fic, foc));
@@ -1550,13 +1559,25 @@ impl DawApp {
                             open_editor = true;
                         }
                         if response.hovered()
+                            && !editing_fade
                             && let Some(pos) = response.hover_pos()
                         {
-                            if self.tool == daw_ui::EditorTool::Stretch || pos.x > rect.right() - 8.0 || pos.x < rect.left() + 8.0 {
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-                            } else {
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-                            }
+                            let icon = match self.tool {
+                                daw_ui::EditorTool::Select
+                                    if pos.x > rect.right() - 8.0 || pos.x < rect.left() + 8.0 =>
+                                {
+                                    egui::CursorIcon::ResizeHorizontal
+                                }
+                                daw_ui::EditorTool::Select | daw_ui::EditorTool::Slip => {
+                                    if response.dragged() {
+                                        egui::CursorIcon::Grabbing
+                                    } else {
+                                        egui::CursorIcon::Grab
+                                    }
+                                }
+                                tool => tool.cursor_icon(),
+                            };
+                            ui.ctx().set_cursor_icon(icon);
                         }
                         if response.drag_started() && !editing_fade && !edge_moved && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch) {
                             let mode = if self.tool == daw_ui::EditorTool::Stretch {
@@ -1673,6 +1694,7 @@ impl DawApp {
                                 self.selected_track = Some(track.id);
                                 self.selected_clip = Some(clip.id);
                                 self.tool = daw_ui::EditorTool::Slip;
+                                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
                                 ui.close();
                             }
                             ui.separator();
@@ -1681,6 +1703,7 @@ impl DawApp {
                                 self.selected_clip = Some(clip.id);
                                 self.selected_notes.clear();
                                 self.tool = daw_ui::EditorTool::Stretch;
+                                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
                                 ui.close();
                             }
                             if daw_ui::button(ui, "Ghost copy")
@@ -1746,8 +1769,18 @@ impl DawApp {
                                 popup = Some(PopupKind::Crossfade);
                             }
                             if let Some(duration) = handle.duration {
-                                let end = if ui.input(|input| input.modifiers.shift) { overlap.start + duration } else { self.snapped(overlap.start + duration) };
-                                let duration = (end - overlap.start).clamp(0.0, overlap.end - overlap.start);
+                                let duration = if duration <= 0.0 {
+                                    0.0
+                                } else if duration >= overlap.end - overlap.start {
+                                    overlap.end - overlap.start
+                                } else {
+                                    let end = if ui.input(|input| input.modifiers.shift) {
+                                        overlap.start + duration
+                                    } else {
+                                        self.snapped(overlap.start + duration)
+                                    };
+                                    (end - overlap.start).clamp(0.0, overlap.end - overlap.start)
+                                };
                                 edits.push(Edit::Crossfade(track.id, incoming.id, (duration > 0.0).then_some(AudioCrossfade {
                                     duration, curve: crossfade.map_or(CrossfadeCurve::LINEAR, |config| config.curve),
                                 })));
@@ -1988,6 +2021,13 @@ impl DawApp {
             if pointer.1 && !pointer.2 {
                 self.arranger_selection.gesture = Some(gesture);
             }
+        }
+        if ui.is_enabled()
+            && !navigation.navigating
+            && !egui::Popup::is_any_open(ui.ctx())
+            && ui.output(|output| output.cursor_icon == egui::CursorIcon::Default)
+        {
+            ui.ctx().set_cursor_icon(self.tool.cursor_icon());
         }
         let folder_containers = daw_ui::paint_folder_containers(
             ui.painter(),

@@ -292,6 +292,7 @@ struct Harness {
     painted_meshes: Vec<Value>,
     audio_output: Option<Vec<[f32; 2]>>,
     clipboard_text: Option<String>,
+    cursor_icon: egui::CursorIcon,
     close_requested: bool,
     focused: bool,
     system_theme: egui::Theme,
@@ -371,6 +372,7 @@ impl Harness {
             painted_meshes: Vec::new(),
             audio_output: None,
             clipboard_text: None,
+            cursor_icon: egui::CursorIcon::Default,
             close_requested: false,
             focused: true,
             system_theme: egui::Theme::Dark,
@@ -444,6 +446,7 @@ impl Harness {
                 }
             }
         });
+        self.cursor_icon = output.platform_output.cursor_icon;
         for command in &output.platform_output.commands {
             if let egui::OutputCommand::CopyText(text) = command {
                 self.clipboard_text = Some(text.clone());
@@ -1461,6 +1464,7 @@ impl Harness {
             "scratch_dir": self.app.settings.scratch_dir,
             "drop_target": self.app.drop_target,
             "pointer_position": self.ctx.input(|input| input.pointer.hover_pos().map(|point| [point.x, point.y])),
+            "cursor_icon": format!("{:?}", self.cursor_icon),
             "viewport": [self.size.x, self.size.y],
             "text_sizes": { "body": daw_ui::tokens::FONT_BODY, "note": daw_ui::tokens::FONT_SMALL, "canvas": daw_ui::tokens::FONT_CANVAS },
             "visible_labels": self.labels.iter().map(|(label, _)| label.trim()).collect::<Vec<_>>(),

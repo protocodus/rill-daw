@@ -2107,6 +2107,7 @@ impl DawApp {
                 && ctx.input(|i| !i.modifiers.any() && i.key_pressed(key))
             {
                 self.tool = tool;
+                ctx.set_cursor_icon(self.tool.cursor_icon());
             }
         }
     }
@@ -2623,6 +2624,7 @@ impl DawApp {
                             .clicked() {
                             self.open_workspace(WorkspaceView::Arrangement);
                             self.tool = Tool::Stretch;
+                            ui.ctx().set_cursor_icon(self.tool.cursor_icon());
                             ui.close();
                         }
                         let audio_clip = self

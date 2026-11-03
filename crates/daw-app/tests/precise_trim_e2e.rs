@@ -287,6 +287,7 @@ fn fade_handles_win_over_edges_and_body_selection_move_copy_and_double_click_sti
     let mut app = Harness::new();
     let path = fixture(&mut app, false);
     app.command(json!({"command":"open", "path":path}));
+    zoom_out_for_small_grid(&mut app);
     let before = select_all(&mut app);
     let from = center(&geometry(&before, 0)["fade_out_handle"]);
     let right = geometry(&before, 0)["rect"]["max"][0].as_f64().unwrap();

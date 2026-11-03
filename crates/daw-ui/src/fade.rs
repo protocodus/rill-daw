@@ -181,11 +181,15 @@ pub fn clip_fade_handles(
             {
                 ui.ctx()
                     .data_mut(|data| data.remove::<f64>(id.with(index).with("last_click")));
-                result.edit = Some((
-                    edge,
-                    (origin + f64::from(delta) / f64::from(view.pixels_per_beat))
-                        .clamp(bounds.start, bounds.end),
-                ));
+                let raw = origin + f64::from(delta) / f64::from(view.pixels_per_beat);
+                let next = if raw <= bounds.start {
+                    bounds.start
+                } else if raw >= bounds.end {
+                    bounds.end
+                } else {
+                    raw
+                };
+                result.edit = Some((edge, next));
                 result.interacting = true;
             } else if handle_double_click(ui, id.with(index), &response) {
                 result.edit = Some((edge, if index == 0 { bounds.start } else { bounds.end }));
@@ -249,7 +253,11 @@ pub fn crossfade_duration_handle(
     let effective = duration.clamp(0.0, (end - start).max(0.0));
     let position = Pos2::new(view.x_at(rect, start + effective), rect.bottom() - 9.0);
     let target = Rect::from_center_size(position, Vec2::splat(18.0)).intersect(rect);
-    let visible = end > start && ui.clip_rect().contains(position) && rect.contains(position);
+    let origin_id = id.with("origin");
+    let active_origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
+    let visible = end > start
+        && (active_origin.is_some()
+            || (ui.clip_rect().contains(position) && rect.contains(position)));
     let mut response = ui.interact(
         if visible { target } else { Rect::NOTHING },
         id,
@@ -260,20 +268,56 @@ pub fn crossfade_duration_handle(
         },
     );
     let mut next = None;
+    let mut interacting = false;
     if editable && visible && ui.is_enabled() {
-        if response.drag_started() {
+        interacting = response.dragged()
+            || response.clicked()
+            || ui.input(|input| {
+                input
+                    .pointer
+                    .hover_pos()
+                    .is_some_and(|point| target.contains(point))
+            }) && ui.rect_contains_pointer(target);
+        if response.is_pointer_button_down_on() && ui.input(|input| input.pointer.primary_pressed())
+        {
+            let x = ui
+                .input(|input| input.pointer.press_origin())
+                .unwrap_or(position)
+                .x;
             ui.ctx()
-                .data_mut(|data| data.insert_temp(id.with("origin"), effective));
+                .data_mut(|data| data.insert_temp(origin_id, (effective, x)));
         }
-        if response.dragged() {
-            let origin = ui
-                .ctx()
-                .data(|data| data.get_temp::<f64>(id.with("origin")))
-                .unwrap_or(effective);
-            let delta = response.total_drag_delta().unwrap_or_default().x as f64
-                / view.pixels_per_beat as f64;
-            next = Some((origin + delta).clamp(0.0, end - start));
+        let origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
+        let owns = response.is_pointer_button_down_on()
+            || response.dragged()
+            || response.clicked()
+            || response.drag_stopped() && ui.input(|input| input.pointer.primary_released());
+        let delta = origin
+            .and_then(|(_, x)| {
+                ui.input(|input| input.pointer.interact_pos())
+                    .map(|point| point.x - x)
+            })
+            .unwrap_or(0.0);
+        if delta.abs() > 0.0
+            && owns
+            && let Some((origin, _)) = origin
+        {
+            ui.ctx()
+                .data_mut(|data| data.remove::<f64>(id.with("last_click")));
+            let raw = origin + f64::from(delta) / f64::from(view.pixels_per_beat);
+            next = Some(if raw <= 0.0 {
+                0.0
+            } else if raw >= end - start {
+                end - start
+            } else {
+                raw
+            });
+            interacting = true;
             response.mark_changed();
+        }
+        if !ui.input(|input| input.pointer.primary_down()) || !owns {
+            ui.ctx()
+                .data_mut(|data| data.remove::<(f64, f32)>(origin_id));
         }
     }
     response.widget_info(|| {
@@ -283,7 +327,7 @@ pub fn crossfade_duration_handle(
             "Crossfade duration",
         )
     });
-    let open_curve = handle_double_click(ui, id, &response);
+    let open_curve = next.is_none() && handle_double_click(ui, id, &response);
     if visible {
         let color = theme::palette(ui.ctx()).automation_override;
         ui.painter_at(rect).add(Shape::convex_polygon(
@@ -299,8 +343,7 @@ pub fn crossfade_duration_handle(
     }
     CrossfadeHandleResponse {
         open_curve,
-        interacting: editable && ui.is_enabled() && visible && (response.dragged() || response.clicked()
-            || ui.input(|input| input.pointer.hover_pos().is_some_and(|point| target.contains(point))) && ui.rect_contains_pointer(target)),
+        interacting,
         response: response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
             .on_hover_text("Crossfade · Drag to blend the overlap · Double-click to shape the curve · Shift bypasses snap"),
         handle: visible.then_some(target),
