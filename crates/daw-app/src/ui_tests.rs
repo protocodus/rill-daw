@@ -299,23 +299,6 @@ fn has_text(output: &FullOutput, text: &str) -> bool {
     })
 }
 
-fn front_text_position(output: &FullOutput, text: &str) -> Pos2 {
-    output
-        .shapes
-        .iter()
-        .rev()
-        .find_map(|shape| {
-            if let egui::epaint::Shape::Text(shape) = &shape.shape
-                && shape.galley.job.text == text
-            {
-                Some(shape.pos)
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| panic!("Could not find foreground {text:?}"))
-}
-
 /// A tenth of a second of mono PCM, sufficient to exercise decoding and waveform caching.
 fn wav_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();

@@ -702,11 +702,16 @@ impl DawApp {
             return false;
         };
         let id = track.id;
-        let mut links = vec![daw_ui::ViewLink {
-            value: Channel,
-            label: "Channel",
-            enabled: true,
-        }];
+        // The Channel page lives under the Properties tabs, which already name
+        // it; its row only links onward.
+        let mut links = Vec::new();
+        if current != Channel {
+            links.push(daw_ui::ViewLink {
+                value: Channel,
+                label: "Channel",
+                enabled: true,
+            });
+        }
         if track.kind == TrackKind::Midi {
             links.push(daw_ui::ViewLink {
                 value: Instrument,

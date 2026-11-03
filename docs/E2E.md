@@ -618,8 +618,9 @@ cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins
 cluster), the loop label in the proportional caption font with a leading canvas
 gutter and the label stepping past the playhead, Mute/Solo as rail-centered
 21-point squares filled with `Palette::mute`/`solo`, one-line folder rows whose
-Mute acts through the shared toggle, and MIDI previews of 2–6 point notes in full
-track color with an outline.
+Mute acts through the shared toggle, MIDI previews of 2–6 point notes in full
+track color with an outline, and a motionless press on a clip's trim edge
+selecting the clip without trimming it.
 
 ```sh
 cargo test --locked -p daw-app --test arranger_polish_e2e -- --test-threads=1
