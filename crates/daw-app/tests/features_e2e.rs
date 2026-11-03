@@ -724,6 +724,7 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
     assert_eq!(state["project"]["tracks"][0]["clips"][0]["length"], 4.0);
     assert_only_popup(&state, "instrument");
     let original_clips = state["project"]["tracks"][0]["clips"].clone();
+    common::wait_visible(&mut app, "Change instrument");
     app.click("Change instrument");
     app.command(json!({"command":"text","text":"Fixture B"}));
     common::wait_visible(&mut app, "Rill Fixture B");
@@ -915,6 +916,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     let state = menu(&mut app, "Window", "Instrument");
     assert_only_popup(&state, "instrument");
     assert!(visible(&state, "Rill Fixture A"));
+    common::wait_visible(&mut app, "Change instrument");
     let state = app.click("Change instrument");
     assert_only_popup(&state, "library");
     assert_eq!(state["selected_track"], first);
