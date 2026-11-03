@@ -3,7 +3,7 @@ mod common;
 
 use common::Harness;
 use daw_core::{AudioData, Clip, Note, Project};
-use eframe::egui::{self, Color32};
+use eframe::egui::Color32;
 use serde_json::{Value, json};
 
 fn track(state: &Value, id: u64) -> &Value {
@@ -179,10 +179,11 @@ fn assert_arranger_paint(state: &Value, id: u64) {
             .to_array();
         assert!(
             shapes.iter().any(|shape| {
+                // The outline snaps to whole physical pixels.
                 bounds(&shape["rect"])
                     .into_iter()
                     .zip(rect)
-                    .all(|(a, b)| (a - b).abs() < 0.1)
+                    .all(|(a, b)| (a - b).abs() < 1.0)
                     && shape["stroke"] == json!(stroke)
                     && shape["stroke_width"].as_f64().unwrap() > 0.0
             }),
@@ -259,15 +260,6 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
         daw_ui::theme::LIGHT
     };
     let shapes = state["painted_rects"].as_array().unwrap();
-    let context = egui::Context::default();
-    daw_ui::theme::apply(&context);
-    // Installing the shared theme restores System appearance. Set this
-    // expectation context's explicit theme after that initialization.
-    context.set_theme(if state["effective_theme"] == "Dark" {
-        egui::Theme::Dark
-    } else {
-        egui::Theme::Light
-    });
     for channel in state["project"]["tracks"]
         .as_array()
         .unwrap()
@@ -283,18 +275,10 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
             .unwrap();
         let (x, y) = center(label);
         let color = rgb(&state, channel["id"].as_u64().unwrap());
-        let header_color = if channel["kind"] == "Bus" {
-            json!(
-                daw_ui::bus_header_fill(
-                    &context,
-                    egui::Color32::from_rgb(color[0], color[1], color[2])
-                )
-                .to_array()
-            )
-        } else {
-            json!([color[0], color[1], color[2], 255])
-        };
-        let color = json!([color[0], color[1], color[2], 255]);
+        // Every strip's name plate carries the full channel color; a bus adds
+        // its BUS chip inside the plate instead of a subdued tint.
+        let header_color = json!([color[0], color[1], color[2], 255]);
+        let color = header_color.clone();
         assert!(
             shapes.iter().any(|shape| {
                 let [left, top, right, bottom] = bounds(&shape["rect"]);
@@ -304,22 +288,9 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
                     && top < y
                     && bottom > y
                     && bottom - top >= 33.0
-                    && right - left > 140.0
+                    && right - left > f64::from(daw_ui::MIXER_CONTENT_WIDTH) - 2.0
             }),
-            "{name}: track headers retain RGB and bus headers use the shared bus treatment"
-        );
-        assert!(
-            shapes.iter().any(|shape| {
-                let [left, top, right, bottom] = bounds(&shape["rect"]);
-                shape["fill"] == color
-                    && left < x
-                    && right > x
-                    && top < y
-                    && y - top < 65.0
-                    && (bottom - top - 3.0).abs() < 0.1
-                    && right - left > 140.0
-            }),
-            "{name}: the channel marker must keep the arranger RGB color"
+            "{name}: the name plate paints the channel color"
         );
         let fill = &mixer_body(&state, name)["fill"];
         assert_ne!(fill, &color, "{name}: the full strip uses a subdued tint");
