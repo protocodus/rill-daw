@@ -2350,8 +2350,11 @@ impl DawApp {
     }
 
     fn menus(&mut self, ctx: &egui::Context) {
+        // The menu bar sits on the darker background fill, so no line is
+        // needed between it and the transport beneath.
         egui::TopBottomPanel::top("application-menu")
-            .frame(daw_ui::panel(ctx).inner_margin(egui::Margin::symmetric(
+            .show_separator_line(false)
+            .frame(daw_ui::panel(ctx).fill(palette(ctx).bg).inner_margin(egui::Margin::symmetric(
                 daw_ui::tokens::SPACE_MD as i8,
                 daw_ui::tokens::SPACE_SM as i8,
             )).corner_radius(0))

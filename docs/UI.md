@@ -276,7 +276,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Toolbar groups that wrap intact | `measured_toolbar_group`, `measured_command_group`, `toolbar_family_rule` |
 | Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
-| Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `paint_track_header_sections`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
+| Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_zoom_controls`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
 | Snap step shared by every timeline | `snap_choice`, `snap_label` (Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator) |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
@@ -622,10 +622,10 @@ identity row reserves the color strip, track icon, name and reorder grip;
 builders add a recording-arm target, bus badge or folder disclosure only where
 applicable; `with_state_toggles` reserves Mute/Solo on the identity line of a
 row without a mix section. A row without a body (folders, very short rows)
-centers its identity line vertically. `paint_track_header_identity` and
-`paint_track_header_sections` paint within those bounds; both section rules span
-the identity width. `paint_track_meter_frame` gives the meter a 1-point frame and
-a 0 dB tick so it reads as a meter while silent. The record-arm target is an
+centers its identity line vertically. `paint_track_header_identity` paints within
+those bounds. The identity, mix and routing sections are separated by spacing
+alone, and the meter is a quiet filled slot without a frame: lines are reserved
+for the row boundary. The record-arm target is an
 outlined ring while idle and a filled `Palette::recording` disc when armed.
 `track_list_menu_at` is the `Tracks ▾` menu above the headers: left-aligned with
 the track-icon column and centered on the ruler. The caller retains selection, reordering, folder state and

@@ -277,41 +277,6 @@ pub fn paint_track_header_identity(
     layout.name
 }
 
-/// Fine section rules clarify the vertical order without boxing every control.
-/// Both rules span the identity width; the meter's own frame separates it.
-pub fn paint_track_header_sections(painter: &Painter, layout: &TrackHeaderLayout) {
-    let painter = painter.with_clip_rect(painter.clip_rect().intersect(layout.rect));
-    let colors = theme::palette(painter.ctx());
-    let stroke = Stroke::new(tokens::BORDER_WIDTH, colors.line);
-    if let Some(mix) = layout.mix {
-        painter.hline(
-            layout.identity.x_range(),
-            (layout.identity.bottom() + mix.top()) * 0.5,
-            stroke,
-        );
-        if let Some(routing) = layout.routing {
-            painter.hline(
-                layout.identity.x_range(),
-                (mix.bottom() + routing.top()) * 0.5,
-                stroke,
-            );
-        }
-    }
-}
-
-/// Frame a channel meter so it reads as a meter even when silent, with a
-/// 0 dB tick at its top (the shared meters scale −60 to 0 dB).
-pub fn paint_track_meter_frame(painter: &Painter, meter: Rect) {
-    let colors = theme::palette(painter.ctx());
-    let stroke = Stroke::new(tokens::BORDER_WIDTH, colors.line);
-    painter.rect_stroke(meter, 1.0, stroke, egui::StrokeKind::Outside);
-    painter.hline(
-        (meter.left() - tokens::SPACE_XS)..=meter.left(),
-        meter.top(),
-        Stroke::new(tokens::BORDER_WIDTH, colors.muted),
-    );
-}
-
 /// A bounded section row with a stable label column and a readable destination.
 /// The full section and value remain available to accessibility and hover help.
 /// Native pointer and keyboard activation are retained without advancing layout.

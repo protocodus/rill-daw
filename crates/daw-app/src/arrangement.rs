@@ -783,7 +783,6 @@ impl DawApp {
                         header_layout = header_layout.without_channel_sections();
                     }
                     header_layout = header_layout.with_depth(depth);
-                    daw_ui::paint_track_header_sections(&p, &header_layout);
                     let mut track_color = track.color;
                     let color_strip = daw_ui::color_strip_at(ui, header_layout.color,
                         (track.id, "color"), &format!("Color of {}", track.name), &mut track_color);
@@ -949,7 +948,6 @@ impl DawApp {
                             meter_ui.set_clip_rect(ui.clip_rect().intersect(meter_rect));
                             let meter = daw_ui::stereo_meter(&mut meter_ui, peaks, meter_rect.size())
                                 .on_hover_text("Channel output level · post-fader");
-                            daw_ui::paint_track_meter_frame(&ui.painter_at(header), meter_rect);
                             let mut exact_gain = false;
                             let mut exact_pan = false;
                             for (response, control, state, current, range, unit, name) in [

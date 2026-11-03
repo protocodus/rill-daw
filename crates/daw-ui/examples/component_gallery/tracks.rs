@@ -134,7 +134,6 @@ fn header(ui: &mut Ui, index: usize, channel: &mut Channel, size: egui::Vec2) {
     };
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0, theme::palette(ui.ctx()).panel);
-    controls::paint_track_header_sections(&painter, &layout);
     controls::color_strip_at(
         ui,
         layout.color,

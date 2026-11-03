@@ -191,10 +191,6 @@ pub fn timeline_loop_editor(
     let colors = theme::palette(ui.ctx());
     let painter = ui.painter_at(lane);
     painter.rect_filled(lane, 0.0, colors.bg);
-    painter.line_segment(
-        [lane.left_bottom(), lane.right_bottom()],
-        Stroke::new(1.0_f32, colors.line),
-    );
     let x = [view.x_at(lane, range.start), view.x_at(lane, range.end)];
     let inset = crate::tokens::BORDER_WIDTH * 2.0;
     let band = Rect::from_min_max(

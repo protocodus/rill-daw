@@ -197,7 +197,6 @@ fn frame(
                     let layout =
                         TrackHeaderLayout::new(row(288.0, if details { 89.0 } else { 144.0 }))
                             .with_record_arm();
-                    daw_ui::paint_track_header_sections(ui.painter(), &layout);
                     daw_ui::paint_track_header_identity(
                         ui.painter(),
                         &layout,
