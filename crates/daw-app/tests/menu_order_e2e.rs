@@ -91,10 +91,11 @@ fn edit_track_and_window_menus_follow_workflow_with_a_shortcut_column() {
     );
     // The shortcut column is right-aligned and shares each item's row.
     let undo = menu_label(&edit, "Undo");
-    let shortcut = menu_label(&edit, "Ctrl+Z");
+    // Shortcuts render in platform notation (⌘Z on macOS).
+    let shortcut = menu_label(&edit, &daw_ui::shortcut_text("Mod+Z"));
     assert!(shortcut[0] > undo[2] + 20.0, "{undo:?} {shortcut:?}");
     assert!(((shortcut[1] + shortcut[3]) - (undo[1] + undo[3])).abs() < 2.0);
-    let copy = menu_label(&edit, "Ctrl+C");
+    let copy = menu_label(&edit, &daw_ui::shortcut_text("Mod+C"));
     assert!(
         (copy[2] - shortcut[2]).abs() < 1.0,
         "shortcuts share a right edge"
