@@ -96,7 +96,8 @@ fn neutral_defaults_and_semantic_roles_survive_theme_changes_and_saved_user_colo
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|shape| shape["fill"] == json!(colors.guide.gamma_multiply(0.6).to_array()))
+                .any(|shape| shape["fill"]
+                    == json!(colors.bg.lerp_to_gamma(colors.guide, 0.35).to_array()))
         );
         app.click("Loop");
     }
