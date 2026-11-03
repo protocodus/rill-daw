@@ -36,8 +36,9 @@ fn value_marker_with_zero(
         return None;
     }
     // Well under a pixel of travel: a value that round-tripped through an f32
-    // parameter or a dB conversion still lands on its landmark.
-    let matches = |landmark: f64| (value - landmark).abs() <= (maximum - minimum) * 1e-4;
+    // parameter or a dB conversion still lands on its landmark, while one
+    // ten-thousandth of the span away keeps its own numeric meaning.
+    let matches = |landmark: f64| (value - landmark).abs() <= (maximum - minimum) * 1e-5;
     if matches(minimum) {
         Some(SliderValueMarker::Minimum)
     } else if matches(maximum) {
