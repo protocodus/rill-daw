@@ -60,11 +60,9 @@ pub const FONT_CANVAS: f32 = FONT_CAPTION;
 pub const FONT_SCALE: f32 = SPACE_SM + 3.0 * GOLDEN_RATIO_INVERSE;
 /// Two proportional label rows with clear space between their glyph bounds.
 pub const TIMELINE_RULER_HEIGHT: f32 = SPACE_XL + SPACE_XS;
+/// One loop strip height for every timeline, directly below the ruler.
 pub const TIMELINE_LOOP_HEIGHT: f32 = SPACE_LG;
-pub const TIMELINE_LOOP_STRIP_HEIGHT: f32 = 5.0;
-/// Keep loop feedback below both ruler label rows, with a clear gap.
-pub const TIMELINE_LOOP_RULER_HEIGHT: f32 =
-    TIMELINE_RULER_HEIGHT + SPACE_SM + TIMELINE_LOOP_STRIP_HEIGHT;
+pub const TIMELINE_LOOP_RULER_HEIGHT: f32 = TIMELINE_RULER_HEIGHT + TIMELINE_LOOP_HEIGHT;
 pub const FONT_TRACK: f32 = FONT_BUTTON;
 pub const SWITCH_WIDTH: f32 = 34.0;
 pub const SWITCH_HEIGHT: f32 = 21.0;

@@ -95,7 +95,7 @@ impl Icon {
             "Cursor" => Self::Cursor,
             "Fit" | "Fit preview" => Self::Fit,
             "Fit selection" => Self::FitSelection,
-            "Tool help" | "Help" => Self::Help,
+            "Tool help" => Self::Help,
             "Start" | "Clip start" | "Set start" => Self::Start,
             "Clip end" | "Set end" | "Snap end" => Self::End,
             "Play" => Self::Play,
