@@ -2533,6 +2533,12 @@ impl DawApp {
                     return;
                 }
                 if self.inspector_page == InspectorPage::Channel {
+                    // The channel page keeps its mouse route to the related
+                    // windows; the tab row above switches only this window's pages.
+                    if self.channel_navigation(ui, crate::app::ChannelDestination::Channel) {
+                        navigated = true;
+                        return;
+                    }
                     daw_ui::scroll_body(ui, "channel_properties_body", |ui| {
                         automation_navigation = self.channel_properties(ui, id);
                     });

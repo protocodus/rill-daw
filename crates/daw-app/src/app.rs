@@ -1,7 +1,7 @@
 use crate::{settings::Settings, theme::*};
 use daw_core::*;
 use daw_engine::{AudioEngine, DeviceInfo};
-use eframe::egui::{self, RichText};
+use eframe::egui;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},

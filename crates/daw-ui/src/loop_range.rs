@@ -1,6 +1,6 @@
 //! A ruler lane for setting and moving a transport loop without a popup.
 use crate::{TimelineViewport, theme};
-use egui::{Id, Pos2, Rect, Sense, Stroke, Ui, Vec2};
+use egui::{Id, Pos2, Rect, Sense, Ui, Vec2};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TimelineLoop {
