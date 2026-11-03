@@ -241,6 +241,9 @@ impl DawApp {
                     "{} kHz · Stereo · 32-bit float",
                     f64::from(self.settings.sample_rate) / 1000.0,
                 )).on_hover_text("Change the sample rate in Window → Setup → Audio.");
+                ui.add_space(daw_ui::tokens::SPACE_MD);
+                daw_ui::checkbox(ui, &mut self.export_include_effect_tails, "Include effect tails")
+                    .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary.");
                 if !missing_instruments.is_empty() {
                     ui.add_space(daw_ui::tokens::SPACE_LG);
                     daw_ui::notice(ui, daw_ui::NoticeKind::Warning, "MIDI notes need an instrument", |_| {});
@@ -249,14 +252,10 @@ impl DawApp {
                     daw_ui::text::body(ui, "These notes will be silent in the WAV. Choose instruments on their tracks, or continue without them.");
                 }
                 });
-                footer.show(window_ui, |ui| {
-                daw_ui::checkbox(ui, &mut self.export_include_effect_tails, "Include effect tails")
-                    .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary.");
-                ui.horizontal(|ui| {
-                    export = daw_ui::primary_button(ui, "Export…").clicked();
-                    cancel = daw_ui::button(ui, "Cancel").clicked();
-                });
-                });
+                footer.show(window_ui, |ui| daw_ui::dialog_actions(ui, |ui| {
+                    export = daw_ui::dialog_primary(ui, "Export…").clicked();
+                    cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
+                }, |_| {}));
             });
         self.export_open = open && !cancel;
         if export {

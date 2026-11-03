@@ -88,7 +88,7 @@ fn utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes()
                     "Properties of Studio phrase",
                     "Name",
                 ),
-                ("Library", "library", "Device library", "Search instruments"),
+                ("Library", "library", "Library", "Search instruments"),
             ] {
                 app.click("Window");
                 app.click(menu);

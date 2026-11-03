@@ -119,7 +119,7 @@ fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep
     );
     assert_eq!(focused["project"], mixer["project"]);
     assert_eq!(focused["history"], mixer["history"]);
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     app.click("Audio");
     menu(&mut app, "Window", "Properties");
     app.click("Compact track");

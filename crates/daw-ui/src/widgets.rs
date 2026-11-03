@@ -184,6 +184,75 @@ pub fn action_row<A, C>(
     })
 }
 
+/// Platform notation for a shortcut written as `"Mod+Shift+Z"`: `⇧⌘Z` on
+/// macOS, `Ctrl+Shift+Z` elsewhere. `Mod` is Command on macOS, Ctrl otherwise.
+pub fn shortcut_text(spec: &str) -> String {
+    if cfg!(target_os = "macos") {
+        let mut modifiers = String::new();
+        let mut key = "";
+        for part in spec.split('+') {
+            match part {
+                "Ctrl" => modifiers.push('⌃'),
+                "Alt" => modifiers.push('⌥'),
+                "Shift" => modifiers.push('⇧'),
+                "Mod" => modifiers.push('⌘'),
+                other => key = other,
+            }
+        }
+        // Apple orders modifier glyphs Control, Option, Shift, Command.
+        let mut glyphs: Vec<char> = modifiers.chars().collect();
+        glyphs.sort_by_key(|glyph| "⌃⌥⇧⌘".find(*glyph));
+        glyphs.into_iter().collect::<String>() + key
+    } else {
+        spec.replace("Mod", "Ctrl")
+    }
+}
+
+/// A text-only menu row with an optional right-aligned, muted shortcut column.
+/// The row reserves room for its shortcut, so the menu widens instead of
+/// letting the label and shortcut overlap.
+pub fn menu_item(ui: &mut Ui, label: impl Into<WidgetText>, shortcut: Option<&str>) -> Response {
+    let label = label.into();
+    let Some(shortcut) = shortcut else {
+        return button(ui, label);
+    };
+    let muted = theme::palette(ui.ctx()).muted;
+    let shortcut = ui.painter().layout_no_wrap(
+        shortcut_text(shortcut),
+        crate::text::TextRole::Note.font(),
+        muted,
+    );
+    let label_width = label
+        .clone()
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        )
+        .size()
+        .x;
+    let width = 2.0 * tokens::BUTTON_PADDING_X + label_width + tokens::SPACE_XL + shortcut.size().x;
+    let response = ui.add(button_widget(label).min_size(egui::vec2(width, tokens::CONTROL_HEIGHT)));
+    let position = egui::pos2(
+        response.rect.right() - tokens::BUTTON_PADDING_X - shortcut.size().x,
+        response.rect.center().y - shortcut.size().y * 0.5,
+    );
+    ui.painter().galley(position, shortcut, muted);
+    response
+}
+
+/// [`menu_item`] that can be disabled while keeping its shortcut visible.
+pub fn menu_item_enabled(
+    ui: &mut Ui,
+    enabled: bool,
+    label: impl Into<WidgetText>,
+    shortcut: Option<&str>,
+) -> Response {
+    ui.add_enabled_ui(enabled, |ui| menu_item(ui, label, shortcut))
+        .inner
+}
+
 pub fn menu_button<R>(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
@@ -1454,6 +1523,8 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
                 .shadow(ctx.style().visuals.window_shadow),
         )
         .default_width(480.0)
+        // The height budget a body may grow into; callers may lower it.
+        .default_height(body_size.y)
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(available.center())
         .max_size(body_size)
@@ -1461,10 +1532,11 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .movable(true)
         .scroll([false, true])
         .collapsible(false)
-        .resizable(true)
-        // Window disables Resize's own handles. Following its desired size
-        // keeps short forms resizable instead of collapsing back to content.
-        .resize(|resize| resize.with_stroke(true))
+        // Width follows the user's resize; height hugs the content up to the
+        // budget above, so short forms and empty lists never leave a blank
+        // window below their actions.
+        .resizable([true, false])
+        .resize(|resize| resize.with_stroke(false))
 }
 
 /// Scroll height inside the actual popup body, with subpixel layout clearance.
@@ -1491,7 +1563,7 @@ pub fn popup_scroll_body<R>(
         .id_salt(id)
         .max_height(body_height)
         .min_scrolled_height(body_height.min(tokens::COMPACT_HEIGHT))
-        .auto_shrink([false, false])
+        .auto_shrink([false, true])
         .show(ui, contents)
         .inner
 }

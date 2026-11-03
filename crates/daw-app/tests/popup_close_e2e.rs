@@ -96,7 +96,7 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
 
             let library = window(&mut app, "Library");
             assert_eq!(library["popups"]["library"], true);
-            let restored = close(&mut app, "Device library");
+            let restored = close(&mut app, "Library");
             assert_eq!(restored["popups"]["library"], false);
             assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["project"], edited["project"]);

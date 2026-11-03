@@ -1,8 +1,5 @@
 use crate::{
-    app::{
-        ChannelDestination, ClipCommand, ClipDragMode, DawApp, Drag, InspectorPage, PopupKind,
-        WorkspaceView,
-    },
+    app::{ClipCommand, ClipDragMode, DawApp, Drag, InspectorPage, PopupKind, WorkspaceView},
     theme::*,
 };
 use daw_core::*;
@@ -2651,29 +2648,24 @@ impl DawApp {
                     InspectorPage::Track => None,
                 };
                 let mut page = self.inspector_page;
-                let open_ai = daw_ui::action_row(ui, |ui| {
+                let mut pages = Vec::with_capacity(3);
+                if has_clip {
+                    pages.push((InspectorPage::Clip, "Clip"));
+                }
+                pages.push((InspectorPage::Track, "Track"));
+                if has_channel {
+                    pages.push((InspectorPage::Channel, "Channel"));
+                }
+                let open_ai = daw_ui::popup_tabs(ui, &mut page, &pages, |ui| {
                     ai_scope.is_some_and(|scope| daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked())
-                }, |ui| {
-                    if has_clip {
-                        daw_ui::selectable_value(ui, &mut page, InspectorPage::Clip, "Clip");
-                    }
-                    daw_ui::selectable_value(ui, &mut page, InspectorPage::Track, "Track");
-                    if has_channel {
-                        daw_ui::selectable_value(ui, &mut page, InspectorPage::Channel, "Channel");
-                    }
-                }).inner.0;
+                });
                 self.inspector_page = page;
-                ui.separator();
                 if open_ai && let Some(scope) = ai_scope {
                     self.open_context_assistant(scope);
                     navigated = true;
                     return;
                 }
                 if self.inspector_page == InspectorPage::Channel {
-                    if self.channel_navigation(ui, ChannelDestination::Channel) {
-                        navigated = true;
-                        return;
-                    }
                     daw_ui::scroll_body(ui, "channel_properties_body", |ui| {
                         automation_navigation = self.channel_properties(ui, id);
                     });
@@ -2717,9 +2709,9 @@ impl DawApp {
                                 ui.add_space(daw_ui::tokens::SPACE_SM);
                             }
                             daw_ui::form_grid(ui, "clip_properties", |ui| {
-                                let label = daw_ui::text::label(ui, "Name");
+                                let label = daw_ui::form_label(ui, "Name");
                                 let name = ui.horizontal(|ui| {
-                                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", 220.0);
+                                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", daw_ui::tokens::FORM_FIELD_WIDTH);
                                     if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this clip with the mouse").clicked() {
                                         name_keyboard = Some(true);
                                     }
@@ -2743,7 +2735,7 @@ impl DawApp {
                                 }, &mut duration_mode, MAX_BEAT, maximum_source_offset,
                                 clip.source_length() / MAX_SOURCE_RATE..=clip.source_length() / MIN_SOURCE_RATE);
                                 ctx.data_mut(|data| data.insert_temp(duration_mode_id, duration_mode));
-                                daw_ui::text::label(ui, "Stretch");
+                                daw_ui::form_label(ui, "Stretch");
                                 daw_ui::text::body(ui, format!("{:.1}%", 100.0 / clip.source_rate))
                                     .on_hover_text("Duration relative to the source; local to this occurrence");
                                 ui.end_row();
@@ -2756,11 +2748,11 @@ impl DawApp {
                                     ..
                                 } = &mut clip.content
                                 {
-                                    daw_ui::text::label(ui, "Pitch & time");
+                                    daw_ui::form_label(ui, "Pitch & time");
                                     changed |= crate::audio_editor::audio_processing_menu(ui, processing);
                                     ui.end_row();
                                     let fade_length = envelope.map_or(clip.length * clip.source_rate, |region| region.length) / clip.source_rate;
-                                    let label = daw_ui::text::label(ui, "Clip gain");
+                                    let label = daw_ui::form_label(ui, "Clip gain");
                                     ui.horizontal(|ui| {
                                         let slider = ui
                                             .add(daw_ui::slider(gain, 0.0..=2.0)
@@ -2796,7 +2788,7 @@ impl DawApp {
                                     });
                                     ui.end_row();
                                     for (name, value) in [("Fade in", fade_in), ("Fade out", fade_out)] {
-                                        let label = daw_ui::text::label(ui, name);
+                                        let label = daw_ui::form_label(ui, name);
                                         let mut audible = *value / clip.source_rate;
                                         if ui
                                             .add(daw_ui::number(&mut audible)
@@ -2843,32 +2835,32 @@ impl DawApp {
                     let mut parent_change = None;
                     if let Some(track) = self.project.track_mut(id) {
                         daw_ui::form_grid(ui, "track_properties", |ui| {
-                            let label = daw_ui::text::label(ui, "Name");
+                            let label = daw_ui::form_label(ui, "Name");
                             changed |= ui.horizontal(|ui| {
-                                let name = daw_ui::text_field(ui, &mut track.name, "Track name", 220.0).labelled_by(label.id);
+                                let name = daw_ui::text_field(ui, &mut track.name, "Track name", daw_ui::tokens::FORM_FIELD_WIDTH).labelled_by(label.id);
                                 if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this track with the mouse").clicked() {
                                     name_keyboard = Some(false);
                                 }
                                 name.changed()
                             }).inner;
                             ui.end_row();
-                            let label = daw_ui::text::label(ui, "Color");
+                            let label = daw_ui::form_label(ui, "Color");
                             changed |= daw_ui::color_edit(ui, &mut track.color).labelled_by(label.id).changed();
                             ui.end_row();
-                            daw_ui::text::label(ui, "Display");
+                            daw_ui::form_label(ui, "Display");
                             changed |= daw_ui::checkbox(ui, &mut track.collapsed, if track.kind == TrackKind::Folder {
                                 "Collapse folder"
                             } else {
                                 "Compact track"
                             }).changed();
                             ui.end_row();
-                            let label = daw_ui::text::label(ui, "Folder");
+                            let label = daw_ui::form_label(ui, "Folder");
                             let mut parent = track.parent_folder;
                             daw_ui::select("properties_folder", parent
                                 .and_then(|id| folders.iter().find(|(folder, _)| *folder == id))
                                 .map(|(_, name)| name.as_str())
                                 .unwrap_or("Top level"))
-                                .width(260.0).truncate().show_ui(ui, |ui| {
+                                .width(daw_ui::tokens::FORM_FIELD_WIDTH).truncate().show_ui(ui, |ui| {
                                     daw_ui::selectable_value(ui, &mut parent, None, "Top level");
                                     for (id, name) in &folders {
                                         daw_ui::selectable_value(ui, &mut parent, Some(*id), name);
@@ -2879,11 +2871,11 @@ impl DawApp {
                                 parent_change = Some(parent);
                             }
                             if track.kind == TrackKind::Automation {
-                                daw_ui::text::label(ui, "Playback");
+                                daw_ui::form_label(ui, "Playback");
                                 changed |= daw_ui::toggle(ui, &mut track.mute, "Bypass automation").changed();
                                 ui.end_row();
                             } else if track.kind == TrackKind::Folder {
-                                daw_ui::text::label(ui, "Playback");
+                                daw_ui::form_label(ui, "Playback");
                                 ui.horizontal(|ui| {
                                     changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
                                     changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
@@ -2932,7 +2924,7 @@ impl DawApp {
         let mut overrides = Vec::new();
         if let Some(track) = self.project.track_mut(id) {
             daw_ui::form_grid(ui, "channel_properties", |ui| {
-                let label = daw_ui::text::label(ui, "Gain");
+                let label = daw_ui::form_label(ui, "Gain");
                 daw_ui::parameter_row(ui, |ui| {
                     let mut gain = gain_automation
                         .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
@@ -2979,7 +2971,7 @@ impl DawApp {
                 });
                 ui.end_row();
                 {
-                    daw_ui::text::label(ui, "Gain automation");
+                    daw_ui::form_label(ui, "Gain automation");
                     let state = gain_automation.map(|(lane, state, _)| (lane, state));
                     daw_ui::action_menu(
                         ui,
@@ -2998,7 +2990,7 @@ impl DawApp {
                     );
                     ui.end_row();
                 }
-                let label = daw_ui::text::label(ui, "Pan");
+                let label = daw_ui::form_label(ui, "Pan");
                 let mut pan = pan_automation
                     .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                     .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value))
@@ -3053,7 +3045,7 @@ impl DawApp {
                 }
                 ui.end_row();
                 {
-                    daw_ui::text::label(ui, "Pan automation");
+                    daw_ui::form_label(ui, "Pan automation");
                     let state = pan_automation.map(|(lane, state, _)| (lane, state));
                     daw_ui::action_menu(
                         ui,
@@ -3072,13 +3064,13 @@ impl DawApp {
                     );
                     ui.end_row();
                 }
-                daw_ui::text::label(ui, "Playback");
+                daw_ui::form_label(ui, "Playback");
                 ui.horizontal(|ui| {
                     changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
                     changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
                 });
                 ui.end_row();
-                let label = daw_ui::text::label(ui, "Path latency");
+                let label = daw_ui::form_label(ui, "Path latency");
                 changed |= ui
                     .add(
                         daw_ui::number(&mut track.latency_samples)

@@ -555,18 +555,25 @@ impl DawApp {
                         }
                     });
                 ui.add_space(daw_ui::tokens::SPACE_XL);
-                daw_ui::action_row(
+                // Primary at the right edge, then Cancel, then alternatives.
+                daw_ui::dialog_actions(
                     ui,
                     |ui| {
                         if confirmation {
-                            save = daw_ui::primary_button(ui, "Save").clicked();
-                            discard = daw_ui::button(ui, "Don't save").clicked();
-                        }
-                        if export_failed {
-                            continue_after_export = daw_ui::button(ui, "Continue").clicked();
+                            save = daw_ui::dialog_primary(ui, "Save").clicked();
+                        } else if export_failed {
+                            continue_after_export =
+                                daw_ui::dialog_primary(ui, "Continue").clicked();
                         }
                         if cancelable {
-                            cancel = daw_ui::button(ui, "Cancel").clicked();
+                            cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
+                        }
+                        if confirmation {
+                            discard = daw_ui::dialog_button(ui, "Don't save").clicked();
+                            if export_failed {
+                                continue_after_export =
+                                    daw_ui::dialog_button(ui, "Continue").clicked();
+                            }
                         }
                     },
                     |_| {},

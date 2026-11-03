@@ -393,17 +393,21 @@ fn value_entry_contents(
     } else if !feedback.is_empty() {
         text::note(ui, feedback);
     }
-    let (apply, cancel) = ui
-        .horizontal(|ui| {
+    let (apply, cancel) = crate::dialog_actions(
+        ui,
+        |ui| {
             let apply = ui
                 .add_enabled_ui(valid.is_some(), |ui| {
-                    crate::primary_button(ui, "Apply value")
+                    crate::dialog_primary(ui, "Apply value")
                 })
                 .inner;
-            let cancel = crate::button(ui, "Cancel");
+            let cancel = crate::dialog_button(ui, "Cancel");
             (apply.clicked(), cancel.clicked())
-        })
-        .inner;
+        },
+        |_| {},
+    )
+    .inner
+    .0;
     if ui.is_enabled() && (cancel || escape || ((apply || enter) && valid.is_some())) {
         ui.data_mut(|data| data.remove::<(u64, Rect)>(Id::new("exact_value_input_rect")));
         ui.close();

@@ -234,22 +234,17 @@ pub fn assistant(
     } else if !compact_layout && !options.context.is_empty() {
         text::truncated(ui, text::TextRole::Note, bounded(options.context, 2_048));
     }
-    ui.horizontal_wrapped(|ui| {
-        for (page, label) in [
+    crate::popup_tabs(
+        ui,
+        &mut state.page,
+        &[
             (AssistantPage::Conversation, "Conversation"),
             (AssistantPage::Examples, "Examples"),
             (AssistantPage::Tools, "Tools"),
             (AssistantPage::Tips, "Tips"),
-        ] {
-            if crate::tab_choice(ui, state.page == page, label).clicked() {
-                state.page = page;
-            }
-        }
-    });
-    if !compact_layout {
-        ui.separator();
-    }
-    ui.add_space(tokens::SPACE_SM);
+        ],
+        |_| {},
+    );
 
     // Browsing needs room for choices, while the conversation benefits from a
     // taller composer. A short popup keeps one editable line and scrolls the

@@ -307,7 +307,10 @@ impl DawApp {
         if !self.plugin_scan_reported && !self.plugin_sync.scanning() {
             self.plugin_scan_reported = true;
             if !self.error {
-                self.status = format!("Found {} VST3 plug-ins", self.vst_catalog.len());
+                self.status = format!(
+                    "Found {}",
+                    daw_ui::text::count(self.vst_catalog.len(), "VST3 plug-in", "VST3 plug-ins")
+                );
             }
         }
         let key = egui::Id::new("plugin_library_state");
@@ -466,7 +469,7 @@ impl DawApp {
         if activate {
             state.activate_when_ready = false;
         }
-        daw_ui::popup("Device library", ctx)
+        daw_ui::popup("Library", ctx)
             .id(egui::Id::new("library"))
             .open(&mut open)
             .default_width(1240.0)
@@ -477,43 +480,39 @@ impl DawApp {
                 // so the catalogue still has room for a complete card.
                 let compact_footer = ui.max_rect().height()
                     < daw_ui::tokens::CONTROL_HEIGHT * 13.0;
-                ui.horizontal(|ui| {
-                    let mut kind = state.kind;
-                    daw_ui::selectable_value(ui, &mut kind, DeviceKind::Instrument, "Instruments");
-                    daw_ui::selectable_value(ui, &mut kind, DeviceKind::Effect, "Effects");
-                    daw_ui::selectable_value(ui, &mut kind, DeviceKind::Unknown, "Unverified");
-                    if kind != state.kind {
-                        state.kind = kind;
-                        state.selected = None;
-                        state.developer.clear();
-                        state.category.clear();
-                        state.category_query.clear();
-                        self.plugin_filter.clear();
+                let mut kind = state.kind;
+                daw_ui::popup_tabs(ui, &mut kind, &[
+                    (DeviceKind::Instrument, "Instruments"),
+                    (DeviceKind::Effect, "Effects"),
+                    (DeviceKind::Unknown, "Unverified"),
+                ], |ui| {
+                    if daw_ui::button(ui, "Plug-in folders…").clicked() {
+                        folders = true;
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        daw_ui::action_menu(ui, "Manage", |ui| {
-                            if daw_ui::button(ui, "Folders").clicked() {
-                                folders = true;
-                                ui.close();
-                            }
-                        });
-                        refresh = ui
-                            .add_enabled(
-                                !scanning,
-                                daw_ui::button_widget(if scanning { "Scanning…" } else { "Refresh" }),
-                            )
-                            .on_hover_text("Rescan plug-in folders and capture missing previews")
-                            .clicked();
-                        let text = match status.phase {
-                            SyncPhase::Capturing => format!(
-                                "Capturing previews · {} left",
-                                status.queued + usize::from(status.current.is_some())
-                            ),
-                            _ => format!("{} plug-ins", self.vst_catalog.len()),
-                        };
-                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, text);
-                    });
+                    refresh = ui
+                        .add_enabled(
+                            !scanning,
+                            daw_ui::button_widget(if scanning { "Scanning…" } else { "Refresh" }),
+                        )
+                        .on_hover_text("Rescan plug-in folders and capture missing previews")
+                        .clicked();
+                    let text = match status.phase {
+                        SyncPhase::Capturing => format!(
+                            "Capturing previews · {} left",
+                            status.queued + usize::from(status.current.is_some())
+                        ),
+                        _ => daw_ui::text::count(self.vst_catalog.len(), "plug-in", "plug-ins"),
+                    };
+                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, text);
                 });
+                if kind != state.kind {
+                    state.kind = kind;
+                    state.selected = None;
+                    state.developer.clear();
+                    state.category.clear();
+                    state.category_query.clear();
+                    self.plugin_filter.clear();
+                }
                 let kind_items: Vec<_> = self
                     .vst_catalog
                     .iter()
@@ -712,7 +711,6 @@ impl DawApp {
                     action = Some((item.entry.plugin.clone(), primary));
                 }
                 let icon = if state.kind == DeviceKind::Instrument { daw_ui::Icon::Instrument } else { daw_ui::Icon::Effect };
-                let label_height = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::text::TextRole::Label.font()));
                 let mut footer_slot = daw_ui::popup_footer(ui, "library_actions");
                 let window_ui = ui;
                 let ui = footer_slot.body();
@@ -732,7 +730,7 @@ impl DawApp {
                         sidebar_rect = Some(ui.max_rect());
                         egui::ScrollArea::vertical().id_salt("library_sidebar").auto_shrink([false, false]).show(ui, |ui| {
                             ui.spacing_mut().item_spacing.y = SPACE_SM;
-                            daw_ui::theme::label(ui, "LIBRARY");
+                            daw_ui::text::section_heading(ui, "Collections");
                             for collection in Collection::ALL {
                                 let count = kind_items.iter().filter(|item| collection.accepts(item)).count();
                                 let response = daw_ui::count_item(ui, state.collection == collection, collection.label(), count);
@@ -746,7 +744,7 @@ impl DawApp {
                                 }
                             }
                             ui.add_space(daw_ui::tokens::SPACE_LG - SPACE_SM);
-                            daw_ui::theme::label(ui, "DEVELOPERS");
+                            daw_ui::text::section_heading(ui, "Developers");
                             if daw_ui::count_item(ui, state.developer.is_empty(), "All developers", kind_items.len()).clicked() {
                                 state.developer.clear();
                             }
@@ -906,7 +904,7 @@ impl DawApp {
                                 edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), favorite));
                             }
                             ui.add_space(SPACE_SM);
-                            daw_ui::theme::label(ui, "CATEGORIES");
+                            daw_ui::text::section_heading(ui, "Categories");
                             if let Some(CategoryDraft { text: draft, .. }) = &mut state.category_draft {
                                 let (save, field) = daw_ui::action_row(
                                     ui,
@@ -932,7 +930,7 @@ impl DawApp {
                                 "From the plug-in"
                             });
                             ui.add_space(SPACE_SM);
-                            daw_ui::theme::label(ui, "INSTALL PATH");
+                            daw_ui::text::section_heading(ui, "Install path");
                             daw_ui::path_row(ui, &entry.plugin.path, |ui| {
                                 if daw_ui::button(ui, "Copy path").clicked() {
                                     copy = Some(entry.plugin.path.display().to_string());
@@ -970,29 +968,20 @@ impl DawApp {
                 }
                 let footer = footer_slot.show(window_ui, |ui| {
                 let selected = state.selected.as_ref().and_then(|selected| matches.iter().find(|item| &item.entry.fingerprint == selected)).copied();
-                if !compact_footer {
-                    if let Some(item) = selected {
-                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, &item.entry.plugin.name);
-                    } else {
-                        ui.allocate_exact_size(egui::vec2(ui.available_width(), label_height), egui::Sense::hover());
-                    }
-                }
                 let primary_label = match primary {
                     DeviceAction::Instrument => "Add instrument track",
                     DeviceAction::Assign => "Assign instrument",
                     DeviceAction::Insert => "Add to effect chain",
                     DeviceAction::Send => "Create send track",
                 };
-                ui.horizontal(|ui| {
-                    if state.kind == DeviceKind::Unknown && daw_ui::view_button(ui, "Inspect device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                daw_ui::dialog_actions(ui, |ui| {
                     if state.kind != DeviceKind::Unknown {
                     ui.add_enabled_ui(enabled && selected.is_some(), |ui| {
-                        if daw_ui::primary_button(ui, primary_label).clicked()
+                        if daw_ui::dialog_primary(ui, primary_label).clicked()
                             && let Some(item) = selected
                         { action = Some((item.entry.plugin.clone(), primary)); }
                     });
                     }
-                    if daw_ui::view_button(ui, "Device details").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
                     ui.add_enabled_ui(selected.is_some(), |ui| {
                         daw_ui::action_menu(ui, "More", |ui| {
                             let Some(item) = selected else { return; };
@@ -1041,11 +1030,19 @@ impl DawApp {
                             }
                         });
                     });
-                    if let Some(item) = selected.filter(|_| compact_footer) {
+                    if daw_ui::dialog_button(ui, "Device details").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                    if state.kind == DeviceKind::Unknown && daw_ui::dialog_button(ui, "Inspect device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                }, |ui| {
+                    // The selected device and where it will go share one status
+                    // column, so the actions keep a fixed corner.
+                    ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    if let Some(item) = selected {
                         let name = &item.entry.plugin.name;
                         daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, name)
                             .on_hover_text(name);
-                    } else if state.kind == DeviceKind::Instrument {
+                    }
+                    if state.kind == DeviceKind::Instrument {
                         let context = if assign {
                             assignment_target.and_then(|id| self.project.track(id))
                                 .map(|track| format!("Assign to {}", track.name))
@@ -1060,6 +1057,7 @@ impl DawApp {
                         }).unwrap_or_else(|| "Select a channel to add effects".to_owned());
                         daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, context);
                     }
+                    });
                 });
                 }).response.rect;
                 let rect = |rect: egui::Rect| serde_json::json!({"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]});

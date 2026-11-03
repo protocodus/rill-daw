@@ -199,7 +199,16 @@ impl DawApp {
         let mut apply = false;
         let mut cancel = false;
         let mut controls = Vec::new();
-        let response = daw_ui::modal(ctx, egui::Id::new("audio_silence_dialog"), &title, |ui| {
+        let mut open = true;
+        daw_ui::popup(title.as_str(), ctx)
+            .id(egui::Id::new("audio_silence_dialog"))
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .vscroll(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+            let mut footer = daw_ui::popup_footer(ui, "audio_silence_actions");
+            let window_ui = ui;
+            let ui = footer.body();
             daw_ui::text::note(
                 ui,
                 format!(
@@ -210,12 +219,12 @@ impl DawApp {
             );
             let before = state.settings;
             daw_ui::form_grid(ui, "audio_silence_settings", |ui| {
-                let label = daw_ui::text::label(ui, "Threshold");
+                let label = daw_ui::form_label(ui, "Threshold");
                 let response = ui.add(daw_ui::number(&mut state.settings.threshold_db).range(-96.0..=0.0).speed(0.5).suffix(" dBFS")).labelled_by(label.id)
                     .on_hover_text("Source level before clip gain, fades and pitch processing. Any channel above this level is retained.");
                 controls.push(response.rect);
                 ui.end_row();
-                let label = daw_ui::text::label(ui, "Minimum silence");
+                let label = daw_ui::form_label(ui, "Minimum silence");
                 controls.push(
                     ui.add(
                         daw_ui::number(&mut state.settings.minimum_silence_ms)
@@ -227,7 +236,7 @@ impl DawApp {
                     .rect,
                 );
                 ui.end_row();
-                let label = daw_ui::text::label(ui, "Padding");
+                let label = daw_ui::form_label(ui, "Padding");
                 controls.push(
                     ui.add(
                         daw_ui::number(&mut state.settings.padding_ms)
@@ -281,21 +290,29 @@ impl DawApp {
                     }
                 },
             );
-            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
-            ui.horizontal(|ui| {
-                let changes = state
-                    .preview
-                    .as_ref()
-                    .is_some_and(|regions| regions.as_slice() != [state.range]);
-                apply = ui
-                    .add_enabled(
-                        !busy && changes && state.error.is_none(),
-                        daw_ui::primary_button_widget(ui, "Apply strip silence"),
-                    )
-                    .clicked();
-                cancel = daw_ui::button(ui, "Cancel").clicked();
+            let changes = state
+                .preview
+                .as_ref()
+                .is_some_and(|regions| regions.as_slice() != [state.range]);
+            footer.show(window_ui, |ui| {
+                daw_ui::dialog_actions(
+                    ui,
+                    |ui| {
+                        apply = ui
+                            .add_enabled(
+                                !busy && changes && state.error.is_none(),
+                                daw_ui::dialog_primary_widget(ui, "Apply strip silence"),
+                            )
+                            .clicked();
+                        cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
+                    },
+                    |_| {},
+                )
             });
         });
+        // Keyboard shortcuts are gated while this dialog is open, so it owns Escape.
+        cancel |=
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         ctx.data_mut(|data| {
             data.insert_temp(
                 egui::Id::new("audio_silence_controls"),
@@ -305,7 +322,7 @@ impl DawApp {
                     .collect::<Vec<_>>(),
             )
         });
-        if response.should_close() || cancel {
+        if !open || cancel {
             reset(ctx);
             return;
         }

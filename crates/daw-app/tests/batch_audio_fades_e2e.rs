@@ -98,6 +98,12 @@ fn select(app: &mut Harness, id: u64, shift: bool) -> Value {
 
 fn edit(app: &mut Harness, label: &str) -> Value {
     app.click("Edit");
+    if matches!(
+        label,
+        "Smooth edit boundaries" | "Boundary fades…" | "Crossfade…"
+    ) {
+        app.click("Audio");
+    }
     app.click(label)
 }
 fn chord(app: &mut Harness, key: &str) -> Value {
@@ -205,17 +211,17 @@ fn configured_fades_cancel_cleanly_apply_once_and_survive_portable_recall() {
     let (mut app, _, b, _, _, source, bytes) = fixture();
     select(&mut app, b, false);
     let before = app.inspect();
-    edit(&mut app, "Boundary fade settings…");
+    edit(&mut app, "Boundary fades…");
     field(&mut app, "3", "4.25");
     field(&mut app, "5", "12.5");
     app.click("Cancel");
     let cancelled = app.inspect();
     assert_eq!(cancelled["project"], before["project"]);
     assert_eq!(cancelled["history"], before["history"]);
-    edit(&mut app, "Boundary fade settings…");
+    edit(&mut app, "Boundary fades…");
     field(&mut app, "3", "4.25");
     field(&mut app, "5", "12.5");
-    let edited = app.click("Apply boundary fades");
+    let edited = app.click("Apply");
     let boundary = &clip(&edited, b)["content"]["Audio"]["boundary_fades"];
     assert!((boundary["fade_in"].as_f64().unwrap() - 0.017).abs() < 1e-10);
     assert!((boundary["fade_out"].as_f64().unwrap() - 0.05).abs() < 1e-10);
@@ -236,8 +242,8 @@ fn configured_fades_cancel_cleanly_apply_once_and_survive_portable_recall() {
     );
     assert_eq!(export(&mut app, "recalled.wav").samples, expected.samples);
     select(&mut app, b, false);
-    edit(&mut app, "Boundary fade settings…");
-    let removed = app.click("Remove boundary fades");
+    edit(&mut app, "Boundary fades…");
+    let removed = app.click("Remove fades");
     assert!(clip(&removed, b)["content"]["Audio"]["boundary_fades"].is_null());
     let restored = chord(&mut app, "Z");
     assert_eq!(

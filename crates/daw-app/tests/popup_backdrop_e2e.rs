@@ -165,7 +165,7 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
             ("Routing", "Routing of Backdrop synth"),
             ("Automation", "Add automation"),
             ("Properties", "Properties of Backdrop phrase"),
-            ("Library", "Device library"),
+            ("Library", "Library"),
             ("Setup", "Setup"),
         ] {
             window(&mut app, menu);
@@ -190,7 +190,7 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
         for _ in 0..3 {
             app.click("+ Insert");
             let nested = painted(&mut app);
-            assert_backdrop(&nested, "Device library");
+            assert_backdrop(&nested, "Library");
             assert_eq!(
                 nested["popup_context"]["source"],
                 "Effects · Backdrop synth"

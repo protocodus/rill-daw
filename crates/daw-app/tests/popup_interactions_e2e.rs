@@ -157,9 +157,11 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                 large[2] - large[0] > before[2] - before[0] + 45.0,
                 "{label} ignores horizontal resize: {before:?} -> {large:?}"
             );
+            // Height hugs the content (up to the viewport); a wider window can
+            // only unwrap text, never add a blank band below the actions.
             assert!(
-                large[3] - large[1] > before[3] - before[1] + 40.0,
-                "{label} ignores vertical resize: {before:?} -> {large:?}"
+                large[3] - large[1] < before[3] - before[1] + 1.1,
+                "{label} height must hug its content: {before:?} -> {large:?}"
             );
             let shrunk = resize(&mut app, large, -70.0, -60.0);
             assert_actions_at_bottom(&shrunk, label);
@@ -169,8 +171,8 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                 "{label} cannot shrink: {large:?} -> {small:?}"
             );
             assert!(
-                small[3] - small[1] < large[3] - large[1] - 40.0,
-                "{label} cannot shrink vertically: {large:?} -> {small:?}"
+                small[3] - small[1] > large[3] - large[1] - 1.1,
+                "{label} height must hug its content: {large:?} -> {small:?}"
             );
             app.command(json!({"command":"pointer","phase":"move","x":0,"y":0}));
             let idle = settle(&mut app);

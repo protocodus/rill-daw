@@ -102,7 +102,7 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
         .unwrap();
     assert_eq!(entry["categories"], json!(["Piano"]));
     assert!(
-        visible(&state, "CATEGORIES") && visible(&state, "Instrument"),
+        visible(&state, "Categories") && visible(&state, "Instrument"),
         "The detail pane shows the kind and categories"
     );
     let created = app.click("Add instrument track");
@@ -328,9 +328,7 @@ fn send_browser_has_one_contextual_action_and_library_management_is_on_demand() 
         added["project"]["tracks"][1]["id"]
     );
     menu(&mut app, "Window", "Library");
-    let managed = app.click("Manage");
-    assert!(visible(&managed, "Folders"));
-    let setup = app.click("Folders");
+    let setup = app.click("Plug-in folders…");
     assert_eq!(setup["popups"]["setup"], true);
     assert_eq!(setup["popups"]["library"], false);
     app.quit();

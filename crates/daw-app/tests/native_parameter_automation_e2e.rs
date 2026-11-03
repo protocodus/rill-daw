@@ -189,7 +189,7 @@ fn native_instrument_action_targets_its_owner_reuses_undoes_and_recalls() {
     let opened = open_instrument(&mut app);
     let pid = opened["native_editor"]["pid"].clone();
     assert_ne!(pid.as_u64().unwrap(), std::process::id() as u64);
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     let selected = app.click("Other phrase");
     assert_eq!(selected["selected_track"], other);
     fixture.action(&mut app, "change 0 0.77\nautomate 0\n");
@@ -202,7 +202,7 @@ fn native_instrument_action_targets_its_owner_reuses_undoes_and_recalls() {
     assert_eq!(created["native_editor"]["pid"], pid);
     assert_eq!(created["native_editor"]["last_touched"], 0);
 
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Other phrase");
     fixture.action(&mut app, "automate 0\n");
     let reused = wait(&mut app, |state| state["selected_track"] == lane);
@@ -244,7 +244,7 @@ fn native_effect_action_keeps_instance_channel_context_and_state() {
     let fixture = Fixture::new();
     let (mut app, track, other, effects) = fixture.app();
     for (index, expected) in [0.26, 0.64].into_iter().enumerate() {
-        menu(&mut app, "Arrangement");
+        menu(&mut app, "Arranger");
         app.click("Neon phrase");
         menu(&mut app, "Effects");
         app.command(json!({"command":"click", "label":"Open editor", "occurrence":index}));
@@ -252,7 +252,7 @@ fn native_effect_action_keeps_instance_channel_context_and_state() {
             state["native_editor"]["open"] == true
                 && state["native_editor"]["effect"] == effects[index]
         });
-        menu(&mut app, "Arrangement");
+        menu(&mut app, "Arranger");
         assert_eq!(app.click("Other phrase")["selected_track"], other);
         fixture.action(&mut app, &format!("change 0 {expected}\nautomate 0\n"));
         let created = wait(&mut app, |state| lanes(state).len() == index + 1);
@@ -402,7 +402,7 @@ fn native_parameter_gestures_override_owned_automation_and_preserve_it_after_sna
     let created = wait(&mut app, |state| lanes(state).len() == 1);
     let curve = lanes(&created)[0]["automation"]["points"].clone();
     assert_lane(lanes(&created)[0], track, None, 0.4);
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     assert_eq!(app.click("Other phrase")["selected_track"], other);
     fixture.action(&mut app, "change 0 0.77\n");
     let changed = wait(&mut app, |state| {
@@ -417,7 +417,7 @@ fn native_parameter_gestures_override_owned_automation_and_preserve_it_after_sna
         "Native ownership must not follow selection"
     );
 
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
     let browser = app.click("Automate…");
@@ -477,7 +477,7 @@ fn delayed_browser_parameter_acknowledgement_does_not_retake_resumed_automation(
     let created = wait(&mut app, |state| lanes(state).len() == 1);
     assert_lane(lanes(&created)[0], track, None, 0.4);
     assert!(lanes(&created)[0]["automation"]["override_value"].is_null());
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
     app.click("Automate…");

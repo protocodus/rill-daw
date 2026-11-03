@@ -155,21 +155,21 @@ impl DawApp {
         let mut apply = false;
         let mut cancel = false;
         let mut remove = false;
-        let response = daw_ui::modal(
-            ctx,
-            egui::Id::new("audio_boundary_fades_modal"),
-            "Smooth edit boundaries",
-            |ui| {
+        let mut open = true;
+        daw_ui::popup("Boundary fades", ctx)
+            .id(egui::Id::new("audio_boundary_fades_modal"))
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .vscroll(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                let mut footer = daw_ui::popup_footer(ui, "audio_boundary_fades_actions");
+                let window_ui = ui;
+                let ui = footer.body();
                 daw_ui::text::body(
                     ui,
                     format!(
-                        "{} selected audio {}",
-                        state.clips.len(),
-                        if state.clips.len() == 1 {
-                            "clip"
-                        } else {
-                            "clips"
-                        }
+                        "{} selected",
+                        daw_ui::text::count(state.clips.len(), "audio clip", "audio clips")
                     ),
                 );
                 let controls = daw_ui::boundary_fade_settings(ui, &mut state.settings);
@@ -186,14 +186,21 @@ impl DawApp {
                     ui,
                     "Existing musical fades stay intact. Only selected occurrences change.",
                 );
-                ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
-                ui.horizontal_wrapped(|ui| {
-                    apply = daw_ui::primary_button(ui, "Apply boundary fades").clicked();
-                    remove = daw_ui::button(ui, "Remove boundary fades").clicked();
-                    cancel = daw_ui::button(ui, "Cancel").clicked();
+                footer.show(window_ui, |ui| {
+                    daw_ui::dialog_actions(
+                        ui,
+                        |ui| {
+                            apply = daw_ui::dialog_primary(ui, "Apply").clicked();
+                            cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
+                            remove = daw_ui::dialog_button(ui, "Remove fades").clicked();
+                        },
+                        |_| {},
+                    )
                 });
-            },
-        );
+            });
+        // Keyboard shortcuts are gated while this dialog is open, so it owns Escape.
+        cancel |=
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         if apply || remove {
             let clips = state
                 .clips
@@ -205,7 +212,7 @@ impl DawApp {
             }
             reset(ctx);
             self.apply_audio_boundary_fades(&clips, apply.then_some(state.settings));
-        } else if cancel || response.should_close() {
+        } else if cancel || !open {
             reset(ctx);
         } else {
             ctx.data_mut(|data| data.insert_temp(egui::Id::new(DIALOG), state));

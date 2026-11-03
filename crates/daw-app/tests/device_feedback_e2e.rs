@@ -79,13 +79,13 @@ fn editor_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn device_library_can_move_and_resize_without_changing_the_project() {
     let mut app = Harness::new();
-    let before = menu(&mut app, "Track", "Add instrument…");
+    let before = menu(&mut app, "Track", "Add instrument track…");
     let window = &before["library"]["window"];
     let title = before["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|label| label["text"] == "Device library")
+        .find(|label| label["text"] == "Library")
         .unwrap();
     let moved = drag(&mut app, center(title), (70.0, 35.0));
     let after = &moved["library"]["window"];

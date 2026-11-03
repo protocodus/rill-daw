@@ -57,7 +57,7 @@ impl DawApp {
             });
             ui.add_enabled_ui(enabled, |ui| {
                 let duration = daw_ui::form_grid(ui, "crossfade_duration", |ui| {
-                    let label = daw_ui::text::label(ui, "Duration");
+                    let label = daw_ui::form_label(ui, "Duration");
                     let response = ui.add(daw_ui::number(&mut config.duration).speed(0.05).range(0.001..=MAX_BEAT).suffix(" beats"))
                         .labelled_by(label.id)
                         .on_hover_text("Automatically limited to the available overlap and next clip takeover.");

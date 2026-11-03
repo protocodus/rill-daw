@@ -84,7 +84,7 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
         for density in [1.0, 2.0] {
             app.command(json!({"command":"system_theme", "dark":dark}));
             app.command(json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}));
-            menu(&mut app, "Window", "Arrangement");
+            menu(&mut app, "Window", "Arranger");
             app.click("Pattern");
             let midi = menu(&mut app, "Window", "Properties");
             assert!(visible(&midi, "Properties of Pattern"));
@@ -135,7 +135,7 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
                 original
             );
 
-            menu(&mut app, "Window", "Arrangement");
+            menu(&mut app, "Window", "Arranger");
             app.click("Take");
             let audio = menu(&mut app, "Window", "Properties");
             assert!(visible(&audio, "Properties of Take"));

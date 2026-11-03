@@ -957,7 +957,7 @@ impl DawApp {
 
     pub(crate) fn ai_setup(&mut self, ui: &mut egui::Ui) {
         daw_ui::form_grid(ui, "ai_settings", |ui| {
-            let label = daw_ui::text::label(ui, "Provider");
+            let label = daw_ui::form_label(ui, "Provider");
             daw_ui::select("ai_provider", self.setup_draft.ai.provider.name())
                 .show_ui(ui, |ui| {
                     for provider in [daw_ai::Provider::OpenAi, daw_ai::Provider::Anthropic] {
@@ -982,13 +982,13 @@ impl DawApp {
                 .response
                 .labelled_by(label.id);
             ui.end_row();
-            let label = daw_ui::text::label(ui, "Model");
+            let label = daw_ui::form_label(ui, "Model");
             let response = daw_ui::text_field(ui, &mut self.setup_draft.ai.model, "Model", 280.0)
                 .labelled_by(label.id);
             ui.ctx()
                 .data_mut(|data| data.insert_temp(egui::Id::new("ai_model_rect"), response.rect));
             ui.end_row();
-            let label = daw_ui::text::label(ui, "API key");
+            let label = daw_ui::form_label(ui, "API key");
             let hint = if self.setup_draft.ai.api_key.is_some() {
                 "Replace stored API key"
             } else {

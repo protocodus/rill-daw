@@ -169,6 +169,7 @@ fn crossfade_popup_duration_presets_spline_drag_undo_and_archive_render() {
     open(&mut app, &project);
     app.click("Incoming take");
     app.click("Edit");
+    app.click("Audio");
     let popup = app.click("Crossfade…");
     assert_eq!(popup["popups"]["crossfade"], true);
     assert!(config(&popup).is_null());
