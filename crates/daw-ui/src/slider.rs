@@ -367,7 +367,7 @@ fn paint_overflow_mark(ui: &Ui, geometry: &SliderScaleGeometry) {
 pub const MIXER_CAP_SIZE: egui::Vec2 =
     egui::vec2(crate::tokens::COMPACT_HEIGHT, crate::tokens::SPACE_MD);
 /// Width of the mixer skin's visible trough.
-const MIXER_TROUGH: f32 = 6.0;
+const MIXER_TROUGH: f32 = 5.0;
 
 /// Mixer skin over the native rail: a narrow pixel-snapped trough, a level
 /// fill from silence (or from center on bipolar rails) and a rectangular cap
@@ -504,13 +504,10 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
     paint_overflow_mark(ui, geometry);
 }
 
-/// Native rail thickness (the pointer target) of the mixer skin.
-pub fn mixer_thickness(orientation: SliderOrientation) -> f32 {
-    if orientation == SliderOrientation::Vertical {
-        2.0 * crate::tokens::SPACE_MD
-    } else {
-        crate::tokens::COMPACT_HEIGHT
-    }
+/// Native rail thickness (the pointer target) of the mixer skin: the cap's
+/// width in either orientation.
+pub fn mixer_thickness(_orientation: SliderOrientation) -> f32 {
+    crate::tokens::COMPACT_HEIGHT
 }
 
 /// Shared slider builder. Rail interaction is egui's native Slider; its exact
@@ -771,7 +768,8 @@ impl<'a> Slider<'a> {
         } else {
             14.0
         };
-        let rail_padding = if aligned_horizontal {
+        // The mixer skin paints its detents inside its own thickness.
+        let rail_padding = if aligned_horizontal && !self.mixer_style {
             if self.scale_labels {
                 caption_height
             } else {
@@ -1111,6 +1109,8 @@ impl Widget for Slider<'_> {
                 SliderOrientation::Horizontal if !self.compact => {
                     let height = if self.scale_labels {
                         crate::tokens::PARAMETER_ROW_HEIGHT
+                    } else if self.mixer_style {
+                        mixer_thickness(SliderOrientation::Horizontal)
                     } else {
                         crate::tokens::CONTROL_HEIGHT
                     };

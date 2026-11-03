@@ -3,19 +3,24 @@
 use egui::{Align2, FontId, Pos2, Rect, Response, Sense, SliderClamping, Stroke, Ui, Vec2};
 
 /// Rail thickness of the vertical mixer fader (its pointer target).
-pub const MIXER_FADER_RAIL: f32 = 2.0 * crate::tokens::SPACE_MD;
+pub const MIXER_FADER_RAIL: f32 = crate::tokens::COMPACT_HEIGHT;
 /// The dB scale gutter plus the fader rail.
 pub const MIXER_FADER_WIDTH: f32 = crate::tokens::MIXER_SCALE_GUTTER + MIXER_FADER_RAIL;
+/// Space between the fader rail's target and the channel meter.
+pub const MIXER_METER_GAP: f32 = crate::tokens::SPACE_XS;
 /// `[scale][rail][gap][meter]`: the unit centered on every strip axis.
 pub const MIXER_FADER_UNIT_WIDTH: f32 =
-    MIXER_FADER_WIDTH + crate::tokens::SPACE_SM + crate::tokens::MIXER_METER_WIDTH;
+    MIXER_FADER_WIDTH + MIXER_METER_GAP + crate::tokens::MIXER_METER_WIDTH;
 /// Distance from the fader rail's ends to its handle travel (silence and top):
 /// half the visible cap, so the cap never leaves the rail.
 pub const MIXER_FADER_INSET: f32 = crate::MIXER_CAP_SIZE.y * 0.5;
 /// Width reserved for the pan value ("L100") beside the pan rail.
 pub const MIXER_PAN_CAPTION_WIDTH: f32 = crate::tokens::SPACE_XL;
 /// The pan rail row above the Mute and Solo row.
-pub const MIXER_PAN_ROW_HEIGHT: f32 = 2.0 * crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_XS;
+pub const MIXER_PAN_ROW_HEIGHT: f32 =
+    crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::tokens::CONTROL_HEIGHT;
+/// Pan values this close to center snap to it while dragging: the center detent.
+const PAN_DETENT: f32 = 0.03;
 
 /// Gain at the top of the fader travel (+3.5 dB); the model allows 0..=1.5.
 pub const GAIN_TAPER_MAX: f32 = 1.5;
@@ -99,7 +104,7 @@ pub fn paint_mixer_scale(ui: &Ui, edge: f32, bottom: f32, top: f32) {
         )
     };
     for (_, gain, major) in stops {
-        let reach = if major { 6.0 } else { 4.0 };
+        let reach = if major { 5.0 } else { 3.0 };
         painter.line_segment(
             [
                 Pos2::new(edge - reach, y(gain)),
@@ -129,7 +134,7 @@ pub fn paint_mixer_scale(ui: &Ui, edge: f32, bottom: f32, top: f32) {
         }
         painted.push(at);
         painter.text(
-            Pos2::new(edge - 9.0, at),
+            Pos2::new(edge - crate::tokens::SPACE_SM, at),
             Align2::RIGHT_CENTER,
             label,
             FontId::proportional(crate::tokens::FONT_CAPTION),
@@ -202,29 +207,37 @@ pub fn mixer_pan_caption(pan: f32) -> String {
     }
 }
 
-/// Horizontal pan rail in the fader's skin, with center and end detents and
-/// the value ("L15", "C") right of it. The whole row is one context target.
+/// Horizontal pan rail in the fader's skin with a center detent, and the
+/// value ("L15", "C") in a caption right of it. The whole row is one context
+/// target.
 pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
+    let height = crate::tokens::COMPACT_HEIGHT;
     let row = ui.allocate_ui_with_layout(
-        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
+        Vec2::new(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.set_min_size(Vec2::new(width, crate::tokens::CONTROL_HEIGHT));
+            ui.set_min_size(Vec2::new(width, height));
+            ui.set_max_height(height);
+            ui.spacing_mut().interact_size.y = height;
             ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
             ui.spacing_mut().slider_width =
                 (width - MIXER_PAN_CAPTION_WIDTH - crate::tokens::SPACE_XS).max(0.0);
-            let response = ui.add(
+            let mut response = ui.add(
                 crate::slider(pan, -1.0..=1.0)
                     .mixer_style()
-                    .scale_ticks(&[(0.0, true), (0.5, true), (1.0, true)])
+                    .scale_ticks(&[(0.5, true)])
                     .zero_reference(0.0)
                     .clamping(SliderClamping::Edits)
                     .show_value(false)
                     .scale_labels(false),
             );
+            if response.dragged() && *pan != 0.0 && pan.abs() < PAN_DETENT {
+                *pan = 0.0;
+                response.mark_changed();
+            }
             let label = ui
                 .allocate_ui_with_layout(
-                    Vec2::new(MIXER_PAN_CAPTION_WIDTH, crate::tokens::CONTROL_HEIGHT),
+                    Vec2::new(MIXER_PAN_CAPTION_WIDTH, height),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         ui.add(
@@ -251,7 +264,7 @@ pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
     crate::hover_text(
         response,
         format!(
-            "Stereo balance · {} · {}%\nDrag or use the arrow keys; Shift for fine adjustment.\nRight-click for exact value entry and automation",
+            "Stereo balance · {} · {}%\nDrag or use the arrow keys; Shift for fine adjustment. Snaps to center.\nRight-click for exact value entry and automation",
             crate::channel_pan_label(*pan),
             *pan * 100.0
         ),
@@ -282,7 +295,7 @@ pub fn mixer_pan_row(
         egui::Layout::top_down(egui::Align::Min),
         |ui| {
             ui.set_min_size(Vec2::new(width, MIXER_PAN_ROW_HEIGHT));
-            ui.spacing_mut().item_spacing.y = crate::tokens::SPACE_XS;
+            ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
             let pan = mixer_pan(ui, pan, width);
             let switches = mixer_mute_solo(ui, mute, solo, width);
             MixerPanRowResponse {
@@ -324,11 +337,7 @@ pub fn mixer_mute_solo(
 fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bool) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let accent = if mute { colors.mute } else { colors.solo };
-    let stroke = if *value {
-        accent
-    } else {
-        colors.line.lerp_to_gamma(colors.muted, 0.5)
-    };
+    // Fill-only until active; the active state takes its palette color.
     let mut response = ui.add_sized(
         Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
         crate::IconButton::new(egui::RichText::new(label).color(if *value {
@@ -342,14 +351,11 @@ fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bo
         } else {
             colors.control_fill
         })
-        .stroke(Stroke::new(
-            if *value {
-                crate::tokens::FOCUS_WIDTH
-            } else {
-                crate::tokens::BORDER_WIDTH
-            },
-            stroke,
-        )),
+        .stroke(if *value {
+            Stroke::new(crate::tokens::FOCUS_WIDTH, accent)
+        } else {
+            Stroke::NONE
+        }),
     );
     if response.clicked() && ui.is_enabled() {
         *value = !*value;
@@ -421,7 +427,7 @@ pub fn channel_meter(
     }
     if ui.is_rect_visible(rect) {
         let colors = crate::theme::palette(ui.ctx());
-        let gap = 2.0;
+        let gap = 3.0;
         let bar_width = (rect.width() - gap) * 0.5;
         let bottom = rect.bottom() - inset;
         let top = rect.top() + inset;
@@ -431,7 +437,14 @@ pub fn channel_meter(
                 rect.min + Vec2::new(index as f32 * (bar_width + gap), 0.0),
                 Vec2::new(bar_width, rect.height()),
             );
-            ui.painter().rect_filled(bar, 1.0, colors.bg);
+            // The same trough as the fader rail beside it.
+            ui.painter().rect(
+                egui::emath::GuiRounding::round_to_pixels(bar, ui.pixels_per_point()),
+                1.0,
+                colors.bg,
+                Stroke::new(1.0 / ui.pixels_per_point(), colors.line),
+                egui::StrokeKind::Inside,
+            );
             if peak > 0.0 {
                 let level = y(peak);
                 let unity = y(1.0);

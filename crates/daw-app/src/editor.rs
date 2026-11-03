@@ -313,34 +313,38 @@ impl DawApp {
             .as_ref()
             .map(|engine| engine.snapshot())
             .unwrap_or_default();
-        let strip_width = daw_ui::tokens::MIXER_STRIP_WIDTH;
+        let strip_width = daw_ui::MIXER_CHANNEL_WIDTH;
         let group_count = channel_groups.len() + 1;
         let mixer_width = (channels.len() + 1) as f32 * strip_width
             + (channels.len() + 1 - group_count) as f32 * channel_gap
             + (group_count - 1) as f32 * group_gap;
-        let content_width = strip_width - 2.0 * daw_ui::tokens::SPACE_MD;
-        let spacing = daw_ui::tokens::SPACE_SM;
+        let content_width = daw_ui::MIXER_CONTENT_WIDTH;
+        let spacing = daw_ui::MIXER_ROW_GAP;
         let section_gap = daw_ui::MIXER_SECTION_GAP;
         let control = daw_ui::tokens::CONTROL_HEIGHT;
-        let send_area_height = 2.0 * daw_ui::MIXER_SEND_ROW_HEIGHT + daw_ui::tokens::SPACE_XS;
+        let send_area_height = 2.0 * daw_ui::MIXER_SEND_ROW_HEIGHT + spacing;
         // Signal order: identity and source, effects, pan with mute/solo, the
-        // gain and peak readouts over the fader unit, then output and sends. Every strip
-        // reserves the same rows, so sections line up across channels.
-        let mut fixed_height = 2.0 * daw_ui::tokens::SPACE_MD
-            + 2.0 * control
-            + spacing
+        // gain and peak readouts over the fader unit, then output and sends.
+        // Rows of a section sit `spacing` apart and sections `section_gap`
+        // apart; every strip reserves the same rows, so they line up.
+        let mut fixed_height = 2.0 * daw_ui::MIXER_CHANNEL_MARGIN
             + control
             + spacing
+            + control
+            + section_gap
+            + control
+            + spacing
+            + section_gap
             + daw_ui::MIXER_PAN_ROW_HEIGHT
-            + spacing
-            + daw_ui::tokens::SPACE_XS
+            + section_gap
             + control
+            + spacing
+            + section_gap
             + control
             + spacing
             + send_area_height
             + spacing
-            + control
-            + 3.0 * section_gap;
+            + daw_ui::MIXER_SEND_ROW_HEIGHT;
         // Size controls against the unobscured workspace, before scrolling.
         // Reserve the output lane and one send lane plus room for an ordinary
         // status notice, so controls never jump when a send or notice appears.
@@ -379,8 +383,10 @@ impl DawApp {
             (workspace_height - routing_overview_height - notice_reserve - group_header_height)
                 .max(fixed_height + daw_ui::tokens::MIXER_FADER_MIN);
         // The `[scale][rail][gap][meter]` unit sits on the strip axis.
-        let unit_offset = ((content_width - daw_ui::MIXER_FADER_UNIT_WIDTH) * 0.5).max(0.0);
-        let meter_offset = unit_offset + daw_ui::MIXER_FADER_WIDTH + daw_ui::tokens::SPACE_SM;
+        let unit_offset = ((content_width - daw_ui::MIXER_FADER_UNIT_WIDTH) * 0.5)
+            .max(0.0)
+            .floor();
+        let meter_offset = unit_offset + daw_ui::MIXER_FADER_WIDTH + daw_ui::MIXER_METER_GAP;
         let scroll = daw_ui::scroll_area(ui, "mixer_scroll", [true, true]);
         let panning = daw_ui::scroll_area_is_panning(ui, "mixer_scroll");
         let mut diagnostics = Vec::new();
@@ -453,7 +459,6 @@ impl DawApp {
                     let channel_peaks = self.engine.as_ref().map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
                     let strip = daw_ui::mixer_strip(ui, track.id, strip_size,
                         Some(color(track.color)), selected_channels.contains(&track.id), |ui| {
-                        daw_ui::mixer_sections(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = spacing;
                         // Identity
                         let name = daw_ui::mixer_name_plate(ui, if bus { daw_ui::MixerNamePlateKind::Bus } else { daw_ui::MixerNamePlateKind::Track },
@@ -527,22 +532,22 @@ impl DawApp {
                                 } else if let Instrument::Vst3 { path, class_id } = &track.instrument {
                                     let model = crate::library::plugin_model(&self.vst_catalog, path, class_id);
                                     let instrument = if track.instrument_name.is_empty() { model.split(" · ").last().unwrap_or(&model) } else { &track.instrument_name };
-                                    let response = ui.add_sized(Vec2::new(width, control),
-                                        daw_ui::button_widget(format!("MIDI · {instrument}")).truncate().presentation())
+                                    let response = daw_ui::mixer_row(ui, width, control, &format!("MIDI · {instrument}"),
+                                        daw_ui::MixerRowText::Caption, None, None)
                                         .on_hover_text(format!("Instrument · {model}\nInstrument output, before channel inserts · Click to open"));
                                     if response.clicked() { device_target = Some((track.id, None)); }
                                     device_diagnostics.push(serde_json::json!({"track":track.id,"effect":null,"name":instrument,"model":model,"rect":rect_json(response.rect)}));
                                     response
                                 } else {
                                     let text = match (track.kind, track.audio_input) {
-                                        (TrackKind::Midi, _) => "MIDI · No instrument".to_owned(),
+                                        (TrackKind::Midi, _) => "MIDI · None".to_owned(),
                                         (_, Some(AudioInputChannels::Mono { channel })) => format!("Audio · In {}", channel + 1),
                                         (_, Some(AudioInputChannels::Stereo { left, right })) => format!("Audio · In {}/{}", left + 1, right + 1),
                                         (_, None) => "Audio".to_owned(),
                                     };
                                     daw_ui::mixer_source_caption(ui, &text, width).on_hover_text(match track.kind {
                                         TrackKind::Audio => "Audio clips and monitored input, including their source processing",
-                                        _ => "Instrument output, before channel inserts",
+                                        _ => "No instrument · choose one in the channel's Instrument window",
                                     })
                                 }
                             }).inner;
@@ -594,6 +599,7 @@ impl DawApp {
                             automation_overrides.push((pan_target, AutomationParameter::TrackPan.normalize(pan))); }
                         let mute_solo_rect = pan_row.mute.rect.union(pan_row.solo.rect);
                         let meter_id = egui::Id::new(("mixer_channel_meter", track.id));
+                        ui.add_space(section_gap - spacing);
                         ui.spacing_mut().item_spacing.y = 0.0;
                         let displayed_gain = gain_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                             .map(|(_, _, value)| AutomationParameter::TrackGain.denormalize(value)).unwrap_or(track.gain);
@@ -616,7 +622,7 @@ impl DawApp {
                         }
                         let readout = daw_ui::channel_meter_readout(ui, meter_id,
                             readout_row.left() + meter_offset + daw_ui::tokens::MIXER_METER_WIDTH * 0.5, readout_row);
-                        ui.add_space(daw_ui::tokens::SPACE_XS);
+                        ui.add_space(spacing);
                         let (fader_rect, fader_scale, level) = ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
                             ui.add_space(unit_offset);
@@ -633,7 +639,7 @@ impl DawApp {
                             if let Some(value) = exact { gain = daw_ui::channel_gain_from_db(value as f32); }
                             if (response.changed() || exact.is_some()) && !panning { track.gain = gain; changed = true;
                                 automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(gain))); }
-                            ui.add_space(daw_ui::tokens::SPACE_SM);
+                            ui.add_space(daw_ui::MIXER_METER_GAP);
                             let level = daw_ui::channel_meter(ui, meter_id, channel_peaks, fader_height, daw_ui::MIXER_FADER_INSET);
                             (response.rect, scale, level)
                         }).inner;
@@ -655,7 +661,7 @@ impl DawApp {
                         let mut send_rows = Vec::new();
                         let send_area = ui.allocate_ui_with_layout(Vec2::new(content_width, send_area_height), egui::Layout::top_down(egui::Align::Min), |ui| {
                             ui.set_min_size(Vec2::new(content_width, send_area_height));
-                            ui.spacing_mut().item_spacing.y = daw_ui::tokens::SPACE_XS;
+                            ui.spacing_mut().item_spacing.y = spacing;
                             let visible = if send_details.len() > 2 { 1 } else { send_details.len() };
                             let mut open = false;
                             for send in &send_details[..visible] {
@@ -673,9 +679,9 @@ impl DawApp {
                         empty_send_menus.push((track.id, add_send.clone()));
                         let sends_rect = send_area.response.rect.union(add_send.rect);
                         let level_rect = pan_response.rect.union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
-                        let sections = [Some(name.rect.union(source.response.rect)), Some(effects.rect.union(insert_summary.rect)), Some(level_rect), Some(target.rect.union(sends_rect))];
-                        let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).filter_map(|(section, bounds)| bounds.map(|bounds| serde_json::json!({"name":section.name(),"rect":rect_json(bounds),"frame":rect_json(egui::emath::GuiRounding::round_to_pixels(bounds.expand(daw_ui::MIXER_SECTION_PADDING), ui.pixels_per_point())),"fill":section.fill(ui.ctx()).to_array()}))).collect();
-                        (serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":rect_json(name.rect),"source":rect_json(source.response.rect),
+                        let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
+                        let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
+                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":rect_json(name.rect),"source":rect_json(source.response.rect),
                             "source_kind":source_kind,"source_menu":rect_json(source.inner.0),"source_label":rect_json(source.inner.1),
                             "automation_state":channel_state.map(daw_ui::automation_state_label),
                             "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
@@ -687,8 +693,7 @@ impl DawApp {
                             "send_rows":send_rows,"add_send":rect_json(add_send.rect),
                             "sections":section_diagnostics,
                             "stages":{"input":rect_json(source.response.rect),"processing":rect_json(effects.rect.union(insert_summary.rect)),
-                                "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}}), sections)
-                        })
+                                "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}})
                     });
                     let drop = daw_ui::track_reorder_target(ui, strip.response.rect, track.id,
                         daw_ui::TrackReorderAxis::Horizontal, false, |intent| intent.source != intent.target);
@@ -717,7 +722,6 @@ impl DawApp {
                 // Master mirrors the channel rows: identity, its summed source,
                 // a meter on the fader scale, and the hardware output.
                 let master = daw_ui::mixer_strip(ui, "master", strip_size, None, false, |ui| {
-                    daw_ui::mixer_sections(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = spacing;
                         let name = daw_ui::mixer_name_plate(ui, daw_ui::MixerNamePlateKind::Master, "Master", content_width, palette(ui.ctx()).raised);
                         let source = daw_ui::mixer_source_caption(ui, &format!("Sum · {master_inputs} in"), content_width)
@@ -725,13 +729,14 @@ impl DawApp {
                         ui.add_space(section_gap - spacing);
                         ui.allocate_space(Vec2::new(content_width, control + spacing + device_height));
                         ui.add_space(section_gap - spacing);
-                        let (pan_space, _) = ui.allocate_exact_size(Vec2::new(content_width, daw_ui::MIXER_PAN_ROW_HEIGHT), egui::Sense::hover());
+                        ui.allocate_space(Vec2::new(content_width, daw_ui::MIXER_PAN_ROW_HEIGHT));
                         let meter_id = egui::Id::new("mixer_master_meter");
+                        ui.add_space(section_gap - spacing);
                         ui.spacing_mut().item_spacing.y = 0.0;
                         let (gain_space, _) = ui.allocate_exact_size(Vec2::new(content_width, control), egui::Sense::hover());
                         let readout = daw_ui::channel_meter_readout(ui, meter_id,
                             gain_space.left() + meter_offset + daw_ui::tokens::MIXER_METER_WIDTH * 0.5, gain_space);
-                        ui.add_space(daw_ui::tokens::SPACE_XS);
+                        ui.add_space(spacing);
                         let level = ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
                             ui.add_space(meter_offset);
@@ -745,11 +750,8 @@ impl DawApp {
                         let output = daw_ui::mixer_output_button(ui, content_width, "Audio output", Some(palette(ui.ctx()).muted))
                             .on_hover_text("Master → audio device output · Click to open Setup › Audio");
                         if output.clicked() { master_output = true; }
-                        let (rest, _) = ui.allocate_exact_size(Vec2::new(content_width, send_area_height + spacing + control), egui::Sense::hover());
-                        let sections = [Some(name.rect.union(source.rect)), None, Some(pan_space.union(level.rect)), Some(output.rect.union(rest))];
-                        (serde_json::json!({"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"target":rect_json(output.rect),
-                            "name":rect_json(name.rect),"source":rect_json(source.rect)}), sections)
-                    })
+                        serde_json::json!({"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"target":rect_json(output.rect),
+                            "name":rect_json(name.rect),"source":rect_json(source.rect)})
                 });
                 anchors.insert(None, master.response.rect.center_bottom());
                 master_details = Some(master.inner);

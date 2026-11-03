@@ -509,14 +509,11 @@ pub fn mixer_strip<R>(
         let frame = egui::Frame::new()
             .fill(fill)
             .corner_radius(tokens::RADIUS)
-            .inner_margin(egui::Margin::symmetric(
-                tokens::SPACE_MD as i8,
-                tokens::SPACE_MD as i8,
-            ));
+            .inner_margin(egui::Margin::same(crate::MIXER_CHANNEL_MARGIN as i8));
         let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.set_width((size.x - 2.0 * tokens::SPACE_MD).max(0.0));
-                ui.set_height((size.y - 2.0 * tokens::SPACE_MD).max(0.0));
+                ui.set_width((size.x - 2.0 * crate::MIXER_CHANNEL_MARGIN).max(0.0));
+                ui.set_height((size.y - 2.0 * crate::MIXER_CHANNEL_MARGIN).max(0.0));
                 contents(ui)
             })
             .inner
@@ -527,6 +524,7 @@ pub fn mixer_strip<R>(
             frame.show(ui, content)
         };
         let rect = result.response.rect;
+        // Fill-only card; only the selected strip gains an outline.
         if selected {
             crate::paint_selection_glow(
                 ui.painter(),
@@ -534,16 +532,13 @@ pub fn mixer_strip<R>(
                 tokens::RADIUS,
                 color.unwrap_or(colors.accent),
             );
+            ui.painter().rect_stroke(
+                egui::emath::GuiRounding::round_to_pixels(rect, ui.painter().pixels_per_point()),
+                tokens::RADIUS,
+                egui::Stroke::new(1.0 / ui.ctx().pixels_per_point(), colors.accent),
+                egui::StrokeKind::Inside,
+            );
         }
-        ui.painter().rect_stroke(
-            egui::emath::GuiRounding::round_to_pixels(rect, ui.painter().pixels_per_point()),
-            tokens::RADIUS,
-            egui::Stroke::new(
-                1.0 / ui.ctx().pixels_per_point(),
-                if selected { colors.accent } else { colors.line },
-            ),
-            egui::StrokeKind::Inside,
-        );
         result.inner
     })
 }

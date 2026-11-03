@@ -15,11 +15,20 @@ pub fn automation_channel_menu<R>(
             crate::widgets::semantic_narrow_action_menu(ui, state.rich_label(ui.ctx()), contents)
         }
         None => {
+            // A narrow quiet icon leaves the source caption its width.
             let response = ui
-                .add(
-                    crate::IconButton::icon_only(crate::Icon::Automation, "Automation")
-                        .min_size(egui::Vec2::splat(crate::tokens::CONTROL_HEIGHT)),
-                )
+                .scope(|ui| {
+                    ui.spacing_mut().button_padding.x = 0.0;
+                    ui.add(
+                        crate::IconButton::icon_only(crate::Icon::Automation, "Automation")
+                            .min_size(egui::Vec2::new(
+                                crate::tokens::COMPACT_HEIGHT,
+                                crate::tokens::CONTROL_HEIGHT,
+                            ))
+                            .quiet(),
+                    )
+                })
+                .inner
                 .on_hover_text("Automation · volume, pan, sends and parameters");
             let inner = egui::Popup::menu(&response)
                 .show(contents)
