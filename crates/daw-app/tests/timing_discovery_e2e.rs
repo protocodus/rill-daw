@@ -165,9 +165,7 @@ fn clip_and_loop_time_readouts_fit_both_appearances_and_do_not_edit_values() {
                     .as_array()
                     .unwrap()
                     .iter()
-                    .any(|s| s
-                        .as_str()
-                        .is_some_and(|s| s.starts_with("Loop 1:1.00–19:3.00")))
+                    .any(|s| s.as_str().is_some_and(|s| s.starts_with("1.1 – 19.3 · ")))
             );
             app.click("Range");
             let viewed = app.inspect();

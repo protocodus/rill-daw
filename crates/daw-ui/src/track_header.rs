@@ -8,6 +8,8 @@ use std::hash::Hash;
 pub const TRACK_HEADER_WIDTH: f32 = 233.0 + 55.0;
 pub const TRACK_HEADER_HEIGHT: f32 = 144.0;
 pub const TRACK_HEADER_COMPACT_HEIGHT: f32 = 89.0;
+/// A folder row shows only its identity line: name, Mute, Solo and actions.
+pub const TRACK_HEADER_FOLDER_HEIGHT: f32 = tokens::CONTROL_HEIGHT + tokens::SPACE_SM;
 
 /// All rectangles remain inside the caller's row. Optional sections disappear
 /// together when their controls cannot fit, instead of shrinking their labels
@@ -23,6 +25,7 @@ pub struct TrackHeaderLayout {
     pub disclosure: Option<Rect>,
     pub bus_badge: Option<Rect>,
     pub record_arm: Option<Rect>,
+    pub state_toggles: Option<Rect>,
     pub mix: Option<Rect>,
     pub meter: Option<Rect>,
     pub routing: Option<Rect>,
@@ -101,6 +104,18 @@ impl TrackHeaderLayout {
         let device = routing.map(|routing| {
             routing.translate(egui::vec2(0.0, tokens::COMPACT_HEIGHT + tokens::SPACE_XS))
         });
+        // Without a body the identity line is the whole row: center it.
+        let (identity, icon, name, reorder) = if mix.is_none() {
+            let shift = egui::vec2(0.0, rect.center().y - identity.center().y);
+            (
+                identity.translate(shift),
+                icon.translate(shift),
+                name.translate(shift),
+                reorder.translate(shift),
+            )
+        } else {
+            (identity, icon, name, reorder)
+        };
         let meter = mix.map(|mix| {
             Rect::from_min_max(
                 egui::pos2(body_right + meter_gap, mix.top()),
@@ -117,6 +132,7 @@ impl TrackHeaderLayout {
             disclosure: None,
             bus_badge: None,
             record_arm: None,
+            state_toggles: None,
             mix,
             meter,
             routing,
@@ -134,6 +150,14 @@ impl TrackHeaderLayout {
     pub fn with_record_arm(mut self) -> Self {
         if self.identity.height() >= tokens::COMPACT_HEIGHT {
             self.record_arm = self.reserve_name_end(tokens::COMPACT_HEIGHT);
+        }
+        self
+    }
+
+    /// Mute and Solo on the identity line, for rows without a mix section.
+    pub fn with_state_toggles(mut self) -> Self {
+        if self.identity.height() >= tokens::COMPACT_HEIGHT {
+            self.state_toggles = self.reserve_name_end(crate::TRACK_STATE_TOGGLES_WIDTH);
         }
         self
     }
@@ -254,10 +278,11 @@ pub fn paint_track_header_identity(
 }
 
 /// Fine section rules clarify the vertical order without boxing every control.
-/// The meter owns a separate column and never shares a slider's value gutter.
+/// Both rules span the identity width; the meter's own frame separates it.
 pub fn paint_track_header_sections(painter: &Painter, layout: &TrackHeaderLayout) {
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(layout.rect));
-    let stroke = Stroke::new(tokens::BORDER_WIDTH, theme::palette(painter.ctx()).line);
+    let colors = theme::palette(painter.ctx());
+    let stroke = Stroke::new(tokens::BORDER_WIDTH, colors.line);
     if let Some(mix) = layout.mix {
         painter.hline(
             layout.identity.x_range(),
@@ -265,12 +290,26 @@ pub fn paint_track_header_sections(painter: &Painter, layout: &TrackHeaderLayout
             stroke,
         );
         if let Some(routing) = layout.routing {
-            painter.hline(mix.x_range(), (mix.bottom() + routing.top()) * 0.5, stroke);
-        }
-        if let Some(meter) = layout.meter {
-            painter.vline((mix.right() + meter.left()) * 0.5, meter.y_range(), stroke);
+            painter.hline(
+                layout.identity.x_range(),
+                (mix.bottom() + routing.top()) * 0.5,
+                stroke,
+            );
         }
     }
+}
+
+/// Frame a channel meter so it reads as a meter even when silent, with a
+/// 0 dB tick at its top (the shared meters scale −60 to 0 dB).
+pub fn paint_track_meter_frame(painter: &Painter, meter: Rect) {
+    let colors = theme::palette(painter.ctx());
+    let stroke = Stroke::new(tokens::BORDER_WIDTH, colors.line);
+    painter.rect_stroke(meter, 1.0, stroke, egui::StrokeKind::Outside);
+    painter.hline(
+        (meter.left() - tokens::SPACE_XS)..=meter.left(),
+        meter.top(),
+        Stroke::new(tokens::BORDER_WIDTH, colors.muted),
+    );
 }
 
 /// A bounded section row with a stable label column and a readable destination.
@@ -402,4 +441,72 @@ fn centered_icon(rect: Rect, size: f32) -> Rect {
         rect.center(),
         Vec2::splat(size.min(rect.width()).min(rect.height()).max(0.0)),
     )
+}
+
+/// The track-list menu above the headers: "Tracks ▾", left-aligned so its
+/// text starts at the track-icon column, and centered on `rect`'s height.
+/// `text_left` is that column; the hover surface extends a little before it.
+pub fn track_list_menu_at<R>(
+    ui: &mut Ui,
+    rect: Rect,
+    text_left: f32,
+    id_salt: impl Hash,
+    label: &str,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> (Response, Option<egui::InnerResponse<R>>) {
+    let colors = theme::palette(ui.ctx());
+    let font = text::TextRole::Label.font();
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), font.clone(), colors.text);
+    let chevron = tokens::SPACE_MD;
+    let target = Rect::from_min_size(
+        egui::pos2(
+            text_left - tokens::SPACE_XS,
+            rect.center().y - tokens::CONTROL_HEIGHT * 0.5,
+        ),
+        Vec2::new(
+            tokens::SPACE_XS * 2.0 + galley.size().x + tokens::SPACE_XS + chevron,
+            tokens::CONTROL_HEIGHT,
+        ),
+    )
+    .intersect(rect);
+    let response = ui.interact(target, ui.make_persistent_id(id_salt), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+    });
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&response));
+    let painter = ui.painter_at(target);
+    if response.hovered() || response.has_focus() || open {
+        painter.add(crate::component_shape(
+            &painter,
+            target,
+            tokens::RADIUS,
+            colors.control_hover,
+            if response.has_focus() {
+                Stroke::new(tokens::FOCUS_WIDTH, colors.accent)
+            } else {
+                Stroke::NONE
+            },
+            crate::ComponentMaterial::default(),
+        ));
+    }
+    let text_rect = Rect::from_min_size(
+        egui::pos2(text_left, target.center().y - galley.size().y * 0.5),
+        galley.size(),
+    );
+    painter.galley(text_rect.min, galley, colors.text);
+    Icon::ChevronDown.paint(
+        &painter,
+        Rect::from_center_size(
+            egui::pos2(
+                text_rect.right() + tokens::SPACE_XS + chevron * 0.5,
+                target.center().y,
+            ),
+            Vec2::splat(chevron),
+        ),
+        colors.muted,
+    );
+    let inner = egui::Popup::menu(&response).show(|ui| crate::command_menu_contents(ui, contents));
+    (response, inner)
 }

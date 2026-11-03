@@ -496,7 +496,8 @@ fn dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_ed
         .unwrap()["header"];
     // Source icons and label padding are independent of the beat mapping.
     let pos = Pos2::new(
-        timeline["canvas"]["min"][0].as_f64().unwrap() as f32 + harness.app.zoom * 2.0,
+        timeline["canvas"]["min"][0].as_f64().unwrap() as f32
+            + harness.app.zoom * (2.0 - timeline["start_beat"].as_f64().unwrap() as f32),
         ((header["min"][1].as_f64().unwrap() + header["max"][1].as_f64().unwrap()) * 0.5) as f32,
     );
     harness.drop_wav(pos, &path);
@@ -519,7 +520,8 @@ fn dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat(
     let mut harness = Harness::new(0.0);
     let output = harness.settle_full();
     let label = text_position(&output, "Drop audio here · Double-click for MIDI", 0.0);
-    let pos = label + Vec2::new(harness.app.zoom * 3.0 - 24.0, 5.0);
+    // The hint is inset SPACE_LG from the canvas edge, where beat 0 sits.
+    let pos = label + Vec2::new(harness.app.zoom * 3.0 - daw_ui::tokens::SPACE_LG, 5.0);
     harness.drop_wav(pos, &path);
     assert_eq!(harness.app.project.tracks.len(), 2);
     let track = harness.app.project.tracks.last().unwrap();

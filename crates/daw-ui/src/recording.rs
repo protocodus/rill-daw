@@ -1,6 +1,6 @@
 //! Recording controls and live regions share the same theme, spacing and input
 //! behavior in the transport, track headers and focused recording view.
-use crate::{Icon, IconButton, text, theme};
+use crate::{IconButton, text, theme};
 use egui::{Color32, Painter, Rect, Response, Stroke, StrokeKind, Ui};
 
 pub fn recording_color(ctx: &egui::Context) -> Color32 {
@@ -65,11 +65,7 @@ pub fn record_arm_at(
     if !enabled {
         child.disable();
     }
-    let color = if armed {
-        recording_color(child.ctx())
-    } else {
-        theme::palette(child.ctx()).muted
-    };
+    let colors = theme::palette(child.ctx());
     let response = child.interact(rect, id, egui::Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(
@@ -80,16 +76,38 @@ pub fn record_arm_at(
         )
     });
     let painter = child.painter().with_clip_rect(rect);
-    if armed || response.hovered() || response.has_focus() {
+    if response.hovered() || response.has_focus() {
         painter.rect(
-            rect.shrink(1.0),
-            4.0,
-            color.gamma_multiply(0.14),
-            Stroke::new(1.0_f32, color),
+            rect,
+            crate::tokens::RADIUS,
+            colors.control_hover,
+            if response.has_focus() {
+                Stroke::new(crate::tokens::BORDER_WIDTH, colors.accent)
+            } else {
+                Stroke::NONE
+            },
             StrokeKind::Inside,
         );
     }
-    Icon::Record.paint(&painter, rect.shrink(4.0), color);
+    // A ring reads as a button waiting to be armed; the filled disc is the
+    // armed state, in the same color as the transport Record command.
+    let radius = (rect.width().min(rect.height()) * 0.5 - crate::tokens::SPACE_XS).max(2.0);
+    if armed {
+        painter.circle_filled(rect.center(), radius, colors.recording);
+    } else {
+        painter.circle_stroke(
+            rect.center(),
+            radius - 0.5,
+            Stroke::new(
+                1.5_f32,
+                if child.is_enabled() {
+                    colors.muted
+                } else {
+                    colors.line
+                },
+            ),
+        );
+    }
     response.on_hover_text(if armed {
         "Disarm recording"
     } else {

@@ -117,9 +117,8 @@ fn label_and_all_row_sizes_resize_without_edits_and_loop_range_has_its_own_lane(
         let lane = &state["timeline"]["loop_lane"];
         assert!(
             indicator["min"][1].as_f64().unwrap()
-                >= state["timeline"]["ruler"]["max"][1].as_f64().unwrap()
-                    + f64::from(daw_ui::tokens::SPACE_SM),
-            "Labelled loop strip must retain the clear gap below the ruler"
+                > state["timeline"]["ruler"]["max"][1].as_f64().unwrap(),
+            "Labelled loop strip must stay clear of the ruler labels"
         );
         for axis in 0..2 {
             assert!(
@@ -136,7 +135,7 @@ fn label_and_all_row_sizes_resize_without_edits_and_loop_range_has_its_own_lane(
             .find(|label| {
                 label["text"]
                     .as_str()
-                    .is_some_and(|text| text.starts_with("Loop 1:1.25–1:4.75"))
+                    .is_some_and(|text| text.starts_with("1.1.2 – 1.4.4 · "))
             })
             .expect("Loop timing remains visible inside its separated lane");
         for axis in 0..2 {

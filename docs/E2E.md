@@ -604,11 +604,24 @@ once. Joined audio can be split again and survives deleting its original scratch
 WAV after portable saving. Loop settings do not truncate offline export.
 `loop_e2e` also drags both loop-strip endpoints with Snap and free adjustment,
 checks one Undo per gesture and unchanged music/selection/viewport, retains a
-positive range, omits handles at clipped viewport edges, and disables dragging
-during recording.
+positive range of at least one snap step, omits handles at clipped viewport edges
+(dragging the clipped band moves the whole loop), and disables dragging during
+recording.
 
 ```sh
 cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins_e2e
+```
+
+`arranger_polish_e2e` checks the arranger toolbar order at 1280 and 1480 points
+(Snap and Nudge on the tools' row, then Add pattern, then the zoom/View/Tool help
+cluster), the loop label in the proportional caption font with a leading canvas
+gutter and the label stepping past the playhead, Mute/Solo as rail-centered
+21-point squares filled with `Palette::mute`/`solo`, one-line folder rows whose
+Mute acts through the shared toggle, and MIDI previews of 2–6 point notes in full
+track color with an outline.
+
+```sh
+cargo test --locked -p daw-app --test arranger_polish_e2e -- --test-threads=1
 ```
 
 The `clones_e2e` suite creates MIDI/audio ghost copies through menus, edits

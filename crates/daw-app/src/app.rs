@@ -2118,16 +2118,14 @@ impl DawApp {
                 daw_ui::tokens::SPACE_SM as i8,
             )).corner_radius(0))
             .show(ctx, |ui| {
-                // Account for the full mouse targets beside tempo while keeping
-                // complete control groups together at smaller window sizes.
+                // Groups by signal flow: view, playback, position, tempo, loop.
+                // Each group reserves the width it measured last frame and wraps intact.
                 let compact = ui.available_width() < 1400.0;
                 let group_spacing = if compact {
                     daw_ui::tokens::SPACE_XS
                 } else {
                     daw_ui::tokens::SPACE_SM
                 };
-                // Navigation stays quiet; playback and musical position have
-                // distinct shared surfaces. Each complete group wraps intact.
                 ui.spacing_mut().item_spacing = egui::vec2(
                     if compact { daw_ui::tokens::SPACE_SM } else { daw_ui::tokens::SPACE_MD },
                     daw_ui::tokens::SPACE_SM,
@@ -2141,33 +2139,11 @@ impl DawApp {
                     timing.counting.then(|| format!("Count-in · {}", timing.remaining_beats.ceil().max(1.0) as u32))
                 });
                 let refining = self.engine.as_ref().is_some_and(|engine| engine.snapshot().refining_audio);
-                let status_width = [
-                    refining.then_some("Refining audio…"),
-                    self.recording_finalizing().then_some("Finishing recording…"),
-                    count_in.as_deref(),
-                ].into_iter().flatten().map(|text| ui.painter().layout_no_wrap(
-                    text.into(), egui::TextStyle::Body.resolve(ui.style()), palette(ui.ctx()).muted,
-                ).size().x + group_spacing).sum::<f32>();
-                // Reserve text, icons, disclosure and padding before laying out
-                // the group. The Range opener truncates inside a narrow child UI
-                // even when the overall window still has spare space.
-                let guide_text_width = |label: &str| ui.painter().layout_no_wrap(
-                    label.into(), egui::TextStyle::Button.resolve(ui.style()), palette(ui.ctx()).text,
-                ).size().x.ceil();
-                let navigation_width = ["Arranger", "Mixer"].into_iter().map(|label| {
-                    guide_text_width(label) + 2.0 * ui.spacing().button_padding.x
-                }).sum::<f32>() + group_spacing + 2.0;
-                let guide_width = ["Click", "Loop"].into_iter().map(|label| {
-                    guide_text_width(label) + 18.0 + ui.spacing().icon_spacing + 2.0 * ui.spacing().button_padding.x
-                }).sum::<f32>()
-                    + guide_text_width("Range") + 12.0 + ui.spacing().icon_spacing
-                    + 2.0 * daw_ui::tokens::BUTTON_PADDING_X
-                    + 2.0 * group_spacing;
                 ui.horizontal_wrapped(|ui| {
                     let row_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_XS * 2.0;
                     ui.set_min_height(row_height);
                     ui.set_row_height(row_height);
-                    daw_ui::toolbar_group_sized_with_spacing(ui, navigation_width, group_spacing, |ui| {
+                    daw_ui::measured_toolbar_group(ui, "transport_views", group_spacing, |ui| {
                         let active = self.navigation.iter().rev().find_map(|snapshot| match snapshot.view {
                             FocusedView::Workspace(view) => Some(view),
                             _ => None,
@@ -2181,7 +2157,7 @@ impl DawApp {
                             }
                         }
                     });
-                    daw_ui::command_group(ui, (if compact { 350.0 } else { 380.0 }) + status_width, |ui| {
+                    daw_ui::measured_command_group(ui, "transport_playback", |ui| {
                         if refining {
                             daw_ui::text::note(ui, "Refining audio…");
                         }
@@ -2214,17 +2190,15 @@ impl DawApp {
                         if self.recording_finalizing() { daw_ui::text::note(ui, "Finishing recording…"); }
                         if let Some(count_in) = &count_in { daw_ui::text::note(ui, count_in); }
                     });
-                    daw_ui::command_group(ui, 380.0, |ui| {
-                        let bar = (self.cursor / self.project.beats_per_bar as f64).floor() as u64 + 1;
-                        let beat = (self.cursor % self.project.beats_per_bar as f64).floor() as u64 + 1;
-                        ui.label(
-                            RichText::new(format!(
-                                "{bar:03} . {beat:02} . {:02}",
-                                (self.cursor.fract() * 100.0) as u64
-                            ))
-                            .size(daw_ui::tokens::FONT_SUBTITLE)
-                            .color(palette(ui.ctx()).text),
+                    daw_ui::measured_command_group(ui, "transport_position", |ui| {
+                        daw_ui::transport_position(
+                            ui,
+                            self.cursor,
+                            self.project.beats_per_bar,
+                            self.cursor * 60.0 / self.project.tempo,
                         );
+                    });
+                    daw_ui::measured_command_group(ui, "transport_tempo", |ui| {
                         let mut tempo = self.project.tempo;
                         let tempo_edit = ui.add_enabled_ui(!recording_busy, |ui| {
                             daw_ui::number_stepper(ui, &mut tempo, 1.0, 20.0..=400.0, "tempo", |ui, value| {
@@ -2252,12 +2226,12 @@ impl DawApp {
                             self.edit_label = Some("Time signature".into());
                             self.changed();
                         }
-                    });
-                    daw_ui::toolbar_group_sized_with_spacing(ui, guide_width, group_spacing, |ui| {
                         let mut click = self.project.metronome_enabled;
                         if daw_ui::quiet_toggle(ui, &mut click, "Click").on_hover_text("Metronome · Pre-count and level are in Window → Recording").changed() {
                             self.begin_edit(); self.project.metronome_enabled = click; self.edit_label = Some("Metronome".into()); self.changed();
                         }
+                    });
+                    daw_ui::measured_toolbar_group(ui, "transport_loop", group_spacing, |ui| {
                         let mut looping = self.project.loop_enabled;
                         if ui.add_enabled_ui(!recording_busy, |ui| daw_ui::quiet_toggle(ui, &mut looping, "Loop")).inner
                             .on_hover_text("Repeat the range between Start beat and End beat")

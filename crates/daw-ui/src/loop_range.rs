@@ -23,15 +23,49 @@ struct LoopDrag {
     mode: LoopDragMode,
 }
 
+/// Musical context for the strip's label. Without it the strip stays unlabelled.
+#[derive(Clone, Copy, Debug)]
+pub struct TimelineLoopLabel {
+    pub tempo: f64,
+    pub beats_per_bar: u8,
+    pub playhead: f64,
+}
+
 pub struct TimelineLoopResponse {
     pub changed: bool,
+    /// A drag began this frame; the caller can start a separate undo step.
+    pub started: bool,
     pub lane: Rect,
+    /// The visible part of the loop band, if any.
+    pub band: Option<Rect>,
     pub handles: [Option<Rect>; 2],
+}
+
+/// "1.1" for a downbeat, "9.2.3" otherwise: the ruler's form without a
+/// redundant first sixteenth.
+fn short_position(beat: f64, beats_per_bar: u8) -> String {
+    let label = crate::musical_position_label(beat, beats_per_bar);
+    match label.strip_suffix(".1") {
+        Some(short) => short.to_owned(),
+        None => label,
+    }
+}
+
+/// Short strip label: "1.1 – 9.1 · 0:17.1" (start, end, duration).
+pub fn loop_strip_label(start: f64, end: f64, tempo: f64, beats_per_bar: u8) -> String {
+    format!(
+        "{} – {} · {}",
+        short_position(start, beats_per_bar),
+        short_position(end, beats_per_bar),
+        crate::format_clock_time((end - start) * 60.0 / tempo.max(1.0), 1),
+    )
 }
 
 /// Click to place the nearest boundary. Drag an edge to resize, the band to
 /// move, or empty space to draw a new loop. Editing enables repetition. Shift
 /// bypasses the grid; the range always remains ordered and within `limit`.
+/// With `label`, the band names its range and duration, kept clear of the playhead.
+#[allow(clippy::too_many_arguments)]
 pub fn timeline_loop_editor(
     ui: &mut Ui,
     id: Id,
@@ -40,6 +74,7 @@ pub fn timeline_loop_editor(
     range: &mut TimelineLoop,
     grid: f64,
     limit: f64,
+    label: Option<TimelineLoopLabel>,
 ) -> TimelineLoopResponse {
     let before = *range;
     let bypass = ui.input(|input| input.modifiers.shift);
@@ -133,30 +168,80 @@ pub fn timeline_loop_editor(
         ui.ctx()
             .data_mut(|data| data.remove::<LoopDrag>(id.with("drag")));
     }
-    response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
-        .on_hover_text("Loop · Click to set a boundary · Drag edges to resize, the band to move, or empty space for a new range · Shift bypasses snap");
+    let started = response.drag_started() && editable;
+    let hint = "Click to set a boundary · Drag edges to resize, the band to move, or empty space for a new range · Shift bypasses snap";
+    let hover = match label {
+        Some(label) => {
+            let seconds =
+                |beat: f64| crate::duration::format_seconds(beat * 60.0 / label.tempo.max(1.0));
+            format!(
+                "Loop from {} ({}) to {} ({}) · {}\n{hint}",
+                crate::duration::musical_position(range.start, label.beats_per_bar),
+                seconds(range.start),
+                crate::duration::musical_position(range.end, label.beats_per_bar),
+                seconds(range.end),
+                seconds(range.end - range.start),
+            )
+        }
+        None => format!("Loop · {hint}"),
+    };
+    response
+        .on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
+        .on_hover_text(hover);
     let colors = theme::palette(ui.ctx());
     let painter = ui.painter_at(lane);
     painter.rect_filled(lane, 0.0, colors.bg);
     painter.line_segment(
         [lane.left_bottom(), lane.right_bottom()],
-        Stroke::new(1.0, colors.line),
+        Stroke::new(1.0_f32, colors.line),
     );
     let x = [view.x_at(lane, range.start), view.x_at(lane, range.end)];
+    let inset = crate::tokens::BORDER_WIDTH * 2.0;
     let band = Rect::from_min_max(
-        Pos2::new(x[0], lane.top() + 2.0),
-        Pos2::new(x[1], lane.bottom() - 2.0),
+        Pos2::new(x[0], lane.top() + inset),
+        Pos2::new(x[1], lane.bottom() - inset),
     );
     let color = if range.enabled {
         colors.guide
     } else {
         colors.muted
     };
-    painter.rect_filled(
-        band,
-        2.0,
-        color.gamma_multiply(if range.enabled { 0.35 } else { 0.12 }),
-    );
+    // Opaque, so the label can take a contrasting ink.
+    let fill = colors
+        .bg
+        .lerp_to_gamma(color, if range.enabled { 0.35 } else { 0.12 });
+    painter.rect_filled(band, 2.0, fill);
+    let visible = band.intersect(lane);
+    if let Some(label) = label
+        && range.enabled
+        && visible.is_positive()
+    {
+        let galley = painter.layout_no_wrap(
+            loop_strip_label(range.start, range.end, label.tempo, label.beats_per_bar),
+            egui::FontId::proportional(crate::tokens::FONT_CAPTION),
+            crate::theme::contrast_text(fill),
+        );
+        let natural = visible.left() + crate::tokens::SPACE_SM;
+        let playhead = view.x_at(lane, label.playhead);
+        // Step past the playhead only where it would cross the text.
+        let left = if (natural - crate::tokens::SPACE_XS
+            ..=natural + galley.size().x + crate::tokens::SPACE_XS)
+            .contains(&playhead)
+        {
+            playhead + crate::tokens::SPACE_SM
+        } else {
+            natural
+        };
+        if left + galley.size().x + crate::tokens::SPACE_XS <= visible.right()
+            && galley.size().y <= lane.height()
+        {
+            painter.galley(
+                Pos2::new(left, visible.center().y - galley.size().y * 0.5),
+                galley,
+                crate::theme::contrast_text(fill),
+            );
+        }
+    }
     let handles = x.map(|x| {
         let position = Pos2::new(x, lane.center().y);
         if !lane.contains(position) {
@@ -164,7 +249,7 @@ pub fn timeline_loop_editor(
         }
         let rect = Rect::from_center_size(position, Vec2::new(12.0, lane.height())).intersect(lane);
         painter.rect_filled(
-            Rect::from_center_size(position, Vec2::new(3.0, lane.height() - 4.0)),
+            Rect::from_center_size(position, Vec2::new(3.0, lane.height() - 6.0)),
             1.0,
             color,
         );
@@ -172,7 +257,9 @@ pub fn timeline_loop_editor(
     });
     TimelineLoopResponse {
         changed: *range != before,
+        started,
         lane,
+        band: visible.is_positive().then_some(visible),
         handles,
     }
 }
