@@ -488,7 +488,7 @@ fn semantic_picker<R>(
     if icon.is_some() {
         atoms.push_left(egui::Atom::custom(icon_id, egui::Vec2::splat(18.0)));
     }
-    atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(12.0)));
+    atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(13.0)));
 
     // Style only the opener, never its popup contents or following controls.
     // Avoid a nested Ui scope so horizontal_wrapped can wrap each whole control.
@@ -1085,10 +1085,10 @@ pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> Combo
         .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
 }
 
-/// The same 12 pt chevron as choice menus, so a select and a picker in one
+/// The same 13 pt chevron as choice menus, so a select and a picker in one
 /// form share their disclosure affordance.
 fn select_chevron(ui: &Ui, rect: egui::Rect, visuals: &egui::style::WidgetVisuals, _open: bool) {
-    let rect = egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(12.0));
+    let rect = egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(13.0));
     crate::Icon::ChevronDown.paint(ui.painter(), rect, visuals.fg_stroke.color);
 }
 
@@ -1501,7 +1501,7 @@ pub fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
     let frame = margin + egui::Vec2::splat(2.0 * tokens::WINDOW_BORDER_WIDTH);
     let title = tokens::CONTROL_HEIGHT + margin.y + tokens::WINDOW_BORDER_WIDTH;
     (popup_bounds(ctx).size() - frame - egui::vec2(0.0, title))
-        .max(egui::vec2(160.0, 120.0))
+        .max(egui::Vec2::splat(144.0))
         .floor()
 }
 
@@ -1538,7 +1538,7 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
                 .stroke(ctx.style().visuals.window_stroke)
                 .shadow(ctx.style().visuals.window_shadow),
         )
-        .default_width(480.0)
+        .default_width(tokens::POPUP_WIDTH_SM)
         // The height budget a body may grow into; callers may lower it.
         .default_height(body_size.y)
         .pivot(egui::Align2::CENTER_CENTER)
@@ -1594,7 +1594,9 @@ pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) ->
         // Keep a usable canvas after a display-scale/viewport change. Native
         // resize state can otherwise retain the transient tiny viewport and
         // scroll the editor's toolbar away while keeping its plot focused.
-        .min_size(popup_body_size(ctx).min(egui::vec2(640.0, 360.0)))
+        .min_size(
+            popup_body_size(ctx).min(egui::vec2(tokens::POPUP_WIDTH_MD, tokens::POPUP_WIDTH_SM)),
+        )
 }
 
 /// A dedicated drag affordance keeps row switches and editor buttons clickable.

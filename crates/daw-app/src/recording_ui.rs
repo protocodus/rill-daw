@@ -969,7 +969,7 @@ impl DawApp {
         let mut open = true;
         daw_ui::popup(title, ctx).id(egui::Id::new("recording_popup")).open(&mut open)
             .default_width(daw_ui::tokens::POPUP_WIDTH_MD).min_width(daw_ui::popup_body_size(ctx).x.min(daw_ui::tokens::POPUP_WIDTH_MD))
-            .default_height(560.0).vscroll(false).show(ctx, |ui| {
+            .default_height(610.0).vscroll(false).show(ctx, |ui| {
             let busy = self.recording_busy();
             let mut footer = daw_ui::popup_footer(ui, "recording_actions");
             let window_ui = ui;

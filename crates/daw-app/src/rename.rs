@@ -41,6 +41,9 @@ fn rect(value: &serde_json::Value) -> Option<egui::Rect> {
     ))
 }
 
+/// The narrowest inline name field: a short name stays fully visible.
+const MIN_WIDTH: f32 = 144.0;
+
 impl DawApp {
     pub(crate) fn apply_precise_clip_timing(
         &mut self,
@@ -332,7 +335,7 @@ impl DawApp {
                         .map(|rect| {
                             egui::Rect::from_min_size(
                                 rect.min + egui::vec2(4.0, 0.0),
-                                egui::vec2(rect.width().max(120.0), 20.0),
+                                egui::vec2(rect.width().max(MIN_WIDTH), daw_ui::tokens::SPACE_LG),
                             )
                         }),
                     RenameTarget::Track(id) => timeline["tracks"]
@@ -362,8 +365,8 @@ impl DawApp {
         let trailing_width = daw_ui::inline_name_editor_width(ctx, 0.0);
         let width = anchor
             .width()
-            .clamp(120.0, 320.0)
-            .min((content.width() - trailing_width).max(120.0));
+            .clamp(MIN_WIDTH, daw_ui::tokens::POPUP_WIDTH_SM)
+            .min((content.width() - trailing_width).max(MIN_WIDTH));
         let keyboard_open = daw_ui::name_keyboard_open(ctx, state_id().with("field"));
         let editor_size = daw_ui::inline_name_editor_size(ctx, width, keyboard_open);
         let position = egui::pos2(

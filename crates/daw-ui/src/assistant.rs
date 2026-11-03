@@ -493,7 +493,7 @@ fn welcome(
             let count = starters.len().max(1) as f32;
             (ui.available_width() - ui.spacing().item_spacing.x * (count - 1.0)) / count
         } else {
-            ui.available_width().min(360.0)
+            ui.available_width().min(tokens::POPUP_WIDTH_SM)
         };
         let draw_starters = |ui: &mut Ui| {
             for example in starters {

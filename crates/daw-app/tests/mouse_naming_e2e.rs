@@ -13,6 +13,18 @@ fn has(state: &Value, label: &str) -> bool {
         .any(|text| text == label)
 }
 
+/// The menu bar shows the project name followed by its muted duration.
+fn shows_duration(state: &Value, duration: &str) -> bool {
+    state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|text| {
+            text.as_str()
+                .is_some_and(|text| text.ends_with(&format!(" · {duration}")))
+        })
+}
+
 fn menu(app: &mut Harness, menu: &str, item: &str) -> Value {
     app.click(menu);
     app.click(item)
@@ -310,14 +322,14 @@ fn project_clip_and_track_names_use_pointer_text_and_supply_personalized_save_ex
         app.command(json!({"command":"system_theme", "dark":dark}));
         seed(&mut app);
         let original = app.inspect();
-        assert!(has(&original, "0:00.100"));
+        assert!(shows_duration(&original, "0:00.1"));
         menu(&mut app, "File", "Rename project…");
         let keyboard = app.click("Keyboard");
         assert_keyboard_fits(&keyboard, 800.0, 600.0);
         mouse_text(&mut app, "Blue 7!");
         let named = app.click("Apply name");
         assert_eq!(named["project"]["name"], "Blue 7!");
-        assert!(has(&named, "0:00.100"));
+        assert!(shows_duration(&named, "0:00.1"));
         for (kind, filename) in [
             ("save", "Blue 7!.rill"),
             ("wav", "Blue 7!.wav"),

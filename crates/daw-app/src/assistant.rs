@@ -887,7 +887,7 @@ impl DawApp {
         daw_ui::popup("Assistant", ctx)
             .open(&mut open)
             .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
-            .default_height(520.0)
+            .default_height(610.0)
             .vscroll(false)
             .show(ctx, |ui| {
                 let response = daw_ui::assistant(
