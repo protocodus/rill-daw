@@ -31,26 +31,15 @@ impl TimelineViewAction {
 }
 
 /// Keep ordinary zoom and selection framing visible without opening a menu.
-/// The family wraps as one unit and never changes width with the selection.
-/// Actions only describe presentation changes; the caller owns the viewport.
+/// Four quiet, same-sized controls wrap as one unit and never change width
+/// with the selection. Actions only describe presentation changes; the caller
+/// owns the viewport.
 pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> TimelineViewAction {
     let square = crate::tokens::CONTROL_HEIGHT;
-    let text_width = |label: &str| {
-        ui.painter()
-            .layout_no_wrap(
-                label.into(),
-                egui::TextStyle::Button.resolve(ui.style()),
-                ui.visuals().text_color(),
-            )
-            .size()
-            .x
-    };
-    let fit_width =
-        text_width("Fit") + 18.0 + crate::tokens::SPACE_XS + 2.0 * ui.spacing().button_padding.x;
-    let selection_width = text_width("Fit selection") + 2.0 * ui.spacing().button_padding.x;
-    let width =
-        square * 2.0 + fit_width.ceil() + selection_width.ceil() + 3.0 * crate::tokens::SPACE_XS;
-    crate::tool_group(ui, width, |ui| {
+    let width = square * 4.0 + 3.0 * crate::tokens::SPACE_XS;
+    crate::toolbar_group_sized_with_spacing(ui, width, crate::tokens::SPACE_XS, |ui| {
+        // Square targets: an 18-point glyph plus 8 points of padding each side.
+        ui.spacing_mut().button_padding.x = crate::tokens::SPACE_SM;
         let mut action = TimelineViewAction::None;
         for (symbol, label, hint, value) in [
             (
@@ -68,8 +57,8 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
         ] {
             let button = ui
                 .add_sized(
-                    egui::vec2(square, crate::tokens::CONTROL_HEIGHT),
-                    crate::button_widget(symbol).presentation(),
+                    egui::vec2(square, square),
+                    crate::button_widget(symbol).presentation().quiet(),
                 )
                 .on_hover_text(hint);
             button.widget_info(|| {
@@ -79,14 +68,28 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
                 action = value;
             }
         }
-        if crate::timeline_fit_button(ui).clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(square, square),
+                crate::IconButton::icon_only(crate::Icon::Fit, "Fit")
+                    .presentation()
+                    .quiet(),
+            )
+            .on_hover_text("Fit all content on both axes · F")
+            .clicked()
+        {
             action = TimelineViewAction::FitAll;
         }
         if ui
-            .add_enabled(
-                selection_available,
-                crate::button_widget("Fit selection").presentation(),
-            )
+            .add_enabled_ui(selection_available, |ui| {
+                ui.add_sized(
+                    egui::vec2(square, square),
+                    crate::IconButton::icon_only(crate::Icon::FitSelection, "Fit selection")
+                        .presentation()
+                        .quiet(),
+                )
+            })
+            .inner
             .on_hover_text(if selection_available {
                 "Fit the selected clips, notes or time range. Return with View → Previous view."
             } else {

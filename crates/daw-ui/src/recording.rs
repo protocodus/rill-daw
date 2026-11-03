@@ -4,11 +4,7 @@ use crate::{Icon, IconButton, text, theme};
 use egui::{Color32, Painter, Rect, Response, Stroke, StrokeKind, Ui};
 
 pub fn recording_color(ctx: &egui::Context) -> Color32 {
-    if ctx.style().visuals.dark_mode {
-        Color32::from_rgb(222, 120, 126)
-    } else {
-        Color32::from_rgb(164, 56, 67)
-    }
+    theme::palette(ctx).recording
 }
 
 pub fn record_button(ui: &mut Ui, active: bool, enabled: bool) -> Response {

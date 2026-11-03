@@ -52,6 +52,12 @@ pub struct Palette {
     pub automation: Color32,
     /// Manual takeover of automation, distinct from the saved curve.
     pub automation_override: Color32,
+    /// Armed inputs and active recording. Never used for ordinary commands.
+    pub recording: Color32,
+    /// Active Mute state; distinct from Solo so both read at a glance.
+    pub mute: Color32,
+    /// Active Solo state.
+    pub solo: Color32,
     pub track_selected: Color32,
     pub track_alternate: Color32,
     pub grid_minor: Color32,
@@ -93,6 +99,9 @@ pub const DARK: Palette = Palette {
     cursor_outline: rgb(18, 32, 23),
     automation: rgb(233, 174, 114),
     automation_override: rgb(255, 207, 155),
+    recording: rgb(222, 120, 126),
+    mute: rgb(236, 196, 94),
+    solo: rgb(140, 203, 158),
     track_selected: rgb(52, 56, 63),
     track_alternate: rgb(29, 31, 36),
     grid_minor: rgb(45, 48, 54),
@@ -128,6 +137,9 @@ pub const LIGHT: Palette = Palette {
     cursor_outline: rgb(255, 255, 255),
     automation: rgb(130, 65, 10),
     automation_override: rgb(184, 91, 18),
+    recording: rgb(164, 56, 67),
+    mute: rgb(146, 104, 8),
+    solo: rgb(49, 119, 80),
     track_selected: rgb(218, 222, 227),
     track_alternate: rgb(231, 233, 236),
     grid_minor: rgb(216, 220, 224),

@@ -68,3 +68,19 @@ pub const TIMELINE_LOOP_RULER_HEIGHT: f32 =
 pub const FONT_TRACK: f32 = FONT_BUTTON;
 pub const SWITCH_WIDTH: f32 = 34.0;
 pub const SWITCH_HEIGHT: f32 = 21.0;
+/// Form label column; longer labels truncate and reveal their full text on hover.
+pub const FORM_LABEL_WIDTH: f32 = 144.0;
+/// Ordinary form field (select, text, number) width inside a form grid.
+pub const FORM_FIELD_WIDTH: f32 = SEARCH_CHOICE_WIDTH;
+pub const POPUP_WIDTH_SM: f32 = 377.0;
+pub const POPUP_WIDTH_MD: f32 = 610.0;
+pub const POPUP_WIDTH_LG: f32 = 987.0;
+pub const MIXER_STRIP_WIDTH: f32 = 180.0;
+/// Caption gutter beside a vertical fader for its dB scale.
+pub const MIXER_SCALE_GUTTER: f32 = SPACE_XL;
+pub const MIXER_FADER_MIN: f32 = 120.0;
+/// A stereo meter beside the fader: two bars and their gap.
+pub const MIXER_METER_WIDTH: f32 = SPACE_MD;
+pub const PIANO_KEYS_WIDTH: f32 = SPACE_XL + SPACE_LG + SPACE_XS;
+pub const VELOCITY_LANE_HEIGHT: f32 = 89.0;
+pub const NOTE_RADIUS: f32 = 3.0;

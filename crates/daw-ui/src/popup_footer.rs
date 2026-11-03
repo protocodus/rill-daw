@@ -84,3 +84,15 @@ impl PopupFooter {
         InnerResponse::new(inner, footer.response())
     }
 }
+
+/// The one footer convention for dialogs. Actions are supplied right to left:
+/// the primary action first (it lands at the right edge), then Cancel/Done,
+/// then any alternative. `status` fills the left edge with read-only text or
+/// view-only toggles; settings that change the result belong in the body.
+pub fn dialog_actions<A, S>(
+    ui: &mut Ui,
+    actions: impl FnOnce(&mut Ui) -> A,
+    status: impl FnOnce(&mut Ui) -> S,
+) -> InnerResponse<(A, S)> {
+    crate::action_row(ui, actions, status)
+}

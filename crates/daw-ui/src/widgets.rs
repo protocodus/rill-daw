@@ -111,12 +111,38 @@ pub fn tool_value<T: PartialEq>(
     response
 }
 
+/// The one filled command of a toolbar or dialog footer. A solid action fill
+/// with contrasting text separates it from the tinted secondary commands.
 pub fn primary_button_widget(ui: &Ui, label: impl Into<WidgetText>) -> crate::IconButton {
-    button_widget(label).fill(
-        theme::palette(ui.ctx())
-            .panel
-            .lerp_to_gamma(theme::palette(ui.ctx()).action, 0.18),
-    )
+    let action = theme::palette(ui.ctx()).action;
+    button_widget(label)
+        .fill(action)
+        .label_color(theme::contrast_text(action))
+}
+
+/// One page-switch row for popups: quiet tabs with a glowing active border,
+/// an optional trailing slot (contextual AI, counts) and one separator with
+/// fixed spacing, so every tabbed window starts its body at the same offset.
+pub fn popup_tabs<T: PartialEq + Copy, R>(
+    ui: &mut Ui,
+    page: &mut T,
+    pages: &[(T, &str)],
+    trailing: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    let result = action_row(ui, trailing, |ui| {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        for (value, label) in pages {
+            if tab_choice(ui, *page == *value, *label).clicked() {
+                *page = *value;
+            }
+        }
+    })
+    .inner
+    .0;
+    ui.add_space(tokens::SPACE_XS);
+    ui.add(egui::Separator::default().spacing(tokens::SPACE_MD));
+    ui.add_space(tokens::SPACE_XS);
+    result
 }
 
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {

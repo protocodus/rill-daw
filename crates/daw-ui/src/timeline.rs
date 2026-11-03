@@ -190,13 +190,11 @@ fn editor_tool_families(
 ) -> Vec<Response> {
     // Stable families make a long toolbar easy to scan. Unsupported modes are
     // omitted without leaving empty groups, separators or inaccessible choices.
+    // Pointer, create, modify, copy, time: the same order in every editor, so
+    // Select and Cursor keep one place whatever else an editor supports.
     const GROUPS: &[&[EditorTool]] = &[
-        &[
-            EditorTool::Select,
-            EditorTool::Pencil,
-            EditorTool::MultiDraw,
-            EditorTool::Cursor,
-        ],
+        &[EditorTool::Select, EditorTool::Cursor],
+        &[EditorTool::Pencil, EditorTool::MultiDraw],
         &[EditorTool::Cut, EditorTool::Glue, EditorTool::Erase],
         &[EditorTool::Duplicate, EditorTool::Ghost],
         &[
@@ -206,7 +204,7 @@ fn editor_tool_families(
             EditorTool::FadeOut,
         ],
     ];
-    let mut previous: Option<Rect> = None;
+    let mut previous: Option<(Rect, usize)> = None;
     let mut responses = Vec::with_capacity(supported.len());
     for group in GROUPS {
         let tools: Vec<_> = group
@@ -219,7 +217,11 @@ fn editor_tool_families(
         }
         let group = editor_tool_family(ui, tool, &tools, &label, &hint);
         let rect = group.response.rect;
-        if let Some(previous) = previous
+        // A single tool is not a family: joining it to its neighbour with the
+        // ordinary gap reads better than fencing one button with two rules.
+        if let Some((previous, count)) = previous
+            && count > 1
+            && tools.len() > 1
             && (previous.center().y - rect.center().y).abs() < 1.0
         {
             // Paint in the existing inter-family gap after native wrapping has
@@ -235,7 +237,7 @@ fn editor_tool_families(
                 ),
             );
         }
-        previous = Some(rect);
+        previous = Some((rect, tools.len()));
         responses.extend(group.inner);
     }
     responses

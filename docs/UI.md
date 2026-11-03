@@ -183,8 +183,10 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
 | Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
 | Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
+| Forms and windows | `FORM_LABEL_WIDTH` 144, `FORM_FIELD_WIDTH` 233; `POPUP_WIDTH_SM` 377, `POPUP_WIDTH_MD` 610, `POPUP_WIDTH_LG` 987 |
+| Mixer and editors | `MIXER_STRIP_WIDTH` 180, `MIXER_SCALE_GUTTER` 34, `MIXER_FADER_MIN` 120, `MIXER_METER_WIDTH` 13; `PIANO_KEYS_WIDTH` 60, `VELOCITY_LANE_HEIGHT` 89, `NOTE_RADIUS` 3 |
 
-Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light. Blue identifies actions, pink AI, green guides, and orange automation; view controls stay gray. Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. Primary actions gain a small blurred shadow; selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
+Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light. Blue identifies commands that change the document, pink AI, green guides, and orange automation. Tools and view controls stay neutral text, so a toolbar reads as quiet text with a few blue commands; the active tool keeps its glowing border. Recording is red, an active Mute is yellow and an active Solo is green (`Palette::recording`, `mute`, `solo`). Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. The single primary action of a toolbar or dialog footer uses a solid action fill with contrasting text and a small blurred shadow; secondary commands keep the tinted fill. Selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
 
 Use the spacing scale consistently:
 
@@ -232,11 +234,12 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Purpose | API |
 | --- | --- |
 | Standard actions | `button`, `primary_button`, `primary_button_widget`, `small_button` |
+| Dialog footer actions | `dialog_actions`: right-aligned; the primary action first (rightmost), then Cancel/Done, then alternatives; status text or view-only toggles fill the left edge |
 | Secondary toolbar actions | `quiet_button`, `quiet_button_widget`, `quiet_toggle`, `quiet_action_menu`, `quiet_view_menu`, `quiet_picker_button` |
 | Searchable choice lists | `searchable_select` (query, mouse selection and empty state) |
 | Presentation commands | `view_button`, `view_button_widget` |
 | Exclusive interaction modes | `tool_value`, `IconButton::tool` |
-| Quiet page navigation | `tab_choice`, `IconButton::tab` |
+| Quiet page navigation | `tab_choice`, `IconButton::tab`, `popup_tabs` (tab row, trailing slot and one separator with fixed spacing) |
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `command_menu_button`, `menu_button` |
@@ -273,6 +276,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Track color | `color_edit`, `color_strip_at` |
 | Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `paint_track_header_sections`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_zoom_controls`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
+| Snap step shared by every timeline | `snap_choice`, `snap_label` (Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator) |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key`, `piano_velocity_marker`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length`, `paint_clip_end_label` |
 | Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline`, `CurveEdit` |
@@ -286,9 +290,10 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Bounded context titles | `text::bounded_block` |
 | Inactive clip regions | `paint_clip_tail` |
 | Surfaces | `panel`, `card`, `inset`, `component_shape`, `material_overlay_shape`, `soft_surface`, `paint_ambient`, `paint_selection_glow` |
-| Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons |
+| Toolbar icons | `Icon`, `IconButton`; ordinary button builders resolve known action icons. Menu rows are text only, so every label in a menu starts at the same x. Icon-only controls (`IconButton::icon_only`) register their accessible name through `icon_only_labels` for pointer automation |
 | On-demand windows | `popup`, `workspace_popup` |
-| Compact section label | `theme::label` |
+| Section headings and counted nouns | `text::section_heading` (sentence case, Subtitle role), `text::count`, `theme::label` |
+| Shared position and clock formats | `time::musical_position_label` ("1.1.1"), `time::format_clock_time` |
 
 `hover_text(response, text)` adds a delayed, read-only tooltip using the shared
 native popup styling. Repeated hints for one response stack without intercepting

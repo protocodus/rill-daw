@@ -107,12 +107,23 @@ impl ToolHintContext {
 /// Full instructions stay one click from the canvas without a permanent band.
 /// This popup changes no tool, selection, viewport, or document state.
 pub fn editor_tool_help(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {
-    let response = crate::quiet_button(ui, "Tool help").on_hover_text(format!(
-        "{} · {}\n{}",
-        context.label(tool),
-        tool.key().name(),
-        context.hint(tool),
-    ));
+    let response = ui
+        .scope(|ui| {
+            ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
+            ui.add_sized(
+                egui::Vec2::splat(tokens::CONTROL_HEIGHT),
+                crate::IconButton::icon_only(crate::Icon::Help, "Tool help")
+                    .presentation()
+                    .quiet(),
+            )
+        })
+        .inner
+        .on_hover_text(format!(
+            "{} · {}\n{}",
+            context.label(tool),
+            tool.key().name(),
+            context.hint(tool),
+        ));
     egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
