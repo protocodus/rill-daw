@@ -328,7 +328,7 @@ fn effects_routing_and_mixer_controls_update_the_same_channel_graph() {
 
     let state = menu(&mut app, "Window", "Routing");
     assert_only_popup(&state, "routing");
-    menu(&mut app, "+ Send", "Bus 1");
+    menu(&mut app, "Add send…", "Bus 1");
     let state = app.click("Pre");
     assert_eq!(state["project"]["tracks"][0]["sends"][0]["target_bus"], bus);
     assert_eq!(state["project"]["tracks"][0]["sends"][0]["pre_fader"], true);

@@ -249,7 +249,12 @@ impl<'a> Knob<'a> {
     }
 
     fn adjusted_value(&self, value: f64, fraction: f64) -> f64 {
-        let span = self.scale_value(*self.range.end()) - self.scale_value(*self.range.start());
+        let mut span = self.scale_value(*self.range.end()) - self.scale_value(*self.range.start());
+        if self.perceptual_gain {
+            // Gain dials move at the fader's rate (silence to +3.5 dB per
+            // full gesture), however far above unity their range extends.
+            span = span.min(1.0);
+        }
         self.unscale_value(self.scale_value(value) + fraction * span)
     }
 

@@ -1,7 +1,4 @@
-use crate::{
-    app::{ChannelDestination, DawApp},
-    theme::*,
-};
+use crate::app::{ChannelDestination, DawApp};
 use daw_core::*;
 use daw_ui as widgets;
 use eframe::egui;
@@ -258,227 +255,9 @@ impl DawApp {
                 let window_ui = ui;
                 let ui = footer.body();
                 widgets::scroll_body(ui, "routing_body", |ui| {
-                    label(ui, "SENDS");
-                    let mut remove = None;
-                    let mut changed = false;
-                    let track = self.project.track_mut(track_id).unwrap();
-                    for (index, send) in track.sends.iter_mut().enumerate() {
-                        ui.push_id(send.target_bus, |ui| {
-                            widgets::card(ui.ctx()).show(ui, |ui| {
-                                widgets::action_row(
-                                    ui,
-                                    |ui| {
-                                        if widgets::small_button(ui, "×")
-                                            .on_hover_text("Remove send")
-                                            .clicked()
-                                        {
-                                            remove = Some(index);
-                                        }
-                                    },
-                                    |ui| {
-                                        widgets::text::truncated(
-                                            ui,
-                                            widgets::text::TextRole::Label,
-                                            buses
-                                                .iter()
-                                                .find(|bus| bus.0 == send.target_bus)
-                                                .map(|bus| bus.1.as_str())
-                                                .unwrap_or("Unavailable bus"),
-                                        );
-                                    },
-                                );
-                                ui.horizontal(|ui| {
-                                    let parameter = AutomationParameter::SendGain {
-                                        bus: send.target_bus,
-                                    };
-                                    let state = automation.get(&send.target_bus).copied();
-                                    let mut gain = state
-                                        .filter(|(_, status, _)| {
-                                            *status != daw_ui::AutomationState::Bypassed
-                                        })
-                                        .map(|(_, _, value)| parameter.denormalize(value))
-                                        .unwrap_or(send.gain);
-                                    let destination = buses
-                                        .iter()
-                                        .find(|bus| bus.0 == send.target_bus)
-                                        .map(|bus| bus.1.as_str())
-                                        .unwrap_or("Unavailable bus");
-                                    let name = format!("{track_name} → {destination} · Send level");
-                                    let control = daw_ui::AutomationControl::Send {
-                                        track: track_id,
-                                        bus: send.target_bus,
-                                    };
-                                    // Both native detail rows fit the supported minimum
-                                    // width. Reserve their measured height before the ring
-                                    // so visual order and native Tab order stay the same.
-                                    let font = egui::TextStyle::Button.resolve(ui.style());
-                                    let row_height = (ui.fonts_mut(|fonts| fonts.row_height(&font))
-                                        + 2.0 * ui.spacing().button_padding.y)
-                                        .max(widgets::tokens::CONTROL_HEIGHT);
-                                    let density = ui.ctx().pixels_per_point();
-                                    let row_height = (row_height * density).ceil() / density;
-                                    let send_row_height = (2.0 * row_height + ui.spacing().item_spacing.y)
-                                        .max(widgets::Knob::compact_height(64.0));
-                                    ui.set_row_height(send_row_height);
-                                    let response = ui.push_id("send_level_knob", |ui| {
-                                        ui.allocate_ui_with_layout(
-                                            egui::vec2(64.0, send_row_height),
-                                            egui::Layout::left_to_right(egui::Align::Center),
-                                            |ui| ui.add(
-                                                widgets::knob(&mut gain, parameter.range())
-                                                    .compact()
-                                                    .diameter(64.0)
-                                                    .perceptual_gain()
-                                                    .clamping(egui::SliderClamping::Edits)
-                                                    .automation(state.map(|(_, status, _)| status))
-                                                    .suffix("×")
-                                                    .text("Level"),
-                                            ),
-                                        ).inner
-                                    }).inner.on_hover_text(format!(
-                                        "{name}: {}×\nDrag up/right to increase; down/left to decrease. Shift for fine adjustment. Click the value for exact entry.",
-                                        daw_ui::parameter_value_text(f64::from(gain)),
-                                    ));
-                                    let (context_action, context_exact) =
-                                        daw_ui::automatable_parameter_value_context_named(
-                                            ui,
-                                            &response,
-                                            control,
-                                            state.map(|(lane, status, _)| (lane, status)),
-                                            f64::from(gain),
-                                            0.0..=16.0,
-                                            "×",
-                                            &name,
-                                        );
-                                    let details = ui.vertical(|ui| {
-                                        let entry = ui.horizontal_wrapped(|ui| {
-                                    widgets::text::label(ui, "Level");
-                                    daw_ui::automatable_parameter_value_button(
-                                            ui,
-                                            "send_exact",
-                                            format!("{}×", daw_ui::parameter_value_text(f64::from(gain))),
-                                            control,
-                                            state.map(|(lane, status, _)| (lane, status)),
-                                            f64::from(gain),
-                                            0.0..=16.0,
-                                            "×",
-                                            &name,
-                                        )
-                                        }).inner;
-                                        ui.horizontal_wrapped(|ui| {
-                                    changed |=
-                                        widgets::radio_value(ui, &mut send.pre_fader, true, "Pre")
-                                            .on_hover_text(
-                                                "Send after inserts, before track gain and pan",
-                                            )
-                                            .changed();
-                                    changed |= widgets::radio_value(
-                                        ui,
-                                        &mut send.pre_fader,
-                                        false,
-                                        "Post",
-                                    )
-                                    .on_hover_text("Send after inserts, track gain, and pan")
-                                    .changed();
-                                    {
-                                        daw_ui::action_menu(
-                                            ui,
-                                            state
-                                                .map(|(_, status, _)| status.rich_label(ui.ctx()))
-                                                .unwrap_or_else(|| {
-                                                    egui::RichText::new("Automation")
-                                                }),
-                                            |ui| {
-                                                if let Some(action) =
-                                                    daw_ui::automatable_menu_contents(
-                                                        ui,
-                                                        daw_ui::AutomationControl::Send {
-                                                            track: track_id,
-                                                            bus: send.target_bus,
-                                                        },
-                                                        state.map(|(lane, status, _)| {
-                                                            (lane, status)
-                                                        }),
-                                                    )
-                                                {
-                                                    automation_navigation = Some(action);
-                                                }
-                                            },
-                                        );
-                                    }
-                                        });
-                                        entry
-                                    });
-                                    let (action, exact) = details.inner;
-                                    let action = action.or(context_action);
-                                    let exact = exact.or(context_exact);
-                                    if let Some(action) = action {
-                                        automation_navigation = Some(action);
-                                    }
-                                    if let Some(value) = exact {
-                                        gain = value as f32;
-                                    }
-                                    if response.changed() || exact.is_some() {
-                                        send.gain = gain;
-                                        changed = true;
-                                        automation_overrides.push((
-                                            AutomationTarget {
-                                                track: track_id,
-                                                parameter,
-                                            },
-                                            parameter.normalize(gain),
-                                        ));
-                                    }
-                                });
-                            });
-                        });
-                    }
-                    if let Some(index) = remove {
-                        track.sends.remove(index);
-                        changed = true;
-                    }
-                    let mut add_bus = None;
-                    widgets::menu_button(ui, "+ Send", |ui| {
-                        let available: Vec<_> = buses
-                            .iter()
-                            .filter(|(id, _)| {
-                                eligible.contains(id)
-                                    && !track.sends.iter().any(|send| send.target_bus == *id)
-                            })
-                            .collect();
-                        if available.is_empty() {
-                            ui.label("No eligible buses");
-                        }
-                        for (id, name) in available {
-                            if widgets::button(ui, name).clicked() {
-                                add_bus = Some(*id);
-                                ui.close();
-                            }
-                        }
-                        ui.separator();
-                        if widgets::button(ui, "+ Bus and send").clicked() {
-                            create_bus_send = true;
-                            ui.close();
-                        }
-                    })
-                    .response
-                    .on_hover_text("Send to a bus; set its effect to 100% wet for a shared return");
-                    if changed {
-                        for (target, value) in automation_overrides.drain(..) {
-                            self.override_automated_parameter(target, value);
-                        }
-                        self.changed();
-                    }
-                    if let Some(bus) = add_bus {
-                        let result = self.project.add_send(track_id, bus, 0.25, false);
-                        if result.is_ok() {
-                            self.changed();
-                        }
-                        self.message(result, "Send added");
-                    }
-
-                ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
-                    label(ui, "OUTPUT");
+                    // Signal order, as on the strip: the main output, then sends
+                    // (pre-fader above post-fader).
+                    widgets::text::section_heading(ui, "Output");
                     let current = self.project.track(track_id).unwrap().output_bus;
                     let mut output = current;
                     widgets::select(
@@ -505,8 +284,186 @@ impl DawApp {
                         }
                         self.message(result, "Output routing updated");
                     }
+                    ui.add_space((widgets::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+                    widgets::text::section_heading(ui, "Sends");
+                    let mut remove = None;
+                    let mut changed = false;
+                    let track = self.project.track_mut(track_id).unwrap();
+                    let mut order: Vec<usize> = (0..track.sends.len()).collect();
+                    order.sort_by_key(|index| !track.sends[*index].pre_fader);
+                    for index in order {
+                        let send = &mut track.sends[index];
+                        ui.push_id(send.target_bus, |ui| {
+                            let parameter = AutomationParameter::SendGain { bus: send.target_bus };
+                            let state = automation.get(&send.target_bus).copied();
+                            let mut gain = state
+                                .filter(|(_, status, _)| *status != daw_ui::AutomationState::Bypassed)
+                                .map(|(_, _, value)| parameter.denormalize(value))
+                                .unwrap_or(send.gain);
+                            let destination = buses
+                                .iter()
+                                .find(|bus| bus.0 == send.target_bus)
+                                .map(|bus| bus.1.as_str())
+                                .unwrap_or("Unavailable bus");
+                            let name = format!("{track_name} → {destination} · Send level");
+                            let control = daw_ui::AutomationControl::Send {
+                                track: track_id,
+                                bus: send.target_bus,
+                            };
+                            let lane = state.map(|(lane, status, _)| (lane, status));
+                            // The top of the send range in dB, rounded for display (16× is +24.08 dB).
+                            let top = (f64::from(daw_ui::channel_gain_to_db(*parameter.range().end())) * 100.0).round() / 100.0;
+                            widgets::parameter_row(ui, |ui| {
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(SEND_NAME_WIDTH, widgets::tokens::PARAMETER_ROW_HEIGHT),
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.set_min_width(SEND_NAME_WIDTH);
+                                        widgets::text::truncated(ui, widgets::text::TextRole::Label, destination)
+                                    },
+                                );
+                                let response = ui
+                                    .add(
+                                        widgets::knob(&mut gain, parameter.range())
+                                            .compact()
+                                            .diameter(SEND_KNOB_DIAMETER)
+                                            .perceptual_gain()
+                                            .clamping(egui::SliderClamping::Edits)
+                                            .automation(state.map(|(_, status, _)| status))
+                                            .text("Send level"),
+                                    )
+                                    .on_hover_text(format!(
+                                        "{name}: {}\nDrag up/right to increase; down/left to decrease. Shift for fine adjustment. Right-click for exact entry.",
+                                        daw_ui::channel_gain_label(gain),
+                                    ));
+                                let (context_action, context_exact) =
+                                    daw_ui::automatable_parameter_value_context_named(
+                                        ui,
+                                        &response,
+                                        control,
+                                        lane,
+                                        f64::from(daw_ui::channel_gain_to_db(gain)),
+                                        -60.0..=top,
+                                        "dB",
+                                        &name,
+                                    );
+                                let (action, exact) = daw_ui::automatable_parameter_value_button(
+                                    ui,
+                                    "send_exact",
+                                    send_level_text(gain),
+                                    control,
+                                    lane,
+                                    f64::from(daw_ui::channel_gain_to_db(gain)),
+                                    -60.0..=top,
+                                    "dB",
+                                    &name,
+                                );
+                                if widgets::selectable(ui, send.pre_fader, "Pre")
+                                    .on_hover_text("Send after inserts, before track gain and pan")
+                                    .clicked()
+                                    && !send.pre_fader
+                                {
+                                    send.pre_fader = true;
+                                    changed = true;
+                                }
+                                if widgets::selectable(ui, !send.pre_fader, "Post")
+                                    .on_hover_text("Send after inserts, track gain, and pan")
+                                    .clicked()
+                                    && send.pre_fader
+                                {
+                                    send.pre_fader = false;
+                                    changed = true;
+                                }
+                                daw_ui::action_menu(
+                                    ui,
+                                    state
+                                        .map(|(_, status, _)| status.rich_label(ui.ctx()))
+                                        .unwrap_or_else(|| egui::RichText::new("Automation")),
+                                    |ui| {
+                                        if let Some(action) = daw_ui::automatable_menu_contents(ui, control, lane) {
+                                            automation_navigation = Some(action);
+                                        }
+                                    },
+                                );
+                                if ui
+                                    .add(widgets::IconButton::icon_only(widgets::Icon::Delete, "Remove send").quiet())
+                                    .on_hover_text(format!("Remove the send to {destination}"))
+                                    .clicked()
+                                {
+                                    remove = Some(index);
+                                }
+                                if let Some(action) = action.or(context_action) {
+                                    automation_navigation = Some(action);
+                                }
+                                if let Some(db) = exact.or(context_exact) {
+                                    gain = daw_ui::channel_gain_from_db(db as f32);
+                                }
+                                if response.changed() || exact.or(context_exact).is_some() {
+                                    send.gain = gain;
+                                    changed = true;
+                                    automation_overrides.push((
+                                        AutomationTarget { track: track_id, parameter },
+                                        parameter.normalize(gain),
+                                    ));
+                                }
+                            });
+                        });
+                    }
+                    if let Some(index) = remove {
+                        track.sends.remove(index);
+                        changed = true;
+                    }
+                    let mut add_bus = None;
+                    widgets::menu_button(ui, "Add send…", |ui| {
+                        let available: Vec<_> = buses
+                            .iter()
+                            .filter(|(id, _)| {
+                                eligible.contains(id)
+                                    && !track.sends.iter().any(|send| send.target_bus == *id)
+                            })
+                            .collect();
+                        if available.is_empty() {
+                            ui.label("No eligible buses");
+                        }
+                        for (id, name) in available {
+                            if widgets::button(ui, name).clicked() {
+                                add_bus = Some(*id);
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        if widgets::button(ui, "New bus and send").clicked() {
+                            create_bus_send = true;
+                            ui.close();
+                        }
+                    })
+                    .response
+                    .on_hover_text("Send to a bus; set its effect to 100% wet for a shared return");
+                    if changed {
+                        for (target, value) in automation_overrides.drain(..) {
+                            self.override_automated_parameter(target, value);
+                        }
+                        self.changed();
+                    }
+                    if let Some(bus) = add_bus {
+                        let result = self.project.add_send(track_id, bus, 0.25, false);
+                        if result.is_ok() {
+                            self.changed();
+                        }
+                        self.message(result, "Send added");
+                    }
                 });
-                footer.show(window_ui, |ui| { create_send = widgets::button(ui, "Create send track").clicked(); });
+                footer.show(window_ui, |ui| {
+                    widgets::dialog_actions(
+                        ui,
+                        |ui| {
+                            create_send = widgets::button(ui, "New return with effect…")
+                                .on_hover_text("Choose an effect for a new bus and send to it")
+                                .clicked();
+                        },
+                        |_| {},
+                    );
+                });
             });
         if !open {
             self.routing_open = false;
@@ -528,6 +485,19 @@ impl DawApp {
             }
             self.message(result, "Bus send added");
         }
+    }
+}
+
+/// Destination names lead each send row; the knob ring sits in a 55 pt row.
+const SEND_NAME_WIDTH: f32 = 89.0;
+const SEND_KNOB_DIAMETER: f32 = 55.0;
+
+/// The send's level on the console's dB vocabulary ("−12.0 dB", "−∞ dB").
+fn send_level_text(gain: f32) -> String {
+    if gain > 0.0 {
+        format!("{:.1} dB", 20.0 * gain.log10()).replace('-', "−")
+    } else {
+        "−∞ dB".to_owned()
     }
 }
 

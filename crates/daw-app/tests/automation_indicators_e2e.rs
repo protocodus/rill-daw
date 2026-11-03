@@ -99,8 +99,12 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
             .find(|channel| channel["track"] == source)
             .unwrap()["source_label"];
         assert!(
-            source_kind["max"][1].as_f64().unwrap() - source_kind["min"][1].as_f64().unwrap()
-                < 20.0,
+            mixer["label_rects"].as_array().unwrap().iter().any(|text| {
+                text["text"].as_str().unwrap().starts_with("Audio")
+                    && text["max"][1].as_f64().unwrap() - text["min"][1].as_f64().unwrap() < 20.0
+                    && text["min"][0].as_f64().unwrap() >= source_kind["min"][0].as_f64().unwrap()
+                    && text["max"][1].as_f64().unwrap() <= source_kind["max"][1].as_f64().unwrap()
+            }),
             "Automation status must not wrap the Audio source kind"
         );
         app.click("Source");
@@ -123,7 +127,7 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
         app.click("Mixer");
         app.click("Source");
         let routing = app.click("Routing");
-        let level_y = center(label(&routing, "Level")).1;
+        let (room_x, room_y) = center(label(&routing, "Room"));
         let numeric = routing["label_rects"]
             .as_array()
             .unwrap()
@@ -131,12 +135,13 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
             .filter(|rect| {
                 rect["text"]
                     .as_str()
-                    .and_then(|text| text.strip_suffix('×'))
-                    .and_then(|text| text.parse::<f64>().ok())
+                    .and_then(|text| text.strip_suffix(" dB"))
+                    .and_then(|text| text.replace('−', "-").parse::<f64>().ok())
                     .is_some()
-                    && (center(rect).1 - level_y).abs() < 4.0
+                    && center(rect).0 > room_x
+                    && (center(rect).1 - room_y).abs() < 4.0
             })
-            .max_by(|a, b| center(a).0.total_cmp(&center(b).0))
+            .min_by(|a, b| center(a).0.total_cmp(&center(b).0))
             .unwrap_or_else(|| panic!("No send value: {}", routing["visible_labels"]));
         // Send readouts now open deliberate exact entry with a single click.
         let (x, y) = center(numeric);
@@ -144,11 +149,15 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
         label(&exact, "Source → Room · Send level");
         app.click("123");
         app.click("Clear");
-        for key in ["0", ".", "4"] {
-            app.click(key);
-        }
+        // +6 dB; the lane stores the send gain normalized over 0..16.
+        app.click("6");
         let changed = app.click("Apply value");
-        assert!((lane(&changed, send)["override_value"].as_f64().unwrap() - 0.025).abs() < 1e-6);
+        assert!(
+            (lane(&changed, send)["override_value"].as_f64().unwrap()
+                - 10_f64.powf(6.0 / 20.0) / 16.0)
+                .abs()
+                < 1e-5
+        );
         label(&changed, "Overridden");
         let resumed = menu(&mut app, "Overridden", "Resume automation");
         assert!(lane(&resumed, send)["override_value"].is_null());

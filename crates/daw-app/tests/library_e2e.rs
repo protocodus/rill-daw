@@ -203,7 +203,7 @@ fn effect_insertion_send_returns_drag_reorder_and_archive_recall_preserve_identi
     // The routing popup can enter the same send-creation browser directly.
     app.click("New audio");
     menu(&mut app, "Window", "Routing");
-    let library = app.click("Create send track");
+    let library = app.click("New return with effect…");
     assert_eq!(library["popups"]["library"], true);
     assert!(visible(&library, "Search effects"));
     let back = app.key("Escape");
@@ -313,7 +313,7 @@ fn send_browser_has_one_contextual_action_and_library_management_is_on_demand() 
     let mut app = Harness::with_vst_path(fixture.path());
     menu(&mut app, "Track", "Add audio track");
     menu(&mut app, "Window", "Routing");
-    app.click("Create send track");
+    app.click("New return with effect…");
     app.click("Search effects");
     app.command(json!({"command":"text","text":"Rill Fixture FX"}));
     common::wait_library_device(&mut app, "Rill Fixture FX");
