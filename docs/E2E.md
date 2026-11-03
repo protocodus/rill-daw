@@ -1115,7 +1115,8 @@ AI, guide and automation colors in both appearances, retaining user colors in
 saved songs. `mixer_sections_e2e` checks painted processing sections and direct
 mouse editing through their frames.
 
-`popup_interactions_e2e` resizes 11 real utility forms in both directions, sweeps
+`popup_interactions_e2e` resizes 11 real utility forms in both directions (width
+follows the drag; height keeps hugging the content), sweeps
 mouse hover without allowing geometry changes, checks native close-icon color
 feedback, and closes with the mouse. It runs in both themes and display densities.
 `library_category_search_e2e` types category queries, selects results, clears
@@ -1127,4 +1128,13 @@ real dialog bottom in large and compact viewports, including generator mode
 changes. `popup_interactions_e2e` also checks each utility's actions, including the
 Assistant, before and after mouse resizing. The shared `popup_footer` test checks
 scrolling body growth, wrapped actions, resizing and real clicks without moving
-footer targets.
+footer targets. `popup_footer_e2e` also checks that Setup, About and Join hug
+their content (Join is titled **Join clips · <track>**), that the primary action is rightmost beside Cancel in one row, and that
+form labels share one column. `channel_layout_e2e` checks that the Effects window
+shrinks back to its content after the inserts are removed. `crossfade_e2e` checks
+that the Crossfade window carries the edited clip in its title.
+
+`menu_order_e2e` checks the workflow order of the File, Edit (including the
+Edit ▸ Audio submenu), Track and Window menus, the right-aligned muted shortcut
+column, Track ▸ Delete track, the Library window title, and the menu bar's
+centered project name with duration and the AI button at the right edge.

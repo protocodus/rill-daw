@@ -159,10 +159,19 @@ pub fn assistant(
     if options.failure.is_none() {
         state.reset_failure_reveal();
     }
-    crate::action_row(
+    // Pages lead, as in every tabbed popup; the scope and its live context
+    // open the body beneath the tab rule.
+    crate::popup_tabs(
         ui,
+        &mut state.page,
+        &[
+            (AssistantPage::Conversation, "Conversation"),
+            (AssistantPage::Examples, "Examples"),
+            (AssistantPage::Tools, "Tools"),
+            (AssistantPage::Tips, "Tips"),
+        ],
         |ui| {
-            crate::menu_button(ui, "More", |ui| {
+            crate::quiet_action_menu(ui, "More", |ui| {
                 let reuse = ui
                     .add_enabled_ui(
                         options.can_reuse && prompt.is_empty() && !options.busy,
@@ -176,7 +185,6 @@ pub fn assistant(
                 .clicked()
                 {
                     reuse_last = true;
-                    state.page = AssistantPage::Conversation;
                     ui.close();
                 }
                 let can_reset = !options.busy
@@ -205,12 +213,13 @@ pub fn assistant(
                 })
                 .clicked();
         },
-        |ui| {
-            let scope = format!("Scope · {}", bounded(options.scope, 2_048));
-            text::truncated(ui, text::TextRole::Label, scope)
-                .on_hover_text(bounded(options.context, 2_048));
-        },
     );
+    if reuse_last {
+        state.page = AssistantPage::Conversation;
+    }
+    let scope = format!("Scope · {}", bounded(options.scope, 2_048));
+    text::truncated(ui, text::TextRole::Label, scope)
+        .on_hover_text(bounded(options.context, 2_048));
     // Status shares the header's context line. Keeping it out of the fixed
     // composer leaves room for readable diagnostics on a short display.
     // The complete musical context remains available on the scope label.
@@ -234,22 +243,7 @@ pub fn assistant(
     } else if !compact_layout && !options.context.is_empty() {
         text::truncated(ui, text::TextRole::Note, bounded(options.context, 2_048));
     }
-    ui.horizontal_wrapped(|ui| {
-        for (page, label) in [
-            (AssistantPage::Conversation, "Conversation"),
-            (AssistantPage::Examples, "Examples"),
-            (AssistantPage::Tools, "Tools"),
-            (AssistantPage::Tips, "Tips"),
-        ] {
-            if crate::tab_choice(ui, state.page == page, label).clicked() {
-                state.page = page;
-            }
-        }
-    });
-    if !compact_layout {
-        ui.separator();
-    }
-    ui.add_space(tokens::SPACE_SM);
+    crate::section_gap(ui);
 
     // Browsing needs room for choices, while the conversation benefits from a
     // taller composer. A short popup keeps one editable line and scrolls the
@@ -498,7 +492,7 @@ fn welcome(
             let count = starters.len().max(1) as f32;
             (ui.available_width() - ui.spacing().item_spacing.x * (count - 1.0)) / count
         } else {
-            ui.available_width().min(360.0)
+            ui.available_width().min(tokens::POPUP_WIDTH_SM)
         };
         let draw_starters = |ui: &mut Ui| {
             for example in starters {

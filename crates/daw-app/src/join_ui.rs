@@ -129,19 +129,23 @@ impl DawApp {
         let mut open = true;
         let mut submit = None;
         let mut cancel = false;
-        daw_ui::popup("Join clips", ctx)
+        let title = self
+            .selected_track
+            .and_then(|id| self.project.track(id))
+            .map(|track| format!("Join clips · {}", track.name))
+            .unwrap_or_else(|| "Join clips".into());
+        daw_ui::popup(title, ctx)
+            .id(egui::Id::new("join_clips"))
             .open(&mut open)
-            .default_width(440.0)
-            .default_height(520.0)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
             .vscroll(false)
             .show(ctx, |ui| {
-                ui.set_min_width(400.0);
+                ui.set_min_width(daw_ui::tokens::POPUP_WIDTH_SM);
                 let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {
                     daw_ui::text::note(ui, "Select an audio or MIDI track.");
                     return;
                 };
                 let busy = self.join_ui.pending();
-                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
                 let mut footer = daw_ui::popup_footer(ui, "join_actions");
                 let window_ui = ui;
                 let ui = footer.body();
@@ -201,42 +205,47 @@ impl DawApp {
                 } else {
                     None
                 };
+                let count = ids.len();
                 footer.show(window_ui, |ui| {
-                    if let Some(error) = &error {
-                        daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
-                            .on_hover_text(error);
-                    } else {
-                        daw_ui::text::note(ui, format!("{} clips → one editable clip", ids.len()));
-                    }
-                    // Reserve the activity row so asynchronous completion cannot
-                    // move Join/Cancel between pointer-down and pointer-up.
-                    ui.horizontal(|ui| {
-                        ui.set_min_height(daw_ui::tokens::COMPACT_HEIGHT);
-                        if busy {
-                            ui.spinner();
-                            daw_ui::text::note(
-                                ui,
-                                if self.join_ui.canceling() {
-                                    "Canceling…"
-                                } else {
-                                    "Rendering audio…"
-                                },
-                            );
-                        }
-                    });
-                    ui.add_space(daw_ui::tokens::SPACE_SM);
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add_enabled(
-                                !busy && error.is_none(),
-                                daw_ui::primary_button_widget(ui, "Join"),
-                            )
-                            .clicked()
-                        {
-                            submit = Some((track.id, ids, track.kind));
-                        }
-                        cancel = daw_ui::button(ui, "Cancel").clicked();
-                    });
+                    // Status shares the action row, so asynchronous completion
+                    // never moves Join/Cancel between pointer-down and pointer-up.
+                    daw_ui::dialog_actions(
+                        ui,
+                        |ui| {
+                            if ui
+                                .add_enabled(
+                                    !busy && error.is_none(),
+                                    daw_ui::dialog_primary_widget(ui, "Join"),
+                                )
+                                .clicked()
+                            {
+                                submit = Some((track.id, ids, track.kind));
+                            }
+                            cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
+                        },
+                        |ui| {
+                            if busy {
+                                ui.spinner();
+                                daw_ui::text::note(
+                                    ui,
+                                    if self.join_ui.canceling() {
+                                        "Canceling…"
+                                    } else {
+                                        "Rendering audio…"
+                                    },
+                                );
+                            } else if let Some(error) = &error {
+                                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, error)
+                                    .on_hover_text(error);
+                            } else {
+                                daw_ui::text::truncated(
+                                    ui,
+                                    daw_ui::text::TextRole::Note,
+                                    format!("{count} clips → one editable clip"),
+                                );
+                            }
+                        },
+                    );
                 });
             });
         self.join_open &= open && !cancel;

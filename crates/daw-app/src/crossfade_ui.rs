@@ -36,18 +36,23 @@ impl DawApp {
                 ))
             });
         let mut open = true;
-        daw_ui::popup("Crossfade", ctx).open(&mut open).default_width(460.0).show(ctx, |ui| {
+        let title = selection
+            .as_ref()
+            .map(|(_, _, _, name, _)| format!("Crossfade · {name}"))
+            .unwrap_or_else(|| "Crossfade".into());
+        daw_ui::popup(title, ctx).id(egui::Id::new("crossfade")).open(&mut open).default_width(daw_ui::tokens::POPUP_WIDTH_SM).vscroll(false).show(ctx, |ui| {
+            // A shrinking scroll body lets the window hug the editor.
+            daw_ui::scroll_body(ui, "crossfade_body", |ui| {
             let Some((track, clip, original, name, overlap)) = &selection else {
                 daw_ui::text::note(ui, "Select an audio clip.");
                 return;
             };
-            daw_ui::text::subtitle(ui, name);
             if let Some((outgoing, _, _)) = overlap {
                 daw_ui::text::note(ui, format!("{outgoing} → {name}"));
             } else {
                 daw_ui::text::note(ui, "No earlier clip overlaps this start.");
             }
-            ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+            daw_ui::section_gap(ui);
             let mut enabled = original.is_some();
             daw_ui::switch(ui, &mut enabled, "Enable crossfade")
                 .on_hover_text("Blend from the preceding clip at this clip’s start. Disabled: switch immediately.");
@@ -57,17 +62,27 @@ impl DawApp {
             });
             ui.add_enabled_ui(enabled, |ui| {
                 let duration = daw_ui::form_grid(ui, "crossfade_duration", |ui| {
-                    let label = daw_ui::text::label(ui, "Duration");
+                    let label = daw_ui::form_label(ui, "Duration");
                     let response = ui.add(daw_ui::number(&mut config.duration).speed(0.05).range(0.001..=MAX_BEAT).suffix(" beats"))
                         .labelled_by(label.id)
                         .on_hover_text("Automatically limited to the available overlap and next clip takeover.");
                     ui.end_row();
+                    // Presets are a parameter choice; a dragged curve reads "Custom".
+                    daw_ui::form_label(ui, "Curve");
+                    ui.horizontal(|ui| {
+                        for (preset, name) in [(CrossfadeCurve::LINEAR, "Linear"), (CrossfadeCurve::SMOOTH, "Smooth")] {
+                            if daw_ui::selectable(ui, config.curve == preset, name).clicked() { config.curve = preset; }
+                        }
+                        if config.curve != CrossfadeCurve::LINEAR && config.curve != CrossfadeCurve::SMOOTH {
+                            daw_ui::text::note(ui, "Custom");
+                        }
+                    });
+                    ui.end_row();
                     response
                 }).inner;
-                ui.horizontal(|ui| {
-                    if daw_ui::button(ui, "Linear").clicked() { config.curve = CrossfadeCurve::LINEAR; }
-                    if daw_ui::button(ui, "Smooth").clicked() { config.curve = CrossfadeCurve::SMOOTH; }
-                });
+                if let Some((_, start, end)) = overlap {
+                    daw_ui::text::note(ui, format!("Effective overlap: {:.2} beats", config.duration.min(end - start)));
+                }
                 let mut curve = daw_ui::CrossfadeCurve { control1: config.curve.control1, control2: config.curve.control2 };
                 let editor = daw_ui::crossfade_editor(ui, egui::Id::new(("crossfade", track, clip)), &mut curve);
                 ctx.data_mut(|data| data.insert_temp(egui::Id::new("crossfade_curve_focus"), editor.focus_ids));
@@ -78,13 +93,6 @@ impl DawApp {
                     "effective": overlap.as_ref().map(|(_, start, end)| [*start, (*start + config.duration).min(*end)]),
                 })));
             });
-            if let Some((_, start, end)) = overlap {
-                if enabled {
-                    daw_ui::text::note(ui, format!("Effective overlap: {:.2} beats", config.duration.min(end - start)));
-                } else {
-                    daw_ui::text::note(ui, "Effective overlap: 0.00 beats (disabled)");
-                }
-            }
             let next = enabled.then_some(config);
             if next != *original {
                 self.begin_edit();
@@ -93,6 +101,7 @@ impl DawApp {
                     Err(error) => self.message(Err(error), ""),
                 }
             }
+            });
         });
         self.crossfade_open &= open;
     }

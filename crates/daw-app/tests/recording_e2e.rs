@@ -327,7 +327,8 @@ fn recorded_c3_d3_takes_comp_in_four_sections_with_exact_export_and_spline_cross
     }
     // The chosen C3 region begins at beat 2. Adjust only its incoming spline
     // with a real handle drag, then verify that all other samples stay intact.
-    let popup = menu(&mut app, "Edit", "Crossfade…");
+    menu(&mut app, "Edit", "Audio");
+    let popup = app.click("Crossfade…");
     let handle = &popup["crossfade"]["handles"][0];
     let plot = &popup["crossfade"]["plot"];
     let x = (handle["min"][0].as_f64().unwrap() + handle["max"][0].as_f64().unwrap()) * 0.5;

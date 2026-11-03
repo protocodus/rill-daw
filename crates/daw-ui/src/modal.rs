@@ -27,23 +27,28 @@ pub(crate) fn modal_with_title_rows<R>(
 ) -> ModalResponse<R> {
     let painter = ctx.layer_painter(egui::Modal::default_area(id).layer());
     crate::backdrop_blur::paint_modal_blur(ctx, &painter);
-    let width = (ctx.content_rect().width() - 4.0 * tokens::POPUP_MARGIN).clamp(180.0, 460.0);
+    let width = (ctx.content_rect().width() - 4.0 * tokens::POPUP_MARGIN)
+        .clamp(tokens::FORM_LABEL_WIDTH, tokens::POPUP_WIDTH_SM);
     egui::Modal::new(id)
         .backdrop_color(crate::theme::palette(ctx).popup_scrim)
         .frame(
             panel(ctx)
-                .inner_margin(tokens::POPUP_MARGIN)
+                .inner_margin(tokens::WINDOW_MARGIN)
                 .stroke(ctx.style().visuals.window_stroke)
                 .shadow(ctx.style().visuals.window_shadow),
         )
         .show(ctx, |ui| {
             ui.set_width(width);
-            if let Some(rows) = title_rows {
-                text::bounded_block(ui, text::TextRole::Title, title, rows);
-            } else {
-                text::title(ui, title);
-            }
-            ui.add_space(tokens::SPACE_MD);
+            // The same centered title row and separator as a popup window, so
+            // blocking decisions and utility windows read as one family.
+            ui.vertical_centered(|ui| {
+                if let Some(rows) = title_rows {
+                    text::bounded_block(ui, text::TextRole::Title, title, rows);
+                } else {
+                    text::title(ui, title);
+                }
+            });
+            ui.add(egui::Separator::default().spacing(tokens::SPACE_MD));
             contents(ui)
         })
 }

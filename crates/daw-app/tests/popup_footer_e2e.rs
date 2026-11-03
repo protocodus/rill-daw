@@ -65,7 +65,17 @@ fn join_generator_and_take_actions_remain_at_the_bottom_in_both_appearances() {
         app.click("Footer phrase");
         app.click("Edit");
         app.click("Join clips…");
-        at_bottom(&settled(&mut app), "Cancel");
+        let join = settled(&mut app);
+        at_bottom(&join, "Cancel");
+        // The subject lives in the title, and the two-row list leaves no
+        // blank band between its last row and the footer divider.
+        let title = label(&join, "Join clips · Footer synth");
+        let last_row = label(&join, "Beats 9.00 – 17.00");
+        let cancel = label(&join, "Cancel");
+        assert!(
+            cancel[1] - last_row[3] < 2.0 * daw_ui::tokens::CONTROL_HEIGHT as f64,
+            "Join did not hug its list: {title:?} {last_row:?} {cancel:?}"
+        );
         app.click("Cancel");
         app.click("Window");
         app.click("Clip Editor");
@@ -101,4 +111,59 @@ fn join_generator_and_take_actions_remain_at_the_bottom_in_both_appearances() {
         assert_eq!(app.inspect()["project"], opened["project"]);
         app.quit();
     }
+}
+
+fn label(state: &Value, text: &str) -> [f64; 4] {
+    bounds(
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|item| item["text"] == text)
+            .unwrap_or_else(|| panic!("Missing {text}: {}", state["visible_labels"])),
+    )
+}
+
+#[test]
+fn footer_windows_hug_short_content_and_put_the_primary_action_rightmost() {
+    let mut app = Harness::new();
+    app.command(json!({"command":"viewport","width":1600,"height":1200}));
+    app.click("Window");
+    app.click("Setup");
+    let setup = settled(&mut app);
+    at_bottom(&setup, "Apply");
+    let [_, top, _, bottom] = bounds(&setup["window_rects"][0]);
+    // A short form leaves no blank band: the window ends right after its actions,
+    // far above the 1200 pt viewport budget.
+    assert!(
+        bottom - top < 700.0,
+        "Setup did not hug its form: {top}..{bottom}"
+    );
+    let (apply, cancel) = (label(&setup, "Apply"), label(&setup, "Cancel"));
+    assert!(
+        apply[0] > cancel[2],
+        "Apply must be right of Cancel: {apply:?} {cancel:?}"
+    );
+    assert!(
+        (apply[1] - cancel[1]).abs() < 1.0,
+        "Footer actions share one row"
+    );
+    let resampling = label(&setup, "Resampling");
+    let buffer = label(&setup, "Buffer");
+    assert!(
+        (resampling[0] - buffer[0]).abs() < 0.5,
+        "Form labels share one column"
+    );
+    app.click("Cancel");
+    app.click("Help");
+    app.click("About RILL");
+    let about = settled(&mut app);
+    at_bottom(&about, "Close");
+    let [_, top, _, bottom] = bounds(&about["window_rects"][0]);
+    assert!(
+        bottom - top < 400.0,
+        "About did not hug its content: {top}..{bottom}"
+    );
+    app.quit();
 }

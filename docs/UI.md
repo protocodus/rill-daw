@@ -159,7 +159,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles identify the current channel or clip, such as **Effects of Bass**. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -234,7 +234,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Purpose | API |
 | --- | --- |
 | Standard actions | `button`, `primary_button`, `primary_button_widget`, `small_button` |
-| Dialog footer actions | `dialog_actions`: right-aligned; the primary action first (rightmost), then Cancel/Done, then alternatives; status text or view-only toggles fill the left edge |
+| Dialog footer actions | `dialog_actions`, `dialog_primary`, `dialog_button`: right-aligned text-only actions; the primary action first (rightmost), then Cancel/Done, then alternatives; status text or view-only toggles fill the left edge |
+| Menu commands with shortcuts | `menu_item`, `menu_item_enabled`, `shortcut_text` |
 | Secondary toolbar actions | `quiet_button`, `quiet_button_widget`, `quiet_toggle`, `quiet_action_menu`, `quiet_view_menu`, `quiet_picker_button` |
 | Searchable choice lists | `searchable_select` (query, mouse selection and empty state) |
 | Presentation commands | `view_button`, `view_button_widget` |
@@ -264,7 +265,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Mouse naming | `inline_name_editor`, `name_keyboard`, `set_name_keyboard_open`, `name_keyboard_open` |
 | Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantSubmitState`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button`, `contextual_ai_button_compact` |
 | Masked credential input | `secret_field` |
-| Aligned settings and paths | `form_grid`, `path_row` |
+| Aligned settings and paths | `form_grid`, `form_label`, `path_row`, `section_gap` |
 | Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Arrangement clip surfaces and previews | `clip_surface`, `ClipSurfaceLayout`, `clip_note_preview` |
 | Dropdown choices | `select`, `select_labeled` |
@@ -1164,8 +1165,8 @@ the initial **100.0%**, so changing duration mode does not move the fields below
 it. F2 accelerates the same Edit/context Rename command.
 
 `batch_fades` supplies millisecond edge settings. Edit → Smooth edit boundaries
-applies the last accepted settings; Boundary fade settings offers Apply,
-Remove boundary fades and Cancel. A local boundary envelope preserves existing
+applies the last accepted settings; Edit → Audio → Boundary fades… opens the
+**Boundary fades** dialog with Apply, Cancel and Remove fades. A local boundary envelope preserves existing
 musical fade parameters and other ghost occurrences. The default is 3 ms in and
 5 ms out; already protected edges retain their musical fade unchanged.
 
@@ -1330,7 +1331,7 @@ uses the full-rate render, even while a live preview is being refined.
 
 **Window → Recording** opens **Recording · Track name** above its caller. **Audio
 setup…** connects to input/output-device selection; the focused view contains the
-track's **Input**, **Arm recording**, **Input monitor (dry)**, and **Record into**
+track's **Input**, **Monitor** (dry input), **Record into**, and **Arm recording**
 choices. Inputs use one-based names such as **Mono 1** and **Stereo 1–2**, plus
 **No input**. Record placement chooses **New take** or **Overdub layer**. The raw
 input meter appears below these controls; recording and monitoring do not require
@@ -1471,15 +1472,47 @@ identifies automation. `ai_button`, `ai_button_widget`, `automation_button` and
 New channels start gray; user colors remain saved and tint their mixer strips
 and arranger clips. Existing project colors are preserved on load and Undo.
 
-Popup windows retain their requested width and height even for short forms.
-Footer scroll bodies budget within the resized window; passive pointer movement
-never resizes it. Native close icons change color and stroke weight on hover.
+Popup windows keep the width the user drags them to; their height hugs the
+content up to the viewport budget (or a caller's `default_height`), so short
+forms and emptied lists never leave a blank band. Passive pointer movement never
+resizes a window. Native close icons change color and stroke weight on hover.
 The VST category picker supports case-insensitive category search, an empty
 result, and clearing the search without changing the chosen category.
 
 Dialog action rows use the shared `popup_footer(ui, id)` component. Reserve it
 before laying out content, draw content through `footer.body()`, then call
-`footer.show(window_ui, actions)`. The body scrolls within its own rectangle;
-the footer measures wrapped rows and stays against the dialog's bottom padding.
-Body growth and status changes cannot push actions down or enlarge the window.
-Use `popup_scroll_body` with a zero footer reservation inside this body.
+`footer.show(window_ui, actions)`. The footer sits right below the body's
+measured content and moves to the bottom edge only when the content needs more
+room than the window allows; then the body scrolls. A one-pixel divider sits
+13 points below the body and 13 points above the actions. Use
+`popup_scroll_body` with a zero footer reservation inside this body; it shrinks
+to short content.
+
+Inside the footer, `dialog_actions(ui, actions, status)` lays out one row: the
+single primary (`dialog_primary`, solid action fill) at the right edge, Cancel or
+Done (`dialog_button`) immediately left of it, alternatives further left, and
+read-only status on the left edge. Footer buttons are text only. Settings that
+change the result (Export's **Include effect tails**) belong in the body.
+`modal` is reserved for blocking decisions (Save changes?, error details) and
+uses the same centered title row and separator as popups; operation dialogs
+such as Strip silence and Boundary fades are popups with footers.
+
+Tabbed utilities (Setup, Library, Properties, Assistant) switch pages with
+`popup_tabs`; contextual AI, counts or management actions use its trailing slot.
+`text::section_heading` names groups in sentence case (**Collections**,
+**Recovery folder**); `form_label` captions one row. `form_grid` reserves a
+fixed 144-point label column (`FORM_LABEL_WIDTH`, longer captions truncate with
+the full text on hover); selects and text fields use `FORM_FIELD_WIDTH`. One
+form uses one grid. `section_gap` separates groups in a popup body.
+
+Menus list items in workflow order with separators between groups. Use
+`menu_item(ui, label, Some("Mod+Z"))` for a command with a shortcut: the
+right-aligned muted column shows platform notation (`Ctrl+Z`, or `⌘Z` on macOS).
+Menu rows are text only. Edit: Undo, Redo, History… | Cut, Copy, Paste,
+Duplicate, Delete | selection | Rename… | Split at cursor, Join clips…, Stretch,
+Ghost copy, Make independent, Repeat to loop end | Audio ▸ Crossfade…, Smooth
+edit boundaries, Boundary fades…. Track: add commands | Rename…, Properties,
+Channel, Audio takes…, Delete track | Route selected channels ▸. Window:
+Arranger, Clip Editor, Mixer | channel utilities | Library, Assistant | Setup.
+The menu bar centers the project name with its muted duration and ends with the
+**AI** button.

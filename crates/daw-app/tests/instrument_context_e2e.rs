@@ -153,7 +153,7 @@ fn plugin_overview_hides_parameters_until_requested_and_retains_channel_context(
         assert_ne!(channel_view["view"], "Mixer");
         assert_eq!(channel_view["project"], baseline["project"]);
         assert_eq!(channel_view["history"], baseline["history"]);
-        menu(&mut app, "Arrangement");
+        menu(&mut app, "Arranger");
     }
     app.quit();
 }

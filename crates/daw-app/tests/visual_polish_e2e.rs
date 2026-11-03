@@ -418,7 +418,7 @@ fn routine_context_blurs_and_stays_inert_while_foreground_input_and_escape_work(
             nested["visible_labels"]
                 .as_array()
                 .unwrap()
-                .contains(&json!("Device library"))
+                .contains(&json!("Library"))
         );
         assert_blurred(&nested);
         app.key("Escape");

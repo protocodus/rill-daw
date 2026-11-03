@@ -176,7 +176,7 @@ fn eight_bar_song_can_be_arranged_varied_balanced_and_recalled_without_source_fi
     }
     let state = app.inspect();
     assert_eq!(notes(&state, 0).as_array().unwrap().len(), 4);
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     for _ in 0..6 {
         menu(&mut app, "Edit", "Ghost copy");
     }
@@ -210,7 +210,7 @@ fn eight_bar_song_can_be_arranged_varied_balanced_and_recalled_without_source_fi
     );
 
     // Balance from the arrangement headers and verify each gesture is undoable.
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     let state = app.inspect();
     let bass = state["project"]["tracks"][1]["id"].as_u64().unwrap();
     let glass = state["project"]["tracks"][2]["id"].as_u64().unwrap();

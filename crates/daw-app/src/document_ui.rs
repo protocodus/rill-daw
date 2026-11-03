@@ -495,7 +495,7 @@ impl DawApp {
                 "Please wait"
             },
             |ui| {
-                let footer_height = daw_ui::tokens::SPACE_XL
+                let footer_height = daw_ui::tokens::SPACE_LG
                     + daw_ui::tokens::CONTROL_HEIGHT
                     + 2.0 * ui.spacing().item_spacing.y;
                 let body_height = (ctx.content_rect().height()
@@ -554,19 +554,26 @@ impl DawApp {
                             }
                         }
                     });
-                ui.add_space(daw_ui::tokens::SPACE_XL);
-                daw_ui::action_row(
+                daw_ui::section_gap(ui);
+                // Primary at the right edge, then Cancel, then alternatives.
+                daw_ui::dialog_actions(
                     ui,
                     |ui| {
                         if confirmation {
-                            save = daw_ui::primary_button(ui, "Save").clicked();
-                            discard = daw_ui::button(ui, "Don't save").clicked();
-                        }
-                        if export_failed {
-                            continue_after_export = daw_ui::button(ui, "Continue").clicked();
+                            save = daw_ui::dialog_primary(ui, "Save").clicked();
+                        } else if export_failed {
+                            continue_after_export =
+                                daw_ui::dialog_primary(ui, "Continue").clicked();
                         }
                         if cancelable {
-                            cancel = daw_ui::button(ui, "Cancel").clicked();
+                            cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
+                        }
+                        if confirmation {
+                            discard = daw_ui::dialog_button(ui, "Don't save").clicked();
+                            if export_failed {
+                                continue_after_export =
+                                    daw_ui::dialog_button(ui, "Continue").clicked();
+                            }
                         }
                     },
                     |_| {},

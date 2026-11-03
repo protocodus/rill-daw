@@ -155,10 +155,7 @@ fn setup_tabs_selects_and_folder_input_stay_accessible_and_cancel_discards_draft
             assert_eq!(draft["settings"], original["settings"]);
 
             let storage = app.click("Storage");
-            accessible(
-                &storage,
-                &["SCRATCH DIRECTORY", "Choose…", "Recover session", "Cancel"],
-            );
+            accessible(&storage, &["Recovery folder", "Choose…", "Cancel"]);
             let plugins = app.click("Plug-ins");
             accessible(
                 &plugins,
@@ -250,7 +247,7 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             app.click("Effects");
             accessible(
                 &common::reveal_library_filter(&mut app, "All developers"),
-                &["Search effects", "All developers", "Manage"],
+                &["Search effects", "All developers", "Plug-in folders…"],
             );
             app.click("Search effects");
             app.command(json!({"command":"text","text":"Rill Fixture FX"}));
@@ -382,7 +379,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
                 &[
                     "Catalog item",
                     "All developers",
-                    "Manage",
+                    "Plug-in folders…",
                     "Add instrument track",
                     "More",
                 ],
@@ -423,7 +420,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
                 "Effects",
                 "Catalog item",
                 "All developers",
-                "Manage",
+                "Plug-in folders…",
                 "Add instrument track",
             ] {
                 assert_eq!(

@@ -249,7 +249,7 @@ fn midi_editor_mouse_nudge_scale_transpose_and_note_context_menu_and_audio_edito
     undo(&mut app, false);
 
     // 2. Clip Properties exact Clip gain entry via right-click context menu.
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     app.click("Take 1");
     let props = menu(&mut app, "Window", "Properties");
     let (gx, gy) = center(label(&props, "0.0 dB"));

@@ -69,11 +69,11 @@ pub fn error_details(
                 })
                 .inner;
             ui.add_space(section_gap);
-            let buttons = crate::action_row(
+            let buttons = crate::dialog_actions(
                 ui,
                 |ui| {
-                    let close = crate::button(ui, "Close");
-                    let copy = crate::button(ui, "Copy details");
+                    let close = crate::dialog_primary(ui, "Close");
+                    let copy = crate::dialog_button(ui, "Copy details");
                     if copy.clicked() {
                         ctx.copy_text(details.to_owned());
                     }

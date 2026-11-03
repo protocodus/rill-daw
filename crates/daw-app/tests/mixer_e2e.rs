@@ -433,7 +433,7 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
     let state = click_header_section(&mut app, &bus_b, "details");
     assert_eq!(state["selected_track"], bus_b);
     assert_eq!(state["popups"]["properties"], true);
-    let state = click_front(&mut app, "Routing");
+    let state = menu(&mut app, "Window", "Routing");
     assert_eq!(state["popups"]["routing"], true);
     click_front(&mut app, "Bus C");
     let state = click_front(&mut app, "Master output");

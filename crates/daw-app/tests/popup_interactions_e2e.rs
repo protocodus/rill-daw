@@ -150,28 +150,33 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                     );
                 }
             }
-            let enlarged = resize(&mut app, before, 70.0, 60.0);
-            assert_actions_at_bottom(&enlarged, label);
-            let large = window(&enlarged);
-            assert!(
-                large[2] - large[0] > before[2] - before[0] + 45.0,
-                "{label} ignores horizontal resize: {before:?} -> {large:?}"
-            );
-            assert!(
-                large[3] - large[1] > before[3] - before[1] + 40.0,
-                "{label} ignores vertical resize: {before:?} -> {large:?}"
-            );
-            let shrunk = resize(&mut app, large, -70.0, -60.0);
-            assert_actions_at_bottom(&shrunk, label);
-            let small = window(&shrunk);
-            assert!(
-                small[2] - small[0] < large[2] - large[0] - 45.0,
-                "{label} cannot shrink: {large:?} -> {small:?}"
-            );
-            assert!(
-                small[3] - small[1] < large[3] - large[1] - 40.0,
-                "{label} cannot shrink vertically: {large:?} -> {small:?}"
-            );
+            // About has a fixed size and no resize corner.
+            if label != "About RILL" {
+                let enlarged = resize(&mut app, before, 70.0, 60.0);
+                assert_actions_at_bottom(&enlarged, label);
+                let large = window(&enlarged);
+                assert!(
+                    large[2] - large[0] > before[2] - before[0] + 45.0,
+                    "{label} ignores horizontal resize: {before:?} -> {large:?}"
+                );
+                // Height hugs the content (up to the viewport); a wider window can
+                // only unwrap text, never add a blank band below the actions.
+                assert!(
+                    large[3] - large[1] < before[3] - before[1] + 1.1,
+                    "{label} height must hug its content: {before:?} -> {large:?}"
+                );
+                let shrunk = resize(&mut app, large, -70.0, -60.0);
+                assert_actions_at_bottom(&shrunk, label);
+                let small = window(&shrunk);
+                assert!(
+                    small[2] - small[0] < large[2] - large[0] - 45.0,
+                    "{label} cannot shrink: {large:?} -> {small:?}"
+                );
+                assert!(
+                    small[3] - small[1] > large[3] - large[1] - 1.1,
+                    "{label} height must hug its content: {large:?} -> {small:?}"
+                );
+            }
             app.command(json!({"command":"pointer","phase":"move","x":0,"y":0}));
             let idle = settle(&mut app);
             let (line, (x, y)) = close_icon(&idle);

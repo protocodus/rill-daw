@@ -145,6 +145,12 @@ pub fn popup_tabs<T: PartialEq + Copy, R>(
     result
 }
 
+/// The gap between two groups of a popup body: SPACE_LG from the previous
+/// item's bottom to the next item's top, including the item spacing.
+pub fn section_gap(ui: &mut Ui) {
+    ui.add_space((tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+}
+
 pub fn primary_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(primary_button_widget(ui, label))
 }
@@ -182,6 +188,75 @@ pub fn action_row<A, C>(
         })
         .inner
     })
+}
+
+/// Platform notation for a shortcut written as `"Mod+Shift+Z"`: `⇧⌘Z` on
+/// macOS, `Ctrl+Shift+Z` elsewhere. `Mod` is Command on macOS, Ctrl otherwise.
+pub fn shortcut_text(spec: &str) -> String {
+    if cfg!(target_os = "macos") {
+        let mut modifiers = String::new();
+        let mut key = "";
+        for part in spec.split('+') {
+            match part {
+                "Ctrl" => modifiers.push('⌃'),
+                "Alt" => modifiers.push('⌥'),
+                "Shift" => modifiers.push('⇧'),
+                "Mod" => modifiers.push('⌘'),
+                other => key = other,
+            }
+        }
+        // Apple orders modifier glyphs Control, Option, Shift, Command.
+        let mut glyphs: Vec<char> = modifiers.chars().collect();
+        glyphs.sort_by_key(|glyph| "⌃⌥⇧⌘".find(*glyph));
+        glyphs.into_iter().collect::<String>() + key
+    } else {
+        spec.replace("Mod", "Ctrl")
+    }
+}
+
+/// A text-only menu row with an optional right-aligned, muted shortcut column.
+/// The row reserves room for its shortcut, so the menu widens instead of
+/// letting the label and shortcut overlap.
+pub fn menu_item(ui: &mut Ui, label: impl Into<WidgetText>, shortcut: Option<&str>) -> Response {
+    let label = label.into();
+    let Some(shortcut) = shortcut else {
+        return button(ui, label);
+    };
+    let muted = theme::palette(ui.ctx()).muted;
+    let shortcut = ui.painter().layout_no_wrap(
+        shortcut_text(shortcut),
+        crate::text::TextRole::Note.font(),
+        muted,
+    );
+    let label_width = label
+        .clone()
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        )
+        .size()
+        .x;
+    let width = 2.0 * tokens::BUTTON_PADDING_X + label_width + tokens::SPACE_XL + shortcut.size().x;
+    let response = ui.add(button_widget(label).min_size(egui::vec2(width, tokens::CONTROL_HEIGHT)));
+    let position = egui::pos2(
+        response.rect.right() - tokens::BUTTON_PADDING_X - shortcut.size().x,
+        response.rect.center().y - shortcut.size().y * 0.5,
+    );
+    ui.painter().galley(position, shortcut, muted);
+    response
+}
+
+/// [`menu_item`] that can be disabled while keeping its shortcut visible.
+pub fn menu_item_enabled(
+    ui: &mut Ui,
+    enabled: bool,
+    label: impl Into<WidgetText>,
+    shortcut: Option<&str>,
+) -> Response {
+    ui.add_enabled_ui(enabled, |ui| menu_item(ui, label, shortcut))
+        .inner
 }
 
 pub fn menu_button<R>(
@@ -231,7 +306,8 @@ pub fn command_menu_button<R>(
     label: impl Into<WidgetText>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
-    menu_button(ui, label, contents)
+    // Menu-bar titles are text only, so "Help" reads like its siblings.
+    native_menu_button(ui, label.into(), contents)
 }
 
 /// Bound a command list to the viewport, including its frame and outer spacing.
@@ -412,7 +488,7 @@ fn semantic_picker<R>(
     if icon.is_some() {
         atoms.push_left(egui::Atom::custom(icon_id, egui::Vec2::splat(18.0)));
     }
-    atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(12.0)));
+    atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(13.0)));
 
     // Style only the opener, never its popup contents or following controls.
     // Avoid a nested Ui scope so horizontal_wrapped can wrap each whole control.
@@ -1005,7 +1081,15 @@ pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> Combo
     ComboBox::from_id_salt(id_salt)
         .selected_text(selected_text)
         .width(tokens::SELECT_WIDTH)
+        .icon(select_chevron)
         .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
+}
+
+/// The same 13 pt chevron as choice menus, so a select and a picker in one
+/// form share their disclosure affordance.
+fn select_chevron(ui: &Ui, rect: egui::Rect, visuals: &egui::style::WidgetVisuals, _open: bool) {
+    let rect = egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(13.0));
+    crate::Icon::ChevronDown.paint(ui.painter(), rect, visuals.fg_stroke.color);
 }
 
 /// A bounded, searchable choice list. Editing its query never accepts a choice;
@@ -1079,6 +1163,7 @@ pub fn select_labeled(
     ComboBox::from_label(label)
         .selected_text(selected_text)
         .width(tokens::SELECT_WIDTH)
+        .icon(select_chevron)
         .popup_style(egui::style::StyleModifier::new(menu_item_spacing))
 }
 
@@ -1416,7 +1501,7 @@ pub fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
     let frame = margin + egui::Vec2::splat(2.0 * tokens::WINDOW_BORDER_WIDTH);
     let title = tokens::CONTROL_HEIGHT + margin.y + tokens::WINDOW_BORDER_WIDTH;
     (popup_bounds(ctx).size() - frame - egui::vec2(0.0, title))
-        .max(egui::vec2(160.0, 120.0))
+        .max(egui::Vec2::splat(144.0))
         .floor()
 }
 
@@ -1453,7 +1538,9 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
                 .stroke(ctx.style().visuals.window_stroke)
                 .shadow(ctx.style().visuals.window_shadow),
         )
-        .default_width(480.0)
+        .default_width(tokens::POPUP_WIDTH_SM)
+        // The height budget a body may grow into; callers may lower it.
+        .default_height(body_size.y)
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(available.center())
         .max_size(body_size)
@@ -1461,10 +1548,11 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .movable(true)
         .scroll([false, true])
         .collapsible(false)
-        .resizable(true)
-        // Window disables Resize's own handles. Following its desired size
-        // keeps short forms resizable instead of collapsing back to content.
-        .resize(|resize| resize.with_stroke(true))
+        // Width follows the user's resize; height hugs the content up to the
+        // budget above, so short forms and empty lists never leave a blank
+        // window below their actions.
+        .resizable([true, false])
+        .resize(|resize| resize.with_stroke(false))
 }
 
 /// Scroll height inside the actual popup body, with subpixel layout clearance.
@@ -1491,7 +1579,7 @@ pub fn popup_scroll_body<R>(
         .id_salt(id)
         .max_height(body_height)
         .min_scrolled_height(body_height.min(tokens::COMPACT_HEIGHT))
-        .auto_shrink([false, false])
+        .auto_shrink([false, true])
         .show(ui, contents)
         .inner
 }
@@ -1506,7 +1594,9 @@ pub fn workspace_popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) ->
         // Keep a usable canvas after a display-scale/viewport change. Native
         // resize state can otherwise retain the transient tiny viewport and
         // scroll the editor's toolbar away while keeping its plot focused.
-        .min_size(popup_body_size(ctx).min(egui::vec2(640.0, 360.0)))
+        .min_size(
+            popup_body_size(ctx).min(egui::vec2(tokens::POPUP_WIDTH_MD, tokens::POPUP_WIDTH_SM)),
+        )
 }
 
 /// A dedicated drag affordance keeps row switches and editor buttons clickable.

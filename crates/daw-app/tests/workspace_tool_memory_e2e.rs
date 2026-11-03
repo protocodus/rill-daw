@@ -158,11 +158,8 @@ fn arranger_midi_and_audio_keep_distinct_tools_through_navigation_and_popups() {
         let notes = app.inspect();
         assert_eq!(app.click("Properties")["popups"]["properties"], true);
         assert_eq!(window(&mut app, "Library")["popups"]["library"], true);
-        assert_eq!(
-            close(&mut app, "Device library")["popups"]["properties"],
-            true
-        );
-        let returned = close(&mut app, "Properties of Tool memory phrase");
+        assert_eq!(close(&mut app, "Library")["popups"]["properties"], true);
+        let returned = close(&mut app, "Properties · Tool memory phrase");
         assert_eq!(returned["view"], "Clip");
         assert_eq!(returned["midi_editor"]["tool"], "Pencil");
         for field in ["selected_track", "selected_clip", "selected_notes"] {

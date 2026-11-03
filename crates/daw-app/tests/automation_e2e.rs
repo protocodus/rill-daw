@@ -615,7 +615,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     let before = app.inspect()["project"].clone();
     // Escape restores Routing, the caller of the parameter picker. Return to
     // the arranger explicitly before selecting a track on its canvas.
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     app.click("New instrument");
     menu(&mut app, "Window", "Effects");
     app.click("More");

@@ -239,7 +239,7 @@ impl DawApp {
         }
     }
 
-    pub(crate) fn finishing_actions_menu(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn repeat_to_loop_end_item(&mut self, ui: &mut egui::Ui) {
         let selection = self.arranger_selection_ids();
         let span = self.arranger_phrase_span().or_else(|| {
             selection
@@ -257,12 +257,22 @@ impl DawApp {
             self.repeat_selection_to_loop_end();
             ui.close();
         }
+    }
+
+    /// Track ▸ Route selected channels, shown while two or more channels are selected.
+    pub(crate) fn route_selected_channels_menu(&mut self, ui: &mut egui::Ui) {
         let channels = self.finishing_selected_channels();
         if !channels.is_empty() {
             let mut choice = None;
             daw_ui::menu_button(ui, "Route selected channels", |ui| {
                 let (outputs, sends) = self.batch_route_destinations(&channels);
-                daw_ui::text::note(ui, format!("{} selected", channels.len()));
+                daw_ui::text::note(
+                    ui,
+                    format!(
+                        "{} selected",
+                        daw_ui::text::count(channels.len(), "channel", "channels")
+                    ),
+                );
                 choice = daw_ui::batch_route_choices(ui, &outputs, &sends);
             });
             if let Some(choice) = choice {
@@ -385,7 +395,13 @@ impl DawApp {
         }
         let mut choice = None;
         daw_ui::toolbar(ui, |ui| {
-            daw_ui::text::note(ui, format!("{} channels selected", channels.len()));
+            daw_ui::text::note(
+                ui,
+                format!(
+                    "{} selected",
+                    daw_ui::text::count(channels.len(), "channel", "channels")
+                ),
+            );
             daw_ui::action_menu(ui, "Route selected channels", |ui| {
                 let (outputs, sends) = self.batch_route_destinations(&channels);
                 choice = daw_ui::batch_route_choices(ui, &outputs, &sends);

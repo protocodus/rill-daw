@@ -4,6 +4,9 @@ use crate::{text, tokens};
 use egui::{Context, Id, Key, Modifiers, Rect, Ui};
 use std::{hash::Hash, ops::RangeInclusive};
 
+/// The value entry popover keeps one width for its field, keypad and feedback.
+const ENTRY_WIDTH: f32 = tokens::SEARCH_CHOICE_WIDTH;
+
 #[derive(Clone)]
 struct ValueDraft {
     text: String,
@@ -208,8 +211,8 @@ fn value_entry_contents(
         concise,
         trailing_height,
     } = options;
-    ui.set_min_width(220.0);
-    ui.set_max_width(220.0);
+    ui.set_min_width(ENTRY_WIDTH);
+    ui.set_max_width(ENTRY_WIDTH);
     let top = ui.cursor().top();
     let id = draft_id(ui, id_salt);
     let frame = ui.ctx().cumulative_frame_nr();
@@ -383,7 +386,7 @@ fn value_entry_contents(
     if draft.keypad_visible {
         let feedback_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0;
         ui.allocate_ui_with_layout(
-            egui::vec2(220.0, feedback_height),
+            egui::vec2(ENTRY_WIDTH, feedback_height),
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
                 ui.set_min_height(feedback_height);
@@ -393,17 +396,21 @@ fn value_entry_contents(
     } else if !feedback.is_empty() {
         text::note(ui, feedback);
     }
-    let (apply, cancel) = ui
-        .horizontal(|ui| {
+    let (apply, cancel) = crate::dialog_actions(
+        ui,
+        |ui| {
             let apply = ui
                 .add_enabled_ui(valid.is_some(), |ui| {
-                    crate::primary_button(ui, "Apply value")
+                    crate::dialog_primary(ui, "Apply value")
                 })
                 .inner;
-            let cancel = crate::button(ui, "Cancel");
+            let cancel = crate::dialog_button(ui, "Cancel");
             (apply.clicked(), cancel.clicked())
-        })
-        .inner;
+        },
+        |_| {},
+    )
+    .inner
+    .0;
     if ui.is_enabled() && (cancel || escape || ((apply || enter) && valid.is_some())) {
         ui.data_mut(|data| data.remove::<(u64, Rect)>(Id::new("exact_value_input_rect")));
         ui.close();

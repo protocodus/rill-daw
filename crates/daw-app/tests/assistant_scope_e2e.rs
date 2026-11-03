@@ -56,6 +56,18 @@ fn local_ai(app: &mut Harness, kind: &str) -> Value {
         "{}",
         state["visible_labels"]
     );
+    // Pages lead the window like every tabbed popup; the scope opens the body.
+    let top = |text: &str| {
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|rect| rect["text"] == text)
+            .and_then(|rect| rect["min"][1].as_f64())
+            .unwrap_or_else(|| panic!("missing {text}"))
+    };
+    assert!(top("Conversation") < top(&format!("Scope · {scope}")));
     state
 }
 
