@@ -122,40 +122,42 @@ pub(crate) fn automation_lane(
     }
     if !view.navigating {
         response.response.context_menu(|ui| {
-            let beat = ui
-                .ctx()
-                .data(|data| data.get_temp::<f64>(id.with("menu_beat")))
-                .unwrap_or(view.viewport.start_beat);
-            if daw_ui::automation_button(ui, "Create automation clip")
-                .on_hover_text("Derive a four-beat pattern from the arrangement curve here")
-                .clicked()
-            {
-                result
-                    .edits
-                    .push(AutomationEdit::Create(beat, 4.0_f64.min(MAX_BEAT - beat)));
-                ui.close();
-            }
-            if daw_ui::automation_button(ui, "Clear arranger points")
-                .on_hover_text("Keep patterns; use the manual value outside them")
-                .clicked()
-            {
-                result.edits.push(AutomationEdit::Clear);
-                ui.close();
-            }
-            let clipboard = ui.ctx().data(|data| {
-                data.get_temp::<AutomationClip>(egui::Id::new("automation_clipboard"))
+            daw_ui::command_menu_contents(ui, |ui| {
+                let beat = ui
+                    .ctx()
+                    .data(|data| data.get_temp::<f64>(id.with("menu_beat")))
+                    .unwrap_or(view.viewport.start_beat);
+                if daw_ui::automation_button(ui, "Create automation clip")
+                    .on_hover_text("Derive a four-beat pattern from the arrangement curve here")
+                    .clicked()
+                {
+                    result
+                        .edits
+                        .push(AutomationEdit::Create(beat, 4.0_f64.min(MAX_BEAT - beat)));
+                    ui.close();
+                }
+                if daw_ui::automation_button(ui, "Clear arranger points")
+                    .on_hover_text("Keep patterns; use the manual value outside them")
+                    .clicked()
+                {
+                    result.edits.push(AutomationEdit::Clear);
+                    ui.close();
+                }
+                let clipboard = ui.ctx().data(|data| {
+                    data.get_temp::<AutomationClip>(egui::Id::new("automation_clipboard"))
+                });
+                if ui
+                    .add_enabled(
+                        clipboard.is_some(),
+                        daw_ui::button_widget("Paste automation clip"),
+                    )
+                    .clicked()
+                    && let Some(clip) = clipboard
+                {
+                    result.edits.push(AutomationEdit::Paste(clip, beat));
+                    ui.close();
+                }
             });
-            if ui
-                .add_enabled(
-                    clipboard.is_some(),
-                    daw_ui::button_widget("Paste automation clip"),
-                )
-                .clicked()
-                && let Some(clip) = clipboard
-            {
-                result.edits.push(AutomationEdit::Paste(clip, beat));
-                ui.close();
-            }
         });
     }
     let mut clips: Vec<_> = lane.clips.iter().collect();
@@ -245,30 +247,32 @@ pub(crate) fn automation_lane(
         }
         if !view.navigating {
             header.context_menu(|ui| {
-                if daw_ui::automation_button(ui, "Copy pattern").clicked() {
-                    ui.ctx().data_mut(|data| {
-                        data.insert_temp(egui::Id::new("automation_clipboard"), clip.clone())
-                    });
-                    ui.close();
-                }
-                for (label, linked) in [("Duplicate pattern", false), ("Ghost pattern", true)] {
-                    if daw_ui::automation_button(ui, label).clicked() {
-                        result
-                            .edits
-                            .push(AutomationEdit::Copy(clip.id, clip.end(), linked));
+                daw_ui::command_menu_contents(ui, |ui| {
+                    if daw_ui::automation_button(ui, "Copy pattern").clicked() {
+                        ui.ctx().data_mut(|data| {
+                            data.insert_temp(egui::Id::new("automation_clipboard"), clip.clone())
+                        });
                         ui.close();
                     }
-                }
-                if clip.link_group.is_some()
-                    && daw_ui::automation_button(ui, "Make pattern independent").clicked()
-                {
-                    result.edits.push(AutomationEdit::Independent(clip.id));
-                    ui.close();
-                }
-                if daw_ui::automation_button(ui, "Delete pattern").clicked() {
-                    result.edits.push(AutomationEdit::Delete(clip.id));
-                    ui.close();
-                }
+                    for (label, linked) in [("Duplicate pattern", false), ("Ghost pattern", true)] {
+                        if daw_ui::automation_button(ui, label).clicked() {
+                            result
+                                .edits
+                                .push(AutomationEdit::Copy(clip.id, clip.end(), linked));
+                            ui.close();
+                        }
+                    }
+                    if clip.link_group.is_some()
+                        && daw_ui::automation_button(ui, "Make pattern independent").clicked()
+                    {
+                        result.edits.push(AutomationEdit::Independent(clip.id));
+                        ui.close();
+                    }
+                    if daw_ui::automation_button(ui, "Delete pattern").clicked() {
+                        result.edits.push(AutomationEdit::Delete(clip.id));
+                        ui.close();
+                    }
+                });
             });
         }
         let plot = Rect::from_min_max(

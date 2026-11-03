@@ -1039,6 +1039,7 @@ impl DawApp {
                         }
                     }
                     row_response.context_menu(|ui| {
+ daw_ui::command_menu_contents(ui, |ui| {
                         if track.kind == TrackKind::Midi
                             && daw_ui::button(ui, "Add pattern").clicked()
                         {
@@ -1101,6 +1102,7 @@ impl DawApp {
                             ui.close();
                         }
                     });
+});
                     if let Some(lane) = &track.automation {
                         let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
                         empty_action_rects.push(row);
@@ -1468,6 +1470,7 @@ impl DawApp {
                         }
                         let has_clipboard = self.has_arranger_clipboard();
                         response.context_menu(|ui| {
+ daw_ui::command_menu_contents(ui, |ui| {
                             let selected_count = self.arranger_selection.ids.len();
                             if selected_count > 1 && self.arranger_selection.ids.contains(&clip.id) {
                                 daw_ui::text::note(ui, format!("{selected_count} clips selected"));
@@ -1598,6 +1601,7 @@ impl DawApp {
                                 ui.close();
                             }
                         });
+});
                     }
                     if track.kind == TrackKind::Audio && let Ok(schedule) = daw_core::AudioSchedule::new(&track.clips) {
                         for fade in &schedule.crossfades {
@@ -2652,6 +2656,7 @@ impl DawApp {
                                         let response = slider.union(readout);
                                         let mut exact = None;
                                         response.context_menu(|ui| {
+ daw_ui::command_menu_contents(ui, |ui| {
                                             exact = daw_ui::value_entry_named(
                                                 ui,
                                                 ("inspector_clip_gain", id, clip.id),
@@ -2661,6 +2666,7 @@ impl DawApp {
                                                 &format!("{} · Clip gain", clip.name),
                                             );
                                         });
+});
                                         if let Some(db) = exact {
                                             let next = daw_ui::channel_gain_from_db(db as f32).clamp(0.0, 2.0);
                                             if *gain != next {

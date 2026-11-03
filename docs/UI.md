@@ -882,9 +882,11 @@ full track color with a 1-point darker outline; very high and low notes remain
 distinct and never cover the name. The clip context menu follows the Edit menu:
 open (Edit notes/audio, Properties) | selection | Cut, Copy, Paste, Duplicate |
 Rename… | Split at cursor, Join clips…, Stretch, Slip contents, Ghost copy, Make
-independent | Crossfade… | Loop playback over clip | Delete. These helpers
-only paint; selection, dragging, trimming and ghost identity retain the clip's
-existing interaction target.
+independent | Crossfade… | Loop playback over clip | Delete. The clip, track
+and automation context menus go through `command_menu_contents`, so a long
+menu scrolls inside a short window instead of losing its last commands. These
+helpers only paint; selection, dragging, trimming and ghost identity retain the
+clip's existing interaction target.
 
 The piano toolbar shows **Snap**, **Length** and **Key** as three current-value choosers right after the tool families: `snap_choice` sets the drawing and moving grid, `drawing_note_length` the initial note length, and **Key C · Natural minor** opens Root, Scale and Chord rows for the grid highlights and multi-draw harmony. `DrawNoteLength` supplies **Last note**, 1/16, 1/8, 1/4, 1/2 and one-bar drawing choices through `drawing_note_length`. Last note begins at 1/16 and remembers the last drawn or selected duration; the application converts audible beats to source time. `paint_clip_end_label` marks the visible **Clip end** without adding hit targets. Drawing beyond it extends the MIDI occurrence in the same Undo step as the note.
 
