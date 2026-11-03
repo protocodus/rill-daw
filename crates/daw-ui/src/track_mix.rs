@@ -175,23 +175,24 @@ struct MixGeometry {
     solo: Rect,
 }
 
+/// Equal gain and pan columns, then square Mute and Solo centered on the rail
+/// line (or on the row in a compact header) so all four read as one row.
 fn mix_geometry(rect: Rect) -> MixGeometry {
-    let gap = tokens::SPACE_SM;
-    let button = tokens::COMPACT_HEIGHT;
+    let gap = tokens::SPACE_MD;
+    let button = tokens::COMPACT_HEIGHT.min(rect.height());
     let toggles_width = button * 2.0 + tokens::SPACE_XS;
     let parameter_width = (rect.width() - toggles_width - gap).max(0.0);
-    let pan_width = 55.0_f32.min((parameter_width - gap).max(0.0) * 0.5);
-    let gain_width = (parameter_width - pan_width - gap).max(0.0);
-    let gain_rect = Rect::from_min_size(rect.min, egui::vec2(gain_width, rect.height()));
-    let pan_rect = Rect::from_min_size(
-        egui::pos2(gain_rect.right() + gap, rect.top()),
-        egui::vec2(pan_width, rect.height()),
-    );
-    let toggle_height = tokens::CONTROL_HEIGHT.min(rect.height());
-    let toggle_top = rect.center().y - toggle_height * 0.5;
-    let mute_rect = Rect::from_min_size(
-        egui::pos2(rect.right() - toggles_width, toggle_top),
-        egui::vec2(button, toggle_height),
+    let column = ((parameter_width - gap) * 0.5).max(0.0);
+    let gain_rect = Rect::from_min_size(rect.min, egui::vec2(column, rect.height()));
+    let pan_rect = gain_rect.translate(egui::vec2(column + gap, 0.0));
+    let center_y = if rect.height() >= tokens::COMPACT_HEIGHT * 2.0 {
+        rect.top() + tokens::COMPACT_HEIGHT + (rect.height() - tokens::COMPACT_HEIGHT) * 0.5
+    } else {
+        rect.center().y
+    };
+    let mute_rect = Rect::from_center_size(
+        egui::pos2(rect.right() - toggles_width + button * 0.5, center_y),
+        Vec2::splat(button),
     );
     let solo_rect = mute_rect.translate(egui::vec2(button + tokens::SPACE_XS, 0.0));
     MixGeometry {
@@ -201,6 +202,26 @@ fn mix_geometry(rect: Rect) -> MixGeometry {
         solo: solo_rect,
     }
 }
+
+/// Mute and Solo for a row without gain or pan, such as a folder. The pair
+/// sits at the right of `rect`, vertically centered, the same as on channels.
+pub fn track_state_toggles_at(
+    ui: &mut Ui,
+    rect: Rect,
+    id_salt: impl Hash,
+    mute: bool,
+    solo: bool,
+) -> [Response; 2] {
+    let id = ui.make_persistent_id(id_salt);
+    let geometry = mix_geometry(rect);
+    [
+        state_button_at(ui, geometry.mute, id.with("mute"), mute, "M", "Mute track"),
+        state_button_at(ui, geometry.solo, id.with("solo"), solo, "S", "Solo track"),
+    ]
+}
+
+/// Width of the Mute and Solo pair, for callers that reserve its slot.
+pub const TRACK_STATE_TOGGLES_WIDTH: f32 = tokens::COMPACT_HEIGHT * 2.0 + tokens::SPACE_XS;
 
 #[derive(Clone, Copy)]
 enum MixParameter {
@@ -676,34 +697,14 @@ fn readout_at(
             crate::ComponentMaterial::default(),
         ));
     }
+    // The value carries its unit; the parameter name stays in the accessible
+    // label and tooltip so adjacent columns never read as one phrase.
     let font = FontId::proportional(if compact {
         tokens::FONT_SCALE
     } else {
         tokens::FONT_CAPTION
     });
-    let value_width = painter
-        .layout_no_wrap(caption.into(), font.clone(), colors.text)
-        .size()
-        .x;
-    let label_font = FontId::proportional(tokens::FONT_CAPTION);
-    let label_width = painter
-        .layout_no_wrap(label.into(), label_font.clone(), colors.muted)
-        .size()
-        .x;
-    let show_label = !compact && value_width + label_width + tokens::SPACE_XS <= rect.width();
-    let value_rect = if show_label {
-        crate::text::paint_single_line(
-            &painter,
-            rect.with_max_x(rect.left() + label_width),
-            label_font,
-            colors.muted,
-            label,
-        );
-        rect.with_min_x((rect.right() - value_width).max(rect.left()))
-    } else {
-        rect
-    };
-    crate::text::paint_single_line(&painter, value_rect, font, colors.text, caption);
+    crate::text::paint_single_line(&painter, rect, font, colors.text, caption);
     let popup = egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| crate::value_entry_named(ui, id, f64::from(*value), range, unit, name));
@@ -734,32 +735,29 @@ fn state_button_at(
     });
     let colors = theme::palette(ui.ctx());
     let painter = ui.painter_at(rect);
+    let active = if glyph == "S" {
+        colors.solo
+    } else {
+        colors.mute
+    };
     let fill = if selected {
-        colors.track_selected
+        active
     } else if response.hovered() {
         colors.control_hover
     } else {
         colors.bg
     };
-    // A compact 21-point target leaves only 1.5 points around its label.
-    // Put the selected keyline outside that target, within the existing halo,
-    // instead of consuming the glyph's clear interior or enlarging the control.
-    let outside_selection = selected && rect.height() <= tokens::COMPACT_HEIGHT;
     painter.add(crate::component_shape(
         &painter,
         rect,
         tokens::RADIUS,
         fill,
-        if outside_selection {
+        if selected {
             Stroke::NONE
         } else {
             Stroke::new(
-                if selected {
-                    tokens::FOCUS_WIDTH
-                } else {
-                    tokens::BORDER_WIDTH
-                },
-                if selected || response.has_focus() {
+                tokens::BORDER_WIDTH,
+                if response.has_focus() {
                     colors.accent
                 } else {
                     colors.line
@@ -771,7 +769,7 @@ fn state_button_at(
             active: !selected && response.has_focus() && response.enabled(),
         },
     ));
-    if outside_selection {
+    if selected && response.has_focus() {
         ui.painter().rect_stroke(
             rect,
             tokens::RADIUS,
@@ -784,10 +782,11 @@ fn state_button_at(
         egui::Align2::CENTER_CENTER,
         glyph,
         crate::text::TextRole::Label.font(),
-        if selected { colors.accent } else { colors.text },
+        if selected {
+            theme::contrast_text(active)
+        } else {
+            colors.text
+        },
     );
-    if selected && response.enabled() {
-        crate::paint_selection_glow(ui.painter(), rect, tokens::RADIUS, colors.accent);
-    }
     response.on_hover_text(label)
 }

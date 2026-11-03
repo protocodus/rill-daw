@@ -155,14 +155,18 @@ fn track_mix_is_bounded_without_tiny_scale_labels_at_supported_sizes_and_densiti
 }
 
 #[test]
-fn selected_mute_and_solo_outline_their_targets_without_moving_or_covering_glyphs() {
-    fn border(shape: &egui::Shape, rect: Rect) -> Option<&egui::epaint::RectShape> {
+fn active_mute_and_solo_fill_with_their_own_colors_without_moving_or_covering_glyphs() {
+    fn surfaces<'a>(
+        shape: &'a egui::Shape,
+        rect: Rect,
+        found: &mut Vec<&'a egui::epaint::RectShape>,
+    ) {
         match shape {
-            egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| border(shape, rect)),
-            egui::Shape::Rect(shape) if shape.rect == rect && !shape.stroke.is_empty() => {
-                Some(shape)
+            egui::Shape::Vec(shapes) => {
+                shapes.iter().for_each(|shape| surfaces(shape, rect, found))
             }
-            _ => None,
+            egui::Shape::Rect(shape) if shape.rect == rect => found.push(shape),
+            _ => {}
         }
     }
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
@@ -171,6 +175,7 @@ fn selected_mute_and_solo_outline_their_targets_without_moving_or_covering_glyph
             theme::apply(&ctx);
             theme::set_appearance(&ctx, appearance);
             ctx.set_pixels_per_point(density);
+            let palette = theme::palette(&ctx);
             for height in [21.0, 42.0] {
                 let mut original = None;
                 for (mute, solo) in [(false, false), (true, false), (false, true), (true, true)] {
@@ -196,9 +201,14 @@ fn selected_mute_and_solo_outline_their_targets_without_moving_or_covering_glyph
                     let targets = targets.unwrap();
                     assert_eq!(*original.get_or_insert(targets), targets);
                     assert_eq!((gain, pan), (0.5, 0.0));
-                    for ((target, selected), glyph) in
-                        targets.into_iter().zip([mute, solo]).zip(["M", "S"])
+                    for ((target, selected), (glyph, color)) in targets
+                        .into_iter()
+                        .zip([mute, solo])
+                        .zip([("M", palette.mute), ("S", palette.solo)])
                     {
+                        // Square 21-point targets at every row height.
+                        assert!((target.width() - daw_ui::tokens::COMPACT_HEIGHT).abs() < 0.01);
+                        assert!((target.height() - daw_ui::tokens::COMPACT_HEIGHT).abs() < 0.01);
                         let label = output
                             .shapes
                             .iter()
@@ -209,54 +219,23 @@ fn selected_mute_and_solo_outline_their_targets_without_moving_or_covering_glyph
                                 _ => None,
                             })
                             .unwrap();
-                        let (outline, clip) = output
-                            .shapes
-                            .iter()
-                            .find_map(|shape| {
-                                border(&shape.shape, target).map(|border| (border, shape.clip_rect))
-                            })
-                            .unwrap();
-                        let inside_width = match outline.stroke_kind {
-                            egui::StrokeKind::Inside => outline.stroke.width,
-                            egui::StrokeKind::Middle => outline.stroke.width * 0.5,
-                            egui::StrokeKind::Outside => 0.0,
-                        };
-                        assert!(
-                            target.shrink(inside_width).contains_rect(label),
-                            "The border must leave the {glyph} glyph clear at {height}pt/{density}×: {label:?} in {target:?}"
-                        );
+                        assert!(target.contains_rect(label), "{glyph} glyph stays inside");
+                        let mut found = Vec::new();
+                        for shape in &output.shapes {
+                            surfaces(&shape.shape, target, &mut found);
+                        }
+                        assert!(!found.is_empty());
                         assert_eq!(
-                            outline.stroke.width == daw_ui::tokens::FOCUS_WIDTH
-                                && outline.stroke.color == theme::palette(&ctx).accent,
-                            selected
+                            found.iter().any(|shape| shape.fill == color),
+                            selected,
+                            "only an active {glyph} uses its palette color"
                         );
-                        if selected && height == daw_ui::tokens::COMPACT_HEIGHT {
-                            assert_eq!(outline.stroke_kind, egui::StrokeKind::Outside);
+                        if !selected {
                             assert!(
-                                clip.contains_rect(target.expand(outline.stroke.width)),
-                                "The parent clip must preserve the complete compact border"
+                                found.iter().any(|shape| !shape.stroke.is_empty()),
+                                "idle {glyph} keeps its border"
                             );
                         }
-                        assert_eq!(
-                            output.shapes.iter().any(|shape| match &shape.shape {
-                                egui::Shape::Mesh(mesh) =>
-                                    mesh.vertices.len() == 128
-                                        && (mesh.calc_bounds().min
-                                            - target
-                                                .expand(daw_ui::tokens::SELECTION_GLOW_EXTENT)
-                                                .min)
-                                            .length()
-                                            < 0.1
-                                        && (mesh.calc_bounds().max
-                                            - target
-                                                .expand(daw_ui::tokens::SELECTION_GLOW_EXTENT)
-                                                .max)
-                                            .length()
-                                            < 0.1,
-                                _ => false,
-                            }),
-                            selected
-                        );
                     }
                 }
             }

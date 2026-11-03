@@ -12,6 +12,18 @@ const HEADER: f32 = daw_ui::TRACK_HEADER_WIDTH;
 const ROW: f32 = daw_ui::TRACK_HEADER_HEIGHT;
 const COMPACT_ROW: f32 = daw_ui::TRACK_HEADER_COMPACT_HEIGHT;
 
+/// Height of a visible row in units of the adjustable row height. A folder
+/// shows only its identity line, so it keeps one physical height at any zoom.
+fn track_row_units(track: &Track, row_height: f32) -> f32 {
+    if track.kind == TrackKind::Folder {
+        daw_ui::TRACK_HEADER_FOLDER_HEIGHT / row_height.max(1.0)
+    } else if track.collapsed {
+        COMPACT_ROW / ROW
+    } else {
+        1.0
+    }
+}
+
 enum Edit {
     Select(u64, u64, bool, bool),
     SelectOnly(u64, u64),
@@ -117,11 +129,7 @@ fn reveal_track(
     let mut top = 0.0;
     for (row_index, (index, _)) in visible.into_iter().enumerate() {
         let track = &project.tracks[index];
-        let rows = if track.collapsed && track.kind != TrackKind::Folder {
-            COMPACT_ROW / ROW
-        } else {
-            1.0
-        };
+        let rows = track_row_units(track, view.row_height);
         if track.id == target {
             if rows > visible_rows || top < view.row_offset {
                 view.row_offset = top;
@@ -336,8 +344,10 @@ impl DawApp {
         let folder_closures = daw_ui::folder_closures(&folder_rows);
         let (folder_step, folder_padding) = daw_ui::folder_lane_padding(&folder_rows, header_width);
         let folder_footer = daw_ui::folder_footer_spacing(folder_step);
-        let folder_footers =
-            folder_rows.iter().filter(|row| row.folder).count() as f32 * folder_footer;
+        // Physical heights that do not scale with row zoom: each folder's
+        // closing strip and its one-line row.
+        let folder_footers = folder_rows.iter().filter(|row| row.folder).count() as f32
+            * (folder_footer + daw_ui::TRACK_HEADER_FOLDER_HEIGHT);
         let right_inset = if folder_padding > 0.0 {
             folder_padding + 4.0
         } else {
@@ -345,14 +355,9 @@ impl DawApp {
         };
         let row_units: f32 = visible_tracks
             .iter()
-            .map(|(index, _)| {
-                let track = &self.project.tracks[*index];
-                if track.collapsed && track.kind != TrackKind::Folder {
-                    COMPACT_ROW / ROW
-                } else {
-                    1.0
-                }
-            })
+            .map(|(index, _)| &self.project.tracks[*index])
+            .filter(|track| track.kind != TrackKind::Folder)
+            .map(|track| track_row_units(track, viewport.row_height))
             .sum();
         let earliest = self
             .project
@@ -408,40 +413,40 @@ impl DawApp {
                     .map(|clip| (clip.start, clip.end()))
                     .reduce(|(a, b), (c, d)| (a.min(c), b.max(d)))
             });
-            // Row heights scale, while recursive folder closing strips keep
-            // their physical thickness. Solve those two terms separately.
+            // Row heights scale, while folder rows and recursive folder closing
+            // strips keep their physical thickness. Solve those two terms separately.
             let mut row_units_before = 0.0_f32;
-            let mut footers_before = 0_usize;
-            let mut selected_rows = None::<(f32, f32, usize, usize)>;
+            let mut fixed_before = 0.0_f32;
+            let mut selected_rows = None::<(f32, f32, f32, f32)>;
             for (row_index, (index, _)) in visible_tracks.iter().enumerate() {
                 let track = &self.project.tracks[*index];
-                let rows = if track.collapsed && track.kind != TrackKind::Folder {
-                    COMPACT_ROW / ROW
+                let (rows, fixed) = if track.kind == TrackKind::Folder {
+                    (0.0, daw_ui::TRACK_HEADER_FOLDER_HEIGHT)
                 } else {
-                    1.0
+                    (track_row_units(track, viewport.row_height), 0.0)
                 };
                 if selected_tracks.contains(&track.id) {
                     selected_rows = Some(selected_rows.map_or(
                         (
                             row_units_before,
                             row_units_before + rows,
-                            footers_before,
-                            footers_before,
+                            fixed_before,
+                            fixed_before + fixed,
                         ),
-                        |(first, _, first_footers, _)| {
+                        |(first, _, first_fixed, _)| {
                             (
                                 first,
                                 row_units_before + rows,
-                                first_footers,
-                                footers_before,
+                                first_fixed,
+                                fixed_before + fixed,
                             )
                         },
                     ));
                 }
                 row_units_before += rows;
-                footers_before += folder_closures[row_index].len();
+                fixed_before += fixed + folder_closures[row_index].len() as f32 * folder_footer;
             }
-            if let (Some((start, end)), Some((first, last, first_footers, last_footers))) =
+            if let (Some((start, end)), Some((first, last, first_fixed, last_fixed))) =
                 (span, selected_rows)
             {
                 viewport.fit_bounds(
@@ -456,13 +461,12 @@ impl DawApp {
                 let padding = 12.0_f32
                     .min(canvas.width() * 0.1)
                     .min(canvas.height() * 0.1);
-                let fixed = (last_footers - first_footers) as f32 * folder_footer;
+                let fixed = last_fixed - first_fixed;
                 viewport.row_height = ((canvas.height() - padding * 2.0 - fixed).max(1.0)
                     / (last - first).max(0.01))
                 .max(0.01);
-                viewport.row_offset = (first
-                    + (first_footers as f32 * folder_footer - padding) / viewport.row_height)
-                    .max(0.0);
+                viewport.row_offset =
+                    (first + (first_fixed - padding) / viewport.row_height).max(0.0);
             }
         }
         bounds.end_row = (row_units + folder_footers / viewport.row_height).max(1.0);
@@ -597,9 +601,19 @@ impl DawApp {
                 .track(*id)
                 .is_some_and(|track| track.kind == TrackKind::Folder)
         });
-        daw_ui::picker_at(
+        let header_cell = Rect::from_min_size(
+            ruler.min,
+            Vec2::new(header_width, daw_ui::tokens::TIMELINE_RULER_HEIGHT),
+        );
+        daw_ui::track_list_menu_at(
             ui,
-            Rect::from_min_size(ruler.min + Vec2::new(14.0, 3.0), Vec2::new(128.0, 28.0)),
+            header_cell,
+            daw_ui::TrackHeaderLayout::new(Rect::from_min_size(
+                ruler.min,
+                Vec2::new(header_width, ROW),
+            ))
+            .icon
+            .left(),
             "arrangement_tracks",
             "Tracks",
             |ui| {
@@ -706,9 +720,8 @@ impl DawApp {
         for (row_index, (index, _)) in visible_tracks.iter().enumerate() {
             row_tops.push(row_top);
             let track = &self.project.tracks[*index];
-            let compact = track.collapsed && track.kind != TrackKind::Folder;
             let bottom =
-                row_top + viewport.row_height * if compact { COMPACT_ROW / ROW } else { 1.0 };
+                row_top + viewport.row_height * track_row_units(track, viewport.row_height);
             for (order, start) in folder_closures[row_index].iter().enumerate() {
                 folder_after_spans[*start] =
                     Some(bottom + (order + 1) as f32 * folder_footer - row_tops[*start]);
@@ -722,8 +735,8 @@ impl DawApp {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for (row_index, (index, depth)) in visible_tracks.into_iter().enumerate() {
                     let track = &self.project.tracks[index];
+                    let row_height = viewport.row_height * track_row_units(track, viewport.row_height);
                     let compact = track.collapsed && track.kind != TrackKind::Folder;
-                    let row_height = viewport.row_height * if compact { COMPACT_ROW / ROW } else { 1.0 };
                     let (row, mut row_response) = ui
                         .allocate_exact_size(Vec2::new(content_width, row_height), Sense::click());
                     folder_rows[row_index].rect = row;
@@ -768,7 +781,7 @@ impl DawApp {
                     } else if matches!(track.kind, TrackKind::Audio | TrackKind::Midi) {
                         header_layout = header_layout.with_record_arm();
                     } else if track.kind == TrackKind::Folder {
-                        header_layout = header_layout.with_folder_disclosure();
+                        header_layout = header_layout.with_folder_disclosure().with_state_toggles();
                     }
                     if !channels.contains_key(&track.id) {
                         header_layout = header_layout.without_channel_sections();
@@ -897,7 +910,7 @@ impl DawApp {
                                         None => "None".to_owned(),
                                     };
                                     if daw_ui::track_header_link_at(ui, rect, (track.id, "recording_input"),
-                                        daw_ui::Icon::Record, "Input", &input)
+                                        daw_ui::Icon::Input, "Input", &input)
                                         .on_hover_text("Choose recording inputs and monitoring").clicked() {
                                         recording_target = Some(track.id);
                                     }
@@ -920,8 +933,8 @@ impl DawApp {
                                 |ui| { if let Some(action) = daw_ui::automation_menu_contents(ui, lane_id, state) { automation_navigation = Some(action); } }).0;
                             daw_ui::paint_automation_control(ui, &response, state);
                     }
-                    if let Some(mix_rect) = header_layout.mix {
-                        if channels.contains_key(&track.id) {
+                    if let Some(mix_rect) = header_layout.mix
+                        && channels.contains_key(&track.id) {
                             let gain_automation = automation.get(&AutomationTarget { track: track.id, parameter: AutomationParameter::TrackGain }).copied();
                             let pan_automation = automation.get(&AutomationTarget { track: track.id, parameter: AutomationParameter::TrackPan }).copied();
                             let mut gain = gain_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
@@ -940,6 +953,7 @@ impl DawApp {
                             meter_ui.set_clip_rect(ui.clip_rect().intersect(meter_rect));
                             let meter = daw_ui::stereo_meter(&mut meter_ui, peaks, meter_rect.size())
                                 .on_hover_text("Channel output level · post-fader");
+                            daw_ui::paint_track_meter_frame(&ui.painter_at(header), meter_rect);
                             let mut exact_gain = false;
                             let mut exact_pan = false;
                             for (response, control, state, current, range, unit, name) in [
@@ -989,16 +1003,11 @@ impl DawApp {
                                 "mute": rect_json(controls.mute.rect), "solo": rect_json(controls.solo.rect),
                                 "compact": header_layout.compact,
                             }));
-                        } else if track.kind == TrackKind::Folder {
-                            for (index, name, active) in [(0, "M", track.mute), (1, "S", track.solo)] {
-                                let rect = Rect::from_min_size(mix_rect.min + Vec2::new(index as f32 * 26.0, 0.0),
-                                    Vec2::new(21.0, mix_rect.height().min(34.0)));
-                                if daw_ui::selectable_at(ui, rect, (track.id, name), active, name)
-                                    .on_hover_text(if index == 0 { "Mute folder" } else { "Solo folder" }).clicked() {
-                                    edits.push(if index == 0 { Edit::Mute(track.id) } else { Edit::Solo(track.id) });
-                                }
-                            }
-                        }
+                    }
+                    if let Some(rect) = header_layout.state_toggles {
+                        let [mute, solo] = daw_ui::track_state_toggles_at(ui, rect, (track.id, "folder_state"), track.mute, track.solo);
+                        if mute.on_hover_text("Mute folder").clicked() { edits.push(Edit::Mute(track.id)); }
+                        if solo.on_hover_text("Solo folder").clicked() { edits.push(Edit::Solo(track.id)); }
                     }
                     let grid_step = (8.0 / self.zoom).ceil().max(1.0) as usize;
                     for beat in ((first_beat / grid_step) * grid_step..last_beat).step_by(grid_step) {
