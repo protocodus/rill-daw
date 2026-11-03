@@ -42,17 +42,6 @@ enum Edit {
 }
 
 #[derive(Clone, Copy)]
-struct LoopEndpointDrag {
-    handle: egui::Id,
-    start: bool,
-    original_start: f64,
-    original_end: f64,
-    pointer_start: f32,
-    pixels_per_beat: f32,
-    dragging: bool,
-}
-
-#[derive(Clone, Copy)]
 struct ClipEdgeDrag {
     handle: egui::Id,
     clip: u64,
@@ -380,7 +369,8 @@ impl DawApp {
             start_row: 0.0,
             end_row: (row_units + folder_footers / viewport.row_height).max(1.0),
         };
-        let ruler_height = daw_ui::duration::loop_ruler_height(ui.ctx());
+        let ruler_height =
+            daw_ui::tokens::TIMELINE_RULER_HEIGHT + daw_ui::tokens::TIMELINE_LOOP_HEIGHT;
         let canvas = Rect::from_min_max(
             ui.available_rect_before_wrap().min
                 + Vec2::new(header_width, ruler_height + ui.spacing().item_spacing.y),
@@ -494,6 +484,8 @@ impl DawApp {
             viewport.row_height = viewport.row_height.min(ROW);
             bounds.end_row = (row_units + folder_footers / viewport.row_height).max(1.0);
         }
+        // Beat 0 is the earliest position; the canvas never shows negative time.
+        viewport.start_beat = viewport.start_beat.max(0.0);
         self.zoom = viewport.pixels_per_beat;
         let content_width = (ui.available_width() - 12.0).max(header_width + 1.0);
         let pattern_start = self.snapped(self.cursor).max(0.0);
@@ -660,7 +652,15 @@ impl DawApp {
         .0
         .on_hover_text("Organize tracks and folders");
         let grid_left = ruler.left() + header_width;
-        let origin = grid_left - (viewport.start_beat * self.zoom as f64) as f32;
+        // A leading gutter keeps beat 0, the playhead and the first clip edge
+        // off the header border. `view` is the painted mapping; `viewport`
+        // stays the stored navigation state.
+        let view = daw_ui::TimelineViewport {
+            start_beat: viewport.start_beat
+                - f64::from(daw_ui::tokens::SPACE_SM / viewport.pixels_per_beat),
+            ..viewport
+        };
+        let origin = grid_left - (view.start_beat * self.zoom as f64) as f32;
         let first_beat = (((grid_left - origin) / self.zoom).floor().max(0.0)) as usize;
         let last_beat = (((canvas.right() - origin) / self.zoom).ceil().max(0.0) as usize + 1)
             .min(end.ceil() as usize);
@@ -678,7 +678,7 @@ impl DawApp {
         daw_ui::paint_timeline_ruler(
             &p,
             label_ruler,
-            viewport,
+            view,
             self.project.tempo,
             self.project.beats_per_bar,
         );
@@ -686,198 +686,16 @@ impl DawApp {
             ui,
             "arrangement_loop",
             loop_lane,
-            viewport,
+            view,
             can_change_loop && !navigation.navigating,
         );
-        let loop_drag_id = egui::Id::new("arrangement_loop_endpoint_drag");
-        let cancel_loop_drag = !self.project.loop_enabled
-            || !can_change_loop
-            || navigation.navigating
-            || egui::Popup::is_any_open(ui.ctx())
-            || ui.input(|input| {
-                input.key_pressed(egui::Key::Escape)
-                    || input.pointer.secondary_down()
-                    || input.pointer.button_down(egui::PointerButton::Middle)
-                    || input
-                        .raw
-                        .events
-                        .iter()
-                        .any(|event| matches!(event, egui::Event::WindowFocused(false)))
-                    || (!input.pointer.primary_down() && !input.pointer.primary_released())
-            });
-        if cancel_loop_drag {
-            ui.ctx()
-                .data_mut(|data| data.remove::<LoopEndpointDrag>(loop_drag_id));
-        }
-        let mut loop_drag = ui
-            .ctx()
-            .data(|data| data.get_temp::<LoopEndpointDrag>(loop_drag_id));
-        if let Some(gesture) = &mut loop_drag {
-            if !gesture.dragging && ui.ctx().is_being_dragged(gesture.handle) {
-                self.history.seal_group();
-                gesture.dragging = true;
-            }
-            if gesture.dragging
-                && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
-            {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-                let delta = f64::from(pointer.x - gesture.pointer_start)
-                    / f64::from(gesture.pixels_per_beat);
-                let original = if gesture.start {
-                    gesture.original_start
-                } else {
-                    gesture.original_end
-                };
-                let target = if ui.input(|input| input.modifiers.shift) {
-                    original + delta
-                } else {
-                    self.snapped(original + delta)
-                };
-                let minimum = 0.001_f64.min(gesture.original_end - gesture.original_start);
-                let (start, end) = if gesture.start {
-                    (
-                        target.clamp(0.0, gesture.original_end - minimum),
-                        gesture.original_end,
-                    )
-                } else {
-                    (
-                        gesture.original_start,
-                        target.clamp(gesture.original_start + minimum, MAX_BEAT),
-                    )
-                };
-                if start != self.project.loop_start || end != self.project.loop_end {
-                    self.loop_range(start, end);
-                    self.edit_label = Some("Loop range".into());
-                }
-                if ui.input(|input| input.pointer.primary_down()) {
-                    let endpoint = if gesture.start { start } else { end };
-                    daw_ui::pointer_text(
-                        ui.ctx(),
-                        loop_drag_id.with("feedback"),
-                        pointer,
-                        format!(
-                            "Loop {} · {}\n{} · Duration {}",
-                            if gesture.start { "start" } else { "end" },
-                            daw_ui::duration::musical_position(
-                                endpoint,
-                                self.project.beats_per_bar
-                            ),
-                            daw_ui::duration::format_seconds(endpoint * 60.0 / self.project.tempo),
-                            daw_ui::duration::format_seconds(
-                                (end - start) * 60.0 / self.project.tempo
-                            ),
-                        ),
-                    );
-                }
-            }
-            ui.ctx()
-                .data_mut(|data| data.insert_temp(loop_drag_id, *gesture));
-        }
-        let mut loop_indicator = None;
-        let mut loop_handles = [None, None];
-        let mut loop_handle_owns_pointer = loop_drag.is_some();
-        if self.project.loop_enabled {
-            let region = Rect::from_min_max(
-                Pos2::new(
-                    origin + self.project.loop_start as f32 * self.zoom,
-                    loop_lane.top() + daw_ui::tokens::SPACE_SM,
-                ),
-                Pos2::new(
-                    origin + self.project.loop_end as f32 * self.zoom,
-                    loop_lane.bottom(),
-                ),
-            );
-            let rr = region.intersect(loop_lane);
-            if rr.is_positive() {
-                daw_ui::duration::paint_loop_region(
-                    &p,
-                    rr,
-                    self.project.loop_start,
-                    self.project.loop_end,
-                    self.project.tempo,
-                    self.project.beats_per_bar,
-                );
-                for (index, start) in [true, false].into_iter().enumerate() {
-                    let handle_id = loop_drag_id.with(start);
-                    if let Some(response) = daw_ui::duration::loop_endpoint_handle(
-                        ui,
-                        handle_id,
-                        region,
-                        loop_lane,
-                        start,
-                        can_change_loop,
-                    ) {
-                        loop_handles[index] = Some(response.rect);
-                        loop_handle_owns_pointer |= response.hovered()
-                            || response.is_pointer_button_down_on()
-                            || response.clicked();
-                        if !cancel_loop_drag
-                            && ui.input(|input| input.pointer.primary_pressed())
-                            && response.is_pointer_button_down_on()
-                            && let Some(pointer) = ui.input(|input| input.pointer.press_origin())
-                        {
-                            ui.ctx().data_mut(|data| {
-                                data.insert_temp(
-                                    loop_drag_id,
-                                    LoopEndpointDrag {
-                                        handle: handle_id,
-                                        start,
-                                        original_start: self.project.loop_start,
-                                        original_end: self.project.loop_end,
-                                        pointer_start: pointer.x,
-                                        pixels_per_beat: self.zoom,
-                                        dragging: false,
-                                    },
-                                )
-                            });
-                        }
-                    }
-                }
-                if ui
-                    .input(|input| input.pointer.hover_pos())
-                    .is_some_and(|point| rr.contains(point))
-                    && !loop_handle_owns_pointer
-                {
-                    daw_ui::hover_text(
-                        ruler_response.clone(),
-                        format!(
-                            "Loop from {} ({}) to {} ({}) · {}",
-                            daw_ui::duration::musical_position(
-                                self.project.loop_start,
-                                self.project.beats_per_bar
-                            ),
-                            daw_ui::duration::format_seconds(
-                                self.project.loop_start * 60.0 / self.project.tempo
-                            ),
-                            daw_ui::duration::musical_position(
-                                self.project.loop_end,
-                                self.project.beats_per_bar
-                            ),
-                            daw_ui::duration::format_seconds(
-                                self.project.loop_end * 60.0 / self.project.tempo
-                            ),
-                            daw_ui::duration::format_seconds(
-                                (self.project.loop_end - self.project.loop_start) * 60.0
-                                    / self.project.tempo
-                            ),
-                        ),
-                    );
-                }
-                loop_indicator = Some(rr);
-            }
-        }
         if ruler_response.clicked()
-            && !loop_handle_owns_pointer
             && let Some(pos) = ruler_response.interact_pointer_pos()
             && pos.x >= grid_left
             && pos.x <= canvas.right()
             && !loop_lane.contains(pos)
         {
             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
-        }
-        if ui.input(|input| input.pointer.primary_released()) {
-            ui.ctx()
-                .data_mut(|data| data.remove::<LoopEndpointDrag>(loop_drag_id));
         }
         // Folder "After" means after its complete subtree, even when the
         // pointer stays over the folder header. Keep that boundary independent
@@ -1284,7 +1102,7 @@ impl DawApp {
                         let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
                         empty_action_rects.push(row);
                         let response = crate::arranger_automation::automation_lane(ui, crate::arranger_automation::LaneView {
-                            track: track.id, rect, viewport, snap: self.snap, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
+                            track: track.id, rect, viewport: view, snap: self.snap, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
                         }, lane, &mut self.selected_clip);
                         if response.interacted {
                             self.selected_track = Some(track.id);
@@ -1294,7 +1112,7 @@ impl DawApp {
                         edits.extend(response.edits.into_iter().map(|edit| Edit::Automation(track.id, edit)));
                         automation_diagnostics.push(response.diagnostic);
                         if let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
-                            daw_ui::paint_curve(&p, rect, viewport.start_beat, viewport.beat_at(rect, rect.right()), palette(ui.ctx()).automation_override, |_| *value);
+                            daw_ui::paint_curve(&p, rect, view.start_beat, view.beat_at(rect, rect.right()), palette(ui.ctx()).automation_override, |_| *value);
                         }
                     }
                     if !navigation.navigating && (background_double
@@ -1762,7 +1580,7 @@ impl DawApp {
                             let incoming = &track.clips[overlap.incoming];
                             let ClipContent::Audio { crossfade, .. } = incoming.content else { continue; };
                             let lane = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(row.right(), row.bottom() - 8.0));
-                            let handle = daw_ui::crossfade_duration_handle(ui, ui.id().with(("overlap_handle", incoming.id)), lane, viewport,
+                            let handle = daw_ui::crossfade_duration_handle(ui, ui.id().with(("overlap_handle", incoming.id)), lane, view,
                                 daw_ui::CrossfadeBounds { start: overlap.start, end: overlap.end, duration: crossfade.map_or(0.0, |config| config.duration) }, !navigation.navigating);
                             if handle.open_curve {
                                 self.selected_track = Some(track.id);
@@ -2088,7 +1906,9 @@ impl DawApp {
             data.insert_temp(header_id, header_width);
             let rect_json = |rect: Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
             let mut diagnostics = serde_json::json!({
-                "start_beat": viewport.start_beat, "pixels_per_beat": viewport.pixels_per_beat,
+                // The painted mapping, gutter included: canvas.min.x is this beat.
+                "start_beat": viewport.start_beat - f64::from(daw_ui::tokens::SPACE_SM / viewport.pixels_per_beat),
+                "view_start_beat": viewport.start_beat, "pixels_per_beat": viewport.pixels_per_beat,
                 "row_offset": viewport.row_offset, "row_height": viewport.row_height,
                 "canvas": {"min": [canvas.min.x, canvas.min.y], "max": [canvas.max.x, canvas.max.y]},
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
@@ -2110,9 +1930,9 @@ impl DawApp {
             diagnostics["automation"] = serde_json::json!(automation_diagnostics);
             diagnostics["loop_lane"] = rect_json(loop_response.lane);
             diagnostics["loop_handles"] = serde_json::json!(loop_response.handles.map(|handle| handle.map(rect_json)));
-            diagnostics["loop_indicator"] = serde_json::json!(loop_indicator.map(rect_json));
-            diagnostics["loop_start_handle"] = serde_json::json!(loop_handles[0].map(rect_json));
-            diagnostics["loop_end_handle"] = serde_json::json!(loop_handles[1].map(rect_json));
+            diagnostics["loop_indicator"] = serde_json::json!(loop_response.band.filter(|_| self.project.loop_enabled).map(rect_json));
+            diagnostics["loop_start_handle"] = serde_json::json!(loop_response.handles[0].filter(|_| self.project.loop_enabled).map(rect_json));
+            diagnostics["loop_end_handle"] = serde_json::json!(loop_response.handles[1].filter(|_| self.project.loop_enabled).map(rect_json));
             diagnostics["folder_padding"] = serde_json::json!(folder_padding);
             diagnostics["folder_containers"] = serde_json::json!(folder_containers.iter().map(|group| serde_json::json!({
                 "folder":group.folder,"depth":group.depth,"rect":rect_json(group.rect),"visible":rect_json(group.visible),
@@ -3129,13 +2949,22 @@ impl DawApp {
             &mut range,
             self.snap,
             MAX_BEAT,
+            Some(daw_ui::TimelineLoopLabel {
+                tempo: self.project.tempo,
+                beats_per_bar: self.project.beats_per_bar,
+                playhead: self.cursor,
+            }),
         );
+        if response.started {
+            // Each drag is its own undo step, even right after another one.
+            self.history.seal_group();
+        }
         if response.changed {
             self.begin_edit();
             self.project.loop_start = range.start;
             self.project.loop_end = range.end;
             self.project.loop_enabled = range.enabled;
-            self.edit_label = Some("Edit loop range".into());
+            self.edit_label = Some("Loop range".into());
             self.changed();
         }
         response
