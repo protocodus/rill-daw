@@ -16,7 +16,7 @@ use eframe::egui;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 const SIDEBAR_WIDTH: f32 = 233.0;
-const DETAILS_WIDTH: f32 = 377.0;
+const DETAILS_WIDTH: f32 = 233.0;
 /// Two card columns and the grid's scrollbar gutter.
 const CATALOG_MIN_WIDTH: f32 =
     2.0 * daw_ui::DEVICE_CARD_MIN_WIDTH + SPACE_MD + daw_ui::tokens::SPACE_LG;
@@ -473,8 +473,9 @@ impl DawApp {
         daw_ui::popup("Library", ctx)
             .id(egui::Id::new("library"))
             .open(&mut open)
-            .default_width(1597.0)
-            .default_height(987.0)
+            // A large popup plus the collections sidebar.
+            .default_width(daw_ui::tokens::POPUP_WIDTH_LG + SIDEBAR_WIDTH)
+            .default_height(610.0)
             .vscroll(false)
             .show(ctx, |ui| {
                 // Share selected identity with the action row on short screens

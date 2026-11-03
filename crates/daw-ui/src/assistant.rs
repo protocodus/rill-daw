@@ -159,10 +159,19 @@ pub fn assistant(
     if options.failure.is_none() {
         state.reset_failure_reveal();
     }
-    crate::action_row(
+    // Pages lead, as in every tabbed popup; the scope and its live context
+    // open the body beneath the tab rule.
+    crate::popup_tabs(
         ui,
+        &mut state.page,
+        &[
+            (AssistantPage::Conversation, "Conversation"),
+            (AssistantPage::Examples, "Examples"),
+            (AssistantPage::Tools, "Tools"),
+            (AssistantPage::Tips, "Tips"),
+        ],
         |ui| {
-            crate::menu_button(ui, "More", |ui| {
+            crate::quiet_action_menu(ui, "More", |ui| {
                 let reuse = ui
                     .add_enabled_ui(
                         options.can_reuse && prompt.is_empty() && !options.busy,
@@ -176,7 +185,6 @@ pub fn assistant(
                 .clicked()
                 {
                     reuse_last = true;
-                    state.page = AssistantPage::Conversation;
                     ui.close();
                 }
                 let can_reset = !options.busy
@@ -205,12 +213,13 @@ pub fn assistant(
                 })
                 .clicked();
         },
-        |ui| {
-            let scope = format!("Scope · {}", bounded(options.scope, 2_048));
-            text::truncated(ui, text::TextRole::Label, scope)
-                .on_hover_text(bounded(options.context, 2_048));
-        },
     );
+    if reuse_last {
+        state.page = AssistantPage::Conversation;
+    }
+    let scope = format!("Scope · {}", bounded(options.scope, 2_048));
+    text::truncated(ui, text::TextRole::Label, scope)
+        .on_hover_text(bounded(options.context, 2_048));
     // Status shares the header's context line. Keeping it out of the fixed
     // composer leaves room for readable diagnostics on a short display.
     // The complete musical context remains available on the scope label.
@@ -234,17 +243,7 @@ pub fn assistant(
     } else if !compact_layout && !options.context.is_empty() {
         text::truncated(ui, text::TextRole::Note, bounded(options.context, 2_048));
     }
-    crate::popup_tabs(
-        ui,
-        &mut state.page,
-        &[
-            (AssistantPage::Conversation, "Conversation"),
-            (AssistantPage::Examples, "Examples"),
-            (AssistantPage::Tools, "Tools"),
-            (AssistantPage::Tips, "Tips"),
-        ],
-        |_| {},
-    );
+    crate::section_gap(ui);
 
     // Browsing needs room for choices, while the conversation benefits from a
     // taller composer. A short popup keeps one editable line and scrolls the

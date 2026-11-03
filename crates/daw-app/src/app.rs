@@ -2385,7 +2385,8 @@ impl DawApp {
                 if self.document_guard.is_some() { ui.disable(); }
                 daw_ui::menu_bar(ui, |ui| {
                     daw_ui::brand_lockup(ui, daw_ui::BrandSize::Compact);
-                    ui.separator();
+                    // A gap, not a rule: the mark and the menus already differ.
+                    ui.add_space(daw_ui::tokens::SPACE_MD);
                     daw_ui::command_menu_button(ui, "File", |ui| {
                         if daw_ui::button(ui, "New").clicked() {
                             self.request_document_transition(crate::document_ui::DocumentTransition::New);

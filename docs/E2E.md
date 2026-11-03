@@ -1115,10 +1115,11 @@ real dialog bottom in large and compact viewports, including generator mode
 changes. `popup_interactions_e2e` also checks each utility's actions, including the
 Assistant, before and after mouse resizing. The shared `popup_footer` test checks
 scrolling body growth, wrapped actions, resizing and real clicks without moving
-footer targets. `popup_footer_e2e` also checks that Setup and About hug their
-content, that the primary action is rightmost beside Cancel in one row, and that
+footer targets. `popup_footer_e2e` also checks that Setup, About and Join hug
+their content (Join is titled **Join clips · <track>**), that the primary action is rightmost beside Cancel in one row, and that
 form labels share one column. `channel_layout_e2e` checks that the Effects window
-shrinks back to its content after the inserts are removed.
+shrinks back to its content after the inserts are removed. `crossfade_e2e` checks
+that the Crossfade window carries the edited clip in its title.
 
 `menu_order_e2e` checks the workflow order of the File, Edit (including the
 Edit ▸ Audio submenu), Track and Window menus, the right-aligned muted shortcut
