@@ -560,6 +560,7 @@ impl DawApp {
         let mut recording_controls = Vec::new();
         let mut arm_toggles = Vec::new();
         let mut open_editor = false;
+        let mut clip_clipboard = None;
         let mut clip_diagnostics = Vec::new();
         let mut automation_diagnostics = Vec::new();
         let mut selection_items = Vec::new();
@@ -754,7 +755,7 @@ impl DawApp {
                         0.0,
                         if selected {
                             palette(ui.ctx()).track_selected
-                        } else if index % 2 == 0 {
+                        } else if row_index % 2 == 0 {
                             palette(ui.ctx()).bg
                         } else {
                             palette(ui.ctx()).track_alternate
@@ -1137,10 +1138,10 @@ impl DawApp {
                     }
                     if track.kind == TrackKind::Midi && track.clips.is_empty() && row_height >= 32.0 {
                         p.text(
-                            Pos2::new(grid_left + 24.0, row.center().y),
+                            Pos2::new(grid_left + daw_ui::tokens::SPACE_LG, row.center().y),
                             Align2::LEFT_CENTER,
                             "Double-click to add a pattern",
-                            FontId::proportional(daw_ui::tokens::FONT_CANVAS),
+                            daw_ui::text::TextRole::Note.font(),
                             palette(ui.ctx()).muted,
                         );
                     }
@@ -1462,6 +1463,7 @@ impl DawApp {
                                 }
                             }
                         }
+                        let has_clipboard = self.has_arranger_clipboard();
                         response.context_menu(|ui| {
                             let selected_count = self.arranger_selection.ids.len();
                             if selected_count > 1 && self.arranger_selection.ids.contains(&clip.id) {
@@ -1488,6 +1490,9 @@ impl DawApp {
                                 popup = Some(PopupKind::Inspector);
                                 ui.close();
                             }
+                            // Same order as the Edit menu: open, select, clipboard,
+                            // name, structure, transitions, playback, delete.
+                            ui.separator();
                             let member = self.arranger_selection.ids.contains(&clip.id);
                             if daw_ui::selection_membership_action(ui, member) {
                                 edits.push(Edit::Select(track.id, clip.id, true, false));
@@ -1496,6 +1501,76 @@ impl DawApp {
                                 edits.push(Edit::SelectOnly(track.id, clip.id));
                                 ui.close();
                             }
+                            ui.separator();
+                            for (label, action) in [
+                                ("Cut", crate::audio_editor::AudioClipboardAction::Cut),
+                                ("Copy", crate::audio_editor::AudioClipboardAction::Copy),
+                                ("Paste", crate::audio_editor::AudioClipboardAction::Paste),
+                            ] {
+                                let enabled = !matches!(action, crate::audio_editor::AudioClipboardAction::Paste)
+                                    || has_clipboard;
+                                if ui.add_enabled(enabled, daw_ui::button_widget(label)).clicked() {
+                                    clip_clipboard = Some((track.id, clip.id, member, action));
+                                    ui.close();
+                                }
+                            }
+                            if daw_ui::button(ui, "Duplicate").clicked() {
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Duplicate));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if daw_ui::button(ui, "Rename…").clicked() {
+                                edits.push(Edit::Rename(track.id, clip.id));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if daw_ui::button(ui, "Split at cursor").clicked() {
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Split(self.cursor)));
+                                ui.close();
+                            }
+                            if daw_ui::button(ui, "Join clips…").clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                popup = Some(PopupKind::Join);
+                                ui.close();
+                            }
+                            if daw_ui::button(ui, "Stretch").clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                self.selected_notes.clear();
+                                self.tool = daw_ui::EditorTool::Stretch;
+                                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
+                                ui.close();
+                            }
+                            if track.kind == TrackKind::Audio && daw_ui::button(ui, "Slip contents").clicked() {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip.id);
+                                self.tool = daw_ui::EditorTool::Slip;
+                                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
+                                ui.close();
+                            }
+                            if daw_ui::button(ui, "Ghost copy")
+                                .on_hover_text("Create another clip sharing its name and edits")
+                                .clicked() {
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Ghost));
+                                ui.close();
+                            }
+                            if clip.link_group.is_some() && daw_ui::button(ui, "Make independent")
+                                .on_hover_text("Disconnect this ghost while keeping its current name and edits")
+                                .clicked() {
+                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::MakeIndependent));
+                                ui.close();
+                            }
+                            if track.kind == TrackKind::Audio {
+                                ui.separator();
+                                if daw_ui::button(ui, "Crossfade…").clicked() {
+                                    self.selected_track = Some(track.id);
+                                    self.selected_clip = Some(clip.id);
+                                    popup = Some(PopupKind::Crossfade);
+                                    ui.close();
+                                }
+                            }
+                            ui.separator();
                             if ui.add_enabled(can_change_loop, daw_ui::button_widget(
                                 if member { "Loop playback over selection" } else { "Loop playback over clip" },
                             ))
@@ -1514,58 +1589,7 @@ impl DawApp {
                                 }
                                 ui.close();
                             }
-                            if daw_ui::button(ui, "Rename").clicked() {
-                                edits.push(Edit::Rename(track.id, clip.id));
-                                ui.close();
-                            }
-                            if track.kind == TrackKind::Audio && daw_ui::button(ui, "Slip contents").clicked() {
-                                self.selected_track = Some(track.id);
-                                self.selected_clip = Some(clip.id);
-                                self.tool = daw_ui::EditorTool::Slip;
-                                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
-                                ui.close();
-                            }
                             ui.separator();
-                            if daw_ui::button(ui, "Stretch").clicked() {
-                                self.selected_track = Some(track.id);
-                                self.selected_clip = Some(clip.id);
-                                self.selected_notes.clear();
-                                self.tool = daw_ui::EditorTool::Stretch;
-                                ui.ctx().set_cursor_icon(self.tool.cursor_icon());
-                                ui.close();
-                            }
-                            if daw_ui::button(ui, "Ghost copy")
-                                .on_hover_text("Create another clip sharing its name and edits")
-                                .clicked() {
-                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Ghost));
-                                ui.close();
-                            }
-                            if clip.link_group.is_some() && daw_ui::button(ui, "Make independent")
-                                .on_hover_text("Disconnect this ghost while keeping its current name and edits")
-                                .clicked() {
-                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::MakeIndependent));
-                                ui.close();
-                            }
-                            if daw_ui::button(ui, "Join clips…").clicked() {
-                                self.selected_track = Some(track.id);
-                                self.selected_clip = Some(clip.id);
-                                popup = Some(PopupKind::Join);
-                                ui.close();
-                            }
-                            if track.kind == TrackKind::Audio && daw_ui::button(ui, "Crossfade…").clicked() {
-                                self.selected_track = Some(track.id);
-                                self.selected_clip = Some(clip.id);
-                                popup = Some(PopupKind::Crossfade);
-                                ui.close();
-                            }
-                            if daw_ui::button(ui, "Duplicate").clicked() {
-                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Duplicate));
-                                ui.close();
-                            }
-                            if daw_ui::button(ui, "Split at cursor").clicked() {
-                                edits.push(Edit::Command(track.id, clip.id, ClipCommand::Split(self.cursor)));
-                                ui.close();
-                            }
                             if daw_ui::button(ui, "Delete").clicked() {
                                 edits.push(Edit::Command(track.id, clip.id, ClipCommand::Delete));
                                 ui.close();
@@ -1687,11 +1711,22 @@ impl DawApp {
                     empty_action = response.action;
                     empty_action_rects.extend(response.actions.iter().map(|(_, response)| response.interact_rect));
                 } else {
+                    // Bars continue below the last track so the timeline reads as one surface.
+                    let bars = usize::from(self.project.beats_per_bar.max(1));
+                    for beat in (first_beat.div_ceil(bars) * bars..last_beat).step_by(bars) {
+                        let x = origin + beat as f32 * self.zoom;
+                        if x >= grid_left && x <= canvas.right() {
+                            p.vline(x, empty.y_range(), Stroke::new(1.0_f32, palette(ui.ctx()).grid_minor));
+                        }
+                    }
                     p.text(
-                        Pos2::new(grid_left + 24.0, empty.top() + 34.0),
+                        Pos2::new(
+                            grid_left + daw_ui::tokens::SPACE_LG,
+                            empty.top() + daw_ui::tokens::CONTROL_HEIGHT,
+                        ),
                         Align2::LEFT_CENTER,
                         "Drop audio here · Double-click for MIDI",
-                        FontId::proportional(12.0),
+                        daw_ui::text::TextRole::Note.font(),
                         palette(ui.ctx()).muted,
                     );
                 }
@@ -1990,6 +2025,14 @@ impl DawApp {
         }
         if open_editor {
             self.open_workspace(WorkspaceView::Clip);
+        }
+        if let Some((track, clip, member, action)) = clip_clipboard {
+            // A clip outside the selection acts alone, as in the Edit menu
+            // after clicking it.
+            if !member {
+                self.arranger_select_only_clip(track, clip);
+            }
+            self.arranger_clipboard_action(ui.ctx(), action);
         }
         if ui.input(|i| i.pointer.primary_released())
             && self.arranger_selection.drag.is_some()

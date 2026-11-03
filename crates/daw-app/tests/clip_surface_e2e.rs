@@ -97,7 +97,7 @@ fn audio_and_midi_clips_keep_titles_and_previews_separate_in_both_appearances() 
                 if clip["track"] == midi {
                     let track = project.track(midi).unwrap();
                     let color = Color32::from_rgb(track.color[0], track.color[1], track.color[2]);
-                    let note_color = json!(color.gamma_multiply(0.85).to_array());
+                    let note_color = json!(color.to_array());
                     let notes: Vec<_> = state["painted_rects"]
                         .as_array()
                         .unwrap()

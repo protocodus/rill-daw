@@ -1,7 +1,7 @@
 //! Inline automation controls use the same curve model and theme as the
 //! focused editor. Application views supply data and own document history.
 use crate::{CurveEdit, CurveInterpolation, CurvePoint, TimelineViewport, theme, tokens};
-use egui::{Color32, Id, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2};
+use egui::{Color32, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
 
 pub struct AutomationCanvas {
     pub rect: Rect,
@@ -127,7 +127,7 @@ pub fn automation_canvas_at(
         painter.circle_stroke(
             position,
             if hovered { 5.0 } else { 3.5 },
-            Stroke::new(1.0, theme::palette(ui.ctx()).bg),
+            Stroke::new(1.0_f32, theme::palette(ui.ctx()).bg),
         );
     }
     if editable
@@ -166,32 +166,18 @@ pub fn automation_pattern_header(
     pattern: AutomationPatternHeader<'_>,
     editable: bool,
 ) -> Response {
-    let colors = theme::palette(ui.ctx());
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, tokens::RADIUS, colors.bg);
-    painter.rect_filled(
-        rect,
-        tokens::RADIUS,
-        pattern
-            .color
-            .gamma_multiply(if pattern.selected { 0.25 } else { 0.12 }),
-    );
-    painter.rect_stroke(
-        rect,
-        tokens::RADIUS,
-        Stroke::new(if pattern.selected { 1.5 } else { 0.8 }, pattern.color),
-        StrokeKind::Inside,
-    );
-    let header = Rect::from_min_max(
-        rect.min,
-        Pos2::new(rect.right(), (rect.top() + 20.0).min(rect.bottom())),
-    );
-    painter.rect_filled(header, tokens::RADIUS, pattern.color.gamma_multiply(0.2));
+    // The same surface, title band and selection treatment as audio and MIDI clips.
+    let painter = ui.painter_at(rect.expand(tokens::SPACE_SM));
+    let surface = crate::clip_surface(&painter, rect, pattern.color, pattern.selected);
+    let header = surface
+        .title
+        .with_min_x(rect.left())
+        .with_max_x(rect.right());
     crate::clip_title(
         &painter,
-        header.shrink2(Vec2::new(tokens::SPACE_SM, 0.0)),
+        surface.title,
         egui::FontId::proportional(tokens::FONT_CANVAS),
-        colors.text,
+        surface.title_color,
         pattern.name,
         pattern.linked,
     );
