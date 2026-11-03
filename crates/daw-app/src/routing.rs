@@ -15,12 +15,8 @@ impl DawApp {
     ) -> (bool, bool) {
         // Five links and the full AI label overflow a medium window; the
         // short AI label keeps the row on one line instead of wrapping.
-        let labels: Vec<&str> = self
-            .channel_links(current)
-            .iter()
-            .map(|link| link.label)
-            .collect();
-        let compact = !widgets::links_fit(ui, &labels, "AI for this context");
+        let links = self.channel_links(current);
+        let compact = !widgets::links_fit(ui, current, &links, "AI for this context");
         widgets::utility_header(
             ui,
             |ui| self.channel_navigation(ui, current),

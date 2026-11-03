@@ -34,25 +34,34 @@ pub fn view_links<T: Copy + PartialEq>(
     selected
 }
 
-/// Whether a row of tab links plus one trailing button fits on one line of
-/// this `ui`, so a caller can shorten the trailing label instead of wrapping.
-pub fn links_fit(ui: &Ui, labels: &[&str], trailing: &str) -> bool {
-    let font = egui::TextStyle::Button.resolve(ui.style());
-    let spacing = ui.spacing().item_spacing.x;
-    let width = |label: &str| {
-        ui.ctx().fonts_mut(|fonts| {
-            fonts
-                .layout_no_wrap(label.to_owned(), font.clone(), egui::Color32::PLACEHOLDER)
-                .size()
-                .x
-        }) + 2.0 * crate::tokens::BUTTON_PADDING_X
-    };
-    let needed = labels
-        .iter()
-        .map(|label| width(label) + spacing)
-        .sum::<f32>()
-        + width(trailing);
-    needed <= ui.available_width()
+/// Whether the page links as tabs plus one trailing button fit on one line
+/// here, so a caller can shorten the trailing label instead of wrapping.
+/// Measured with an invisible sizing pass of the same widgets.
+pub fn links_fit<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: T,
+    links: &[ViewLink<T>],
+    trailing: &str,
+) -> bool {
+    let mut probe = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(ui.max_rect())
+            .sizing_pass()
+            .invisible()
+            .id_salt("links_fit"),
+    );
+    probe.horizontal(|ui| {
+        for link in links {
+            ui.add(
+                crate::IconButton::tab(current == link.value, link.label)
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        }
+        ui.add(crate::ai_button_widget(trailing));
+    });
+    // action_row separates the trailing action from the links by SPACE_SM on
+    // top of the item spacing the probe already contains.
+    probe.min_rect().width() + crate::tokens::SPACE_SM <= ui.available_width()
 }
 
 /// The one header of channel utility windows (Channel, Instrument, Effects,
