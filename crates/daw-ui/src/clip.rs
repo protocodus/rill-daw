@@ -230,16 +230,25 @@ pub fn clip_choice(
     linked: bool,
     detail: &str,
 ) -> Response {
-    let response = crate::checkbox(ui, selected, title);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
-        ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(tokens::SPACE_LG), Sense::hover());
-        if linked {
-            Icon::Link.paint(ui.painter(), rect, crate::theme::palette(ui.ctx()).muted);
-        }
-        text::note(ui, detail);
-    });
+    // The detail hugs its name, indented to the checkbox label's text.
+    let response = ui
+        .vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
+            let response = crate::checkbox(ui, selected, title);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+                ui.spacing_mut().interact_size.y = tokens::COMPACT_HEIGHT;
+                ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
+                if linked {
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::splat(tokens::SPACE_MD), Sense::hover());
+                    Icon::Link.paint(ui.painter(), rect, crate::theme::palette(ui.ctx()).muted);
+                }
+                text::note(ui, detail);
+            });
+            response
+        })
+        .inner;
     response.on_hover_text(format!(
         "{title}\n{detail}{}",
         if linked {

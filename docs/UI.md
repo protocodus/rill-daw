@@ -240,7 +240,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Searchable choice lists | `searchable_select` (query, mouse selection and empty state) |
 | Presentation commands | `view_button`, `view_button_widget` |
 | Exclusive interaction modes | `tool_value`, `IconButton::tool` |
-| Quiet page navigation | `tab_choice`, `IconButton::tab`, `popup_tabs` (tab row, trailing slot and one separator with fixed spacing) |
+| Quiet page navigation | `tab_choice`, `IconButton::tab`, `popup_tabs` (tab row and trailing slot; the window title line above and a fixed gap below separate it from the body) |
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `command_menu_button`, `menu_button` |

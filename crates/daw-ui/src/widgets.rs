@@ -139,9 +139,9 @@ pub fn popup_tabs<T: PartialEq + Copy, R>(
     })
     .inner
     .0;
-    ui.add_space(tokens::SPACE_XS);
-    ui.add(egui::Separator::default().spacing(tokens::SPACE_MD));
-    ui.add_space(tokens::SPACE_XS);
+    // The window title already draws one line above the tabs; the body is
+    // separated from the tab row by space alone.
+    ui.add_space(tokens::SPACE_LG - ui.spacing().item_spacing.y);
     result
 }
 
