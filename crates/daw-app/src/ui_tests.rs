@@ -651,13 +651,8 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!harness.app.inspector_open);
     let output = harness.menu("Window", "Mixer");
     assert_eq!(harness.app.view, WorkspaceView::Mixer);
-    let channel = text_position(&output, "Channel", 0.0) + Vec2::new(12.0, 8.0);
-    harness.full_click(channel);
-    let output = harness.settle_full();
-    assert!(egui::Popup::is_any_open(&harness.ctx));
-    // Mixer also has a direct Effects button behind the Channel menu. Click
-    // the foreground menu entry, as the menu helper does for duplicate labels.
-    let effects = front_text_position(&output, "Effects") + Vec2::new(12.0, 8.0);
+    // The strip's Effects row opens the chain directly.
+    let effects = text_position(&output, "Effects", 0.0) + Vec2::new(12.0, 8.0);
     harness.full_click(effects);
     let output = harness.settle_full();
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);

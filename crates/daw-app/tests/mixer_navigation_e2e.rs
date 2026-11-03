@@ -19,7 +19,7 @@ fn fader(state: &Value, channel: usize) -> Value {
 }
 
 fn pan_dial(state: &Value, channel: usize) -> Value {
-    state["mixer"]["channels"][channel]["pan_knob"]["dial"].clone()
+    state["mixer"]["channels"][channel]["pan_scale"]["rail"].clone()
 }
 
 fn reveal_control(app: &mut Harness, target: fn(&Value, usize) -> Value, channel: usize) -> Value {

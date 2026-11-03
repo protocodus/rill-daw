@@ -135,12 +135,13 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         let routing_title = format!("Routing of {}", project.track(track).unwrap().name);
         for label in [
             routing_title.as_str(),
-            "Level",
+            "Output",
+            "Sends",
+            "8.0 dB",
             "Pre",
             "Post",
-            "×",
-            "+ Send",
-            "Create send track",
+            "Add send…",
+            "New return with effect…",
         ] {
             visible(&state, label);
         }
@@ -164,7 +165,7 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         let state = click_revealed(&mut app, "Pre");
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["pre_fader"], true);
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["gain"], 2.5);
-        let state = app.click("×");
+        let state = app.click("Remove send");
         assert!(
             state["project"]["tracks"][0]["sends"]
                 .as_array()

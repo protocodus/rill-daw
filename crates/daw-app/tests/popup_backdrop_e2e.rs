@@ -268,8 +268,13 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
     app.key("Escape");
     assert_clear(&mut app);
 
-    app.click("Mixer");
-    app.click("Channel");
+    let mixer = app.click("Mixer");
+    // Channel destinations open from the name plate's context menu.
+    let [left, top, right, bottom] = bounds(&mixer["mixer"]["channels"][0]["name"]);
+    app.command(
+        json!({"command":"pointer", "phase":"click", "button":"secondary",
+        "x":(left+right)*0.5, "y":(top+bottom)*0.5}),
+    );
     assert_menu_backdrop(&painted(&mut app), "Open channel");
     app.click("Effects");
     assert_backdrop(&painted(&mut app), "Effects of Backdrop synth");

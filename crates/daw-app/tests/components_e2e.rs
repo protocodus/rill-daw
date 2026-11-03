@@ -280,14 +280,14 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
                 app.inspect();
             }
             let top = app.inspect();
-            accessible(&top, &["Calm controls", "Channel", "Back"]);
+            accessible(&top, &["Calm controls", "Automation", "Back"]);
             let back_rect = text_rect(&top, "Back");
             app.command(json!({"command":"scroll","x":90.0,"y":350.0,"delta":-1000.0}));
             for _ in 0..20 {
                 app.inspect();
             }
             let scrolled = app.inspect();
-            accessible(&scrolled, &["Output", "Ch 1 > Master", "Back"]);
+            accessible(&scrolled, &["Master", "Add send…", "Back"]);
             assert_eq!(text_rect(&scrolled, "Back"), back_rect);
             for field in ["project", "history", "selected_track"] {
                 assert_eq!(scrolled[field], top[field], "Scrolling changed {field}");

@@ -708,7 +708,7 @@ fn mixer_card_padding_and_parent_gutters_survive_display_scaling() {
                         let strip = controls::mixer_strip(
                             ui,
                             selected,
-                            egui::vec2(180.0, 400.0),
+                            egui::vec2(controls::MIXER_CHANNEL_WIDTH, 400.0),
                             None,
                             selected,
                             |ui| controls::button(ui, "Effects").rect,
@@ -716,17 +716,20 @@ fn mixer_card_padding_and_parent_gutters_survive_display_scaling() {
                         let tolerance = 1.0 / density;
                         assert!(
                             strip.inner.left() - strip.response.rect.left()
-                                >= controls::tokens::SPACE_MD - tolerance
+                                >= controls::MIXER_CHANNEL_MARGIN - tolerance
                         );
                         assert!(
                             strip.inner.top() - strip.response.rect.top()
-                                >= controls::tokens::SPACE_MD - tolerance
+                                >= controls::MIXER_CHANNEL_MARGIN - tolerance
                         );
                         assert!(
                             strip.response.rect.right() - strip.inner.right()
-                                >= controls::tokens::SPACE_MD - tolerance
+                                >= controls::MIXER_CHANNEL_MARGIN - tolerance
                         );
-                        assert!((strip.response.rect.width() - 180.0).abs() <= tolerance);
+                        assert!(
+                            (strip.response.rect.width() - controls::MIXER_CHANNEL_WIDTH).abs()
+                                <= tolerance
+                        );
                         if let Some(previous) = previous {
                             assert!(
                                 (strip.response.rect.left()

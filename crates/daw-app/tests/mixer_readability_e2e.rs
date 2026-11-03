@@ -158,14 +158,17 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                         && rect.contains(name)
                         && rect.contains(sends)
                         && rect.height() > 250.0
-                        && paint["stroke_width"].as_f64().unwrap() >= 1.0
+                        // A fill-only card.
+                        && paint["fill"][3].as_u64().unwrap() > 0
                 })
                 .unwrap_or_else(|| panic!("No bounded strip for channel {channel}"));
-            assert!(strip["stroke_width"].as_f64().unwrap() >= 1.0);
+
             let strip = Bounds::from(&strip["rect"]);
             for control in [name, output, sends] {
-                assert!(control.left - strip.left >= f64::from(daw_ui::tokens::SPACE_MD) - 0.1);
-                assert!(strip.right - control.right >= f64::from(daw_ui::tokens::SPACE_MD) - 0.1);
+                assert!(control.left - strip.left >= f64::from(daw_ui::MIXER_CHANNEL_MARGIN) - 0.1);
+                assert!(
+                    strip.right - control.right >= f64::from(daw_ui::MIXER_CHANNEL_MARGIN) - 0.1
+                );
             }
             strips.push(strip);
         }
@@ -201,18 +204,15 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
         assert_eq!(channel(&state, room)["incoming_count"], 1);
         assert!(
             Bounds::from(&channel(&state, music)["source"])
-                .contains(Bounds::from(label(&state, "2 in")))
+                .contains(Bounds::from(label(&state, "Bus · 2 in")))
         );
         assert!(
             Bounds::from(&channel(&state, room)["source"])
-                .contains(Bounds::from(label(&state, "1 in")))
+                .contains(Bounds::from(label(&state, "Bus · 1 in")))
         );
         let output = Bounds::from(&drum_channel["target"]);
-        assert!(output.contains(Bounds::from(label(&state, "Ch 1 > Music"))));
-        assert!(
-            Bounds::from(&drum_channel["sends"])
-                .contains(Bounds::from(label(&state, "Send · Room")))
-        );
+        assert!(output.contains(Bounds::from(label(&state, "Music"))));
+        assert!(Bounds::from(&drum_channel["sends"]).contains(Bounds::from(label(&state, "Room"))));
         assert!(
             state["painted_rects"]
                 .as_array()
@@ -229,9 +229,15 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
         );
         unchanged(&state, &original);
 
-        for control in ["target", "sends"] {
+        for control in ["target", "send_row"] {
             let current = app.inspect();
-            let routing = click_bounds(&mut app, &channel(&current, drums)[control]);
+            let drum_channel = channel(&current, drums);
+            let target = if control == "target" {
+                &drum_channel["target"]
+            } else {
+                &drum_channel["send_rows"][0]
+            };
+            let routing = click_bounds(&mut app, target);
             assert_eq!(routing["popups"]["routing"], true);
             assert_eq!(routing["selected_track"], drums);
             label(&routing, "Routing of Drums");
@@ -245,7 +251,7 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
         // An empty channel asks for its destination immediately, without
         // changing selection, opening another workspace, or creating a send.
         let current = app.inspect();
-        let choices = click_bounds(&mut app, &channel(&current, bass)["sends"]);
+        let choices = click_bounds(&mut app, &channel(&current, bass)["add_send"]);
         assert_eq!(choices["selected_track"], current["selected_track"]);
         assert_eq!(choices["popups"]["routing"], false);
         label(&choices, "Send from Bass");

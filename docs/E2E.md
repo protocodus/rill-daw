@@ -221,8 +221,9 @@ opens and closes on-demand utilities in both appearances and at narrow/wide
 sizes, preserving the song while keeping the wrapped transport accessible.
 `control_roles_e2e` also checks whole-family tool wrapping and mouse selection.
 `routing_layout_e2e` follows Properties into Routing through live appearance,
-display-density and viewport changes. It keeps automated sends visible beneath
-the contextual AI action, scrolls a long send list to its output selector, and
+display-density and viewport changes. It checks Output above Sends beneath
+the contextual AI action, wheels down to the automated send and its dB level,
+reaches **Add send…** and **New return with effect…** at the end, and
 checks mouse edits and Undo at 800×600 and 1100×850.
 
 ```sh
@@ -1003,15 +1004,16 @@ installed plug-in or network connection.
 
 ### Precision, context and routing refinements
 
-`expert_send_controls_e2e` locates the painted 64-point send knob, checks that a
-small drag from 0.25× remains below unity, and compares the live value readout
+`expert_send_controls_e2e` locates the painted 55-point send ring on its row
+(destination, ring, dB value, Pre/Post share one center line), checks that a
+small drag from −12 dB remains below unity, and compares the live dB readout
 with the project after pointer adjustment. It exercises the direct value button, named
 source/destination editor, mouse keypad, fractional precision, Cancel,
 untouched Apply and Undo. Pan entry hides binary float display noise without
 changing the stored value. Automated send edits retain the existing normalized
 linear mapping over 0–16× and override without rewriting the curve; Resume and
 Undo restore the appropriate state. Shared `knob` and `value_entry` tests cover
-the `ln(1 + gain / 0.01)` taper, unity landmark, readable drafts, external value
+the shared `gain_taper`, unity landmark, readable drafts, external value
 synchronization and untouched precision, including rounded range boundaries.
 
 `clip_editor_context_e2e` opens repeated MIDI occurrences and an audio clip at
@@ -1143,8 +1145,18 @@ they do not simulate UI zoom or temporarily shrink resizable utility windows.
 
 `semantic_colors_e2e` exercises neutral track creation and painted action, view,
 AI, guide and automation colors in both appearances, retaining user colors in
-saved songs. `mixer_sections_e2e` checks painted processing sections and direct
-mouse editing through their frames.
+saved songs. `mixer_sections_e2e` checks that strip sections sit one 13-point
+gap apart without frames, that only the gain field and the pan, fader and meter
+troughs are outlined inside a strip, and direct mouse editing in both themes and
+densities. `mixer_strip_e2e` checks aligned sections across strips, the centered
+`[scale][rail][gap][meter]` unit, "−∞ dB", real sources, compact send rows with
+"PRE" and dB levels, "+N more", destination-only outputs and Master's output to
+Setup › Audio. `mixer_pan_e2e` drags the pan rail, including the center detent.
+`utility_header_e2e` checks the shared Channel/Instrument/Effects/Routing header:
+one row of links in a fixed order with the AI action trailing, bodies starting at
+one height, and switching windows through the links. `routing_layout_e2e` and
+`expert_send_controls_e2e` cover the Routing window's Output-then-Sends order and
+dB send levels with exact entry.
 
 `popup_interactions_e2e` resizes 11 real utility forms in both directions (width
 follows the drag; height keeps hugging the content), sweeps

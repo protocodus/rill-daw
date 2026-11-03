@@ -1,4 +1,4 @@
-//! Routing retains useful send controls below its fixed navigation and AI row.
+//! Routing lists the output, then its sends, below its fixed navigation and AI row.
 mod common;
 
 use common::Harness;
@@ -37,6 +37,27 @@ fn scroll(app: &mut Harness, direction: f64) -> Value {
         app.inspect();
     }
     app.inspect()
+}
+
+/// Wheel the routing body down in small steps until `text` is fully visible.
+fn reveal(app: &mut Harness, text: &str) -> Value {
+    for _ in 0..40 {
+        let state = app.inspect();
+        if let Some(rect) = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rect| rect["text"] == text)
+            && rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap() >= 13.0
+        {
+            return state;
+        }
+        let window = &state["window_rects"][0];
+        let x = (window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5;
+        let y = window["max"][1].as_f64().unwrap() - 100.0;
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-34.0}));
+    }
+    panic!("{text} never became visible");
 }
 
 #[test]
@@ -84,22 +105,36 @@ fn routing_from_properties_keeps_sends_and_output_reachable_across_live_display_
         let opened = scroll(&mut app, 1.0);
         assert_eq!(opened["popups"]["routing"], true);
         assert_eq!(opened["project"], original["project"]);
-        for text in [
-            "AI for this context",
-            "Return 0",
-            "Level",
-            "Pre",
-            "Post",
-            "Automated",
-        ] {
+        // Signal order: the output, then the sends with their level in dB.
+        for text in ["AI for this context", "Output", "Master output"] {
             label(&opened, text);
+        }
+        let sends = reveal(&mut app, "Automated");
+        // Return 0 follows its automation lane (0.5 of 16×, +18.1 dB).
+        for text in ["Return 0", "18.1 dB", "Pre", "Post", "Automated"] {
+            label(&sends, text);
+        }
+        let row = label(&sends, "Return 0")["min"][1].as_f64().unwrap();
+        for text in ["Output", "Sends"] {
+            if let Some(heading) = sends["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|rect| rect["text"] == text)
+            {
+                assert!(
+                    heading["max"][1].as_f64().unwrap() < row,
+                    "{text} precedes the sends"
+                );
+            }
         }
 
         let bottom = scroll(&mut app, -1.0);
-        for text in ["OUTPUT", "Master output", "+ Send", "Create send track"] {
+        for text in ["Add send…", "New return with effect…"] {
             label(&bottom, text);
         }
         assert_eq!(bottom["project"], original["project"]);
+        scroll(&mut app, 1.0);
         let choices = app.click("Master output");
         let destination = choices["menu_label_rects"]
             .as_array()
@@ -124,7 +159,8 @@ fn routing_from_properties_keeps_sends_and_output_reachable_across_live_display_
         );
         app.click("Edit");
         assert_eq!(app.click("Undo")["project"], original["project"]);
-        let top = scroll(&mut app, 1.0);
+        scroll(&mut app, 1.0);
+        let top = reveal(&mut app, "Automated");
         label(&top, "Return 0");
         label(&top, "Automated");
         app.command(json!({"command":"click","label":"Pre","occurrence":0}));

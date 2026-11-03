@@ -37,7 +37,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             text::subtitle(ui, "Mixer channels");
             text::note(
                 ui,
-                "mixer_fader · mixer_pan · mixer_mute_solo · mixer_level_meter",
+                "mixer_name_plate · mixer_pan_row · mixer_fader · channel_meter",
             );
             ui.add_space(tokens::SPACE_SM);
             let mut endpoints = Vec::new();
@@ -74,28 +74,40 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         index == 1,
                         |ui| {
                             let width = ui.available_width();
-                            if index == 2 {
-                                ui::mixer_bus_button(ui, name, width, color);
-                            } else {
-                                ui::mixer_channel_button(ui, name, width, color);
-                            }
+                            ui::mixer_name_plate(
+                                ui,
+                                if index == 2 {
+                                    ui::MixerNamePlateKind::Bus
+                                } else {
+                                    ui::MixerNamePlateKind::Track
+                                },
+                                name,
+                                width,
+                                color,
+                            );
                             ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
                             text::note(ui, format!("Input · {kind}"));
                             let mut db = ui::channel_gain_to_db(state.gain[index]);
                             if ui.add(ui::channel_gain_number(&mut db)).changed() {
                                 state.gain[index] = ui::channel_gain_from_db(db);
                             }
-                            ui.vertical_centered(|ui| {
-                                ui::mixer_fader(ui, &mut state.gain[index], 116.0);
-                            });
-                            ui::mixer_pan(ui, &mut state.pan[index], width);
-                            ui::mixer_mute_solo(
+                            ui::mixer_pan_row(
                                 ui,
+                                &mut state.pan[index],
                                 &mut state.muted[index],
                                 &mut state.solo[index],
                                 width,
                             );
-                            ui::mixer_level_meter(ui, peaks, width);
+                            ui.horizontal(|ui| {
+                                ui::mixer_fader(ui, &mut state.gain[index], 116.0);
+                                ui::channel_meter(
+                                    ui,
+                                    Id::new(("gallery_meter", index)),
+                                    peaks,
+                                    116.0,
+                                    ui::MIXER_FADER_INSET,
+                                );
+                            });
                             ui::view_button(ui, if index == 2 { "Master" } else { "Music bus" });
                         },
                     );

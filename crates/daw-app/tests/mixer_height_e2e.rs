@@ -119,23 +119,25 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         );
         assert!((fader.top - faders[0].top).abs() < 1.0);
         assert!((fader.bottom - faders[0].bottom).abs() < 1.0);
-        assert!(fader.bottom <= pan.top && pan.bottom <= mute_solo.top);
+        assert!(pan.bottom <= mute_solo.top && mute_solo.bottom <= fader.top);
         assert!(
-            mute_solo.bottom <= meter.top && meter.bottom <= target.top,
-            "Metering follows processing and precedes output: {channel}"
+            (meter.top - fader.top).abs() < 0.5
+                && (meter.bottom - fader.bottom).abs() < 0.5
+                && meter.bottom <= target.top,
+            "The meter stands beside the fader, before the output: {channel}"
         );
         assert!(
-            meter.width() > meter.height() * 2.0,
-            "The compact stereo meter must use horizontal rails: {meter:?}"
+            meter.height() > meter.width() * 2.0,
+            "The channel meter uses vertical bars on the fader scale: {meter:?}"
         );
         assert!(meter.left > strip.left && meter.right < strip.right);
         assert!(meter.bottom <= height && target.bottom <= height);
     }
     for (label, minimum_height) in [
-        ("Pan C", 12.0),
+        ("C", 12.0),
         ("Mute", 17.0),
         ("Solo", 17.0),
-        ("Channel", 17.0),
+        ("Automation", 17.0),
     ] {
         let controls = labels(state, label);
         assert_eq!(controls.len(), 3, "all {label} controls must be visible");
@@ -154,7 +156,15 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
 }
 
 fn assert_aligned_targets(state: &Value, height: f64) {
-    let targets = labels(state, "Output");
+    let targets: Vec<_> = state["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|channel| Bounds::from(&channel["target"]))
+        .chain(std::iter::once(Bounds::from(
+            &state["mixer"]["master"]["target"],
+        )))
+        .collect();
     assert_eq!(
         targets.len(),
         4,
@@ -219,7 +229,6 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
                 app.inspect();
             }
         }
-        app.click("Channel");
         let effects = app.click("Effects");
         assert_eq!(effects["popups"]["effects"], true);
         assert_eq!(effects["selected_track"], project.tracks[0].id);

@@ -668,17 +668,16 @@ impl DawApp {
                 // Keep the exact numeric field visible before secondary metadata.
                 // The details pane scrolls; use its visible bounds, not the
                 // unbounded content height, to size only the dial preview.
-                let label_height = egui::WidgetText::from(
-                    daw_ui::text::TextRole::Label.rich(ui.ctx(), "Normalized value"),
-                )
-                .into_galley(
-                    ui,
-                    Some(egui::TextWrapMode::Wrap),
-                    ui.available_width().max(112.0),
-                    egui::TextStyle::Body,
-                )
-                .size()
-                .y;
+                let label_height =
+                    egui::WidgetText::from(daw_ui::text::TextRole::Label.rich(ui.ctx(), "Value"))
+                        .into_galley(
+                            ui,
+                            Some(egui::TextWrapMode::Wrap),
+                            ui.available_width().max(112.0),
+                            egui::TextStyle::Body,
+                        )
+                        .size()
+                        .y;
                 let control_chrome = label_height
                     + daw_ui::tokens::FONT_SMALL
                     + daw_ui::tokens::SPACE_XS
@@ -697,7 +696,7 @@ impl DawApp {
                     (ui.clip_rect().height() - preceding_height - control_chrome - metadata_height)
                         .clamp(48.0, 96.0);
                 let mut knob = daw_ui::knob(&mut percent, 0.0..=100.0)
-                    .text("Normalized value")
+                    .text("Value")
                     .diameter(diameter)
                     .suffix(" %")
                     .min_decimals(2)
@@ -746,7 +745,10 @@ impl DawApp {
                             );
                         });
                     });
-                daw_ui::hover_text(response.clone(), "Right-click for exact value entry");
+                daw_ui::hover_text(
+                    response.clone(),
+                    "Normalized value, 0–100 % of the parameter's range\nRight-click for exact value entry",
+                );
                 control_geometry = daw_ui::knob_geometry(ui.ctx(), response.id);
                 control_clip = Some(ui.clip_rect());
                 ui.ctx().data_mut(|data| {
@@ -903,24 +905,15 @@ impl DawApp {
                     None => daw_tools::ToolScope::Instrument { track_id },
                 };
                 let scope_label = scope.label(&self.project);
-                let (open_ai, navigating) = daw_ui::action_row(
+                let (navigating, open_ai) = self.utility_header(
                     ui,
-                    |ui| {
-                        !matches!(instrument, Instrument::None)
-                            && daw_ui::contextual_ai_button(ui, &scope_label).clicked()
+                    if target.effect.is_some() {
+                        ChannelDestination::PluginEditor
+                    } else {
+                        ChannelDestination::Instrument
                     },
-                    |ui| {
-                        self.channel_navigation(
-                            ui,
-                            if target.effect.is_some() {
-                                ChannelDestination::PluginEditor
-                            } else {
-                                ChannelDestination::Instrument
-                            },
-                        )
-                    },
-                )
-                .inner;
+                    (!matches!(instrument, Instrument::None)).then_some(scope_label.as_str()),
+                );
                 if navigating {
                     return;
                 }
@@ -928,7 +921,6 @@ impl DawApp {
                     self.open_context_assistant(scope);
                     return;
                 }
-                ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
                 let mut footer =
                     (!parameter_page).then(|| daw_ui::popup_footer(ui, "device_actions"));
                 let mut body = |ui: &mut egui::Ui| match &instrument {

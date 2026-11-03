@@ -502,5 +502,5 @@ pub fn edit_plugin_parameter_value(app: &mut Harness, state: &Value, percent: &s
     let y = (min_y + max_y) * 0.5;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":percent}));
-    app.click("Normalized value")
+    app.click("Value")
 }

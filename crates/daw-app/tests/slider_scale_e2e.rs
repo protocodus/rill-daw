@@ -103,7 +103,13 @@ fn caption_left_at(state: &Value, point: Point, text: &str) {
                     && (center.y - point.y).abs() < 1.0
                     && max.y - min.y >= 10.0
             }),
-        "Endpoint {text:?} must be visibly aligned to {point:?}"
+        "Endpoint {text:?} must be visibly aligned to {point:?}: {:?}",
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|label| label["text"] == text)
+            .collect::<Vec<_>>()
     );
 }
 fn click_fraction(app: &mut Harness, scale: Scale, fraction: f64) -> Value {
@@ -134,8 +140,9 @@ fn assert_paint_alignment(state: &Value, scale: Scale, fraction: f64, ticks: &[f
             if scale.vertical() {
                 (a.y - point.y).abs() <= 0.7
                     && (b.y - point.y).abs() <= 0.7
-                    && a.x.min(b.x) <= point.x + 12.0
-                    && a.x.max(b.x) >= point.x - 12.0
+                    // Mixer scale ticks sit in the gutter, left of the cap.
+                    && a.x.min(b.x) <= point.x + 18.0
+                    && a.x.max(b.x) >= point.x - 18.0
             } else {
                 (a.x - point.x).abs() <= 0.7
                     && (b.x - point.x).abs() <= 0.7
@@ -237,35 +244,40 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
             json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
         );
         app.click("Mixer");
-        // Mixer Pan is a rotary control; mixer_pan_knob_e2e checks its
-        // calibrated arc, painted index, captions and relative mouse edits.
+        // The fader's ticks are its calibrated dB stops (mixer_pan_e2e covers Pan).
         let mut lengths = Vec::new();
         let mut allocations = Vec::new();
         let mut strip_heights = Vec::new();
-        // At 600 px the larger shared control rows hold the fader at its
-        // usable minimum. Give the tall case room beyond those fixed rows.
-        for (height, fractions) in [
-            (600, vec![0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0]),
-            (1300, (0..=10).map(|i| f64::from(i) / 10.0).collect()),
-        ] {
+        // At 720 px the fixed signal-flow rows hold the fader at its usable
+        // minimum (still on screen). Give the tall case room beyond them.
+        for height in [720, 1300] {
             app.command(json!({"command":"viewport", "width":1100, "height":height}));
             let state = painted(&mut app);
             let channel = mixer_channel(&state, id);
             let fader = Scale::from(&channel["fader_scale"]);
+            let fractions: Vec<f64> = channel["fader_scale"]["ticks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tick| tick["fraction"].as_f64().unwrap())
+                .collect();
+            assert_eq!(channel["fader_scale"]["divisions"], 0);
+            near(fractions[1], f64::from(daw_ui::gain_taper(1.0)), 1e-6);
             let height_of =
                 |rect: &Value| rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
             allocations.push(height_of(&channel["fader"]));
             strip_heights.push(height_of(&channel["strip"]));
             caption_left_at(&state, fader.min, "−∞");
-            caption_left_at(&state, fader.max, "+3.5 dB");
+            caption_left_at(&state, fader.max, "+3.5");
+            caption_left_at(&state, fader.min.between(fader.max, 0.75), "0");
             lengths.push(fader.length());
             for fraction in [0.0, 0.2, 0.5, 0.8, 1.0] {
                 let fader = Scale::from(&mixer_channel(&painted(&mut app), id)["fader_scale"]);
                 let edited = click_fraction(&mut app, fader, fraction);
                 near(
                     track(&edited, id)["gain"].as_f64().unwrap(),
-                    fraction * 1.5,
-                    1e-5,
+                    f64::from(daw_ui::gain_untaper(fraction as f32)),
+                    1e-4,
                 );
                 let state = painted(&mut app);
                 assert_paint_alignment(

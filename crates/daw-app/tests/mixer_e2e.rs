@@ -27,6 +27,36 @@ fn label_count(state: &Value, text: &str) -> usize {
         .count()
 }
 
+fn center(rect: &Value) -> (f64, f64) {
+    (
+        (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+        (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
+    )
+}
+
+/// The text painted on a channel's output button (its destination only).
+fn output_label(state: &Value, channel: usize) -> String {
+    let target = &state["mixer"]["channels"][channel]["target"];
+    let (_, y) = center(target);
+    state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| {
+            row["min"][0].as_f64().unwrap() >= target["min"][0].as_f64().unwrap()
+                && row["max"][0].as_f64().unwrap() <= target["max"][0].as_f64().unwrap()
+                && row["min"][1].as_f64().unwrap() <= y
+                && row["max"][1].as_f64().unwrap() >= y
+        })
+        .map(|row| row["text"].as_str().unwrap().to_owned())
+        .expect("output button label")
+}
+
+fn click_at(app: &mut Harness, rect: &Value, button: &str) -> Value {
+    let (x, y) = center(rect);
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y,"button":button}))
+}
+
 fn click_front(app: &mut Harness, label: &str) -> Value {
     let occurrence = label_count(&app.inspect(), label)
         .checked_sub(1)
@@ -176,8 +206,8 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     app.click("S");
 
     let state = menu(&mut app, "Window", "Mixer");
-    assert!(visible(&state, "Ch 1 > Bus 1"));
-    assert!(visible(&state, "Ch 2 > Master"));
+    assert_eq!(output_label(&state, 0), "Bus 1");
+    assert_eq!(output_label(&state, 1), "Master");
     let expected_db = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain as f32));
     assert!(
         visible(&state, &expected_db),
@@ -230,18 +260,18 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     app.command(json!({"command":"open","path":path}));
     app.command(json!({"command":"viewport","width":1100,"height":900}));
     let state = menu(&mut app, "Window", "Mixer");
-    assert_eq!(label_count(&state, "Channel"), 3);
+    assert_eq!(label_count(&state, "Automation"), 3);
     assert_eq!(
         label_count(&state, "Effects"),
         3,
         "inserts precede channel volume"
     );
     assert!(!visible(&state, "Instrument"));
-    let route_rows: Vec<_> = state["label_rects"]
+    let route_rows: Vec<_> = state["mixer"]["channels"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|row| row["text"].as_str().unwrap().starts_with("Ch "))
+        .map(|channel| &channel["target"])
         .collect();
     assert_eq!(route_rows.len(), 3);
     assert!(route_rows.windows(2).all(|rows| {
@@ -251,42 +281,56 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         .as_array()
         .unwrap()
         .iter()
-        // Calibrated fader endpoints carry a separate fixed +3.5 dB caption
-        // below each channel's editable level readout.
-        .filter(|row| {
-            let text = row["text"].as_str().unwrap();
-            text.ends_with(" dB") && text != "+3.5 dB"
-        })
+        .filter(|row| row["text"].as_str().unwrap().ends_with(" dB"))
         .collect();
-    assert_eq!(levels.len(), 4, "three channel gains and the master peak");
+    assert_eq!(levels.len(), 3, "one gain readout per channel");
     assert!(
         levels.windows(2).all(|rows| {
             (rows[0]["min"][1].as_f64().unwrap() - rows[1]["min"][1].as_f64().unwrap()).abs() <= 1.0
         }),
-        "channel gain readouts and master peak must align"
+        "channel gain readouts must align"
     );
+    let master_meter = &state["mixer"]["master"]["meter"];
+    for channel in state["mixer"]["channels"].as_array().unwrap() {
+        assert_eq!(channel["meter"]["min"][1], master_meter["min"][1]);
+        assert_eq!(channel["meter"]["max"][1], master_meter["max"][1]);
+    }
     assert!(
         state["label_rects"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|row| row["text"] == "Channel")
+            .filter(|row| row["text"] == "Automation")
             .all(|row| row["max"][1].as_f64().unwrap() < 900.0)
     );
     let channel = app.click("Drums");
     assert_eq!(channel["selected_track"], drums);
     assert_eq!(channel["popups"]["properties"], true);
     app.key("Escape");
-    let routing = app.click("Ch 1 > Master");
+    let mixer = app.inspect();
+    let routing = click_at(
+        &mut app,
+        &mixer["mixer"]["channels"][0]["target"],
+        "primary",
+    );
     assert_eq!(routing["selected_track"], bass);
     assert_eq!(routing["popups"]["routing"], true);
-    menu(&mut app, "Window", "Mixer");
-    app.click("Channel");
-    let effects = app.click("Effects");
+    let mixer = menu(&mut app, "Window", "Mixer");
+    // Channel destinations live in the name plate's context menu.
+    click_at(
+        &mut app,
+        &mixer["mixer"]["channels"][0]["name"],
+        "secondary",
+    );
+    let effects = click_front(&mut app, "Effects");
     assert_eq!(effects["selected_track"], bass);
     assert_eq!(effects["popups"]["effects"], true);
-    menu(&mut app, "Window", "Mixer");
-    app.command(json!({"command":"click","label":"Channel","occurrence":1}));
+    let mixer = menu(&mut app, "Window", "Mixer");
+    click_at(
+        &mut app,
+        &mixer["mixer"]["channels"][1]["name"],
+        "secondary",
+    );
     let menu_state = app.inspect();
     assert!(
         !visible(&menu_state, "Instrument"),
@@ -306,15 +350,13 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     for _ in 0..20 {
         scrolled = app.inspect();
     }
-    assert!(visible(&scrolled, "Output"));
     assert!(visible(&scrolled, "Back"));
     assert!(
-        scrolled["label_rects"]
+        scrolled["mixer"]["channels"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|row| row["text"] == "Output")
-            .all(|row| row["max"][1].as_f64().unwrap() < 600.0)
+            .all(|channel| channel["target"]["max"][1].as_f64().unwrap() < 600.0)
     );
     // Hover the actual fader after scrolling settles; shared padding can move
     // it without changing the control. Its stacked value/volume/automation
@@ -350,7 +392,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         .min(viewport["max"][1].as_f64().unwrap());
     assert!(visible_bottom - visible_top >= f64::from(daw_ui::tokens::CONTROL_HEIGHT) - 1.0);
     let y = (visible_top + visible_bottom) * 0.5;
-    let output = &scrolled["mixer"]["channels"][0]["target"];
+    let output = scrolled["mixer"]["channels"][0]["target"].clone();
     assert!(output["min"][1].as_f64().unwrap() >= viewport["min"][1].as_f64().unwrap());
     assert!(output["max"][1].as_f64().unwrap() <= viewport["max"][1].as_f64().unwrap());
     assert!((0.0..800.0).contains(&x) && (0.0..600.0).contains(&y));
@@ -363,7 +405,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         &scrolled,
         "Right-click for exact value and automation"
     ));
-    let routing = app.click("Ch 1 > Master");
+    let routing = click_at(&mut app, &output, "primary");
     assert_eq!(
         routing["popups"]["routing"], true,
         "the output target remains usable at the end of the signal chain"

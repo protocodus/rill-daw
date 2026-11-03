@@ -107,8 +107,9 @@ fn range_text(state: &Value) -> &str {
         .unwrap_or_else(|| panic!("Missing explicit range: {}", state["visible_labels"]))
 }
 
+/// The send's dB value button, on the row of its destination ("Room").
 fn send_value_rect(state: &Value) -> &Value {
-    let (_, level_y) = center(label(state, "Level"));
+    let (room_x, room_y) = center(label(state, "Room"));
     state["label_rects"]
         .as_array()
         .unwrap()
@@ -116,11 +117,13 @@ fn send_value_rect(state: &Value) -> &Value {
         .filter(|row| {
             row["text"]
                 .as_str()
-                .and_then(|text| text.trim_end_matches('×').trim().parse::<f64>().ok())
+                .and_then(|text| text.strip_suffix(" dB"))
+                .and_then(|text| text.replace('−', "-").parse::<f64>().ok())
                 .is_some()
-                && (center(row).1 - level_y).abs() < 4.0
+                && center(row).0 > room_x
+                && (center(row).1 - room_y).abs() < 4.0
         })
-        .max_by(|left, right| center(left).0.total_cmp(&center(right).0))
+        .min_by(|left, right| center(left).0.total_cmp(&center(right).0))
         .unwrap_or_else(|| panic!("No send value control: {}", state["visible_labels"]))
 }
 
@@ -142,7 +145,8 @@ fn assert_pan_marker(app: &mut Harness, source: u64, dark: bool, marker: &str) {
     app.command(json!({"command":"pointer","phase":"move","x":1095,"y":755}));
     let state = app.command(json!({"command":"inspect","paint":true}));
     let pan = &channel(&state, "mixer", source)["pan"];
-    let dial = &channel(&state, "mixer", source)["pan_knob"]["dial"];
+    let handle = &channel(&state, "mixer", source)["pan_scale"]["handle_center"];
+    let (handle_x, handle_y) = (handle[0].as_f64().unwrap(), handle[1].as_f64().unwrap());
     let palette = if dark { theme::DARK } else { theme::LIGHT };
     let color = match marker {
         "A" => palette.automation,
@@ -161,12 +165,15 @@ fn assert_pan_marker(app: &mut Harness, source: u64, dark: bool, marker: &str) {
                         .as_array()
                         .unwrap()
                         .contains(&json!(color.to_array()))
-                    && x >= dial["max"][0].as_f64().unwrap()
+                    && x >= pan["min"][0].as_f64().unwrap()
                     && x <= pan["max"][0].as_f64().unwrap()
                     && y >= pan["min"][1].as_f64().unwrap()
-                    && y <= pan["min"][1].as_f64().unwrap() + 12.0
+                    && y <= pan["max"][1].as_f64().unwrap()
+                    // Beside the cap, never over its center groove.
+                    && ((x - handle_x).abs() >= f64::from(daw_ui::MIXER_CAP_SIZE.y) * 0.5
+                        || (y - handle_y).abs() >= f64::from(daw_ui::MIXER_CAP_SIZE.x) * 0.5)
             }),
-        "Missing {marker} state marker at the pan row's top-right, clear of the dial"
+        "Missing {marker} state marker on the pan row, clear of the cap"
     );
 }
 
@@ -391,7 +398,7 @@ fn exact_automated_pan_entry_and_explicit_override_preserve_the_curve_and_resume
 }
 
 #[test]
-fn routing_send_exact_entry_exposes_full_range_and_recalls_the_fraction() {
+fn routing_send_exact_entry_uses_db_over_the_full_range_and_recalls_it() {
     let mut app = Harness::new();
     let (source, bus, _) = fixture(&mut app, false, false);
     app.click("Mixer");
@@ -399,20 +406,19 @@ fn routing_send_exact_entry_exposes_full_range_and_recalls_the_fraction() {
     let before = app.click("Routing");
     let opened = right_click(&mut app, send_value_rect(&before));
     assert!(visible(&opened, "Precise channel → Room · Send level"));
-    assert_eq!(range_text(&opened), "Range: 0 to 16 ×");
-    shows_number(&opened, 8.0);
+    // Sends share the console's dB vocabulary: silence to 16× (+24.08 dB).
+    assert_eq!(range_text(&opened), "Range: -60 to 24.08 dB");
+    shows_number(&opened, 20.0 * 8.0_f64.log10());
     draft(&mut app, &before, "12.3456");
     let applied = app.click("Apply value");
     let sends = track(&applied, source)["sends"].as_array().unwrap();
     let send = sends.iter().find(|send| send["target_bus"] == bus).unwrap();
-    near(send["gain"].as_f64().unwrap(), 12.3456);
+    let expected = 10_f64.powf(12.3456 / 20.0);
+    assert!((send["gain"].as_f64().unwrap() - expected).abs() < 1e-5);
     let saved = app.directory.path().join("exact-send.rill");
     app.command(json!({"command":"save","path":saved}));
     let recalled = Project::load(&saved).unwrap();
-    near(
-        f64::from(recalled.track(source).unwrap().sends[0].gain),
-        12.3456,
-    );
+    assert!((f64::from(recalled.track(source).unwrap().sends[0].gain) - expected).abs() < 1e-5);
     let state = app.inspect();
     let opened = right_click(&mut app, send_value_rect(&state));
     shows_number(&opened, 12.3456);
