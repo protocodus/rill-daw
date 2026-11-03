@@ -235,6 +235,8 @@ fn failed_save_keeps_the_document_and_can_be_cancelled_or_retried() {
     assert_eq!(failed["modified"], true);
     assert!(invalid.is_dir());
     assert!(has(&failed, "Cancel"));
+    // The error block and its Details action lay out a frame after the error.
+    common::wait_visible(&mut app, "Details");
     let details = app.click("Details");
     assert_eq!(details["error_details"]["title"], "Project error");
     assert!(
