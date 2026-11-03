@@ -949,6 +949,21 @@ that the transient drawer opens below the canvas without moving its top.
 The piano toolbar and toolbar stability suites check that Snap, Length and Key
 keep their positions across tools and widths.
 
+### Takes, generator and automation popups
+
+```sh
+cargo test -p daw-app --test audio_takes_e2e --test generation_workflow_e2e --test automation_curves_e2e -- --test-threads=1
+```
+
+`take_toolbar_leads_with_commands_and_rows_read_in_bars` checks that the takes
+popup keeps Add takes…, Keep comp only (a direct button, no one-item Takes menu)
+and the trailing View on one toolbar row, that every take row is 89 points tall,
+and that the range fields read bar.beat positions. The generator suites check the
+docked single layout (range rows share the form column) and that the footer
+targets stay fixed through feedback, Next range and Cancel/Done. The curve suite
+reads the gain axis in decibels down to −∞; `tool_hints_e2e` finds the automation
+gestures in the toolbar caption instead of a separate hint band.
+
 ### Spectral waveform previews
 
 ```sh

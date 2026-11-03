@@ -444,8 +444,24 @@ pub fn editor_status_caption(ui: &mut Ui, status: &str) -> Option<Response> {
             egui::vec2(available.width(), crate::tokens::CONTROL_HEIGHT),
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
+                // Drop whole trailing clauses before truncating, so a narrow
+                // caption still reads "Click to add" rather than "Click to a…".
+                let font = crate::text::TextRole::Note.font();
+                let fits = |text: &str| {
+                    ui.painter()
+                        .layout_no_wrap(text.to_owned(), font.clone(), egui::Color32::PLACEHOLDER)
+                        .size()
+                        .x
+                        <= available.width()
+                };
+                let clauses: Vec<_> = status.split(" · ").collect();
+                let shown = (1..=clauses.len())
+                    .rev()
+                    .map(|count| clauses[..count].join(" · "))
+                    .find(|text| fits(text))
+                    .unwrap_or_else(|| clauses[0].to_owned());
                 ui.add(
-                    egui::Label::new(crate::text::TextRole::Note.rich(ui.ctx(), status))
+                    egui::Label::new(crate::text::TextRole::Note.rich(ui.ctx(), shown))
                         .truncate()
                         .selectable(false),
                 )

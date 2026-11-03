@@ -522,17 +522,6 @@ impl DawApp {
             }
             ui.separator();
             daw_ui::checkbox(ui, &mut enabled, "Enabled");
-            fit |= daw_ui::timeline_fit_button(ui).clicked();
-            // Guidance lives in the toolbar's free space, not in its own band.
-            if let Some(caption) = daw_ui::editor_status_caption(
-                ui,
-                "Click to add · Drag points to move · Drag diamonds to bend",
-            ) {
-                caption.on_hover_text(
-                    "Click to add; drag points to move and diamonds to bend. Right-click for options.",
-                );
-            }
-            add_parameter = daw_ui::button(ui, "Add parameter").clicked();
             daw_ui::automation_badge(ui, automation_state);
             if lane.override_value.is_some() {
                 if daw_ui::button(ui, "Resume automation")
@@ -553,6 +542,20 @@ impl DawApp {
             {
                 override_edit = Some(Some(lane.value_at(self.cursor).unwrap_or(0.5)));
             }
+            // View and lane actions trail; the gesture caption fills the
+            // space between, so no separate hint band takes plot height.
+            daw_ui::toolbar_trailing(ui, AUTOMATION_TRAILING_WIDTH, |ui| {
+                add_parameter = daw_ui::button(ui, "Add parameter").clicked();
+                fit |= daw_ui::timeline_fit_button(ui).clicked();
+                if let Some(caption) = daw_ui::editor_status_caption(
+                    ui,
+                    "Click to add · Drag to move · Drag diamonds to bend · Right-click for options",
+                ) {
+                    caption.on_hover_text(
+                        "Click to add; drag points to move and diamonds to bend. Right-click for options.",
+                    );
+                }
+            });
         });
         if add_parameter {
             state.creating = true;
@@ -1347,6 +1350,10 @@ mod tests {
         assert_eq!(app.selected_track, Some(id));
     }
 }
+
+/// Room kept at the toolbar end for Add parameter, Fit and at least the
+/// caption's first clause; with less, the group starts its own row.
+const AUTOMATION_TRAILING_WIDTH: f32 = 377.0;
 
 /// Value-axis labels in the parameter's own units.
 fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {

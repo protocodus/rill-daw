@@ -82,7 +82,9 @@ fn control(app: &mut Harness, field: &str) -> Value {
         let controls = &generator(&state)["controls"];
         let rect = &controls[field];
         assert!(!rect.is_null(), "Missing {field}: {controls}");
-        if ["start_bar", "length_bars"].contains(&field) {
+        // The grid-scale helper is pinned in the footer; range fields scroll
+        // with the rest of the form.
+        if field == "use_grid_scale" {
             return rect.clone();
         }
         let options = &controls["options"];

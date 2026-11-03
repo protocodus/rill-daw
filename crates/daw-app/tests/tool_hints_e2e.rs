@@ -199,21 +199,22 @@ fn tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboa
         app.click("Arranger");
         app.click("Hint automation");
         let before = window(&mut app, "Automation");
-        app.click("Tool help");
         app.command(json!({"command":"pointer","phase":"move","x":2.0,"y":2.0}));
         let state = app.inspect();
-        let guidance = hint(&state, "", "Click to add; drag points");
+        // The curve's gestures read in the toolbar caption, without a band.
+        // Narrow toolbars keep whole leading clauses; the hover has the rest.
+        let guidance = hint(&state, "", "Click to add");
+        let full = "Click to add · Drag to move · Drag diamonds to bend · Right-click for options";
+        let shown = guidance["text"].as_str().unwrap();
         assert!(
-            guidance["text"]
-                .as_str()
-                .unwrap()
-                .contains("diamonds to bend. Right-click for options")
+            full.starts_with(shown) && (shown == full || full[shown.len()..].starts_with(" · ")),
+            "The caption keeps whole clauses: {shown}"
         );
         assert!(guidance["max"][0].as_f64().unwrap() <= f64::from(width));
         unchanged(&state, &before);
         // Interpolation is a parameter choice, not a separate pointer tool.
         assert_eq!(
-            hint(&app.inspect(), "", "drag points to move")["text"],
+            hint(&app.inspect(), "", "Click to add")["text"],
             guidance["text"]
         );
         app.quit();

@@ -174,7 +174,6 @@ pub fn clip_workspace_header<R>(
                                     .truncate()
                                     .show_tooltip_when_elided(false),
                             )
-                            .on_hover_text(context)
                         });
                         (back, title, context, inner)
                     })

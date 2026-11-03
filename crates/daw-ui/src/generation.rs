@@ -174,11 +174,15 @@ fn generation_footer_inner(
                 crate::checkbox(ui, preview, "Preview");
                 crate::view_button(ui, "Fit preview").clicked()
             });
-            // The slot keeps its size whatever the text, so nothing moves.
+            // A fixed slot: neither the text nor the window width moves it.
             let slot = ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), crate::tokens::CONTROL_HEIGHT),
+                egui::vec2(crate::tokens::SELECT_WIDTH, crate::tokens::CONTROL_HEIGHT),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
+                    ui.set_min_size(egui::vec2(
+                        crate::tokens::SELECT_WIDTH,
+                        crate::tokens::CONTROL_HEIGHT,
+                    ));
                     ui.add(
                         egui::Label::new(text::TextRole::Note.rich(ui.ctx(), status))
                             .truncate()
@@ -194,14 +198,31 @@ fn generation_footer_inner(
         ui,
         |ui| {
             let add = ui.add_enabled(can_add, crate::primary_button_widget(ui, "Add notes"));
-            // One width for Cancel and Done keeps Next range in place.
+            // One width for Cancel and Done (the wider of the two, with its
+            // icon) keeps Next range in place after the first addition.
+            let close_width = ["Cancel", "Done"]
+                .into_iter()
+                .map(|label| {
+                    let text = ui
+                        .painter()
+                        .layout_no_wrap(
+                            label.to_owned(),
+                            egui::TextStyle::Button.resolve(ui.style()),
+                            egui::Color32::PLACEHOLDER,
+                        )
+                        .size()
+                        .x;
+                    let icon = if crate::Icon::for_label(label).is_some() {
+                        18.0 + ui.spacing().icon_spacing
+                    } else {
+                        0.0
+                    };
+                    (text + icon + 2.0 * ui.spacing().button_padding.x).ceil()
+                })
+                .fold(0.0_f32, f32::max);
             let close = ui.add(
-                crate::button_widget(if has_added { "Done" } else { "Cancel" }).min_size(
-                    egui::vec2(
-                        2.0 * crate::tokens::SPACE_XL + crate::tokens::SPACE_LG,
-                        crate::tokens::CONTROL_HEIGHT,
-                    ),
-                ),
+                crate::button_widget(if has_added { "Done" } else { "Cancel" })
+                    .min_size(egui::vec2(close_width, crate::tokens::CONTROL_HEIGHT)),
             );
             let next = ui
                 .add_enabled(can_advance, crate::button_widget("Next range"))

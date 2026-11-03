@@ -1463,7 +1463,8 @@ impl DawApp {
             state.view,
             clip.start,
             clip.end(),
-            palette(ui.ctx()).accent,
+            // Neutral text, so edges never read as the accent-tinted selection.
+            palette(ui.ctx()).text.gamma_multiply(0.8),
         );
         daw_ui::paint_clip_fades(
             &painter,
