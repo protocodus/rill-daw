@@ -1021,6 +1021,41 @@ fn start_parameter_read(
     });
 }
 
+/// Room kept at the toolbar end for Add parameter, Fit and at least the
+/// caption's first clause; with less, the group starts its own row.
+const AUTOMATION_TRAILING_WIDTH: f32 = 377.0;
+
+/// Value-axis labels in the parameter's own units.
+fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {
+    match parameter {
+        AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => |value| {
+            let gain = AutomationParameter::TrackGain.denormalize(value);
+            if gain <= 0.000_01 {
+                "−∞".into()
+            } else {
+                let db = 20.0 * gain.log10();
+                if db.abs() < 0.05 {
+                    "0 dB".into()
+                } else {
+                    format!("{:+.1} dB", db).replace('-', "−")
+                }
+            }
+        },
+        AutomationParameter::TrackPan => |value| {
+            let pan = AutomationParameter::TrackPan.denormalize(value);
+            let amount = (pan.abs() * 100.0).round();
+            if amount < 0.5 {
+                "C".into()
+            } else if pan < 0.0 {
+                format!("L {amount:.0}")
+            } else {
+                format!("R {amount:.0}")
+            }
+        },
+        AutomationParameter::VstParameter { .. } => |value| format!("{value:.2}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1348,40 +1383,5 @@ mod tests {
         }
         assert_eq!(app.project.tracks.len(), 2, "existing automation is reused");
         assert_eq!(app.selected_track, Some(id));
-    }
-}
-
-/// Room kept at the toolbar end for Add parameter, Fit and at least the
-/// caption's first clause; with less, the group starts its own row.
-const AUTOMATION_TRAILING_WIDTH: f32 = 377.0;
-
-/// Value-axis labels in the parameter's own units.
-fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {
-    match parameter {
-        AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => |value| {
-            let gain = AutomationParameter::TrackGain.denormalize(value);
-            if gain <= 0.000_01 {
-                "−∞".into()
-            } else {
-                let db = 20.0 * gain.log10();
-                if db.abs() < 0.05 {
-                    "0 dB".into()
-                } else {
-                    format!("{:+.1} dB", db).replace('-', "−")
-                }
-            }
-        },
-        AutomationParameter::TrackPan => |value| {
-            let pan = AutomationParameter::TrackPan.denormalize(value);
-            let amount = (pan.abs() * 100.0).round();
-            if amount < 0.5 {
-                "C".into()
-            } else if pan < 0.0 {
-                format!("L {amount:.0}")
-            } else {
-                format!("R {amount:.0}")
-            }
-        },
-        AutomationParameter::VstParameter { .. } => |value| format!("{value:.2}"),
     }
 }
