@@ -6,17 +6,24 @@ use egui::{InnerResponse, Response, Ui};
 /// The chain's heading with its active count; the processing order is in the
 /// count's tooltip rather than a persistent sentence.
 pub fn effect_chain_header(ui: &mut Ui, count: usize, active: usize) -> Response {
-    crate::action_row(
-        ui,
+    // The heading alone sets the line height, as a section heading does in
+    // the sibling windows; the count shares its line at the trailing edge.
+    let heading = text::section_heading(ui, "Inserts");
+    let line = egui::Rect::from_x_y_ranges(
+        heading.rect.right()..=ui.max_rect().right(),
+        heading.rect.y_range(),
+    );
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(line)
+            .layout(egui::Layout::right_to_left(egui::Align::Center)),
         |ui| {
             text::note(ui, format!("{active} / {count} active")).on_hover_text(
                 "Input → Inserts → Volume & pan\nEffects process the signal from top to bottom, before channel volume and pan.",
             )
         },
-        |ui| text::label(ui, "Inserts"),
     )
     .inner
-    .0
 }
 
 /// One insert: an identity row (reorder handle, enable switch with the name,
