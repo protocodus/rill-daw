@@ -222,25 +222,31 @@ fn editor_tool_families(
         if let Some((previous, count)) = previous
             && count > 1
             && tools.len() > 1
-            && (previous.center().y - rect.center().y).abs() < 1.0
         {
-            // Paint in the existing inter-family gap after native wrapping has
-            // settled. A wrapped family therefore never starts with a rule.
-            let x = (previous.right() + rect.left()) * 0.5;
-            let half_height = crate::tokens::COMPACT_HEIGHT * 0.5;
-            ui.painter().vline(
-                x,
-                rect.center().y - half_height..=rect.center().y + half_height,
-                egui::Stroke::new(
-                    crate::tokens::BORDER_WIDTH,
-                    crate::theme::palette(ui.ctx()).line,
-                ),
-            );
+            toolbar_family_rule(ui, previous, rect);
         }
         previous = Some((rect, tools.len()));
         responses.extend(group.inner);
     }
     responses
+}
+
+/// A quiet rule in the gap between two toolbar families. It is painted after
+/// native wrapping has settled, so a family that wrapped never starts with a rule.
+pub fn toolbar_family_rule(ui: &Ui, previous: Rect, next: Rect) {
+    if (previous.center().y - next.center().y).abs() >= 1.0 || next.left() < previous.right() {
+        return;
+    }
+    let x = (previous.right() + next.left()) * 0.5;
+    let half_height = crate::tokens::COMPACT_HEIGHT * 0.5;
+    ui.painter().vline(
+        x,
+        next.center().y - half_height..=next.center().y + half_height,
+        egui::Stroke::new(
+            crate::tokens::BORDER_WIDTH,
+            crate::theme::palette(ui.ctx()).line,
+        ),
+    );
 }
 
 fn editor_tool_family(

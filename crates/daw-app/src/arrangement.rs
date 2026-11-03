@@ -251,38 +251,44 @@ impl DawApp {
                 .unwrap_or_default()
         });
         let compact_toolbar = ui.available_width() < 1200.0;
-        let snap_width = if compact_toolbar {
-            120.0
-        } else {
-            daw_ui::tokens::SELECT_WIDTH
-        };
+        let trailing_id = egui::Id::new("arrangement_toolbar_trailing_width");
+        let trailing_width = ui
+            .ctx()
+            .data(|data| data.get_temp::<f32>(trailing_id))
+            .unwrap_or(320.0);
+        // Workflow order: modes, then the precision that governs them, then
+        // creation; the caption fills the gap before the view controls.
         daw_ui::toolbar(ui, |ui| {
             if compact_toolbar {
                 ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
                 ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_XS;
             }
-            daw_ui::editor_tools_with_context(
+            let tools = daw_ui::editor_tools_with_context(
                 ui,
                 &mut self.tool,
                 &supported,
                 daw_ui::ToolHintContext::Arrangement,
             );
-            nudge = daw_ui::nudge_menu(ui, self.selected().is_some());
-            if !compact_toolbar {
-                ui.add_space(daw_ui::tokens::SPACE_SM);
+            let precision = daw_ui::measured_toolbar_group(
+                ui,
+                "arrangement_precision",
+                daw_ui::tokens::SPACE_XS,
+                |ui| {
+                    daw_ui::snap_choice(ui, &mut self.snap, self.project.beats_per_bar, None);
+                    daw_ui::nudge_menu(ui, self.selected().is_some())
+                },
+            );
+            nudge = precision.inner;
+            if let Some(last) = tools.last() {
+                daw_ui::toolbar_family_rule(ui, last.rect, precision.response.rect);
             }
             add_pattern = daw_ui::quiet_button(ui, "Add pattern")
                 .on_hover_text("Add a four-beat MIDI pattern at the cursor; use the selected MIDI track or create one")
                 .clicked();
-            let zoom_action =
-                daw_ui::timeline_zoom_controls(ui, !self.arranger_selection_ids().is_empty());
-            if zoom_action != daw_ui::TimelineViewAction::None {
-                view_action = zoom_action;
-                fit = zoom_action == daw_ui::TimelineViewAction::FitAll;
-            }
-            daw_ui::toolbar_trailing(ui, if compact_toolbar { 320.0 } else { 366.0 }, |ui| {
-                daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
-                daw_ui::quiet_view_menu(ui, "View", |ui| {
+            daw_ui::toolbar_trailing(ui, trailing_width, |ui| {
+                let help =
+                    daw_ui::editor_tool_help(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
+                let view = daw_ui::quiet_view_menu(ui, "View", |ui| {
                     let action = daw_ui::timeline_selection_view_actions(
                         ui,
                         "arrangement",
@@ -301,32 +307,27 @@ impl DawApp {
                         max_header,
                     );
                 });
-                daw_ui::select(
-                    "snap",
-                    if self.snap == 0.0 {
-                        "Snap off".into()
-                    } else if self.snap == f64::from(self.project.beats_per_bar) {
-                        "Snap 1 bar".into()
-                    } else if [0.125, 0.25, 0.5, 1.0].contains(&self.snap) {
-                        format!("Snap 1/{}", (4.0 / self.snap) as u32)
-                    } else {
-                        format!("Snap {} beats", self.snap)
+                let zoom = daw_ui::measured_toolbar_group(
+                    ui,
+                    "arrangement_zoom",
+                    daw_ui::tokens::SPACE_XS,
+                    |ui| {
+                        daw_ui::timeline_zoom_controls(
+                            ui,
+                            !self.arranger_selection_ids().is_empty(),
+                        )
                     },
-                )
-                .width(snap_width)
-                .height(6.0 * (daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_SM))
-                .show_ui(ui, |ui| {
-                    for (name, value) in [
-                        ("Off", 0.0),
-                        ("1 bar", f64::from(self.project.beats_per_bar)),
-                        ("1/4", 1.0),
-                        ("1/8", 0.5),
-                        ("1/16", 0.25),
-                        ("1/32", 0.125),
-                    ] {
-                        daw_ui::selectable_value(ui, &mut self.snap, value, name);
-                    }
-                });
+                );
+                if zoom.inner != daw_ui::TimelineViewAction::None {
+                    view_action = zoom.inner;
+                    fit = zoom.inner == daw_ui::TimelineViewAction::FitAll;
+                }
+                let controls = help
+                    .rect
+                    .union(view.response.rect)
+                    .union(zoom.response.rect);
+                ui.ctx()
+                    .data_mut(|data| data.insert_temp(trailing_id, controls.width()));
                 daw_ui::editor_tool_caption(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
             });
         });
