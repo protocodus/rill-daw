@@ -580,8 +580,8 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     for group in [
         &["Arranger", "Mixer"][..],
         &["Start", "Play", "Stop", "Record"][..],
-        &["Click", "Loop", "Range"][..],
-        &["120.0 BPM", "4/4"][..],
+        &["120.0 BPM", "4/4", "Click"][..],
+        &["Loop", "Range"][..],
     ] {
         let row_y = center(
             labels
