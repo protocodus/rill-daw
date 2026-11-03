@@ -3082,7 +3082,7 @@ impl DawApp {
                             daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, None, "System default");
                             for device in &self.devices { daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, Some(device.name.clone()), &device.name); }
                         }).response.labelled_by(output_label.id).on_hover_text(self.setup_draft.device_name.as_deref().unwrap_or("System default"));
-                        if daw_ui::button(ui, "Refresh devices").clicked() { self.refresh_devices(); }
+                        if daw_ui::quiet_button(ui, "Refresh devices").clicked() { self.refresh_devices(); }
                         });
                         ui.end_row();
                         let input_label = daw_ui::form_label(ui, "Input device");
@@ -3154,7 +3154,7 @@ impl DawApp {
                     let path_key = egui::Id::new("plugin_scan_folder_input");
                     let mut folder = ctx.data_mut(|data| data.get_temp::<String>(path_key)).unwrap_or_default();
                     ui.horizontal_wrapped(|ui| {
-                        daw_ui::text_field(ui, &mut folder, "Folder path", 310.0);
+                        daw_ui::text_field(ui, &mut folder, "Folder path", daw_ui::tokens::FORM_FIELD_WIDTH);
                         daw_ui::toolbar_group(ui, |ui| {
                             if daw_ui::button(ui, "Add folder").clicked() {
                                 let path = PathBuf::from(folder.trim());

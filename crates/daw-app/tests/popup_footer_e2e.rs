@@ -65,7 +65,17 @@ fn join_generator_and_take_actions_remain_at_the_bottom_in_both_appearances() {
         app.click("Footer phrase");
         app.click("Edit");
         app.click("Join clips…");
-        at_bottom(&settled(&mut app), "Cancel");
+        let join = settled(&mut app);
+        at_bottom(&join, "Cancel");
+        // The subject lives in the title, and the two-row list leaves no
+        // blank band between its last row and the footer divider.
+        let title = label(&join, "Join clips · Footer synth");
+        let last_row = label(&join, "Beats 9.00 – 17.00");
+        let cancel = label(&join, "Cancel");
+        assert!(
+            cancel[1] - last_row[3] < 2.0 * daw_ui::tokens::CONTROL_HEIGHT as f64,
+            "Join did not hug its list: {title:?} {last_row:?} {cancel:?}"
+        );
         app.click("Cancel");
         app.click("Window");
         app.click("Clip Editor");

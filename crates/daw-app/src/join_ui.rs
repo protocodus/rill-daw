@@ -129,19 +129,23 @@ impl DawApp {
         let mut open = true;
         let mut submit = None;
         let mut cancel = false;
-        daw_ui::popup("Join clips", ctx)
+        let title = self
+            .selected_track
+            .and_then(|id| self.project.track(id))
+            .map(|track| format!("Join clips · {}", track.name))
+            .unwrap_or_else(|| "Join clips".into());
+        daw_ui::popup(title, ctx)
+            .id(egui::Id::new("join_clips"))
             .open(&mut open)
             .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
-            .default_height(520.0)
             .vscroll(false)
             .show(ctx, |ui| {
-                ui.set_min_width(400.0);
+                ui.set_min_width(daw_ui::tokens::POPUP_WIDTH_SM);
                 let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {
                     daw_ui::text::note(ui, "Select an audio or MIDI track.");
                     return;
                 };
                 let busy = self.join_ui.pending();
-                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track.name);
                 let mut footer = daw_ui::popup_footer(ui, "join_actions");
                 let window_ui = ui;
                 let ui = footer.body();

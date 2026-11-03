@@ -15,10 +15,11 @@ use daw_ui::tokens::{SPACE_MD, SPACE_SM};
 use eframe::egui;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-const SIDEBAR_WIDTH: f32 = 184.0;
-const DETAILS_WIDTH: f32 = 300.0;
+const SIDEBAR_WIDTH: f32 = 233.0;
+const DETAILS_WIDTH: f32 = 377.0;
 /// Two card columns and the grid's scrollbar gutter.
-const CATALOG_MIN_WIDTH: f32 = 2.0 * daw_ui::DEVICE_CARD_MIN_WIDTH + SPACE_MD + 16.0;
+const CATALOG_MIN_WIDTH: f32 =
+    2.0 * daw_ui::DEVICE_CARD_MIN_WIDTH + SPACE_MD + daw_ui::tokens::SPACE_LG;
 const PANE_GAP: f32 = daw_ui::tokens::SPACE_LG;
 const PREVIEW_IMAGE_HELP: &str = "An optional image of the plug-in editor. Image capture does not verify whether the plug-in can load or play; assignment remains available.";
 
@@ -472,8 +473,8 @@ impl DawApp {
         daw_ui::popup("Library", ctx)
             .id(egui::Id::new("library"))
             .open(&mut open)
-            .default_width(1240.0)
-            .default_height(760.0)
+            .default_width(1597.0)
+            .default_height(987.0)
             .vscroll(false)
             .show(ctx, |ui| {
                 // Share selected identity with the action row on short screens
@@ -486,13 +487,13 @@ impl DawApp {
                     (DeviceKind::Effect, "Effects"),
                     (DeviceKind::Unknown, "Unverified"),
                 ], |ui| {
-                    if daw_ui::button(ui, "Plug-in folders…").clicked() {
+                    if daw_ui::quiet_button(ui, "Plug-in folders…").clicked() {
                         folders = true;
                     }
                     refresh = ui
                         .add_enabled(
                             !scanning,
-                            daw_ui::button_widget(if scanning { "Scanning…" } else { "Refresh" }),
+                            daw_ui::quiet_button_widget(if scanning { "Scanning…" } else { "Refresh" }),
                         )
                         .on_hover_text("Rescan plug-in folders and capture missing previews")
                         .clicked();
@@ -558,7 +559,7 @@ impl DawApp {
                                 DeviceKind::Effect => "Search effects",
                                 DeviceKind::Unknown => "Search unverified devices",
                             },
-                            ui.available_width().min(460.0),
+                            ui.available_width().min(daw_ui::tokens::POPUP_WIDTH_SM),
                         );
                         if self.plugin_search_focus {
                             if search.has_focus() {
@@ -815,7 +816,7 @@ impl DawApp {
                             empty.vertical_centered(|ui| {
                                 ui.add_space(daw_ui::tokens::SPACE_XL);
                                 ui.allocate_ui_with_layout(
-                                    egui::vec2(ui.available_width().min(540.0), 0.0),
+                                    egui::vec2(ui.available_width().min(daw_ui::tokens::POPUP_WIDTH_MD), 0.0),
                                     egui::Layout::top_down(egui::Align::Center),
                                     |ui| {
                                         if has_kind {
@@ -937,7 +938,7 @@ impl DawApp {
                                 }
                             });
                             ui.add_space(SPACE_SM);
-                            egui::Grid::new("library_device_details").num_columns(2).min_col_width(88.0).min_row_height(daw_ui::tokens::COMPACT_HEIGHT).spacing(egui::vec2(SPACE_MD, SPACE_SM)).show(ui, |ui| {
+                            egui::Grid::new("library_device_details").num_columns(2).min_col_width(89.0).min_row_height(daw_ui::tokens::COMPACT_HEIGHT).spacing(egui::vec2(SPACE_MD, SPACE_SM)).show(ui, |ui| {
                                 let mut row = |label: &str, value: String| {
                                     daw_ui::text::note(ui, label);
                                     daw_ui::text::body(ui, value);
@@ -986,7 +987,7 @@ impl DawApp {
                         daw_ui::action_menu(ui, "More", |ui| {
                             let Some(item) = selected else { return; };
                             let entry = item.entry;
-                            ui.set_max_width(360.0);
+                            ui.set_max_width(daw_ui::tokens::POPUP_WIDTH_SM);
                             if state.kind == DeviceKind::Unknown {
                                 if daw_ui::button(ui, "Try as instrument").on_hover_text("Type is unverified; the isolated host will validate the device").clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Instrument)); ui.close();

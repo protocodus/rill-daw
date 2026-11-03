@@ -2631,7 +2631,7 @@ impl DawApp {
         daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
             .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
-            .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 520.0 } else { 420.0 }))
+            .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 610.0 } else { 377.0 }))
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
@@ -2709,7 +2709,7 @@ impl DawApp {
                                 let label = daw_ui::form_label(ui, "Name");
                                 let name = ui.horizontal(|ui| {
                                     let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", daw_ui::tokens::FORM_FIELD_WIDTH);
-                                    if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this clip with the mouse").clicked() {
+                                    if ui.add(daw_ui::quiet_button_widget("Keyboard…").small()).on_hover_text("Name this clip with the mouse").clicked() {
                                         name_keyboard = Some(true);
                                     }
                                     name
@@ -2835,7 +2835,7 @@ impl DawApp {
                             let label = daw_ui::form_label(ui, "Name");
                             changed |= ui.horizontal(|ui| {
                                 let name = daw_ui::text_field(ui, &mut track.name, "Track name", daw_ui::tokens::FORM_FIELD_WIDTH).labelled_by(label.id);
-                                if daw_ui::small_button(ui, "Keyboard…").on_hover_text("Name this track with the mouse").clicked() {
+                                if ui.add(daw_ui::quiet_button_widget("Keyboard…").small()).on_hover_text("Name this track with the mouse").clicked() {
                                     name_keyboard = Some(false);
                                 }
                                 name.changed()

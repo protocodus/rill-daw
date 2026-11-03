@@ -495,7 +495,7 @@ impl DawApp {
                 "Please wait"
             },
             |ui| {
-                let footer_height = daw_ui::tokens::SPACE_XL
+                let footer_height = daw_ui::tokens::SPACE_LG
                     + daw_ui::tokens::CONTROL_HEIGHT
                     + 2.0 * ui.spacing().item_spacing.y;
                 let body_height = (ctx.content_rect().height()
@@ -554,7 +554,7 @@ impl DawApp {
                             }
                         }
                     });
-                ui.add_space(daw_ui::tokens::SPACE_XL);
+                daw_ui::section_gap(ui);
                 // Primary at the right edge, then Cancel, then alternatives.
                 daw_ui::dialog_actions(
                     ui,

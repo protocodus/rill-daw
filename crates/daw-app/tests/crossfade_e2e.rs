@@ -173,6 +173,22 @@ fn crossfade_popup_duration_presets_spline_drag_undo_and_archive_render() {
     let popup = app.click("Crossfade…");
     assert_eq!(popup["popups"]["crossfade"], true);
     assert!(config(&popup).is_null());
+    // The edited clip is the window's subject, not a second heading.
+    let titles: Vec<_> = popup["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| {
+            row["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("Incoming take"))
+        })
+        .map(|row| row["text"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(
+        titles.contains(&"Crossfade · Incoming take".to_owned()),
+        "{titles:?}"
+    );
     let enabled = app.click("Enable crossfade");
     let (x, y) = center(&enabled["crossfade"]["duration"]);
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}));
