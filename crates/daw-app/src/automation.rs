@@ -402,6 +402,7 @@ impl Harness {
         let app = &mut self.app;
         let menu_labels = &mut self.menu_labels;
         let window_labels = &mut self.window_labels;
+        daw_ui::reset_icon_only_labels(&self.ctx);
         let output = self.ctx.run(input, |ctx| {
             app.ui_frame(ctx);
             // A menu can repeat a persistent toolbar destination. Resolve the

@@ -639,16 +639,20 @@ fn register_icon_only_label(ctx: &egui::Context, label: &str, rect: Rect) {
     });
 }
 
-/// Accessible names and bounds of the icon-only controls shown in the latest
-/// pass. Pointer automation resolves these exactly as it resolves painted text.
+/// Accessible names and bounds of the icon-only controls shown by the latest
+/// pass that painted any. Pointer automation resolves these exactly as it
+/// resolves painted text. Call `reset_icon_only_labels` before running a
+/// frame so a control that disappeared is not reported from an earlier frame.
 pub fn icon_only_labels(ctx: &egui::Context) -> Vec<(String, Rect)> {
-    let pass = ctx.cumulative_pass_nr();
     ctx.data(|data| {
         data.get_temp::<IconOnlyLabels>(Id::new(ICON_ONLY_LABELS))
-            .filter(|entry| entry.pass == pass)
             .map(|entry| entry.labels)
             .unwrap_or_default()
     })
+}
+
+pub fn reset_icon_only_labels(ctx: &egui::Context) {
+    ctx.data_mut(|data| data.remove::<IconOnlyLabels>(Id::new(ICON_ONLY_LABELS)));
 }
 
 impl IconButton {
