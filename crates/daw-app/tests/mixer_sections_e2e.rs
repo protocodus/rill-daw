@@ -37,7 +37,7 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     .iter()
                     .map(|section| section["name"].as_str().unwrap())
                     .collect::<Vec<_>>(),
-                ["Source", "Inserts", "Volume & pan", "Output & sends"]
+                ["Source", "Effects", "Volume & pan", "Output & sends"]
             );
             for pair in sections.windows(2) {
                 assert!(

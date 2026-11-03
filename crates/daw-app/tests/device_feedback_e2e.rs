@@ -215,7 +215,8 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     let mixer = menu(&mut app, "Window", "Mixer");
-    assert!(visible(&mixer, "Soft keys"));
+    // The instrument is the MIDI channel's source.
+    assert!(visible(&mixer, "MIDI · Soft keys"));
     assert!(visible(&mixer, "Space"));
     assert!(visible(&mixer, "Echo"));
     assert_eq!(mixer["mixer_devices"].as_array().unwrap().len(), 3);
@@ -229,7 +230,7 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
     app.key("Escape");
     let mixer = app.inspect();
     assert!(visible(&mixer, "Long reverb"));
-    app.click("Soft keys");
+    app.click("MIDI · Soft keys");
     common::wait_visible(&mut app, "Soft keys");
     let named = rename(&mut app, "Soft keys", "Warm piano");
     assert_eq!(
@@ -258,7 +259,7 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
         "Long reverb"
     );
     menu(&mut app, "Window", "Mixer");
-    app.click("Warm piano");
+    app.click("MIDI · Warm piano");
     front(&mut app, "Keyboard…");
     common::wait_visible(&mut app, "Clear");
     app.click("Clear");

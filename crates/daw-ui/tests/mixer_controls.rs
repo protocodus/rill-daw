@@ -1,4 +1,4 @@
-use daw_ui::{KnobGeometry, MixerMuteSoloResponse, SliderScaleGeometry};
+use daw_ui::{MixerMuteSoloResponse, SliderScaleGeometry};
 use egui::{
     Context, Event, Key, Modifiers, PointerButton, RawInput, Rect, Response, SliderOrientation,
     pos2, vec2,
@@ -58,26 +58,19 @@ fn pan_frame(
     ctx: &Context,
     value: &mut f32,
     enabled: bool,
-    modifiers: Modifiers,
     events: Vec<Event>,
-) -> (Response, KnobGeometry, egui::FullOutput) {
+) -> (Response, SliderScaleGeometry, egui::FullOutput) {
     let mut response = None;
-    let output = ctx.run(
-        RawInput {
-            modifiers,
-            ..input(events)
-        },
-        |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.add_enabled_ui(enabled, |ui| {
-                    response = Some(daw_ui::mixer_pan(ui, value, 180.0));
-                });
+    let output = ctx.run(input(events), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add_enabled_ui(enabled, |ui| {
+                response = Some(daw_ui::mixer_pan(ui, value, 180.0));
             });
-        },
-    );
+        });
+    });
     let response = response.unwrap();
-    let geometry = daw_ui::knob_geometry(ctx, response.id)
-        .expect("pan row must retain the compact knob's calibrated identity");
+    let geometry = daw_ui::slider_scale_geometry(ctx, response.id)
+        .expect("pan row must retain the rail's calibrated identity");
     (response, geometry, output)
 }
 
@@ -108,14 +101,17 @@ fn mixer_fader_preserves_precise_and_out_of_range_values_when_inspected() {
                 let (response, geometry, _) = fader_frame(&ctx, &mut value, true, vec![]);
                 assert_eq!(value.to_bits(), original.to_bits());
                 assert!(!response.changed());
-                assert_eq!(geometry.value, f64::from(original));
-                assert_eq!(geometry.range, [0.0, 1.5]);
-                assert_eq!(geometry.zero_reference, 1.0);
+                let travel = daw_ui::gain_taper(original);
+                assert_eq!(geometry.value, f64::from(travel));
+                assert_eq!(geometry.range, [0.0, 1.0]);
+                assert_eq!(geometry.zero_reference, 0.75);
+                assert!(geometry.custom_scale);
+                assert_eq!(geometry.divisions, 0);
                 assert_eq!(geometry.orientation, SliderOrientation::Vertical);
                 assert!(geometry.rail.contains(geometry.minimum));
                 assert!(geometry.rail.contains(geometry.maximum));
                 assert!(geometry.rail.contains(geometry.handle));
-                let fraction = (original / 1.5).clamp(0.0, 1.0);
+                let fraction = travel.clamp(0.0, 1.0);
                 assert!(
                     geometry
                         .handle
@@ -147,7 +143,7 @@ fn mixer_fader_pointer_and_keyboard_edits_follow_native_handle_travel() {
             true,
             pointer(at, PointerButton::Primary, false),
         );
-        assert!((value - fraction * 1.5).abs() < 0.00001);
+        assert!((value - daw_ui::gain_untaper(fraction)).abs() < 0.00001);
         assert!(geometry.handle.distance(at) < 0.001);
     }
     value = 0.5;
@@ -202,7 +198,7 @@ fn mixer_fader_secondary_middle_and_disabled_input_never_edit_values() {
 }
 
 #[test]
-fn compact_pan_preserves_values_and_paints_its_ring_in_a_bounded_row() {
+fn pan_rail_preserves_values_and_shows_detents_and_a_short_value() {
     for dark in [false, true] {
         let ctx = Context::default();
         daw_ui::theme::apply(&ctx);
@@ -211,265 +207,103 @@ fn compact_pan_preserves_values_and_paints_its_ring_in_a_bounded_row() {
         } else {
             egui::Theme::Light
         });
-        for original in [
-            -1.25_f32,
-            -1.0,
-            -0.123_456_79,
-            0.0,
-            0.000_000_000_123,
-            0.123_456_79,
-            1.0,
-            1.25,
-        ] {
+        for original in [-1.25_f32, -1.0, -0.123_456_79, 0.0, 0.004, 0.5, 1.0, 1.25] {
             let mut value = original;
-            let (response, geometry, output) =
-                pan_frame(&ctx, &mut value, true, Modifiers::NONE, vec![]);
+            let (response, geometry, output) = pan_frame(&ctx, &mut value, true, vec![]);
             assert_eq!(value.to_bits(), original.to_bits());
             assert!(!response.changed());
             assert_eq!(geometry.value, f64::from(original));
             assert_eq!(geometry.range, [-1.0, 1.0]);
-            assert_eq!(geometry.number, Rect::NOTHING);
-            assert_eq!(geometry.dial.size(), vec2(48.0, 48.0));
+            assert_eq!(geometry.orientation, SliderOrientation::Horizontal);
+            assert!(geometry.custom_scale);
+            assert_eq!(
+                geometry
+                    .ticks
+                    .iter()
+                    .map(|tick| tick.fraction)
+                    .collect::<Vec<_>>(),
+                [0.0, 0.5, 1.0]
+            );
             assert!((response.rect.width() - 180.0).abs() < 0.1);
             assert!(
-                (response.rect.height()
-                    - daw_ui::Knob::compact_height(48.0).max(daw_ui::tokens::PARAMETER_ROW_HEIGHT))
-                .abs()
-                    < 0.1,
-                "compact pan ring and adjacent value must share a bounded row: {:?}, dial {:?}",
-                response.rect,
-                geometry.dial
+                (response.rect.height() - daw_ui::tokens::CONTROL_HEIGHT).abs() < 0.1,
+                "the pan row is one control row: {:?}",
+                response.rect
             );
-            assert!(response.rect.contains_rect(geometry.dial));
-            let fraction = ((original + 1.0) * 0.5).clamp(0.0, 1.0);
-            let expected = geometry.center
-                + egui::Vec2::angled(std::f32::consts::PI * (0.75 + 1.5 * fraction))
-                    * geometry.radius;
-            assert!(geometry.index.distance(expected) < 0.001);
-            assert!(geometry.ticks.is_empty());
-            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
-                egui::Shape::Path(path) if path.stroke.width == 2.5
-                    && path.points.last().is_some_and(|point| point.distance(geometry.index) < 0.001)
-            )), "The active arc ends at the actual stored pan");
+            let caption = daw_ui::mixer_pan_caption(original);
             let labels = text_labels(&output);
-            let caption = format!("Pan {}", daw_ui::channel_pan_label(original));
             assert!(labels.contains(&caption), "missing {caption}: {labels:?}");
-            assert!(!labels.iter().any(|label| label == "L" || label == "R"));
-            assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
-                egui::Shape::Text(text) if geometry.dial.intersects(text.galley.rect.translate(text.pos.to_vec2()))
-            )), "Compact knob artwork contains no text");
-        }
-    }
-}
-
-#[test]
-fn compact_pan_is_relative_with_no_click_jump_fine_drag_and_keyboard_steps() {
-    let ctx = Context::default();
-    daw_ui::theme::apply(&ctx);
-    let mut value = 0.123_456_79_f32;
-    let before = value;
-    let (_, geometry, _) = pan_frame(&ctx, &mut value, true, Modifiers::NONE, vec![]);
-    let origin = geometry.minimum;
-    for pressed in [true, false] {
-        let (response, _, _) = pan_frame(
-            &ctx,
-            &mut value,
-            true,
-            Modifiers::NONE,
-            pointer(origin, PointerButton::Primary, pressed),
-        );
-        assert_eq!(
-            value.to_bits(),
-            before.to_bits(),
-            "clicking a different angle must not jump pan"
-        );
-        assert!(!response.changed());
-    }
-    pan_frame(
-        &ctx,
-        &mut value,
-        true,
-        Modifiers::NONE,
-        pointer(origin, PointerButton::Primary, true),
-    );
-    let moved = origin + vec2(20.0, 0.0);
-    let (response, _, _) = pan_frame(
-        &ctx,
-        &mut value,
-        true,
-        Modifiers::NONE,
-        vec![Event::PointerMoved(moved)],
-    );
-    assert!(response.changed());
-    assert!((value - before - 0.2).abs() < 0.000001);
-    let shift = Modifiers {
-        shift: true,
-        ..Modifiers::NONE
-    };
-    let fine = moved + vec2(0.0, -20.0);
-    pan_frame(
-        &ctx,
-        &mut value,
-        true,
-        shift,
-        vec![Event::PointerMoved(fine)],
-    );
-    assert!(
-        (value - before - 0.22).abs() < 0.000001,
-        "fine movement must continue from the current pan"
-    );
-    let (response, _, _) = pan_frame(
-        &ctx,
-        &mut value,
-        true,
-        Modifiers::NONE,
-        pointer(fine, PointerButton::Primary, false),
-    );
-    response.request_focus();
-    let before = value;
-    let (response, _, _) = pan_frame(
-        &ctx,
-        &mut value,
-        true,
-        Modifiers::NONE,
-        key(Key::ArrowRight, true),
-    );
-    assert!(response.changed());
-    assert!((value - before - 0.01).abs() < 0.000001);
-}
-
-#[test]
-fn compact_pan_context_clicks_cover_the_caption_and_disabled_input_cannot_edit() {
-    for enabled in [false, true] {
-        for button in [
-            PointerButton::Secondary,
-            PointerButton::Middle,
-            PointerButton::Primary,
-        ] {
-            if enabled && button == PointerButton::Primary {
-                continue;
-            }
-            let ctx = Context::default();
-            daw_ui::theme::apply(&ctx);
-            let mut value = -0.123_456_79_f32;
-            let before = value;
-            let (response, geometry, output) =
-                pan_frame(&ctx, &mut value, enabled, Modifiers::NONE, vec![]);
-            let caption = output
+            let caption_rect = output
                 .shapes
                 .iter()
                 .find_map(|shape| match &shape.shape {
-                    egui::Shape::Text(text) if text.galley.text().starts_with("Pan ") => {
+                    egui::Shape::Text(text) if text.galley.text() == caption => {
                         Some(text.galley.rect.translate(text.pos.to_vec2()))
                     }
                     _ => None,
                 })
-                .expect("pan paints a current caption");
-            assert!(caption.left() > geometry.dial.right());
-            let gap = pos2(
-                (geometry.dial.right() + caption.left()) * 0.5,
-                response.rect.center().y,
+                .unwrap();
+            assert!(caption_rect.left() >= geometry.rail.right());
+            assert!(
+                response.rect.expand(1.0).contains_rect(caption_rect),
+                "{caption_rect:?} escapes {:?}",
+                response.rect
             );
-            let edge = pos2(response.rect.right() - 2.0, response.rect.center().y);
-            for target in [
-                geometry.center,
-                caption.center(),
-                gap,
-                edge,
-                response.rect.center(),
-            ] {
-                pan_frame(
-                    &ctx,
-                    &mut value,
-                    enabled,
-                    Modifiers::NONE,
-                    pointer(target, button, true),
-                );
-                let (response, _, _) = pan_frame(
-                    &ctx,
-                    &mut value,
-                    enabled,
-                    Modifiers::NONE,
-                    pointer(target, button, false),
-                );
-                assert_eq!(value.to_bits(), before.to_bits());
-                assert!(!response.changed());
-                if enabled && button == PointerButton::Secondary {
-                    assert!(
-                        response.secondary_clicked(),
-                        "whole row must expose the same pan context menu at {target:?}; caption {caption:?}"
-                    );
-                }
-            }
-            if !enabled {
-                pan_frame(
-                    &ctx,
-                    &mut value,
-                    false,
-                    Modifiers::NONE,
-                    pointer(geometry.center, PointerButton::Primary, true),
-                );
-                pan_frame(
-                    &ctx,
-                    &mut value,
-                    false,
-                    Modifiers::NONE,
-                    vec![Event::PointerMoved(geometry.center + vec2(20.0, -20.0))],
-                );
-                let (response, _, _) = pan_frame(
-                    &ctx,
-                    &mut value,
-                    false,
-                    Modifiers::NONE,
-                    pointer(
-                        geometry.center + vec2(20.0, -20.0),
-                        PointerButton::Primary,
-                        false,
-                    ),
-                );
-                response.request_focus();
-                pan_frame(
-                    &ctx,
-                    &mut value,
-                    false,
-                    Modifiers::NONE,
-                    key(Key::ArrowRight, true),
-                );
-                assert_eq!(value.to_bits(), before.to_bits());
-            }
         }
     }
+    assert_eq!(daw_ui::mixer_pan_caption(0.004), "C");
+    assert_eq!(daw_ui::mixer_pan_caption(-0.15), "L15");
+    assert_eq!(daw_ui::mixer_pan_caption(1.0), "R100");
 }
 
 #[test]
-fn compact_pan_hint_uses_pan_units_and_only_offers_visible_edit_paths() {
+fn pan_rail_drags_and_context_clicks_never_jump_from_secondary_input() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
-    ctx.style_mut(|style| {
-        style.interaction.tooltip_delay = 0.0;
-        style.interaction.show_tooltips_only_when_still = false;
-    });
-    let mut value = 0.25;
-    let (_, geometry, _) = pan_frame(&ctx, &mut value, true, Modifiers::NONE, vec![]);
+    let mut value = 0.0_f32;
+    let (_, geometry, _) = pan_frame(&ctx, &mut value, true, vec![]);
+    let quarter = geometry.minimum.lerp(geometry.maximum, 0.25);
     pan_frame(
         &ctx,
         &mut value,
         true,
-        Modifiers::NONE,
-        vec![Event::PointerMoved(geometry.center)],
+        pointer(geometry.handle, PointerButton::Primary, true),
     );
-    pan_frame(&ctx, &mut value, true, Modifiers::NONE, vec![]);
-    let (_, _, output) = pan_frame(&ctx, &mut value, true, Modifiers::NONE, vec![]);
-    let rendered = text_labels(&output);
-    let hint = rendered
-        .iter()
-        .find(|text| text.contains("Stereo balance"))
-        .expect("pan wrapper supplies a unit-aware editing hint");
-    for wording in ["R25", "25%", "Drag up/right", "Shift", "Right-click"] {
-        assert!(hint.contains(wording), "missing {wording}: {hint}");
+    pan_frame(&ctx, &mut value, true, vec![Event::PointerMoved(quarter)]);
+    let (response, _, _) = pan_frame(
+        &ctx,
+        &mut value,
+        true,
+        pointer(quarter, PointerButton::Primary, false),
+    );
+    assert!((value + 0.5).abs() < 0.02, "{value}");
+    let _ = response;
+    let before = value;
+    for enabled in [true, false] {
+        let (response, geometry, _) = pan_frame(&ctx, &mut value, enabled, vec![]);
+        let caption = pos2(response.rect.right() - 4.0, response.rect.center().y);
+        for target in [geometry.maximum, caption] {
+            pan_frame(
+                &ctx,
+                &mut value,
+                enabled,
+                pointer(target, PointerButton::Secondary, true),
+            );
+            let (response, _, _) = pan_frame(
+                &ctx,
+                &mut value,
+                enabled,
+                pointer(target, PointerButton::Secondary, false),
+            );
+            assert_eq!(value.to_bits(), before.to_bits());
+            if enabled {
+                assert!(
+                    response.secondary_clicked(),
+                    "the whole row exposes the pan context menu at {target:?}"
+                );
+            }
+        }
     }
-    assert!(!hint.contains("Click the number"));
-    assert_eq!(value, 0.25);
 }
 
 fn mute_solo_frame(
@@ -553,81 +387,50 @@ fn mute_and_solo_are_equal_sized_independent_native_buttons() {
     }
 }
 
-#[test]
-fn level_meter_has_a_bounded_captioned_footprint_and_sanitizes_nonfinite_input() {
-    for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
-        let ctx = Context::default();
-        daw_ui::theme::apply(&ctx);
-        ctx.set_pixels_per_point(density);
-        ctx.set_theme(if dark {
-            egui::Theme::Dark
-        } else {
-            egui::Theme::Light
+fn meter_frame(ctx: &Context, peaks: [f32; 2], events: Vec<Event>) -> (Response, egui::FullOutput) {
+    let mut response = None;
+    let output = ctx.run(input(events), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            response = Some(daw_ui::channel_meter(
+                ui,
+                egui::Id::new("meter"),
+                peaks,
+                240.0,
+                daw_ui::MIXER_FADER_INSET,
+            ));
         });
-        let _ = ctx.run(input(vec![]), |_| {});
-        for peaks in [
-            [0.0, 0.0],
-            [f32::NAN, f32::INFINITY],
-            [f32::NEG_INFINITY, -1.0],
-            [0.01, 1.2],
-        ] {
-            let mut response = None;
-            let output = ctx.run(input(vec![]), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    response = Some(daw_ui::mixer_level_meter(ui, peaks, 180.0));
-                });
-            });
-            let response = response.unwrap();
-            assert_eq!(
-                response.rect.size(),
-                vec2(180.0, daw_ui::MIXER_LEVEL_METER_HEIGHT)
-            );
-            assert_eq!(response.sense, egui::Sense::hover());
-            assert!(!response.changed());
-            let labels = text_labels(&output);
-            for caption in ["Level", "dBFS"] {
-                assert!(
-                    labels.iter().any(|label| label == caption),
-                    "missing {caption}: {labels:?}"
-                );
-            }
-            let caption_rects: Vec<_> = output
-                .shapes
-                .iter()
-                .filter_map(|shape| {
-                    if let egui::Shape::Text(text) = &shape.shape {
-                        Some((
-                            text.galley.text(),
-                            text.galley.rect.translate(text.pos.to_vec2()),
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            for (index, (caption, bounds)) in caption_rects.iter().enumerate() {
-                assert!(
-                    response.rect.expand(1.0 / density).contains_rect(*bounds),
-                    "Meter caption {caption} escaped its allocated height: {bounds:?}"
-                );
-                for (other, other_bounds) in &caption_rects[..index] {
-                    assert!(
-                        !bounds.intersects(*other_bounds),
-                        "Meter captions {caption} and {other} overlap"
-                    );
-                }
-            }
-            for shape in &output.shapes {
-                if !matches!(shape.shape, egui::Shape::Noop) {
-                    assert!(shape.shape.visual_bounding_rect().is_finite());
-                }
-            }
-        }
+    });
+    (response.unwrap(), output)
+}
+
+#[test]
+fn gain_taper_puts_unity_at_three_quarters_and_spaces_decades_evenly() {
+    assert_eq!(daw_ui::gain_taper(0.0), 0.0);
+    assert_eq!(daw_ui::gain_taper(-1.0), 0.0);
+    assert_eq!(daw_ui::gain_taper(f32::NAN), 0.0);
+    assert_eq!(daw_ui::gain_taper(1.0), 0.75);
+    assert!((daw_ui::gain_taper(1.5) - 1.0).abs() < 1e-5);
+    let at = |db: f32| daw_ui::gain_taper(10.0_f32.powf(db / 20.0));
+    let steps = [
+        at(0.0) - at(-10.0),
+        at(-10.0) - at(-20.0),
+        at(-20.0) - at(-30.0),
+    ];
+    for step in steps {
+        assert!((step - steps[0]).abs() < 1e-5, "{steps:?}");
+    }
+    let mut previous = -1.0;
+    for index in 0..=300 {
+        let gain = index as f32 * 0.005;
+        let fraction = daw_ui::gain_taper(gain);
+        assert!(fraction > previous, "the taper must be monotonic");
+        previous = fraction;
+        assert!((daw_ui::gain_untaper(fraction) - gain).abs() < 1e-4);
     }
 }
 
 #[test]
-fn level_meter_uses_decibel_travel_and_never_fabricates_or_overflows_signal() {
+fn channel_meter_follows_the_fader_scale_and_sanitizes_input() {
     for dark in [false, true] {
         let ctx = Context::default();
         daw_ui::theme::apply(&ctx);
@@ -637,88 +440,80 @@ fn level_meter_uses_decibel_travel_and_never_fabricates_or_overflows_signal() {
             egui::Theme::Light
         });
         let colors = daw_ui::theme::palette(&ctx);
-        for (peaks, expected) in [
-            ([10.0_f32.powf(-30.0 / 20.0), 1.0], [0.5, 1.0]),
-            ([10.0_f32.powf(-45.0 / 20.0), 1.2], [0.25, 1.0]),
-            ([0.0, 0.0], [0.0, 0.0]),
-            ([f32::NAN, f32::INFINITY], [0.0, 0.0]),
-            ([f32::NEG_INFINITY, -1.0], [0.0, 0.0]),
+        for peaks in [
+            [0.0, 0.0],
+            [f32::NAN, f32::INFINITY],
+            [f32::NEG_INFINITY, -1.0],
+            [0.5, 1.0],
         ] {
-            let mut response = None;
-            let output = ctx.run(input(vec![]), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    response = Some(daw_ui::mixer_level_meter(ui, peaks, 180.0));
-                });
-            });
-            let bounds = response.unwrap().rect;
-            let rails: Vec<_> = output
-                .shapes
-                .iter()
-                .filter_map(|shape| match &shape.shape {
-                    egui::Shape::Rect(rect)
-                        if rect.fill == colors.bg
-                            && rect.rect.height() <= 8.0
-                            && bounds.contains_rect(rect.rect) =>
-                    {
-                        Some(rect.rect)
-                    }
-                    _ => None,
-                })
-                .collect();
+            let (response, output) = meter_frame(&ctx, peaks, vec![]);
             assert_eq!(
-                rails.len(),
-                2,
-                "stereo channels need separate calibrated rails"
+                response.rect.size(),
+                vec2(daw_ui::tokens::MIXER_METER_WIDTH, 240.0)
             );
+            assert!(!response.changed());
+            for shape in &output.shapes {
+                if !matches!(shape.shape, egui::Shape::Noop) {
+                    assert!(shape.shape.visual_bounding_rect().is_finite());
+                }
+            }
             let fills: Vec<_> = output
                 .shapes
                 .iter()
                 .filter_map(|shape| match &shape.shape {
-                    egui::Shape::Rect(rect)
-                        if rect.fill == colors.guide || rect.fill == colors.warning =>
-                    {
-                        Some(rect)
-                    }
+                    egui::Shape::Rect(rect) if rect.fill == colors.guide => Some(rect.rect),
                     _ => None,
                 })
                 .collect();
-            assert_eq!(
-                fills.len(),
-                expected.into_iter().filter(|level| *level > 0.0).count()
-            );
-            for (index, rail) in rails.into_iter().enumerate() {
-                let fill = fills
-                    .iter()
-                    .find(|fill| fill.rect.center().y == rail.center().y);
-                if expected[index] == 0.0 {
-                    assert!(
-                        fill.is_none(),
-                        "silence and invalid readings must paint no signal"
-                    );
-                } else {
-                    let fill = fill.expect("a finite audible peak needs a signal fill");
-                    assert!(rail.contains_rect(fill.rect));
-                    assert_eq!(fill.rect.left(), rail.left());
-                    assert!((fill.rect.width() / rail.width() - expected[index]).abs() < 0.0001);
-                    assert_eq!(
-                        fill.fill,
-                        if peaks[index] >= 1.0 {
-                            colors.warning
-                        } else {
-                            colors.guide
-                        }
-                    );
-                }
-            }
-            let labels = text_labels(&output);
-            for caption in ["−60", "−30", "0"] {
-                assert!(
-                    labels.iter().any(|label| label == caption),
-                    "missing scale reference {caption}"
-                );
+            let audible = peaks
+                .iter()
+                .filter(|peak| peak.is_finite() && **peak > 0.0)
+                .count();
+            assert_eq!(fills.len(), audible, "silence paints no signal");
+            let bottom = response.rect.bottom() - daw_ui::MIXER_FADER_INSET;
+            let top = response.rect.top() + daw_ui::MIXER_FADER_INSET;
+            for (fill, peak) in fills.iter().zip(peaks.iter().filter(|peak| **peak > 0.0)) {
+                assert!(response.rect.contains_rect(*fill));
+                let expected = bottom + (top - bottom) * daw_ui::gain_taper(*peak);
+                assert!((fill.top() - expected).abs() < 0.01);
             }
         }
     }
+}
+
+#[test]
+fn channel_meter_latches_clipping_until_clicked() {
+    let ctx = Context::default();
+    daw_ui::theme::apply(&ctx);
+    let colors = daw_ui::theme::palette(&ctx);
+    let warning = |output: &egui::FullOutput| {
+        output.shapes.iter().any(
+            |shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == colors.warning),
+        )
+    };
+    let (response, output) = meter_frame(&ctx, [1.2, 0.1], vec![]);
+    assert!(warning(&output));
+    let (_, output) = meter_frame(&ctx, [0.1, 0.1], vec![]);
+    assert!(
+        warning(&output),
+        "a clip stays latched after the peak falls"
+    );
+    let center = response.rect.center();
+    meter_frame(
+        &ctx,
+        [0.1, 0.1],
+        pointer(center, PointerButton::Primary, true),
+    );
+    meter_frame(
+        &ctx,
+        [0.1, 0.1],
+        pointer(center, PointerButton::Primary, false),
+    );
+    let (_, output) = meter_frame(&ctx, [0.0, 0.0], vec![]);
+    assert!(!output.shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == colors.warning
+            && rect.rect.height() <= daw_ui::tokens::SPACE_XS)
+    }));
 }
 
 #[test]

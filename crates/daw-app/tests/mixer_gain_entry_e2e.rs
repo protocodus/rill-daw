@@ -164,7 +164,9 @@ fn viewing_extreme_values_and_middle_dragging_readout_or_fader_do_not_edit() {
     let fader = state["mixer"]["channels"][0]["fader_scale"]["rail"].clone();
     assert!(fader.is_object(), "first channel fader rail");
     for target in [&readout, &fader] {
+        // The fader's top end stays visible in this short window.
         let (x, y) = center(target);
+        let y = y.min(target["min"][1].as_f64().unwrap() + 12.0);
         unchanged(
             &app.command(json!({"command":"pointer","phase":"down","button":"middle","x":x,"y":y})),
         );

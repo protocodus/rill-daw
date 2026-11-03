@@ -101,7 +101,7 @@ fn gain_frame(
         |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let response = ui.add(
-                    daw_ui::knob(value, 0.0..=16.0)
+                    daw_ui::knob(value, 0.0..=1.5)
                         .compact()
                         .diameter(64.0)
                         .perceptual_gain()
@@ -123,7 +123,7 @@ fn gain_taper_gives_sub_unity_adjustments_room_and_keeps_silence_and_full_range(
     let mut value = 0.25;
     let (_, geometry, output) = gain_frame(&ctx, &mut value, vec![]);
     assert_eq!(value, 0.25);
-    assert_eq!(geometry.range, [0.0, 16.0]);
+    assert_eq!(geometry.range, [0.0, 1.5]);
     assert!(geometry.unity.is_none());
     assert!(labels(&output).is_empty());
     let start = geometry.center;
@@ -183,7 +183,7 @@ fn gain_taper_gives_sub_unity_adjustments_room_and_keeps_silence_and_full_range(
         vec![Event::PointerMoved(start - vec2(0.0, 200.0))],
     );
     assert!(
-        (value - 16.0).abs() < 1e-12,
+        (value - 1.5).abs() < 1e-6,
         "the full gain range remains reachable"
     );
 }
@@ -931,7 +931,7 @@ fn automation_keeps_markers_on_wide_pan_rows_and_separate_value_buttons() {
         |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let response = daw_ui::mixer_pan(ui, &mut pan, 180.0);
-                geometry = daw_ui::knob_geometry(ctx, response.id);
+                geometry = daw_ui::slider_scale_geometry(ctx, response.id);
                 daw_ui::paint_automation_control(ui, &response, AutomationState::Read);
                 daw_ui::automatable_parameter_value_button(
                     ui,
@@ -947,7 +947,13 @@ fn automation_keeps_markers_on_wide_pan_rows_and_separate_value_buttons() {
             });
         },
     );
-    let dial = geometry.unwrap().dial;
+    // On the pan rail the marker sits beside the cap, never over it.
+    let geometry = geometry.unwrap();
+    let dial = Rect::from_center_size(
+        geometry.handle,
+        vec2(daw_ui::MIXER_CAP_SIZE.y, daw_ui::MIXER_CAP_SIZE.x),
+    )
+    .shrink(0.5);
     let markers: Vec<_> = output
         .shapes
         .iter()
@@ -964,11 +970,6 @@ fn automation_keeps_markers_on_wide_pan_rows_and_separate_value_buttons() {
         "Both external automation targets retain their state marker"
     );
     assert!(markers.iter().all(|marker| !dial.intersects(*marker)));
-    assert!(
-        labels(&output)
-            .iter()
-            .any(|label| label.starts_with("Pan R"))
-    );
     assert!(labels(&output).contains(&"0.25×"));
     assert_eq!(pan, 0.25);
 }

@@ -142,7 +142,8 @@ fn assert_pan_marker(app: &mut Harness, source: u64, dark: bool, marker: &str) {
     app.command(json!({"command":"pointer","phase":"move","x":1095,"y":755}));
     let state = app.command(json!({"command":"inspect","paint":true}));
     let pan = &channel(&state, "mixer", source)["pan"];
-    let dial = &channel(&state, "mixer", source)["pan_knob"]["dial"];
+    let handle = &channel(&state, "mixer", source)["pan_scale"]["handle_center"];
+    let (handle_x, handle_y) = (handle[0].as_f64().unwrap(), handle[1].as_f64().unwrap());
     let palette = if dark { theme::DARK } else { theme::LIGHT };
     let color = match marker {
         "A" => palette.automation,
@@ -161,12 +162,15 @@ fn assert_pan_marker(app: &mut Harness, source: u64, dark: bool, marker: &str) {
                         .as_array()
                         .unwrap()
                         .contains(&json!(color.to_array()))
-                    && x >= dial["max"][0].as_f64().unwrap()
+                    && x >= pan["min"][0].as_f64().unwrap()
                     && x <= pan["max"][0].as_f64().unwrap()
                     && y >= pan["min"][1].as_f64().unwrap()
-                    && y <= pan["min"][1].as_f64().unwrap() + 12.0
+                    && y <= pan["max"][1].as_f64().unwrap()
+                    // Beside the cap, never over its center groove.
+                    && ((x - handle_x).abs() >= f64::from(daw_ui::MIXER_CAP_SIZE.y) * 0.5
+                        || (y - handle_y).abs() >= f64::from(daw_ui::MIXER_CAP_SIZE.x) * 0.5)
             }),
-        "Missing {marker} state marker at the pan row's top-right, clear of the dial"
+        "Missing {marker} state marker on the pan row, clear of the cap"
     );
 }
 

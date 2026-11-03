@@ -72,6 +72,9 @@ pub struct SliderScaleGeometry {
     pub zero_reference: f64,
     pub divisions: usize,
     pub ticks: Vec<SliderTick>,
+    /// The caller supplied its own calibrated ticks (`Slider::scale_ticks`):
+    /// no generic divisions and no midpoint landmark.
+    pub custom_scale: bool,
 }
 
 impl SliderScaleGeometry {
@@ -152,6 +155,7 @@ impl SliderScaleGeometry {
             zero_reference: 0.0,
             divisions,
             ticks,
+            custom_scale: false,
         }
     }
 
@@ -161,6 +165,21 @@ impl SliderScaleGeometry {
             self.range[0]..=self.range[1],
             self.zero_reference,
         )
+        .filter(|marker| !self.custom_scale || *marker == SliderValueMarker::Zero)
+    }
+
+    /// Replace the generic divisions with caller-calibrated `(fraction, major)` ticks.
+    pub fn set_custom_ticks(&mut self, ticks: &[(f32, bool)]) {
+        self.ticks = ticks
+            .iter()
+            .map(|(fraction, major)| SliderTick {
+                fraction: *fraction,
+                center: self.minimum.lerp(self.maximum, *fraction),
+                major: *major,
+            })
+            .collect();
+        self.divisions = 0;
+        self.custom_scale = true;
     }
 }
 
@@ -307,8 +326,14 @@ fn paint_slider_index(ui: &Ui, geometry: &SliderScaleGeometry) {
             ),
         );
     }
-    // A pinned handle must not imply an out-of-range stored value equals the
-    // endpoint. Show a directional overflow mark without changing that value.
+    paint_overflow_mark(ui, geometry);
+}
+
+/// A pinned handle must not imply an out-of-range stored value equals the
+/// endpoint. Show a directional overflow mark without changing that value.
+fn paint_overflow_mark(ui: &Ui, geometry: &SliderScaleGeometry) {
+    let colors = crate::theme::palette(ui.ctx());
+    let vertical = geometry.orientation == SliderOrientation::Vertical;
     if geometry.value.is_finite() && geometry.range[0] != geometry.range[1] {
         let fraction =
             (geometry.value - geometry.range[0]) / (geometry.range[1] - geometry.range[0]);
@@ -338,32 +363,43 @@ fn paint_slider_index(ui: &Ui, geometry: &SliderScaleGeometry) {
     }
 }
 
-/// Mixer skin over the native rail: the trough is deliberately narrower than
-/// its pointer target, and the cap stays centered on the native handle travel.
+/// Visible cap of the mixer skin, `(across, along)` the rail: about 21 x 13 pt.
+pub const MIXER_CAP_SIZE: egui::Vec2 =
+    egui::vec2(crate::tokens::COMPACT_HEIGHT, crate::tokens::SPACE_MD);
+/// Width of the mixer skin's visible trough.
+const MIXER_TROUGH: f32 = 6.0;
+
+/// Mixer skin over the native rail: a narrow pixel-snapped trough, a level
+/// fill from silence (or from center on bipolar rails) and a rectangular cap
+/// with a center groove. The pointer target stays the full native rail.
 fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeometry) {
     if !ui.is_rect_visible(geometry.rail) {
         return;
     }
+    let painter = ui.painter();
     let colors = crate::theme::palette(ui.ctx());
+    let hairline = 1.0 / painter.pixels_per_point();
     let vertical = geometry.orientation == SliderOrientation::Vertical;
-    let axis = if vertical {
-        egui::vec2(0.0, 1.0)
-    } else {
-        egui::vec2(1.0, 0.0)
+    let swap = |size: egui::Vec2| {
+        if vertical {
+            size
+        } else {
+            egui::vec2(size.y, size.x)
+        }
     };
-    let cross = if vertical {
-        egui::vec2(1.0, 0.0)
-    } else {
-        egui::vec2(0.0, 1.0)
-    };
-    let first = geometry.minimum.min(geometry.maximum) - axis * 3.0;
-    let last = geometry.minimum.max(geometry.maximum) + axis * 3.0;
-    let trough = Rect::from_min_max(first - cross * 3.0, last + cross * 3.0);
-    ui.painter().rect(
+    let first = geometry.minimum.min(geometry.maximum);
+    let last = geometry.minimum.max(geometry.maximum);
+    let cross = swap(egui::vec2(MIXER_TROUGH * 0.5, 0.0));
+    let along = swap(egui::vec2(0.0, MIXER_CAP_SIZE.y * 0.5));
+    let trough = egui::emath::GuiRounding::round_to_pixels(
+        Rect::from_min_max(first - cross - along, last + cross + along),
+        painter.pixels_per_point(),
+    );
+    painter.rect(
         trough,
-        3.0,
+        MIXER_TROUGH * 0.5,
         colors.bg,
-        Stroke::new(crate::tokens::BORDER_WIDTH, colors.line),
+        Stroke::new(hairline, colors.line),
         egui::StrokeKind::Inside,
     );
     let anchor = if !vertical && geometry.range[0] < 0.0 && geometry.range[1] > 0.0 {
@@ -373,36 +409,54 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
         geometry.minimum
     };
     if anchor.distance(geometry.handle) > 0.5 {
-        ui.painter().line_segment(
-            [anchor, geometry.handle],
-            Stroke::new(
-                2.0_f32,
-                if ui.is_enabled() {
-                    colors.accent
-                } else {
-                    colors.muted
-                },
-            ),
+        let fill = Rect::from_two_pos(anchor, geometry.handle).expand2(swap(egui::vec2(1.0, 0.0)));
+        painter.rect_filled(
+            egui::emath::GuiRounding::round_to_pixels(fill, painter.pixels_per_point()),
+            1.0,
+            if ui.is_enabled() {
+                colors.accent
+            } else {
+                colors.muted
+            },
         );
     }
-    paint_slider_ticks(ui, geometry);
-    let cap = Rect::from_center_size(geometry.handle, geometry.handle_half_extent * 2.0);
+    if !geometry.custom_scale {
+        paint_slider_ticks(ui, geometry);
+    } else if !vertical {
+        // Bipolar end and center detents above the trough.
+        for tick in &geometry.ticks {
+            let x = egui::emath::GuiRounding::round_to_pixel_center(
+                tick.center.x,
+                painter.pixels_per_point(),
+            );
+            let reach = if tick.major { 5.0 } else { 3.0 };
+            painter.line_segment(
+                [
+                    egui::pos2(x, trough.top() - 2.0 - reach),
+                    egui::pos2(x, trough.top() - 2.0),
+                ],
+                Stroke::new(hairline, colors.muted),
+            );
+        }
+    }
+    let cap = egui::emath::GuiRounding::round_to_pixels(
+        Rect::from_center_size(geometry.handle, swap(MIXER_CAP_SIZE)),
+        painter.pixels_per_point(),
+    );
     let active = response.dragged() || response.has_focus();
-    let fill = if response.hovered() || active {
-        colors.control_hover
-    } else {
-        colors.control_fill
-    };
-    ui.painter().add(crate::component_shape(
-        ui.painter(),
+    painter.rect(
         cap,
-        3,
-        fill,
+        3.0,
+        if response.hovered() || active {
+            colors.control_hover
+        } else {
+            colors.raised
+        },
         Stroke::new(
             if response.has_focus() {
                 crate::tokens::FOCUS_WIDTH
             } else {
-                crate::tokens::BORDER_WIDTH
+                hairline
             },
             if active && ui.is_enabled() {
                 colors.accent
@@ -410,27 +464,53 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
                 colors.line.lerp_to_gamma(colors.muted, 0.5)
             },
         ),
-        crate::ComponentMaterial {
-            elevated: false,
-            active: response.has_focus() && ui.is_enabled(),
-        },
-    ));
-    if vertical {
-        // Short grip lines leave the central landmark legible at every value.
-        for y in [-3.5, 3.5] {
-            for sign in [-1.0, 1.0] {
-                ui.painter().line_segment(
-                    [
-                        geometry.handle + egui::vec2(sign * 7.0, y),
-                        geometry.handle
-                            + egui::vec2(sign * (geometry.handle_half_extent.x - 3.0), y),
-                    ],
-                    Stroke::new(1.0_f32, colors.muted.gamma_multiply(0.6)),
-                );
-            }
-        }
+        egui::StrokeKind::Inside,
+    );
+    let marker = geometry.value_marker() == Some(SliderValueMarker::Zero);
+    if marker {
+        // The unity landmark: a hollow circle in place of the groove.
+        painter.circle_stroke(
+            geometry.handle,
+            MIXER_CAP_SIZE.y * 0.5 - 2.5,
+            Stroke::new(1.0_f32, colors.text),
+        );
+    } else {
+        let half = swap(egui::vec2(MIXER_CAP_SIZE.x * 0.5 - 3.0, 0.0));
+        // Keep the groove on a pixel row (or column) across the cap.
+        let ppp = painter.pixels_per_point();
+        let center = if vertical {
+            egui::pos2(
+                geometry.handle.x,
+                egui::emath::GuiRounding::round_to_pixel_center(geometry.handle.y, ppp),
+            )
+        } else {
+            egui::pos2(
+                egui::emath::GuiRounding::round_to_pixel_center(geometry.handle.x, ppp),
+                geometry.handle.y,
+            )
+        };
+        painter.line_segment(
+            [center - half, center + half],
+            Stroke::new(
+                1.5_f32,
+                if ui.is_enabled() {
+                    colors.text
+                } else {
+                    colors.muted
+                },
+            ),
+        );
     }
-    paint_slider_index(ui, geometry);
+    paint_overflow_mark(ui, geometry);
+}
+
+/// Native rail thickness (the pointer target) of the mixer skin.
+pub fn mixer_thickness(orientation: SliderOrientation) -> f32 {
+    if orientation == SliderOrientation::Vertical {
+        2.0 * crate::tokens::SPACE_MD
+    } else {
+        crate::tokens::COMPACT_HEIGHT
+    }
 }
 
 /// Shared slider builder. Rail interaction is egui's native Slider; its exact
@@ -445,6 +525,7 @@ pub struct Slider<'a> {
     scale_labels: bool,
     compact: bool,
     mixer_style: bool,
+    scale_ticks: Option<Vec<(f32, bool)>>,
     orientation: SliderOrientation,
     text: WidgetText,
     prefix: String,
@@ -477,6 +558,7 @@ impl<'a> Slider<'a> {
             scale_labels: true,
             compact: false,
             mixer_style: false,
+            scale_ticks: None,
             orientation: SliderOrientation::Horizontal,
             text: WidgetText::default(),
             prefix: String::new(),
@@ -539,6 +621,12 @@ impl<'a> Slider<'a> {
     }
     /// A recessed console rail and indexed cap; native input and numeric
     /// mapping stay unchanged. Other sliders retain the default shared skin.
+    /// Calibrated `(fraction, major)` ticks instead of generic divisions; this
+    /// also drops the midpoint landmark, which means nothing on such a scale.
+    pub fn scale_ticks(mut self, ticks: &[(f32, bool)]) -> Self {
+        self.scale_ticks = Some(ticks.to_vec());
+        self
+    }
     pub fn mixer_style(mut self) -> Self {
         self.mixer_style = true;
         self
@@ -637,18 +725,15 @@ impl<'a> Slider<'a> {
     fn add_rail(&mut self, ui: &mut Ui) -> (Response, SliderScaleGeometry) {
         let orientation = self.orientation;
         let shape = self.handle_shape.unwrap_or(if self.mixer_style {
+            // The handle travel ends where the visible cap meets the trough ends.
             egui::style::HandleShape::Rect {
-                aspect_ratio: if orientation == SliderOrientation::Vertical {
-                    0.55
-                } else {
-                    1.1
-                },
+                aspect_ratio: MIXER_CAP_SIZE.y * 0.5 / (mixer_thickness(orientation) / 2.5),
             }
         } else {
             ui.visuals().handle_shape
         });
-        let thickness = if self.mixer_style && orientation == SliderOrientation::Vertical {
-            crate::tokens::SPACE_XL + crate::tokens::SPACE_XS
+        let thickness = if self.mixer_style {
+            mixer_thickness(orientation)
         } else if self.compact {
             (ui.available_height().min(crate::tokens::COMPACT_HEIGHT) - 12.0).clamp(8.0, 12.0)
         } else if orientation == SliderOrientation::Vertical {
@@ -816,6 +901,9 @@ impl<'a> Slider<'a> {
                 value,
             );
             geometry.zero_reference = self.zero_reference;
+            if let Some(ticks) = &self.scale_ticks {
+                geometry.set_custom_ticks(ticks);
+            }
             if self.mixer_style {
                 paint_mixer_slider(ui, &rail_response, &geometry);
             } else {

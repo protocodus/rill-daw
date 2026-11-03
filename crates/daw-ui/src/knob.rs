@@ -180,8 +180,8 @@ impl<'a> Knob<'a> {
             84.0
         }
     }
-    /// An audio gain taper with continuous silence, useful travel below unity,
-    /// and the caller's unchanged linear gain range and stored values.
+    /// The shared console taper (`gain_taper`, as on the mixer fader) over the
+    /// caller's unchanged linear gain range and stored values.
     /// Detailed dials paint a unity landmark when 1.0 lies inside the range.
     pub fn perceptual_gain(mut self) -> Self {
         self.perceptual_gain =
@@ -234,7 +234,7 @@ impl<'a> Knob<'a> {
 
     fn scale_value(&self, value: f64) -> f64 {
         if self.perceptual_gain {
-            (value.max(0.0) / 0.01).ln_1p()
+            f64::from(crate::gain_taper(value as f32))
         } else {
             value
         }
@@ -242,7 +242,7 @@ impl<'a> Knob<'a> {
 
     fn unscale_value(&self, value: f64) -> f64 {
         if self.perceptual_gain {
-            value.exp_m1() * 0.01
+            f64::from(crate::gain_untaper(value as f32))
         } else {
             value
         }
@@ -602,13 +602,6 @@ impl<'a> Knob<'a> {
             if let Some(unity) = geometry.unity {
                 ui.painter()
                     .circle_stroke(unity, 3.0, Stroke::new(1.5_f32, colors.text));
-                ui.painter().text(
-                    center + egui::vec2(0.0, radius * 0.42),
-                    egui::Align2::CENTER_CENTER,
-                    "1× unity",
-                    egui::FontId::proportional(tokens::FONT_SCALE),
-                    colors.muted,
-                );
             }
             if !ring_only {
                 ui.painter().line_segment(

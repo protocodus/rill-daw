@@ -1,83 +1,195 @@
-//! Shared mixer readouts, calibrated scales, and read-only routing lanes.
+//! Shared mixer identity, insert and routing summaries, and read-only routing lanes.
 use egui::{Color32, FontId, Pos2, Rect, Response, Sense, Ui, Vec2};
 
-/// A bounded insert preview with the full ordered chain available on hover.
-/// The iterator borrows names; details are formatted only when the tooltip opens.
-pub fn mixer_insert_summary<'a>(
-    ui: &mut Ui,
-    width: f32,
-    inserts: impl ExactSizeIterator<Item = (&'a str, bool)> + Clone,
-) -> Response {
-    let count = inserts.len();
-    let first = inserts.clone().next();
-    ui.allocate_ui_with_layout(
-        Vec2::new(width, crate::tokens::COMPACT_HEIGHT),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            // This is a read-only caption row. Native horizontal layouts use
-            // interact_size as their minimum, even when they contain no buttons.
-            ui.spacing_mut().interact_size.y = crate::tokens::COMPACT_HEIGHT;
-            ui.set_min_height(crate::tokens::COMPACT_HEIGHT);
-            crate::action_row(
-                ui,
-                |ui| {
-                    if count > 1 {
-                        crate::text::note(ui, format!("+{}", count - 1));
-                    }
-                },
-                |ui| {
-                    let (name, enabled) = first.unwrap_or(("No inserts", true));
-                    let mut text = crate::text::TextRole::Note.rich(ui.ctx(), name);
-                    if !enabled {
-                        text = text.strikethrough();
-                    }
-                    ui.add(egui::Label::new(text).truncate());
-                },
-            );
-        },
-    )
-    .response
-    .on_hover_ui(|ui| {
-        crate::text::label(ui, "Inserts · top to bottom");
-        if count == 0 {
-            crate::text::note(ui, "No inserts");
-        }
-        for (index, (name, enabled)) in inserts.enumerate() {
-            crate::text::note(
-                ui,
-                format!(
-                    "{:02} · {name} · {}",
-                    index + 1,
-                    if enabled { "Active" } else { "Bypassed" }
-                ),
-            );
-        }
-    })
+/// One reserved route lane under the strips: a 3 pt ribbon and one caption.
+pub const MIXER_ROUTE_LANE: f32 = crate::tokens::SPACE_LG + crate::tokens::SPACE_XS + 2.0;
+/// Height of the dashed empty-chain slot and of one compact send row.
+pub const MIXER_SLOT_HEIGHT: f32 = crate::tokens::COMPACT_HEIGHT + crate::tokens::SPACE_SM;
+pub const MIXER_SEND_ROW_HEIGHT: f32 = crate::tokens::COMPACT_HEIGHT;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MixerNamePlateKind {
+    Track,
+    Bus,
+    Master,
 }
 
-/// Count the main outputs and auxiliary sends entering a bus, with named
-/// sources available on hover. `None` denotes a main output; `Some` is a send
+fn one_line(
+    ui: &Ui,
+    text: &str,
+    font: FontId,
+    color: Color32,
+    width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(width.max(0.0));
+    ui.painter().layout_job(job)
+}
+
+/// One channel identity for tracks, buses and master: a full-height plate with
+/// centered text. Tracks and buses take the channel color (buses add the BUS
+/// badge inside the plate); master is neutral and not interactive.
+pub fn mixer_name_plate(
+    ui: &mut Ui,
+    kind: MixerNamePlateKind,
+    name: &str,
+    width: f32,
+    color: Color32,
+) -> Response {
+    let master = kind == MixerNamePlateKind::Master;
+    let (rect, response) = ui.allocate_exact_size(
+        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
+        if master {
+            Sense::hover()
+        } else {
+            Sense::click()
+        },
+    );
+    let colors = crate::theme::palette(ui.ctx());
+    let hairline = 1.0 / ui.ctx().pixels_per_point();
+    let plate = egui::emath::GuiRounding::round_to_pixels(rect, ui.painter().pixels_per_point());
+    let fill = if master { colors.raised } else { color };
+    let foreground = if master {
+        colors.text
+    } else {
+        crate::theme::contrast_text(fill)
+    };
+    if ui.is_rect_visible(rect) {
+        ui.painter().rect_filled(plate, crate::tokens::RADIUS, fill);
+        if master {
+            ui.painter().rect_stroke(
+                plate,
+                crate::tokens::RADIUS,
+                egui::Stroke::new(hairline, colors.line),
+                egui::StrokeKind::Inside,
+            );
+        }
+        let mut text_area = rect.shrink2(Vec2::new(crate::tokens::SPACE_SM, 0.0));
+        if kind == MixerNamePlateKind::Bus {
+            let badge = Rect::from_center_size(
+                Pos2::new(text_area.right() - 20.0, rect.center().y),
+                Vec2::new(40.0, 18.0),
+            );
+            crate::paint_bus_badge(ui.painter(), badge, color);
+            text_area.max.x = badge.left() - crate::tokens::SPACE_XS;
+        }
+        let galley = one_line(
+            ui,
+            name,
+            crate::text::TextRole::Label.font(),
+            foreground,
+            text_area.width(),
+        );
+        ui.painter()
+            .galley(text_area.center() - galley.size() * 0.5, galley, foreground);
+        // A fixed identity fill needs its own hover/focus cue without changing hue.
+        if !master && (response.hovered() || response.has_focus()) {
+            ui.painter().rect_stroke(
+                plate,
+                crate::tokens::RADIUS,
+                egui::Stroke::new(
+                    if response.has_focus() {
+                        crate::tokens::FOCUS_WIDTH
+                    } else {
+                        hairline
+                    },
+                    foreground.gamma_multiply(0.65),
+                ),
+                egui::StrokeKind::Inside,
+            );
+        }
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            if master {
+                egui::WidgetType::Label
+            } else {
+                egui::WidgetType::Button
+            },
+            ui.is_enabled(),
+            name,
+        )
+    });
+    if master {
+        response.on_hover_text("Final stereo output · receives all channels routed to Master")
+    } else {
+        response
+    }
+}
+
+/// The dashed empty-chain slot: one click adds the first insert.
+pub fn mixer_insert_slot(ui: &mut Ui, width: f32) -> Response {
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(width, MIXER_SLOT_HEIGHT), Sense::click());
+    let colors = crate::theme::palette(ui.ctx());
+    if ui.is_rect_visible(rect) {
+        if response.hovered() || response.has_focus() {
+            ui.painter()
+                .rect_filled(rect, crate::tokens::RADIUS, colors.control_hover);
+        }
+        let outline = rect.shrink(0.5);
+        let stroke = egui::Stroke::new(
+            if response.has_focus() {
+                crate::tokens::FOCUS_WIDTH
+            } else {
+                crate::tokens::BORDER_WIDTH
+            },
+            colors.line.lerp_to_gamma(colors.muted, 0.5),
+        );
+        let corners = [
+            outline.left_top(),
+            outline.right_top(),
+            outline.right_bottom(),
+            outline.left_bottom(),
+            outline.left_top(),
+        ];
+        ui.painter().extend(egui::Shape::dashed_line(
+            &corners,
+            stroke,
+            crate::tokens::SPACE_XS,
+            3.0,
+        ));
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "+ Insert",
+            FontId::proportional(crate::tokens::FONT_CAPTION),
+            colors.muted,
+        );
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "+ Insert")
+    });
+    response.on_hover_text("Add an effect to this channel")
+}
+
+/// The source row's caption: the kind plus the actual source, e.g. "Audio · In 1".
+pub fn mixer_source_caption(ui: &mut Ui, text: &str, width: f32) -> Response {
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_size(Vec2::new(width, crate::tokens::CONTROL_HEIGHT));
+            ui.add(
+                egui::Label::new(crate::text::TextRole::Note.rich(ui.ctx(), text))
+                    .truncate()
+                    .selectable(false),
+            )
+        },
+    )
+    .inner
+}
+
+/// Count the main outputs and auxiliary sends entering a bus ("Bus · 2 in"),
+/// with named sources on hover. `None` denotes a main output; `Some` is a send
 /// whose boolean identifies its pre-fader position.
 pub fn mixer_bus_input_summary<'a>(
     ui: &mut Ui,
+    width: f32,
     inputs: impl ExactSizeIterator<Item = (&'a str, Option<bool>)>,
 ) -> Response {
     let count = inputs.len();
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-        let kind = crate::text::note(ui, "Bus");
-        let count = ui.add(
-            egui::Label::new(
-                egui::RichText::new(format!("{count} in"))
-                    .size(crate::tokens::FONT_CANVAS)
-                    .color(crate::theme::palette(ui.ctx()).muted),
-            )
-            .truncate(),
-        );
-        kind.union(count)
-    })
-    .inner
-    .on_hover_ui(|ui| {
+    mixer_source_caption(ui, &format!("Bus · {count} in"), width).on_hover_ui(|ui| {
         crate::text::label(ui, "Incoming signal");
         if count == 0 {
             crate::text::note(ui, "No incoming channels or sends");
@@ -93,31 +205,23 @@ pub fn mixer_bus_input_summary<'a>(
     })
 }
 
-/// A native Effects action with a quiet insert-count badge. The full button,
-/// including its count, opens the same chain; it retains the ordinary action's
-/// label and keyboard behavior. No badge is drawn when the width is too small.
+/// The Effects header: the whole row opens the chain; "active/total" sits at
+/// its trailing edge once the chain has inserts.
 pub fn mixer_effects_button(ui: &mut Ui, width: f32, count: usize, active: usize) -> Response {
     let response = ui.add_sized(
         Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
         crate::view_button_widget("Effects"),
     );
-    if response.rect.width() >= 144.0 && ui.is_rect_visible(response.rect) {
+    if count > 0 && ui.is_rect_visible(response.rect) {
         let colors = crate::theme::palette(ui.ctx());
-        let badge = Rect::from_center_size(
-            Pos2::new(response.rect.right() - 16.0, response.rect.center().y),
-            Vec2::new(22.0, 20.0),
-        );
-        ui.painter()
-            .rect_filled(badge, crate::tokens::RADIUS, colors.bg);
         ui.painter().text(
-            badge.center(),
-            egui::Align2::CENTER_CENTER,
-            if count > 99 {
-                "99+".to_owned()
-            } else {
-                count.to_string()
-            },
-            FontId::proportional(crate::tokens::FONT_CANVAS),
+            Pos2::new(
+                response.rect.right() - crate::tokens::SPACE_SM,
+                response.rect.center().y,
+            ),
+            egui::Align2::RIGHT_CENTER,
+            format!("{active}/{count}"),
+            FontId::proportional(crate::tokens::FONT_CAPTION),
             if active > 0 {
                 colors.accent
             } else {
@@ -128,51 +232,6 @@ pub fn mixer_effects_button(ui: &mut Ui, width: f32, count: usize, active: usize
     response.on_hover_text(format!(
         "{active} active / {count} inserts · before volume and pan"
     ))
-}
-
-/// Calibrate the native vertical 0..=1.5 gain fader without changing its gain
-/// law or hit target. The tick coordinates account for egui's handle travel.
-/// Reserve 44 points to its left. Labels supplement the shared fractional ticks.
-pub fn paint_mixer_fader_scale(ui: &Ui, fader: Rect) {
-    if !ui.is_rect_visible(fader) || fader.height() < 80.0 {
-        return;
-    }
-    let colors = crate::theme::palette(ui.ctx());
-    let radius = fader.width() / 2.5;
-    let end_padding = match ui.visuals().handle_shape {
-        egui::style::HandleShape::Circle => radius,
-        egui::style::HandleShape::Rect { aspect_ratio } => radius * aspect_ratio,
-    };
-    let top = fader.top() + end_padding;
-    let bottom = fader.bottom() - end_padding;
-    for (label, gain) in [
-        ("+3.5 dB", 1.5_f32),
-        ("0", 1.0_f32),
-        ("−6", 10.0_f32.powf(-6.0 / 20.0)),
-        ("−12", 10.0_f32.powf(-12.0 / 20.0)),
-        ("−∞", 0.0),
-    ] {
-        let y = bottom - (bottom - top) * (gain / 1.5);
-        let color = if gain == 1.0 {
-            colors.text
-        } else {
-            colors.muted
-        };
-        ui.painter().line_segment(
-            [
-                Pos2::new(fader.left() - 6.0, y),
-                Pos2::new(fader.left() - 1.0, y),
-            ],
-            egui::Stroke::new(1.0_f32, color),
-        );
-        ui.painter().text(
-            Pos2::new(fader.left() - 10.0, y),
-            egui::Align2::RIGHT_CENTER,
-            label,
-            FontId::proportional(crate::tokens::FONT_CANVAS),
-            color,
-        );
-    }
 }
 
 /// A quiet visual group label aligned with the channel name controls beneath it.
@@ -231,7 +290,7 @@ pub fn mixer_route_lane(
     connection_clip: Rect,
 ) -> MixerRouteResponse {
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), crate::tokens::MIXER_ROUTE_LANE_HEIGHT),
+        Vec2::new(ui.available_width(), MIXER_ROUTE_LANE),
         Sense::hover(),
     );
     let visible = rect.intersect(ui.clip_rect());
@@ -261,7 +320,7 @@ pub fn mixer_route_lane(
     let half = crate::tokens::MIXER_ROUTE_WIDTH * 0.5;
     let head_height = crate::tokens::MIXER_ROUTE_HEAD;
     let turn_y =
-        (rect.bottom() - crate::tokens::SPACE_SM).max(from.y.max(to.y) + head_height + half);
+        (rect.bottom() - crate::tokens::SPACE_XS).max(from.y.max(to.y) + head_height + half);
     let path = [from, Pos2::new(from.x, turn_y), Pos2::new(to.x, turn_y), to];
     let clip = Rect::from_min_max(
         Pos2::new(visible.left(), from.y.min(to.y)),
@@ -333,7 +392,7 @@ pub fn mixer_route_lane(
             Pos2::new(caption_left, rect.top() + crate::tokens::SPACE_XS),
             Pos2::new(
                 (caption_left + caption_width).min(visible.right() - crate::tokens::SPACE_SM),
-                rect.top() + 22.0,
+                rect.top() + crate::tokens::SPACE_XS + crate::tokens::FONT_CAPTION + 3.0,
             ),
         ),
         FontId::proportional(crate::tokens::FONT_CAPTION),
@@ -364,17 +423,22 @@ pub fn mixer_route_lane(
 #[derive(Clone, Copy)]
 pub enum MixerSection {
     Source,
-    Inserts,
+    Effects,
     Level,
     Output,
 }
 
+/// Every frame extends this far beyond its controls on all sides.
+pub const MIXER_SECTION_PADDING: f32 = crate::tokens::SPACE_XS;
+/// Space between neighboring controls of two sections: a uniform gap between frames.
+pub const MIXER_SECTION_GAP: f32 = crate::tokens::SPACE_SM + 2.0 * MIXER_SECTION_PADDING;
+
 impl MixerSection {
-    pub const ALL: [Self; 4] = [Self::Source, Self::Inserts, Self::Level, Self::Output];
+    pub const ALL: [Self; 4] = [Self::Source, Self::Effects, Self::Level, Self::Output];
     pub fn name(self) -> &'static str {
         match self {
             Self::Source => "Source",
-            Self::Inserts => "Inserts",
+            Self::Effects => "Effects",
             Self::Level => "Volume & pan",
             Self::Output => "Output & sends",
         }
@@ -383,18 +447,28 @@ impl MixerSection {
         let colors = crate::theme::palette(ctx);
         match self {
             Self::Source | Self::Level => colors.bg.gamma_multiply(0.55),
-            Self::Inserts | Self::Output => colors.raised.gamma_multiply(0.8),
+            Self::Effects | Self::Output => colors.raised.gamma_multiply(0.8),
         }
     }
 }
 
-pub fn mixer_sections<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> (R, [Rect; 4])) -> R {
+/// Paint one frame per section behind the contents' bounds. A `None` bound
+/// (an empty master section) paints nothing.
+pub fn mixer_sections<R>(
+    ui: &mut Ui,
+    contents: impl FnOnce(&mut Ui) -> (R, [Option<Rect>; 4]),
+) -> R {
     let background = ui.painter().add(egui::Shape::Noop);
     let (value, sections) = contents(ui);
     let colors = crate::theme::palette(ui.ctx());
-    let mut shapes = Vec::with_capacity(11);
+    let hairline = 1.0 / ui.ctx().pixels_per_point();
+    let mut shapes = Vec::with_capacity(8);
     for (section, bounds) in MixerSection::ALL.into_iter().zip(sections) {
-        let rect = bounds.expand2(egui::vec2(crate::tokens::SPACE_XS, 2.0));
+        let Some(bounds) = bounds else { continue };
+        let rect = egui::emath::GuiRounding::round_to_pixels(
+            bounds.expand(MIXER_SECTION_PADDING),
+            ui.pixels_per_point(),
+        );
         shapes.push(egui::Shape::rect_filled(
             rect,
             crate::tokens::RADIUS,
@@ -403,21 +477,8 @@ pub fn mixer_sections<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> (R, [Rec
         shapes.push(egui::Shape::rect_stroke(
             rect,
             crate::tokens::RADIUS,
-            egui::Stroke::new(crate::tokens::BORDER_WIDTH, colors.line),
+            egui::Stroke::new(hairline, colors.line),
             egui::StrokeKind::Inside,
-        ));
-    }
-    for pair in sections.windows(2) {
-        let center = egui::pos2(pair[0].center().x, (pair[0].bottom() + pair[1].top()) * 0.5);
-        let radius = crate::tokens::SPACE_XS * 0.5;
-        shapes.push(egui::Shape::convex_polygon(
-            vec![
-                center + egui::vec2(-radius, -radius * 0.5),
-                center + egui::vec2(radius, -radius * 0.5),
-                center + egui::vec2(0.0, radius),
-            ],
-            colors.muted,
-            egui::Stroke::NONE,
         ));
     }
     ui.painter().set(background, egui::Shape::Vec(shapes));

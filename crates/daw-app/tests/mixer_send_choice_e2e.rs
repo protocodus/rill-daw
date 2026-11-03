@@ -85,10 +85,14 @@ fn empty_body_position(state: &Value) -> [f64; 2] {
     position
 }
 
-fn send_position(app: &mut Harness, source: u64) -> [f64; 2] {
+/// The "Add send…" button, or with `row` one of the channel's send rows.
+fn send_position(app: &mut Harness, source: u64, row: Option<usize>) -> [f64; 2] {
     for _ in 0..12 {
         let state = settled(app);
-        let rect = &channel(&state, source)["sends"];
+        let rect = match row {
+            Some(row) => &channel(&state, source)["send_rows"][row],
+            None => &channel(&state, source)["add_send"],
+        };
         let viewport = &state["mixer"]["reorder_viewport"];
         if rect["min"][1].as_f64().unwrap() >= viewport["min"][1].as_f64().unwrap()
             && rect["max"][1].as_f64().unwrap() <= viewport["max"][1].as_f64().unwrap()
@@ -107,7 +111,7 @@ fn send_position(app: &mut Harness, source: u64) -> [f64; 2] {
 }
 
 fn open_send_choices(app: &mut Harness, source: u64) -> Value {
-    let position = send_position(app, source);
+    let position = send_position(app, source, None);
     click_position(app, position);
     settled(app)
 }
@@ -141,7 +145,7 @@ fn empty_channel_send_opens_choices_and_mouse_cancellation_changes_nothing() {
     for (dark, width, height) in [(false, 1100.0, 900.0), (true, 800.0, 600.0)] {
         let mut app = Harness::new();
         let (selected, clicked, _) = fixture(&mut app, dark, width, height);
-        let position = send_position(&mut app, clicked);
+        let position = send_position(&mut app, clicked, None);
         let before = app.inspect();
         assert_eq!(before["selected_track"], selected);
         click_position(&mut app, position);
@@ -209,10 +213,10 @@ fn channel_destination_choice_targets_the_clicked_source_and_is_one_undo() {
         app.click("Edit");
         assert_eq!(app.click("Redo")["project"], sent["project"]);
 
-        // Once a send exists, its summary retains the established editing
-        // route so level, Pre/Post, removal and automation remain available.
+        // Once a send exists, its row opens the established editing route
+        // so level, Pre/Post, removal and automation remain available.
         let before_editing = settled(&mut app);
-        let position = send_position(&mut app, clicked);
+        let position = send_position(&mut app, clicked, Some(0));
         let routing = click_position(&mut app, position);
         assert_eq!(routing["popups"]["routing"], true);
         assert_eq!(routing["selected_track"], clicked);
