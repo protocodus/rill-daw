@@ -63,7 +63,15 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
             "insert count must not overlap the Effects label"
         );
         let chain = app.click("Effects");
-        label(&chain, "Input → Inserts → Volume & pan");
+        label(&chain, "Inserts");
+        assert!(
+            !chain["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|text| text == "Input → Inserts → Volume & pan"),
+            "the processing order lives in the count's tooltip"
+        );
         label(&chain, "12 / 12 active");
         let footer = label(&chain, "+ Insert").clone();
         assert!(footer["max"][1].as_f64().unwrap() <= 600.0);
@@ -72,7 +80,14 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
             bypassed["project"]["tracks"][0]["inserts"][0]["enabled"],
             false
         );
-        label(&bypassed, "Bypassed");
+        // Bypass is told by the switch, the muted name and the gray rail.
+        assert!(
+            !bypassed["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|text| text == "Bypassed" || text == "Active")
+        );
         label(&bypassed, "11 / 12 active");
         app.click("More");
         let moved = app.click("Down");

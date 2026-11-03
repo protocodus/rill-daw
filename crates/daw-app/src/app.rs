@@ -728,7 +728,6 @@ impl DawApp {
                 enabled: true,
             },
         ]);
-        links.retain(|link| link.value != current);
         let Some(destination) = daw_ui::view_links(ui, current, &links) else {
             return false;
         };

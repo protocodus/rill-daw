@@ -69,7 +69,7 @@ fn assert_actions_at_bottom(state: &Value, dialog: &str) {
     let action = match dialog {
         "Instrument" => "Choose instrument",
         "Effects" => "+ Insert",
-        "Routing" => "Create send track",
+        "Routing" => "New return with effect…",
         "Automation" | "Setup" | "Export WAV…" => "Cancel",
         "Library" => "More",
         "Recording" => "Record",

@@ -533,7 +533,7 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     app.click("Automate…");
     ready(&mut app);
     let initial = query(&mut app, "Filter Cutoff");
-    assert!(visible(&initial, "Normalized value"));
+    assert!(visible(&initial, "Value"));
     assert!(visible(&initial, "Plug-in unit · Hz"));
     assert!(visible(&initial, "0 %") && visible(&initial, "100 %"));
     assert_eq!(
@@ -701,7 +701,7 @@ fn stepped_knob_quantizes_edits_only_and_read_only_parameters_cannot_be_edited()
     let read_only = query(&mut app, "Output Meter");
     assert!(read_only["native_editor"]["selected"].is_null());
     assert!(read_only["native_editor"]["parameter_control"].is_null());
-    assert!(!visible(&read_only, "Normalized value"));
+    assert!(!visible(&read_only, "Value"));
     assert_eq!(read_only["project"], project);
     assert_eq!(read_only["history"], history);
     app.quit();

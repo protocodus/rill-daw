@@ -98,7 +98,27 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
             state["project"]["tracks"][0]["inserts"][0]["enabled"],
             false
         );
-        app.command(json!({"command":"click","label":"More","occurrence":1}));
+        // Each slot now lists its model under the name: reveal the second
+        // insert's actions with the wheel.
+        let bounds = app.inspect()["window_rects"][0].clone();
+        app.command(json!({"command":"scroll",
+            "x":(bounds["min"][0].as_f64().unwrap() + bounds["max"][0].as_f64().unwrap()) * 0.5,
+            "y":(bounds["min"][1].as_f64().unwrap() + bounds["max"][1].as_f64().unwrap()) * 0.5,
+            "delta":-10000.0}));
+        for _ in 0..20 {
+            app.inspect();
+        }
+        let revealed = app.inspect();
+        let more = revealed["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|label| label["text"] == "More")
+            .unwrap();
+        app.command(json!({"command":"pointer", "phase":"click",
+            "x":(more["min"][0].as_f64().unwrap() + more["max"][0].as_f64().unwrap()) * 0.5,
+            "y":(more["min"][1].as_f64().unwrap() + more["max"][1].as_f64().unwrap()) * 0.5}));
         let state = app.click("Up");
         assert_eq!(state["project"]["tracks"][0]["inserts"][0]["id"], second);
         app.click("More");

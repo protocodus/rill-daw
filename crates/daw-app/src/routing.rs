@@ -4,6 +4,22 @@ use daw_ui as widgets;
 use eframe::egui;
 
 impl DawApp {
+    /// The shared header of the channel utility windows: page links, then the
+    /// contextual AI action when `ai_scope` is given. Returns whether a link
+    /// navigated away and whether AI was requested.
+    pub(crate) fn utility_header(
+        &mut self,
+        ui: &mut egui::Ui,
+        current: ChannelDestination,
+        ai_scope: Option<&str>,
+    ) -> (bool, bool) {
+        widgets::utility_header(
+            ui,
+            |ui| self.channel_navigation(ui, current),
+            |ui| ai_scope.is_some_and(|scope| widgets::contextual_ai_button(ui, scope).clicked()),
+        )
+    }
+
     pub fn channel_rack(&mut self, ctx: &egui::Context) {
         if !self.effects_open {
             return;
@@ -32,15 +48,17 @@ impl DawApp {
             .default_height(620.0)
             .vscroll(false)
             .show(ctx, |ui| {
-                if self.channel_navigation(ui, ChannelDestination::Effects) {
+                let scope = daw_tools::ToolScope::EffectChain { track_id };
+                let label = scope.label(&self.project);
+                let (navigated, open_ai) =
+                    self.utility_header(ui, ChannelDestination::Effects, Some(&label));
+                if navigated {
                     return;
                 }
-                let scope = daw_tools::ToolScope::EffectChain { track_id };
-                if widgets::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
+                if open_ai {
                     self.open_context_assistant(scope);
                     return;
                 }
-                ui.add_space(widgets::tokens::SPACE_SM);
                 let inserts = &self.project.track(track_id).unwrap().inserts;
                 widgets::effect_chain_header(
                     ui,
@@ -61,11 +79,15 @@ impl DawApp {
                     let count = track.inserts.len();
                     for (index, slot) in track.inserts.iter_mut().enumerate() {
                         ui.push_id(slot.id, |ui| {
+                            let Effect::Vst3 { path, class_id } = &slot.effect;
+                            let model =
+                                crate::library::plugin_model(&self.vst_catalog, path, class_id);
                             let row = widgets::effect_slot(
                                 ui,
                                 (track_id, slot.id),
                                 index,
                                 &slot.name,
+                                &model,
                                 &mut slot.enabled,
                                 |ui| {
                                     if widgets::small_button(ui, "Open editor")
@@ -106,18 +128,6 @@ impl DawApp {
                                     })
                                     .response
                                     .on_hover_text("Insert actions");
-                                    let Effect::Vst3 { path, class_id } = &slot.effect;
-                                    let model = crate::library::plugin_model(
-                                        &self.vst_catalog,
-                                        path,
-                                        class_id,
-                                    );
-                                    widgets::text::truncated(
-                                        ui,
-                                        widgets::text::TextRole::Note,
-                                        &model,
-                                    )
-                                    .on_hover_text(&model);
                                 },
                             );
                             let Effect::Vst3 { path, .. } = &slot.effect;
@@ -242,15 +252,17 @@ impl DawApp {
             .min_height(widgets::popup_body_size(ctx).y.min(360.0))
             .vscroll(false)
             .show(ctx, |ui| {
-                if self.channel_navigation(ui, ChannelDestination::Routing) {
+                let scope = daw_tools::ToolScope::Routing { track_id };
+                let label = scope.label(&self.project);
+                let (navigated, open_ai) =
+                    self.utility_header(ui, ChannelDestination::Routing, Some(&label));
+                if navigated {
                     return;
                 }
-                let scope = daw_tools::ToolScope::Routing { track_id };
-                if widgets::contextual_ai_button(ui, &scope.label(&self.project)).clicked() {
+                if open_ai {
                     self.open_context_assistant(scope);
                     return;
                 }
-                ui.add_space(widgets::tokens::SPACE_SM);
                 let mut footer = widgets::popup_footer(ui, "routing_actions");
                 let window_ui = ui;
                 let ui = footer.body();
