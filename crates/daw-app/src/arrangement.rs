@@ -1350,8 +1350,18 @@ impl DawApp {
                             && !edge_moved
                             && self.tool == daw_ui::EditorTool::Select
                             && self.arranger_selection.plain_click_candidate == Some(clip.id);
-                        if plain_click {
-                            edits.push(Edit::SelectOnly(track.id, clip.id));
+                        // The drag-only trim edge swallows the body's click, so a
+                        // press released there without motion selects like a click.
+                        let edge_click = !edge_moved
+                            && self.tool == daw_ui::EditorTool::Select
+                            && clip_edge_drag.is_some_and(|gesture| gesture.clip == clip.id)
+                            && ui.input(|input| input.pointer.primary_released());
+                        if plain_click || edge_click {
+                            edits.push(if edge_click && press_shift {
+                                Edit::Select(track.id, clip.id, true, false)
+                            } else {
+                                Edit::SelectOnly(track.id, clip.id)
+                            });
                         } else if (response.drag_started() || response.clicked()
                             && (self.tool != daw_ui::EditorTool::Select || press_shift))
                             && self.tool != daw_ui::EditorTool::Cursor && !edge_moved {

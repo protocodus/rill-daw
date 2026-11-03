@@ -317,3 +317,30 @@ fn midi_previews_paint_readable_track_colored_notes() {
     assert!((bounds(&clip["title_rect"])[0] - content[0]).abs() < 0.5);
     app.quit();
 }
+
+#[test]
+fn a_motionless_press_on_a_trim_edge_selects_the_clip() {
+    let mut app = Harness::new();
+    let (_, midi, _) = fixture(&mut app);
+    let state = app.inspect();
+    let clip = &state["timeline"]["clips"][0];
+    let id = clip["id"].clone();
+    let [left, top, _, bottom] = bounds(&clip["rect"]);
+    assert!(state["selected_clip"].is_null());
+    // The title starts inside the trim zone, so a reader clicking the name
+    // must still get a selection and no trim.
+    let selected = app.command(
+        json!({"command":"pointer","phase":"click","x":left + 3.0,"y":(top + bottom) * 0.5}),
+    );
+    assert_eq!(selected["selected_clip"], id);
+    let track = selected["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|track| track["id"] == midi)
+        .unwrap();
+    assert_eq!(track["clips"][0]["start"], 0.0);
+    assert_eq!(track["clips"][0]["length"], 8.0);
+    assert_eq!(selected["history"]["undo"].as_array().unwrap().len(), 0);
+    app.quit();
+}
