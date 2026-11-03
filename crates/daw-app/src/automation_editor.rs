@@ -215,7 +215,7 @@ impl DawApp {
             state.source = tracks.first().map(|(id, _)| *id);
         }
         let Some(source) = state.source else {
-            ui.label("Add an audio, instrument, or bus track first.");
+            daw_ui::text::note(ui, "Add an audio, instrument, or bus track first.");
             return footer
                 .show(window_ui, |ui| daw_ui::button(ui, back).clicked())
                 .inner;
@@ -708,7 +708,7 @@ impl DawApp {
                     delete_selection = response.selection.len() > 1;
                 }
             } else {
-                ui.label("Click the curve to add a point");
+                daw_ui::text::note(ui, "Click the curve to add a point");
             }
         });
         daw_ui::toolbar(ui, |ui| {
@@ -895,7 +895,7 @@ fn plugin_parameters(
     daw_ui::toolbar(ui, |ui| {
         daw_ui::picker_button(ui, "Manual ID", |ui| {
             daw_ui::checkbox(ui, &mut state.manual_id, "Use manual ID");
-            ui.label("VST parameter ID");
+            daw_ui::text::label(ui, "VST parameter ID");
             ui.add_enabled(
                 state.manual_id,
                 daw_ui::number(&mut state.vst_id).range(0..=u32::MAX),
@@ -933,7 +933,7 @@ fn plugin_parameters(
             last_touched: last_touched == Some(parameter.id),
         })
         .collect::<Vec<_>>();
-    let height = ui.available_height().clamp(0.0, 400.0);
+    let height = ui.available_height().max(0.0);
     let mut selected_id = state.vst_id;
     let previous_selected = state.browser.selected;
     let mut initial = state.initial;

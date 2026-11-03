@@ -716,7 +716,7 @@ impl DawApp {
                 let mut footer_slot = daw_ui::popup_footer(ui, "library_actions");
                 let window_ui = ui;
                 let ui = footer_slot.body();
-                let body_height = daw_ui::popup_scroll_height(ui, 0.0).min(760.0);
+                let body_height = daw_ui::popup_scroll_height(ui, 0.0);
                 let mut grid = None;
                 let mut sidebar_rect = None;
                 let mut details_rect = None;

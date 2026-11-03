@@ -116,6 +116,7 @@ pub(crate) struct PreparedLiveEdit {
     context: Arc<LiveEditContext>,
     tracks: Vec<TrackEdit>,
     end_sample: u64,
+    loop_range: Option<(u64, u64)>,
     automation_sequence: u64,
 }
 
@@ -154,11 +155,17 @@ impl LiveEditCompatibility {
             .parameters
             .lock()
             .unwrap_or_else(|error| error.into_inner());
+        let samples_per_beat = self.context.sample_rate as f64 * 60.0 / project.tempo;
+        let to_sample = |beat: f64| (beat.max(0.0) * samples_per_beat).round() as u64;
+        let loop_valid = !project.loop_enabled
+            || (project.loop_start.is_finite()
+                && project.loop_end.is_finite()
+                && project.loop_start >= 0.0
+                && project.loop_end > project.loop_start
+                && to_sample(project.loop_end) > to_sample(project.loop_start));
         baseline.tempo == project.tempo
-            && baseline.beats_per_bar == project.beats_per_bar
-            && baseline.loop_enabled == project.loop_enabled
-            && baseline.loop_start == project.loop_start
-            && baseline.loop_end == project.loop_end
+            && (1..=16).contains(&project.beats_per_bar)
+            && loop_valid
             && baseline.tracks.len() == project.tracks.len()
             && tracks.len() == project.tracks.len()
             && baseline.tracks.iter().all(|a| {
@@ -346,7 +353,11 @@ impl LiveEditPreparer {
             );
             let maximum = self.maximum_notes.entry(id).or_default();
             *maximum = (*maximum).max(content.notes.len());
-            let midi_capacity = content.events.len() + 2 * *maximum + 4;
+            let midi_capacity = if track.kind == daw_core::TrackKind::Midi {
+                content.events.len() + 2 * *maximum + 4
+            } else {
+                0
+            };
             tracks.push(TrackEdit {
                 id,
                 name: track.name.clone(),
@@ -400,11 +411,21 @@ impl LiveEditPreparer {
         self.content = next_content;
         self.previous = Arc::new(project.clone());
         let samples_per_beat = self.context.sample_rate as f64 * 60.0 / project.tempo;
+        let to_sample = |beat: f64| (beat.max(0.0) * samples_per_beat).round() as u64;
+        let loop_range = if project.loop_enabled {
+            let start = to_sample(project.loop_start);
+            let end = to_sample(project.loop_end);
+            ensure!(end > start, "Loop end must be after loop start");
+            Some((start, end))
+        } else {
+            None
+        };
         Ok(PreparedLiveEdit {
             context: Arc::clone(&self.context),
             tracks,
             end_sample: (project.end_beat() * samples_per_beat).round() as u64
                 + self.context.tail_samples,
+            loop_range,
             automation_sequence: 0,
         })
     }
@@ -614,6 +635,9 @@ impl Renderer {
             });
         }
         self.timeline_end_sample = edit.end_sample;
+        if self.tolerate_plugin_failure {
+            self.loop_range = edit.loop_range;
+        }
         if content_changed && !self.preview {
             // Removing the final clip behind the playhead must still deliver
             // pending note-offs and drain existing plugin/PDC tails. This window

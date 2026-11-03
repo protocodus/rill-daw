@@ -473,6 +473,7 @@ impl DawApp {
                 }
             ui.add(egui::Separator::default().spacing(daw_ui::tokens::SPACE_LG));
             ui.horizontal_wrapped(|ui| {
+                ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT);
                 let mut use_range = self.audio_takes_ui.range.is_some();
                 if daw_ui::checkbox(ui, &mut use_range, "Time selection").changed() {
                     self.audio_takes_ui.range = use_range.then_some((anchor.start, anchor.end()));
@@ -486,6 +487,7 @@ impl DawApp {
                 }
             });
             ui.horizontal_wrapped(|ui| {
+                ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT);
                 daw_ui::text::label(ui, "Boundary crossfade");
                 ui.add(daw_ui::number(&mut self.audio_takes_ui.crossfade_ms).range(0.0..=500.0).speed(1.0).suffix(" ms"))
                     .on_hover_text("Smooth complementary fades, limited to available audio handles. Edit the spline in Crossfade after choosing a take.");

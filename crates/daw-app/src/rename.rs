@@ -214,6 +214,15 @@ impl DawApp {
         }
     }
 
+    pub(crate) fn start_track_rename(&mut self, ctx: &egui::Context, track: u64) {
+        let Some(name) = self.project.track(track).map(|track| track.name.clone()) else {
+            return;
+        };
+        self.selected_track = Some(track);
+        self.selected_clip = None;
+        self.start_name_draft(ctx, RenameTarget::Track(track), name, false);
+    }
+
     fn start_name_draft(
         &mut self,
         ctx: &egui::Context,

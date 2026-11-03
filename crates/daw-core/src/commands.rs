@@ -553,10 +553,9 @@ fn selected_notes(project: &Project, track: u64, clip: u64, ids: &[u64]) -> Resu
     }
     let selected: HashSet<_> = ids.iter().copied().collect();
     ensure!(selected.len() == ids.len(), "Duplicate selected note ID");
+    let existing: HashSet<_> = notes.iter().map(|note| note.id).collect();
     ensure!(
-        selected
-            .iter()
-            .all(|id| notes.iter().any(|note| note.id == *id)),
+        selected.iter().all(|id| existing.contains(id)),
         "Selected note not found"
     );
     Ok(selected)
@@ -903,13 +902,16 @@ fn apply_one(
             let data = p
                 .midi_notes_mut(track, clip)
                 .context("MIDI clip not found")?;
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::with_capacity(notes.len());
+            let index_by_id: HashMap<u64, usize> = data
+                .iter()
+                .enumerate()
+                .map(|(index, note)| (note.id, index))
+                .collect();
             for change in notes {
                 ensure!(seen.insert(change.id), "Duplicate note change");
-                let note = data
-                    .iter_mut()
-                    .find(|n| n.id == change.id)
-                    .context("Note not found")?;
+                let &index = index_by_id.get(&change.id).context("Note not found")?;
+                let note = &mut data[index];
                 if let Some(v) = change.pitch {
                     note.pitch = v;
                 }
@@ -1262,8 +1264,12 @@ fn apply_one(
         SongEdit::UpsertAutomationPoints { track, points } => {
             ensure!(points.len() <= 4096, "Too many automation points");
             let track = r(track)?;
+            let lane = p
+                .automation_lane_mut(track)
+                .context("Automation track not found")?;
+            lane.validate()?;
             for (beat, value) in points {
-                let id = p.upsert_automation_point(track, *beat, *value)?;
+                let id = lane.upsert_point_validated(*beat, *value)?;
                 record(result, refs, "point", id, &None)?;
             }
         }
@@ -1286,9 +1292,18 @@ fn apply_one(
         SongEdit::RemoveAutomationPoints { track, point_ids } => {
             ensure!(point_ids.len() <= 4096, "Too many automation points");
             let track = r(track)?;
+            let lane = p
+                .automation_lane_mut(track)
+                .context("Automation track not found")?;
+            let existing: HashSet<_> = lane.points.iter().map(|point| point.id).collect();
+            let mut removed = HashSet::with_capacity(point_ids.len());
             for id in point_ids {
-                p.remove_automation_point(track, *id)?;
+                ensure!(
+                    existing.contains(id) && removed.insert(*id),
+                    "Automation point not found"
+                );
             }
+            lane.points.retain(|point| !removed.contains(&point.id));
         }
         SongEdit::GroupAudioTakes {
             track,

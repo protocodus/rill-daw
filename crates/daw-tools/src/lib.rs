@@ -313,7 +313,7 @@ fn bounded_text(value: &str) -> &str {
     &value[..end]
 }
 fn track_summary(track: &Track) -> Value {
-    json!({"id":track.id,"name":bounded_text(&track.name),"name_truncated":track.name.len()>1024,"kind":track.kind,"gain":track.gain,"gain":track.gain,"gain_db":if track.gain > 0.0 {Some(20.0 * f64::from(track.gain).log10())} else {None},"pan":track.pan,"mute":track.mute,"solo":track.solo,"clip_count":track.clips.len(),"output_bus":track.output_bus,"parent_folder":track.parent_folder,"has_instrument":!matches!(track.instrument, Instrument::None),"insert_count":track.inserts.len()})
+    json!({"id":track.id,"name":bounded_text(&track.name),"name_truncated":track.name.len()>1024,"kind":track.kind,"gain":track.gain,"gain_db":if track.gain > 0.0 {Some(20.0 * f64::from(track.gain).log10())} else {None},"pan":track.pan,"mute":track.mute,"solo":track.solo,"latency_samples":track.latency_samples,"clip_count":track.clips.len(),"output_bus":track.output_bus,"parent_folder":track.parent_folder,"has_instrument":!matches!(track.instrument, Instrument::None),"insert_count":track.inserts.len()})
 }
 fn clip_summary(clip: &Clip) -> Value {
     json!({"id":clip.id,"name":bounded_text(&clip.name),"name_truncated":clip.name.len()>1024,"start":clip.start,"length":clip.length,"offset":clip.offset,"source_rate":clip.source_rate,"link_group":clip.link_group,"audio_take":clip.audio_take,"kind":match clip.content {ClipContent::Midi{..}=>"midi",ClipContent::Audio{..}=>"audio"}})
@@ -379,7 +379,15 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
             value["inserts"] = json!(track.inserts.iter().take(MAX_QUERY_ITEMS).map(|slot|json!({"id":slot.id,"name":bounded_text(&slot.name),"name_truncated":slot.name.len()>1024,"enabled":slot.enabled,"parameter_count":slot.parameters.len()})).collect::<Vec<_>>());
             // No opaque plugin state, VST paths, or source paths leave this API.
             if let Some(lane) = &track.automation {
-                value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"override_value":lane.override_value,"total_points":lane.points.len(),"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>()});
+                let clips: Vec<_> = lane
+                    .clips
+                    .iter()
+                    .take(MAX_QUERY_ITEMS)
+                    .map(|clip| {
+                        json!({"id":clip.id,"name":bounded_text(&clip.name),"start":clip.start,"length":clip.length,"offset":clip.offset,"link_group":clip.link_group,"total_points":clip.points.len(),"points":clip.points.iter().take(MAX_QUERY_ITEMS).collect::<Vec<_>>()})
+                    })
+                    .collect();
+                value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"override_value":lane.override_value,"total_points":lane.points.len(),"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>(),"clip_count":lane.clips.len(),"clips":clips});
             }
             Ok(value)
         }

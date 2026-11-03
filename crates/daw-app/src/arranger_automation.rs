@@ -365,11 +365,17 @@ impl DawApp {
             AutomationEdit::Copy(id, start, linked) => self
                 .project
                 .copy_automation_clip(track, id, start, linked)
-                .map(|id| self.selected_clip = Some(id)),
+                .map(|id| {
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(id);
+                }),
             AutomationEdit::Paste(clip, start) => self
                 .project
                 .paste_automation_clip(track, &clip, start)
-                .map(|id| self.selected_clip = Some(id)),
+                .map(|id| {
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(id);
+                }),
             AutomationEdit::Bounds(id, start, length, offset) => self
                 .project
                 .set_automation_clip_bounds(track, id, start, length, offset),

@@ -17,7 +17,7 @@ impl Project {
         let lane = self
             .automation_lane(track)
             .context("Automation track not found")?;
-        let fallback = lane.target.current_value(self).unwrap_or(0.5);
+        let fallback = lane.target.stored_value(self).unwrap_or(0.5);
         let mut points = vec![AutomationPoint::new(
             0.0,
             lane.arrangement_value_at(start).unwrap_or(fallback),
@@ -256,5 +256,16 @@ impl Project {
                 .interpolation = Some(interpolation);
             Ok(())
         })
+    }
+
+    pub fn automation_clip(&self, track_id: u64, clip_id: u64) -> Option<&AutomationClip> {
+        self.automation_lane(track_id)?
+            .clips
+            .iter()
+            .find(|clip| clip.id == clip_id)
+    }
+
+    pub fn has_clip_or_automation_clip(&self, track_id: u64, clip_id: u64) -> bool {
+        self.clip(track_id, clip_id).is_some() || self.automation_clip(track_id, clip_id).is_some()
     }
 }

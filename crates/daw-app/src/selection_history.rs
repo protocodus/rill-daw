@@ -75,9 +75,12 @@ impl DawApp {
             .track
             .filter(|id| self.project.track(*id).is_some());
         self.selected_clip = snapshot.clip.filter(|id| {
-            self.selected_track
-                .and_then(|track| self.project.clip(track, *id))
-                .is_some_and(|clip| !clip.is_take_source())
+            self.selected_track.is_some_and(|track| {
+                self.project
+                    .clip(track, *id)
+                    .is_some_and(|clip| !clip.is_take_source())
+                    || self.project.automation_clip(track, *id).is_some()
+            })
         });
         self.restore_arranger_selection_snapshot(snapshot.arranger);
         self.selected_notes = snapshot.notes.into_iter().collect();

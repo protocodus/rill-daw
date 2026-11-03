@@ -145,7 +145,7 @@ impl DawApp {
                 let mut footer = daw_ui::popup_footer(ui, "join_actions");
                 let window_ui = ui;
                 let ui = footer.body();
-                let list_height = daw_ui::popup_scroll_height(ui, 0.0).min(300.0);
+                let list_height = daw_ui::popup_scroll_height(ui, 0.0);
                 ui.add_enabled_ui(!busy, |ui| {
                     egui::ScrollArea::vertical()
                         .max_height(list_height)
@@ -227,7 +227,10 @@ impl DawApp {
                     ui.add_space(daw_ui::tokens::SPACE_SM);
                     ui.horizontal(|ui| {
                         if ui
-                            .add_enabled(!busy && error.is_none(), daw_ui::button_widget("Join"))
+                            .add_enabled(
+                                !busy && error.is_none(),
+                                daw_ui::primary_button_widget(ui, "Join"),
+                            )
                             .clicked()
                         {
                             submit = Some((track.id, ids, track.kind));

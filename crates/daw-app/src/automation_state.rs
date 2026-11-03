@@ -1,6 +1,6 @@
 //! Automation ownership and manual takeover, shared by every parameter surface.
 use crate::app::DawApp;
-use daw_core::{AutomationLane, AutomationParameter, AutomationTarget, Project};
+use daw_core::{AutomationLane, AutomationTarget, Project};
 
 pub(crate) fn lane_enabled(project: &Project, lane: u64) -> bool {
     let Some(track) = project.track(lane) else {
@@ -24,30 +24,7 @@ pub(crate) fn lane_enabled(project: &Project, lane: u64) -> bool {
 }
 
 fn manual_value(project: &Project, target: AutomationTarget) -> Option<f32> {
-    let track = project.track(target.track)?;
-    let value = match target.parameter {
-        AutomationParameter::TrackGain => track.gain,
-        AutomationParameter::TrackPan => track.pan,
-        AutomationParameter::SendGain { bus } => {
-            track.sends.iter().find(|send| send.target_bus == bus)?.gain
-        }
-        AutomationParameter::VstParameter { effect, id } => {
-            let parameters = if let Some(effect) = effect {
-                &track
-                    .inserts
-                    .iter()
-                    .find(|slot| slot.id == effect)?
-                    .parameters
-            } else {
-                &track.instrument_parameters
-            };
-            parameters
-                .iter()
-                .find(|parameter| parameter.id == id)?
-                .value as f32
-        }
-    };
-    value.is_finite().then(|| target.parameter.normalize(value))
+    target.stored_value(project)
 }
 
 /// Take over active lanes whose stored parameter value changed. Same-value
@@ -178,7 +155,7 @@ impl DawApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw_core::AutomationPoint;
+    use daw_core::{AutomationParameter, AutomationPoint};
     use eframe::egui;
 
     fn fixture() -> (DawApp, AutomationTarget, u64) {

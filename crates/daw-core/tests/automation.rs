@@ -744,3 +744,40 @@ fn automation_roundtrips_reserves_ids_and_legacy_tracks_need_no_new_field() {
     legacy.validate().unwrap();
     assert!(legacy.tracks.iter().all(|track| track.automation.is_none()));
 }
+
+#[test]
+fn automation_clip_on_empty_vst_lane_uses_stored_parameter_value() {
+    let (mut project, source, _) = fixture();
+    project
+        .set_instrument(
+            source,
+            Instrument::Vst3 {
+                class_id: None,
+                path: "/plugins/synth.vst3".into(),
+            },
+        )
+        .unwrap();
+    project
+        .track_mut(source)
+        .unwrap()
+        .instrument_parameters
+        .push(daw_core::PluginParameterValue { id: 7, value: 0.82 });
+    let target = AutomationTarget {
+        track: source,
+        parameter: Parameter::VstParameter {
+            effect: None,
+            id: 7,
+        },
+    };
+    assert_eq!(target.stored_value(&project), Some(0.82));
+    let lane = project
+        .add_automation_track_with_value("Cutoff", target, 0.82)
+        .unwrap();
+    project.automation_lane_mut(lane).unwrap().points.clear();
+    let clip_id = project.create_automation_clip(lane, 2.0, 4.0).unwrap();
+    let clip = project.automation_clip(lane, clip_id).unwrap();
+    assert_eq!(clip.points.len(), 2);
+    assert!((clip.points[0].value - 0.82).abs() < 1e-6);
+    assert!((clip.points[1].value - 0.82).abs() < 1e-6);
+    assert!(project.has_clip_or_automation_clip(lane, clip_id));
+}

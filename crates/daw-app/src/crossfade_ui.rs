@@ -78,8 +78,12 @@ impl DawApp {
                     "effective": overlap.as_ref().map(|(_, start, end)| [*start, (*start + config.duration).min(*end)]),
                 })));
             });
-            if enabled && let Some((_, start, end)) = overlap {
-                daw_ui::text::note(ui, format!("Effective overlap: {:.2} beats", config.duration.min(end - start)));
+            if let Some((_, start, end)) = overlap {
+                if enabled {
+                    daw_ui::text::note(ui, format!("Effective overlap: {:.2} beats", config.duration.min(end - start)));
+                } else {
+                    daw_ui::text::note(ui, "Effective overlap: 0.00 beats (disabled)");
+                }
             }
             let next = enabled.then_some(config);
             if next != *original {

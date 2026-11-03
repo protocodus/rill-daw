@@ -665,6 +665,61 @@ impl DawApp {
                                 ui.close();
                             }
                         }
+                        for (label, row_step) in [("+1 scale degree", -1_i16), ("-1 scale degree", 1_i16)] {
+                            if daw_ui::button(ui, label).clicked() {
+                                let scale_rows = PianoRows::new(|pitch| self.scale.contains(self.root, pitch));
+                                match move_midi_notes(&source_notes, &self.selected_notes, 0.0, 0) {
+                                    Ok(mut edited) => {
+                                        let delta = scale_rows.clamp_move(
+                                            edited
+                                                .iter()
+                                                .filter(|note| self.selected_notes.contains(&note.id))
+                                                .map(|note| note.pitch),
+                                            row_step,
+                                        );
+                                        for note in edited
+                                            .iter_mut()
+                                            .filter(|note| self.selected_notes.contains(&note.id))
+                                        {
+                                            let row = scale_rows.nearest_row(note.pitch);
+                                            note.pitch = scale_rows.pitch_at(row as f32 + f32::from(delta));
+                                        }
+                                        actions.push(NoteEdit::Replace(
+                                            edited,
+                                            self.selected_notes.clone(),
+                                            "Transpose notes",
+                                        ));
+                                    }
+                                    Err(error) => self.message(Err(error), ""),
+                                }
+                                ui.close();
+                            }
+                        }
+                        let grid_step = self.snap.max(0.0625);
+                        let bar_step = f64::from(self.project.beats_per_bar);
+                        for (label, beats) in [
+                            ("Nudge left", -grid_step),
+                            ("Nudge right", grid_step),
+                            ("Nudge left 1 bar", -bar_step),
+                            ("Nudge right 1 bar", bar_step),
+                        ] {
+                            if daw_ui::button(ui, label).clicked() {
+                                match move_midi_notes(
+                                    &source_notes,
+                                    &self.selected_notes,
+                                    beats,
+                                    0,
+                                ) {
+                                    Ok(edited) => actions.push(NoteEdit::Replace(
+                                        edited,
+                                        self.selected_notes.clone(),
+                                        "Nudge notes",
+                                    )),
+                                    Err(error) => self.message(Err(error), ""),
+                                }
+                                ui.close();
+                            }
+                        }
                         for (label, action) in [
                             ("Copy notes", MidiClipboardAction::Copy),
                             ("Cut notes", MidiClipboardAction::Cut),
@@ -986,7 +1041,7 @@ impl DawApp {
                 match &mut preview.settings {
                     NoteTransform::Quantize(settings) => {
                         daw_ui::parameter_row_wrapped(ui, |ui| {
-                            ui.label("Quantize preview");
+                            daw_ui::text::label(ui, "Quantize preview");
                             daw_ui::select("quantize_grid", format!("{} beat", settings.grid)).width(90.0).show_ui(ui, |ui| {
                                 for grid in [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0] { daw_ui::selectable_value(ui, &mut settings.grid, grid, format!("{grid} beat")); }
                             });
@@ -1008,17 +1063,17 @@ impl DawApp {
                     }
                     NoteTransform::Randomize(settings) => {
                         ui.horizontal_wrapped(|ui| {
-                            ui.label("Randomize preview");
+                            daw_ui::text::label(ui, "Randomize preview");
                             let velocity = daw_ui::toolbar_group(ui, |ui| {
-                                ui.label("Velocity ±");
+                                daw_ui::text::label(ui, "Velocity ±");
                                 ui.add(daw_ui::number(&mut settings.velocity).range(0..=127).speed(1.0))
                             }).inner;
                             let timing = daw_ui::toolbar_group(ui, |ui| {
-                                ui.label("Timing ±");
+                                daw_ui::text::label(ui, "Timing ±");
                                 ui.add(daw_ui::number(&mut settings.timing).range(0.0..=0.25).speed(0.001).max_decimals(3).suffix(" beats"))
                             }).inner;
                             let seed = daw_ui::toolbar_group(ui, |ui| {
-                                ui.label("Seed");
+                                daw_ui::text::label(ui, "Seed");
                                 ui.add(daw_ui::number(&mut settings.seed).range(0..=u32::MAX).speed(1.0))
                             }).inner;
                             if daw_ui::button(ui, "New variation").clicked() {
@@ -1029,7 +1084,7 @@ impl DawApp {
                         ui.horizontal_wrapped(|ui| {
                             apply = daw_ui::primary_button(ui, "Apply randomize").clicked();
                             cancel = daw_ui::button(ui, "Cancel randomize").clicked();
-                            ui.weak("Selected notes · pitch and length stay fixed");
+                            daw_ui::text::note(ui, "Selected notes · pitch and length stay fixed");
                         });
                         state.randomize_settings = *settings;
                     }
@@ -1767,6 +1822,22 @@ impl DawApp {
                                     self.selected_notes.contains(&note.id).then_some(note.id);
                                 state.keyboard_focus = false;
                                 state.clear_hidden_selection();
+                            }
+                            if daw_ui::button(ui, "Select only this note").clicked() {
+                                self.selected_notes = HashSet::from([note.id]);
+                                state.navigation_note = Some(note.id);
+                                state.keyboard_focus = false;
+                                state.clear_hidden_selection();
+                                ui.close();
+                            }
+                            ui.separator();
+                            if daw_ui::button(ui, "Duplicate").clicked() {
+                                actions.push(NoteEdit::Duplicate(note.id));
+                                ui.close();
+                            }
+                            if daw_ui::button(ui, "Delete").clicked() {
+                                actions.push(NoteEdit::Delete(note.id));
+                                ui.close();
                             }
                         },
                     );

@@ -555,6 +555,7 @@ impl DawApp {
             .collect();
         let mut popup = None;
         let mut channel_target = None;
+        let mut rename_track = None;
         let mut channel_controls = Vec::new();
         let mut track_colors = Vec::new();
         let mut instrument_target = None;
@@ -1244,6 +1245,10 @@ impl DawApp {
                             popup = Some(PopupKind::Automation);
                             ui.close();
                         }
+                        if daw_ui::button(ui, "Rename…").clicked() {
+                            rename_track = Some(track.id);
+                            ui.close();
+                        }
                         if daw_ui::button(ui, "Properties").clicked() {
                             self.selected_track = Some(track.id);
                             self.selected_clip = None;
@@ -1276,10 +1281,15 @@ impl DawApp {
                     });
                     if let Some(lane) = &track.automation {
                         let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
+                        empty_action_rects.push(row);
                         let response = crate::arranger_automation::automation_lane(ui, crate::arranger_automation::LaneView {
                             track: track.id, rect, viewport, snap: self.snap, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
                         }, lane, &mut self.selected_clip);
-                        if response.interacted { self.selected_track = Some(track.id); }
+                        if response.interacted {
+                            self.selected_track = Some(track.id);
+                            self.arranger_selection.ids.clear();
+                            self.arranger_selection.span = None;
+                        }
                         edits.extend(response.edits.into_iter().map(|edit| Edit::Automation(track.id, edit)));
                         automation_diagnostics.push(response.diagnostic);
                         if let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
@@ -1741,8 +1751,6 @@ impl DawApp {
                                 edits.push(Edit::Crossfade(track.id, incoming.id, (duration > 0.0).then_some(AudioCrossfade {
                                     duration, curve: crossfade.map_or(CrossfadeCurve::LINEAR, |config| config.curve),
                                 })));
-                                self.selected_track = Some(track.id);
-                                self.selected_clip = Some(incoming.id);
                             }
                             if let Some(diagnostic) = clip_diagnostics.iter_mut().find(|value| value["id"] == incoming.id) {
                                 diagnostic["crossfade_handle"] = handle.handle.map(|rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})).into();
@@ -2095,6 +2103,9 @@ impl DawApp {
         if let Some(track) = channel_target {
             self.open_channel(track);
         }
+        if let Some(track) = rename_track {
+            self.start_track_rename(ui.ctx(), track);
+        }
         for track in arm_toggles {
             self.toggle_record_arm(track);
         }
@@ -2142,6 +2153,8 @@ impl DawApp {
                 }
                 Edit::Crossfade(t, c, config) => {
                     if self.project.clip(t, c).is_some_and(|clip| matches!(clip.content, ClipContent::Audio { crossfade, .. } if crossfade == config)) { continue; }
+                    self.selected_track = Some(t);
+                    self.selected_clip = Some(c);
                     self.edit_label = Some("Edit crossfade".into());
                     self.project.set_audio_crossfade(t, c, config)
                 }
@@ -2709,18 +2722,37 @@ impl DawApp {
                                     let fade_length = envelope.map_or(clip.length * clip.source_rate, |region| region.length) / clip.source_rate;
                                     let label = daw_ui::text::label(ui, "Clip gain");
                                     ui.horizontal(|ui| {
-                                        changed |= ui
+                                        let slider = ui
                                             .add(daw_ui::slider(gain, 0.0..=2.0)
                                                 .zero_reference(1.0)
                                                 .scale_labels(false)
                                                 .clamping(egui::SliderClamping::Edits).show_value(false))
-                                            .labelled_by(label.id)
-                                            .changed();
-                                        daw_ui::text::body(ui, if *gain <= 0.0 {
+                                            .labelled_by(label.id);
+                                        changed |= slider.changed();
+                                        let readout = daw_ui::text::body(ui, if *gain <= 0.0 {
                                             "−∞ dB".to_string()
                                         } else {
                                             format!("{:.1} dB", 20.0 * gain.log10())
                                         });
+                                        let response = slider.union(readout);
+                                        let mut exact = None;
+                                        response.context_menu(|ui| {
+                                            exact = daw_ui::value_entry_named(
+                                                ui,
+                                                ("inspector_clip_gain", id, clip.id),
+                                                f64::from(daw_ui::channel_gain_to_db(*gain)),
+                                                -60.0..=f64::from(20.0 * 2.0_f32.log10()),
+                                                "dB",
+                                                &format!("{} · Clip gain", clip.name),
+                                            );
+                                        });
+                                        if let Some(db) = exact {
+                                            let next = daw_ui::channel_gain_from_db(db as f32).clamp(0.0, 2.0);
+                                            if *gain != next {
+                                                *gain = next;
+                                                changed = true;
+                                            }
+                                        }
                                     });
                                     ui.end_row();
                                     for (name, value) in [("Fade in", fade_in), ("Fade out", fade_out)] {

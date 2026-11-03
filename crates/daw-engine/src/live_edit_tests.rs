@@ -821,3 +821,36 @@ fn removing_last_audio_clip_finishes_its_bridge_and_seek_clears_stale_correction
         "seek must not carry correction from a different timeline position"
     );
 }
+
+#[test]
+fn live_meter_and_loop_changes_update_without_rebuilding_or_allocating() {
+    let (mut project, _directory, _id) = audio_project();
+    project.loop_enabled = false;
+    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    render_block(&mut renderer);
+    project.beats_per_bar = 3;
+    project.loop_enabled = true;
+    project.loop_start = 0.0;
+    project.loop_end = 0.125;
+    assert!(prepare.compatible(&project));
+    let mut edit = prepare.prepare(&project).unwrap();
+    assert_eq!(
+        crate::allocation_test_support::count_allocations(|| renderer
+            .apply_live_edit(&mut edit)
+            .unwrap()),
+        0
+    );
+    let mut wrapped = false;
+    let mut previous = renderer.logical_sample;
+    for _ in 0..8 {
+        let output = render_block(&mut renderer);
+        assert!(output.iter().all(|frame| frame[0] > 0.0));
+        wrapped |= renderer.logical_sample < previous;
+        previous = renderer.logical_sample;
+    }
+    assert!(
+        wrapped,
+        "Live loop update wraps transport without graph rebuild"
+    );
+}

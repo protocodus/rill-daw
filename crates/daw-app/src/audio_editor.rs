@@ -478,6 +478,32 @@ impl DawApp {
         true
     }
 
+    pub(crate) fn has_audio_time_selection(&self, ctx: &egui::Context) -> bool {
+        let id = egui::Id::new("audio_editor_state");
+        ctx.data(|data| {
+            data.get_temp::<AudioView>(id)
+                .and_then(|state| state.range)
+                .is_some()
+        })
+    }
+
+    pub(crate) fn select_audio_clip_time(&self, ctx: &egui::Context) {
+        let Some(clip) = self.selected() else {
+            return;
+        };
+        let id = egui::Id::new("audio_editor_state");
+        let mut state = ctx.data_mut(|data| data.get_temp::<AudioView>(id).unwrap_or_default());
+        state.range = (clip.length > 0.0).then_some((clip.start, clip.end()));
+        ctx.data_mut(|data| data.insert_temp(id, state));
+    }
+
+    pub(crate) fn clear_audio_time_selection(&self, ctx: &egui::Context) {
+        let id = egui::Id::new("audio_editor_state");
+        let mut state = ctx.data_mut(|data| data.get_temp::<AudioView>(id).unwrap_or_default());
+        state.range = None;
+        ctx.data_mut(|data| data.insert_temp(id, state));
+    }
+
     pub(crate) fn nudge_selected_clip(&mut self, ctx: &egui::Context, direction: i32) {
         let Some((track, clip)) = self.selected_track.zip(self.selected().cloned()) else {
             return;
@@ -1173,6 +1199,7 @@ impl DawApp {
                 let source = clip.clone();
                 let tempo = self.project.tempo;
                 let settings = state.settings;
+                let cached = self.waveforms.get(path.as_str()).cloned();
                 let path = path.clone();
                 let spawned = std::thread::Builder::new()
                     .name("audio-analysis".into())
@@ -1184,7 +1211,11 @@ impl DawApp {
                             }
                         }
                         let _release = ReleaseWorker;
-                        let value = AudioData::load_wav(path)
+                        let loaded = match cached {
+                            Some(data) => Ok(data),
+                            None => AudioData::load_wav(path),
+                        };
+                        let value = loaded
                             .and_then(|data| {
                                 if transients {
                                     detect_transients(&source, &data, tempo, settings)
@@ -1516,6 +1547,69 @@ impl DawApp {
             }
         };
         let mut new_cursor = None;
+        if response.secondary_clicked()
+            && let Some(pointer) = response.interact_pointer_pos()
+        {
+            let raw = state.view.beat_at(canvas, pointer.x);
+            let snapped = snap(raw).0.clamp(clip.start, clip.end());
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(ui.id().with("audio_menu_beat"), snapped));
+        }
+        if !navigation.navigating && !strip_open {
+            response.context_menu(|ui| {
+                let menu_beat = ui
+                    .ctx()
+                    .data(|data| data.get_temp::<f64>(ui.id().with("audio_menu_beat")))
+                    .unwrap_or(self.cursor);
+                if ui
+                    .add_enabled(
+                        menu_beat > clip.start && menu_beat < clip.end(),
+                        daw_ui::button_widget("Split here"),
+                    )
+                    .clicked()
+                {
+                    edit = Some(Edit::Split(menu_beat));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Select clip time").clicked() {
+                    state.range = (clip.length > 0.0).then_some((clip.start, clip.end()));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        state.range.is_some(),
+                        daw_ui::button_widget("Clear time selection"),
+                    )
+                    .clicked()
+                {
+                    state.range = None;
+                    ui.close();
+                }
+                ui.separator();
+                for (label, action) in [
+                    ("Copy", AudioClipboardAction::Copy),
+                    ("Cut selection", AudioClipboardAction::Cut),
+                    ("Paste", AudioClipboardAction::Paste),
+                    ("Duplicate", AudioClipboardAction::Duplicate),
+                    ("Delete", AudioClipboardAction::Delete),
+                ] {
+                    let enabled = !matches!(action, AudioClipboardAction::Paste)
+                        || has_audio_clipboard(ui.ctx());
+                    if ui
+                        .add_enabled(enabled, daw_ui::button_widget(label))
+                        .clicked()
+                    {
+                        clipboard_action = Some(action);
+                        ui.close();
+                    }
+                }
+                ui.separator();
+                if daw_ui::button(ui, "Reverse").clicked() {
+                    edit = Some(Edit::Reverse);
+                    ui.close();
+                }
+            });
+        }
         if !navigation.navigating
             && !strip_open
             && response.hovered()

@@ -24,12 +24,21 @@ impl DawApp {
     pub fn editor(&mut self, ui: &mut egui::Ui) {
         self.audio_clip_selection_navigation(ui);
         let Some(clip) = self.selected() else {
-            ui.centered_and_justified(|ui| {
-                ui.label(
-                    egui::RichText::new("Select a clip in Arrangement")
-                        .color(palette(ui.ctx()).muted),
-                );
-            });
+            ui.add_space((ui.available_height() * 0.3).max(24.0));
+            let empty = daw_ui::empty_workspace(
+                ui,
+                "Select a clip in Arrangement",
+                "Choose a MIDI or audio clip on the timeline to edit its notes or waveform.",
+                &[daw_ui::EmptyWorkspaceAction {
+                    id: "open_arrangement",
+                    label: "Open Arrangement",
+                    description: "Switch to the arrangement timeline",
+                    primary: true,
+                }],
+            );
+            if empty.action.as_deref() == Some("open_arrangement") {
+                self.open_workspace(crate::app::WorkspaceView::Arrangement);
+            }
             return;
         };
         if matches!(clip.content, ClipContent::Audio { .. }) {
@@ -157,6 +166,7 @@ impl DawApp {
         let mut device_diagnostics = Vec::new();
         let mut toggle_selection = None;
         let mut channel_selection = None;
+        let mut rename_track = None;
         let mut automation_navigation = None;
         let mut automation_overrides = Vec::new();
         let mut empty_send_menus = Vec::new();
@@ -450,6 +460,10 @@ impl DawApp {
                             .on_hover_text(format!("Open channel · {} · Drag to reorder · Right-click for selection actions · Shift-click to add/remove", track.name));
                         let name = daw_ui::track_reorder_source(ui, &name, track.id);
                         name.context_menu(|ui| {
+                            if daw_ui::button(ui, "Rename…").clicked() {
+                                rename_track = Some(track.id);
+                                ui.close();
+                            }
                             if let Some(choice) = daw_ui::channel_selection_choices(ui, selected_channels.contains(&track.id)) {
                                 channel_selection = Some((track.id, choice));
                             }
@@ -782,6 +796,9 @@ impl DawApp {
         }
         if let Some((track, choice)) = channel_selection {
             self.mixer_channel_selection_action(track, choice);
+        }
+        if let Some(track) = rename_track {
+            self.start_track_rename(ui.ctx(), track);
         }
         if let Some(popup) = popup {
             self.open_popup(popup);

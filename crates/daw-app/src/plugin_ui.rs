@@ -569,11 +569,6 @@ impl DawApp {
             {
                 actions.refresh = true;
             }
-        } else if loading {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                daw_ui::text::note(ui, "Loading parameters…");
-            });
         }
         let editing_enabled = self.parameter_editing_enabled();
         // The parameter catalogue may contain thousands of entries. Walk the
@@ -623,8 +618,15 @@ impl DawApp {
             ui.available_height().max(0.0),
             |ui, selected| {
                 let Some(parameter) = selected else {
-                    daw_ui::text::subtitle(ui, "Choose a parameter");
-                    daw_ui::text::note(ui, "Search by name or unit.");
+                    if loading {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            daw_ui::text::note(ui, "Loading parameters…");
+                        });
+                    } else {
+                        daw_ui::text::subtitle(ui, "Choose a parameter");
+                        daw_ui::text::note(ui, "Search by name or unit.");
+                    }
                     return;
                 };
                 let steps = metadata

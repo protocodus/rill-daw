@@ -127,6 +127,36 @@ impl AutomationTarget {
         );
         Ok(self.parameter.normalize(value))
     }
+
+    /// Current normalized parameter value stored in the project, including
+    /// persisted VST3 parameter values when present.
+    pub fn stored_value(self, project: &Project) -> Option<f32> {
+        let track = project.track(self.track)?;
+        let value = match self.parameter {
+            AutomationParameter::TrackGain => track.gain,
+            AutomationParameter::TrackPan => track.pan,
+            AutomationParameter::SendGain { bus } => {
+                track.sends.iter().find(|send| send.target_bus == bus)?.gain
+            }
+            AutomationParameter::VstParameter { effect, id } => {
+                let parameters = if let Some(effect) = effect {
+                    &track
+                        .inserts
+                        .iter()
+                        .find(|slot| slot.id == effect)?
+                        .parameters
+                } else {
+                    &track.instrument_parameters
+                };
+                parameters
+                    .iter()
+                    .find(|parameter| parameter.id == id)?
+                    .value as f32
+            }
+        };
+        (value.is_finite() && self.parameter.range().contains(&value))
+            .then(|| self.parameter.normalize(value))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -426,8 +456,12 @@ impl AutomationLane {
 
     /// Exact-beat insertion replaces the existing value and preserves its ID.
     pub fn upsert_point(&mut self, beat: f64, value: f32) -> Result<u64> {
-        validate_position(beat, value)?;
         self.validate()?;
+        self.upsert_point_validated(beat, value)
+    }
+
+    pub(crate) fn upsert_point_validated(&mut self, beat: f64, value: f32) -> Result<u64> {
+        validate_position(beat, value)?;
         match self.points.binary_search_by(|point| {
             point
                 .beat

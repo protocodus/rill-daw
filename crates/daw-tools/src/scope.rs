@@ -756,7 +756,15 @@ impl ToolScope {
             value["name"] = json!(crate::bounded_text(
                 &project.track(q.track_id).unwrap().name
             ));
-            value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"override_value":lane.override_value,"total_points":lane.points.len(),"points_offset":q.offset,"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>()});
+            let clips: Vec<_> = lane
+                .clips
+                .iter()
+                .take(crate::MAX_QUERY_ITEMS)
+                .map(|clip| {
+                    json!({"id":clip.id,"name":crate::bounded_text(&clip.name),"start":clip.start,"length":clip.length,"offset":clip.offset,"link_group":clip.link_group,"total_points":clip.points.len(),"points":clip.points.iter().take(crate::MAX_QUERY_ITEMS).collect::<Vec<_>>()})
+                })
+                .collect();
+            value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"override_value":lane.override_value,"total_points":lane.points.len(),"points_offset":q.offset,"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>(),"clip_count":lane.clips.len(),"clips":clips});
         } else if let Self::Instrument { track_id } = self {
             let parameters = &project.track(*track_id).unwrap().instrument_parameters;
             value["instrument"] = json!({"assigned":true,"total_parameters":parameters.len(),"parameters_offset":q.offset,"parameters":parameters.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>()});
@@ -857,7 +865,7 @@ impl ToolScope {
     }
 
     fn automation_summaries(&self, project: &Project, offset: usize, limit: usize) -> Vec<Value> {
-        project.tracks.iter().filter_map(|t|t.automation.as_ref().filter(|l|self.allows_automation(project,Some(t.id),l.target)).map(|l|(t,l))).skip(offset).take(limit).map(|(t,l)|json!({"id":t.id,"name":crate::bounded_text(&t.name),"target":l.target,"interpolation":l.interpolation,"override_value":l.override_value,"total_points":l.points.len()})).collect()
+        project.tracks.iter().filter_map(|t|t.automation.as_ref().filter(|l|self.allows_automation(project,Some(t.id),l.target)).map(|l|(t,l))).skip(offset).take(limit).map(|(t,l)|json!({"id":t.id,"name":crate::bounded_text(&t.name),"target":l.target,"interpolation":l.interpolation,"override_value":l.override_value,"total_points":l.points.len(),"clip_count":l.clips.len()})).collect()
     }
 }
 
@@ -1402,5 +1410,39 @@ mod tests {
             serde_json::to_value(ToolScope::Song.tool_specs(&project)).unwrap(),
             serde_json::to_value(song_tool_specs()).unwrap()
         );
+    }
+
+    #[test]
+    fn track_queries_and_scoped_reads_expose_latency_samples_and_automation_clips() {
+        let (mut project, track, _, _, _) = fixture();
+        project.track_mut(track).unwrap().latency_samples = 512;
+        let lane = project
+            .add_automation_track(
+                "Gain curve",
+                AutomationTarget {
+                    track,
+                    parameter: AutomationParameter::TrackGain,
+                },
+            )
+            .unwrap();
+        let pattern = project.create_automation_clip(lane, 2.0, 4.0).unwrap();
+        let summary = crate::track_summary(project.track(track).unwrap());
+        assert_eq!(summary["latency_samples"], 512);
+        let scope = ToolScope::Channel { track_id: track };
+        let read = scope
+            .read_context(&project, "get_track", &json!({"track_id": lane}))
+            .unwrap();
+        assert_eq!(read["automation"]["clip_count"], 1);
+        assert_eq!(read["automation"]["clips"][0]["id"], pattern);
+        assert_eq!(read["automation"]["clips"][0]["start"], 2.0);
+        assert_eq!(read["automation"]["clips"][0]["length"], 4.0);
+        let context = scope.context(&project);
+        let lane_summary = context["automation"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == lane)
+            .unwrap();
+        assert_eq!(lane_summary["clip_count"], 1);
     }
 }

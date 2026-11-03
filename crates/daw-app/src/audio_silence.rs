@@ -290,7 +290,7 @@ impl DawApp {
                 apply = ui
                     .add_enabled(
                         !busy && changes && state.error.is_none(),
-                        daw_ui::button_widget("Apply strip silence"),
+                        daw_ui::primary_button_widget(ui, "Apply strip silence"),
                     )
                     .clicked();
                 cancel = daw_ui::button(ui, "Cancel").clicked();

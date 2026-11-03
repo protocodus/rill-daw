@@ -185,12 +185,19 @@ impl DawApp {
         &mut self,
         snapshot: ArrangerSelectionSnapshot,
     ) {
+        let automation_primary = snapshot
+            .primary
+            .filter(|(track, clip)| self.project.automation_clip(*track, *clip).is_some());
         self.selected_track = snapshot
             .primary
             .map(|(track, _)| track)
             .or(self.selected_track);
         self.selected_clip = snapshot.primary.map(|(_, clip)| clip);
         self.arranger_select_clips(snapshot.clips, snapshot.span);
+        if let Some((track, clip)) = automation_primary {
+            self.selected_track = Some(track);
+            self.selected_clip = Some(clip);
+        }
         self.arranger_selection.gesture = None;
         self.arranger_selection.drag = None;
         self.arranger_selection.audio_drag = None;
@@ -438,6 +445,14 @@ impl DawApp {
         if self.view != WorkspaceView::Arrangement {
             return false;
         }
+        if let Some((track, clip)) = self
+            .selected_track
+            .zip(self.selected_clip)
+            .filter(|(t, c)| self.project.automation_clip(*t, *c).is_some())
+        {
+            self.apply_clip_command(track, clip, crate::app::ClipCommand::Duplicate);
+            return true;
+        }
         let Some(clipboard) = self.arranger_clipboard() else {
             return true;
         };
@@ -448,6 +463,14 @@ impl DawApp {
     pub(crate) fn arranger_delete_selection(&mut self) -> bool {
         if self.view != WorkspaceView::Arrangement {
             return false;
+        }
+        if let Some((track, clip)) = self
+            .selected_track
+            .zip(self.selected_clip)
+            .filter(|(t, c)| self.project.automation_clip(*t, *c).is_some())
+        {
+            self.apply_clip_command(track, clip, crate::app::ClipCommand::Delete);
+            return true;
         }
         let selected = self.arranger_selection_ids();
         if selected.is_empty() {

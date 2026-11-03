@@ -115,7 +115,7 @@ impl DawApp {
         if self
             .selected_track
             .zip(self.selected_clip)
-            .is_some_and(|(t, c)| self.project.clip(t, c).is_none())
+            .is_some_and(|(t, c)| !self.project.has_clip_or_automation_clip(t, c))
         {
             self.selected_clip = None;
         }
@@ -257,9 +257,15 @@ impl ToolHost for DawApp {
                     return Err(ToolError::new("not_found", "Track not found"));
                 }
                 let clip = match (args.track_id, args.clip_id) {
-                    (Some(t), Some(c)) => Some(self.project.clip(t, c).ok_or_else(|| {
-                        ToolError::new("not_found", "Clip not found on this track")
-                    })?),
+                    (Some(t), Some(c)) => {
+                        if !self.project.has_clip_or_automation_clip(t, c) {
+                            return Err(ToolError::new(
+                                "not_found",
+                                "Clip not found on this track",
+                            ));
+                        }
+                        self.project.clip(t, c)
+                    }
                     (_, Some(_)) => {
                         return Err(ToolError::new(
                             "invalid_arguments",

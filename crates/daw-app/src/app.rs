@@ -1848,30 +1848,64 @@ impl DawApp {
     /// Every clip entry point shares result selection and one history label.
     pub(crate) fn apply_clip_command(&mut self, track: u64, clip: u64, command: ClipCommand) {
         self.begin_edit();
-        let (label, result) = match command {
-            ClipCommand::Split(beat) => (
-                "Split clip",
-                self.project.split_clip(track, clip, beat).map(Some),
-            ),
-            ClipCommand::Duplicate => (
-                "Duplicate clip",
-                self.project.duplicate_clip(track, clip).map(Some),
-            ),
-            ClipCommand::Ghost => (
-                "Create ghost copy",
-                self.project.clone_clip(track, clip).map(Some),
-            ),
-            ClipCommand::MakeIndependent => (
-                "Make clip independent",
-                self.project
-                    .make_clip_independent(track, clip)
-                    .map(|()| Some(clip)),
-            ),
-            ClipCommand::Delete => (
-                "Delete clip",
-                self.project.delete_clip(track, clip).map(|_| None),
-            ),
-        };
+        let (label, result) =
+            if let Some(automation_clip) = self.project.automation_clip(track, clip).cloned() {
+                match command {
+                    ClipCommand::Split(_) => (
+                        "Split clip",
+                        Err(anyhow::anyhow!("Automation clips cannot be split")),
+                    ),
+                    ClipCommand::Duplicate => (
+                        "Duplicate automation clip",
+                        self.project
+                            .copy_automation_clip(track, clip, automation_clip.end(), false)
+                            .map(Some),
+                    ),
+                    ClipCommand::Ghost => (
+                        "Create ghost automation clip",
+                        self.project
+                            .copy_automation_clip(track, clip, automation_clip.end(), true)
+                            .map(Some),
+                    ),
+                    ClipCommand::MakeIndependent => (
+                        "Make automation clip independent",
+                        self.project
+                            .make_automation_clip_independent(track, clip)
+                            .map(|()| Some(clip)),
+                    ),
+                    ClipCommand::Delete => (
+                        "Delete automation clip",
+                        self.project
+                            .remove_automation_clip(track, clip)
+                            .map(|()| None),
+                    ),
+                }
+            } else {
+                match command {
+                    ClipCommand::Split(beat) => (
+                        "Split clip",
+                        self.project.split_clip(track, clip, beat).map(Some),
+                    ),
+                    ClipCommand::Duplicate => (
+                        "Duplicate clip",
+                        self.project.duplicate_clip(track, clip).map(Some),
+                    ),
+                    ClipCommand::Ghost => (
+                        "Create ghost copy",
+                        self.project.clone_clip(track, clip).map(Some),
+                    ),
+                    ClipCommand::MakeIndependent => (
+                        "Make clip independent",
+                        self.project
+                            .make_clip_independent(track, clip)
+                            .map(|()| Some(clip)),
+                    ),
+                    ClipCommand::Delete => (
+                        "Delete clip",
+                        self.project.delete_clip(track, clip).map(|_| None),
+                    ),
+                }
+            };
         match result {
             Ok(selected) => {
                 self.selected_track = Some(track);
@@ -2431,8 +2465,14 @@ impl DawApp {
                             self.open_popup(PopupKind::History);
                             ui.close();
                         }
-                        let has_clip =
-                            self.selected().is_some() && !self.midi_editor.note_transform_active() && !self.midi_editor.generate_active();
+                        let selected_automation_clip_linked = self
+                            .selected_track
+                            .zip(self.selected_clip)
+                            .and_then(|(t, c)| self.project.automation_clip(t, c))
+                            .map(|clip| clip.link_group.is_some());
+                        let has_clip = (self.selected().is_some() || selected_automation_clip_linked.is_some())
+                            && !self.midi_editor.note_transform_active()
+                            && !self.midi_editor.generate_active();
                         let has_edit_selection = has_clip && !(self.view == WorkspaceView::Clip
                             && self.selected_notes.is_empty()
                             && matches!(self.selected().map(|clip| &clip.content), Some(ClipContent::Midi { .. })));
@@ -2443,6 +2483,7 @@ impl DawApp {
                             }
                             if ui.add_enabled(has_clip, daw_ui::button_widget("Clear clip selection")).clicked() {
                                 self.arranger_select_clips([], None);
+                                self.selected_clip = None;
                                 ui.close();
                             }
                         } else if self.view == WorkspaceView::Clip
@@ -2457,6 +2498,23 @@ impl DawApp {
                             if ui.add_enabled(!self.selected_notes.is_empty(), daw_ui::button_widget("Clear note selection")).clicked() {
                                 self.selected_notes.clear();
                                 self.midi_editor.clear_hidden_selection();
+                                ui.close();
+                            }
+                        } else if self.view == WorkspaceView::Clip
+                            && matches!(self.selected().map(|clip| &clip.content), Some(ClipContent::Audio { .. }))
+                        {
+                            if daw_ui::button(ui, "Select clip time").clicked() {
+                                self.select_audio_clip_time(ui.ctx());
+                                ui.close();
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.has_audio_time_selection(ui.ctx()),
+                                    daw_ui::button_widget("Clear time selection"),
+                                )
+                                .clicked()
+                            {
+                                self.clear_audio_time_selection(ui.ctx());
                                 ui.close();
                             }
                         }
@@ -2515,7 +2573,8 @@ impl DawApp {
                             self.create_linked_clone();
                             ui.close();
                         }
-                        if self.selected().is_some_and(|clip| clip.link_group.is_some())
+                        if (self.selected().is_some_and(|clip| clip.link_group.is_some())
+                            || selected_automation_clip_linked == Some(true))
                             && ui.add_enabled(has_clip, daw_ui::button_widget("Make independent"))
                                 .on_hover_text("Disconnect this ghost while keeping its current name and edits")
                                 .clicked() {
@@ -2746,7 +2805,13 @@ impl DawApp {
                     .find(|track| !matches!(track.kind, TrackKind::Folder | TrackKind::Automation))
                     .map(|track| track.id);
             }
-            if self.selected_clip.is_some() && self.selected().is_none() {
+            if self.selected_clip.is_some()
+                && self.selected().is_none()
+                && self
+                    .selected_track
+                    .zip(self.selected_clip)
+                    .is_none_or(|(t, c)| self.project.automation_clip(t, c).is_none())
+            {
                 self.selected_clip = self
                     .selected_track
                     .and_then(|id| self.project.track(id))

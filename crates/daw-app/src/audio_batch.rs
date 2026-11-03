@@ -188,9 +188,9 @@ impl DawApp {
                 );
                 ui.add_space((daw_ui::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
                 ui.horizontal_wrapped(|ui| {
-                    cancel = daw_ui::button(ui, "Cancel").clicked();
+                    apply = daw_ui::primary_button(ui, "Apply boundary fades").clicked();
                     remove = daw_ui::button(ui, "Remove boundary fades").clicked();
-                    apply = daw_ui::button(ui, "Apply boundary fades").clicked();
+                    cancel = daw_ui::button(ui, "Cancel").clicked();
                 });
             },
         );
