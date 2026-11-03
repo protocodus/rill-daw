@@ -231,7 +231,10 @@ pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
                     .show_value(false)
                     .scale_labels(false),
             );
-            if response.dragged() && *pan != 0.0 && pan.abs() < PAN_DETENT {
+            // Pointer edits only: arrow keys keep their fine steps.
+            let pointer =
+                ui.input(|input| input.pointer.any_down() || input.pointer.any_released());
+            if response.changed() && pointer && *pan != 0.0 && pan.abs() < PAN_DETENT {
                 *pan = 0.0;
                 response.mark_changed();
             }

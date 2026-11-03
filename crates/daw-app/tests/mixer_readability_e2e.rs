@@ -158,15 +158,17 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                         && rect.contains(name)
                         && rect.contains(sends)
                         && rect.height() > 250.0
-                        // One physical pixel at every density.
-                        && paint["stroke_width"].as_f64().unwrap() * density >= 1.0 - 1e-6
+                        // A fill-only card.
+                        && paint["fill"][3].as_u64().unwrap() > 0
                 })
                 .unwrap_or_else(|| panic!("No bounded strip for channel {channel}"));
 
             let strip = Bounds::from(&strip["rect"]);
             for control in [name, output, sends] {
-                assert!(control.left - strip.left >= f64::from(daw_ui::tokens::SPACE_MD) - 0.1);
-                assert!(strip.right - control.right >= f64::from(daw_ui::tokens::SPACE_MD) - 0.1);
+                assert!(control.left - strip.left >= f64::from(daw_ui::MIXER_CHANNEL_MARGIN) - 0.1);
+                assert!(
+                    strip.right - control.right >= f64::from(daw_ui::MIXER_CHANNEL_MARGIN) - 0.1
+                );
             }
             strips.push(strip);
         }

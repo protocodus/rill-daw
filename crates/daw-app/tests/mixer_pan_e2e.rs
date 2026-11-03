@@ -58,7 +58,7 @@ fn visible(state: &Value, text: &str) -> bool {
         .any(|label| label == text)
 }
 
-/// The rail is horizontal, carries center and end detents and no generic
+/// The rail is horizontal, carries one center detent mark and no generic
 /// divisions; its value caption sits in the row, right of the rail.
 fn assert_pan_rail(state: &Value, id: u64, expected: f64) {
     let channel = channel(state, id);
@@ -72,7 +72,7 @@ fn assert_pan_rail(state: &Value, id: u64, expected: f64) {
         .iter()
         .map(|tick| tick["fraction"].as_f64().unwrap())
         .collect();
-    assert_eq!(ticks, [0.0, 0.5, 1.0]);
+    assert_eq!(ticks, [0.5]);
     near(scale["value"].as_f64().unwrap(), expected, 2e-6);
     let minimum = point(&scale["min_position"]);
     let maximum = point(&scale["max_position"]);
@@ -158,6 +158,13 @@ fn mixer_pan_rail_drags_exact_entry_and_undo() {
             assert_pan_rail(&painted(&mut app), id, pan);
             assert_eq!(undo(&mut app)["project"], baseline["project"]);
         }
+        // The center detent: a drag ending just beside center lands on C.
+        drag_to(&mut app, id, 0.25);
+        let centered = drag_to(&mut app, id, 0.51);
+        assert_eq!(track(&centered, id)["pan"].as_f64().unwrap(), 0.0);
+        assert_pan_rail(&painted(&mut app), id, 0.0);
+        undo(&mut app);
+        assert_eq!(undo(&mut app)["project"], baseline["project"]);
         let opened = open_exact(&mut app, id);
         assert!(
             opened["visible_labels"]

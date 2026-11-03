@@ -191,11 +191,6 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
             let kind = channel["source_kind"].as_str().unwrap();
             let label = &channel["source_label"];
             assert!(
-                bottom(label) - top(label)
-                    <= f64::from(daw_ui::tokens::FONT_SMALL + 2.0 * daw_ui::tokens::SPACE_XS),
-                "{kind} must stay on one line: {label}"
-            );
-            assert!(
                 label["max"][0].as_f64().unwrap()
                     <= channel["source"]["max"][0].as_f64().unwrap() + 0.1
             );

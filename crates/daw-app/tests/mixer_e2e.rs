@@ -37,14 +37,14 @@ fn center(rect: &Value) -> (f64, f64) {
 /// The text painted on a channel's output button (its destination only).
 fn output_label(state: &Value, channel: usize) -> String {
     let target = &state["mixer"]["channels"][channel]["target"];
-    let (x, y) = center(target);
+    let (_, y) = center(target);
     state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
         .find(|row| {
-            row["min"][0].as_f64().unwrap() <= x
-                && row["max"][0].as_f64().unwrap() >= x
+            row["min"][0].as_f64().unwrap() >= target["min"][0].as_f64().unwrap()
+                && row["max"][0].as_f64().unwrap() <= target["max"][0].as_f64().unwrap()
                 && row["min"][1].as_f64().unwrap() <= y
                 && row["max"][1].as_f64().unwrap() >= y
         })

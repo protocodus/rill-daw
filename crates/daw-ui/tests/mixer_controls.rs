@@ -222,12 +222,12 @@ fn pan_rail_preserves_values_and_shows_detents_and_a_short_value() {
                     .iter()
                     .map(|tick| tick.fraction)
                     .collect::<Vec<_>>(),
-                [0.0, 0.5, 1.0]
+                [0.5]
             );
             assert!((response.rect.width() - 180.0).abs() < 0.1);
             assert!(
-                (response.rect.height() - daw_ui::tokens::CONTROL_HEIGHT).abs() < 0.1,
-                "the pan row is one control row: {:?}",
+                (response.rect.height() - daw_ui::tokens::COMPACT_HEIGHT).abs() < 0.1,
+                "the pan row is one compact row: {:?}",
                 response.rect
             );
             let caption = daw_ui::mixer_pan_caption(original);

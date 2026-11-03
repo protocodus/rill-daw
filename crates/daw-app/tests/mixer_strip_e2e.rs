@@ -82,7 +82,7 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
                 assert_eq!(section["name"], reference["name"]);
                 for corner in ["min", "max"] {
                     assert_eq!(
-                        section["frame"][corner][1], reference["frame"][corner][1],
+                        section["rect"][corner][1], reference["rect"][corner][1],
                         "{}",
                         section["name"]
                     );
@@ -111,12 +111,11 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
         assert!(inside(&state, "Sum · 4 in", &master["source"]));
 
         // Up to two send rows; more collapse into "+N more". Pre-fader sends
-        // carry a PRE badge, levels read in dB.
+        // carry a PRE mark before their level in dB.
         let rows = channels[0]["send_rows"].as_array().unwrap();
         assert_eq!(rows.len(), 1);
         assert!(inside(&state, "Room", &rows[0]));
-        assert!(inside(&state, "PRE", &rows[0]));
-        assert!(inside(&state, "−6.0", &rows[0]));
+        assert!(inside(&state, "PRE −6.0", &rows[0]));
         assert!(inside(&state, "+2 more", &channels[0]["sends"]));
         let quiet_rows = channels[1]["send_rows"].as_array().unwrap();
         assert_eq!(quiet_rows.len(), 1);
@@ -156,7 +155,7 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
         assert_eq!(setup["project"], original["project"]);
         app.key("Escape");
 
-        // An empty chain's dashed slot opens the effect library for its channel.
+        // An empty chain's "+ Insert" row opens the effect library for its channel.
         let mixer = app.inspect();
         let library = click(&mut app, &mixer["mixer"]["channels"][1]["insert_summary"]);
         assert_eq!(library["popups"]["library"], true);
