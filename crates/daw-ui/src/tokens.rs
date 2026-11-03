@@ -73,10 +73,10 @@ pub const FORM_FIELD_WIDTH: f32 = SEARCH_CHOICE_WIDTH;
 pub const POPUP_WIDTH_SM: f32 = 377.0;
 pub const POPUP_WIDTH_MD: f32 = 610.0;
 pub const POPUP_WIDTH_LG: f32 = 987.0;
-pub const MIXER_STRIP_WIDTH: f32 = 180.0;
+pub const MIXER_STRIP_WIDTH: f32 = 144.0;
 /// Caption gutter beside a vertical fader for its dB scale.
 pub const MIXER_SCALE_GUTTER: f32 = SPACE_XL;
-pub const MIXER_FADER_MIN: f32 = 120.0;
+pub const MIXER_FADER_MIN: f32 = 144.0;
 /// A stereo meter beside the fader: two bars and their gap.
 pub const MIXER_METER_WIDTH: f32 = SPACE_MD;
 pub const PIANO_KEYS_WIDTH: f32 = SPACE_XL + SPACE_LG + SPACE_XS;

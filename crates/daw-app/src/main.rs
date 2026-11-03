@@ -138,15 +138,7 @@ fn main() -> anyhow::Result<()> {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_app_id(daw_ui::APP_ID)
             .with_icon(daw_ui::app_icon())
-            .with_inner_size(
-                std::env::var("RILL_TMP_SIZE")
-                    .ok()
-                    .and_then(|v| {
-                        let (w, h) = v.split_once('x')?;
-                        Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?])
-                    })
-                    .unwrap_or([1480.0, 960.0]),
-            )
+            .with_inner_size([1480.0, 960.0])
             .with_min_inner_size([1100.0, 720.0]),
         vsync: true,
         ..Default::default()

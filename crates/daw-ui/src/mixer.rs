@@ -2,7 +2,7 @@
 use egui::{Color32, FontId, Pos2, Rect, Response, Sense, Ui, Vec2};
 
 /// Channel card width: 8 pt margins leave 128 pt for the strip's controls.
-pub const MIXER_CHANNEL_WIDTH: f32 = 144.0;
+pub const MIXER_CHANNEL_WIDTH: f32 = crate::tokens::MIXER_STRIP_WIDTH;
 pub const MIXER_CHANNEL_MARGIN: f32 = crate::tokens::SPACE_SM;
 pub const MIXER_CONTENT_WIDTH: f32 = MIXER_CHANNEL_WIDTH - 2.0 * MIXER_CHANNEL_MARGIN;
 /// Space between rows of one section, and between sections. Sections are
