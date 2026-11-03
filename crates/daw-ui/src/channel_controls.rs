@@ -75,6 +75,10 @@ pub fn channel_gain_number(db: &mut f32) -> impl egui::Widget + '_ {
                 .custom_formatter(move |value, _| {
                     if focused {
                         (value as f32).to_string()
+                    } else if value == -60.0 {
+                        // The editing floor is silence (gain 0), as on the
+                        // fader scale; quieter stored gains keep their number.
+                        "−∞".to_owned()
                     } else {
                         format!("{value:.1}")
                     }
@@ -88,7 +92,11 @@ pub fn channel_gain_number(db: &mut f32) -> impl egui::Widget + '_ {
                     // Native numeric fields parse again on blur. Rejecting the
                     // untouched initial text avoids treating viewing as a user
                     // edit, which would otherwise clamp an out-of-range gain.
-                    (text != initial).then(|| text.parse().ok()).flatten()
+                    let value = match text.to_lowercase().as_str() {
+                        "-∞" | "∞" | "-inf" | "inf" => Some(-60.0),
+                        number => number.parse().ok(),
+                    };
+                    (text != initial).then_some(value).flatten()
                 }),
         );
         // TextEdit marks draft changes too. The app should only create an Undo

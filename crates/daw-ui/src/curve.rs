@@ -1,7 +1,7 @@
 //! Data-independent breakpoint editor. The owner applies edits, owns undo, and
 //! supplies evaluation so the displayed curve matches its processing model.
 
-use crate::{TimelineBounds, TimelineNavigation, TimelinePane, TimelineViewport, theme};
+use crate::{TimelineBounds, TimelineNavigation, TimelinePane, TimelineViewport, theme, tokens};
 use egui::{Align2, FontId, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -71,6 +71,14 @@ pub struct CurveTimeline {
     pub fit: bool,
     /// Route view shortcuts here when this is the foreground editor.
     pub keyboard_active: bool,
+    /// Value-axis label for a normalized value, in the parameter's own units
+    /// (for example "L 100" for pan or "−6 dB" for gain).
+    pub value_label: fn(f32) -> String,
+}
+
+/// The default value-axis label: the normalized value as a percentage.
+pub fn percent_value_label(value: f32) -> String {
+    format!("{:.0}%", value * 100.0)
 }
 
 /// Paint a normalized curve in a caller-owned rectangle without allocating UI
@@ -95,6 +103,32 @@ pub fn paint_curve(
         path.push(position);
     }
     painter.add(egui::Shape::line(path, Stroke::new(1.8_f32, color)));
+}
+
+/// A quiet area under the curve, so the shape reads at a glance.
+fn paint_curve_fill(
+    painter: &egui::Painter,
+    rect: Rect,
+    start: f64,
+    end: f64,
+    color: egui::Color32,
+    evaluate: impl Fn(f64) -> f32,
+) {
+    let samples = (rect.width().ceil() as usize).clamp(2, 2048);
+    let mut mesh = egui::Mesh::default();
+    for sample in 0..=samples {
+        let fraction = sample as f64 / samples as f64;
+        let value = evaluate(start + fraction * (end - start)).clamp(0.0, 1.0);
+        let x = rect.left() + fraction as f32 * rect.width();
+        mesh.colored_vertex(Pos2::new(x, rect.bottom() - value * rect.height()), color);
+        mesh.colored_vertex(Pos2::new(x, rect.bottom()), color);
+    }
+    for index in 0..samples as u32 {
+        let a = index * 2;
+        mesh.add_triangle(a, a + 1, a + 2);
+        mesh.add_triangle(a + 1, a + 3, a + 2);
+    }
+    painter.add(egui::Shape::mesh(mesh));
 }
 
 pub fn curve_editor(
@@ -257,6 +291,14 @@ fn curve_editor_inner(
     let mut start = view.start.max(0.0);
     let mut end = view.end.max(start + 0.01);
     let musical = timeline.is_some();
+    let value_label = timeline
+        .as_ref()
+        .map_or(percent_value_label as fn(f32) -> String, |(_, timeline)| {
+            timeline.value_label
+        });
+    let grid_meter = timeline
+        .as_ref()
+        .map(|(_, timeline)| timeline.beats_per_bar);
     let top_inset = crate::tokens::SPACE_MD
         + if musical {
             crate::tokens::TIMELINE_RULER_HEIGHT
@@ -324,7 +366,12 @@ fn curve_editor_inner(
     let plot = Rect::from_min_max(
         rect.min
             + Vec2::new(
-                crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_MD,
+                // Unit labels such as "+3.5 dB" need a wider axis than percentages.
+                if musical {
+                    crate::tokens::SPACE_XL * 2.0
+                } else {
+                    crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_MD
+                },
                 top_inset,
             ),
         rect.max - Vec2::new(crate::tokens::SPACE_MD, bottom_inset),
@@ -414,14 +461,18 @@ fn curve_editor_inner(
         painter.text(
             Pos2::new(plot.left() - 6.0, y),
             Align2::RIGHT_CENTER,
-            format!("{}%", index * 100 / tick_intervals),
+            value_label(value),
             tick_font.clone(),
             theme::palette(ui.ctx()).muted,
         );
     }
+    if let (Some(viewport), Some(beats_per_bar)) = (viewport, grid_meter) {
+        // Bars, beats and snap steps use the same grid as the clip editors.
+        crate::paint_beat_grid(&painter, plot, viewport, view.snap, beats_per_bar);
+    }
     let tick = ((end - start) / 12.0).ceil().max(1.0);
     let mut x = (start / tick).ceil() * tick;
-    while x <= end {
+    while !musical && x <= end {
         let position = plot.left() + ((x - start) / (end - start)) as f32 * plot.width();
         painter.line_segment(
             [
@@ -440,6 +491,16 @@ fn curve_editor_inner(
             );
         }
         x += tick;
+    }
+    if override_value.is_none() {
+        paint_curve_fill(
+            &painter,
+            plot,
+            start,
+            end,
+            theme::palette(ui.ctx()).automation.gamma_multiply(0.10),
+            &evaluate,
+        );
     }
     paint_curve(
         &painter,
@@ -494,7 +555,7 @@ fn curve_editor_inner(
         let b_screen = to_screen(b);
         // Dense breakpoints still have precise footer controls; do not put a
         // second hit target on top of either endpoint.
-        if (b_screen.x - a_screen.x).abs() < 40.0 {
+        if (b_screen.x - a_screen.x).abs() < 2.0 * tokens::HIT_TARGET {
             continue;
         }
         let position = to_screen(CurvePoint {
@@ -502,7 +563,7 @@ fn curve_editor_inner(
             x: midpoint,
             value: evaluate(midpoint),
         });
-        let handle = Rect::from_center_size(position, Vec2::splat(18.0));
+        let handle = Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET));
         let handle_response =
             ui.interact(handle, id.with(("segment", a.id)), Sense::click_and_drag());
         handle_response.widget_info(|| {
@@ -579,7 +640,7 @@ fn curve_editor_inner(
         }
         let position = to_screen(point);
         let point_response = ui.interact(
-            Rect::from_center_size(position, Vec2::splat(18.0)),
+            Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET)),
             id.with(point.id),
             Sense::click_and_drag(),
         );

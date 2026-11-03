@@ -199,9 +199,9 @@ fn compact_curve_keeps_readable_percentages_and_mouse_access_to_point_inspectors
             .unwrap()
             .iter()
             .filter(|text| {
-                ["0%", "25%", "50%", "75%", "100%"]
-                    .iter()
-                    .any(|tick| text["text"] == *tick)
+                // Gain reads in decibels down to silence.
+                let label = text["text"].as_str().unwrap_or_default();
+                (label.ends_with(" dB") || label == "−∞")
                     && text["rect"]["max"][0].as_f64().unwrap() < left
                     && text["rect"]["min"][1].as_f64().unwrap() >= top - 21.0
                     && text["rect"]["max"][1].as_f64().unwrap() <= bottom + 21.0
@@ -213,8 +213,8 @@ fn compact_curve_keeps_readable_percentages_and_mouse_access_to_point_inspectors
                 .unwrap()
                 .total_cmp(&b["rect"]["min"][1].as_f64().unwrap())
         });
-        assert_eq!(ticks.first().unwrap()["text"], "100%");
-        assert_eq!(ticks.last().unwrap()["text"], "0%");
+        assert_eq!(ticks.first().unwrap()["text"], "+3.5 dB");
+        assert_eq!(ticks.last().unwrap()["text"], "−∞");
         for pair in ticks.windows(2) {
             assert!(
                 pair[1]["rect"]["min"][1].as_f64().unwrap()

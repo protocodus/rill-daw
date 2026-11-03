@@ -100,6 +100,7 @@ pub struct Knob<'a> {
     show_automation_label: bool,
     compact: bool,
     perceptual_gain: bool,
+    pointer: bool,
     display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
 }
 
@@ -130,6 +131,7 @@ impl<'a> Knob<'a> {
             show_automation_label: true,
             compact: false,
             perceptual_gain: false,
+            pointer: false,
             display_round_trip: None,
         }
     }
@@ -180,12 +182,18 @@ impl<'a> Knob<'a> {
             84.0
         }
     }
-    /// An audio gain taper with continuous silence, useful travel below unity,
-    /// and the caller's unchanged linear gain range and stored values.
+    /// The shared console taper (`gain_taper`, as on the mixer fader) over the
+    /// caller's unchanged linear gain range and stored values.
     /// Detailed dials paint a unity landmark when 1.0 lies inside the range.
     pub fn perceptual_gain(mut self) -> Self {
         self.perceptual_gain =
             *self.range.start() >= 0.0 && *self.range.end() > *self.range.start();
+        self
+    }
+    /// A compact dial with a filled body and a pointer, so a small ring
+    /// still reads as a control rather than a bare arc.
+    pub fn pointer(mut self) -> Self {
+        self.pointer = true;
         self
     }
     pub fn min_decimals(mut self, decimals: usize) -> Self {
@@ -234,7 +242,7 @@ impl<'a> Knob<'a> {
 
     fn scale_value(&self, value: f64) -> f64 {
         if self.perceptual_gain {
-            (value.max(0.0) / 0.01).ln_1p()
+            f64::from(crate::gain_taper(value as f32))
         } else {
             value
         }
@@ -242,14 +250,19 @@ impl<'a> Knob<'a> {
 
     fn unscale_value(&self, value: f64) -> f64 {
         if self.perceptual_gain {
-            value.exp_m1() * 0.01
+            f64::from(crate::gain_untaper(value as f32))
         } else {
             value
         }
     }
 
     fn adjusted_value(&self, value: f64, fraction: f64) -> f64 {
-        let span = self.scale_value(*self.range.end()) - self.scale_value(*self.range.start());
+        let mut span = self.scale_value(*self.range.end()) - self.scale_value(*self.range.start());
+        if self.perceptual_gain {
+            // Gain dials move at the fader's rate (silence to +3.5 dB per
+            // full gesture), however far above unity their range extends.
+            span = span.min(1.0);
+        }
         self.unscale_value(self.scale_value(value) + fraction * span)
     }
 
@@ -567,6 +580,17 @@ impl<'a> Knob<'a> {
                 let visuals = ui.style().interact(&dial_response);
                 ui.painter()
                     .circle(center, radius * 0.75, visuals.bg_fill, visuals.bg_stroke);
+            } else if self.pointer {
+                // Fill only: the ring itself is the body's edge.
+                ui.painter().circle_filled(
+                    center,
+                    radius - 3.0,
+                    if dial_response.hovered() {
+                        colors.control_hover
+                    } else {
+                        colors.control_fill
+                    },
+                );
             }
             let focused_ring = ring_only && ui.is_enabled() && dial_response.has_focus();
             ui.painter().add(egui::Shape::line(
@@ -575,6 +599,8 @@ impl<'a> Knob<'a> {
                     if focused_ring { 3.0_f32 } else { 2.0_f32 },
                     if focused_ring {
                         colors.text
+                    } else if self.pointer {
+                        colors.line.lerp_to_gamma(colors.muted, 0.5)
                     } else {
                         colors.line
                     },
@@ -602,15 +628,8 @@ impl<'a> Knob<'a> {
             if let Some(unity) = geometry.unity {
                 ui.painter()
                     .circle_stroke(unity, 3.0, Stroke::new(1.5_f32, colors.text));
-                ui.painter().text(
-                    center + egui::vec2(0.0, radius * 0.42),
-                    egui::Align2::CENTER_CENTER,
-                    "1× unity",
-                    egui::FontId::proportional(tokens::FONT_SCALE),
-                    colors.muted,
-                );
             }
-            if !ring_only {
+            if !ring_only || self.pointer {
                 ui.painter().line_segment(
                     [center + index_direction * radius * 0.18, geometry.index],
                     Stroke::new(2.0_f32, colors.text),

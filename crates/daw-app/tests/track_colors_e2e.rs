@@ -122,7 +122,7 @@ fn audio_drops_and_instrument_creation_start_neutral_but_existing_tracks_keep_th
         assigned = assert_new_color(&assigned, &dropped);
     }
 
-    menu(&mut app, "Track", "Add instrument…");
+    menu(&mut app, "Track", "Add instrument track…");
     app.click("Search instruments");
     app.command(json!({"command":"text", "text":"Rill Fixture A"}));
     // Both the query text and disabled creation action appear before scanning

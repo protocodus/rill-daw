@@ -177,9 +177,9 @@ fn clip_properties_workflow(audio: bool) {
         assert!(visible(
             &properties,
             if audio {
-                "Properties of Audio phrase"
+                "Properties · Audio phrase"
             } else {
-                "Properties of MIDI phrase"
+                "Properties · MIDI phrase"
             }
         ));
 
@@ -379,7 +379,7 @@ fn output_and_one_send_stay_visible_without_scrolling_through_notices_and_undo()
 
 fn open_source_send(app: &mut Harness, source: u64) -> Value {
     let state = settled_source(app, source);
-    click_rect(app, &channel(&state, source)["sends"])
+    click_rect(app, &channel(&state, source)["add_send"])
 }
 
 fn assert_bus_choices(state: &Value) {

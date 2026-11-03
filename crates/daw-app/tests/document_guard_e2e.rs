@@ -54,21 +54,30 @@ fn cmd(app: &mut Harness, key: &str) -> Value {
     app.command(json!({"command":"key", "key":key, "cmd":true}))
 }
 
-fn full_title_size(title: &str, density: f32) -> egui::Vec2 {
+/// The menu bar paints the project name as a label followed by a muted
+/// " · duration" note in one row.
+fn full_title_size(title: &str, duration: &str, density: f32) -> egui::Vec2 {
     let ctx = egui::Context::default();
     daw_ui::theme::apply(&ctx);
     ctx.set_pixels_per_point(density);
     let mut size = egui::Vec2::ZERO;
     let _ = ctx.run(egui::RawInput::default(), |ctx| {
-        size = ctx.fonts_mut(|fonts| {
-            fonts
-                .layout_no_wrap(
-                    title.to_owned(),
-                    daw_ui::text::TextRole::Note.font(),
-                    egui::Color32::WHITE,
-                )
-                .size()
-        });
+        let mut job = egui::text::LayoutJob::default();
+        job.append(
+            title,
+            0.0,
+            egui::TextFormat::simple(daw_ui::text::TextRole::Label.font(), egui::Color32::WHITE),
+        );
+        job.append(
+            &format!(" · {duration}"),
+            0.0,
+            egui::TextFormat {
+                font_id: daw_ui::text::TextRole::Note.font(),
+                valign: egui::Align::Center,
+                ..Default::default()
+            },
+        );
+        size = ctx.fonts_mut(|fonts| fonts.layout_job(job).size());
     });
     size
 }
@@ -87,10 +96,10 @@ fn new_confirmation_is_bounded_blocks_background_edits_and_cancel_restores_conte
                 .as_array()
                 .unwrap()
                 .iter()
-                .find(|rect| rect["text"] == "Untitled session")
+                .find(|rect| rect["text"] == "Untitled session · 0:00")
                 .unwrap();
             let rect = &title["rect"];
-            let expected = full_title_size("Untitled session", scale as f32);
+            let expected = full_title_size("Untitled session", "0:00", scale as f32);
             let width = rect["max"][0].as_f64().unwrap() - rect["min"][0].as_f64().unwrap();
             let height = rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
             assert!(
@@ -226,6 +235,8 @@ fn failed_save_keeps_the_document_and_can_be_cancelled_or_retried() {
     assert_eq!(failed["modified"], true);
     assert!(invalid.is_dir());
     assert!(has(&failed, "Cancel"));
+    // The error block and its Details action lay out a frame after the error.
+    common::wait_visible(&mut app, "Details");
     let details = app.click("Details");
     assert_eq!(details["error_details"]["title"], "Project error");
     assert!(

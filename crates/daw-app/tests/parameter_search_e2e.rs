@@ -316,7 +316,7 @@ fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_t
 
     // Returning to the same source channel and a different instance must not
     // reuse the first insert's metadata values, even though its VST class matches.
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Effects");
     app.command(json!({"command":"click","label":"Automate…","occurrence":1}));
@@ -349,7 +349,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     let created = app.key("Enter");
     assert_lane(lanes(&created)[0], track, None, 7, 0.73);
 
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Automation");
     app.click("Volume");
@@ -360,7 +360,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     assert_eq!(lanes(&created).len(), 2);
     assert_lane(lanes(&created)[1], track, Some(effects[0]), 7, 0.21);
 
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Automation");
     app.click("Volume");
@@ -371,7 +371,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     assert_eq!(lanes(&created).len(), 3);
     assert_lane(lanes(&created)[2], track, Some(effects[1]), 7, 0.82);
     let id = lanes(&created)[2]["id"].clone();
-    menu(&mut app, "Arrangement");
+    menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Automation");
     app.click("Volume");
@@ -533,7 +533,7 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     app.click("Automate…");
     ready(&mut app);
     let initial = query(&mut app, "Filter Cutoff");
-    assert!(visible(&initial, "Normalized value"));
+    assert!(visible(&initial, "Value"));
     assert!(visible(&initial, "Plug-in unit · Hz"));
     assert!(visible(&initial, "0 %") && visible(&initial, "100 %"));
     assert_eq!(
@@ -701,7 +701,7 @@ fn stepped_knob_quantizes_edits_only_and_read_only_parameters_cannot_be_edited()
     let read_only = query(&mut app, "Output Meter");
     assert!(read_only["native_editor"]["selected"].is_null());
     assert!(read_only["native_editor"]["parameter_control"].is_null());
-    assert!(!visible(&read_only, "Normalized value"));
+    assert!(!visible(&read_only, "Value"));
     assert_eq!(read_only["project"], project);
     assert_eq!(read_only["history"], history);
     app.quit();

@@ -86,7 +86,7 @@ fn scroll_properties(app: &mut Harness, delta: f64) -> Value {
 }
 
 fn select_track(app: &mut Harness, name: &str) {
-    let arrangement = window(app, "Arrangement");
+    let arrangement = window(app, "Arranger");
     if name == "Track folder" {
         // The folder header toggles collapse; its empty timeline row only selects.
         let y = center(rect(&arrangement, "Track folder")).1;
@@ -105,7 +105,7 @@ fn undo(app: &mut Harness, redo: bool) -> Value {
 }
 
 fn selected_clip(app: &mut Harness, id: u64) -> Value {
-    window(app, "Arrangement");
+    window(app, "Arranger");
     app.key("Q");
     let state = app.click("Fit");
     let clip = state["timeline"]["clips"]

@@ -708,7 +708,7 @@ fn mixer_card_padding_and_parent_gutters_survive_display_scaling() {
                         let strip = controls::mixer_strip(
                             ui,
                             selected,
-                            egui::vec2(180.0, 400.0),
+                            egui::vec2(controls::MIXER_CHANNEL_WIDTH, 400.0),
                             None,
                             selected,
                             |ui| controls::button(ui, "Effects").rect,
@@ -716,17 +716,20 @@ fn mixer_card_padding_and_parent_gutters_survive_display_scaling() {
                         let tolerance = 1.0 / density;
                         assert!(
                             strip.inner.left() - strip.response.rect.left()
-                                >= controls::tokens::SPACE_MD - tolerance
+                                >= controls::MIXER_CHANNEL_MARGIN - tolerance
                         );
                         assert!(
                             strip.inner.top() - strip.response.rect.top()
-                                >= controls::tokens::SPACE_MD - tolerance
+                                >= controls::MIXER_CHANNEL_MARGIN - tolerance
                         );
                         assert!(
                             strip.response.rect.right() - strip.inner.right()
-                                >= controls::tokens::SPACE_MD - tolerance
+                                >= controls::MIXER_CHANNEL_MARGIN - tolerance
                         );
-                        assert!((strip.response.rect.width() - 180.0).abs() <= tolerance);
+                        assert!(
+                            (strip.response.rect.width() - controls::MIXER_CHANNEL_WIDTH).abs()
+                                <= tolerance
+                        );
                         if let Some(previous) = previous {
                             assert!(
                                 (strip.response.rect.left()
@@ -787,14 +790,18 @@ fn take_lane_labels_keep_clearance_from_the_waveform_at_display_scales() {
                 }
             })
             .collect();
-        labels.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        // Name and detail share one identity line: name left, detail right.
+        labels.sort_by(|a, b| a.left().total_cmp(&b.left()));
         assert_eq!(labels.len(), 2);
         let tolerance = 1.0 / density;
         assert!(labels[0].left() - card.left() >= controls::tokens::SPACE_MD - tolerance);
-        assert!(labels[1].top() - labels[0].bottom() >= controls::tokens::SPACE_XS - tolerance);
-        assert!(plot.top() - labels[1].bottom() >= controls::tokens::SPACE_XS - tolerance);
-        assert!(plot.height() >= controls::tokens::SPACE_LG - tolerance);
-        assert!(card.bottom() - plot.bottom() >= controls::tokens::SPACE_SM - tolerance);
+        assert!(labels[1].left() - labels[0].right() >= controls::tokens::SPACE_SM - tolerance);
+        assert!(card.right() - labels[1].right() >= controls::tokens::SPACE_MD - tolerance);
+        assert!((labels[0].center().y - labels[1].center().y).abs() <= 1.0);
+        let identity_bottom = labels[0].bottom().max(labels[1].bottom());
+        assert!(plot.top() - identity_bottom >= controls::tokens::SPACE_XS - tolerance);
+        assert!(plot.height() >= controls::tokens::SPACE_XL - tolerance);
+        assert!(card.bottom() - plot.bottom() >= controls::tokens::SPACE_MD - tolerance);
         assert!((card.height() - 89.0).abs() <= tolerance);
     }
 }

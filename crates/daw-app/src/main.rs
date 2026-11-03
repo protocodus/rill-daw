@@ -153,32 +153,10 @@ fn main() -> anyhow::Result<()> {
                 app.assistant.start_mcp_stdio(mcp_profile);
             }
             app.project_path = project_path;
-            match view.as_deref() {
-                Some("assistant") => app.open_global_assistant(),
-                Some("setup") => {
-                    app.open_popup(app::PopupKind::Setup);
-                }
-                Some("mixer") => app.view = app::WorkspaceView::Mixer,
-                Some("channel") => {
-                    if let Some(track) = app.selected_track {
-                        app.open_channel(track);
-                    }
-                }
-                Some("clip") => app.view = app::WorkspaceView::Clip,
-                Some("library") => app.open_popup(app::PopupKind::Library),
-                Some("automation") => app.open_popup(app::PopupKind::Automation),
-                Some("crossfade") => app.open_popup(app::PopupKind::Crossfade),
-                Some("join") => app.open_popup(app::PopupKind::Join),
-                Some("routing") => app.open_popup(app::PopupKind::Routing),
-                Some("properties") => app.open_popup(app::PopupKind::Inspector),
-                Some("unsaved-changes") if app.screenshot.is_some() => {
-                    app.modified = true;
-                    app.history.mark_unsaved();
-                    app.request_document_transition(document_ui::DocumentTransition::New);
-                }
-                Some("instrument") => app.open_popup(app::PopupKind::Instrument),
-                Some("rack" | "effects") => app.open_popup(app::PopupKind::Effects),
-                _ => {}
+            if app.screenshot.is_some() {
+                app.screenshot_view = view;
+            } else if let Some(view) = view {
+                app.open_screenshot_view(&view);
             }
             Ok(Box::new(app))
         }),

@@ -119,7 +119,7 @@ fn explicit_add_instrument_keeps_an_intentionally_empty_track() {
     let empty = menu(&mut app, "Track", "Add MIDI track");
     let original = tracks(&empty)[0].clone();
     app.key("Escape");
-    menu(&mut app, "Track", "Add instrument…");
+    menu(&mut app, "Track", "Add instrument track…");
     common::wait_library_device(&mut app, "Rill Fixture A");
     assert!(visible(&app.inspect(), "Create a new MIDI track"));
     let added = app.click("Add instrument track");

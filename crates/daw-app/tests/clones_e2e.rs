@@ -42,7 +42,7 @@ fn pointer(app: &mut Harness, phase: &str, from: (f64, f64), to: Option<(f64, f6
     app.command(command)
 }
 fn arrangement(app: &mut Harness) -> Value {
-    menu(app, "Window", "Arrangement");
+    menu(app, "Window", "Arranger");
     app.key("Q");
     app.click("Fit")
 }

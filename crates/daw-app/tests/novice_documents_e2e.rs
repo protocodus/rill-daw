@@ -14,12 +14,18 @@ fn picker(app: &mut Harness, kind: &str, path: Option<&Path>) {
     app.command(json!({"command":"file_dialog", "kind":kind, "path":path}));
 }
 
+/// The menu bar paints the title followed by " · duration".
 fn has(state: &Value, label: &str) -> bool {
     state["visible_labels"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|text| text == label)
+        .any(|text| {
+            text == label
+                || text
+                    .as_str()
+                    .is_some_and(|text| text.starts_with(&format!("{label} · ")))
+        })
 }
 
 fn finished(app: &mut Harness) -> Value {

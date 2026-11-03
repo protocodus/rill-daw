@@ -143,7 +143,7 @@ fn quantize_rows_keep_controls_centered_when_wrapping_and_editing_values() {
     app.command(json!({"command":"key", "key":"A", "cmd":true}));
     let original = app.inspect();
     app.click("Notes");
-    app.click("Quantize...");
+    app.click("Quantize…");
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         app.command(json!({"command":"system_theme", "dark":dark}));
         for width in [1440.0, 800.0] {

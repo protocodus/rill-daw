@@ -31,26 +31,15 @@ impl TimelineViewAction {
 }
 
 /// Keep ordinary zoom and selection framing visible without opening a menu.
-/// The family wraps as one unit and never changes width with the selection.
-/// Actions only describe presentation changes; the caller owns the viewport.
+/// Four quiet, same-sized controls wrap as one unit and never change width
+/// with the selection. Actions only describe presentation changes; the caller
+/// owns the viewport.
 pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> TimelineViewAction {
     let square = crate::tokens::CONTROL_HEIGHT;
-    let text_width = |label: &str| {
-        ui.painter()
-            .layout_no_wrap(
-                label.into(),
-                egui::TextStyle::Button.resolve(ui.style()),
-                ui.visuals().text_color(),
-            )
-            .size()
-            .x
-    };
-    let fit_width =
-        text_width("Fit") + 18.0 + crate::tokens::SPACE_XS + 2.0 * ui.spacing().button_padding.x;
-    let selection_width = text_width("Fit selection") + 2.0 * ui.spacing().button_padding.x;
-    let width =
-        square * 2.0 + fit_width.ceil() + selection_width.ceil() + 3.0 * crate::tokens::SPACE_XS;
-    crate::tool_group(ui, width, |ui| {
+    let width = square * 4.0 + 3.0 * crate::tokens::SPACE_XS;
+    crate::toolbar_group_sized_with_spacing(ui, width, crate::tokens::SPACE_XS, |ui| {
+        // Square targets: an 18-point glyph plus 8 points of padding each side.
+        ui.spacing_mut().button_padding.x = crate::tokens::SPACE_SM;
         let mut action = TimelineViewAction::None;
         for (symbol, label, hint, value) in [
             (
@@ -68,8 +57,8 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
         ] {
             let button = ui
                 .add_sized(
-                    egui::vec2(square, crate::tokens::CONTROL_HEIGHT),
-                    crate::button_widget(symbol).presentation(),
+                    egui::vec2(square, square),
+                    crate::button_widget(symbol).presentation().quiet(),
                 )
                 .on_hover_text(hint);
             button.widget_info(|| {
@@ -79,14 +68,28 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
                 action = value;
             }
         }
-        if crate::timeline_fit_button(ui).clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(square, square),
+                crate::IconButton::icon_only(crate::Icon::Fit, "Fit")
+                    .presentation()
+                    .quiet(),
+            )
+            .on_hover_text("Fit all content on both axes · F")
+            .clicked()
+        {
             action = TimelineViewAction::FitAll;
         }
         if ui
-            .add_enabled(
-                selection_available,
-                crate::button_widget("Fit selection").presentation(),
-            )
+            .add_enabled_ui(selection_available, |ui| {
+                ui.add_sized(
+                    egui::vec2(square, square),
+                    crate::IconButton::icon_only(crate::Icon::FitSelection, "Fit selection")
+                        .presentation()
+                        .quiet(),
+                )
+            })
+            .inner
             .on_hover_text(if selection_available {
                 "Fit the selected clips, notes or time range. Return with View → Previous view."
             } else {
@@ -99,6 +102,123 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
         action
     })
     .inner
+}
+
+/// Reserve a toolbar group at the width its contents took on the previous
+/// frame, so a wrapping row moves the complete group without hand-measured widths.
+pub fn measured_toolbar_group<R>(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    spacing: f32,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<R> {
+    let id = ui.id().with(("measured_toolbar_group", id_salt));
+    let width = ui
+        .ctx()
+        .data(|data| data.get_temp::<f32>(id))
+        .unwrap_or_default();
+    let group = crate::toolbar_group_sized_with_spacing(ui, width, spacing, |ui| {
+        unbounded(ui);
+        contents(ui)
+    });
+    let measured = group.response.rect.width();
+    if measured != width {
+        ui.ctx().data_mut(|data| data.insert_temp(id, measured));
+        ui.ctx().request_discard("toolbar group width changed");
+    }
+    group
+}
+
+/// The reservation only decides wrapping. Contents measure at their natural
+/// width, so a label that grows is never truncated to last frame's width.
+fn unbounded(ui: &mut Ui) {
+    ui.set_max_width(ui.ctx().content_rect().width());
+}
+
+/// `measured_toolbar_group` for a shared `command_group` surface.
+pub fn measured_command_group<R>(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<R> {
+    let id = ui.id().with(("measured_command_group", id_salt));
+    let width = ui
+        .ctx()
+        .data(|data| data.get_temp::<f32>(id))
+        .unwrap_or_default();
+    let group = crate::command_group(ui, width, |ui| {
+        unbounded(ui);
+        contents(ui)
+    });
+    let measured = group.response.rect.width();
+    if measured != width {
+        ui.ctx().data_mut(|data| data.insert_temp(id, measured));
+        ui.ctx().request_discard("command group width changed");
+    }
+    group
+}
+
+/// Transport position: "1.1.1" over a muted clock, at a width reserved for
+/// the longest common values so playback never shifts neighbouring controls.
+pub fn transport_position(
+    ui: &mut Ui,
+    beat: f64,
+    beats_per_bar: u8,
+    seconds: f64,
+) -> egui::Response {
+    let colors = crate::theme::palette(ui.ctx());
+    let position = egui::FontId::proportional(crate::tokens::FONT_SUBTITLE);
+    let clock = egui::FontId::proportional(crate::tokens::FONT_CAPTION);
+    let measure = |text: &str, font: &egui::FontId| {
+        ui.painter()
+            .layout_no_wrap(text.into(), font.clone(), colors.text)
+            .size()
+            .x
+            .ceil()
+    };
+    let position_width = measure("188.8.8", &position);
+    let clock_width = measure("18:88.88", &clock);
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_SM;
+        let slot = |ui: &mut Ui, width: f32, text: String, font: egui::FontId, color| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(width, crate::tokens::CONTROL_HEIGHT),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.set_min_width(width);
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(text).font(font).color(color))
+                            .selectable(false),
+                    )
+                },
+            )
+            .inner
+        };
+        let bar_beat = slot(
+            ui,
+            position_width,
+            crate::musical_position_label(beat, beats_per_bar),
+            position,
+            colors.text,
+        );
+        // Always two decimals: a trimmed "0:01.5" would change width mid-play.
+        let hundredths = (seconds.max(0.0) * 100.0).round() as u64;
+        slot(
+            ui,
+            clock_width,
+            format!(
+                "{}:{:02}.{:02}",
+                hundredths / 6000,
+                hundredths / 100 % 60,
+                hundredths % 100
+            ),
+            clock,
+            colors.muted,
+        );
+        bar_beat
+    })
+    .inner
+    .on_hover_text("Playhead · bar.beat.sixteenth and elapsed time")
 }
 
 #[derive(Clone, Default)]

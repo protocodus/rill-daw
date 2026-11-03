@@ -477,64 +477,6 @@ pub fn workspace_header_with_context<R>(
     }
 }
 
-/// A channel name action that keeps the arranger's exact track color. Text
-/// contrast follows the user-chosen color rather than the application theme.
-pub fn mixer_channel_button(ui: &mut Ui, name: &str, width: f32, color: egui::Color32) -> Response {
-    let foreground = theme::contrast_text(color);
-    let response = ui.add_sized(
-        egui::vec2(width, tokens::CONTROL_HEIGHT),
-        egui::Button::new(
-            crate::text::TextRole::Label
-                .rich(ui.ctx(), name)
-                .color(foreground),
-        )
-        .fill(color)
-        .corner_radius(tokens::RADIUS)
-        .truncate(),
-    );
-    // A fixed identity fill needs its own hover/focus cue without changing hue.
-    if response.hovered() || response.has_focus() {
-        ui.painter().rect_stroke(
-            response.rect,
-            tokens::RADIUS,
-            egui::Stroke::new(
-                if response.has_focus() {
-                    2.0_f32
-                } else {
-                    1.0_f32
-                },
-                foreground.gamma_multiply(0.65),
-            ),
-            egui::StrokeKind::Inside,
-        );
-    }
-    response
-}
-
-/// Bus headers retain native button input and a distinct, reserved BUS badge.
-/// The name truncates before the badge instead of painting beneath it.
-pub fn mixer_bus_button(ui: &mut Ui, name: &str, width: f32, tint: egui::Color32) -> Response {
-    let fill = crate::bus_header_fill(ui.ctx(), tint);
-    let foreground = theme::contrast_text(fill);
-    let badge_id = egui::Id::new("mixer_bus_badge");
-    let mut atoms = egui::Atoms::new(
-        crate::text::TextRole::Label
-            .rich(ui.ctx(), name)
-            .color(foreground),
-    );
-    atoms.push_right(egui::Atom::custom(badge_id, egui::vec2(40.0, 18.0)));
-    let button = egui::Button::new(atoms)
-        .min_size(egui::vec2(width, tokens::CONTROL_HEIGHT))
-        .fill(fill)
-        .corner_radius(tokens::RADIUS)
-        .truncate()
-        .atom_ui(ui);
-    if let Some(rect) = button.rect(badge_id) {
-        crate::paint_bus_badge(ui.painter(), rect, tint);
-    }
-    button.response
-}
-
 /// A uniform mixer channel with a quiet wash of its arranger track color.
 /// Size includes the internal margins; all channels can share the viewport
 /// height while their controls remain stacked. Uncolored channels stay neutral.
@@ -567,14 +509,11 @@ pub fn mixer_strip<R>(
         let frame = egui::Frame::new()
             .fill(fill)
             .corner_radius(tokens::RADIUS)
-            .inner_margin(egui::Margin::symmetric(
-                tokens::SPACE_MD as i8,
-                tokens::SPACE_MD as i8,
-            ));
+            .inner_margin(egui::Margin::same(crate::MIXER_CHANNEL_MARGIN as i8));
         let content = |ui: &mut Ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.set_width((size.x - 2.0 * tokens::SPACE_MD).max(0.0));
-                ui.set_height((size.y - 2.0 * tokens::SPACE_MD).max(0.0));
+                ui.set_width((size.x - 2.0 * crate::MIXER_CHANNEL_MARGIN).max(0.0));
+                ui.set_height((size.y - 2.0 * crate::MIXER_CHANNEL_MARGIN).max(0.0));
                 contents(ui)
             })
             .inner
@@ -585,6 +524,7 @@ pub fn mixer_strip<R>(
             frame.show(ui, content)
         };
         let rect = result.response.rect;
+        // Fill-only card; only the selected strip gains an outline.
         if selected {
             crate::paint_selection_glow(
                 ui.painter(),
@@ -592,21 +532,11 @@ pub fn mixer_strip<R>(
                 tokens::RADIUS,
                 color.unwrap_or(colors.accent),
             );
-        }
-        ui.painter().rect_stroke(
-            rect,
-            tokens::RADIUS,
-            egui::Stroke::new(1.0_f32, if selected { colors.accent } else { colors.line }),
-            egui::StrokeKind::Inside,
-        );
-        if let Some(color) = color {
-            ui.painter().rect_filled(
-                egui::Rect::from_min_size(
-                    rect.min + egui::vec2(tokens::RADIUS as f32, 0.0),
-                    egui::vec2(rect.width() - 2.0 * tokens::RADIUS as f32, 3.0),
-                ),
-                0.0,
-                color,
+            ui.painter().rect_stroke(
+                egui::emath::GuiRounding::round_to_pixels(rect, ui.painter().pixels_per_point()),
+                tokens::RADIUS,
+                egui::Stroke::new(1.0 / ui.ctx().pixels_per_point(), colors.accent),
+                egui::StrokeKind::Inside,
             );
         }
         result.inner

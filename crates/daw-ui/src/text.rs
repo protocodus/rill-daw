@@ -203,3 +203,17 @@ pub fn label(ui: &mut Ui, value: impl Into<String>) -> Response {
 pub fn note(ui: &mut Ui, value: impl Into<String>) -> Response {
     block(ui, TextRole::Note, value)
 }
+
+/// A sentence-case section heading inside a popup or panel. It separates
+/// groups of controls; use `label` for the caption of one row.
+pub fn section_heading(ui: &mut Ui, value: impl Into<String>) -> Response {
+    ui.add_space(tokens::SPACE_XS);
+    let response = block(ui, TextRole::Subtitle, value);
+    ui.add_space(tokens::SPACE_XS);
+    response
+}
+
+/// "1 plug-in", "3 plug-ins": one place for counted nouns.
+pub fn count(count: usize, singular: &str, plural: &str) -> String {
+    format!("{count} {}", if count == 1 { singular } else { plural })
+}

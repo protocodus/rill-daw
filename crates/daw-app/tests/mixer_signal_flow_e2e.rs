@@ -86,20 +86,22 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
                     "Signal stages {pair:?} overlap or run backwards: {channel}"
                 );
             }
-            for processing in [
-                "effects",
-                "insert_summary",
-                "gain",
-                "fader",
-                "pan",
-                "mute",
-                "solo",
-            ] {
+            for processing in ["effects", "insert_summary", "pan", "mute", "solo"] {
                 assert!(
                     edge(&channel[processing], "max", 1) <= edge(&channel["meter"], "min", 1),
                     "The measured output must follow {processing}"
                 );
             }
+            // The post-fader meter stands beside the fader on its scale; the
+            // gain readout sits directly above the pair.
+            for side in ["min", "max"] {
+                assert_eq!(
+                    edge(&channel["meter"], side, 1),
+                    edge(&channel["fader"], side, 1)
+                );
+            }
+            assert!(edge(&channel["meter"], "min", 0) >= edge(&channel["fader"], "max", 0));
+            assert!(edge(&channel["gain"], "max", 1) <= edge(&channel["meter"], "min", 1));
             assert!(edge(&channel["meter"], "max", 1) <= edge(&channel["target"], "min", 1));
             assert!(edge(&channel["target"], "max", 1) <= edge(&channel["sends"], "min", 1));
             assert!(edge(&channel["sends"], "max", 1) <= 900.0);

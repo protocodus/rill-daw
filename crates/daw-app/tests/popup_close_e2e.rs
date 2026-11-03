@@ -79,7 +79,7 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
             assert_eq!(restored["popups"]["instrument"], false);
             assert_eq!(restored["popups"]["properties"], true);
             app.click(&name);
-            let restored = close(&mut app, &format!("Properties of {name}"));
+            let restored = close(&mut app, &format!("Properties · {name}"));
             assert_eq!(restored["popups"]["properties"], false);
             assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["selected_clip"], editor["selected_clip"]);
@@ -96,7 +96,7 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
 
             let library = window(&mut app, "Library");
             assert_eq!(library["popups"]["library"], true);
-            let restored = close(&mut app, "Device library");
+            let restored = close(&mut app, "Library");
             assert_eq!(restored["popups"]["library"], false);
             assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["project"], edited["project"]);

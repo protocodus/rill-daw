@@ -3,6 +3,13 @@
 use crate::{TimelineViewport, text, theme};
 use egui::{Color32, Painter, Pos2, Rect, Response, Stroke, StrokeKind, Ui};
 
+/// Range fields keep one width whatever their value, so nothing beside or
+/// below them moves when Next range advances the start bar.
+const RANGE_FIELD_SIZE: egui::Vec2 = egui::vec2(
+    2.0 * crate::tokens::SPACE_XL + crate::tokens::SPACE_LG,
+    crate::tokens::CONTROL_HEIGHT,
+);
+
 pub struct GenerationBarRangeResponse {
     pub start: Response,
     pub length: Response,
@@ -35,10 +42,11 @@ impl GenerationBarRangeResponse {
     }
 }
 
-/// One-based start and duration in whole bars. The end shown below is inclusive.
-/// Zero length represents a viewport with no complete bars, awaiting a range edit.
-/// Native fields retain dragging and typing; visible steps and the shared value
-/// keypad also allow precise entry using only the mouse.
+/// One-based start and duration in whole bars, as two rows of the caller's
+/// `form_grid`, so their fields share the column of every other setting.
+/// Zero length represents a viewport with no complete bars, awaiting a range
+/// edit. Native fields retain dragging and typing; visible steps and the
+/// shared value keypad also allow precise entry using only the mouse.
 pub fn generation_bar_range(
     ui: &mut Ui,
     start_bar: &mut u32,
@@ -46,91 +54,72 @@ pub fn generation_bar_range(
 ) -> GenerationBarRangeResponse {
     *start_bar = (*start_bar).clamp(1, 1_000_000);
     *length_bars = (*length_bars).min(1024);
-    let wide = ui.available_width() >= 520.0;
-    let response = egui::Grid::new("generation_bar_range")
-        .num_columns(if wide { 4 } else { 2 })
-        .min_col_width(if wide {
-            // Grid labels need a real width on the first sizing pass. A zero
-            // minimum wraps "Start bar" one character per line and inflates
-            // the supposedly compact header before column widths stabilize.
-            89.0
-        } else {
-            crate::tokens::SELECT_WIDTH
-        })
-        .spacing(egui::vec2(crate::tokens::SPACE_LG, crate::tokens::SPACE_MD))
-        .min_row_height(crate::tokens::CONTROL_HEIGHT)
-        .show(ui, |ui| {
-            let label = text::truncated(ui, text::TextRole::Label, "Start bar");
-            let mut start_value = f64::from(*start_bar);
-            let start = ui
-                .push_id("generation_start", |ui| {
-                    crate::number_stepper_integer(
-                        ui,
-                        &mut start_value,
-                        1.0,
-                        1.0..=1_000_000.0,
-                        "Start bar",
-                        |ui, value| {
-                            ui.add(
-                                crate::number(value)
-                                    .range(1.0..=1_000_000.0)
-                                    .speed(0.1)
-                                    .max_decimals(0),
-                            )
-                        },
+    let label = text::truncated(ui, text::TextRole::Label, "Start bar");
+    let mut start_value = f64::from(*start_bar);
+    let start = ui
+        .push_id("generation_start", |ui| {
+            crate::number_stepper_integer(
+                ui,
+                &mut start_value,
+                1.0,
+                1.0..=1_000_000.0,
+                "Start bar",
+                |ui, value| {
+                    ui.add_sized(
+                        RANGE_FIELD_SIZE,
+                        crate::number(value)
+                            .range(1.0..=1_000_000.0)
+                            .speed(0.1)
+                            .max_decimals(0),
                     )
-                    .response
-                })
-                .inner
-                .labelled_by(label.id);
-            if start.changed() {
-                *start_bar = start_value.round().clamp(1.0, 1_000_000.0) as u32;
-            }
-            if !wide {
-                ui.end_row();
-            }
-            let label = text::truncated(ui, text::TextRole::Label, "Length");
-            let mut length_value = f64::from(*length_bars);
-            let length = ui
-                .push_id("generation_length", |ui| {
-                    crate::number_stepper_integer(
-                        ui,
-                        &mut length_value,
-                        1.0,
-                        0.0..=1024.0,
-                        "Length",
-                        |ui, value| {
-                            ui.add(
-                                crate::number(value)
-                                    .range(0.0..=1024.0)
-                                    .speed(0.1)
-                                    .max_decimals(0)
-                                    .suffix(" bars"),
-                            )
-                        },
-                    )
-                    .response
-                })
-                .inner
-                .labelled_by(label.id);
-            if length.changed() {
-                *length_bars = length_value.round().clamp(0.0, 1024.0) as u32;
-            }
-            ui.end_row();
-            GenerationBarRangeResponse { start, length }
+                },
+            )
+            .response
         })
-        .inner;
+        .inner
+        .labelled_by(label.id);
+    if start.changed() {
+        *start_bar = start_value.round().clamp(1.0, 1_000_000.0) as u32;
+    }
+    ui.end_row();
+    let label = text::truncated(ui, text::TextRole::Label, "Length");
+    let mut length_value = f64::from(*length_bars);
+    let length = ui
+        .push_id("generation_length", |ui| {
+            crate::number_stepper_integer(
+                ui,
+                &mut length_value,
+                1.0,
+                0.0..=1024.0,
+                "Length",
+                |ui, value| {
+                    ui.add_sized(
+                        RANGE_FIELD_SIZE,
+                        crate::number(value)
+                            .range(0.0..=1024.0)
+                            .speed(0.1)
+                            .max_decimals(0)
+                            .suffix(" bars"),
+                    )
+                },
+            )
+            .response
+        })
+        .inner
+        .labelled_by(label.id);
+    if length.changed() {
+        *length_bars = length_value.round().clamp(0.0, 1024.0) as u32;
+    }
+    ui.end_row();
     let summary = if *length_bars == 0 {
         "No complete bars in view".to_owned()
     } else {
         format!("Bars {}–{}", start_bar, *start_bar + *length_bars - 1)
     };
-    if wide {
-        response.length.clone().on_hover_text(summary);
-    } else {
-        text::note(ui, summary);
+    GenerationBarRangeResponse {
+        start,
+        length: length.on_hover_text(summary),
     }
-    response
 }
 
 pub struct GenerationFooterResponse {
@@ -140,9 +129,10 @@ pub struct GenerationFooterResponse {
     pub close: Response,
 }
 
-/// Reserve feedback space before the first addition, so errors, successful
-/// additions and subsequent drafts never move the repeatable action targets.
-/// Feedback stays bounded to two lines, with its full text available on hover.
+/// The generator footer in the `dialog_actions` convention: Add notes
+/// (primary) at the right edge, then Cancel/Done, then Next range; the status
+/// line (and, with `preview`, the Preview toggle and Fit preview) fills the left
+/// edge. Every target keeps its place when the status text changes.
 pub fn generation_footer(
     ui: &mut Ui,
     status: &str,
@@ -153,9 +143,9 @@ pub fn generation_footer(
     generation_footer_inner(ui, status, can_add, can_advance, has_added, None).0
 }
 
-/// Compact utilities keep preview controls beside their bounded feedback,
-/// leaving the scroll body for generation parameters. Returns whether Fit was
-/// requested; the caller still owns every musical and viewport change.
+/// The footer with view-only preview controls on its left edge. Returns
+/// whether Fit preview was requested; the caller owns every musical and
+/// viewport change.
 pub fn generation_footer_with_preview(
     ui: &mut Ui,
     status: &str,
@@ -175,54 +165,77 @@ fn generation_footer_inner(
     has_added: bool,
     preview: Option<&mut bool>,
 ) -> (GenerationFooterResponse, bool) {
-    let mut fit = false;
-    let status_size = egui::vec2(ui.available_width(), crate::tokens::CONTROL_HEIGHT);
-    let status = ui.allocate_ui_with_layout(
-        status_size,
-        egui::Layout::top_down(egui::Align::Min),
-        |ui| {
-            ui.set_min_size(status_size);
-            if let Some(preview) = preview {
-                fit = crate::action_row(
-                    ui,
-                    |ui| {
-                        let fit = crate::view_button(ui, "Fit preview").clicked();
-                        crate::checkbox(ui, preview, "Preview");
-                        fit
-                    },
-                    |ui| text::bounded_block(ui, text::TextRole::Note, status, 2),
-                )
-                .inner
-                .0;
-            } else {
-                text::bounded_block(ui, text::TextRole::Note, status, 2);
-            }
-        },
-    );
-    let (add, next, close) = ui
-        .allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), crate::tokens::CONTROL_HEIGHT),
-            egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
-            |ui| {
-                let add = ui.add_enabled(can_add, crate::primary_button_widget(ui, "Add notes"));
-                let next = ui
-                    .add_enabled(can_advance, crate::button_widget("Next range"))
-                    .on_hover_text("Move forward by this range's length, keeping your settings");
-                let close = ui.add(
-                    crate::button_widget(if has_added { "Done" } else { "Cancel" }).min_size(
-                        egui::vec2(
-                            crate::tokens::CONTROL_HEIGHT * 3.0,
-                            crate::tokens::CONTROL_HEIGHT,
-                        ),
-                    ),
-                );
-                (add, next, close)
-            },
-        )
+    // A narrow docked dialog cannot hold three actions and the status on one
+    // line, so the status line (view toggles first) sits above the actions.
+    let (status, fit) = ui
+        .horizontal(|ui| {
+            ui.set_min_height(crate::tokens::CONTROL_HEIGHT);
+            let fit = preview.is_some_and(|preview| {
+                crate::checkbox(ui, preview, "Preview");
+                crate::view_button(ui, "Fit preview").clicked()
+            });
+            // A fixed slot: neither the text nor the window width moves it.
+            let slot = ui.allocate_ui_with_layout(
+                egui::vec2(crate::tokens::SELECT_WIDTH, crate::tokens::CONTROL_HEIGHT),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.set_min_size(egui::vec2(
+                        crate::tokens::SELECT_WIDTH,
+                        crate::tokens::CONTROL_HEIGHT,
+                    ));
+                    ui.add(
+                        egui::Label::new(text::TextRole::Note.rich(ui.ctx(), status))
+                            .truncate()
+                            .selectable(false),
+                    )
+                    .on_hover_text(status);
+                },
+            );
+            (slot.response.rect, fit)
+        })
         .inner;
+    let (add, next, close) = crate::dialog_actions(
+        ui,
+        |ui| {
+            let add = ui.add_enabled(can_add, crate::primary_button_widget(ui, "Add notes"));
+            // One width for Cancel and Done (the wider of the two, with its
+            // icon) keeps Next range in place after the first addition.
+            let close_width = ["Cancel", "Done"]
+                .into_iter()
+                .map(|label| {
+                    let text = ui
+                        .painter()
+                        .layout_no_wrap(
+                            label.to_owned(),
+                            egui::TextStyle::Button.resolve(ui.style()),
+                            egui::Color32::PLACEHOLDER,
+                        )
+                        .size()
+                        .x;
+                    let icon = if crate::Icon::for_label(label).is_some() {
+                        crate::tokens::ICON_SIZE + ui.spacing().icon_spacing
+                    } else {
+                        0.0
+                    };
+                    (text + icon + 2.0 * ui.spacing().button_padding.x).ceil()
+                })
+                .fold(0.0_f32, f32::max);
+            let close = ui.add(
+                crate::button_widget(if has_added { "Done" } else { "Cancel" })
+                    .min_size(egui::vec2(close_width, crate::tokens::CONTROL_HEIGHT)),
+            );
+            let next = ui
+                .add_enabled(can_advance, crate::button_widget("Next range"))
+                .on_hover_text("Move forward by this range's length, keeping your settings");
+            (add, next, close)
+        },
+        |_| {},
+    )
+    .inner
+    .0;
     (
         GenerationFooterResponse {
-            status: status.response.rect,
+            status,
             add,
             next,
             close,

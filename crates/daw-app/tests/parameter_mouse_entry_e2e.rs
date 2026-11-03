@@ -178,7 +178,8 @@ fn fixture(app: &mut Harness, compact: bool, automated: bool) -> (u64, u64, Opti
 }
 
 fn send_value_rect(state: &Value) -> &Value {
-    let (_, level_y) = center(label(state, "Level"));
+    // The Routing window lists each send as "<bus> · dial · <value> dB · …".
+    let (_, row_y) = center(label(state, "Room"));
     state["label_rects"]
         .as_array()
         .unwrap()
@@ -186,9 +187,8 @@ fn send_value_rect(state: &Value) -> &Value {
         .filter(|row| {
             row["text"]
                 .as_str()
-                .and_then(|text| text.trim_end_matches('×').trim().parse::<f64>().ok())
-                .is_some()
-                && (center(row).1 - level_y).abs() < 4.0
+                .is_some_and(|text| text.ends_with(" dB"))
+                && (center(row).1 - row_y).abs() < 4.0
         })
         .max_by(|left, right| center(left).0.total_cmp(&center(right).0))
         .unwrap_or_else(|| panic!("Missing send level: {}", state["visible_labels"]))
@@ -237,9 +237,10 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
         app.click("Mouse channel");
         let before = app.click("Routing");
         let opened = right_click(&mut app, send_value_rect(&before));
-        assert!(visible(&opened, "Range: 0 to 16 ×"));
+        // Send levels are entered in dB and stored as linear gain.
+        assert!(visible(&opened, "Range: -60 to 24.08 dB"));
         toggle_keypad(&mut app, &opened, "Mouse channel → Room · Send level");
-        enter_mouse(&mut app, &before, "0.375");
+        enter_mouse(&mut app, &before, "-8.5");
         let sent = app.click("Apply value");
         let send = track(&sent, source)["sends"]
             .as_array()
@@ -247,7 +248,7 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
             .iter()
             .find(|send| send["target_bus"] == bus)
             .unwrap();
-        near(send["gain"].as_f64().unwrap(), 0.375);
+        near(send["gain"].as_f64().unwrap(), 10f64.powf(-8.5 / 20.0));
         one_edit(&sent, &before);
         assert_eq!(undo(&mut app)["project"], before["project"]);
         app.quit();

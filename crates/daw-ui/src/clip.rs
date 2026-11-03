@@ -1,6 +1,7 @@
 //! Clip identity presentation shared by timeline canvases and property views.
 //! The application decides which instances are linked and owns all editing.
 use crate::{Icon, text, tokens};
+use egui::emath::GuiRounding as _;
 use egui::{
     Color32, CornerRadius, FontId, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
     Vec2,
@@ -25,7 +26,13 @@ pub fn clip_surface(
     selected: bool,
 ) -> ClipSurfaceLayout {
     let colors = crate::theme::palette(painter.ctx());
-    let header_bottom = (rect.top() + tokens::FONT_CANVAS + tokens::SPACE_SM).min(rect.bottom());
+    // Whole physical pixels keep the rounded outline continuous where the
+    // title band meets it, at any display density.
+    let pixel = 1.0 / painter.pixels_per_point();
+    let rect = rect.round_to_pixels(painter.pixels_per_point());
+    let header_bottom = (rect.top() + tokens::FONT_CANVAS + tokens::SPACE_SM)
+        .min(rect.bottom())
+        .round_to_pixels(painter.pixels_per_point());
     let inset_x = tokens::SPACE_XS.min(rect.width().max(0.0) * 0.5);
     let content_top = (header_bottom + tokens::SPACE_XS * 0.5).min(rect.bottom());
     let content_bottom = (rect.bottom() - tokens::SPACE_XS).max(content_top);
@@ -33,15 +40,10 @@ pub fn clip_surface(
         .panel
         .lerp_to_gamma(color, if selected { 0.42 } else { 0.28 });
     let layout = ClipSurfaceLayout {
+        // The name starts where the waveform or notes start.
         title: Rect::from_min_max(
-            Pos2::new(
-                (rect.left() + tokens::SPACE_SM).min(rect.right()),
-                rect.top(),
-            ),
-            Pos2::new(
-                (rect.right() - inset_x).max((rect.left() + tokens::SPACE_SM).min(rect.right())),
-                header_bottom,
-            ),
+            Pos2::new(rect.left() + inset_x, rect.top()),
+            Pos2::new(rect.right() - inset_x, header_bottom),
         ),
         content: Rect::from_min_max(
             Pos2::new(rect.left() + inset_x, content_top),
@@ -77,7 +79,7 @@ pub fn clip_surface(
         rect,
         tokens::RADIUS,
         Stroke::new(
-            if selected { 1.8_f32 } else { 0.8_f32 },
+            if selected { 2.0 * pixel } else { pixel },
             color.gamma_multiply(if selected { 1.0 } else { 0.65 }),
         ),
         StrokeKind::Inside,
@@ -99,10 +101,14 @@ pub fn clip_note_preview(
     if !content.is_positive() || !content.is_finite() || time.end <= time.start {
         return None;
     }
-    let height = 2.5_f32.min(content.height());
+    // A small range still fills the preview: at least eight rows, notes 2–6
+    // points tall, so a short pattern reads as notes rather than hairlines.
     let low = f32::from(*pitches.start());
     let high = f32::from(*pitches.end());
-    let span = (high - low).max(12.0);
+    let span = (high - low + 2.0).max(8.0);
+    let height = (content.height() / (span + 1.0))
+        .clamp(2.0, tokens::SPACE_XS + 1.0)
+        .min(content.height());
     let pitch_y = (0.5 + (f32::from(pitch) - (low + high) * 0.5) / span).clamp(0.0, 1.0);
     let y = content.bottom() - height - pitch_y * (content.height() - height);
     let rect = Rect::from_min_size(
@@ -113,9 +119,16 @@ pub fn clip_note_preview(
     if !rect.is_positive() || !rect.intersects(painter.clip_rect()) {
         return None;
     }
+    let background = crate::theme::palette(painter.ctx()).bg;
     painter
         .with_clip_rect(content.intersect(painter.clip_rect()))
-        .rect_filled(rect, 1.0, color.gamma_multiply(0.85));
+        .rect(
+            rect,
+            1.0,
+            color,
+            Stroke::new(tokens::BORDER_WIDTH, color.lerp_to_gamma(background, 0.4)),
+            StrokeKind::Inside,
+        );
     Some(rect)
 }
 
@@ -217,16 +230,25 @@ pub fn clip_choice(
     linked: bool,
     detail: &str,
 ) -> Response {
-    let response = crate::checkbox(ui, selected, title);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
-        ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(tokens::SPACE_LG), Sense::hover());
-        if linked {
-            Icon::Link.paint(ui.painter(), rect, crate::theme::palette(ui.ctx()).muted);
-        }
-        text::note(ui, detail);
-    });
+    // The detail hugs its name, indented to the checkbox label's text.
+    let response = ui
+        .vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = tokens::SPACE_XS;
+            let response = crate::checkbox(ui, selected, title);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+                ui.spacing_mut().interact_size.y = tokens::COMPACT_HEIGHT;
+                ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
+                if linked {
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::splat(tokens::SPACE_MD), Sense::hover());
+                    Icon::Link.paint(ui.painter(), rect, crate::theme::palette(ui.ctx()).muted);
+                }
+                text::note(ui, detail);
+            });
+            response
+        })
+        .inner;
     response.on_hover_text(format!(
         "{title}\n{detail}{}",
         if linked {

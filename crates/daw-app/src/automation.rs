@@ -402,6 +402,7 @@ impl Harness {
         let app = &mut self.app;
         let menu_labels = &mut self.menu_labels;
         let window_labels = &mut self.window_labels;
+        daw_ui::reset_icon_only_labels(&self.ctx);
         let output = self.ctx.run(input, |ctx| {
             app.ui_frame(ctx);
             // A menu can repeat a persistent toolbar destination. Resolve the
@@ -466,6 +467,9 @@ impl Harness {
         self.painted_text.clear();
         self.painted_images.clear();
         self.painted_meshes.clear();
+        // Icon-only controls have no painted text; their accessible names make
+        // them clickable through the same label lookup as text controls.
+        self.labels.extend(daw_ui::icon_only_labels(&self.ctx));
         for clipped in output.shapes {
             collect_labels(&clipped.shape, clipped.clip_rect, &mut self.labels);
             if self.inspect_paint {

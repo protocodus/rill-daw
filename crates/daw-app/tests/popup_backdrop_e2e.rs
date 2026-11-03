@@ -164,8 +164,8 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
             ("Effects", "Effects of Backdrop synth"),
             ("Routing", "Routing of Backdrop synth"),
             ("Automation", "Add automation"),
-            ("Properties", "Properties of Backdrop phrase"),
-            ("Library", "Device library"),
+            ("Properties", "Properties · Backdrop phrase"),
+            ("Library", "Library"),
             ("Setup", "Setup"),
         ] {
             window(&mut app, menu);
@@ -190,7 +190,7 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
         for _ in 0..3 {
             app.click("+ Insert");
             let nested = painted(&mut app);
-            assert_backdrop(&nested, "Device library");
+            assert_backdrop(&nested, "Library");
             assert_eq!(
                 nested["popup_context"]["source"],
                 "Effects · Backdrop synth"
@@ -268,8 +268,13 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
     app.key("Escape");
     assert_clear(&mut app);
 
-    app.click("Mixer");
-    app.click("Channel");
+    let mixer = app.click("Mixer");
+    // Channel destinations open from the name plate's context menu.
+    let [left, top, right, bottom] = bounds(&mixer["mixer"]["channels"][0]["name"]);
+    app.command(
+        json!({"command":"pointer", "phase":"click", "button":"secondary",
+        "x":(left+right)*0.5, "y":(top+bottom)*0.5}),
+    );
     assert_menu_backdrop(&painted(&mut app), "Open channel");
     app.click("Effects");
     assert_backdrop(&painted(&mut app), "Effects of Backdrop synth");
@@ -299,7 +304,7 @@ fn save_confirmation_uses_one_dim_layer_and_restores_the_utility_on_cancel() {
     assert_eq!(blur[0]["gpu_available"], false);
     app.click("Cancel");
     let restored = painted(&mut app);
-    assert_backdrop(&restored, "Track · New audio");
+    assert_backdrop(&restored, "Properties · New audio");
     assert_eq!(restored["project"], original["project"]);
     assert_eq!(restored["popups"], original["popups"]);
     app.key("Escape");

@@ -256,6 +256,7 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
             app.command(json!({"command":"key", "key":"A", "cmd":true}));
             let before_action = app.inspect();
             app.click("Notes");
+            app.click("Transpose");
             let transposed = app.click("+1 semitone");
             mode(&transposed, "Pencil");
             assert_ne!(transposed["project"], before_action["project"]);

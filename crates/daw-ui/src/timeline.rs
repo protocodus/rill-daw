@@ -190,13 +190,11 @@ fn editor_tool_families(
 ) -> Vec<Response> {
     // Stable families make a long toolbar easy to scan. Unsupported modes are
     // omitted without leaving empty groups, separators or inaccessible choices.
+    // Pointer, create, modify, copy, time: the same order in every editor, so
+    // Select and Cursor keep one place whatever else an editor supports.
     const GROUPS: &[&[EditorTool]] = &[
-        &[
-            EditorTool::Select,
-            EditorTool::Pencil,
-            EditorTool::MultiDraw,
-            EditorTool::Cursor,
-        ],
+        &[EditorTool::Select, EditorTool::Cursor],
+        &[EditorTool::Pencil, EditorTool::MultiDraw],
         &[EditorTool::Cut, EditorTool::Glue, EditorTool::Erase],
         &[EditorTool::Duplicate, EditorTool::Ghost],
         &[
@@ -206,7 +204,7 @@ fn editor_tool_families(
             EditorTool::FadeOut,
         ],
     ];
-    let mut previous: Option<Rect> = None;
+    let mut previous: Option<(Rect, usize)> = None;
     let mut responses = Vec::with_capacity(supported.len());
     for group in GROUPS {
         let tools: Vec<_> = group
@@ -219,26 +217,36 @@ fn editor_tool_families(
         }
         let group = editor_tool_family(ui, tool, &tools, &label, &hint);
         let rect = group.response.rect;
-        if let Some(previous) = previous
-            && (previous.center().y - rect.center().y).abs() < 1.0
+        // A single tool is not a family: joining it to its neighbour with the
+        // ordinary gap reads better than fencing one button with two rules.
+        if let Some((previous, count)) = previous
+            && count > 1
+            && tools.len() > 1
         {
-            // Paint in the existing inter-family gap after native wrapping has
-            // settled. A wrapped family therefore never starts with a rule.
-            let x = (previous.right() + rect.left()) * 0.5;
-            let half_height = crate::tokens::COMPACT_HEIGHT * 0.5;
-            ui.painter().vline(
-                x,
-                rect.center().y - half_height..=rect.center().y + half_height,
-                egui::Stroke::new(
-                    crate::tokens::BORDER_WIDTH,
-                    crate::theme::palette(ui.ctx()).line,
-                ),
-            );
+            toolbar_family_rule(ui, previous, rect);
         }
-        previous = Some(rect);
+        previous = Some((rect, tools.len()));
         responses.extend(group.inner);
     }
     responses
+}
+
+/// A quiet rule in the gap between two toolbar families. It is painted after
+/// native wrapping has settled, so a family that wrapped never starts with a rule.
+pub fn toolbar_family_rule(ui: &Ui, previous: Rect, next: Rect) {
+    if (previous.center().y - next.center().y).abs() >= 1.0 || next.left() < previous.right() {
+        return;
+    }
+    let x = (previous.right() + next.left()) * 0.5;
+    let half_height = crate::tokens::COMPACT_HEIGHT * 0.5;
+    ui.painter().vline(
+        x,
+        next.center().y - half_height..=next.center().y + half_height,
+        egui::Stroke::new(
+            crate::tokens::BORDER_WIDTH,
+            crate::theme::palette(ui.ctx()).line,
+        ),
+    );
 }
 
 fn editor_tool_family(

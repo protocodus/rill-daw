@@ -60,11 +60,29 @@ pub const FONT_CANVAS: f32 = FONT_CAPTION;
 pub const FONT_SCALE: f32 = SPACE_SM + 3.0 * GOLDEN_RATIO_INVERSE;
 /// Two proportional label rows with clear space between their glyph bounds.
 pub const TIMELINE_RULER_HEIGHT: f32 = SPACE_XL + SPACE_XS;
+/// One loop strip height for every timeline, directly below the ruler.
 pub const TIMELINE_LOOP_HEIGHT: f32 = SPACE_LG;
-pub const TIMELINE_LOOP_STRIP_HEIGHT: f32 = 5.0;
-/// Keep loop feedback below both ruler label rows, with a clear gap.
-pub const TIMELINE_LOOP_RULER_HEIGHT: f32 =
-    TIMELINE_RULER_HEIGHT + SPACE_SM + TIMELINE_LOOP_STRIP_HEIGHT;
+pub const TIMELINE_LOOP_RULER_HEIGHT: f32 = TIMELINE_RULER_HEIGHT + TIMELINE_LOOP_HEIGHT;
 pub const FONT_TRACK: f32 = FONT_BUTTON;
 pub const SWITCH_WIDTH: f32 = 34.0;
 pub const SWITCH_HEIGHT: f32 = 21.0;
+/// Form label column; longer labels truncate and reveal their full text on hover.
+pub const FORM_LABEL_WIDTH: f32 = 144.0;
+/// Ordinary form field (select, text, number) width inside a form grid.
+pub const FORM_FIELD_WIDTH: f32 = SEARCH_CHOICE_WIDTH;
+pub const POPUP_WIDTH_SM: f32 = 377.0;
+pub const POPUP_WIDTH_MD: f32 = 610.0;
+pub const POPUP_WIDTH_LG: f32 = 987.0;
+pub const MIXER_STRIP_WIDTH: f32 = 144.0;
+/// Caption gutter beside a vertical fader for its dB scale.
+pub const MIXER_SCALE_GUTTER: f32 = SPACE_XL;
+pub const MIXER_FADER_MIN: f32 = 144.0;
+/// A stereo meter beside the fader: two bars and their gap.
+pub const MIXER_METER_WIDTH: f32 = SPACE_MD;
+pub const PIANO_KEYS_WIDTH: f32 = SPACE_XL + SPACE_LG + SPACE_XS;
+pub const VELOCITY_LANE_HEIGHT: f32 = 89.0;
+pub const NOTE_RADIUS: f32 = 3.0;
+/// Icon glyph box inside buttons and rows: the control height minus the button padding.
+pub const ICON_SIZE: f32 = CONTROL_HEIGHT - 2.0 * BUTTON_PADDING_Y;
+/// Square hit target for canvas handles such as fade corners and curve points.
+pub const HIT_TARGET: f32 = SPACE_LG;

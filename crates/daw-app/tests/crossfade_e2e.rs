@@ -169,9 +169,26 @@ fn crossfade_popup_duration_presets_spline_drag_undo_and_archive_render() {
     open(&mut app, &project);
     app.click("Incoming take");
     app.click("Edit");
+    app.click("Audio");
     let popup = app.click("Crossfade…");
     assert_eq!(popup["popups"]["crossfade"], true);
     assert!(config(&popup).is_null());
+    // The edited clip is the window's subject, not a second heading.
+    let titles: Vec<_> = popup["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| {
+            row["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("Incoming take"))
+        })
+        .map(|row| row["text"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(
+        titles.contains(&"Crossfade · Incoming take".to_owned()),
+        "{titles:?}"
+    );
     let enabled = app.click("Enable crossfade");
     let (x, y) = center(&enabled["crossfade"]["duration"]);
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}));
@@ -206,6 +223,14 @@ fn crossfade_popup_duration_presets_spline_drag_undo_and_archive_render() {
         - 0.8 * (plot["max"][1].as_f64().unwrap() - plot["min"][1].as_f64().unwrap());
     let dragged = app.command(
         json!({"command":"pointer", "phase":"drag", "x":x, "y":y, "to_x":x, "to_y":target_y}),
+    );
+    // A dragged curve leaves the presets and reads "Custom".
+    assert!(
+        dragged["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Custom")
     );
     let curve = config(&dragged)["curve"].clone();
     let y1 = curve["control1"][1].as_f64().unwrap();

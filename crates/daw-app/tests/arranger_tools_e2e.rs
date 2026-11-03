@@ -559,7 +559,7 @@ fn switching_editors_retains_each_supported_tool_without_editing_the_project() {
     menu(&mut app, "Window", "Clip Editor");
     let multi = app.key("U");
     assert_eq!(multi["midi_editor"]["tool"], "MultiDraw");
-    let arranger = menu(&mut app, "Window", "Arrangement");
+    let arranger = menu(&mut app, "Window", "Arranger");
     assert_eq!(
         arranger["timeline"]["tool"], "Select",
         "MIDI-only MultiDraw must not enter the arranger"
@@ -571,7 +571,7 @@ fn switching_editors_retains_each_supported_tool_without_editing_the_project() {
         editor["midi_editor"]["tool"], "MultiDraw",
         "Arranger-only Stretch must not replace the piano roll's choice"
     );
-    let state = menu(&mut app, "Window", "Arrangement");
+    let state = menu(&mut app, "Window", "Arranger");
     assert_eq!(state["timeline"]["tool"], "Stretch");
     let selected = pointer(&mut app, "click", center(&state, id));
     assert_eq!(selected["selected_clip"], id);

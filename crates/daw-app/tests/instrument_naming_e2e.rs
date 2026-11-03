@@ -47,7 +47,7 @@ fn initial_assignment_and_explicit_add_use_unique_names_with_atomic_undo() {
     assert_eq!(tracks(&second)[1]["name"], "Rill Fixture A 2");
 
     // The selected track must still count when explicitly adding another one.
-    menu(&mut app, "Track", "Add instrument…");
+    menu(&mut app, "Track", "Add instrument track…");
     common::wait_library_device(&mut app, "Rill Fixture A");
     app.click("Rill Fixture A");
     let third = app.click("Add instrument track");

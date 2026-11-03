@@ -227,7 +227,8 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));
-    app.command(json!({"command":"text","text":"45"}));
+    // Bar 12, beat 1 in 4/4 is beat 45 counted from one.
+    app.command(json!({"command":"text","text":"12.1"}));
     let typed = app.key("Enter");
     assert_eq!(
         typed["project"]["tracks"][1]["automation"]["points"][1]["beat"],
@@ -573,7 +574,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     menu(&mut app, "+ Insert", "Rill Fixture FX");
     app.click("Add to effect chain");
     menu(&mut app, "Window", "Routing");
-    menu(&mut app, "+ Send", "Bus 1");
+    menu(&mut app, "Add send…", "Bus 1");
     let state = app.inspect();
     let target = state["project"]["tracks"][0]["id"].clone();
     let effect = state["project"]["tracks"][0]["inserts"][0]["id"].clone();
@@ -615,7 +616,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     let before = app.inspect()["project"].clone();
     // Escape restores Routing, the caller of the parameter picker. Return to
     // the arranger explicitly before selecting a track on its canvas.
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     app.click("New instrument");
     menu(&mut app, "Window", "Effects");
     app.click("More");
@@ -630,7 +631,7 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     let state = menu(&mut app, "Edit", "Undo");
     assert_eq!(state["project"], before);
     menu(&mut app, "Window", "Routing");
-    let state = app.click("×");
+    let state = app.click("Remove send");
     assert!(
         state["project"]["tracks"][0]["sends"]
             .as_array()

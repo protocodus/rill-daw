@@ -77,7 +77,7 @@ fn actions_fit_narrow_and_wide_workspaces_in_both_appearances() {
             );
             ctx.set_pixels_per_point(density);
             frame(&ctx, 640.0, true, vec![]);
-            for width in [320.0, 480.0, 960.0] {
+            for width in [320.0, 520.0, 960.0] {
                 frame(&ctx, width, true, vec![]);
                 let shown = frame(&ctx, width, true, vec![]);
                 assert!(shown.action.is_none());

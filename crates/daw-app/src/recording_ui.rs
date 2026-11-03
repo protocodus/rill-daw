@@ -968,8 +968,8 @@ impl DawApp {
             .unwrap_or_else(|| "Recording".into());
         let mut open = true;
         daw_ui::popup(title, ctx).id(egui::Id::new("recording_popup")).open(&mut open)
-            .default_width(610.0).min_width(daw_ui::popup_body_size(ctx).x.min(610.0))
-            .default_height(560.0).vscroll(false).show(ctx, |ui| {
+            .default_width(daw_ui::tokens::POPUP_WIDTH_MD).min_width(daw_ui::popup_body_size(ctx).x.min(daw_ui::tokens::POPUP_WIDTH_MD))
+            .default_height(610.0).vscroll(false).show(ctx, |ui| {
             let busy = self.recording_busy();
             let mut footer = daw_ui::popup_footer(ui, "recording_actions");
             let window_ui = ui;
@@ -978,17 +978,70 @@ impl DawApp {
             if let Some(track) = &track {
                 let midi = track.kind == TrackKind::Midi;
                 ui.add_enabled_ui(!busy, |ui| {
-                    if midi {
-                        let mut device = self.settings.midi_input_device.clone();
-                        daw_ui::form_grid(ui, "recording_midi_device", |ui| {
-                            let label = daw_ui::text::label(ui, "MIDI device");
+                    let field = daw_ui::tokens::FORM_FIELD_WIDTH;
+                    let mut device = self.settings.midi_input_device.clone();
+                    let mut midi_input = track.midi_input;
+                    let mut audio_input = track.audio_input;
+                    let mut armed = self.recording.armed.contains(&track.id);
+                    let mut toggle_arm = false;
+                    let mut refresh_midi = false;
+                    let mut audio_setup = false;
+                    let mut mode = self.recording.monitors.get(&track.id).copied().unwrap_or_default();
+                    let channels = self.input_devices.iter().find(|device| self.settings.input_device_name.as_ref().map_or(device.is_default, |name| name == &device.name)).map_or(2, |device| device.channels.min(32));
+                    // One grid keeps every caption and control on shared columns.
+                    daw_ui::form_grid(ui, "recording_inputs_form", |ui| {
+                        if midi {
+                            let label = daw_ui::form_label(ui, "MIDI device");
                             let selected = device.as_ref().map(|id| self.recording.midi_ports.iter().find(|port| &port.id == id).map(|port| port.name.as_str()).unwrap_or("Unavailable MIDI input")).unwrap_or("No MIDI input");
-                            daw_ui::select("recording_midi_port", selected).show_ui(ui, |ui| {
-                                daw_ui::selectable_value(ui, &mut device, None, "No MIDI input");
-                                for port in &self.recording.midi_ports { daw_ui::selectable_value(ui, &mut device, Some(port.id.clone()), &port.name); }
-                            }).response.labelled_by(label.id).on_hover_text("Input device shared by MIDI tracks; choose each track's channel below");
+                            ui.horizontal(|ui| {
+                                daw_ui::select("recording_midi_port", selected).width(field).truncate().show_ui(ui, |ui| {
+                                    daw_ui::selectable_value(ui, &mut device, None, "No MIDI input");
+                                    for port in &self.recording.midi_ports { daw_ui::selectable_value(ui, &mut device, Some(port.id.clone()), &port.name); }
+                                }).response.labelled_by(label.id).on_hover_text("Input device shared by MIDI tracks; choose each track's channel below");
+                                refresh_midi = daw_ui::small_button(ui, "Refresh MIDI inputs").clicked();
+                            });
                             ui.end_row();
-                        });
+                            let label = daw_ui::form_label(ui, "Channel");
+                            daw_ui::select("track_midi_input", midi_input_label(midi_input)).width(field).show_ui(ui, |ui| {
+                                daw_ui::selectable_value(ui, &mut midi_input, None, "No input");
+                                daw_ui::selectable_value(ui, &mut midi_input, Some(MidiInputChannel::All), "All channels");
+                                for channel in 0..16 { let choice = Some(MidiInputChannel::Channel { channel }); daw_ui::selectable_value(ui, &mut midi_input, choice, midi_input_label(choice)); }
+                            }).response.labelled_by(label.id);
+                            ui.end_row();
+                        } else {
+                            daw_ui::form_label(ui, "Device");
+                            ui.horizontal(|ui| {
+                                ui.allocate_ui(egui::vec2(field, daw_ui::tokens::CONTROL_HEIGHT), |ui| {
+                                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Body, self.settings.input_device_name.as_deref().unwrap_or("System default input"));
+                                });
+                                audio_setup = daw_ui::button(ui, "Audio setup…").clicked();
+                            });
+                            ui.end_row();
+                            let label = daw_ui::form_label(ui, "Input");
+                            daw_ui::select("track_audio_input", input_label(audio_input)).width(field).show_ui(ui, |ui| {
+                                daw_ui::selectable_value(ui, &mut audio_input, None, "No input");
+                                for channel in 0..channels { let choice = Some(AudioInputChannels::Mono {channel}); daw_ui::selectable_value(ui, &mut audio_input, choice, input_label(choice)); }
+                                for left in (0..channels.saturating_sub(1)).step_by(2) { let choice = Some(AudioInputChannels::Stereo {left,right:left+1}); daw_ui::selectable_value(ui, &mut audio_input, choice, input_label(choice)); }
+                            }).response.labelled_by(label.id);
+                            ui.end_row();
+                        }
+                        let label = daw_ui::form_label(ui, "Monitor");
+                        daw_ui::select("input_monitor_mode", mode.label()).width(field).show_ui(ui, |ui| { for choice in [MonitorMode::Off,MonitorMode::Auto,MonitorMode::On] { daw_ui::selectable_value(ui, &mut mode, choice, choice.label()); } }).response.labelled_by(label.id)
+                            .on_hover_text(if midi { "Hear the input through this track's instrument" } else { "Hear the dry input signal, before effects" });
+                        ui.end_row();
+                        if !midi {
+                            let label = daw_ui::form_label(ui, "Record into");
+                            daw_ui::select("recording_placement", if self.recording.placement == RecordingPlacement::Take {"New take"} else {"Overdub layer"}).width(field).show_ui(ui, |ui| {
+                                daw_ui::selectable_value(ui, &mut self.recording.placement, RecordingPlacement::Take, "New take");
+                                daw_ui::selectable_value(ui, &mut self.recording.placement, RecordingPlacement::Overdub, "Overdub layer");
+                            }).response.labelled_by(label.id);
+                            ui.end_row();
+                        }
+                        ui.label("");
+                        toggle_arm = daw_ui::checkbox(ui, &mut armed, "Arm recording").changed();
+                        ui.end_row();
+                    });
+                    if midi {
                         if device != self.settings.midi_input_device {
                             let mut settings = self.settings.clone(); settings.midi_input_device = device;
                             match settings.save() {
@@ -996,49 +1049,13 @@ impl DawApp {
                                 Err(error) => self.message(Err(error), ""),
                             }
                         }
-                        if daw_ui::small_button(ui, "Refresh MIDI inputs").clicked() { self.refresh_midi_devices(); }
-                        let mut input = track.midi_input;
-                        daw_ui::form_grid(ui, "recording_midi_channel", |ui| {
-                            let label = daw_ui::text::label(ui, "Channel");
-                            daw_ui::select("track_midi_input", midi_input_label(input)).show_ui(ui, |ui| {
-                                daw_ui::selectable_value(ui, &mut input, None, "No input");
-                                daw_ui::selectable_value(ui, &mut input, Some(MidiInputChannel::All), "All channels");
-                                for channel in 0..16 { let choice = Some(MidiInputChannel::Channel { channel }); daw_ui::selectable_value(ui, &mut input, choice, midi_input_label(choice)); }
-                            }).response.labelled_by(label.id);
-                            ui.end_row();
-                        });
-                        if input != track.midi_input { self.begin_edit(); self.project.track_mut(track.id).unwrap().midi_input = input; self.edit_label = Some("Choose MIDI input channel".into()); self.changed(); self.recording.failed_input = false; }
+                        if refresh_midi { self.refresh_midi_devices(); }
+                        if midi_input != track.midi_input { self.begin_edit(); self.project.track_mut(track.id).unwrap().midi_input = midi_input; self.edit_label = Some("Choose MIDI input channel".into()); self.changed(); self.recording.failed_input = false; }
                     } else {
-                        ui.horizontal_wrapped(|ui| {
-                            daw_ui::text::note(ui, self.settings.input_device_name.as_deref().unwrap_or("System default input"));
-                            if daw_ui::button(ui, "Audio setup…").clicked() { self.setup_page = SetupPage::Audio; self.open_popup(PopupKind::Setup); }
-                        });
-                        let channels = self.input_devices.iter().find(|device| self.settings.input_device_name.as_ref().map_or(device.is_default, |name| name == &device.name)).map_or(2, |device| device.channels.min(32));
-                        let mut input = track.audio_input;
-                        daw_ui::form_grid(ui, "recording_input", |ui| {
-                            let label = daw_ui::text::label(ui, "Input");
-                            daw_ui::select("track_audio_input", input_label(input)).show_ui(ui, |ui| {
-                                daw_ui::selectable_value(ui, &mut input, None, "No input");
-                                for channel in 0..channels { let choice = Some(AudioInputChannels::Mono {channel}); daw_ui::selectable_value(ui, &mut input, choice, input_label(choice)); }
-                                for left in (0..channels.saturating_sub(1)).step_by(2) { let choice = Some(AudioInputChannels::Stereo {left,right:left+1}); daw_ui::selectable_value(ui, &mut input, choice, input_label(choice)); }
-                            }).response.labelled_by(label.id); ui.end_row();
-                        });
-                        if input != track.audio_input { self.begin_edit(); self.project.track_mut(track.id).unwrap().audio_input = input; self.edit_label = Some("Choose recording input".into()); self.changed(); self.recording.failed_input = false; }
+                        if audio_setup { self.setup_page = SetupPage::Audio; self.open_popup(PopupKind::Setup); }
+                        if audio_input != track.audio_input { self.begin_edit(); self.project.track_mut(track.id).unwrap().audio_input = audio_input; self.edit_label = Some("Choose recording input".into()); self.changed(); self.recording.failed_input = false; }
                     }
-                    let mut armed = self.recording.armed.contains(&track.id);
-                    if daw_ui::checkbox(ui, &mut armed, "Arm recording").changed() { self.toggle_record_arm(track.id); }
-                    let mut mode = self.recording.monitors.get(&track.id).copied().unwrap_or_default();
-                    daw_ui::form_grid(ui, "recording_monitor", |ui| {
-                        let label = daw_ui::text::label(ui, if midi { "Input monitor" } else { "Input monitor (dry)" });
-                        daw_ui::select("input_monitor_mode", mode.label()).show_ui(ui, |ui| { for choice in [MonitorMode::Off,MonitorMode::Auto,MonitorMode::On] { daw_ui::selectable_value(ui, &mut mode, choice, choice.label()); } }).response.labelled_by(label.id); ui.end_row();
-                        if !midi {
-                            let label = daw_ui::text::label(ui, "Record into");
-                            daw_ui::select("recording_placement", if self.recording.placement == RecordingPlacement::Take {"New take"} else {"Overdub layer"}).show_ui(ui, |ui| {
-                                daw_ui::selectable_value(ui, &mut self.recording.placement, RecordingPlacement::Take, "New take");
-                                daw_ui::selectable_value(ui, &mut self.recording.placement, RecordingPlacement::Overdub, "Overdub layer");
-                            }).response.labelled_by(label.id); ui.end_row();
-                        }
-                    });
+                    if toggle_arm { self.toggle_record_arm(track.id); }
                     if mode != self.recording.monitors.get(&track.id).copied().unwrap_or_default() { self.recording.monitors.insert(track.id, mode); self.recording.failed_input = false; }
                 });
                 if midi {

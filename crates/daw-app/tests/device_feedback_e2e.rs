@@ -79,13 +79,13 @@ fn editor_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn device_library_can_move_and_resize_without_changing_the_project() {
     let mut app = Harness::new();
-    let before = menu(&mut app, "Track", "Add instrument…");
+    let before = menu(&mut app, "Track", "Add instrument track…");
     let window = &before["library"]["window"];
     let title = before["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|label| label["text"] == "Device library")
+        .find(|label| label["text"] == "Library")
         .unwrap();
     let moved = drag(&mut app, center(title), (70.0, 35.0));
     let after = &moved["library"]["window"];
@@ -104,7 +104,12 @@ fn device_library_can_move_and_resize_without_changing_the_project() {
         resized_window["max"][0].as_f64().unwrap() < after["max"][0].as_f64().unwrap() - 80.0,
         "{after} -> {resized_window}"
     );
-    assert!(resized_window["max"][1].as_f64().unwrap() < after["max"][1].as_f64().unwrap() - 50.0);
+    // Window height hugs the content up to its budget; only the width follows
+    // the user's resize, so the catalogue never leaves a blank band below.
+    assert!(
+        (resized_window["max"][1].as_f64().unwrap() - after["max"][1].as_f64().unwrap()).abs()
+            <= 2.0
+    );
     assert!(visible(&resized, "Search instruments"));
     assert_eq!(resized["project"], before["project"]);
     assert_eq!(resized["history"], before["history"]);
@@ -215,7 +220,8 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     let mixer = menu(&mut app, "Window", "Mixer");
-    assert!(visible(&mixer, "Soft keys"));
+    // The instrument is the MIDI channel's source.
+    assert!(visible(&mixer, "MIDI · Soft keys"));
     assert!(visible(&mixer, "Space"));
     assert!(visible(&mixer, "Echo"));
     assert_eq!(mixer["mixer_devices"].as_array().unwrap().len(), 3);
@@ -229,7 +235,7 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
     app.key("Escape");
     let mixer = app.inspect();
     assert!(visible(&mixer, "Long reverb"));
-    app.click("Soft keys");
+    app.click("MIDI · Soft keys");
     common::wait_visible(&mut app, "Soft keys");
     let named = rename(&mut app, "Soft keys", "Warm piano");
     assert_eq!(
@@ -258,7 +264,7 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
         "Long reverb"
     );
     menu(&mut app, "Window", "Mixer");
-    app.click("Warm piano");
+    app.click("MIDI · Warm piano");
     front(&mut app, "Keyboard…");
     common::wait_visible(&mut app, "Clear");
     app.click("Clear");

@@ -66,6 +66,10 @@ pub enum Icon {
     ChevronRight,
     Star,
     StarFilled,
+    Help,
+    FitSelection,
+    Crossfade,
+    Input,
 }
 
 impl Icon {
@@ -90,18 +94,21 @@ impl Icon {
             "Fade out" => Self::FadeOut,
             "Cursor" => Self::Cursor,
             "Fit" | "Fit preview" => Self::Fit,
+            "Fit selection" => Self::FitSelection,
+            "Tool help" => Self::Help,
             "Start" | "Clip start" | "Set start" => Self::Start,
             "Clip end" | "Set end" | "Snap end" => Self::End,
             "Play" => Self::Play,
             "Pause" => Self::Pause,
             "Stop" => Self::Stop,
-            "Record" | "Arm recording" | "Recording" | "Inputs…" => Self::Record,
+            "Record" | "Arm recording" | "Recording" => Self::Record,
+            "Input" | "Inputs…" => Self::Input,
             "Stop recording" => Self::Stop,
             "Click" | "Metronome" => Self::Metronome,
             "Loop" | "Range" => Self::Loop,
             "Add notes" => Self::Add,
             "New variation" => Self::Refresh,
-            "Crossfade…" => Self::Automation,
+            "Crossfade…" | "Crossfade" => Self::Crossfade,
             "Undo" => Self::Undo,
             "Redo" => Self::Redo,
             "Delete"
@@ -537,6 +544,36 @@ impl Icon {
                     circle(x, 12., 1.3);
                 }
             }
+            Self::Help => {
+                circle(12., 12., 9.);
+                line(&[
+                    (9., 9.5),
+                    (10., 7.5),
+                    (12., 7.),
+                    (14., 7.5),
+                    (15., 9.5),
+                    (14., 11.5),
+                    (12., 12.5),
+                    (12., 14.5),
+                ]);
+                painter.circle_filled(point(12., 17.5), size / 24.0, color);
+            }
+            Self::FitSelection => {
+                line(&[(3., 8.), (3., 3.), (8., 3.)]);
+                line(&[(16., 3.), (21., 3.), (21., 8.)]);
+                line(&[(21., 16.), (21., 21.), (16., 21.)]);
+                line(&[(8., 21.), (3., 21.), (3., 16.)]);
+                box_at(8., 8., 8., 8.);
+            }
+            Self::Crossfade => {
+                line(&[(3., 5.), (8., 6.), (13., 10.), (17., 16.), (21., 19.)]);
+                line(&[(3., 19.), (7., 16.), (11., 10.), (16., 6.), (21., 5.)]);
+            }
+            Self::Input => {
+                line(&[(3., 12.), (14., 12.)]);
+                line(&[(10., 8.), (14., 12.), (10., 16.)]);
+                line(&[(17., 4.), (21., 4.), (21., 20.), (17., 20.)]);
+            }
             Self::Grip => {
                 for x in [8., 16.] {
                     for y in [5., 12., 19.] {
@@ -550,10 +587,11 @@ impl Icon {
 
 /// Uses native Button/AtomLayout so padding, wrapping, disabled/selected states,
 /// keyboard activation and accessible labels exactly match ordinary controls.
+/// The native button is assembled when shown, so a menu row can drop its icon
+/// while a toolbar keeps it, without changing the caller's builder calls.
 pub struct IconButton {
-    button: Button<'static>,
+    label: WidgetText,
     icon: Option<Icon>,
-    id: Id,
     selected: bool,
     accessible_label: Option<String>,
     role: ButtonRole,
@@ -562,6 +600,12 @@ pub struct IconButton {
     frame_when_inactive: bool,
     fill: Option<Color32>,
     stroke: Option<Stroke>,
+    label_color: Option<Color32>,
+    sense: Option<egui::Sense>,
+    small: bool,
+    min_size: Vec2,
+    truncate: bool,
+    wrap_mode: Option<egui::TextWrapMode>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -573,6 +617,42 @@ enum ButtonRole {
     ToolChoice,
     View,
     Tab,
+}
+
+#[derive(Clone, Default)]
+struct IconOnlyLabels {
+    pass: u64,
+    labels: Vec<(String, Rect)>,
+}
+
+const ICON_ONLY_LABELS: &str = "rill_icon_only_labels";
+
+fn register_icon_only_label(ctx: &egui::Context, label: &str, rect: Rect) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|data| {
+        let entry = data.get_temp_mut_or_default::<IconOnlyLabels>(Id::new(ICON_ONLY_LABELS));
+        if entry.pass != pass {
+            entry.pass = pass;
+            entry.labels.clear();
+        }
+        entry.labels.push((label.to_owned(), rect));
+    });
+}
+
+/// Accessible names and bounds of the icon-only controls shown by the latest
+/// pass that painted any. Pointer automation resolves these exactly as it
+/// resolves painted text. Call `reset_icon_only_labels` before running a
+/// frame so a control that disappeared is not reported from an earlier frame.
+pub fn icon_only_labels(ctx: &egui::Context) -> Vec<(String, Rect)> {
+    ctx.data(|data| {
+        data.get_temp::<IconOnlyLabels>(Id::new(ICON_ONLY_LABELS))
+            .map(|entry| entry.labels)
+            .unwrap_or_default()
+    })
+}
+
+pub fn reset_icon_only_labels(ctx: &egui::Context) {
+    ctx.data_mut(|data| data.remove::<IconOnlyLabels>(Id::new(ICON_ONLY_LABELS)));
 }
 
 impl IconButton {
@@ -654,7 +734,6 @@ impl IconButton {
     /// Apply after `selected` so active choices retain their state fill.
     pub fn quiet(mut self) -> Self {
         self.frame_when_inactive = self.selected;
-        self.button = self.button.frame_when_inactive(self.frame_when_inactive);
         self
     }
     /// An icon-only control still exposes its action to assistive technology.
@@ -667,29 +746,9 @@ impl IconButton {
         Self::from_parts_with_disclosure(label, icon, false)
     }
     fn from_parts_with_disclosure(label: WidgetText, icon: Option<Icon>, disclosure: bool) -> Self {
-        let id = Id::new("rill-button-icon");
-        let mut atoms = egui::Atoms::new(label.clone());
-        if icon.is_some() {
-            let atom = Atom::custom(id, Vec2::splat(18.0));
-            if label.text().is_empty() {
-                atoms = egui::Atoms::new(atom);
-            } else {
-                atoms.push_left(atom);
-            }
-        }
-        if disclosure {
-            atoms.push_right(Atom::custom(
-                Id::new("rill-button-disclosure"),
-                Vec2::splat(12.0),
-            ));
-        }
-        let button = Button::new(atoms);
         Self {
-            button: button
-                .min_size(egui::vec2(0.0, crate::tokens::CONTROL_HEIGHT))
-                .corner_radius(crate::tokens::RADIUS),
+            label,
             icon,
-            id,
             selected: false,
             accessible_label: None,
             role: if icon == Some(Icon::Automation) {
@@ -716,52 +775,58 @@ impl IconButton {
             frame_when_inactive: true,
             fill: None,
             stroke: None,
+            label_color: None,
+            sense: None,
+            small: false,
+            min_size: egui::vec2(0.0, crate::tokens::CONTROL_HEIGHT),
+            truncate: false,
+            wrap_mode: None,
         }
     }
     pub fn fill(mut self, fill: Color32) -> Self {
         self.fill = Some(fill);
-        self.button = self.button.fill(fill);
+        self
+    }
+    /// Text and icon color over an explicit fill, such as a solid primary action.
+    pub fn label_color(mut self, color: Color32) -> Self {
+        self.label_color = Some(color);
         self
     }
     pub fn stroke(mut self, stroke: Stroke) -> Self {
         self.stroke = Some(stroke);
         self.frame = Some(true);
-        self.button = self.button.stroke(stroke);
         self
     }
     pub fn sense(mut self, sense: egui::Sense) -> Self {
-        self.button = self.button.sense(sense);
+        self.sense = Some(sense);
         self
     }
     pub fn small(mut self) -> Self {
-        self.button = self.button.small();
+        self.small = true;
         self
     }
     pub fn min_size(mut self, size: Vec2) -> Self {
-        self.button = self.button.min_size(size);
+        self.min_size = size;
         self
     }
     pub fn frame(mut self, frame: bool) -> Self {
         self.frame = Some(frame);
-        self.button = self.button.frame(frame);
         self
     }
     pub fn frame_when_inactive(mut self, frame: bool) -> Self {
         self.frame_when_inactive = frame;
-        self.button = self.button.frame_when_inactive(frame);
         self
     }
     pub fn truncate(mut self) -> Self {
-        self.button = self.button.truncate();
+        self.truncate = true;
         self
     }
     pub fn wrap_mode(mut self, wrap_mode: egui::TextWrapMode) -> Self {
-        self.button = self.button.wrap_mode(wrap_mode);
+        self.wrap_mode = Some(wrap_mode);
         self
     }
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
-        self.button = self.button.selected(selected);
         self
     }
 }
@@ -779,19 +844,54 @@ impl Widget for IconButton {
                 crate::tokens::BUTTON_PADDING_Y,
             );
         }
+        // Menu rows are text only, so every label in a menu starts at the same
+        // x. Icon-only controls keep their glyph; it is their whole identity.
+        let icon_only = self.label.text().is_empty();
+        let icon = self.icon.filter(|_| !in_menu || icon_only);
+        let icon_id = Id::new("rill-button-icon");
+        let disclosure_id = Id::new("rill-button-disclosure");
+        let mut atoms = egui::Atoms::new(self.label.clone());
+        if icon.is_some() {
+            let atom = Atom::custom(icon_id, Vec2::splat(crate::tokens::ICON_SIZE));
+            if icon_only {
+                atoms = egui::Atoms::new(atom);
+            } else {
+                atoms.push_left(atom);
+            }
+        }
+        if self.disclosure {
+            atoms.push_right(Atom::custom(disclosure_id, Vec2::splat(12.0)));
+        }
+        let mut button = Button::new(atoms)
+            .min_size(self.min_size)
+            .corner_radius(crate::tokens::RADIUS)
+            .selected(self.selected);
+        if self.small {
+            button = button.small();
+        }
+        if let Some(sense) = self.sense {
+            button = button.sense(sense);
+        }
+        if self.truncate {
+            button = button.truncate();
+        }
+        if let Some(wrap_mode) = self.wrap_mode {
+            button = button.wrap_mode(wrap_mode);
+        }
         let colors = crate::theme::palette(ui.ctx());
         let inherited = ui.visuals().override_text_color.filter(|color| {
             *color == colors.automation
                 || *color == colors.automation_override
                 || *color == colors.ai
         });
+        // Modes and views stay neutral; the action tint marks commands that
+        // change the document, so a toolbar reads as mostly quiet text.
         let purpose = match self.role {
-            ButtonRole::View | ButtonRole::Tab => colors.text,
-            ButtonRole::Ai => colors.ai,
-            ButtonRole::Automation => colors.automation,
-            ButtonRole::Tool if matches!(self.icon, Some(Icon::Select | Icon::Cursor)) => {
+            ButtonRole::View | ButtonRole::Tab | ButtonRole::Tool | ButtonRole::ToolChoice => {
                 colors.text
             }
+            ButtonRole::Ai => colors.ai,
+            ButtonRole::Automation => colors.automation,
             _ if in_menu => inherited.unwrap_or(colors.text),
             _ => inherited.unwrap_or(colors.action),
         };
@@ -799,7 +899,8 @@ impl Widget for IconButton {
             || purpose == colors.ai
             || purpose == colors.automation
             || purpose == colors.automation_override;
-        ui.visuals_mut().override_text_color = Some(purpose);
+        let foreground = self.label_color.unwrap_or(purpose);
+        ui.visuals_mut().override_text_color = Some(foreground);
         let visuals = &mut ui.visuals_mut().widgets;
         for visuals in [
             &mut visuals.inactive,
@@ -807,7 +908,7 @@ impl Widget for IconButton {
             &mut visuals.active,
             &mut visuals.open,
         ] {
-            visuals.fg_stroke.color = purpose;
+            visuals.fg_stroke.color = foreground;
         }
         if colored {
             let visuals = &mut ui.visuals_mut().widgets;
@@ -857,8 +958,7 @@ impl Widget for IconButton {
         };
         // Keep native frame padding and hit geometry, but paint its material in
         // the reserved slot beneath the native text, icons and accessibility.
-        let output = self
-            .button
+        let output = button
             .frame_when_inactive(true)
             .fill(Color32::TRANSPARENT)
             .stroke(Stroke::NONE)
@@ -900,7 +1000,7 @@ impl Widget for IconButton {
             );
         }
         ui.set_style(previous_style);
-        if let (Some(label), Some(index)) = (self.accessible_label, native_event_index) {
+        if let (Some(label), Some(index)) = (self.accessible_label.as_deref(), native_event_index) {
             // A custom atom has no text, so native Button emits an unlabelled
             // activation/focus event. Replace that event while retaining every
             // earlier event, then update the native accessibility node as well.
@@ -922,12 +1022,15 @@ impl Widget for IconButton {
                         egui::WidgetType::RadioButton,
                         ui.is_enabled(),
                         self.selected,
-                        &label,
+                        label,
                     )
                 } else {
-                    egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &label)
+                    egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
                 }
             });
+            if icon_only {
+                register_icon_only_label(ui.ctx(), label, output.response.rect);
+            }
         }
         if selected_mode && !in_menu {
             // Selection outlines the complete native target. The halo shares
@@ -954,16 +1057,16 @@ impl Widget for IconButton {
                 egui::StrokeKind::Inside,
             );
         }
-        if let (Some(icon), Some(rect)) = (self.icon, output.rect(self.id)) {
+        if let (Some(icon), Some(rect)) = (icon, output.rect(icon_id)) {
             let color = if output.response.enabled() {
-                purpose
+                foreground
             } else {
                 colors.muted
             };
             icon.paint(ui.painter(), rect, color);
         }
         if self.disclosure
-            && let Some(rect) = output.rect(Id::new("rill-button-disclosure"))
+            && let Some(rect) = output.rect(disclosure_id)
         {
             Icon::ChevronDown.paint(
                 ui.painter(),

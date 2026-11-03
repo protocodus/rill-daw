@@ -299,23 +299,6 @@ fn has_text(output: &FullOutput, text: &str) -> bool {
     })
 }
 
-fn front_text_position(output: &FullOutput, text: &str) -> Pos2 {
-    output
-        .shapes
-        .iter()
-        .rev()
-        .find_map(|shape| {
-            if let egui::epaint::Shape::Text(shape) = &shape.shape
-                && shape.galley.job.text == text
-            {
-                Some(shape.pos)
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| panic!("Could not find foreground {text:?}"))
-}
-
 /// A tenth of a second of mono PCM, sufficient to exercise decoding and waveform caching.
 fn wav_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
@@ -496,7 +479,8 @@ fn dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_ed
         .unwrap()["header"];
     // Source icons and label padding are independent of the beat mapping.
     let pos = Pos2::new(
-        timeline["canvas"]["min"][0].as_f64().unwrap() as f32 + harness.app.zoom * 2.0,
+        timeline["canvas"]["min"][0].as_f64().unwrap() as f32
+            + harness.app.zoom * (2.0 - timeline["start_beat"].as_f64().unwrap() as f32),
         ((header["min"][1].as_f64().unwrap() + header["max"][1].as_f64().unwrap()) * 0.5) as f32,
     );
     harness.drop_wav(pos, &path);
@@ -519,7 +503,8 @@ fn dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat(
     let mut harness = Harness::new(0.0);
     let output = harness.settle_full();
     let label = text_position(&output, "Drop audio here · Double-click for MIDI", 0.0);
-    let pos = label + Vec2::new(harness.app.zoom * 3.0 - 24.0, 5.0);
+    // The hint is inset SPACE_LG from the canvas edge, where beat 0 sits.
+    let pos = label + Vec2::new(harness.app.zoom * 3.0 - daw_ui::tokens::SPACE_LG, 5.0);
     harness.drop_wav(pos, &path);
     assert_eq!(harness.app.project.tracks.len(), 2);
     let track = harness.app.project.tracks.last().unwrap();
@@ -639,7 +624,7 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!has_text(&output, "Properties"));
     let output = harness.menu("Window", "Properties");
     assert!(harness.app.inspector_open);
-    assert!(has_text(&output, "Properties of Pattern"));
+    assert!(has_text(&output, "Properties · Pattern"));
     // Global edit shortcuts must never delete the selected clip behind a popup.
     harness.full_key(egui::Key::Delete, egui::Modifiers::NONE);
     assert_eq!(harness.app.project, before);
@@ -649,13 +634,8 @@ fn tool_popups_are_exclusive_and_escape_returns_to_the_arrangement() {
     assert!(!harness.app.inspector_open);
     let output = harness.menu("Window", "Mixer");
     assert_eq!(harness.app.view, WorkspaceView::Mixer);
-    let channel = text_position(&output, "Channel", 0.0) + Vec2::new(12.0, 8.0);
-    harness.full_click(channel);
-    let output = harness.settle_full();
-    assert!(egui::Popup::is_any_open(&harness.ctx));
-    // Mixer also has a direct Effects button behind the Channel menu. Click
-    // the foreground menu entry, as the menu helper does for duplicate labels.
-    let effects = front_text_position(&output, "Effects") + Vec2::new(12.0, 8.0);
+    // The strip's Effects row opens the chain directly.
+    let effects = text_position(&output, "Effects", 0.0) + Vec2::new(12.0, 8.0);
     harness.full_click(effects);
     let output = harness.settle_full();
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
@@ -836,7 +816,7 @@ fn leaving_the_clip_editor_clears_note_selection_so_keyboard_commands_target_the
     harness.full_click(note);
     harness.settle_full();
     assert_eq!(harness.app.selected_notes.len(), 1);
-    harness.menu("Window", "Arrangement");
+    harness.menu("Window", "Arranger");
     assert_eq!(harness.app.view, WorkspaceView::Arrangement);
     assert!(harness.app.selected_notes.is_empty());
     assert!(
@@ -939,9 +919,9 @@ fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
     let selected = harness.app.selected_notes.clone();
     assert_eq!(selected.len(), 1);
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "Draw settings", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "Key C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
     harness.full_frame(RawInput {
         events: vec![Event::PointerMoved(
@@ -1117,7 +1097,7 @@ fn linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_ins
     let note = harness.notes()[0].id;
     harness.app.selected_notes.insert(note);
     let before = harness.app.project.clone();
-    let output = harness.menu("Notes", "Quantize...");
+    let output = harness.menu("Notes", "Quantize…");
     assert!(has_text(&output, "Quantize preview"));
     assert_eq!(harness.app.project, before);
     assert!(!harness.app.history.can_undo());
@@ -1127,7 +1107,7 @@ fn linked_midi_quantize_preview_and_cancel_are_local_but_apply_updates_every_ins
     assert_eq!(harness.app.project, before);
     assert!(!harness.app.history.can_undo());
 
-    let output = harness.menu("Notes", "Quantize...");
+    let output = harness.menu("Notes", "Quantize…");
     let apply = text_position(&output, "Apply quantize", 0.0) + Vec2::new(8.0, 8.0);
     harness.full_click(apply);
     assert!(!has_text(&harness.settle_full(), "Quantize preview"));

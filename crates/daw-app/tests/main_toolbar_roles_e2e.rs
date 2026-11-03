@@ -102,14 +102,15 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
             }
             same_row(&state, &["Arranger", "Mixer"]);
             same_row(&state, &["Start", "Play", "Stop", "Record"]);
-            same_row(&state, &["001 . 01 . 00", "120.0 BPM", "4/4"]);
-            same_row(&state, &["Click", "Loop", "Range"]);
+            same_row(&state, &["1.1.1", "0:00.00"]);
+            same_row(&state, &["120.0 BPM", "4/4", "Click"]);
+            same_row(&state, &["Loop", "Range"]);
             // Visible tempo steps add two full mouse targets. Below 1280 the
             // complete guide group may wrap; common laptop widths keep one row.
             if width >= 1280 {
                 same_row(
                     &state,
-                    &["Arranger", "Start", "120.0 BPM", "Click", "Range"],
+                    &["Arranger", "Start", "1.1.1", "120.0 BPM", "Click", "Range"],
                 );
             }
             // Diagnostics retain the original string even if the actual galley

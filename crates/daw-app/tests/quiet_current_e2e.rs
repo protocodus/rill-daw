@@ -33,7 +33,7 @@ fn center(rect: &Value) -> (f64, f64) {
 }
 
 fn select(app: &mut Harness, id: u64) -> Value {
-    menu(app, "Window", "Arrangement");
+    menu(app, "Window", "Arranger");
     let state = app.click("Fit");
     let rect = &state["timeline"]["clips"]
         .as_array()
@@ -259,7 +259,7 @@ fn waltz_range_variation_and_fades_survive_portable_recall_and_exact_export() {
 
     // Balance one voice in the existing arranger controls, retaining centered
     // brushes and bass. The final mix must contain a real stereo difference.
-    let state = menu(&mut app, "Window", "Arrangement");
+    let state = menu(&mut app, "Window", "Arranger");
     let pan = &state["timeline"]["channels"].as_array().unwrap()[2]["pan"];
     let (x, y) = center(pan);
     let target = pan["min"][0].as_f64().unwrap()

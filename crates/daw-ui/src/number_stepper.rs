@@ -78,10 +78,13 @@ fn number_stepper_impl(
             let button = ui
                 .add_enabled(
                     allowed,
-                    crate::button_widget(symbol).small().min_size(egui::vec2(
-                        crate::tokens::COMPACT_HEIGHT,
-                        crate::tokens::CONTROL_HEIGHT,
-                    )),
+                    // Steps sit beside an input, so they stay frameless until hover.
+                    crate::quiet_button_widget(symbol)
+                        .small()
+                        .min_size(egui::vec2(
+                            crate::tokens::COMPACT_HEIGHT,
+                            crate::tokens::CONTROL_HEIGHT,
+                        )),
                 )
                 .on_hover_text(format!("{verb} {name} by {step}"));
             button.widget_info(|| {
@@ -99,9 +102,12 @@ fn number_stepper_impl(
         }
         let keypad = ui
             .add(
-                crate::button_widget("123")
+                crate::quiet_button_widget("123")
                     .small()
-                    .min_size(egui::vec2(34.0, crate::tokens::CONTROL_HEIGHT)),
+                    .min_size(egui::vec2(
+                        crate::tokens::CONTROL_HEIGHT,
+                        crate::tokens::CONTROL_HEIGHT,
+                    )),
             )
             .on_hover_text(format!("Enter {name} using mouse"));
         keypad.widget_info(|| {

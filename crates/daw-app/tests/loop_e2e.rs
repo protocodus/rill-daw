@@ -50,21 +50,12 @@ fn loop_indicator_clears_ruler_labels_without_shifting_the_canvas_when_toggled()
             let off = app.command(json!({"command":"system_theme","dark":dark}));
             app.click("Loop");
             let on = app.command(json!({"command":"inspect","paint":true}));
-            let palette = if dark {
-                daw_ui::theme::DARK
-            } else {
-                daw_ui::theme::LIGHT
-            };
-            let fill = json!(palette.guide.gamma_multiply(0.6).to_array());
             let canvas_top = on["timeline"]["canvas"]["min"][1].as_f64().unwrap();
-            let strip = on["painted_rects"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|shape| {
-                    shape["fill"] == fill && shape["rect"]["max"][1].as_f64().unwrap() <= canvas_top
-                })
-                .expect("visible loop indicator below ruler labels");
+            let strip = json!({"rect": on["timeline"]["loop_indicator"].clone()});
+            assert!(
+                strip["rect"]["max"][1].as_f64().unwrap() <= canvas_top,
+                "visible loop indicator below ruler labels"
+            );
             let strip_top = strip["rect"]["min"][1].as_f64().unwrap();
             let clock = on["label_rects"]
                 .as_array()
@@ -73,7 +64,7 @@ fn loop_indicator_clears_ruler_labels_without_shifting_the_canvas_when_toggled()
                 .find(|label| label["text"] == "0:00")
                 .expect("visible clock label");
             assert!(
-                clock["max"][1].as_f64().unwrap() + 8.0 <= strip_top,
+                clock["max"][1].as_f64().unwrap() <= strip_top,
                 "loop indicator crowds the clock at {density}x: {clock}, {strip}"
             );
             assert_eq!(off["timeline"]["canvas"], on["timeline"]["canvas"]);
@@ -354,7 +345,7 @@ fn loop_strip_endpoints_drag_live_with_snap_and_separate_undo_without_editing_mu
             );
             assert!(
                 rect["min"][1].as_f64().unwrap()
-                    >= before["timeline"]["ruler"]["max"][1].as_f64().unwrap() + 8.0
+                    >= before["timeline"]["ruler"]["max"][1].as_f64().unwrap()
             );
             let (x, y) = rect_center(rect);
             let hover = app.command(json!({"command":"pointer","phase":"move","x":x,"y":y}));
@@ -432,13 +423,14 @@ fn loop_strip_handles_keep_a_positive_range_and_never_appear_at_clipped_edges() 
     assert_range(&zero, 0.0, 10.0, true);
     loop_drag_context_unchanged(&before, &zero);
     assert_eq!(edit(&mut app, "Undo")["project"], before["project"]);
+    // Crossing stops one snap step (1/16) before the other endpoint.
     let (_, crossed) = drag_loop_handle(&mut app, "loop_start_handle", 10.0);
-    assert!((crossed["project"]["loop_start"].as_f64().unwrap() - 9.999).abs() < 1e-8);
+    assert_eq!(crossed["project"]["loop_start"], 9.75);
     assert_eq!(crossed["project"]["loop_end"], 10.0);
     assert_eq!(edit(&mut app, "Undo")["project"], before["project"]);
     let (_, crossed) = drag_loop_handle(&mut app, "loop_end_handle", -9.0);
     assert_eq!(crossed["project"]["loop_start"], 2.0);
-    assert!((crossed["project"]["loop_end"].as_f64().unwrap() - 2.001).abs() < 1e-8);
+    assert_eq!(crossed["project"]["loop_end"], 2.25);
     assert_eq!(edit(&mut app, "Undo")["project"], before["project"]);
 
     // Centered zoom exposes the continuation of the loop, not a new endpoint.
@@ -463,14 +455,21 @@ fn loop_strip_handles_keep_a_positive_range_and_never_appear_at_clipped_edges() 
     assert!(!timeline["loop_indicator"].is_null());
     let rect = &timeline["loop_indicator"];
     let (_, y) = rect_center(rect);
+    // Dragging inside the band moves the loop as a whole; a clipped edge
+    // never resizes it.
     for (x, dx) in [
         (rect["min"][0].as_f64().unwrap() + 1.0, 40.0),
         (rect["max"][0].as_f64().unwrap() - 1.0, -40.0),
     ] {
+        let before = app.inspect();
         let moved = app
             .command(json!({"command":"pointer","phase":"drag","x":x,"y":y,"to_x":x+dx,"to_y":y}));
-        assert_eq!(moved["project"], clipped["project"]);
-        assert_eq!(moved["history"], clipped["history"]);
+        let length = |state: &Value| {
+            state["project"]["loop_end"].as_f64().unwrap()
+                - state["project"]["loop_start"].as_f64().unwrap()
+        };
+        assert!((length(&moved) - length(&before)).abs() < 1e-9);
+        assert_eq!(moved["project"]["tracks"], before["project"]["tracks"]);
     }
     app.quit();
 }

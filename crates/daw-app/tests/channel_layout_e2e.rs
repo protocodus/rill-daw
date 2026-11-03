@@ -30,7 +30,8 @@ fn scroll_routing(app: &mut Harness, down: bool) -> Value {
     let state = app.inspect();
     let window = &state["window_rects"][0];
     let x = (window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5;
-    let y = window["max"][1].as_f64().unwrap() - 50.0;
+    // Wheel over the scrolling body, above the divider and pinned actions.
+    let y = window["max"][1].as_f64().unwrap() - 90.0;
     app.command(json!({"command":"scroll", "x":x, "y":y,
         "delta":if down { -10000.0 } else { 10000.0 }}));
     for _ in 0..20 {
@@ -98,7 +99,23 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
             state["project"]["tracks"][0]["inserts"][0]["enabled"],
             false
         );
-        app.command(json!({"command":"click","label":"More","occurrence":1}));
+        // At 720 pt the second card's actions sit below the bounded body;
+        // the footer stays pinned and the body scrolls to reveal them.
+        let state = app.inspect();
+        let frame = &state["window_rects"][0];
+        let x = (frame["min"][0].as_f64().unwrap() + frame["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (frame["min"][1].as_f64().unwrap() + frame["max"][1].as_f64().unwrap()) * 0.5;
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-10000.0}));
+        for _ in 0..20 {
+            app.inspect();
+        }
+        let more = app.inspect()["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|label| label["text"] == "More")
+            .count();
+        app.command(json!({"command":"click","label":"More","occurrence":more - 1}));
         let state = app.click("Up");
         assert_eq!(state["project"]["tracks"][0]["inserts"][0]["id"], second);
         app.click("More");
@@ -118,12 +135,13 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         let routing_title = format!("Routing of {}", project.track(track).unwrap().name);
         for label in [
             routing_title.as_str(),
-            "Level",
+            "Output",
+            "Sends",
+            "8.0 dB",
             "Pre",
             "Post",
-            "×",
-            "+ Send",
-            "Create send track",
+            "Add send…",
+            "New return with effect…",
         ] {
             visible(&state, label);
         }
@@ -147,7 +165,7 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         let state = click_revealed(&mut app, "Pre");
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["pre_fader"], true);
         assert_eq!(state["project"]["tracks"][0]["sends"][0]["gain"], 2.5);
-        let state = app.click("×");
+        let state = app.click("Remove send");
         assert!(
             state["project"]["tracks"][0]["sends"]
                 .as_array()

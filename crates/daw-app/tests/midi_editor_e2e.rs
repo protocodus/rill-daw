@@ -492,7 +492,7 @@ fn quantize_preview_strength_swing_ends_apply_cancel_and_history() {
     app.command(json!({"command":"key","key":"A","cmd":true}));
     let before = notes(&app.inspect());
     app.click("Notes");
-    let preview = app.click("Quantize...");
+    let preview = app.click("Quantize…");
     assert_eq!(
         notes(&preview),
         before,
@@ -519,7 +519,7 @@ fn quantize_preview_strength_swing_ends_apply_cancel_and_history() {
     }
     assert_eq!(notes(&app.click("Cancel quantize")), before);
     app.click("Notes");
-    app.click("Quantize...");
+    app.click("Quantize…");
     let state = app.inspect();
     let slider = &state["midi_editor"]["quantize"]["strength_rect"];
     let center = center(slider);
@@ -552,13 +552,13 @@ fn quantize_preview_strength_swing_ends_apply_cancel_and_history() {
     assert_eq!(notes(&undo(&mut app, false)), before);
     assert_eq!(notes(&undo(&mut app, true)), expected);
     app.click("Notes");
-    app.click("Quantize...");
+    app.click("Quantize…");
     let cancelled = app.key("Escape");
     assert_eq!(cancelled["view"], "Clip");
     assert!(cancelled["midi_editor"]["preview_notes"].is_null());
     assert_eq!(notes(&cancelled), expected);
     app.click("Notes");
-    app.click("Quantize...");
+    app.click("Quantize…");
     let undone = undo(&mut app, false);
     assert_eq!(notes(&undone), before);
     assert!(undone["midi_editor"]["preview_notes"].is_null());
@@ -580,8 +580,8 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     for group in [
         &["Arranger", "Mixer"][..],
         &["Start", "Play", "Stop", "Record"][..],
-        &["Click", "Loop", "Range"][..],
-        &["120.0 BPM", "4/4"][..],
+        &["120.0 BPM", "4/4", "Click"][..],
+        &["Loop", "Range"][..],
     ] {
         let row_y = center(
             labels
@@ -623,8 +623,7 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     ] {
         assert!(!visible(&before, label), "{label} should be contextual");
     }
-    app.click("Draw settings");
-    let pitch = app.click("C · Natural minor");
+    let pitch = app.click("Key C · Natural minor");
     assert!(visible(&pitch, "Natural minor"));
     assert!(visible(&pitch, "Major triad"));
     assert_eq!(app.key("Escape")["view"], "Clip");
@@ -646,7 +645,7 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     let multi = app.key("U");
     assert!(visible(&multi, "Chord stack"));
     assert!(visible(&multi, "Major triad"), "{}", multi["label_rects"]);
-    assert!(visible(&multi, "Draw settings"));
+    assert!(visible(&multi, "Key C · Natural minor"));
     let plot = &multi["midi_editor"]["plot"];
     let top = plot["min"][1].as_f64().unwrap();
     let bottom = plot["max"][1].as_f64().unwrap();
@@ -731,7 +730,8 @@ fn legato_preserves_chords_and_transpose_and_nudge_preserve_group_spacing() {
     app.command(json!({"command":"key","key":"A","cmd":true}));
     let original = notes(&app.inspect());
     app.click("Notes");
-    let legato = notes(&app.click("Legato"));
+    app.click("Legato");
+    let legato = notes(&app.click("Legato to next note"));
     assert_eq!(
         legato
             .iter()
@@ -740,9 +740,11 @@ fn legato_preserves_chords_and_transpose_and_nudge_preserve_group_spacing() {
         vec![1.0, 1.0, 1.0, 0.5]
     );
     app.click("Notes");
+    app.click("Transpose");
     let up = notes(&app.click("+1 semitone"));
     assert_eq!(up[0]["pitch"], 61);
     app.click("Notes");
+    app.click("Transpose");
     let octave = notes(&app.click("+1 octave"));
     assert_eq!(octave[0]["pitch"], 73);
     app.command(json!({"command":"key","key":"ArrowDown","cmd":true}));
@@ -1060,8 +1062,7 @@ fn folded_fit_and_root_changes_handle_hidden_only_clips_without_edits() {
         assert_eq!(disabled["history"], original["history"]);
         app.click("Fit");
     }
-    app.click("Draw settings");
-    app.click("C · Natural minor");
+    app.click("Key C · Natural minor");
     app.click("C");
     let revealed = app.click("C♯");
     assert_eq!(revealed["midi_editor"]["hidden_notes"], 0);

@@ -145,7 +145,11 @@ fn single_clip_header_keeps_actions_without_empty_navigation_controls() {
 fn next_previous_and_arrow_selection_keep_tool_scale_project_and_history() {
     let (mut app, first, second, lower, original) = fixture();
     let compact = app.command(json!({"command":"viewport","width":800.0,"height":760.0}));
-    for (name, minimum_width) in [("Previous", 50.0), ("Next", 25.0)] {
+    // Previous and Next are icon-only controls that register their names.
+    for (name, minimum_width) in [
+        ("Previous", f64::from(daw_ui::tokens::ICON_SIZE)),
+        ("Next", f64::from(daw_ui::tokens::ICON_SIZE)),
+    ] {
         assert!(
             compact["visible_labels"]
                 .as_array()
@@ -162,7 +166,7 @@ fn next_previous_and_arrow_selection_keep_tool_scale_project_and_history() {
         assert!(label["max"][0].as_f64().unwrap() <= 800.0);
         assert!(
             label["max"][0].as_f64().unwrap() - label["min"][0].as_f64().unwrap() >= minimum_width,
-            "{name} must paint its full short label, rather than an ellipsis"
+            "{name} must keep its full icon target"
         );
     }
     app.key("I");

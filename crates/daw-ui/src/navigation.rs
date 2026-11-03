@@ -9,7 +9,8 @@ pub struct ViewLink<T> {
     pub enabled: bool,
 }
 
-/// A compact, wrapping row of links with the current destination marked.
+/// A compact, wrapping row of page links in a fixed order. The current
+/// destination stays in place as the selected tab, so the row never shifts.
 pub fn view_links<T: Copy + PartialEq>(
     ui: &mut Ui,
     current: T,
@@ -21,10 +22,7 @@ pub fn view_links<T: Copy + PartialEq>(
             if ui
                 .add_enabled(
                     link.enabled,
-                    crate::button_widget(link.label)
-                        .selected(current == link.value)
-                        .frame_when_inactive(current == link.value)
-                        .frame(true)
+                    crate::IconButton::tab(current == link.value, link.label)
                         .wrap_mode(egui::TextWrapMode::Extend),
                 )
                 .clicked()
@@ -34,6 +32,49 @@ pub fn view_links<T: Copy + PartialEq>(
         }
     });
     selected
+}
+
+/// Whether the page links as tabs plus one trailing button fit on one line
+/// here, so a caller can shorten the trailing label instead of wrapping.
+/// Measured with an invisible sizing pass of the same widgets.
+pub fn links_fit<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: T,
+    links: &[ViewLink<T>],
+    trailing: &str,
+) -> bool {
+    let mut probe = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(ui.max_rect())
+            .sizing_pass()
+            .invisible()
+            .id_salt("links_fit"),
+    );
+    probe.horizontal(|ui| {
+        for link in links {
+            ui.add(
+                crate::IconButton::tab(current == link.value, link.label)
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        }
+        ui.add(crate::ai_button_widget(trailing));
+    });
+    // action_row separates the trailing action from the links by SPACE_SM on
+    // top of the item spacing the probe already contains.
+    probe.min_rect().width() + crate::tokens::SPACE_SM <= ui.available_width()
+}
+
+/// The one header of channel utility windows (Channel, Instrument, Effects,
+/// Routing): page links leading, the contextual AI action trailing, on one
+/// row, then a uniform SPACE_LG gap so every body starts at the same height.
+pub fn utility_header<L, A>(
+    ui: &mut Ui,
+    links: impl FnOnce(&mut Ui) -> L,
+    ai: impl FnOnce(&mut Ui) -> A,
+) -> (L, A) {
+    let (ai, links) = crate::action_row(ui, ai, links).inner;
+    ui.add_space((crate::tokens::SPACE_LG - ui.spacing().item_spacing.y).max(0.0));
+    (links, ai)
 }
 
 /// Frozen paint of a caller view. It creates no widgets, focus, or hit targets.

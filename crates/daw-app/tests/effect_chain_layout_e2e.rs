@@ -47,7 +47,7 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
             json!({"command":"viewport", "width":800, "height":600, "pixels_per_point":density}),
         );
         let mixer = app.click("Mixer");
-        let count = label(&mixer, "12");
+        let count = label(&mixer, "12/12");
         let action = label(&mixer, "Effects");
         let summary = label(&mixer, "First insert");
         assert_eq!(mixer["mixer_devices"].as_array().unwrap().len(), 12);
@@ -63,7 +63,15 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
             "insert count must not overlap the Effects label"
         );
         let chain = app.click("Effects");
-        label(&chain, "Input → Inserts → Volume & pan");
+        label(&chain, "Inserts");
+        assert!(
+            !chain["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|text| text == "Input → Inserts → Volume & pan"),
+            "the processing order lives in the count's tooltip"
+        );
         label(&chain, "12 / 12 active");
         let footer = label(&chain, "+ Insert").clone();
         assert!(footer["max"][1].as_f64().unwrap() <= 600.0);
@@ -72,7 +80,14 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
             bypassed["project"]["tracks"][0]["inserts"][0]["enabled"],
             false
         );
-        label(&bypassed, "Bypassed");
+        // Bypass is told by the switch, the muted name and the gray rail.
+        assert!(
+            !bypassed["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|text| text == "Bypassed" || text == "Active")
+        );
         label(&bypassed, "11 / 12 active");
         app.click("More");
         let moved = app.click("Down");
@@ -110,7 +125,17 @@ fn mixer_scale_marks_match_native_fader_gain_and_empty_chains_offer_insertion() 
     let mut app = Harness::new();
     fixture(&mut app, 0);
     let mixer = app.click("Mixer");
-    label(&mixer, "No inserts");
+    // An empty chain shows one dashed "+ Insert" slot under the Effects header.
+    let slot = label(&mixer, "+ Insert").clone();
+    let summary = &mixer["mixer"]["channels"][0]["insert_summary"];
+    assert!(slot["min"][1].as_f64().unwrap() >= summary["min"][1].as_f64().unwrap());
+    assert!(slot["max"][1].as_f64().unwrap() <= summary["max"][1].as_f64().unwrap());
+    let (x, y) = center(&slot);
+    let library = app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
+    assert_eq!(library["popups"]["library"], true);
+    assert_eq!(library["project"], mixer["project"]);
+    app.key("Escape");
+    let mixer = app.click("Mixer");
     let fader = &mixer["mixer"]["channels"][0]["fader"];
     let x = center(fader).0;
     for (mark, gain) in [("−6", 10.0_f64.powf(-6.0 / 20.0)), ("0", 1.0)] {

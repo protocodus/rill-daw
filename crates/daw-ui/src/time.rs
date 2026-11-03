@@ -25,3 +25,30 @@ pub fn format_clock_time(seconds: f64, precision: usize) -> String {
     }
     label
 }
+
+/// Compact one-based "bar.beat.sixteenth" position, the same form the rulers
+/// use. Rounded to the nearest sixteenth so a readout never flickers between
+/// two neighbouring values at a sixteenth boundary.
+pub fn musical_position_label(beat: f64, beats_per_bar: u8) -> String {
+    let beats_per_bar = u64::from(beats_per_bar.max(1));
+    let sixteenths = (beat.max(0.0) * 4.0).round() as u64;
+    let bar = sixteenths / (beats_per_bar * 4) + 1;
+    let beat = sixteenths / 4 % beats_per_bar + 1;
+    format!("{bar}.{beat}.{}", sixteenths % 4 + 1)
+}
+
+#[cfg(test)]
+mod position_tests {
+    use super::*;
+
+    #[test]
+    fn positions_count_from_one_and_carry_into_bars() {
+        assert_eq!(musical_position_label(0.0, 4), "1.1.1");
+        assert_eq!(musical_position_label(0.25, 4), "1.1.2");
+        assert_eq!(musical_position_label(3.75, 4), "1.4.4");
+        assert_eq!(musical_position_label(4.0, 4), "2.1.1");
+        assert_eq!(musical_position_label(6.5, 3), "3.1.3");
+        assert_eq!(musical_position_label(-2.0, 4), "1.1.1");
+        assert_eq!(musical_position_label(3.999, 4), "2.1.1");
+    }
+}

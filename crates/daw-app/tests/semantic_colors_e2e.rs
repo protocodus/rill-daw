@@ -57,7 +57,27 @@ fn neutral_defaults_and_semantic_roles_survive_theme_changes_and_saved_user_colo
         let colors = if dark { theme::DARK } else { theme::LIGHT };
         let before = app.inspect();
         let state = app.command(json!({"command":"inspect","paint":true}));
-        text_color(&state, "Play", colors.action);
+        // The primary transport action is a solid action fill with
+        // contrasting text, not action-colored text on a tinted surface.
+        text_color(&state, "Play", theme::contrast_text(colors.action));
+        let play = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == "Play")
+            .expect("Play label");
+        assert!(
+            state["painted_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|shape| shape["fill"] == json!(colors.action.to_array())
+                    && shape["rect"]["min"][0].as_f64().unwrap()
+                        <= play["min"][0].as_f64().unwrap()
+                    && shape["rect"]["max"][0].as_f64().unwrap()
+                        >= play["max"][0].as_f64().unwrap()),
+            "Play keeps a solid action fill"
+        );
         text_color(&state, "Mixer", colors.text);
         text_color(&state, "AI", colors.ai);
         assert_eq!(colors.cursor, colors.guide);
@@ -76,7 +96,8 @@ fn neutral_defaults_and_semantic_roles_survive_theme_changes_and_saved_user_colo
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|shape| shape["fill"] == json!(colors.guide.gamma_multiply(0.6).to_array()))
+                .any(|shape| shape["fill"]
+                    == json!(colors.bg.lerp_to_gamma(colors.guide, 0.35).to_array()))
         );
         app.click("Loop");
     }

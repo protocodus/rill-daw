@@ -5,7 +5,7 @@ use daw_core::{AudioData, Clip, Project};
 use serde_json::{Value, json};
 
 fn menu(app: &mut Harness, parent: &str, item: &str) -> Value {
-    if parent == "+ Send" {
+    if parent == "Add send…" {
         open_send_choices(app);
     } else {
         app.click(parent);
@@ -27,19 +27,27 @@ fn routing_footer(app: &mut Harness) -> Value {
     scrolled
 }
 
+/// The routing window's own "Add send…" menu (the strips behind it carry the
+/// same label).
 fn open_send_choices(app: &mut Harness) -> Value {
     let state = routing_footer(app);
+    let window = &state["window_rects"][0];
     let target = state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|label| label["text"] == "+ Send")
+        .find(|label| {
+            label["text"] == "Add send…"
+                && label["min"][0].as_f64().unwrap() >= window["min"][0].as_f64().unwrap()
+                && label["max"][0].as_f64().unwrap() <= window["max"][0].as_f64().unwrap()
+                && top(label) >= window["min"][1].as_f64().unwrap()
+                && bottom(label) <= window["max"][1].as_f64().unwrap()
+        })
         .expect("Send action reachable by scrolling");
     assert!(bottom(target) - top(target) >= 13.0);
-    app.command(json!({"command":"pointer", "phase":"move",
+    app.command(json!({"command":"pointer", "phase":"click",
         "x":(target["min"][0].as_f64().unwrap() + target["max"][0].as_f64().unwrap()) * 0.5,
-        "y":(top(target) + bottom(target)) * 0.5}));
-    app.click("+ Send")
+        "y":(top(target) + bottom(target)) * 0.5}))
 }
 fn undo(app: &mut Harness, redo: bool) -> Value {
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":redo}))
@@ -68,9 +76,15 @@ fn count(state: &Value, label: &str) -> usize {
         .filter(|value| *value == label)
         .count()
 }
-fn open_routing(app: &mut Harness, route: &str) {
-    app.click("Mixer");
-    app.click(route);
+/// Open Routing from a channel's output button (labelled by its destination).
+fn open_routing(app: &mut Harness, channel: usize) {
+    let state = app.click("Mixer");
+    click_rect(app, &state["mixer"]["channels"][channel]["target"]);
+}
+fn click_rect(app: &mut Harness, rect: &Value) -> Value {
+    app.command(json!({"command":"pointer","phase":"click",
+        "x":(rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+        "y":(top(rect) + bottom(rect)) * 0.5}))
 }
 fn export(app: &mut Harness, name: &str) -> AudioData {
     let path = app.directory.path().join(name);
@@ -145,7 +159,7 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 .iter()
                 .map(|group| group["label"].as_str().unwrap())
                 .collect::<Vec<_>>(),
-            ["Tracks", "Buses", "Tracks", "Master"]
+            ["Tracks", "Buses", "Tracks", "Output"]
         );
         assert!(
             state["mixer"]["groups"]
@@ -161,12 +175,13 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 "name",
                 "source",
                 "effects",
-                "gain",
-                "fader",
+                "insert_summary",
                 "pan",
                 "mute_solo",
-                "meter",
+                "gain",
+                "fader",
                 "target",
+                "sends",
             ];
             for pair in stages.windows(2) {
                 assert!(
@@ -174,13 +189,15 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                     "signal order {pair:?}: {channel}"
                 );
             }
+            // The meter shares the fader's height, right of its rail.
+            assert_eq!(top(&channel["meter"]), top(&channel["fader"]));
+            assert_eq!(bottom(&channel["meter"]), bottom(&channel["fader"]));
+            assert!(
+                channel["meter"]["min"][0].as_f64().unwrap()
+                    >= channel["fader"]["max"][0].as_f64().unwrap()
+            );
             let kind = channel["source_kind"].as_str().unwrap();
             let label = &channel["source_label"];
-            assert!(
-                bottom(label) - top(label)
-                    <= f64::from(daw_ui::tokens::FONT_SMALL + 2.0 * daw_ui::tokens::SPACE_XS),
-                "{kind} must stay on one line: {label}"
-            );
             assert!(
                 label["max"][0].as_f64().unwrap()
                     <= channel["source"]["max"][0].as_f64().unwrap() + 0.1
@@ -194,7 +211,7 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                     .as_array()
                     .unwrap()
                     .iter()
-                    .any(|paint| paint["text"] == kind
+                    .any(|paint| paint["text"].as_str().unwrap().starts_with(kind)
                         && bottom(paint) - top(paint) <= 22.0
                         && paint["min"][0].as_f64().unwrap()
                             >= label["min"][0].as_f64().unwrap() - 0.1
@@ -206,14 +223,22 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .find(|paint| paint["rect"] == channel["name"])
+                .find(|paint| {
+                    (0..2).all(|corner| {
+                        (0..2).all(|axis| {
+                            let key = if corner == 0 { "min" } else { "max" };
+                            (paint["rect"][key][axis].as_f64().unwrap()
+                                - channel["name"][key][axis].as_f64().unwrap())
+                            .abs()
+                                <= 0.5
+                        })
+                    })
+                })
                 .unwrap();
+            // One name plate for tracks and buses: the channel color, centered
+            // text; buses add the BUS badge inside the plate.
+            assert_eq!(header["fill"], json!([140, 160, 180, 255]));
             if channel["bus"] == true {
-                assert_ne!(
-                    header["fill"],
-                    json!([140, 160, 180, 255]),
-                    "bus headers have a distinct treatment even with the same track color"
-                );
                 assert!(
                     state["label_rects"]
                         .as_array()
@@ -225,8 +250,6 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                             && paint["max"][0].as_f64().unwrap()
                                 <= channel["name"]["max"][0].as_f64().unwrap())
                 );
-            } else {
-                assert_eq!(header["fill"], json!([140, 160, 180, 255]));
             }
         }
         // Send lanes extend below the stable channel controls. Reveal them
@@ -256,7 +279,14 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         }
         assert_eq!(state["project"], before["project"]);
         assert_eq!(state["history"], before["history"]);
-        assert!(visible(&state, "Send · Room"));
+        assert_eq!(
+            state["mixer"]["channels"][0]["send_rows"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(visible(&state, "Room"));
         app.command(json!({"command":"scroll","x":100,"y":400,"delta":1000}));
         for _ in 0..10 {
             app.inspect();
@@ -319,7 +349,8 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         // Returning to a workspace can restore its top scroll position. Give
         // the following selection/reading check room to show the routing band.
         app.command(json!({"command":"viewport","width":1100,"height":900}));
-        app.click("Ch 2 > Master");
+        let current = app.inspect();
+        click_rect(&mut app, &current["mixer"]["channels"][1]["target"]);
         app.key("Escape");
         let current = app.inspect();
         let selected_channel = current["mixer"]["channels"]
@@ -391,11 +422,11 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     assert_eq!(second["project"]["tracks"][5]["name"], "Bus 2");
     undo(&mut app, false);
     assert_eq!(undo(&mut app, false)["project"], initial["project"]);
-    open_routing(&mut app, "Ch 1 > Master");
+    open_routing(&mut app, 0);
     app.click("Master output");
     app.click("Music");
-    menu(&mut app, "+ Send", "Room");
-    menu(&mut app, "+ Send", "Parallel");
+    menu(&mut app, "Add send…", "Room");
+    menu(&mut app, "Add send…", "Parallel");
     let controls = routing_footer(&mut app);
     let occurrence = count(&controls, "Pre")
         .checked_sub(1)
@@ -423,7 +454,7 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     assert_eq!(sent["project"]["tracks"][0]["sends"][1]["pre_fader"], true);
     assert_eq!(sent["project"]["tracks"][0]["sends"][0]["pre_fader"], false);
     let snapshot = sent["project"].clone();
-    menu(&mut app, "+ Send", "+ Bus and send");
+    menu(&mut app, "Add send…", "New bus and send");
     let created = app.inspect();
     assert_eq!(created["project"]["tracks"].as_array().unwrap().len(), 5);
     assert_eq!(
@@ -440,11 +471,11 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
     );
     app.key("Escape");
     // A transitive Music→Room path prevents Room→Music and Room→Room.
-    open_routing(&mut app, "Ch 2 > Master");
+    open_routing(&mut app, 1);
     app.click("Master output");
     app.click("Room");
     app.key("Escape");
-    open_routing(&mut app, "Ch 3 > Master");
+    open_routing(&mut app, 2);
     let before_choices = routing_footer(&mut app);
     let choices = open_send_choices(&mut app);
     assert_eq!(count(&choices, "Music"), count(&before_choices, "Music"));

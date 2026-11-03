@@ -149,7 +149,7 @@ fn nested_utilities_return_to_the_selected_notes_and_scroll_position() {
         1
     );
     app.click("Properties");
-    assert_only_popup(&menu(&mut app, "Window", "Arrangement"), "none");
+    assert_only_popup(&menu(&mut app, "Window", "Arranger"), "none");
     assert_only_popup(&app.key("Escape"), "none");
     let reopened = menu(&mut app, "Window", "Clip Editor");
     assert!(
@@ -169,8 +169,7 @@ fn escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_p
     menu(&mut app, "Track", "Add MIDI track");
     app.key("Escape");
     menu(&mut app, "Window", "Clip Editor");
-    app.click("Draw settings");
-    app.click("C · Natural minor");
+    app.click("Key C · Natural minor");
     let open = app.click("Natural minor");
     assert!(visible(&open, "Dorian"));
     let closed = app.key("Escape");
@@ -328,7 +327,7 @@ fn effects_routing_and_mixer_controls_update_the_same_channel_graph() {
 
     let state = menu(&mut app, "Window", "Routing");
     assert_only_popup(&state, "routing");
-    menu(&mut app, "+ Send", "Bus 1");
+    menu(&mut app, "Add send…", "Bus 1");
     let state = app.click("Pre");
     assert_eq!(state["project"]["tracks"][0]["sends"][0]["target_bus"], bus);
     assert_eq!(state["project"]["tracks"][0]["sends"][0]["pre_fader"], true);
@@ -597,7 +596,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     drop(restored);
 
-    menu(&mut app, "Track", "Add instrument…");
+    menu(&mut app, "Track", "Add instrument track…");
     app.command(json!({"command":"text","text":name.chars().take(4).collect::<String>()}));
     common::wait_visible(&mut app, &name);
     let state = app.key("Enter");
@@ -710,7 +709,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
 fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign_preserves_them() {
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
-    menu(&mut app, "Track", "Add instrument…");
+    menu(&mut app, "Track", "Add instrument track…");
     // The search receives keyboard focus without another click.
     app.command(json!({"command":"text","text":"Fixture A"}));
     common::wait_visible(&mut app, "Rill Fixture A");
@@ -725,6 +724,15 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
     assert_eq!(state["project"]["tracks"][0]["clips"][0]["length"], 4.0);
     assert_only_popup(&state, "instrument");
     let original_clips = state["project"]["tracks"][0]["clips"].clone();
+    common::wait_visible(&mut app, "Change instrument");
+    // The new track auto-launches its editor, which fails a moment later without a
+    // display. That error lands above the actions and moves the row, so let the
+    // startup settle before aiming the click.
+    common::wait_until(&mut app, |state| {
+        state["native_editor"]["opening"] == false
+            && (state["native_editor"]["open"] == true
+                || state["native_editor"]["error"].is_string())
+    });
     app.click("Change instrument");
     app.command(json!({"command":"text","text":"Fixture B"}));
     common::wait_visible(&mut app, "Rill Fixture B");
@@ -769,7 +777,7 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
         "Clip",
         "A failed plug-in stays editable"
     );
-    menu(&mut app, "Track", "Add instrument…");
+    menu(&mut app, "Track", "Add instrument track…");
     app.command(json!({"command":"text","text":"Fixture A"}));
     common::wait_visible(&mut app, "Rill Fixture A");
     for _ in 0..15 {
@@ -912,9 +920,11 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     let state = click_header(&mut app, &first, "details");
     assert_only_popup(&state, "properties");
     assert_eq!(state["selected_track"], first);
-    let state = click_front(&mut app, "Instrument");
+    // Properties has one tab row; the channel's instrument opens from Window.
+    let state = menu(&mut app, "Window", "Instrument");
     assert_only_popup(&state, "instrument");
     assert!(visible(&state, "Rill Fixture A"));
+    common::wait_visible(&mut app, "Change instrument");
     let state = app.click("Change instrument");
     assert_only_popup(&state, "library");
     assert_eq!(state["selected_track"], first);
@@ -939,9 +949,9 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     assert_eq!(state["project"], before_replacement);
     let state = menu(&mut app, "Edit", "Redo");
     assert_eq!(state["project"], replaced["project"]);
-    menu(&mut app, "Window", "Arrangement");
+    menu(&mut app, "Window", "Arranger");
     click_header(&mut app, &first, "details");
-    click_front(&mut app, "Instrument");
+    menu(&mut app, "Window", "Instrument");
     assert!(visible(&app.inspect(), "Rill Fixture B"));
     app.quit();
 }

@@ -160,13 +160,13 @@ fn mixer_fader_markers_follow_mouse_edits_and_undo_without_changing_stored_value
         let original = painted(&mut app);
         assert_marker(&original, "fader_scale", Marker::Ordinary);
 
-        // Rotary pan uses an arc/index, covered by mixer_pan_knob_e2e;
-        // endpoint triangles and unity/midpoint glyphs belong to sliders.
+        // The calibrated dB fader keeps one landmark: the hollow 0 dB circle
+        // at 75 % travel. Its ends and midpoint show the ordinary groove.
         for (field, geometry, fraction, expected, marker) in [
-            ("gain", "fader_scale", 0.0, 0.0, Marker::Minimum),
-            ("gain", "fader_scale", 1.0, 1.5, Marker::Maximum),
-            ("gain", "fader_scale", 0.5, 0.75, Marker::Center),
-            ("gain", "fader_scale", 2.0 / 3.0, 1.0, Marker::Zero),
+            ("gain", "fader_scale", 0.0, 0.0, Marker::Ordinary),
+            ("gain", "fader_scale", 1.0, 1.5, Marker::Ordinary),
+            ("gain", "fader_scale", 0.5, 0.0, Marker::Ordinary),
+            ("gain", "fader_scale", 0.75, 1.0, Marker::Zero),
         ] {
             let before = painted(&mut app);
             let control = scale(&before, geometry);
@@ -175,7 +175,12 @@ fn mixer_fader_markers_follow_mouse_edits_and_undo_without_changing_stored_value
             let x = min[0] + (max[0] - min[0]) * fraction;
             let y = min[1] + (max[1] - min[1]) * fraction;
             let edited = app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
-            assert!((number(&edited["project"]["tracks"][0][field]) - expected).abs() < 1e-5);
+            let expected = if fraction == 0.5 {
+                f64::from(daw_ui::gain_untaper(0.5))
+            } else {
+                expected
+            };
+            assert!((number(&edited["project"]["tracks"][0][field]) - expected).abs() < 1e-4);
             let visible = painted(&mut app);
             assert_marker(&visible, geometry, marker);
             for key in ["project", "history", "modified"] {

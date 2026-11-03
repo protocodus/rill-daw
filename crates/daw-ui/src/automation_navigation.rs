@@ -3,6 +3,8 @@ use crate::AutomationState;
 use egui::{Response, Ui};
 use std::ops::RangeInclusive;
 
+/// The channel's automation menu: an icon-only "Automation" opener, or the
+/// current automation state as its label once the channel has a lane.
 pub fn automation_channel_menu<R>(
     ui: &mut Ui,
     state: Option<AutomationState>,
@@ -12,7 +14,27 @@ pub fn automation_channel_menu<R>(
         Some(state) => {
             crate::widgets::semantic_narrow_action_menu(ui, state.rich_label(ui.ctx()), contents)
         }
-        None => crate::compact_action_menu(ui, "Channel", contents),
+        None => {
+            // A narrow quiet icon leaves the source caption its width.
+            let response = ui
+                .scope(|ui| {
+                    ui.spacing_mut().button_padding.x = 0.0;
+                    ui.add(
+                        crate::IconButton::icon_only(crate::Icon::Automation, "Automation")
+                            .min_size(egui::Vec2::new(
+                                crate::tokens::COMPACT_HEIGHT,
+                                crate::tokens::CONTROL_HEIGHT,
+                            ))
+                            .quiet(),
+                    )
+                })
+                .inner
+                .on_hover_text("Automation · volume, pan, sends and parameters");
+            let inner = egui::Popup::menu(&response)
+                .show(contents)
+                .map(|shown| shown.inner);
+            egui::InnerResponse::new(inner, response)
+        }
     }
 }
 

@@ -61,6 +61,7 @@ impl Editor {
                             beats_per_bar: 4,
                             fit,
                             keyboard_active: false,
+                            value_label: daw_ui::percent_value_label,
                         },
                         |beat| {
                             let t = ((beat - 2.0) / 4.0).clamp(0.0, 1.0) as f32;

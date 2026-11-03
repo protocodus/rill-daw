@@ -86,7 +86,7 @@ fn long_unicode_scan_paths_keep_tabs_actions_and_aligned_audio_settings_in_view(
             ],
         );
         let label_x = visible_rect(&audio, "Output")["min"][0].as_f64().unwrap();
-        for label in ["Sample rate", "Buffer", "Sample conversion"] {
+        for label in ["Sample rate", "Buffer", "Resampling"] {
             assert!(
                 (visible_rect(&audio, label)["min"][0].as_f64().unwrap() - label_x).abs() < 1.0
             );
@@ -103,7 +103,7 @@ fn long_unicode_scan_paths_keep_tabs_actions_and_aligned_audio_settings_in_view(
         accessible(&app.click("Appearance"), &["System", "Apply", "Cancel"]);
         accessible(
             &app.click("Storage"),
-            &["Choose…", "Recover session", "Apply", "Cancel"],
+            &["Recovery folder", "Choose…", "Apply", "Cancel"],
         );
         app.click("Plug-ins");
         let removed = app.click("Remove");

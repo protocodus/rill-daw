@@ -221,8 +221,9 @@ opens and closes on-demand utilities in both appearances and at narrow/wide
 sizes, preserving the song while keeping the wrapped transport accessible.
 `control_roles_e2e` also checks whole-family tool wrapping and mouse selection.
 `routing_layout_e2e` follows Properties into Routing through live appearance,
-display-density and viewport changes. It keeps automated sends visible beneath
-the contextual AI action, scrolls a long send list to its output selector, and
+display-density and viewport changes. It checks Output above Sends beneath
+the contextual AI action, wheels down to the automated send and its dB level,
+reaches **Add send…** and **New return with effect…** at the end, and
 checks mouse edits and Undo at 800×600 and 1100×850.
 
 ```sh
@@ -604,11 +605,25 @@ once. Joined audio can be split again and survives deleting its original scratch
 WAV after portable saving. Loop settings do not truncate offline export.
 `loop_e2e` also drags both loop-strip endpoints with Snap and free adjustment,
 checks one Undo per gesture and unchanged music/selection/viewport, retains a
-positive range, omits handles at clipped viewport edges, and disables dragging
-during recording.
+positive range of at least one snap step, omits handles at clipped viewport edges
+(dragging the clipped band moves the whole loop), and disables dragging during
+recording.
 
 ```sh
 cargo test --locked -p daw-app --test loop_e2e --test crossfade_e2e --test joins_e2e
+```
+
+`arranger_polish_e2e` checks the arranger toolbar order at 1280 and 1480 points
+(Snap and Nudge on the tools' row, then Add pattern, then the zoom/View/Tool help
+cluster), the loop label in the proportional caption font with a leading canvas
+gutter and the label stepping past the playhead, Mute/Solo as rail-centered
+21-point squares filled with `Palette::mute`/`solo`, one-line folder rows whose
+Mute acts through the shared toggle, MIDI previews of 2–6 point notes in full
+track color with an outline, and a motionless press on a clip's trim edge
+selecting the clip without trimming it.
+
+```sh
+cargo test --locked -p daw-app --test arranger_polish_e2e -- --test-threads=1
 ```
 
 The `clones_e2e` suite creates MIDI/audio ghost copies through menus, edits
@@ -933,6 +948,37 @@ with every output sample matching the edited song. Native egui clipboard-event
 coverage complements the keyboard-driven E2Es. See
 [audio editor coverage](AUDIO_EDITOR.md) for controls and remaining advanced tools.
 
+### Clip editor toolbars, snap and canvas stability
+
+```sh
+cargo test -p daw-app --test audio_editor_e2e --test midi_note_entry_e2e --test piano_toolbar_e2e -- --test-threads=1
+```
+
+`audio_toolbar_is_one_row_and_tools_and_drawers_never_move_the_canvas` checks
+that the audio toolbar uses one row when wide enough and at most two otherwise,
+that Nudge lives in the Clip menu, that Select, Fade in, Fade out, Cut and Slip
+leave the canvas rect unchanged, that fade options stay in the tool row, and
+that the transient drawer opens below the canvas without moving its top.
+`piano_roll_snap_and_length_choosers_set_the_pencil_grid_by_mouse` chooses
+**Snap 1/8** and **Length 1/8 note** by mouse and draws notes on that grid.
+The piano toolbar and toolbar stability suites check that Snap, Length and Key
+keep their positions across tools and widths.
+
+### Takes, generator and automation popups
+
+```sh
+cargo test -p daw-app --test audio_takes_e2e --test generation_workflow_e2e --test automation_curves_e2e -- --test-threads=1
+```
+
+`take_toolbar_leads_with_commands_and_rows_read_in_bars` checks that the takes
+popup keeps Add takes…, Keep comp only (a direct button, no one-item Takes menu)
+and the trailing View on one toolbar row, that every take row is 89 points tall,
+and that the range fields read bar.beat positions. The generator suites check the
+docked single layout (range rows share the form column) and that the footer
+targets stay fixed through feedback, Next range and Cancel/Done. The curve suite
+reads the gain axis in decibels down to −∞; `tool_hints_e2e` finds the automation
+gestures in the toolbar caption instead of a separate hint band.
+
 ### Spectral waveform previews
 
 ```sh
@@ -959,15 +1005,16 @@ installed plug-in or network connection.
 
 ### Precision, context and routing refinements
 
-`expert_send_controls_e2e` locates the painted 64-point send knob, checks that a
-small drag from 0.25× remains below unity, and compares the live value readout
+`expert_send_controls_e2e` locates the painted 55-point send ring on its row
+(destination, ring, dB value, Pre/Post share one center line), checks that a
+small drag from −12 dB remains below unity, and compares the live dB readout
 with the project after pointer adjustment. It exercises the direct value button, named
 source/destination editor, mouse keypad, fractional precision, Cancel,
 untouched Apply and Undo. Pan entry hides binary float display noise without
 changing the stored value. Automated send edits retain the existing normalized
 linear mapping over 0–16× and override without rewriting the curve; Resume and
 Undo restore the appropriate state. Shared `knob` and `value_entry` tests cover
-the `ln(1 + gain / 0.01)` taper, unity landmark, readable drafts, external value
+the shared `gain_taper`, unity landmark, readable drafts, external value
 synchronization and untouched precision, including rounded range boundaries.
 
 `clip_editor_context_e2e` opens repeated MIDI occurrences and an audio clip at
@@ -1099,10 +1146,21 @@ they do not simulate UI zoom or temporarily shrink resizable utility windows.
 
 `semantic_colors_e2e` exercises neutral track creation and painted action, view,
 AI, guide and automation colors in both appearances, retaining user colors in
-saved songs. `mixer_sections_e2e` checks painted processing sections and direct
-mouse editing through their frames.
+saved songs. `mixer_sections_e2e` checks that strip sections sit one 13-point
+gap apart without frames, that only the gain field and the pan, fader and meter
+troughs are outlined inside a strip, and direct mouse editing in both themes and
+densities. `mixer_strip_e2e` checks aligned sections across strips, the centered
+`[scale][rail][gap][meter]` unit, "−∞ dB", real sources, compact send rows with
+"PRE" and dB levels, "+N more", destination-only outputs and Master's output to
+Setup › Audio. `mixer_pan_e2e` drags the pan rail, including the center detent.
+`utility_header_e2e` checks the shared Channel/Instrument/Effects/Routing header:
+one row of links in a fixed order with the AI action trailing, bodies starting at
+one height, and switching windows through the links. `routing_layout_e2e` and
+`expert_send_controls_e2e` cover the Routing window's Output-then-Sends order and
+dB send levels with exact entry.
 
-`popup_interactions_e2e` resizes 11 real utility forms in both directions, sweeps
+`popup_interactions_e2e` resizes 11 real utility forms in both directions (width
+follows the drag; height keeps hugging the content), sweeps
 mouse hover without allowing geometry changes, checks native close-icon color
 feedback, and closes with the mouse. It runs in both themes and display densities.
 `library_category_search_e2e` types category queries, selects results, clears
@@ -1114,4 +1172,13 @@ real dialog bottom in large and compact viewports, including generator mode
 changes. `popup_interactions_e2e` also checks each utility's actions, including the
 Assistant, before and after mouse resizing. The shared `popup_footer` test checks
 scrolling body growth, wrapped actions, resizing and real clicks without moving
-footer targets.
+footer targets. `popup_footer_e2e` also checks that Setup, About and Join hug
+their content (Join is titled **Join clips · <track>**), that the primary action is rightmost beside Cancel in one row, and that
+form labels share one column. `channel_layout_e2e` checks that the Effects window
+shrinks back to its content after the inserts are removed. `crossfade_e2e` checks
+that the Crossfade window carries the edited clip in its title.
+
+`menu_order_e2e` checks the workflow order of the File, Edit (including the
+Edit ▸ Audio submenu), Track and Window menus, the right-aligned muted shortcut
+column, Track ▸ Delete track, the Library window title, and the menu bar's
+centered project name with duration and the AI button at the right edge.

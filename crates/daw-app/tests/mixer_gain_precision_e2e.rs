@@ -21,7 +21,13 @@ fn visible(state: &Value, text: &str) -> bool {
 }
 
 fn readout(state: &Value, gain: f32) -> &Value {
-    let text = format!("{:.1} dB", daw_ui::channel_gain_to_db(gain));
+    // The editing floor (silence) reads as −∞, like the fader scale.
+    let db = daw_ui::channel_gain_to_db(gain);
+    let text = if db == -60.0 {
+        "−∞ dB".to_owned()
+    } else {
+        format!("{db:.1} dB")
+    };
     state["label_rects"]
         .as_array()
         .unwrap()

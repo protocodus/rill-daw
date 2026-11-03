@@ -1,7 +1,9 @@
 //! Non-destructive clip envelopes and canvas handles. Callers own source
 //! coordinates, snapping, audio processing and the document's undo history.
-use crate::{TimelineViewport, theme};
-use egui::{Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
+use crate::{TimelineViewport, theme, tokens};
+use egui::{
+    Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, emath::GuiRounding,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClipFadeEdge {
@@ -73,10 +75,15 @@ pub fn paint_clip_fades(
     let color = theme::palette(painter.ctx()).orange;
     let samples = (visible.width().ceil() as usize).clamp(2, 2048);
     let mut points = Vec::with_capacity(samples + 1);
+    let mut unity = Vec::with_capacity(samples + 1);
+    // Inset unity from the canvas edge so an untouched envelope stays visible.
+    let top = rect.top() + crate::tokens::SPACE_XS;
+    let height = (rect.bottom() - top).max(0.0);
     for index in 0..=samples {
         let x = egui::lerp(visible.x_range(), index as f32 / samples as f32);
         let value = gain(view.beat_at(rect, x)).clamp(0.0, 1.0);
-        points.push(Pos2::new(x, rect.bottom() - value * rect.height()));
+        points.push(Pos2::new(x, rect.bottom() - value * height));
+        unity.push(value >= 0.999);
     }
     // A quiet veil above the envelope distinguishes attenuated audio without
     // repainting or baking the source waveform.
@@ -91,8 +98,26 @@ pub fn paint_clip_fades(
         mesh.add_triangle(a + 1, a + 3, a + 2);
     }
     painter.add(Shape::mesh(mesh));
-    painter.add(Shape::line(points, Stroke::new(2.0, color)));
+    // Unity runs are quiet; attenuated runs (fades, lowered envelope) are solid.
+    let mut run = vec![points[0]];
+    for index in 1..points.len() {
+        run.push(points[index]);
+        let quiet = unity[index - 1] && unity[index];
+        let next_quiet = index + 1 < points.len() && unity[index] && unity[index + 1];
+        if index + 1 == points.len() || quiet != next_quiet {
+            let stroke = if quiet {
+                Stroke::new(1.0_f32, color.gamma_multiply(0.5))
+            } else {
+                Stroke::new(2.0_f32, color)
+            };
+            painter.add(Shape::line(std::mem::take(&mut run), stroke));
+            run.push(points[index]);
+        }
+    }
 }
+
+/// Visible fade handle edge length (`SPACE_MD`); the hit target stays 16.
+const HANDLE_SIZE: f32 = crate::tokens::SPACE_MD;
 
 /// Dedicated fade targets occupy the top of a clip, separate from its trim
 /// edges. They remain available at zero duration and on unselected clips.
@@ -119,16 +144,26 @@ pub fn clip_fade_handles(
         view.x_at(rect, beat.clamp(bounds.start, bounds.end))
             .clamp(left + inset, right - inset)
     });
-    let separate = (positions[0] - positions[1]).abs() < 18.0;
+    let separate = (positions[0] - positions[1]).abs() < tokens::HIT_TARGET;
     for (index, edge) in [ClipFadeEdge::In, ClipFadeEdge::Out]
         .into_iter()
         .enumerate()
     {
         let beat =
             [bounds.fade_in_end, bounds.fade_out_start][index].clamp(bounds.start, bounds.end);
+        // Square handles sit SPACE_SM below the canvas top, clear of the
+        // loop lane and of waveform peaks at full scale.
+        let half = HANDLE_SIZE * 0.5;
         let position = Pos2::new(
             positions[index],
-            rect.top() + 7.0 + if separate && index == 1 { 14.0 } else { 0.0 },
+            rect.top()
+                + crate::tokens::SPACE_SM
+                + half
+                + if separate && index == 1 {
+                    HANDLE_SIZE + crate::tokens::SPACE_XS
+                } else {
+                    0.0
+                },
         );
         let target = Rect::from_center_size(position, Vec2::splat(16.0)).intersect(rect);
         if !ui.clip_rect().contains(position) || !rect.contains(position) {
@@ -212,10 +247,24 @@ pub fn clip_fade_handles(
             .on_hover_text(format!("{label} · Drag to adjust · Double-click to remove"));
         let colors = theme::palette(ui.ctx());
         let painter = ui.painter_at(rect);
-        let marker =
-            Rect::from_center_size(position, Vec2::splat(if hovered { 10.0 } else { 8.0 }));
-        painter.rect_filled(marker, 1.0, colors.orange);
-        painter.rect_stroke(marker, 1.0, Stroke::new(1.0, colors.bg), StrokeKind::Inside);
+        if hovered {
+            // A dotted guide shows where the fade boundary meets the audio.
+            let x = position.x.round_to_pixel_center(painter.pixels_per_point());
+            painter.extend(Shape::dotted_line(
+                &[Pos2::new(x, position.y + half), Pos2::new(x, rect.bottom())],
+                colors.orange.gamma_multiply(0.7),
+                crate::tokens::SPACE_XS,
+                0.75,
+            ));
+        }
+        let marker = Rect::from_center_size(position, Vec2::splat(HANDLE_SIZE));
+        painter.rect_filled(marker, crate::tokens::NOTE_RADIUS, colors.orange);
+        painter.rect_stroke(
+            marker,
+            crate::tokens::NOTE_RADIUS,
+            Stroke::new(1.5_f32, colors.bg),
+            StrokeKind::Inside,
+        );
     }
     result
 }
@@ -252,7 +301,7 @@ pub fn crossfade_duration_handle(
     } = bounds;
     let effective = duration.clamp(0.0, (end - start).max(0.0));
     let position = Pos2::new(view.x_at(rect, start + effective), rect.bottom() - 9.0);
-    let target = Rect::from_center_size(position, Vec2::splat(18.0)).intersect(rect);
+    let target = Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET)).intersect(rect);
     let origin_id = id.with("origin");
     let active_origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
     let visible = end > start
@@ -338,7 +387,7 @@ pub fn crossfade_duration_handle(
                 position - Vec2::new(6.0, 0.0),
             ],
             color,
-            Stroke::new(1.0, theme::palette(ui.ctx()).bg),
+            Stroke::new(1.0_f32, theme::palette(ui.ctx()).bg),
         ));
     }
     CrossfadeHandleResponse {

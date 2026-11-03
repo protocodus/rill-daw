@@ -213,7 +213,7 @@ fn framed_range(state: &Value, key: &str, start: f64, end: f64) {
     );
     assert!(
         right - left < (end - start).max(0.25) * 1.2,
-        "Selection must be closely framed"
+        "Selection must be closely framed: {left}..{right} for {start}..{end}"
     );
 }
 

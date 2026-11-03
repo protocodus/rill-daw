@@ -84,10 +84,10 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
         for density in [1.0, 2.0] {
             app.command(json!({"command":"system_theme", "dark":dark}));
             app.command(json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}));
-            menu(&mut app, "Window", "Arrangement");
+            menu(&mut app, "Window", "Arranger");
             app.click("Pattern");
             let midi = menu(&mut app, "Window", "Properties");
-            assert!(visible(&midi, "Properties of Pattern"));
+            assert!(visible(&midi, "Properties · Pattern"));
             for channel_control in ["Gain", "Clip gain", "Pan", "Mute", "Solo"] {
                 assert!(
                     !visible(&midi, channel_control),
@@ -95,7 +95,10 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
                 );
             }
             let track = front(&mut app, "Track");
-            assert!(visible(&track, "Track · Synth"));
+            assert!(
+                visible(&track, "Properties · Pattern"),
+                "The title keeps its subject on every tab"
+            );
             assert!(visible(&track, "Color"));
             for channel_control in ["Gain", "Pan", "Mute", "Solo"] {
                 assert!(
@@ -104,7 +107,7 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
                 );
             }
             let channel = front(&mut app, "Channel");
-            assert!(visible(&channel, "Channel · Synth"));
+            assert!(visible(&channel, "Properties · Pattern"));
             assert!(visible(&channel, "Gain"));
             assert!(visible(&channel, "Pan"));
             assert!(!visible(&channel, "Clip gain"));
@@ -135,10 +138,10 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
                 original
             );
 
-            menu(&mut app, "Window", "Arrangement");
+            menu(&mut app, "Window", "Arranger");
             app.click("Take");
             let audio = menu(&mut app, "Window", "Properties");
-            assert!(visible(&audio, "Properties of Take"));
+            assert!(visible(&audio, "Properties · Take"));
             assert!(visible(&audio, "Clip gain"));
             assert!(!visible(&audio, "Pan"));
             let left = audio["clip_name_rect"][0].as_f64().unwrap();
@@ -177,22 +180,22 @@ fn mixer_names_open_the_correct_channel_and_connect_to_related_views() {
     let original = fixture(&mut app);
     menu(&mut app, "Window", "Mixer");
     let channel = app.click("Synth");
-    assert!(visible(&channel, "Channel · Synth"));
+    assert_eq!(channel["inspector_page"], "Channel");
     assert_eq!(channel["popups"]["properties"], true);
     assert_eq!(channel["selected_track"], original["tracks"][0]["id"]);
-    let effects = front(&mut app, "Effects");
+    let effects = menu(&mut app, "Window", "Effects");
     assert!(visible(&effects, "Effects of Synth"));
     let channel = front(&mut app, "Channel");
-    assert!(visible(&channel, "Channel · Synth"));
-    let instrument = front(&mut app, "Instrument");
+    assert_eq!(channel["inspector_page"], "Channel");
+    // Properties shows one tab row; other channel windows open from Window.
+    let instrument = menu(&mut app, "Window", "Instrument");
     assert_eq!(instrument["popups"]["instrument"], true);
-    front(&mut app, "Channel");
-    let routing = front(&mut app, "Routing");
+    let routing = menu(&mut app, "Window", "Routing");
     assert_eq!(routing["popups"]["routing"], true);
     let mixer = front(&mut app, "Mixer");
     assert_eq!(mixer["view"], "Mixer");
     let drums = app.click("Drums");
-    assert!(visible(&drums, "Channel · Drums"));
+    assert_eq!(drums["inspector_page"], "Channel");
     assert_eq!(drums["selected_track"], original["tracks"][1]["id"]);
     assert!(
         !visible(&drums, "Instrument"),

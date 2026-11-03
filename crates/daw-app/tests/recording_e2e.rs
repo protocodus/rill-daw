@@ -177,24 +177,15 @@ fn comp_selection(app: &mut Harness, source: u64, from: u32, to: u32, fade_ms: u
     }
     // Expand the left side first when moving to an earlier range; otherwise
     // expand the right side first. Both fields enforce a nonempty selection.
+    // The fields read and accept bar.beat.sixteenth positions, as the rulers do.
     let current = app.inspect();
+    let beats_per_bar = current["project"]["beats_per_bar"].as_u64().unwrap() as u8;
+    let position = |beat: u32| daw_ui::musical_position_label(f64::from(beat), beats_per_bar);
     if f64::from(from) < current["audio_takes"]["range"][0].as_f64().unwrap() {
-        set_number(
-            app,
-            |text| text.starts_with("From beat "),
-            &(from + 1).to_string(),
-        );
+        set_number(app, |text| text.starts_with("From "), &position(from));
     }
-    set_number(
-        app,
-        |text| text.starts_with("To beat "),
-        &(to + 1).to_string(),
-    );
-    set_number(
-        app,
-        |text| text.starts_with("From beat "),
-        &(from + 1).to_string(),
-    );
+    set_number(app, |text| text.starts_with("To "), &position(to));
+    set_number(app, |text| text.starts_with("From "), &position(from));
     set_number(app, |text| text.ends_with(" ms"), &fade_ms.to_string());
     let state = app.inspect();
     assert_eq!(
@@ -327,7 +318,8 @@ fn recorded_c3_d3_takes_comp_in_four_sections_with_exact_export_and_spline_cross
     }
     // The chosen C3 region begins at beat 2. Adjust only its incoming spline
     // with a real handle drag, then verify that all other samples stay intact.
-    let popup = menu(&mut app, "Edit", "Crossfade…");
+    menu(&mut app, "Edit", "Audio");
+    let popup = app.click("Crossfade…");
     let handle = &popup["crossfade"]["handles"][0];
     let plot = &popup["crossfade"]["plot"];
     let x = (handle["min"][0].as_f64().unwrap() + handle["max"][0].as_f64().unwrap()) * 0.5;

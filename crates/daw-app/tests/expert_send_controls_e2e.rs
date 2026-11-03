@@ -105,13 +105,28 @@ fn fixture(app: &mut Harness, stored: f32, automated: bool) -> (u64, u64, Option
 fn routing(app: &mut Harness) -> Value {
     app.click("Mixer");
     app.click(SOURCE);
-    app.click("Routing")
+    app.click("Routing");
+    to_sends(app)
+}
+
+/// Sends follow the output: wheel the routing body to its end so the send
+/// row is fully visible in short windows.
+fn to_sends(app: &mut Harness) -> Value {
+    let state = app.inspect();
+    let window = &state["window_rects"][0];
+    let x = (window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5;
+    let y = window["max"][1].as_f64().unwrap() - 100.0;
+    app.command(json!({"command":"scroll", "x":x, "y":y, "delta":-10000.0}));
+    for _ in 0..12 {
+        app.inspect();
+    }
+    app.inspect()
 }
 
 /// Locate the complete painted 270-degree ring, independently of diagnostics.
 /// Its progress arc, relative drag target and exact readout remain distinct.
 fn send_dial(state: &Value) -> (f64, f64) {
-    let (level_x, level_y) = center(label(state, "Level"));
+    let (level_x, level_y) = center(send_readout(state));
     state["painted_paths"]
         .as_array()
         .unwrap()
@@ -134,7 +149,7 @@ fn send_dial(state: &Value) -> (f64, f64) {
             let radius = (right - minimum[0]) * 0.5;
             let x = minimum[0] + radius;
             let y = minimum[1] + radius;
-            if !(23.0..=26.0).contains(&radius)
+            if !(19.0..=23.0).contains(&radius)
                 || x >= level_x
                 || level_x - x > 130.0
                 || (y - level_y).abs() > 80.0
@@ -156,62 +171,63 @@ fn send_dial(state: &Value) -> (f64, f64) {
         .unwrap_or_else(|| panic!("Missing visible send ring: {}", state["visible_labels"]))
 }
 
+/// One send row: destination, ring, dB value, Pre/Post and automation share
+/// a center line, and the ring itself carries no text.
 fn assert_send_row(state: &Value) {
     let (x, y) = send_dial(state);
-    let first = center(label(state, "Level")).1;
-    let last = ["Pre", "Post", "Automation", "Automated", "Overridden"]
-        .iter()
-        .filter(|text| visible(state, text))
-        .map(|text| center(label(state, text)).1)
-        .fold(first, f64::max);
-    assert!(
-        (y - (first + last) * 0.5).abs() < 0.75,
-        "The ring must center on the measured detail rows: y={y}, first={first}, last={last}"
-    );
+    for text in ["Room", "Pre", "Post"] {
+        let other = center(label(state, text)).1;
+        assert!(
+            (y - other).abs() < 0.75,
+            "The ring must share the row's center line with {text}: y={y}, {other}"
+        );
+    }
+    assert!((y - center(send_readout(state)).1).abs() < 0.75);
     for caption in state["label_rects"].as_array().unwrap() {
         let left = caption["min"][0].as_f64().unwrap();
         let top = caption["min"][1].as_f64().unwrap();
         let right = caption["max"][0].as_f64().unwrap();
         let bottom = caption["max"][1].as_f64().unwrap();
         assert!(
-            right <= x - 32.0 || left >= x + 32.0 || bottom <= y - 32.0 || top >= y + 32.0,
+            right <= x - 24.0 || left >= x + 24.0 || bottom <= y - 24.0 || top >= y + 24.0,
             "The small send ring must be text-free: {caption}"
         );
     }
 }
 
+fn db_text(text: &str) -> Option<f64> {
+    let number = text.strip_suffix(" dB")?.replace('−', "-");
+    if number == "-∞" {
+        Some(f64::NEG_INFINITY)
+    } else {
+        number.parse().ok()
+    }
+}
+
+/// The send's dB value button, right of its destination name on one row.
 fn send_readout(state: &Value) -> &Value {
-    let (level_x, level_y) = center(label(state, "Level"));
+    let (room_x, room_y) = center(label(state, "Room"));
     state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|row| {
             let (x, y) = center(row);
-            row["text"].as_str().is_some_and(|text| {
-                text.ends_with('×') && text.trim_end_matches('×').trim().parse::<f64>().is_ok()
-            }) && x > level_x
-                && x - level_x < 150.0
-                && (y - level_y).abs() < 4.0
+            row["text"].as_str().and_then(db_text).is_some()
+                && x > room_x
+                && (y - room_y).abs() < 4.0
         })
-        .min_by(|a, b| {
-            let score = |row: &Value| {
-                let (x, y) = center(row);
-                (x - level_x).abs() + (y - level_y).abs()
-            };
-            score(a).total_cmp(&score(b))
-        })
+        .min_by(|a, b| center(a).0.total_cmp(&center(b).0))
         .unwrap_or_else(|| panic!("Missing send readout: {}", state["visible_labels"]))
 }
 
-fn shown_gain(state: &Value) -> f64 {
-    send_readout(state)["text"]
-        .as_str()
-        .unwrap()
-        .trim_end_matches('×')
-        .trim()
-        .parse()
-        .unwrap()
+/// The level the row shows, in dB (one decimal).
+fn shown_db(state: &Value) -> f64 {
+    db_text(send_readout(state)["text"].as_str().unwrap()).unwrap()
+}
+
+fn db(gain: f64) -> f64 {
+    20.0 * gain.log10()
 }
 
 fn open_send(app: &mut Harness) -> Value {
@@ -221,7 +237,7 @@ fn open_send(app: &mut Harness) -> Value {
     label(&opened, SEND_TITLE);
     label(&opened, "Apply value");
     label(&opened, "Cancel");
-    assert!(visible(&opened, "Range: 0 to 16 ×"));
+    assert!(visible(&opened, "Range: -60 to 24.08 dB"));
     unchanged(&opened, &before);
     opened
 }
@@ -249,7 +265,6 @@ fn send_small_rotary_adjustments_remain_below_unity_and_the_readout_tracks_live_
         app.command(json!({"command":"viewport", "width":1100, "height":850,
             "pixels_per_point":density}));
         let baseline = routing(&mut app);
-        assert!(!visible(&baseline, "1× unity"));
         let painted = app.command(json!({"command":"inspect", "paint":true}));
         assert_send_row(&painted);
         let (x, y) = send_dial(&painted);
@@ -274,14 +289,14 @@ fn send_small_rotary_adjustments_remain_below_unity_and_the_readout_tracks_live_
                 "A {pixels}-point send adjustment must be useful below unity: {actual}"
             );
             assert!(
-                (shown_gain(&changed) - actual).abs() < 0.000_01,
+                (shown_db(&changed) - db(actual)).abs() < 0.051,
                 "The visible readout must agree with the live gain"
             );
             one_edit(&changed, &baseline);
             let opened = open_send(&mut app);
             unchanged(&app.click("Apply value"), &opened);
             assert_eq!(undo(&mut app)["project"], baseline["project"]);
-            assert_eq!(shown_gain(&app.inspect()), 0.25);
+            assert_eq!(shown_db(&app.inspect()), -12.0);
         }
         app.quit();
     }
@@ -300,6 +315,7 @@ fn send_ring_stays_centered_and_tab_reaches_its_adjacent_exact_value() {
             for (width, height) in [(800, 600), (1100, 850)] {
                 app.command(json!({"command":"viewport", "width":width, "height":height,
                     "pixels_per_point":density}));
+                to_sends(&mut app);
                 let state = app.command(json!({"command":"inspect", "paint":true}));
                 unchanged(&state, &original);
                 assert_send_row(&state);
@@ -352,17 +368,23 @@ fn send_exact_button_formats_without_rounding_and_mouse_keypad_preserves_precisi
     open_send(&mut app);
     mouse_draft(&mut app, &baseline, "0.375123");
     let applied = app.click("Apply value");
-    assert_eq!(gain(&applied, source, bus) as f32, 0.375_123_f32);
+    assert_eq!(
+        gain(&applied, source, bus) as f32,
+        daw_ui::channel_gain_from_db(0.375_123)
+    );
     one_edit(&applied, &baseline);
     assert_eq!(undo(&mut app)["project"], baseline["project"]);
 
-    // The perceptual control must retain the full stored/editable gain domain.
-    for value in ["0", "1", "16"] {
+    // Exact dB entry reaches unity and the top of the 0..16 send range.
+    for value in ["0", "6", "24.08"] {
         open_send(&mut app);
         let before_draft = app.inspect();
         mouse_draft(&mut app, &before_draft, value);
         let applied = app.click("Apply value");
-        assert_eq!(gain(&applied, source, bus), value.parse::<f64>().unwrap());
+        assert_eq!(
+            gain(&applied, source, bus) as f32,
+            daw_ui::channel_gain_from_db(value.parse().unwrap())
+        );
         assert_eq!(undo(&mut app)["project"], baseline["project"]);
     }
     app.quit();
@@ -430,7 +452,7 @@ fn automated_send_exact_entry_and_small_drag_override_without_rewriting_the_curv
     app.command(json!({"command":"viewport", "width":1100, "height":850}));
     let baseline = routing(&mut app);
     let curve = track(&baseline, lane)["automation"]["points"].clone();
-    assert_eq!(shown_gain(&baseline), 0.25);
+    assert_eq!(shown_db(&baseline), -12.0);
     let painted = app.command(json!({"command":"inspect", "paint":true}));
     let (x, y) = send_dial(&painted);
     let dragged = app.command(json!({"command":"pointer", "phase":"drag",
@@ -455,13 +477,14 @@ fn automated_send_exact_entry_and_small_drag_override_without_rewriting_the_curv
     open_send(&mut app);
     mouse_draft(&mut app, &restored, "0.375123");
     let applied = app.click("Apply value");
-    assert_eq!(gain(&applied, source, bus) as f32, 0.375_123_f32);
+    let expected = daw_ui::channel_gain_from_db(0.375_123);
+    assert_eq!(gain(&applied, source, bus) as f32, expected);
     assert_eq!(track(&applied, lane)["automation"]["points"], curve);
     assert!(
         (track(&applied, lane)["automation"]["override_value"]
             .as_f64()
             .unwrap()
-            - f64::from(0.375_123_f32) / 16.0)
+            - f64::from(expected) / 16.0)
             .abs()
             < 1e-7
     );
@@ -470,7 +493,7 @@ fn automated_send_exact_entry_and_small_drag_override_without_rewriting_the_curv
     let resumed = app.click("Resume automation");
     assert!(track(&resumed, lane)["automation"]["override_value"].is_null());
     assert_eq!(track(&resumed, lane)["automation"]["points"], curve);
-    assert_eq!(shown_gain(&resumed), 0.25);
+    assert_eq!(shown_db(&resumed), -12.0);
     assert_eq!(undo(&mut app)["project"], applied["project"]);
     assert_eq!(undo(&mut app)["project"], baseline["project"]);
     app.quit();

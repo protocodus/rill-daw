@@ -123,7 +123,7 @@ fn generous_popup_frames_fit_small_viewports_even_with_a_large_minimum_body() {
         let context = Context::default();
         theme::apply(&context);
         let viewport = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1100.0, 720.0));
-        for _ in 0..3 {
+        for frame in 0..3 {
             let _ = context.run(
                 RawInput {
                     screen_rect: Some(viewport),
@@ -154,6 +154,11 @@ fn generous_popup_frames_fit_small_viewports_even_with_a_large_minimum_body() {
                         .unwrap()
                         .response
                         .rect;
+                    // Frame 0 is egui's invisible sizing pass for a window
+                    // that hugs its content; it is never shown.
+                    if frame == 0 {
+                        return;
+                    }
                     assert!(
                         window.top() >= daw_ui::tokens::POPUP_TOP,
                         "popup must leave the transport accessible: {window:?}"

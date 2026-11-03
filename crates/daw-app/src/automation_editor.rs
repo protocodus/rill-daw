@@ -522,8 +522,6 @@ impl DawApp {
             }
             ui.separator();
             daw_ui::checkbox(ui, &mut enabled, "Enabled");
-            fit |= daw_ui::timeline_fit_button(ui).clicked();
-            add_parameter = daw_ui::button(ui, "Add parameter").clicked();
             daw_ui::automation_badge(ui, automation_state);
             if lane.override_value.is_some() {
                 if daw_ui::button(ui, "Resume automation")
@@ -544,12 +542,21 @@ impl DawApp {
             {
                 override_edit = Some(Some(lane.value_at(self.cursor).unwrap_or(0.5)));
             }
+            // View and lane actions trail; the gesture caption fills the
+            // space between, so no separate hint band takes plot height.
+            daw_ui::toolbar_trailing(ui, AUTOMATION_TRAILING_WIDTH, |ui| {
+                add_parameter = daw_ui::button(ui, "Add parameter").clicked();
+                fit |= daw_ui::timeline_fit_button(ui).clicked();
+                if let Some(caption) = daw_ui::editor_status_caption(
+                    ui,
+                    "Click to add · Drag to move · Drag diamonds to bend · Right-click for options",
+                ) {
+                    caption.on_hover_text(
+                        "Click to add; drag points to move and diamonds to bend. Right-click for options.",
+                    );
+                }
+            });
         });
-        daw_ui::interaction_hint(
-            ui,
-            "Edit points",
-            "Click to add; drag points to move and diamonds to bend. Right-click for options.",
-        );
         if add_parameter {
             state.creating = true;
             state.source = Some(lane.target.track);
@@ -594,11 +601,12 @@ impl DawApp {
                 snap: self.snap,
                 // Each inspector toolbar owns its 8 px top/bottom inset. The
                 // gap after the plot and between inspectors follows the theme.
+                // One inspector row stays reserved under the plot, so selecting
+                // a point never changes the plot height.
                 height: (ui.available_height()
-                    - 2.0
-                        * (daw_ui::tokens::CONTROL_HEIGHT
-                            + daw_ui::tokens::SPACE_SM * 2.0
-                            + ui.spacing().item_spacing.y))
+                    - (daw_ui::tokens::PARAMETER_ROW_HEIGHT
+                        + daw_ui::tokens::SPACE_SM * 2.0
+                        + ui.spacing().item_spacing.y))
                     // Keep a useful mouse canvas; compact windows scroll the
                     // point and segment inspectors below it instead of
                     // compressing the curve into overlapping percentage rows.
@@ -611,6 +619,7 @@ impl DawApp {
                 beats_per_bar: self.project.beats_per_bar,
                 fit,
                 keyboard_active: true,
+                value_label: value_axis_label(lane.target.parameter),
             },
             |beat| lane.value_at(beat).unwrap_or(0.5),
         );
@@ -628,7 +637,8 @@ impl DawApp {
         let mut displayed_beat = None;
         let mut segment_edit = response.segment_edit;
         let mut slope_rect = None;
-        daw_ui::toolbar(ui, |ui| {
+        let beats_per_bar = self.project.beats_per_bar;
+        daw_ui::parameter_toolbar(ui, |ui| {
             if let Some(value) = lane.override_value {
                 let mut manual = lane.target.parameter.denormalize(value);
                 if ui
@@ -644,91 +654,77 @@ impl DawApp {
                     override_edit = Some(Some(lane.target.parameter.normalize(manual)));
                 }
             }
-            if let Some(point) = state
+            let Some(index) = state
                 .point
-                .and_then(|selected| lane.points.iter().find(|p| p.id == selected))
-            {
-                let mut beat = point.beat + 1.0;
-                let mut value = lane.target.parameter.denormalize(point.value);
-                let beat_response = ui
-                    .add(
-                        daw_ui::number(&mut beat)
-                            .prefix("Beat ")
-                            .range(1.0..=(daw_core::MAX_BEAT + 1.0))
-                            .min_decimals(2)
-                            .max_decimals(3)
-                            .speed(self.snap.max(0.01)),
-                    )
-                    .on_hover_text("Musical beat number from one · drag or double-click to type");
-                point_beat_rect = Some(beat_response.rect);
-                displayed_beat = Some(beat);
-                let range = lane.target.parameter.range();
-                let speed = (*range.end() - *range.start()) as f64 / 200.0;
-                let (prefix, suffix, tooltip) = match lane.target.parameter {
-                    AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => (
-                        "Gain ",
-                        " ×",
-                        "Linear gain multiplier: 1× is unity, 0× is silence",
-                    ),
-                    AutomationParameter::TrackPan => ("Pan ", "", "−1 left · 0 center · 1 right"),
-                    AutomationParameter::VstParameter { .. } => (
-                        "Value ",
-                        "",
-                        "Normalized plug-in parameter value from 0 to 1",
-                    ),
-                };
-                let value_changed = ui
-                    .add(
-                        daw_ui::number(&mut value)
-                            .range(range)
-                            .speed(speed)
-                            .prefix(prefix)
-                            .suffix(suffix),
-                    )
-                    .on_hover_text(tooltip)
-                    .changed();
-                if beat_response.changed() || value_changed {
-                    edit = Some(CurveEdit::Move {
-                        id: point.id,
-                        x: beat - 1.0,
-                        value: lane.target.parameter.normalize(value),
-                    });
-                }
-                if daw_ui::button(
-                    ui,
-                    if response.selection.len() > 1 {
-                        "Delete selected points"
-                    } else {
-                        "Delete point"
-                    },
+                .and_then(|selected| lane.points.iter().position(|p| p.id == selected))
+            else {
+                daw_ui::text::note(ui, "Select a point to edit its position, value and segment");
+                return;
+            };
+            let point = &lane.points[index];
+            let mut beat = point.beat;
+            let mut value = lane.target.parameter.denormalize(point.value);
+            let beat_response = ui
+                .add(
+                    daw_ui::musical_position_field(&mut beat, beats_per_bar, "Position ")
+                        .range(0.0..=daw_core::MAX_BEAT)
+                        .speed(self.snap.max(0.01)),
                 )
-                .clicked()
-                {
-                    edit = Some(CurveEdit::Delete { id: point.id });
-                    delete_selection = response.selection.len() > 1;
-                }
-            } else {
-                daw_ui::text::note(ui, "Click the curve to add a point");
+                .on_hover_text("Bar.beat.sixteenth · drag or double-click to type, e.g. 12.1");
+            point_beat_rect = Some(beat_response.rect);
+            displayed_beat = Some(beat + 1.0);
+            let range = lane.target.parameter.range();
+            let speed = (*range.end() - *range.start()) as f64 / 200.0;
+            let (prefix, suffix, tooltip) = match lane.target.parameter {
+                AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => (
+                    "Gain ",
+                    " ×",
+                    "Linear gain multiplier: 1× is unity, 0× is silence",
+                ),
+                AutomationParameter::TrackPan => ("Pan ", "", "−1 left · 0 center · 1 right"),
+                AutomationParameter::VstParameter { .. } => (
+                    "Value ",
+                    "",
+                    "Normalized plug-in parameter value from 0 to 1",
+                ),
+            };
+            let value_changed = ui
+                .add(
+                    daw_ui::number(&mut value)
+                        .range(range)
+                        .speed(speed)
+                        .prefix(prefix)
+                        .suffix(suffix),
+                )
+                .on_hover_text(tooltip)
+                .changed();
+            if beat_response.changed() || value_changed {
+                edit = Some(CurveEdit::Move {
+                    id: point.id,
+                    x: beat,
+                    value: lane.target.parameter.normalize(value),
+                });
             }
-        });
-        daw_ui::toolbar(ui, |ui| {
-            if let Some(index) = state
-                .point
-                .and_then(|selected| lane.points.iter().position(|point| point.id == selected))
-                && index + 1 < lane.points.len()
-            {
-                let point = &lane.points[index];
+            if index + 1 < lane.points.len() {
                 let mut curve = point.curve;
                 let controls = daw_ui::curve_segment_controls(ui, &mut curve);
                 slope_rect = Some(controls.rect);
                 if controls.changed() {
                     segment_edit = Some((point.id, curve));
                 }
-            } else {
-                daw_ui::text::note(
-                    ui,
-                    "Select a point or diamond to shape its following segment",
-                );
+            }
+            if daw_ui::button(
+                ui,
+                if response.selection.len() > 1 {
+                    "Delete selected points"
+                } else {
+                    "Delete point"
+                },
+            )
+            .clicked()
+            {
+                edit = Some(CurveEdit::Delete { id: point.id });
+                delete_selection = response.selection.len() > 1;
             }
             if let Some(first) = lane.points.first()
                 && let Some(last) = lane.points.last()
@@ -1023,6 +1019,41 @@ fn start_parameter_read(
             *result = Some(result_value);
         }
     });
+}
+
+/// Room kept at the toolbar end for Add parameter, Fit and at least the
+/// caption's first clause; with less, the group starts its own row.
+const AUTOMATION_TRAILING_WIDTH: f32 = 377.0;
+
+/// Value-axis labels in the parameter's own units.
+fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {
+    match parameter {
+        AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => |value| {
+            let gain = AutomationParameter::TrackGain.denormalize(value);
+            if gain <= 0.000_01 {
+                "−∞".into()
+            } else {
+                let db = 20.0 * gain.log10();
+                if db.abs() < 0.05 {
+                    "0 dB".into()
+                } else {
+                    format!("{:+.1} dB", db).replace('-', "−")
+                }
+            }
+        },
+        AutomationParameter::TrackPan => |value| {
+            let pan = AutomationParameter::TrackPan.denormalize(value);
+            let amount = (pan.abs() * 100.0).round();
+            if amount < 0.5 {
+                "C".into()
+            } else if pan < 0.0 {
+                format!("L {amount:.0}")
+            } else {
+                format!("R {amount:.0}")
+            }
+        },
+        AutomationParameter::VstParameter { .. } => |value| format!("{value:.2}"),
+    }
 }
 
 #[cfg(test)]
