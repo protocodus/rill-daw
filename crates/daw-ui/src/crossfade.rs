@@ -120,15 +120,20 @@ pub fn paint_crossfade(painter: &egui::Painter, rect: Rect, curve: CrossfadeCurv
 /// Drag either handle, or focus it and use arrows (Shift: fine adjustment).
 /// A background click selects the nearest handle. Home restores a linear fade.
 /// `Response::changed()` reports actual edits; drag flags let callers group Undo.
+const PLOT_MIN_WIDTH: f32 = 233.0;
+const PLOT_HEIGHT: f32 = 233.0;
+const LEGEND_STEP: f32 = 89.0;
+
 pub fn crossfade_editor(ui: &mut Ui, id: Id, curve: &mut CrossfadeCurve) -> CrossfadeResponse {
     let before = *curve;
     let (rect, mut response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width().max(180.0), 220.0),
+        Vec2::new(ui.available_width().max(PLOT_MIN_WIDTH), PLOT_HEIGHT),
         Sense::click(),
     );
+    // Margins hold the legend above, the 0/1 captions left and Start/End below.
     let plot = Rect::from_min_max(
-        rect.min + Vec2::new(40.0, 34.0),
-        rect.max - Vec2::new(16.0, 28.0),
+        rect.min + Vec2::new(tokens::SPACE_XL, tokens::SPACE_XL),
+        rect.max - Vec2::new(tokens::SPACE_MD, tokens::SPACE_LG),
     );
     let selected_id = id.with("selected");
     let mut selected = ui
@@ -257,14 +262,14 @@ pub fn crossfade_editor(ui: &mut Ui, id: Id, curve: &mut CrossfadeCurve) -> Cros
         (0, "Outgoing", colors.orange),
         (1, "Incoming", colors.automation_override),
     ] {
-        let x = plot.left() + index as f32 * 112.0;
-        let y = rect.top() + 14.0;
+        let x = plot.left() + index as f32 * LEGEND_STEP;
+        let y = rect.top() + tokens::SPACE_MD;
         painter.line_segment(
-            [Pos2::new(x, y), Pos2::new(x + 20.0, y)],
+            [Pos2::new(x, y), Pos2::new(x + tokens::SPACE_LG, y)],
             Stroke::new(2.0_f32, color),
         );
         painter.text(
-            Pos2::new(x + 26.0, y),
+            Pos2::new(x + tokens::SPACE_LG + tokens::SPACE_XS, y),
             Align2::LEFT_CENTER,
             label,
             font.clone(),
@@ -298,14 +303,14 @@ pub fn crossfade_editor(ui: &mut Ui, id: Id, curve: &mut CrossfadeCurve) -> Cros
         );
     }
     painter.text(
-        Pos2::new(plot.left(), plot.bottom() + 15.0),
+        Pos2::new(plot.left(), plot.bottom() + tokens::SPACE_MD),
         Align2::LEFT_CENTER,
         "Start",
         font.clone(),
         colors.muted,
     );
     painter.text(
-        Pos2::new(plot.right(), plot.bottom() + 15.0),
+        Pos2::new(plot.right(), plot.bottom() + tokens::SPACE_MD),
         Align2::RIGHT_CENTER,
         "End",
         font,

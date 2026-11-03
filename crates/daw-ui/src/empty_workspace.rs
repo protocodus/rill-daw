@@ -1,6 +1,9 @@
 //! Quiet next steps for an empty musical workspace. The caller owns commands,
 //! navigation, document state, and placement within the available canvas.
 use crate::{text, theme, tokens};
+
+/// Width of one action in the empty-workspace list; two fit side by side on wide views.
+const ACTION_WIDTH: f32 = 233.0;
 use egui::{Align, Layout, Rect, Response, Ui, UiBuilder, vec2};
 
 pub struct EmptyWorkspaceAction<'a> {
@@ -54,7 +57,7 @@ pub fn empty_workspace(
                 return;
             }
             ui.add_space(tokens::SPACE_LG);
-            let button_width = width.min(240.0);
+            let button_width = width.min(ACTION_WIDTH);
             if let Some(index) = primary {
                 action_button(ui, &actions[index], button_width, true, &mut result);
                 if actions.len() > 1 {
@@ -67,13 +70,17 @@ pub fn empty_workspace(
                 .filter(|(index, _)| Some(*index) != primary)
                 .map(|(_, action)| action)
                 .collect();
-            let columns = if width >= 2.0 * 220.0 + tokens::SPACE_SM {
+            let columns = if width >= 2.0 * ACTION_WIDTH + tokens::SPACE_SM {
                 2
             } else {
                 1
             };
             for row in secondary.chunks(columns) {
-                let item_width = if columns == 2 { 220.0 } else { button_width };
+                let item_width = if columns == 2 {
+                    ACTION_WIDTH
+                } else {
+                    button_width
+                };
                 let row_width = row.len() as f32 * item_width
                     + row.len().saturating_sub(1) as f32 * tokens::SPACE_SM;
                 ui.allocate_ui_with_layout(

@@ -245,6 +245,8 @@ pub struct DawApp {
     pub last_editor_clip: Option<u64>,
     pub frame_count: usize,
     pub screenshot: Option<PathBuf>,
+    /// A `--view` the screenshot tool opens once the workspace has laid out.
+    pub screenshot_view: Option<String>,
     pub last_recovery: Instant,
 }
 
@@ -392,6 +394,7 @@ impl DawApp {
             last_editor_clip: None,
             frame_count: 0,
             screenshot,
+            screenshot_view: None,
             last_recovery: Instant::now(),
         };
         app.cache_audio();
@@ -3161,6 +3164,13 @@ impl DawApp {
     pub fn ui_frame(&mut self, ctx: &egui::Context) {
         crate::theme::set_appearance(ctx, self.settings.appearance);
         self.frame_count += 1;
+        // Opening the view only after the first frames lets a popup's blurred
+        // backdrop show the laid-out scene instead of an empty first pass.
+        if self.frame_count == 3
+            && let Some(view) = self.screenshot_view.take()
+        {
+            self.open_screenshot_view(&view);
+        }
         if std::mem::take(&mut self.reset_views) {
             self.midi_editor.clear_generation_memory();
             ctx.data_mut(|data| {
@@ -3555,6 +3565,34 @@ impl DawApp {
                 100
             },
         ));
+    }
+    /// Open the workspace or popup named by the `--view` command-line option.
+    pub fn open_screenshot_view(&mut self, view: &str) {
+        match view {
+            "assistant" => self.open_global_assistant(),
+            "setup" => self.open_popup(PopupKind::Setup),
+            "mixer" => self.view = WorkspaceView::Mixer,
+            "channel" => {
+                if let Some(track) = self.selected_track {
+                    self.open_channel(track);
+                }
+            }
+            "clip" => self.view = WorkspaceView::Clip,
+            "library" => self.open_popup(PopupKind::Library),
+            "automation" => self.open_popup(PopupKind::Automation),
+            "crossfade" => self.open_popup(PopupKind::Crossfade),
+            "join" => self.open_popup(PopupKind::Join),
+            "routing" => self.open_popup(PopupKind::Routing),
+            "properties" => self.open_popup(PopupKind::Inspector),
+            "unsaved-changes" if self.screenshot.is_some() => {
+                self.modified = true;
+                self.history.mark_unsaved();
+                self.request_document_transition(crate::document_ui::DocumentTransition::New);
+            }
+            "instrument" => self.open_popup(PopupKind::Instrument),
+            "rack" | "effects" => self.open_popup(PopupKind::Effects),
+            _ => {}
+        }
     }
     fn capture_screenshot(&mut self, ctx: &egui::Context) {
         if let Some(path) = &self.screenshot {

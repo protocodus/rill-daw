@@ -213,7 +213,7 @@ fn generation_footer_inner(
                         .size()
                         .x;
                     let icon = if crate::Icon::for_label(label).is_some() {
-                        18.0 + ui.spacing().icon_spacing
+                        crate::tokens::ICON_SIZE + ui.spacing().icon_spacing
                     } else {
                         0.0
                     };

@@ -158,7 +158,7 @@ pub fn clip_timing_fields(
                 "Stretch"
             },
         )
-        .width(96.0)
+        .width(89.0)
         .show_ui(ui, |ui| {
             crate::selectable_value(ui, mode, DurationEditMode::Trim, "Trim");
             crate::selectable_value(ui, mode, DurationEditMode::Stretch, "Stretch");
@@ -232,7 +232,7 @@ pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
                     .size()
                     .x;
                 let icon = if crate::Icon::for_label(label).is_some() {
-                    18.0 + style.spacing.icon_spacing
+                    crate::tokens::ICON_SIZE + style.spacing.icon_spacing
                 } else {
                     0.0
                 };
@@ -312,7 +312,7 @@ fn inline_name_editor_contents(
                 .id(id)
                 .hint_text(hint)
                 .char_limit(crate::NAME_MAX_CHARS)
-                .desired_width(width.max(32.0))
+                .desired_width(width.max(crate::tokens::SPACE_XL))
                 .margin(egui::vec2(
                     crate::tokens::BUTTON_PADDING_X,
                     crate::tokens::BUTTON_PADDING_Y,

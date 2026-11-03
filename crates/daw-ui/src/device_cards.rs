@@ -71,7 +71,7 @@ pub fn device_identity_button(
     );
     let mut text = rect.shrink2(egui::vec2(tokens::SPACE_SM, 3.0));
     if let Some(preview) = device.preview {
-        let image = Rect::from_min_size(text.min, egui::Vec2::splat(32.0));
+        let image = Rect::from_min_size(text.min, egui::Vec2::splat(tokens::SPACE_XL));
         painter.image(
             preview.id(),
             image,
@@ -114,7 +114,7 @@ const NAME_HEIGHT: f32 = 2.0 * tokens::SPACE_LG;
 const PRODUCER_HEIGHT: f32 = tokens::SPACE_LG;
 pub const DEVICE_ROW_HEIGHT: f32 =
     2.0 * tokens::SPACE_MD + 2.0 * tokens::SPACE_LG + tokens::SPACE_XS;
-const ROW_PREVIEW_WIDTH: f32 = 80.0;
+const ROW_PREVIEW_WIDTH: f32 = 89.0;
 const SCROLLBAR_GUTTER: f32 = 16.0;
 
 fn card_height(available: f32) -> f32 {
@@ -454,11 +454,11 @@ pub fn device_row(
         let painter = ui.painter_at(rect);
         paint_item_frame(&painter, rect, card, &response);
         paint_preview(&painter, preview_rect, card);
-        let star = 18.0;
+        let star = tokens::ICON_SIZE;
         let detail_width = if detail.is_empty() {
             0.0
         } else {
-            (inset.width() * 0.3).min(220.0)
+            (inset.width() * 0.3).min(233.0)
         };
         let trailing = inset.right() - star - tokens::SPACE_SM;
         let text = Rect::from_min_max(

@@ -852,7 +852,7 @@ impl Widget for IconButton {
         let disclosure_id = Id::new("rill-button-disclosure");
         let mut atoms = egui::Atoms::new(self.label.clone());
         if icon.is_some() {
-            let atom = Atom::custom(icon_id, Vec2::splat(18.0));
+            let atom = Atom::custom(icon_id, Vec2::splat(crate::tokens::ICON_SIZE));
             if icon_only {
                 atoms = egui::Atoms::new(atom);
             } else {

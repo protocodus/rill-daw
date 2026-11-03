@@ -1,7 +1,7 @@
 //! Data-independent breakpoint editor. The owner applies edits, owns undo, and
 //! supplies evaluation so the displayed curve matches its processing model.
 
-use crate::{TimelineBounds, TimelineNavigation, TimelinePane, TimelineViewport, theme};
+use crate::{TimelineBounds, TimelineNavigation, TimelinePane, TimelineViewport, theme, tokens};
 use egui::{Align2, FontId, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -555,7 +555,7 @@ fn curve_editor_inner(
         let b_screen = to_screen(b);
         // Dense breakpoints still have precise footer controls; do not put a
         // second hit target on top of either endpoint.
-        if (b_screen.x - a_screen.x).abs() < 40.0 {
+        if (b_screen.x - a_screen.x).abs() < 2.0 * tokens::HIT_TARGET {
             continue;
         }
         let position = to_screen(CurvePoint {
@@ -563,7 +563,7 @@ fn curve_editor_inner(
             x: midpoint,
             value: evaluate(midpoint),
         });
-        let handle = Rect::from_center_size(position, Vec2::splat(18.0));
+        let handle = Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET));
         let handle_response =
             ui.interact(handle, id.with(("segment", a.id)), Sense::click_and_drag());
         handle_response.widget_info(|| {
@@ -640,7 +640,7 @@ fn curve_editor_inner(
         }
         let position = to_screen(point);
         let point_response = ui.interact(
-            Rect::from_center_size(position, Vec2::splat(18.0)),
+            Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET)),
             id.with(point.id),
             Sense::click_and_drag(),
         );

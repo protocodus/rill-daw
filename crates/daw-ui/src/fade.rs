@@ -1,6 +1,6 @@
 //! Non-destructive clip envelopes and canvas handles. Callers own source
 //! coordinates, snapping, audio processing and the document's undo history.
-use crate::{TimelineViewport, theme};
+use crate::{TimelineViewport, theme, tokens};
 use egui::{
     Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, emath::GuiRounding,
 };
@@ -144,7 +144,7 @@ pub fn clip_fade_handles(
         view.x_at(rect, beat.clamp(bounds.start, bounds.end))
             .clamp(left + inset, right - inset)
     });
-    let separate = (positions[0] - positions[1]).abs() < 18.0;
+    let separate = (positions[0] - positions[1]).abs() < tokens::HIT_TARGET;
     for (index, edge) in [ClipFadeEdge::In, ClipFadeEdge::Out]
         .into_iter()
         .enumerate()
@@ -301,7 +301,7 @@ pub fn crossfade_duration_handle(
     } = bounds;
     let effective = duration.clamp(0.0, (end - start).max(0.0));
     let position = Pos2::new(view.x_at(rect, start + effective), rect.bottom() - 9.0);
-    let target = Rect::from_center_size(position, Vec2::splat(18.0)).intersect(rect);
+    let target = Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET)).intersect(rect);
     let origin_id = id.with("origin");
     let active_origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
     let visible = end > start
