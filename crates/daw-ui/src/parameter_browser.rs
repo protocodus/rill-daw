@@ -37,6 +37,9 @@ pub struct ParameterBrowserState {
 }
 
 pub struct ParameterBrowserResponse<R> {
+    /// An explicit row click, including a click on the current selection.
+    /// Filtering, keyboard navigation and automatic selection never set this.
+    pub clicked: Option<u32>,
     pub activated: Option<u32>,
     pub inner: R,
 }
@@ -420,6 +423,7 @@ pub fn parameter_browser<R>(
                 );
             });
         }
+        let mut clicked = None;
         let mut activated = (keyboard && enter).then_some(state.selected).flatten();
         if activated.is_some() {
             ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter));
@@ -463,6 +467,7 @@ pub fn parameter_browser<R>(
                         let item = &items[matches[result]];
                         let row = parameter_row(ui, item, state.selected == Some(item.id));
                         if row.clicked() {
+                            clicked = Some(item.id);
                             state.selected = Some(item.id);
                             ui.memory_mut(|memory| memory.request_focus(list_focus));
                             if pointer_clicked && let Some(position) = row.interact_pointer_pos() {
@@ -521,6 +526,7 @@ pub fn parameter_browser<R>(
             }
         });
         ParameterBrowserResponse {
+            clicked,
             activated,
             inner: inner.unwrap(),
         }

@@ -503,17 +503,7 @@ impl DawApp {
             self.open_effect_library(track_id, true);
         }
         if create_bus_send {
-            self.begin_edit();
-            let name = self.available_bus_name();
-            let bus = self.project.add_bus(name);
-            let result = self.project.add_send(track_id, bus, 0.25, false);
-            if result.is_ok() {
-                self.edit_label = Some("Add bus send".into());
-                self.changed();
-            } else {
-                self.project.delete_track(bus).ok();
-            }
-            self.message(result, "Bus send added");
+            self.mixer_create_send(track_id, None);
         }
     }
 }

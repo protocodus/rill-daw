@@ -77,6 +77,16 @@ Channel strips, meters, gain/pan controls, and recording controls with fixed dem
 
 [`mixer_strip`, `stereo_meter`](../crates/daw-ui/src/layout.rs) · [`channel_controls_at`](../crates/daw-ui/src/channel_controls.rs) · [`record_button`, `input_meter`](../crates/daw-ui/src/recording.rs)
 
+Shared output and send choosers keep their source identity, destination list,
+and creation/detail actions together.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/routing-choices-dark.png">
+  <img alt="Source-labelled output and send menus with current destination, new bus actions, and access to routing details." src="assets/ui-gallery/routing-choices-light.png" width="1120">
+</picture>
+
+[`mixer_route_choices`](../crates/daw-ui/src/mixer_routing.rs) · [Light preview](assets/ui-gallery/routing-choices-light.png) · [Dark preview](assets/ui-gallery/routing-choices-dark.png)
+
 ### Track headers
 
 Track identity, volume/pan and M/S, routing, source selection, and a dedicated
@@ -117,6 +127,16 @@ Selectable device cards and a searchable parameter browser with example catalogu
 [Light preview](assets/ui-gallery/devices-light.png) · [Dark preview](assets/ui-gallery/devices-dark.png)
 
 [`device_card`](../crates/daw-ui/src/device_cards.rs) · [`parameter_browser`](../crates/daw-ui/src/parameter_browser.rs)
+
+Inspected audio/MIDI capabilities and a read-only parameter catalogue preserve
+unknown values until the isolated metadata read completes.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/device-details-dark.png">
+  <img alt="Device audio and MIDI counts, unknown metadata, and a searchable parameter catalogue with units and read-only states." src="assets/ui-gallery/device-details-light.png" width="1120">
+</picture>
+
+[`device_io_summary`, `device_parameter_catalog`](../crates/daw-ui/src/device_metadata.rs) · [Light preview](assets/ui-gallery/device-details-light.png) · [Dark preview](assets/ui-gallery/device-details-dark.png)
 
 ### Feedback and assistant
 
@@ -288,6 +308,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Bar.beat position entry | `musical_position_field(beat, beats_per_bar, prefix)` and `parse_musical_position`: a zero-based beat shown and typed as **12.3.2** (automation point position, take range) |
 | Automation state and segment shape | `AutomationState`, `AutomationControl`, `automation_badge`, `paint_automation_control`, `automatable_parameter_context`, `automatable_menu_contents`, `automation_parameter_context`, `automation_channel_menu`, `curve_timeline_editor_with_segments`, `CurveSegment`, `curve_segment_controls`, `curve_toolbar`, `curve_endpoint_summary`, `paint_curve_override` |
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
+| Read-only plugin capabilities | `device_io_summary`, `DeviceIoSummary`, `device_parameter_catalog`, `DeviceParameterMetadata` |
 | Non-modal operation feedback | `notice`, `NoticeKind` |
 | On-demand error diagnostics | `error_details`, `ErrorDetailsResponse`, `text::selectable_block` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
@@ -729,7 +750,7 @@ targets are rejected. Hover cues identify the destination and folder, and edge
 dragging scrolls long sessions. Escape or releasing outside a target cancels.
 Only a valid drop commits one Undo step; previews leave the document unchanged.
 
-Arrangement and Mixer share the project's complete hierarchy order. Collapsed
+Arrangement and the mixer's **Song order** view share the project's complete hierarchy order. Collapsed
 folders keep their children in that order while hiding their arranger rows.
 Reordering preserves track/clip IDs, selection, routing, insert state and
 automation. Changes in order alone preserve playback and loaded plug-ins;
@@ -815,27 +836,39 @@ selected audio, MIDI or bus channel and requires an explicit eligible destinatio
 it excludes duplicate sends and feedback routes. **New bus and send** creates
 both in one Undo step. New sends start post-fader at gain 0.25. Without an eligible
 selected channel, the send action is disabled.
+**Add bus** selects and reveals its new strip, including in a long mixer.
 Generic bus creation chooses the first unused **Bus 1**, **Bus 2**, and so on,
 checking all existing channel names. Existing names remain unchanged, and bus
 destinations stay distinct from the **New bus and send** creation command.
-The output row names the destination only ("Master", "Drum bus") beside its
-color rail; Master's output row opens Setup › Audio. Up to two compact send
-rows follow (destination rail, name, "PRE" when pre-fader, level in dB), then
-"+N more", then **Add send…**; every strip reserves the same send area so
-controls never move when a send is added. An empty strip's **Add send…** opens
+The output control carries the destination's color. Clicking it opens a source-labelled
+chooser with **Master**, eligible buses, **New bus and route**, and **Routing…**.
+The current destination is marked. A direct route changes only that strip's
+output, preserves selection, and has one Undo step. **New bus and route** inserts
+a unity-gain bus before the current downstream destination, preserving its
+processing. Opening or cancelling either chooser changes no document state.
+`mixer_route_choices` owns the shared bounded menu and scrolling destination list;
+creation and detail actions remain outside that list.
+
+Up to two compact send rows follow the output (destination rail, name, "PRE"
+when pre-fader, level in dB), then "+N more", then **Add send…**. Every strip
+reserves the same send area so controls never move when a send is added.
+Clicking a send row opens Routing to edit it; **Add send…** opens
 the same destination choices directly, with a caption naming that strip's source.
 Opening or cancelling preserves selection, workspace and project state; a choice
-creates one undoable send. Existing send summaries open Routing for editing.
+creates one undoable send. **Add send…** remains available for additional sends, with **Edit sends…** for levels, pre/post placement, and removal.
 Pre-fader sends tap after inserts and before volume/pan;
 post-fader sends include both, and all sends respect channel mute.
 Selecting or hovering a channel previews its output and
 pre/post sends in separate routing lanes below the controls. `mixer_route_lane` connects actual `MixerRouteEndpoint` positions with a continuous three-point-wide U-shaped ribbon, including the arrowhead touching the destination. Vertex colors blend smoothly from source to destination along the path; Master uses the theme accent. Each route uses eleven vertices, with no textures or repaint requests. Offscreen endpoints retain their true coordinates and remain named. The model validates every routing change too.
 
-Mixer separates contiguous Tracks and Buses with group headings and spacing,
-followed by Master. Drag a channel name to place it before or after another
-channel, including across track/bus boundaries. Bus headers share a routing icon,
-BUS badge and quiet tint with the arranger. Grouping follows the saved order;
-channel numbers match the arranger. Master remains the terminal output readout.
+Mixer defaults to **Signal flow**: audio/MIDI sources come first, buses follow
+all their upstream channels and buses, and Master remains last. Both main outputs
+and sends determine this order; unrelated channels retain song order. Tracks and
+Buses have separate headings and spacing. **Signal flow → Song order** restores
+the Arrangement order and enables dragging channel names before or after other
+channels. Switching views never changes routing, project order, history, or
+playback. Channel numbers retain their song identities in either view. Bus
+headers share the routing icon, BUS badge, and quiet tint with the arranger.
 Narrow source
 rows use `compact_action_menu`, which retains the normal action target height
 while removing the optional leading icon and reducing horizontal padding.
@@ -1088,7 +1121,11 @@ states that unassigned MIDI notes are silent. Inventory hidden by search or
 developer filters instead shows **No matching instruments/effects** with
 **Clear filters**.
 
-Search matches names, developers, and category metadata; the developer selector narrows results independently. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. The footer keeps one primary action appropriate to the insertion context. Background preview completion cannot move its target or change the selection. Only visible card rows are built; a bounded asynchronous cache decodes previews off the UI thread, memoizes failures, and invalidates refreshed images without clearing unrelated previews. The shared `device_card` and `device_grid` components own card styling, stable input identities, focus, and virtualized layout.
+Search matches every entered word across names, producers, and category metadata, in any order and without case sensitivity. Searchable category and producer choices narrow results independently; **Clear filters** also clears the text query. Filter controls wrap on narrow windows without shrinking the search field. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. The footer keeps one primary action appropriate to the insertion context. Background preview completion cannot move its target or change the selection. Only visible card rows are built; a bounded asynchronous cache decodes previews off the UI thread, memoizes failures, and invalidates refreshed images without clearing unrelated previews. The shared `device_card` and `device_grid` components own card styling, stable input identities, focus, and virtualized layout.
+
+**Recently used** lists the last 50 distinct plug-ins assigned to instruments, inserted as effects, or used on send tracks, newest first. Browsing, preview capture, and opening a project do not change that order. History is saved independently of the project and survives app restarts and plug-in updates. **Favorites** filters saved stars; the **Favorite** toggle stays in the pinned footer in both Grid and List views. At compact widths, **View** holds sorting choices; if the sidebar cannot fit, **View** also holds its collection choices.
+
+The details pane shows **Inputs**, **Outputs**, and **Parameters**. **Read details** or **Device details** inspects the selected plug-in in a disposable isolated helper and opens a searchable parameter catalogue. Counts describe its initial bus layout, including separate MIDI support; unknown and failed reads never appear as zero. Inspection does not insert a device or alter a loaded instance. The catalogue shows parameter names, IDs, units, steps, read-only status, and automation availability. Closing the details returns to the same selection and filters.
 
 The instrument tab creates a MIDI track and pattern or assigns the selected MIDI track, then opens its native editor. **Effects → + Insert** opens this same browser pinned to that channel. **Add to effect chain** returns to the channel's inserts. **Create send track** creates a bus containing the effect and a post-fader send from the source at 25%; configure the plugin's wet/dry control for the desired return. Routing also offers **Create send track**. Escape returns to the caller without inserting anything.
 
@@ -1096,7 +1133,7 @@ Plugin discovery stays metadata-only. After discovery, one isolated helper at a 
 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
 
-Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its destination to open Routing. The name plate's context menu provides **Open channel**, Instrument, Effects, and Routing where applicable; the source row's Automation menu holds the channel's automation actions. Channel, Instrument, Effects, and Routing share `utility_header`: one row with the page links in a fixed order (Channel · Instrument · Effects · Routing · Mixer, the current window shown as the selected tab; the Channel page sits under the Properties tabs, so its row omits Channel) leading and **AI for this context** trailing (shortened to **AI** where the full row would wrap), then a 21-point gap, so every body starts at the same height. Closing a utility returns to its caller. Each channel's vertical meter stands beside its fader on the fader's dB scale; Master shows the final stereo output on the same scale. Readings come from the running engine.
+Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its output destination to choose a route; **Routing…** opens the full routing controls. The name plate's context menu provides **Open channel**, Instrument, Effects, and Routing where applicable; the source row's Automation menu holds the channel's automation actions. Channel, Instrument, Effects, and Routing share `utility_header`: one row with the page links in a fixed order (Channel · Instrument · Effects · Routing · Mixer, the current window shown as the selected tab; the Channel page sits under the Properties tabs, so its row omits Channel) leading and **AI for this context** trailing (shortened to **AI** where the full row would wrap), then a 21-point gap, so every body starts at the same height. Closing a utility returns to its caller. Each channel's vertical meter stands beside its fader on the fader's dB scale; Master shows the final stereo output on the same scale. Readings come from the running engine.
 
 Routing follows the strip's signal order: **Output** first, then **Sends**, with
 pre-fader sends above post-fader ones. Each send is one `parameter_row`: the
@@ -1138,6 +1175,8 @@ In a native VST3 editor, right-click a parameter and choose **Automate in Rill**
 `NativeContextMenu` in the shared component library preserves action IDs, checked/disabled entries, separators, and nested submenus. The editor sandbox either handles the plugin's copied host action or sends its popup model to a short-lived menu process. macOS and Windows use native OS menus; Linux reuses the shared egui menu renderer. Holding a host-rendered menu open does not suspend editor processing, state synchronization, or heartbeats. Closing/replacing the editor or menu kills the menu worker and releases retained plugin targets. Plugin-rendered menus remain under the plugin's own event-loop behavior and the editor sandbox's timeout protection.
 
 The menu worker announces readiness before receiving its model. On macOS this lets the editor yield activation to the registered worker before it opens the menu; cancellation returns activation only when the menu still owns focus. Request serialization and pipe writes run outside the editor loop. The parent keeps stdin open as a lifetime signal, and a crashed parent closes the worker automatically. Linux converts physical X11 coordinates using the actual display scale before revealing the menu.
+
+**Pick parameter** arms a one-shot automation picker in the Instrument or Effect view. With the native editor open, click or adjust an automatable control there; otherwise choose a row in the searchable parameter list with one click. Rill creates that parameter's lane at its current value or opens the existing lane. **Cancel picking**, Escape, and navigating away cancel the pending pick. Native replies carry a request ID so late replies cannot complete a cancelled pick; selecting a list row reports `ParameterBrowserResponse::clicked` independently of ordinary activation and automatic selection.
 
 `parameter_browser(ui, id, state, items, height, details)` shares the device library's list-and-details layout. Search matches words across names and units, ranks exact/prefix matches first, and handles Unicode. **All**, **Automated**, and **Last touched** narrow the results. Cards show normalized percentages, unit metadata, automation/touch markers, and compact value bars. Up/Down chooses a result; Enter or double-click creates its lane or reopens the existing one. Cmd/Ctrl+F returns focus to search; Clear restores results. An empty result list clears selection, so Enter cannot automate a stale parameter. Browsing does not alter plugin values. The caller supplies detail controls; the list virtualizes large parameter sets and both panes stay bounded and scroll independently.
 
@@ -1206,7 +1245,11 @@ musical fade parameters and other ghost occurrences. The default is 3 ms in and
 
 `batch_actions` supplies independent Repeat to Loop End and atomic routing of
 selected channels. Mixer context menus provide Select/Add/Remove/All/Clear;
-Shift-click and arrows accelerate those selection changes. Re-export uses the
+Shift-click and arrows accelerate those selection changes. **Route selected
+channels → New bus and route** groups their outputs in one undoable action.
+The new bus retains a shared downstream destination; channels with different
+outputs create a group routed to Master. Existing sends, levels, inserts, and
+selection are preserved. Re-export uses the
 last successful destination and tail setting through the normal export path.
 
 `EditorTool` owns tool identities, shortcuts and hover hints. `editor_tools` and `editor_tools_with_labels` use shared exclusive tool controls with a persistent glowing border and separate them from subsequent controls. `toolbar_trailing` reserves and wraps trailing controls before right alignment so their hit areas cannot overlap preceding tools. `editor_tools_with_labels` allows contextual wording (Join in the arranger, Glue in the MIDI editor) without changing the tool or key. Each workspace retains its own supported tool when navigating between editors. Ghost copy and Stretch use the shared chain/stretch icons. Fit, Fit preview, and Show all use presentation controls.

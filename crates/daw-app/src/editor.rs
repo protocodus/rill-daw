@@ -48,116 +48,10 @@ impl DawApp {
         }
         self.finish_clip_navigation(ui.ctx());
     }
-    pub(crate) fn mixer_add_bus(&mut self) {
-        self.begin_edit();
-        let name = self.available_bus_name();
-        self.selected_track = Some(self.project.add_bus(name));
-        self.selected_clip = None;
-        self.selected_notes.clear();
-        self.edit_label = Some("Add bus".into());
-        self.changed();
-    }
-
-    pub(crate) fn mixer_add_send_menu(&mut self, ui: &mut egui::Ui) {
-        let source = self.selected_track.filter(|id| {
-            self.project.track(*id).is_some_and(|track| {
-                matches!(
-                    track.kind,
-                    TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
-                )
-            })
-        });
-        let mut destination = None;
-        ui.add_enabled_ui(source.is_some(), |ui| {
-            daw_ui::action_menu(ui, "Add send…", |ui| {
-                destination = source.and_then(|source| self.mixer_send_choices(ui, source));
-            })
-            .response
-            .on_hover_text(source.and_then(|id| self.project.track(id)).map_or_else(
-                || "Select a channel to add a send".to_owned(),
-                |track| format!("Add a post-fader send from {}", track.name),
-            ));
-        });
-        if let Some((source, destination)) = source.zip(destination) {
-            self.mixer_create_send(source, destination);
-        }
-    }
-
-    /// Both entry points name their source and require a destination choice.
-    /// A channel-strip menu does not retarget the toolbar's selected channel.
-    fn mixer_send_choices(&self, ui: &mut egui::Ui, source: u64) -> Option<Option<u64>> {
-        daw_ui::command_menu_contents(ui, |ui| {
-            let track = self.project.track(source)?;
-            daw_ui::text::truncated(
-                ui,
-                daw_ui::text::TextRole::Label,
-                format!("Send from {}", track.name),
-            );
-            ui.separator();
-            let buses = self
-                .project
-                .eligible_output_buses(source)
-                .unwrap_or_default();
-            let mut destination = None;
-            let mut available = false;
-            for bus in buses
-                .iter()
-                .filter(|bus| !track.sends.iter().any(|send| send.target_bus == bus.id))
-            {
-                available = true;
-                if daw_ui::button(ui, &bus.name).clicked() {
-                    destination = Some(Some(bus.id));
-                    ui.close();
-                }
-            }
-            if !available {
-                daw_ui::text::note(ui, "No eligible buses");
-            }
-            ui.separator();
-            if daw_ui::button(ui, "New bus and send").clicked() {
-                destination = Some(None);
-                ui.close();
-            }
-            destination
-        })
-    }
-
-    fn mixer_create_send(&mut self, source: u64, destination: Option<u64>) {
-        self.begin_edit();
-        let created_bus = destination.is_none();
-        let bus = destination.unwrap_or_else(|| {
-            let name = self.available_bus_name();
-            self.project.add_bus(name)
-        });
-        let result = self.project.add_send(source, bus, 0.25, false);
-        if result.is_ok() {
-            self.edit_label = Some(
-                if created_bus {
-                    "Add bus send"
-                } else {
-                    "Add send"
-                }
-                .into(),
-            );
-            self.changed();
-        } else if created_bus {
-            self.project.delete_track(bus).ok();
-        }
-        self.message(result, "Send added");
-    }
-
-    pub(crate) fn available_bus_name(&self) -> String {
-        for index in 1.. {
-            let name = format!("Bus {index}");
-            if !self.project.tracks.iter().any(|track| track.name == name) {
-                return name;
-            }
-        }
-        unreachable!()
-    }
-
     pub(crate) fn mixer(&mut self, ui: &mut egui::Ui) {
         self.mixer_batch_routing_menu(ui);
+        let order = crate::mixer_flow::MixerOrder::read(ui.ctx());
+        let reorder_enabled = order == crate::mixer_flow::MixerOrder::Song;
         let mut changed = false;
         let mut popup = None;
         let mut channel_target = None;
@@ -169,7 +63,8 @@ impl DawApp {
         let mut rename_track = None;
         let mut automation_navigation = None;
         let mut automation_overrides = Vec::new();
-        let mut empty_send_menus = Vec::new();
+        let mut output_menus = Vec::new();
+        let mut send_menus = Vec::new();
         let mut track_reorder = None;
         let mut reorder_preview = None;
         let mut reorder_viewport = None;
@@ -203,23 +98,20 @@ impl DawApp {
             .filter(|(_, track)| !matches!(track.kind, TrackKind::Folder | TrackKind::Automation))
             .map(|(index, track)| (track.id, index))
             .collect();
-        let channel_indices: Vec<_> = self
-            .project
-            .ordered_track_ids()
-            .into_iter()
-            .filter_map(|id| channel_indices_by_id.get(&id).copied())
-            .collect();
-        let channels: Vec<_> = channel_indices
+        let song_channels =
+            crate::mixer_flow::ordered_channels(&self.project, crate::mixer_flow::MixerOrder::Song);
+        let channels = crate::mixer_flow::ordered_channels(&self.project, order);
+        let channel_indices: Vec<_> = channels
             .iter()
-            .map(|index| self.project.tracks[*index].id)
+            .filter_map(|id| channel_indices_by_id.get(id).copied())
             .collect();
-        let channel_numbers: std::collections::HashMap<_, _> = channels
+        // Channel numbers identify the song's channels, independently of the
+        // current mixer presentation and its visible strip positions.
+        let channel_numbers: std::collections::HashMap<_, _> = song_channels
             .iter()
             .enumerate()
             .map(|(index, id)| (*id, index + 1))
             .collect();
-        // Separate contiguous channel kinds visually without imposing a second
-        // order over the project. A bus can be placed between ordinary tracks.
         let mut channel_groups: Vec<(bool, usize)> = Vec::new();
         for index in &channel_indices {
             let bus = self.project.tracks[*index].kind == TrackKind::Bus;
@@ -251,7 +143,9 @@ impl DawApp {
                     .push((track.id, Some(send.pre_fader)));
             }
         }
-        let mut reveal_channel = None;
+        let mut reveal_channel = ui
+            .ctx()
+            .data_mut(|data| data.remove_temp::<u64>(egui::Id::new("mixer_reveal_channel")));
         if let Some((direction, extend)) = daw_ui::selection_navigation_input(ui, None) {
             let direction = match direction {
                 daw_ui::SelectionDirection::Up => daw_ui::SelectionDirection::Left,
@@ -420,7 +314,9 @@ impl DawApp {
         scroll.auto_shrink([false, false]).show_viewport(ui, |ui, _viewport| {
             let reorder_rect = ui.clip_rect();
             reorder_viewport = Some(rect_json(reorder_rect));
-            let scroll_delta = daw_ui::track_reorder_scroll_delta(ui, reorder_rect, daw_ui::TrackReorderAxis::Horizontal);
+            let scroll_delta = if reorder_enabled {
+                daw_ui::track_reorder_scroll_delta(ui, reorder_rect, daw_ui::TrackReorderAxis::Horizontal)
+            } else { Vec2::ZERO };
             let strip_size = Vec2::new(strip_width, strip_height);
             let fader_height = strip_height - fixed_height;
             let mut anchors = std::collections::HashMap::new();
@@ -463,8 +359,8 @@ impl DawApp {
                         // Identity
                         let name = daw_ui::mixer_name_plate(ui, if bus { daw_ui::MixerNamePlateKind::Bus } else { daw_ui::MixerNamePlateKind::Track },
                             &track.name, content_width, color(track.color))
-                            .on_hover_text(format!("Open channel · {} · Drag to reorder · Right-click for channel and selection actions · Shift-click to add/remove", track.name));
-                        let name = daw_ui::track_reorder_source(ui, &name, track.id);
+                            .on_hover_text(format!("Open channel · {} · {} · Right-click for channel and selection actions · Shift-click to add/remove", track.name, if reorder_enabled { "Drag to reorder" } else { "Signal flow order; choose Song order to drag" }));
+                        let name = if reorder_enabled { daw_ui::track_reorder_source(ui, &name, track.id) } else { name };
                         name.context_menu(|ui| {
                             if daw_ui::button(ui, "Open channel").clicked() {
                                 channel_target = Some(track.id); ui.close();
@@ -648,8 +544,8 @@ impl DawApp {
                         ui.add_space(section_gap);
                         let target = daw_ui::mixer_output_button(ui, content_width, destination,
                             track.output_bus.and_then(|id| channel_colors.get(&id)).copied())
-                            .on_hover_text(format!("Output → {destination}\nAfter inserts, volume and pan · Click to edit routing"));
-                        if target.clicked() { self.selected_track = Some(track.id); popup = Some(PopupKind::Routing); }
+                            .on_hover_text(format!("Output → {destination}\nAfter inserts, volume and pan · Click to choose output"));
+                        output_menus.push((track.id, target.clone()));
                         let send_details: Vec<_> = track.sends.iter().map(|send| daw_ui::MixerSend {
                             destination: names.get(&send.target_bus).map(String::as_str).unwrap_or("Bus"),
                             color: channel_colors.get(&send.target_bus).copied().unwrap_or(palette(ui.ctx()).accent),
@@ -676,12 +572,12 @@ impl DawApp {
                         });
                         if send_area.inner { self.selected_track = Some(track.id); popup = Some(PopupKind::Routing); }
                         let add_send = daw_ui::mixer_add_send_button(ui, content_width);
-                        empty_send_menus.push((track.id, add_send.clone()));
+                        send_menus.push((track.id, add_send.clone()));
                         let sends_rect = send_area.response.rect.union(add_send.rect);
                         let level_rect = pan_response.rect.union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
                         let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
                         let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
-                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":rect_json(name.rect),"source":rect_json(source.response.rect),
+                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
                             "source_kind":source_kind,"source_menu":rect_json(source.inner.0),"source_label":rect_json(source.inner.1),
                             "automation_state":channel_state.map(daw_ui::automation_state_label),
                             "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
@@ -695,8 +591,10 @@ impl DawApp {
                             "stages":{"input":rect_json(source.response.rect),"processing":rect_json(effects.rect.union(insert_summary.rect)),
                                 "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}})
                     });
-                    let drop = daw_ui::track_reorder_target(ui, strip.response.rect, track.id,
-                        daw_ui::TrackReorderAxis::Horizontal, false, |intent| intent.source != intent.target);
+                    let drop = if reorder_enabled {
+                        daw_ui::track_reorder_target(ui, strip.response.rect, track.id,
+                            daw_ui::TrackReorderAxis::Horizontal, false, |intent| intent.source != intent.target)
+                    } else { daw_ui::TrackDropResponse::default() };
                     if let Some(preview) = drop.preview {
                         let placement = if preview.intent.placement == daw_ui::TrackDropPlacement::Before { "Before" } else { "After" };
                         let parent = track.parent_folder.and_then(|id| names.get(&id)).map(String::as_str).unwrap_or("Top level");
@@ -715,7 +613,7 @@ impl DawApp {
                     { flow_source = Some(track.id); }
                     let mut channel_diagnostics = strip.inner;
                     channel_diagnostics["strip"] = rect_json(strip.response.rect);
-                    channel_diagnostics["drop"] = rect_json(strip.response.rect);
+                    channel_diagnostics["drop"] = if reorder_enabled { rect_json(strip.response.rect) } else { serde_json::Value::Null };
                     diagnostics.push(channel_diagnostics);
                 }
                 if !channels.is_empty() { ui.add_space(group_gap); }
@@ -811,18 +709,16 @@ impl DawApp {
         // Attach the shared destination choices to the existing strip button
         // after releasing the mutable track borrow. The captured source owns
         // this action even when another channel remains selected.
-        for (source, response) in empty_send_menus {
-            if let Some(destination) = egui::Popup::menu(&response)
-                .show(|ui| self.mixer_send_choices(ui, source))
-                .and_then(|shown| shown.inner)
-            {
-                self.mixer_create_send(source, destination);
-            }
+        for (source, response) in output_menus {
+            self.mixer_output_menu(ui, source, &response);
+        }
+        for (source, response) in send_menus {
+            self.mixer_send_menu(ui, source, &response);
         }
         ui.ctx().data_mut(|data| {
             data.insert_temp(preview_id, (generation, frame, self.selected_track, flow_source));
             data.insert_temp(egui::Id::new("mixer_diagnostics"),
-                serde_json::json!({"channels":diagnostics,"master_strip":master_diagnostics,"master":master_details,"master_peaks":[meter.peak_left,meter.peak_right],"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport}));
+                serde_json::json!({"order":order.label(),"channel_order":channels,"reorder_enabled":reorder_enabled,"channels":diagnostics,"master_strip":master_diagnostics,"master":master_details,"master_peaks":[meter.peak_left,meter.peak_right],"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport}));
         });
         for (target, value) in automation_overrides {
             self.override_automated_parameter(target, value);

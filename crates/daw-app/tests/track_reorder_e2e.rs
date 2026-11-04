@@ -118,6 +118,24 @@ fn menu(app: &mut Harness, parent: &str, child: &str) -> Value {
     app.click(child)
 }
 
+// Reordering is a song edit; opt into the view that displays that stored order.
+fn song_mixer(app: &mut Harness) -> Value {
+    let before = app.click("Mixer");
+    if before["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|label| label == "Signal flow")
+    {
+        app.click("Signal flow");
+        let after = app.click("Song order");
+        document_unchanged(&before, &after);
+        after
+    } else {
+        before
+    }
+}
+
 fn start_drag(
     app: &mut Harness,
     view: View,
@@ -278,7 +296,7 @@ fn every_arranger_track_kind_reorders_by_mouse_with_one_history_entry_and_portab
         let same = pointer(&mut app, "up", to);
         document_unchanged(&before, &same);
 
-        let final_state = app.click("Mixer");
+        let final_state = song_mixer(&mut app);
         assert_eq!(
             visible_order(&final_state, View::Mixer),
             channel_order(&final_state)
@@ -368,7 +386,7 @@ fn folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles() {
     expected_content.get_mut(&bus).unwrap()["parent_folder"] = json!(nested);
     assert_eq!(tracks(&after), expected_content);
     undo_redo(&mut app, &before, &after);
-    let mixer = app.click("Mixer");
+    let mixer = song_mixer(&mut app);
     assert_eq!(
         visible_order(&mixer, View::Mixer),
         vec![first, child, midi, bus]
@@ -383,7 +401,7 @@ fn mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing
         let (mut project, [audio, midi, bus, _, automation]) = fixture();
         let last = project.add_audio_track("Last channel");
         open(&mut app, &project, dark, density);
-        let mixer = app.click("Mixer");
+        let mixer = song_mixer(&mut app);
         let content = tracks(&mixer);
         assert_eq!(
             visible_order(&mixer, View::Mixer),
@@ -408,7 +426,7 @@ fn mixer_channels_cross_bus_boundaries_and_share_arranger_order_without_changing
                 automation,
             );
             assert_eq!(visible_order(&arranger, View::Arrangement), visible);
-            app.click("Mixer");
+            song_mixer(&mut app);
         }
         let (before, _, to) = start_drag(&mut app, View::Mixer, audio, midi, "Before");
         app.key("Escape");
@@ -436,7 +454,7 @@ fn compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations() {
         let selected = app.click("Channel 02");
         assert_eq!(selected["selected_track"], order[1]);
         if matches!(view, View::Mixer) {
-            app.click("Mixer");
+            song_mixer(&mut app);
         }
         let before = app.inspect();
         let source = order[0];

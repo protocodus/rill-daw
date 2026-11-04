@@ -484,6 +484,7 @@ impl ToolHost for DawApp {
                         ToolError::new("not_found", "Choose a plug-in ID returned by list_plugins")
                     })?;
                 let classification = entry.plugin.is_instrument();
+                let used_plugin = entry.plugin.clone();
                 if (!args.insert && classification == Some(false))
                     || (args.insert && classification == Some(true))
                 {
@@ -511,6 +512,7 @@ impl ToolHost for DawApp {
                     None
                 };
                 self.commit_song_candidate(candidate, "Assign plug-in")?;
+                self.record_plugin_use(&used_plugin);
                 Ok(
                     json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"insert_id":effect_id}),
                 )

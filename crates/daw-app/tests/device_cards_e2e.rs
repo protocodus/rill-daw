@@ -156,6 +156,21 @@ fn selected_name(state: &Value) -> &str {
         .unwrap_or_else(|| panic!("Selected card must remain visible: {}", state["library"]))
 }
 
+fn sidebar_filter(app: &mut Harness, label: &str) -> Value {
+    let state = common::reveal_library_filter(app, label);
+    let sidebar = Bounds::from(&state["library"]["sidebar"]);
+    let rect = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["text"] == label && sidebar.contains(Bounds::from(rect)))
+        .unwrap();
+    let bounds = Bounds::from(rect);
+    app.command(json!({"command":"pointer", "phase":"click",
+        "x":(bounds.left + bounds.right) * 0.5,
+        "y":(bounds.top + bounds.bottom) * 0.5}))
+}
+
 fn assert_layout(state: &Value, width: f64, height: f64) {
     let catalog = Bounds::from(&state["library"]["catalog"]);
     assert!(
@@ -349,10 +364,8 @@ fn card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe(
         down_at_end["library"]["selected"], late_fingerprint,
         "Down on the last row must preserve the selected column"
     );
-    common::reveal_library_filter(&mut app, "All developers");
-    app.click("All developers");
-    common::reveal_library_filter(&mut app, SECOND_PRODUCER);
-    let narrowed = app.click(SECOND_PRODUCER);
+    sidebar_filter(&mut app, "All developers");
+    let narrowed = sidebar_filter(&mut app, SECOND_PRODUCER);
     assert_eq!(narrowed["library"]["total"], 12);
     assert_eq!(
         narrowed["library"]["selected"], late_fingerprint,
@@ -367,9 +380,7 @@ fn card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe(
         Bounds::from(&narrowed["library"]["catalog"]).contains(Bounds::from(&selected["rect"])),
         "A retained selection must stay visible after the producer filter changes row indices"
     );
-    app.click(SECOND_PRODUCER);
-    common::reveal_library_filter(&mut app, "All developers");
-    app.click("All developers");
+    sidebar_filter(&mut app, "All developers");
 
     let empty = query(&mut app, "Card Synth", "No such device Ω");
     assert_eq!(empty["library"]["total"], 0);
@@ -385,10 +396,8 @@ fn card_grid_keyboard_and_filters_keep_selection_visible_and_empty_results_safe(
     assert_eq!(after_enter["popups"]["library"], true);
 
     query(&mut app, "No such device Ω", "Card Synth");
-    common::reveal_library_filter(&mut app, "All developers");
-    app.click("All developers");
-    common::reveal_library_filter(&mut app, SECOND_PRODUCER);
-    let filtered = app.click(SECOND_PRODUCER);
+    sidebar_filter(&mut app, "All developers");
+    let filtered = sidebar_filter(&mut app, SECOND_PRODUCER);
     assert_eq!(filtered["library"]["total"], 12);
     assert!(
         cards(&filtered)
@@ -419,6 +428,12 @@ fn card_clicks_select_while_double_click_creates_or_assigns_the_chosen_instrumen
         .find(|card| card["selected"] == true)
         .unwrap()
         .clone();
+    // Begin a distinct double-click after the selection gesture. Otherwise the
+    // selection plus two clicks form a triple-click, and its final click can
+    // legitimately hit a control in the newly opened Instrument workspace.
+    for _ in 0..20 {
+        app.inspect();
+    }
     let created = pointer(&mut app, &chosen, "double_click");
     assert_eq!(created["project"]["tracks"].as_array().unwrap().len(), 1);
     assert_eq!(created["project"]["tracks"][0]["name"], chosen["name"]);
@@ -429,7 +444,9 @@ fn card_clicks_select_while_double_click_creates_or_assigns_the_chosen_instrumen
     assert_eq!(added["project"]["tracks"].as_array().unwrap().len(), 2);
     let destination = added["selected_track"].clone();
     let tracks_before = added["project"]["tracks"].clone();
-    app.command(json!({"command":"text", "text":"Card Synth 00"}));
+    // Search a unique name token: "00" also occurs in both producer names,
+    // and the browser now matches independent words across all metadata.
+    app.command(json!({"command":"text", "text":"Étoile"}));
     let chooser = wait(&mut app, |state| state["library"]["total"] == 1);
     let selected = cards(&chooser)[0].clone();
     assert_eq!(selected["name"], LONG_NAME);

@@ -313,12 +313,17 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     assert_eq!(cleared["library"]["developer"], "");
     assert_eq!(cleared["library"]["total"], 2);
 
+    // Installation information follows the I/O and parameter summary in the
+    // independently scrolling detail pane. Keep the pinned actions stationary.
+    let details = scroll_details(&mut app, -300.0);
+    assert!(readable_detail(&details, "Copy path"));
     // Copy path uses the selected device's install path.
     let state = app.click("Copy path");
     assert_eq!(
         state["clipboard_text"],
         json!(bundle_path.display().to_string())
     );
+    scroll_details(&mut app, 10_000.0);
 
     // The list view keeps selection and double-click creation.
     app.click("View");

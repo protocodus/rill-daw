@@ -206,6 +206,8 @@ fn mixer_reorder_and_following_gain_edit_preserve_plugin_instances_and_live_audi
     app.command(json!({"command":"open","path":path}));
     app.command(json!({"command":"viewport","width":1400,"height":950}));
     app.click("Mixer");
+    app.click("Signal flow");
+    app.click("Song order");
     app.click("Play");
     let started = wait(&mut app, |state| {
         state["engine"]["playing"] == true && state["playback_loading"] == false

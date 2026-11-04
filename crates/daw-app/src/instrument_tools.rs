@@ -86,6 +86,7 @@ impl DawApp {
             class_id: entry.plugin.class_id.clone(),
         };
         let instrument_name = entry.plugin.name.clone();
+        let used_plugin = entry.plugin.clone();
         let unverified = entry.plugin.is_instrument().is_none();
         let requested_track = args.part.get("track_id").and_then(Value::as_u64);
         let mut candidate = CandidateHost {
@@ -139,6 +140,9 @@ impl DawApp {
                 .name
         );
         let changed = self.commit_song_candidate(candidate.project, &label)?;
+        if changed {
+            self.record_plugin_use(&used_plugin);
+        }
         result["session_id"] = json!(self.song_session.id);
         result["revision"] = json!(self.song_session.revision);
         result["changed"] = json!(changed);

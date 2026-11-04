@@ -33,6 +33,8 @@ fn editor_main() {
     let mut values = std::collections::HashMap::from([(0, 0.4), (7, 0.5), (43, 0.1)]);
     let mut output = std::io::stdout().lock();
     let mut ready = false;
+    let mut picking = None;
+    let mut last_pick = None;
     loop {
         match receiver.recv_timeout(Duration::from_millis(10)) {
             Ok(command) => {
@@ -48,6 +50,11 @@ fn editor_main() {
                     }
                     editor_ready(&mut output, &values);
                     ready = true;
+                } else if command.contains("\"command\":\"pick_parameter\"") {
+                    picking = number(&command, "request_id").map(|id| id as u64);
+                    if picking.is_some() {
+                        last_pick = picking;
+                    }
                 } else if command.contains("\"command\":\"set_parameter\"") {
                     let id = number(&command, "id").unwrap() as u32;
                     let value = number(&command, "value").unwrap();
@@ -109,7 +116,7 @@ fn editor_main() {
                         r#"{{"event":"parameter_changed","id":{id},"value":{value}}}"#
                     )
                     .unwrap();
-                } else {
+                } else if action == "automate" {
                     // Match the real helper's ordering: capture opaque preset
                     // state before the app creates an automation Undo boundary.
                     let state = (values[&0] * 100.0).round() as u8;
@@ -126,6 +133,23 @@ fn editor_main() {
                         r#"{{"event":"automate_parameter","id":{id},"value":{value}}}"#
                     )
                     .unwrap();
+                }
+                let picked = if action == "late_pick" {
+                    last_pick
+                } else if matches!(action, "touch" | "change") && matches!(id, 0 | 7) {
+                    picking.take()
+                } else {
+                    None
+                };
+                if let Some(request) = picked {
+                    let state = (values[&0] * 100.0).round() as u8;
+                    writeln!(
+                        output,
+                        r#"{{"event":"state_saved","request_id":null,"state":[{state}]}}"#
+                    )
+                    .unwrap();
+                    editor_ready(&mut output, &values);
+                    writeln!(output, r#"{{"event":"parameter_picked","request_id":{request},"id":{id},"value":{value}}}"#).unwrap();
                 }
             }
             output.flush().unwrap();

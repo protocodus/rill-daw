@@ -1,5 +1,32 @@
 # Application E2E tests
 
+`mixer_group_bus_e2e` creates a bus from a mouse-selected channel group, keeps
+shared downstream processing and existing sends, and checks cancellation and
+atomic Undo/Redo in compact/light and wide/dark layouts. Different previous
+outputs produce a group routed to Master. The same suite verifies that **Add bus**
+reveals its selected strip in a long mixer.
+
+`mixer_order_e2e` checks default source-to-bus signal ordering, nested output/send
+connections, stable channel numbers, mouse switching to Song order, drag gating,
+and compact viewports. `mixer_inline_routing_e2e` checks direct output changes,
+new bus insertion, additional sends, cancellation, feedback prevention, Undo/Redo,
+and long destination lists with fixed creation/detail actions.
+
+```sh
+cargo test --locked -p daw-app --test mixer_order_e2e --test mixer_inline_routing_e2e --test mixer_group_bus_e2e --test mixer_send_choice_e2e -- --test-threads=1
+```
+
+`plugin_library_workflow_e2e` covers recently used assignment/insert/send ordering,
+restart persistence, favourites in the pinned footer, and combined name/category/
+producer search. `plugin_details_e2e` covers isolated I/O and parameter inspection,
+search, failure/retry, and returning to the library without changing the project.
+`native_parameter_automation_e2e` includes the one-shot **Pick parameter** flow,
+cancellation and stale replies, existing lanes, and precise effect ownership.
+
+```sh
+cargo test --locked -p daw-app --test plugin_library_workflow_e2e --test plugin_details_e2e --test native_parameter_automation_e2e -- --test-threads=1
+```
+
 `main_toolbar_roles_e2e` checks the grouped transport across 800–1600 point
 windows in both appearances: full-size targets, fixed Play/Pause geometry, quiet
 secondary commands, and preserved playback, loop, click, export and history

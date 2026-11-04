@@ -4,6 +4,7 @@ use egui::Ui;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BatchRouteChoice {
     Output(Option<u64>),
+    NewBusOutput,
     Send { bus: u64, pre_fader: bool },
 }
 
@@ -63,6 +64,13 @@ pub fn batch_route_choices(
             choice = Some(BatchRouteChoice::Output(Some(*id)));
             ui.close();
         }
+    }
+    if crate::button(ui, "New bus and route")
+        .on_hover_text("Group these outputs in a new bus. Keep their shared destination, or use Master when destinations differ.")
+        .clicked()
+    {
+        choice = Some(BatchRouteChoice::NewBusOutput);
+        ui.close();
     }
     ui.separator();
     crate::text::note(ui, "Existing sends keep their settings");

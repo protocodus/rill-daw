@@ -1949,6 +1949,7 @@ impl DawApp {
         self.sync_workspace_tool();
         if self.document_guard.is_some()
             || self.error_details.is_some()
+            || crate::plugin_details::is_open(ctx)
             || crate::audio_silence::is_open(ctx)
             || crate::audio_batch::is_open(ctx)
         {
@@ -3191,6 +3192,7 @@ impl DawApp {
             self.open_screenshot_view(&view);
         }
         if std::mem::take(&mut self.reset_views) {
+            crate::plugin_details::close(ctx);
             self.midi_editor.clear_generation_memory();
             ctx.data_mut(|data| {
                 data.remove::<daw_ui::TimelineViewport>(egui::Id::new(
@@ -3213,11 +3215,13 @@ impl DawApp {
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error_details = None;
+            crate::plugin_details::close(ctx);
             self.finish_inline_rename(ctx, true);
             self.request_document_transition(crate::document_ui::DocumentTransition::Quit);
         }
         if self.document_guard.is_none()
             && self.error_details.is_none()
+            && !crate::plugin_details::is_open(ctx)
             && ctx.input(|i| {
                 i.pointer.any_pressed()
                     || i.events.iter().any(|e| {
@@ -3285,6 +3289,11 @@ impl DawApp {
         self.poll_plugin_catalog(ctx);
         self.poll_document_guard(ctx);
         self.poll_assistant(ctx);
+        if crate::plugin_details::is_open(ctx) {
+            crate::plugin_details::show_window(ctx);
+            self.capture_screenshot(ctx);
+            return;
+        }
         if self.error_details.is_some() {
             self.error_details_frame(ctx);
             self.capture_screenshot(ctx);
@@ -3433,9 +3442,10 @@ impl DawApp {
                         }
                     }
                     if workspace == WorkspaceView::Mixer {
+                        self.mixer_order_menu(ui);
                         self.mixer_add_send_menu(ui);
                         if daw_ui::button(ui, "Add bus").clicked() {
-                            self.mixer_add_bus();
+                            self.mixer_add_bus(ui.ctx());
                         }
                     }
                     if workspace == WorkspaceView::Clip

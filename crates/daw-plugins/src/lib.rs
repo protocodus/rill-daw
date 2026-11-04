@@ -38,9 +38,11 @@ mod editor_platform;
 #[path = "editor_platform_windows.rs"]
 mod editor_platform;
 pub mod helper;
+mod inspection;
 pub mod sync;
 pub use catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
 pub use editor::{EditorEvent, EditorSession, capture_editor, capture_editor_info, launch_editor};
+pub use inspection::{PluginAudioBus, PluginInspection, PluginParameterMetadata, inspect_plugin};
 
 /// Leaves headroom in the host's 4,096-event queue for panic note-offs.
 pub const MAX_MIDI_EVENTS_PER_BLOCK: usize = 2_048;

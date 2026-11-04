@@ -76,10 +76,12 @@ fn count(state: &Value, label: &str) -> usize {
         .filter(|value| *value == label)
         .count()
 }
-/// Open Routing from a channel's output button (labelled by its destination).
+/// Open Routing through a channel's output destination menu.
 fn open_routing(app: &mut Harness, channel: usize) {
     let state = app.click("Mixer");
-    click_rect(app, &state["mixer"]["channels"][channel]["target"]);
+    let choices = click_rect(app, &state["mixer"]["channels"][channel]["target"]);
+    assert_eq!(choices["popups"]["routing"], false);
+    app.click("Routing…");
 }
 fn click_rect(app: &mut Harness, rect: &Value) -> Value {
     app.command(json!({"command":"pointer","phase":"click",
@@ -133,7 +135,11 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
             json!({"command":"viewport","width":1100,"height":900,"pixels_per_point":density}),
         );
         let before_audio = export(&mut app, "Before group view.wav");
-        let before = app.click("Mixer");
+        let flow_view = app.click("Mixer");
+        app.click("Signal flow");
+        let before = app.click("Song order");
+        assert_eq!(before["project"], flow_view["project"]);
+        assert_eq!(before["history"], flow_view["history"]);
         // The pointer remains over the workspace selector; this shows the
         // selected channel rather than relying on a synthetic graph snapshot.
         let state = paint(&mut app);
@@ -351,6 +357,9 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         app.command(json!({"command":"viewport","width":1100,"height":900}));
         let current = app.inspect();
         click_rect(&mut app, &current["mixer"]["channels"][1]["target"]);
+        let routing = app.click("Routing…");
+        assert_eq!(routing["popups"]["routing"], true, "{routing}");
+        assert_eq!(routing["selected_track"], bus_a, "{routing}");
         app.key("Escape");
         let current = app.inspect();
         let selected_channel = current["mixer"]["channels"]

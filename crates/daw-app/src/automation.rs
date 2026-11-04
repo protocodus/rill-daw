@@ -1436,6 +1436,7 @@ impl Harness {
             "waveform_count": self.app.waveforms.len(),
             "waveform_warning": self.app.waveform_warning,
             "native_editor": self.app.instrument_diagnostics(),
+            "plugin_details": crate::plugin_details::diagnostics(&self.ctx),
             "audition_request": self.app.audition_request,
             "join_pending": self.app.join_ui.pending(),
             "plugin_catalog": self.app.vst_catalog.iter().map(|entry| json!({

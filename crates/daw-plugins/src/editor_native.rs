@@ -228,9 +228,11 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
     let mut capture: Option<(PathBuf, Instant)> = None;
     let mut context_menu: Option<ContextMenuProcess> = None;
     let mut closing = None;
+    let mut picking = None;
     while closing.is_none() {
         for _ in 0..32 {
             match commands.try_recv() {
+                Ok(EditorCommand::PickParameter { request_id }) => picking = request_id,
                 Ok(EditorCommand::SetParameter { id, value }) => {
                     ensure!(
                         value.is_finite() && (0.0..=1.0).contains(&value),
@@ -328,6 +330,19 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
             // changes also contain processor meters/LFOs, so drain those separately.
             let _ = plugin.get_parameter_changes();
             for edit in plugin.take_parameter_edits() {
+                if picking.is_some()
+                    && closing.is_none()
+                    && visible
+                    && matches!(
+                        edit.kind,
+                        ParameterEditKind::BeginGesture | ParameterEditKind::ValueChange
+                    )
+                    && plugin.get_parameters()?.iter().any(|parameter| {
+                        parameter.id == edit.id && parameter.can_automate && !parameter.is_read_only
+                    })
+                {
+                    automation_requests.push((edit.id, picking.take()));
+                }
                 if matches!(
                     edit.kind,
                     ParameterEditKind::ValueChange | ParameterEditKind::EndGesture
@@ -366,7 +381,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                     HostNotification::ParameterAutomationRequested { id }
                         if visible && closing.is_none() =>
                     {
-                        automation_requests.push(id);
+                        automation_requests.push((id, None));
                     }
                     _ => {}
                 }
@@ -388,7 +403,7 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                 buffers = plugin.create_bus_audio_buffers(256)?;
             }
         }
-        for id in automation_requests {
+        for (id, pick_request) in automation_requests {
             // Commit opaque preset changes and queued controller edits before
             // creating a lane. Otherwise its playback rebuild and Undo entry
             // could precede an earlier preset change's periodic snapshot.
@@ -410,7 +425,18 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
                         parameters: current_parameters(&mut plugin)?,
                     },
                 )?;
-                emit(output, &EditorEvent::AutomateParameter { id, value })?;
+                if let Some(request_id) = pick_request {
+                    emit(
+                        output,
+                        &EditorEvent::ParameterPicked {
+                            request_id,
+                            id,
+                            value,
+                        },
+                    )?;
+                } else {
+                    emit(output, &EditorEvent::AutomateParameter { id, value })?;
+                }
             }
         }
         for (menu_id, x, y, items) in menu_requests {

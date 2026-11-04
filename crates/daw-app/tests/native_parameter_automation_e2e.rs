@@ -541,3 +541,128 @@ fn delayed_browser_parameter_acknowledgement_does_not_retake_resumed_automation(
     assert_lane(lanes(&manual)[0], track, None, 0.4);
     app.quit();
 }
+
+#[test]
+fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it() {
+    let fixture = Fixture::new();
+    let (mut app, track, _, _) = fixture.app();
+    open_instrument(&mut app);
+    let armed = app.click("Pick parameter");
+    assert_eq!(armed["native_editor"]["picking"], true);
+    assert!(lanes(&armed).is_empty());
+    // A meter and an unknown control must not consume the picker.
+    fixture.action(&mut app, "touch 43\ntouch 999\n");
+    assert_eq!(app.inspect()["native_editor"]["picking"], true);
+    fixture.action(&mut app, "touch 0\n");
+    let created = wait(&mut app, |state| lanes(state).len() == 1);
+    assert_lane(lanes(&created)[0], track, None, 0.4);
+    assert_eq!(created["native_editor"]["picking"], false);
+    assert_eq!(created["popups"]["automation"], true);
+    assert!(created["native_editor"]["last_touched"].is_null());
+    let lane = lanes(&created)[0]["id"].clone();
+    fixture.action(&mut app, "touch 7\n");
+    assert_eq!(lanes(&app.inspect()).len(), 1, "picker is one-shot");
+
+    menu(&mut app, "Arranger");
+    app.click("Neon phrase");
+    menu(&mut app, "Instrument");
+    app.click("Pick parameter");
+    fixture.action(&mut app, "touch 0\n");
+    let reused = wait(&mut app, |state| state["popups"]["automation"] == true);
+    assert_eq!(lanes(&reused).len(), 1);
+    assert_eq!(reused["selected_track"], lane);
+    assert_lane(lanes(&reused)[0], track, None, 0.4);
+    let undone = app.command(json!({"command":"key", "key":"Z", "cmd":true}));
+    assert!(lanes(&undone).is_empty(), "reopening adds no Undo entry");
+    app.quit();
+}
+
+#[test]
+fn cancelled_picks_ignore_late_native_replies_and_workspace_navigation_cancels() {
+    let fixture = Fixture::new();
+    let (mut app, _, _, _) = fixture.app();
+    open_instrument(&mut app);
+    app.click("Pick parameter");
+    let cancelled = app.click("Cancel picking");
+    assert_eq!(cancelled["native_editor"]["picking"], false);
+    fixture.action(&mut app, "late_pick 0\nchange 7 0.66\n");
+    let ignored = wait(&mut app, |state| {
+        state["native_editor"]["last_touched"] == 7
+    });
+    assert!(lanes(&ignored).is_empty());
+
+    app.click("Pick parameter");
+    let escaped = app.command(json!({"command":"key", "key":"Escape"}));
+    assert_eq!(escaped["native_editor"]["picking"], false);
+    assert_eq!(escaped["popups"]["instrument"], true);
+    fixture.action(&mut app, "late_pick 0\nchange 7 0.67\n");
+    let ignored = wait(&mut app, |state| {
+        state["project"]["tracks"][0]["instrument_parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"] == 7 && p["value"] == 0.67)
+    });
+    assert!(lanes(&ignored).is_empty());
+
+    app.click("Pick parameter");
+    let left = menu(&mut app, "Arranger");
+    assert_eq!(left["native_editor"]["picking"], false);
+    fixture.action(&mut app, "late_pick 0\nchange 7 0.68\n");
+    let ignored = wait(&mut app, |state| {
+        state["project"]["tracks"][0]["instrument_parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"] == 7 && p["value"] == 0.68)
+    });
+    assert!(lanes(&ignored).is_empty());
+    app.quit();
+}
+
+#[test]
+fn parameter_list_picker_uses_a_single_click_and_does_not_automate_search_selection() {
+    let fixture = Fixture::new();
+    let (mut app, track, _, _) = fixture.app();
+    // No native editor is needed: Pick opens the searchable parameter browser.
+    menu(&mut app, "Instrument");
+    app.click("Pick parameter");
+    wait(&mut app, |state| {
+        state["native_editor"]["parameter_count"].as_u64().unwrap() > 0
+    });
+    let filtered = app.command(json!({"command":"text", "text":"Resonance"}));
+    assert_eq!(filtered["native_editor"]["picking"], true);
+    assert!(
+        lanes(&filtered).is_empty(),
+        "search only selects a candidate"
+    );
+    app.click("Filter Resonance");
+    let created = wait(&mut app, |state| lanes(state).len() == 1);
+    assert_eq!(created["native_editor"]["picking"], false);
+    assert_eq!(created["native_editor"]["open"], false);
+    assert_eq!(
+        lanes(&created)[0]["automation"]["target"],
+        json!({"track":track,"parameter":{"VstParameter":{"effect":null,"id":8}}})
+    );
+    app.quit();
+}
+
+#[test]
+fn native_parameter_picker_targets_the_selected_effect_instance() {
+    let fixture = Fixture::new();
+    let (mut app, track, _, effects) = fixture.app();
+    menu(&mut app, "Effects");
+    app.command(json!({"command":"click", "label":"Open editor", "occurrence":1}));
+    wait(&mut app, |state| {
+        state["native_editor"]["open"] == true && state["native_editor"]["effect"] == effects[1]
+    });
+    app.click("Pick parameter");
+    fixture.action(&mut app, "touch 0\n");
+    let created = wait(&mut app, |state| lanes(state).len() == 1);
+    assert_lane(lanes(&created)[0], track, Some(effects[1]), 0.3);
+    assert_eq!(
+        lanes(&created)[0]["name"],
+        "Neon keys 🎹 · Echo B · Filter Cutoff"
+    );
+    app.quit();
+}

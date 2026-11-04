@@ -49,14 +49,16 @@ enum DeviceKind {
 enum Collection {
     #[default]
     All,
+    RecentlyUsed,
     Favorites,
     WithPreview,
     WithoutPreview,
 }
 
 impl Collection {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::All,
+        Self::RecentlyUsed,
         Self::Favorites,
         Self::WithPreview,
         Self::WithoutPreview,
@@ -65,6 +67,7 @@ impl Collection {
     fn label(self) -> &'static str {
         match self {
             Self::All => "All plug-ins",
+            Self::RecentlyUsed => "Recently used",
             Self::Favorites => "Favorites",
             Self::WithPreview => "With preview",
             Self::WithoutPreview => "Without preview",
@@ -74,6 +77,7 @@ impl Collection {
     fn accepts(self, item: &Item<'_>) -> bool {
         match self {
             Self::All => true,
+            Self::RecentlyUsed => item.recent_position.is_some(),
             Self::Favorites => item.favorite,
             Self::WithPreview => item.entry.status == ThumbnailStatus::Ready,
             Self::WithoutPreview => item.entry.status != ThumbnailStatus::Ready,
@@ -111,6 +115,7 @@ struct LibraryUi {
     target: LibraryTarget,
     collection: Collection,
     developer: String,
+    developer_query: String,
     category: String,
     category_query: String,
     sort: Sort,
@@ -145,6 +150,7 @@ enum DeviceAction {
 struct Item<'a> {
     entry: &'a CatalogEntry,
     favorite: bool,
+    recent_position: Option<usize>,
     categories: Vec<String>,
     custom_categories: bool,
 }
@@ -230,6 +236,10 @@ fn item<'a>(library: &PluginLibrary, entry: &'a CatalogEntry) -> Item<'a> {
     Item {
         entry,
         favorite: library.favorites.contains(&key),
+        recent_position: library
+            .recently_used
+            .iter()
+            .position(|recent| recent == &key),
         categories: custom
             .cloned()
             .unwrap_or_else(|| automatic_categories(&entry.plugin)),
@@ -238,6 +248,25 @@ fn item<'a>(library: &PluginLibrary, entry: &'a CatalogEntry) -> Item<'a> {
 }
 
 impl DawApp {
+    pub(crate) fn record_plugin_use(&mut self, plugin: &PluginInfo) {
+        let previous = self.plugin_library.clone();
+        self.plugin_library.record_use(plugin);
+        // In-process unit apps have no isolated settings directory. Persistence
+        // is exercised by the real-app subprocess suite with its own config.
+        #[cfg(test)]
+        if std::env::var_os("RILL_CONFIG_DIR").is_none() {
+            return;
+        }
+        if let Err(error) = self
+            .plugin_library
+            .save()
+            .context("Saving recently used plug-ins")
+        {
+            self.plugin_library = previous;
+            self.message(Err(error), "");
+        }
+    }
+
     pub(crate) fn plugin_favorite(&self, plugin: &PluginInfo) -> bool {
         self.plugin_library
             .favorites
@@ -413,6 +442,7 @@ impl DawApp {
             };
             state.selected = None;
             state.developer.clear();
+            state.developer_query.clear();
             state.category.clear();
             state.category_query.clear();
             state.grid_filter = None;
@@ -452,6 +482,7 @@ impl DawApp {
         let mut edit = None;
         let mut copy = None;
         let mut diagnostic_request = None;
+        let mut details_request = None;
         let mut open = true;
         let search_focused = state
             .search_id
@@ -511,6 +542,7 @@ impl DawApp {
                     state.kind = kind;
                     state.selected = None;
                     state.developer.clear();
+                    state.developer_query.clear();
                     state.category.clear();
                     state.category_query.clear();
                     self.plugin_filter.clear();
@@ -523,24 +555,63 @@ impl DawApp {
                     .collect();
                 let categories: BTreeSet<_> =
                     kind_items.iter().flat_map(|item| &item.categories).collect();
-                // Trailing choices are laid out right to left, so the search
-                // field takes the remaining width without wrapping the row.
-                let search = daw_ui::action_row(
-                    ui,
-                    |ui| {
-                        daw_ui::view_menu(ui, "View", |ui| {
-                            if daw_ui::selectable_value(ui, &mut state.list, false, "Grid").clicked()
-                                || daw_ui::selectable_value(ui, &mut state.list, true, "List").clicked()
-                            {
-                                ui.close();
-                            }
-                        });
-                        daw_ui::select("library_sort", format!("Sort: {}", state.sort.label()))
-                            .show_ui(ui, |ui| {
-                                for sort in Sort::ALL {
-                                    daw_ui::selectable_value(ui, &mut state.sort, sort, sort.label());
-                                }
-                            });
+                // Give each choice a bounded allocation before painting it.
+                // Nested picker scopes cannot decide wrapping from the space
+                // left after a sibling, and must never widen the popup.
+                let width = ui.available_width();
+                let compact_filters = width < 1000.0;
+                let choice_width = daw_ui::tokens::SELECT_WIDTH;
+                let sort_width = 160.0;
+                let view_width = 110.0;
+                let hide_sidebar = width < SIDEBAR_WIDTH + PANE_GAP + CATALOG_MIN_WIDTH;
+                let search_width = (width - 2.0 * choice_width - view_width
+                    - 3.0 * SPACE_SM - 2.0 * daw_ui::tokens::BUTTON_PADDING_X
+                    - if compact_filters { 0.0 } else { sort_width + SPACE_SM })
+                    .clamp(120.0, daw_ui::tokens::POPUP_WIDTH_SM);
+                let search = ui.horizontal_wrapped(|ui| {
+                    ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT);
+                    ui.spacing_mut().item_spacing.x = SPACE_SM;
+                    let has_search = !self.plugin_filter.is_empty();
+                    let mut clear_search = false;
+                    let search = daw_ui::toolbar_group_sized(
+                        ui,
+                        search_width + 2.0 * daw_ui::tokens::BUTTON_PADDING_X,
+                        |ui| daw_ui::action_row(
+                            ui,
+                            |ui| {
+                                clear_search = ui
+                                    .add_enabled(has_search, daw_ui::view_button_widget("Clear").small())
+                                    .on_hover_text("Clear the plug-in search")
+                                    .clicked();
+                            },
+                            |ui| daw_ui::text_field(
+                                ui,
+                                &mut self.plugin_filter,
+                                match state.kind {
+                                    DeviceKind::Instrument => "Search instruments",
+                                    DeviceKind::Effect => "Search effects",
+                                    DeviceKind::Unknown => "Search unverified devices",
+                                },
+                                (ui.available_width() - 2.0 * daw_ui::tokens::BUTTON_PADDING_X).max(0.0),
+                            ).on_hover_text("Search by name, category or producer; combine words in any order"),
+                        ).inner.1,
+                    ).inner;
+                    if clear_search {
+                        self.plugin_filter.clear();
+                        state.selected = None;
+                        search.request_focus();
+                    }
+                    if self.plugin_search_focus {
+                        if search.has_focus() {
+                            self.plugin_search_focus = false;
+                        } else {
+                            search.request_focus();
+                        }
+                    }
+                    if search.changed() {
+                        state.selected = None;
+                    }
+                    daw_ui::toolbar_group_sized(ui, choice_width, |ui| {
                         daw_ui::searchable_select(
                             ui,
                             "library_category",
@@ -550,33 +621,68 @@ impl DawApp {
                             "Search categories",
                             categories,
                         );
-                    },
-                    |ui| {
-                        let search = daw_ui::text_field(
+                    });
+                    let producers: BTreeSet<_> = kind_items.iter()
+                        .map(|item| &item.entry.plugin.vendor)
+                        .filter(|vendor| !vendor.is_empty())
+                        .collect();
+                    daw_ui::toolbar_group_sized(ui, choice_width, |ui| {
+                        daw_ui::searchable_select(
                             ui,
-                            &mut self.plugin_filter,
-                            match state.kind {
-                                DeviceKind::Instrument => "Search instruments",
-                                DeviceKind::Effect => "Search effects",
-                                DeviceKind::Unknown => "Search unverified devices",
-                            },
-                            ui.available_width().min(daw_ui::tokens::POPUP_WIDTH_SM),
+                            "library_producer",
+                            &mut state.developer,
+                            &mut state.developer_query,
+                            "All producers",
+                            "Search producers",
+                            producers,
                         );
-                        if self.plugin_search_focus {
-                            if search.has_focus() {
-                                self.plugin_search_focus = false;
-                            } else {
-                                search.request_focus();
+                    });
+                    if !compact_filters {
+                        daw_ui::toolbar_group_sized(ui, sort_width, |ui| {
+                            ui.add_enabled_ui(state.collection != Collection::RecentlyUsed, |ui| {
+                                daw_ui::select("library_sort", if state.collection == Collection::RecentlyUsed {
+                                    "Sort: Recently used".to_owned()
+                                } else { format!("Sort: {}", state.sort.label()) })
+                                    .width(sort_width)
+                                    .show_ui(ui, |ui| {
+                                        for sort in Sort::ALL {
+                                            daw_ui::selectable_value(ui, &mut state.sort, sort, sort.label());
+                                        }
+                                    });
+                            });
+                        });
+                    }
+                    daw_ui::toolbar_group_sized(ui, view_width, |ui| {
+                        daw_ui::view_menu(ui, "View", |ui| {
+                            if daw_ui::selectable_value(ui, &mut state.list, false, "Grid").clicked()
+                                || daw_ui::selectable_value(ui, &mut state.list, true, "List").clicked()
+                            {
+                                ui.close();
                             }
-                        }
-                        if search.changed() {
-                            state.selected = None;
-                        }
-                        search.on_hover_text("Search names, categories and developers")
-                    },
-                )
-                .inner
-                .1;
+                            if compact_filters {
+                                ui.separator();
+                                daw_ui::text::note(ui, "Sort");
+                                ui.add_enabled_ui(state.collection != Collection::RecentlyUsed, |ui| {
+                                    for sort in Sort::ALL {
+                                        if daw_ui::selectable_value(ui, &mut state.sort, sort, sort.label()).clicked() {
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            }
+                            if hide_sidebar {
+                                ui.separator();
+                                daw_ui::text::note(ui, "Collection");
+                                for collection in Collection::ALL {
+                                    if daw_ui::selectable_value(ui, &mut state.collection, collection, collection.label()).clicked() {
+                                        ui.close();
+                                    }
+                                }
+                            }
+                        });
+                    });
+                    search
+                }).inner;
                 state.search_id = Some(search.id);
                 let chips = [
                     (state.collection != Collection::All).then(|| state.collection.label().to_owned()),
@@ -599,6 +705,7 @@ impl DawApp {
                         if daw_ui::small_button(ui, "Clear filters").clicked() {
                             state.collection = Collection::All;
                             state.developer.clear();
+                            state.developer_query.clear();
                             state.category.clear();
                             state.category_query.clear();
                             self.plugin_filter.clear();
@@ -607,6 +714,7 @@ impl DawApp {
                 }
                 if !compact_footer { ui.add_space(SPACE_SM); }
                 let filter = self.plugin_filter.to_lowercase();
+                let terms: Vec<_> = filter.split_whitespace().collect();
                 // A filtered-out device needs a different next step from an
                 // inventory with no instruments/effects of the requested type.
                 let has_kind = !kind_items.is_empty();
@@ -618,26 +726,30 @@ impl DawApp {
                                 || item.entry.plugin.vendor == state.developer)
                             && (state.category.is_empty()
                                 || item.categories.contains(&state.category))
-                            && (filter.is_empty() || format!(
+                            && (terms.is_empty() || {
+                                let searchable = format!(
                                 "{} {} {} {}",
                                 item.entry.plugin.name,
                                 item.entry.plugin.vendor,
                                 item.entry.plugin.category,
                                 item.categories.join(" ")
                             )
-                            .to_lowercase()
-                            .contains(&filter))
+                                .to_lowercase();
+                                terms.iter().all(|term| searchable.contains(term))
+                            })
                     })
                     .collect();
                 let name = |item: &Item| item.entry.plugin.name.to_lowercase();
-                match state.sort {
+                if state.collection == Collection::RecentlyUsed {
+                    matches.sort_by_cached_key(|item| (item.recent_position, name(item)));
+                } else { match state.sort {
                     Sort::Name => matches.sort_by_cached_key(|item| name(item)),
                     Sort::Developer => matches
                         .sort_by_cached_key(|item| (item.entry.plugin.vendor.to_lowercase(), name(item))),
                     Sort::Recent => matches.sort_by_cached_key(|item| {
                         (std::cmp::Reverse(item.entry.added_unix_ms), name(item))
                     }),
-                }
+                } }
                 let signature = (
                     state.kind,
                     self.plugin_filter.clone(),
@@ -851,6 +963,7 @@ impl DawApp {
                                             self.plugin_filter.clear();
                                             state.collection = Collection::All;
                                             state.developer.clear();
+                                            state.developer_query.clear();
                                             state.category.clear();
                                             state.category_query.clear();
                                             state.selected = None;
@@ -891,8 +1004,8 @@ impl DawApp {
                                     + fonts.row_height(&daw_ui::text::TextRole::Label.font())
                             });
                             let identity_estimate = text_height
-                                + 2.0 * daw_ui::tokens::CONTROL_HEIGHT
-                                + 7.0 * ui.spacing().item_spacing.y
+                                + 5.0 * daw_ui::tokens::CONTROL_HEIGHT
+                                + 10.0 * ui.spacing().item_spacing.y
                                 + SPACE_SM;
                             // The identity, categories and install path must stay
                             // above the fold; the previous frame's measurement
@@ -910,10 +1023,6 @@ impl DawApp {
                             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Title, &entry.plugin.name, 2);
                             daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, if entry.plugin.vendor.is_empty() { "Unknown developer" } else { &entry.plugin.vendor });
                             daw_ui::text::note(ui, kind_label(&entry.plugin));
-                            let mut favorite = item.favorite;
-                            if daw_ui::favorite_toggle(ui, &mut favorite).changed() {
-                                edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), favorite));
-                            }
                             ui.add_space(SPACE_SM);
                             daw_ui::text::section_heading(ui, "Categories");
                             if let Some(CategoryDraft { text: draft, .. }) = &mut state.category_draft {
@@ -947,6 +1056,8 @@ impl DawApp {
                                     copy = Some(entry.plugin.path.display().to_string());
                                 }
                             });
+                            ui.add_space(SPACE_SM);
+                            crate::plugin_details::show_summary(ui, entry);
                             ui.add_space(SPACE_SM);
                             let measured = ui.next_widget_position().y - identity_top;
                             if (measured - identity_height).abs() > 0.5 {
@@ -999,6 +1110,14 @@ impl DawApp {
                     });
                     }
                     ui.add_enabled_ui(selected.is_some(), |ui| {
+                        let mut favorite = selected.is_some_and(|item| item.favorite);
+                        if daw_ui::favorite_toggle(ui, &mut favorite).changed()
+                            && let Some(item) = selected
+                        {
+                            edit = Some(LibraryEdit::Favorite(item.entry.plugin.clone(), favorite));
+                        }
+                    });
+                    ui.add_enabled_ui(selected.is_some(), |ui| {
                         daw_ui::action_menu(ui, "More", |ui| {
                             let Some(item) = selected else { return; };
                             let entry = item.entry;
@@ -1046,7 +1165,13 @@ impl DawApp {
                             }
                         });
                     });
-                    if daw_ui::dialog_button(ui, "Device details").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                    if daw_ui::dialog_button(ui, "Device details").clicked() && let Some(item) = selected {
+                        if state.kind == DeviceKind::Unknown {
+                            diagnostic_request = Some(device_diagnostics(item.entry));
+                        } else {
+                            details_request = Some(item.entry.clone());
+                        }
+                    }
                     if state.kind == DeviceKind::Unknown && daw_ui::dialog_button(ui, "Inspect device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
                 }, |ui| {
                     // The selected device and where it will go share one status
@@ -1085,7 +1210,7 @@ impl DawApp {
                     "card_size": [grid.layout.card_width, grid.layout.row_height - if state.list { daw_ui::tokens::SPACE_SM } else { daw_ui::tokens::SPACE_MD }],
                     "view": if state.list { "list" } else { "grid" },
                     "collection": state.collection.label(), "developer": state.developer,
-                    "category": state.category, "sort": state.sort.label(),
+                    "category": state.category, "sort": if state.collection == Collection::RecentlyUsed { "Recently used" } else { state.sort.label() },
                     "total": matches.len(), "cards": cards,
                     "order": matches.iter().map(|item| &item.entry.plugin.name).collect::<Vec<_>>(),
                     "sync": {
@@ -1106,6 +1231,9 @@ impl DawApp {
         }
         if let Some((summary, report)) = diagnostic_request {
             self.show_error_details("Device details", summary, report);
+        }
+        if let Some(entry) = details_request {
+            crate::plugin_details::open(ctx, &entry);
         }
         self.library_open &= open;
         if folders {
@@ -1134,6 +1262,7 @@ impl DawApp {
             data.insert_temp(egui::Id::new(KEY_TARGETS), targets);
             data.insert_temp(key, state);
         });
+        crate::plugin_details::show_window(ctx);
     }
 
     fn add_library_device(
@@ -1156,7 +1285,7 @@ impl DawApp {
                 &plugin.name,
                 Effect::Vst3 {
                     path: plugin.path.to_string_lossy().into_owned(),
-                    class_id: plugin.class_id,
+                    class_id: plugin.class_id.clone(),
                 },
             );
             self.project.track_mut(track).unwrap().inserts.push(slot);
@@ -1171,6 +1300,7 @@ impl DawApp {
             self.selected_clip = None;
             self.changed();
             self.replace_popup(PopupKind::Effects);
+            self.record_plugin_use(&plugin);
             return;
         }
         let replace = action == DeviceAction::Assign;
@@ -1216,7 +1346,7 @@ impl DawApp {
             track,
             Instrument::Vst3 {
                 path: plugin.path.to_string_lossy().into_owned(),
-                class_id: plugin.class_id,
+                class_id: plugin.class_id.clone(),
             },
         );
         if result.is_ok() {
@@ -1244,6 +1374,7 @@ impl DawApp {
                 self.instrument_autolaunch = Some(track);
             }
         }
+        let assigned = result.is_ok();
         self.message(
             result,
             if replace {
@@ -1252,6 +1383,9 @@ impl DawApp {
                 "Instrument track added"
             },
         );
+        if assigned {
+            self.record_plugin_use(&plugin);
+        }
     }
 }
 
@@ -1283,7 +1417,7 @@ pub(crate) fn plugin_model(
         })
 }
 
-fn device_diagnostics(entry: &CatalogEntry) -> (String, String) {
+pub(crate) fn device_diagnostics(entry: &CatalogEntry) -> (String, String) {
     let plugin = &entry.plugin;
     let kind = if plugin.is_instrument() == Some(true) {
         "Instrument"

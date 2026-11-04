@@ -308,11 +308,14 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     assert_eq!(channel["popups"]["properties"], true);
     app.key("Escape");
     let mixer = app.inspect();
-    let routing = click_at(
+    let choices = click_at(
         &mut app,
         &mixer["mixer"]["channels"][0]["target"],
         "primary",
     );
+    assert_eq!(choices["popups"]["routing"], false);
+    assert_eq!(choices["selected_track"], mixer["selected_track"]);
+    let routing = app.click("Routing…");
     assert_eq!(routing["selected_track"], bass);
     assert_eq!(routing["popups"]["routing"], true);
     let mixer = menu(&mut app, "Window", "Mixer");
@@ -405,7 +408,10 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         &scrolled,
         "Right-click for exact value and automation"
     ));
-    let routing = click_at(&mut app, &output, "primary");
+    let choices = click_at(&mut app, &output, "primary");
+    assert_eq!(choices["popups"]["routing"], false);
+    assert_eq!(choices["selected_track"], scrolled["selected_track"]);
+    let routing = app.click("Routing…");
     assert_eq!(
         routing["popups"]["routing"], true,
         "the output target remains usable at the end of the signal chain"

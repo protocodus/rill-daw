@@ -106,6 +106,8 @@ pub(crate) struct InstrumentUi {
     parameter_control: Option<daw_ui::KnobGeometry>,
     parameter_control_clip: Option<egui::Rect>,
     last_touched: Option<u32>,
+    picking: bool,
+    pick_request: Option<u64>,
     browse_target: Option<EditorTarget>,
     parameters_open: bool,
     closing: bool,
@@ -327,6 +329,7 @@ impl DawApp {
             })),
             "parameter_query": self.instrument_ui.browser.query,
             "last_touched": self.instrument_ui.last_touched,
+            "picking": self.instrument_ui.picking,
             "error": self.instrument_ui.error,
             "track": self.instrument_ui.owner.as_ref().map(|(target, _)| target.track),
             "effect": self.instrument_ui.owner.as_ref().and_then(|(target, _)| target.effect),
@@ -343,6 +346,7 @@ impl DawApp {
     }
 
     fn defer_for_editor(&mut self, action: PendingAction) -> Option<PendingAction> {
+        self.cancel_parameter_picking();
         if self.instrument_ui.pending.is_some() {
             self.message(
                 Err(anyhow::anyhow!(
@@ -502,6 +506,10 @@ impl DawApp {
 
     /// Escape leaves the parameter chooser before dismissing its plugin context.
     pub(crate) fn close_instrument_parameters(&mut self) -> bool {
+        if self.instrument_open && self.instrument_ui.picking {
+            self.cancel_parameter_picking();
+            return true;
+        }
         if self.instrument_open && self.instrument_ui.parameters_open {
             self.instrument_ui.parameters_open = false;
             true
@@ -525,6 +533,48 @@ impl DawApp {
             .and(self.instrument_ui.last_touched)
     }
 
+    fn cancel_parameter_picking(&mut self) {
+        self.instrument_ui.picking = false;
+        if self.instrument_ui.pick_request.take().is_some()
+            && let Some(session) = &self.instrument_ui.session
+        {
+            let _ = session.pick_parameter(false);
+        }
+    }
+
+    /// The shared button is also the mouse cancellation route. Arming the
+    /// native helper scopes its one-shot reply to this exact editor session.
+    fn parameter_picker_control(&mut self, ui: &mut egui::Ui) -> bool {
+        let picking = self.instrument_ui.picking;
+        if !ui
+            .add_enabled(
+                self.parameter_editing_enabled(),
+                daw_ui::button_widget(if picking { "Cancel picking" } else { "Pick parameter" })
+                    .automation()
+                    .selected(picking),
+            )
+            .on_hover_text("Create or open automation for the next parameter you click. Use the native editor, or choose a row in the parameter list. Escape cancels.")
+            .clicked()
+        {
+            return false;
+        }
+        if picking {
+            self.cancel_parameter_picking();
+            return false;
+        }
+        if let Some(session) = &self.instrument_ui.session {
+            match session.pick_parameter(true) {
+                Ok(request) => self.instrument_ui.pick_request = request,
+                Err(error) => {
+                    self.instrument_ui.error = Some(error.to_string());
+                    return false;
+                }
+            }
+        }
+        self.instrument_ui.picking = true;
+        true
+    }
+
     fn plugin_parameter_browser(
         &mut self,
         ui: &mut egui::Ui,
@@ -538,6 +588,7 @@ impl DawApp {
         daw_ui::action_row(
             ui,
             |ui| {
+                self.parameter_picker_control(ui);
                 daw_ui::action_menu(ui, "More", |ui| {
                     if ui
                         .add_enabled(can_refresh, daw_ui::button_widget("Read parameters"))
@@ -548,6 +599,7 @@ impl DawApp {
                     }
                 });
                 if daw_ui::button(ui, "Back").clicked() {
+                    self.cancel_parameter_picking();
                     self.instrument_ui.parameters_open = false;
                 }
             },
@@ -559,6 +611,9 @@ impl DawApp {
                 );
             },
         );
+        if self.instrument_ui.picking {
+            daw_ui::text::note(ui, "Click a parameter in the list or native editor.");
+        }
         if let Some(error) = &self.instrument_ui.error {
             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 2)
                 .on_hover_text(error);
@@ -809,8 +864,12 @@ impl DawApp {
         );
         self.instrument_ui.parameter_control = control_geometry;
         self.instrument_ui.parameter_control_clip = control_clip;
-        if let Some(id) = browser.activated
-            && let Some(parameter) = items.iter().find(|p| p.id == id)
+        if let Some(id) = browser.activated.or_else(|| {
+            self.instrument_ui
+                .picking
+                .then_some(browser.clicked)
+                .flatten()
+        }) && let Some(parameter) = items.iter().find(|p| p.id == id)
         {
             actions.automate = Some((id, parameter.value));
         }
@@ -858,6 +917,7 @@ impl DawApp {
             .unwrap_or_else(|| format!("Instrument of {name}"));
         let owner = (target, instrument.clone());
         if self.instrument_ui.owner.as_ref() != Some(&owner) {
+            self.cancel_parameter_picking();
             if self.instrument_ui.session.is_some() || self.instrument_ui.opening.is_some() {
                 if !self.instrument_ui.closing
                     && let Some(session) = &self.instrument_ui.session
@@ -915,6 +975,7 @@ impl DawApp {
                     (!matches!(instrument, Instrument::None)).then_some(scope_label.as_str()),
                 );
                 if navigating {
+                    self.cancel_parameter_picking();
                     return;
                 }
                 if open_ai {
@@ -1073,6 +1134,9 @@ impl DawApp {
                         }
                         Instrument::Vst3 { .. } => {
                             let device_name = title.clone();
+                            if self.instrument_ui.picking {
+                                daw_ui::text::note(ui, "Click a parameter in the native editor, or open the parameter list.");
+                            }
                             if let Some(parameter) =
                                 self.instrument_ui.last_touched.and_then(|id| {
                                     self.instrument_ui
@@ -1115,8 +1179,11 @@ impl DawApp {
                                 {
                                     let _ = session.close();
                                     self.instrument_ui.closing = true;
+                                    self.cancel_parameter_picking();
                                 }
-                                if daw_ui::button(ui, "Automate…").clicked() {
+                                let pick_in_list = self.parameter_picker_control(ui)
+                                    && self.instrument_ui.session.is_none();
+                                if daw_ui::button(ui, "Automate…").clicked() || pick_in_list {
                                     self.instrument_ui.parameters_open = true;
                                     self.instrument_ui.browser.focus_search = true;
                                     fetch = self.instrument_ui.parameters.is_empty()
@@ -1134,6 +1201,7 @@ impl DawApp {
             });
         self.instrument_open &= open;
         if !self.instrument_open {
+            self.cancel_parameter_picking();
             return;
         }
         if self.instrument_autolaunch == Some(track_id)
@@ -1287,6 +1355,7 @@ impl DawApp {
         };
         match result {
             Ok(lane) => {
+                self.cancel_parameter_picking();
                 self.instrument_ui.browser.selected = Some(id);
                 self.open_popup(PopupKind::Automation);
                 self.selected_track = Some(lane);
@@ -1304,6 +1373,9 @@ impl DawApp {
     }
 
     pub(crate) fn poll_instrument_editor(&mut self, ctx: &egui::Context) {
+        if !self.instrument_open || !self.parameter_editing_enabled() {
+            self.cancel_parameter_picking();
+        }
         let mut initialization_failed = false;
         let mut view_unavailable = false;
         let mut editor_failed = false;
@@ -1411,6 +1483,9 @@ impl DawApp {
             .is_some_and(|(target, instrument)| {
                 self.editor_plugin(*target).as_ref() == Some(instrument)
             });
+        if !valid {
+            self.cancel_parameter_picking();
+        }
         if !valid
             && !self.instrument_ui.closing
             && let Some(session) = &self.instrument_ui.session
@@ -1471,6 +1546,25 @@ impl DawApp {
                         }
                     }
                 }
+                EditorEvent::ParameterPicked {
+                    request_id,
+                    id,
+                    value,
+                } => {
+                    if valid
+                        && self.instrument_ui.picking
+                        && self.instrument_ui.pick_request == Some(request_id)
+                    {
+                        self.apply_instrument_parameters(&updates);
+                        updates.clear();
+                        self.cancel_parameter_picking();
+                        if let Some((target, _)) = self.instrument_ui.owner.as_ref()
+                            && self.automate_plugin_parameter(*target, id, value).is_some()
+                        {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        }
+                    }
+                }
                 EditorEvent::StateSaved { request_id, state } => {
                     if state.len() > daw_core::MAX_PLUGIN_STATE_BYTES {
                         self.instrument_ui.error =
@@ -1516,6 +1610,7 @@ impl DawApp {
             self.apply_instrument_parameters(&updates);
         }
         if closed {
+            self.cancel_parameter_picking();
             if let Some(session) = self.instrument_ui.session.take() {
                 std::thread::spawn(move || drop(session));
             }

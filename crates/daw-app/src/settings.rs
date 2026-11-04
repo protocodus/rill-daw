@@ -172,11 +172,20 @@ impl Settings {
 #[serde(default)]
 pub struct PluginLibrary {
     pub favorites: BTreeSet<String>,
+    /// Stable plug-in keys, most recently assigned/inserted first.
+    pub recently_used: Vec<String>,
     /// User categories replacing the plug-in's own VST3 subcategories.
     pub categories: BTreeMap<String, Vec<String>>,
 }
 
 impl PluginLibrary {
+    pub fn record_use(&mut self, plugin: &daw_plugins::PluginInfo) {
+        let key = Self::key(plugin);
+        self.recently_used.retain(|existing| existing != &key);
+        self.recently_used.insert(0, key);
+        self.recently_used.truncate(50);
+    }
+
     pub fn key(plugin: &daw_plugins::PluginInfo) -> String {
         format!(
             "{}#{}",

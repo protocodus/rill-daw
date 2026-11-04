@@ -66,6 +66,13 @@ pub enum EditorEvent {
         id: u32,
         value: f64,
     },
+    /// One deliberate editor gesture consumed an explicit picking request.
+    /// Callers ignore replies from cancelled or superseded requests.
+    ParameterPicked {
+        request_id: u64,
+        id: u32,
+        value: f64,
+    },
     StateSaved {
         /// `None` is automatic/native-window-close state, never an explicit Save
         /// acknowledgement. Match the ID returned by `save_state` or `close`.
@@ -101,6 +108,9 @@ pub(crate) enum EditorCommand {
         id: u32,
         value: f64,
     },
+    PickParameter {
+        request_id: Option<u64>,
+    },
     SaveState {
         request_id: u64,
     },
@@ -129,6 +139,7 @@ impl EditorCommand {
         match self {
             Self::Open { .. } => "Open native editor",
             Self::SetParameter { .. } => "Set plugin parameter",
+            Self::PickParameter { .. } => "Pick automation parameter",
             Self::SaveState { .. } => "Save plugin state",
             Self::Capture { .. } => "Capture plugin preview",
             Self::Close { .. } => "Close native editor",
@@ -381,6 +392,17 @@ impl EditorSession {
             "Parameter value must be normalized to 0..=1"
         );
         self.send(EditorCommand::SetParameter { id, value })
+    }
+
+    /// Arm one native parameter gesture, or cancel the current request.
+    pub fn pick_parameter(&self, enabled: bool) -> Result<Option<u64>> {
+        ensure!(
+            self.close_request.get().is_none(),
+            "Native editor is closing"
+        );
+        let request_id = enabled.then(request_id).transpose()?;
+        self.send(EditorCommand::PickParameter { request_id })?;
+        Ok(request_id)
     }
 
     /// Request a snapshot; only StateSaved carrying this ID acknowledges it.
@@ -949,6 +971,7 @@ exec sleep 30
             .find(|p| p.name == "Global Volume")
             .unwrap();
         std::thread::sleep(Duration::from_millis(700));
+        let pick_request = session.pick_parameter(true).unwrap().unwrap();
         // Drag the real Global Volume slider in Surge's default skin; this never
         // invokes Plugin::set_parameter and therefore requires performEdit feedback.
         session
@@ -958,7 +981,9 @@ exec sleep 30
             })
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
+        let mut changed = false;
+        let mut picked = false;
+        while !changed || !picked {
             assert!(
                 Instant::now() < deadline,
                 "Native slider did not report a parameter gesture"
@@ -966,16 +991,49 @@ exec sleep 30
             if let Some(event) = session.try_recv() {
                 match event {
                     EditorEvent::ParameterChanged { id, value } if id == parameter.id => {
-                        assert!((value - parameter.value).abs() > 0.01);
+                        changed |= (value - parameter.value).abs() > 0.01;
                         eprintln!(
                             "Surge native mouse gesture: parameter {id}, {} -> {value}",
                             parameter.value
                         );
-                        break;
+                    }
+                    EditorEvent::ParameterPicked {
+                        request_id,
+                        id,
+                        value,
+                    } => {
+                        assert_eq!(request_id, pick_request);
+                        assert_eq!(id, parameter.id);
+                        assert!((0.0..=1.0).contains(&value));
+                        picked = true;
                     }
                     EditorEvent::Error { message } => panic!("{message}"),
                     _ => {}
                 }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // Picking also accepts a click without movement: beginEdit identifies
+        // the control even when the plug-in does not issue a new value.
+        let click_request = session.pick_parameter(true).unwrap().unwrap();
+        assert_ne!(click_request, pick_request);
+        session
+            .send(EditorCommand::MouseDrag {
+                from: [0.87, 0.071],
+                to: [0.87, 0.071],
+            })
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            assert!(Instant::now() < deadline, "Native click was not picked");
+            match session.try_recv() {
+                Some(EditorEvent::ParameterPicked { request_id, id, .. }) => {
+                    assert_eq!(request_id, click_request);
+                    assert_eq!(id, parameter.id);
+                    break;
+                }
+                Some(EditorEvent::Error { message }) => panic!("{message}"),
+                _ => {}
             }
             std::thread::sleep(Duration::from_millis(10));
         }

@@ -97,7 +97,15 @@ fn routing_from_properties_keeps_sends_and_output_reachable_across_live_display_
             json!({"command":"viewport","width":width,"height":height,"pixels_per_point":density}),
         );
         app.command(json!({"command":"system_theme","dark":dark}));
-        app.click("Mixer");
+        let mixer = app.click("Mixer");
+        let pane = &mixer["mixer"]["reorder_viewport"];
+        app.command(json!({"command":"scroll",
+            "x":pane["min"][0].as_f64().unwrap() + 20.0,
+            "y":pane["min"][1].as_f64().unwrap() + 20.0,
+            "delta":0.0,"delta_x":10000.0}));
+        for _ in 0..12 {
+            app.inspect();
+        }
         app.click("Source");
         app.click("Routing");
         // Preserve legitimate remembered scroll positions, then use the mouse

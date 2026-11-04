@@ -326,6 +326,10 @@ impl DawApp {
         channels: &[u64],
         choice: daw_ui::BatchRouteChoice,
     ) {
+        if choice == daw_ui::BatchRouteChoice::NewBusOutput {
+            self.mixer_create_routed_bus(channels);
+            return;
+        }
         let mut candidate = self.project.clone();
         let result = apply_batch_route(&mut candidate, channels, choice);
         match result {
@@ -335,6 +339,7 @@ impl DawApp {
                 self.edit_label = Some(
                     match choice {
                         daw_ui::BatchRouteChoice::Output(_) => "Route selected channels",
+                        daw_ui::BatchRouteChoice::NewBusOutput => "Create bus and route channels",
                         daw_ui::BatchRouteChoice::Send { .. } => "Send selected channels",
                     }
                     .into(),
@@ -435,6 +440,9 @@ fn apply_batch_route(
             "Select audio, MIDI, or bus channels"
         );
         match choice {
+            daw_ui::BatchRouteChoice::NewBusOutput => {
+                anyhow::bail!("Create the destination bus before routing channels");
+            }
             daw_ui::BatchRouteChoice::Output(target) => track.output_bus = target,
             daw_ui::BatchRouteChoice::Send { bus, pre_fader } => {
                 if !track.sends.iter().any(|send| send.target_bus == bus) {

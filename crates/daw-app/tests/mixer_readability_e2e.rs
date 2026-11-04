@@ -232,12 +232,16 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
         for control in ["target", "send_row"] {
             let current = app.inspect();
             let drum_channel = channel(&current, drums);
-            let target = if control == "target" {
-                &drum_channel["target"]
+            let routing = if control == "target" {
+                let choices = click_bounds(&mut app, &drum_channel["target"]);
+                assert_eq!(choices["popups"]["routing"], false);
+                assert_eq!(choices["selected_track"], current["selected_track"]);
+                unchanged(&choices, &original);
+                app.click("Routing…")
             } else {
-                &drum_channel["send_rows"][0]
+                // Existing send rows retain direct access to dB level and mode.
+                click_bounds(&mut app, &drum_channel["send_rows"][0])
             };
-            let routing = click_bounds(&mut app, target);
             assert_eq!(routing["popups"]["routing"], true);
             assert_eq!(routing["selected_track"], drums);
             label(&routing, "Routing of Drums");

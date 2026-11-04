@@ -14,6 +14,8 @@ use std::{
 mod actions;
 #[path = "component_gallery/curves.rs"]
 mod curves;
+#[path = "component_gallery/device_details.rs"]
+mod device_details;
 #[path = "component_gallery/devices.rs"]
 mod devices;
 #[path = "component_gallery/feedback.rs"]
@@ -24,12 +26,14 @@ mod inputs;
 mod mixer;
 #[path = "component_gallery/navigation.rs"]
 mod navigation;
+#[path = "component_gallery/routing_choices.rs"]
+mod routing_choices;
 #[path = "component_gallery/timeline.rs"]
 mod timeline;
 #[path = "component_gallery/tracks.rs"]
 mod tracks;
 
-const PAGES: [(&str, &str, &str); 9] = [
+const PAGES: [(&str, &str, &str); 11] = [
     (
         "actions",
         "Actions, tools, and views",
@@ -75,6 +79,16 @@ const PAGES: [(&str, &str, &str); 9] = [
         "Track headers",
         "Identity, mix, routing, source and stereo metering, with fixed demonstration levels.",
     ),
+    (
+        "device-details",
+        "Device details",
+        "Inspected input/output counts and a searchable, read-only parameter catalogue with sample metadata.",
+    ),
+    (
+        "routing-choices",
+        "Mixer routing choices",
+        "Choose the main output, create a group bus, add sends, or open their full controls beside the source channel.",
+    ),
 ];
 
 #[derive(Default)]
@@ -99,6 +113,7 @@ struct Gallery {
     mixer: mixer::State,
     curves: curves::State,
     devices: devices::State,
+    device_details: device_details::State,
     feedback: feedback::State,
     tracks: tracks::State,
 }
@@ -127,6 +142,7 @@ impl Gallery {
             mixer: Default::default(),
             curves: Default::default(),
             devices: Default::default(),
+            device_details: Default::default(),
             feedback: Default::default(),
             tracks: Default::default(),
         }
@@ -273,6 +289,8 @@ impl eframe::App for Gallery {
                     6 => devices::show(ui, &mut self.devices),
                     7 => feedback::show(ui, &mut self.feedback),
                     8 => tracks::show(ui, &mut self.tracks),
+                    9 => device_details::show(ui, &mut self.device_details),
+                    10 => routing_choices::show(ui),
                     _ => unreachable!(),
                 });
             });
@@ -296,7 +314,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         Some("--help" | "-h") => {
             println!(
-                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes nine light/dark PNG pairs and exits."
+                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes eleven light/dark PNG pairs and exits."
             );
             return Ok(());
         }
