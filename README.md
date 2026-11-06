@@ -43,7 +43,7 @@ Try prompts such as:
 - “Lower the drum bus by 3 dB and pan the shaker 20% right.”
 - “Normalize the selected audio clip to −1 dBFS.”
 
-![Rill's integrated AI Assistant with an example composition prompt ready to send](artifacts/readme-ai-assistant.png)
+![Rill's integrated AI Assistant with an example composition prompt prepared before sending](artifacts/readme-ai-assistant.png)
 
 *An example prompt prepared in the Assistant panel, before sending it to a model.*
 
@@ -53,7 +53,7 @@ Prefer an external AI client? Rill also exposes the live song through **MCP**. S
 
 ## Screenshots
 
-One original 32-bar project, from arranging and writing to editing and mixing. These are captures of the running desktop app.
+One original 32-bar project, from arranging and writing to editing and mixing. Captured from the running desktop app on 6 November 2026. [Capture details](artifacts/readme-screenshots.json).
 
 ### Build the arrangement
 
@@ -77,7 +77,7 @@ Work directly on the waveform with non-destructive trimming, fades, gain, and pr
 
 Balance channels, place sounds in stereo, and reach instruments, effects, and routing from the mixer.
 
-![Rill Mixer showing the demo project's audio and instrument channels alongside its buses and master](artifacts/readme-mixer.png)
+![Rill Mixer showing eight audio and MIDI channels, two buses, the master channel, and signal routing](artifacts/readme-mixer.png)
 
 ## Start making music
 

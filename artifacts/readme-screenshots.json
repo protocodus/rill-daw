@@ -1,0 +1,78 @@
+{
+  "captured_on": "2026-11-06",
+  "source_commit": "1facbdc196cfa2a7f3bde1a488ff614c3c419add",
+  "source_version": "0.1.0",
+  "method": "Native RILL --screenshot captures on macOS with dark appearance. Complete application content, with no composited or retouched UI elements.",
+  "demo": "Glass Current: original 32-bar session at 120 BPM, with four audio tracks, four MIDI tracks and two buses.",
+  "capture_setup": "Capture-only harness sets the viewport, fits the timelines, selects D minor and prepares the unsent assistant prompt. Plugin discovery, preview generation and audio-device startup are disabled for capture; UI controls and rendering are unchanged. No AI request was sent.",
+  "capture_harness": "https://github.com/voho/protocodus.github.io/blob/172ffd4be3de83461f178b2483f185bd68c00900/scripts/rill-capture/capture-harness.patch",
+  "demo_generator": "https://github.com/voho/protocodus.github.io/blob/172ffd4be3de83461f178b2483f185bd68c00900/scripts/rill-capture/make_demo.py",
+  "processing": "Pillow 11.0.0: RGB, proportional Lanczos downsampling, optimized PNG. Matches the website screenshot dimensions.",
+  "assets": {
+    "artifacts/readme-arrangement.png": {
+      "source_sha256": "4ccdad3064fabb7115ec14c285f448c0355c68dca4af70f8ce99770b71d88db9",
+      "source_dimensions": [
+        3200,
+        2000
+      ],
+      "sha256": "8e1099d958119becea359afdcdf5bb08b5ffb8a49fc78ad8e6249af4c75dc946",
+      "dimensions": [
+        2000,
+        1250
+      ],
+      "bytes": 870816
+    },
+    "artifacts/readme-piano-roll.png": {
+      "source_sha256": "d09f30ecd3f6c9691696eee4b7eaf212651f9e8be42e429833d4a5e2a67d7688",
+      "source_dimensions": [
+        3200,
+        2000
+      ],
+      "sha256": "f05d60a316643337a56d42321e15c2aa9adb8748fd8794b2b935ceabbbecca3f",
+      "dimensions": [
+        2000,
+        1250
+      ],
+      "bytes": 331655
+    },
+    "artifacts/readme-audio-editor.png": {
+      "source_sha256": "8ea30f4b9d3327774770496fa10f3ead17dd4184911e883f035c933d00801a9f",
+      "source_dimensions": [
+        3200,
+        2000
+      ],
+      "sha256": "4d622a7d825c9b399aee94df6a224ec0294a50d6d3081bd74b4837cf8962f2a3",
+      "dimensions": [
+        2000,
+        1250
+      ],
+      "bytes": 825070
+    },
+    "artifacts/readme-mixer.png": {
+      "source_sha256": "59bd9dadd6ff0cafe3fbfe93c85f2a86e25bbaf709a13ab3dbb181e65bc6bdfc",
+      "source_dimensions": [
+        3840,
+        2000
+      ],
+      "sha256": "5dd38d44066a75b035ddc2241e548c121cc2dd9b6f35e0fb56024a38a1e4c02e",
+      "dimensions": [
+        2400,
+        1250
+      ],
+      "bytes": 709644
+    },
+    "artifacts/readme-ai-assistant.png": {
+      "source_sha256": "70dbc61cbce65cccb5e77cdc0937b56d051f3851b2c3e27a9f347cfaf0d7a081",
+      "source_dimensions": [
+        3200,
+        2000
+      ],
+      "sha256": "10e73128e4173715d6cac24e34911e4db1e2300073b430bd02600aa4b6dcd8b6",
+      "dimensions": [
+        2000,
+        1250
+      ],
+      "bytes": 1104341
+    }
+  }
+}
