@@ -20,6 +20,7 @@ pub mod clip_navigation;
 pub mod color;
 pub mod crossfade;
 pub mod curve;
+mod curve_segment;
 pub mod device_cards;
 pub mod device_metadata;
 pub mod duration;

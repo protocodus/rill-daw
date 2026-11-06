@@ -362,7 +362,7 @@ fn segment_shapes_and_mouse_handles_preserve_neighbors_and_hold_song_endpoints()
         let (mut app, _, automation) = fixture(dark, density);
         app.click("Held volume");
         let initial = menu(&mut app, "Window", "Automation");
-        assert_eq!(lane(&initial, automation)["interpolation"], "Spline");
+        assert_eq!(lane(&initial, automation)["interpolation"], "Linear");
         let points = lane(&initial, automation)["points"].clone();
         let baseline = export(&mut app, "linear.wav");
         assert_sample(&baseline, 0.0, 0.3);
@@ -385,7 +385,8 @@ fn segment_shapes_and_mouse_handles_preserve_neighbors_and_hold_song_endpoints()
         assert_eq!(lane(&logarithmic, automation)["points"][0]["curve"], -1.0);
         assert_sample(&export(&mut app, "logarithmic.wav"), 3.0, 1.0875);
         let linear = click_last(&mut app, "Linear");
-        assert_eq!(lane(&linear, automation)["interpolation"], "Spline");
+        assert_eq!(lane(&linear, automation)["interpolation"], "Linear");
+        assert!(lane(&linear, automation)["points"][0]["interpolation"].is_null());
         assert_eq!(lane(&linear, automation)["points"], points);
 
         let first = points[0]["id"].as_u64().unwrap();

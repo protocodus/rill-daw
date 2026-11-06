@@ -52,6 +52,30 @@ fn points(points: &[daw_core::AutomationPoint]) -> Vec<CurvePoint> {
         .collect()
 }
 
+fn segments(
+    points: &[daw_core::AutomationPoint],
+    interpolation: Interpolation,
+) -> Vec<daw_ui::CurveSegment> {
+    points
+        .iter()
+        .take(points.len().saturating_sub(1))
+        .map(|point| daw_ui::CurveSegment {
+            start: point.id,
+            curve: if point.interpolation.unwrap_or(interpolation) == Interpolation::Spline {
+                point.curve
+            } else {
+                0.0
+            },
+        })
+        .collect()
+}
+
+fn segment_diagnostics(handles: &[daw_ui::CurveSegmentHandle]) -> serde_json::Value {
+    serde_json::json!(handles.iter().map(|handle| serde_json::json!({
+        "start":handle.start,"end":handle.end,"rect":rect_json(handle.rect),"curve":handle.curve,
+    })).collect::<Vec<_>>())
+}
+
 pub(crate) fn automation_lane(
     ui: &mut egui::Ui,
     view: LaneView,
@@ -80,10 +104,11 @@ pub(crate) fn automation_lane(
                 .iter()
                 .any(|clip| clip_rect(clip).contains(point))
         });
-    let response = daw_ui::automation_canvas_at(
+    let response = daw_ui::automation_canvas_with_segments_at(
         ui,
         id,
         &points(&lane.points),
+        &segments(&lane.points, lane.interpolation),
         AutomationCanvas {
             rect: view.rect,
             viewport: view.viewport,
@@ -279,10 +304,11 @@ pub(crate) fn automation_lane(
             rect.min + Vec2::new(0.0, 23.0_f32.min(rect.height() * 0.4)),
             rect.max - Vec2::new(0.0, 3.0),
         );
-        let response = daw_ui::automation_canvas_at(
+        let response = daw_ui::automation_canvas_with_segments_at(
             ui,
             clip_id.with("points"),
             &points(&clip.points),
+            &segments(&clip.points, clip.interpolation),
             AutomationCanvas {
                 rect: plot,
                 viewport: TimelineViewport {
@@ -304,20 +330,23 @@ pub(crate) fn automation_lane(
                 .edits
                 .push(AutomationEdit::Curve(Some(clip.id), edit));
         }
-        clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(rect),"plot":rect_json(plot),"points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()}));
+        clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(rect),"plot":rect_json(plot),"segment_handles":segment_diagnostics(&response.segments),"points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()}));
     }
     if view.pointer_blocked {
         result.edits.retain(|edit| {
             !matches!(
                 edit,
-                AutomationEdit::Curve(_, CurveEdit::Add { .. } | CurveEdit::Move { .. })
-                    | AutomationEdit::Bounds(..)
+                AutomationEdit::Curve(
+                    _,
+                    CurveEdit::Add { .. } | CurveEdit::Move { .. } | CurveEdit::Bend { .. }
+                ) | AutomationEdit::Bounds(..)
             )
         });
         result.interacted = !result.edits.is_empty();
     }
     result.interacted |= !result.edits.is_empty();
     result.diagnostic = serde_json::json!({"track":view.track,"target":lane.target,"rect":rect_json(view.rect),"clips":clip_diagnostics,
+        "segment_handles":segment_diagnostics(&response.segments),
         "points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()});
     result
 }
@@ -344,6 +373,7 @@ impl DawApp {
                         CurveEdit::Add { x, value } => lane.upsert_point(x, value).map(|_| ()),
                         CurveEdit::Move { id, x, value } => lane.move_point(id, x, value),
                         CurveEdit::Delete { id } => lane.remove_point(id).map(|_| ()),
+                        CurveEdit::Bend { id, curve } => lane.set_point_curve(id, curve),
                         CurveEdit::Interpolation { id, mode } => {
                             let point = lane
                                 .points

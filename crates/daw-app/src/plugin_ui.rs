@@ -784,7 +784,10 @@ impl DawApp {
                     .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                     .show(|ui| {
                         ui.add_enabled_ui(editing_enabled, |ui| {
-                            entered = daw_ui::value_entry_named(
+                            let footer_height = daw_ui::tokens::CONTROL_HEIGHT
+                                + ui.spacing().item_spacing.y
+                                + daw_ui::tokens::SPACE_SM * 2.0;
+                            entered = daw_ui::value_entry_with_footer(
                                 ui,
                                 (target.track, target.effect, parameter.id),
                                 percent,
@@ -798,12 +801,27 @@ impl DawApp {
                                         .unwrap_or("Channel"),
                                     parameter.name
                                 ),
+                                footer_height,
                             );
+                            ui.separator();
+                            if daw_ui::button(
+                                ui,
+                                if parameter.automated {
+                                    "Edit automation"
+                                } else {
+                                    "Automate"
+                                },
+                            )
+                            .clicked()
+                            {
+                                actions.automate = Some((parameter.id, parameter.value));
+                                ui.close();
+                            }
                         });
                     });
                 daw_ui::hover_text(
                     response.clone(),
-                    "Normalized value, 0–100 % of the parameter's range\nRight-click for exact value entry",
+                    "Normalized value, 0–100 % of the parameter's range\nRight-click for exact value entry and automation",
                 );
                 control_geometry = daw_ui::knob_geometry(ui.ctx(), response.id);
                 control_clip = Some(ui.clip_rect());

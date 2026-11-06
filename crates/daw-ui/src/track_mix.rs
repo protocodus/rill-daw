@@ -85,7 +85,6 @@ pub fn track_mix_controls_at_named(
         &mut db,
         gain_range.clone(),
         "Channel volume",
-        false,
     );
     let gain_readout = readout_at(
         ui,
@@ -118,7 +117,6 @@ pub fn track_mix_controls_at_named(
         &mut percent,
         -100.0..=100.0,
         "Channel pan",
-        true,
     );
     let pan_readout = readout_at(
         ui,
@@ -525,7 +523,6 @@ fn rail_at(
     value: &mut f32,
     range: RangeInclusive<f64>,
     label: &str,
-    bipolar: bool,
 ) -> (Response, SliderScaleGeometry) {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
@@ -542,7 +539,7 @@ fn rail_at(
         FontId::proportional((rect.height() * tokens::GOLDEN_RATIO_INVERSE).max(1.0)),
     );
     // Native Slider owns focus, accessibility actions and value mapping. Its
-    // decorative frame is replaced with one restrained rail and a rounded thumb.
+    // decorative frame is replaced with the shared slider rail and thumb.
     let background = child.painter().add(egui::Shape::Noop);
     let previous_style = child.style().clone();
     let visuals = &mut child.visuals_mut().widgets;
@@ -567,7 +564,7 @@ fn rail_at(
                 })
         });
     let shape = egui::style::HandleShape::Rect {
-        aspect_ratio: tokens::GOLDEN_RATIO_INVERSE,
+        aspect_ratio: tokens::GOLDEN_RATIO_INVERSE * 1.25,
     };
     let event_index = child.output(|output| output.events.len());
     let native = child.add(
@@ -607,56 +604,10 @@ fn rail_at(
     );
     geometry.ticks.clear();
     geometry.divisions = 0;
-    let colors = theme::palette(ui.ctx());
-    let rail = Rect::from_min_max(
-        geometry.minimum - egui::vec2(0.0, 1.5),
-        geometry.maximum + egui::vec2(0.0, 1.5),
-    );
-    let origin = if bipolar {
-        geometry.minimum.lerp(geometry.maximum, 0.5)
-    } else {
-        geometry.minimum
-    };
-    let filled = Rect::from_two_pos(origin, geometry.handle).expand2(egui::vec2(0.0, 1.5));
-    let mut shapes = vec![
-        egui::Shape::rect_filled(rail, 2, colors.line),
-        egui::Shape::rect_filled(
-            filled,
-            2,
-            colors.accent.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
-        ),
-    ];
-    if bipolar {
-        shapes.push(egui::Shape::line_segment(
-            [origin - egui::vec2(0.0, 3.0), origin + egui::vec2(0.0, 3.0)],
-            Stroke::new(tokens::BORDER_WIDTH, colors.muted),
-        ));
-    }
-    let thumb = Rect::from_center_size(geometry.handle, geometry.handle_half_extent * 2.0);
-    shapes.push(crate::component_shape(
-        child.painter(),
-        thumb,
-        3,
-        if response.dragged() {
-            colors.track_selected
-        } else {
-            colors.control_hover
-        },
-        Stroke::new(
-            tokens::BORDER_WIDTH,
-            if response.has_focus() || response.hovered() || response.dragged() {
-                colors.accent
-            } else {
-                colors.muted
-            },
-        ),
-        crate::ComponentMaterial {
-            elevated: false,
-            active: response.has_focus() && response.enabled(),
-        },
-    ));
-    child.painter().set(background, egui::Shape::Vec(shapes));
-    crate::paint_slider_value_marker(&child, &geometry);
+    // Header rails share the same trough, rectangular thumb and center point
+    // as Mixer, channel controls and ordinary parameter sliders.
+    child.painter().set(background, egui::Shape::Noop);
+    crate::paint_slider_rail(&child, &response, &geometry);
     (response, geometry)
 }
 

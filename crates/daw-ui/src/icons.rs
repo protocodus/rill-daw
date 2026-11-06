@@ -476,10 +476,9 @@ impl Icon {
                 line(&[(12., 12.), (12., 19.), (16., 19.)]);
             }
             Self::Automation => {
-                line(&[(3., 18.), (10., 7.), (21., 13.)]);
-                for (x, y) in [(3., 18.), (10., 7.), (21., 13.)] {
-                    circle(x, y, 2.);
-                }
+                // Alternating slopes keep the envelope recognizable even at
+                // compact control size, rather than resembling a flat rail.
+                line(&[(2., 16.), (7., 7.), (12., 17.), (17., 6.), (22., 13.)]);
             }
             Self::Save => {
                 line(&[

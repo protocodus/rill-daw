@@ -88,6 +88,21 @@ pub fn mixer_scale_stops() -> [(&'static str, f32, bool); 12] {
     ]
 }
 
+/// Physical-pixel level row shared by the fader index, its scale and meters.
+/// The unrounded rail endpoints remain the native slider's input geometry.
+pub fn mixer_level_y(rect: Rect, inset: f32, gain: f32, pixels_per_point: f32) -> f32 {
+    let bottom = rect.bottom() - inset;
+    let top = rect.top() + inset;
+    crate::slider_paint_center(
+        Pos2::new(
+            rect.center().x,
+            bottom + (top - bottom) * gain_taper(gain).clamp(0.0, 1.0),
+        ),
+        pixels_per_point,
+    )
+    .y
+}
+
 /// Paint the dB scale into the gutter left of `edge`: ticks end 1 pt before
 /// it, captions are right-aligned. `bottom`/`top` are the y of silence and of
 /// the travel top; positions follow [`gain_taper`]. On short faders captions
@@ -463,9 +478,8 @@ fn channel_meter_inner(
         let colors = crate::theme::palette(ui.ctx());
         let gap = 3.0;
         let bar_width = (rect.width() - gap) * 0.5;
-        let bottom = rect.bottom() - inset;
-        let top = rect.top() + inset;
-        let y = |gain: f32| bottom + (top - bottom) * gain_taper(gain).min(1.0);
+        let bottom = mixer_level_y(rect, inset, 0.0, ui.pixels_per_point());
+        let y = |gain: f32| mixer_level_y(rect, inset, gain, ui.pixels_per_point());
         for (index, peak) in peaks.into_iter().enumerate() {
             let bar = Rect::from_min_size(
                 rect.min + Vec2::new(index as f32 * (bar_width + gap), 0.0),
@@ -483,13 +497,19 @@ fn channel_meter_inner(
                 let level = y(peak);
                 let unity = y(1.0);
                 ui.painter().rect_filled(
-                    Rect::from_x_y_ranges(bar.x_range(), level.max(unity)..=bottom),
+                    egui::emath::GuiRounding::round_to_pixels(
+                        Rect::from_x_y_ranges(bar.x_range(), level.max(unity)..=bottom),
+                        ui.pixels_per_point(),
+                    ),
                     1.0,
                     colors.guide,
                 );
                 if level < unity {
                     ui.painter().rect_filled(
-                        Rect::from_x_y_ranges(bar.x_range(), level..=unity),
+                        egui::emath::GuiRounding::round_to_pixels(
+                            Rect::from_x_y_ranges(bar.x_range(), level..=unity),
+                            ui.pixels_per_point(),
+                        ),
                         1.0,
                         colors.warning,
                     );
@@ -500,7 +520,7 @@ fn channel_meter_inner(
                 ui.painter().line_segment(
                     [Pos2::new(bar.left(), hold), Pos2::new(bar.right(), hold)],
                     Stroke::new(
-                        1.5_f32,
+                        1.0 / ui.pixels_per_point(),
                         if state.hold[index] >= 1.0 {
                             colors.warning
                         } else {

@@ -213,10 +213,71 @@ pub fn mixer_name_plate(
     width: f32,
     color: Color32,
 ) -> Response {
+    mixer_name_plate_inner(ui, kind, name, width, color, false)
+}
+
+/// A channel identity with a small dedicated drag grip. The name retains its
+/// own selection, open and context-menu hit area; the two never overlap.
+pub fn mixer_name_plate_with_grip(
+    ui: &mut Ui,
+    kind: MixerNamePlateKind,
+    name: &str,
+    width: f32,
+    color: Color32,
+    track: u64,
+    enabled: bool,
+) -> (Response, Response) {
+    let plate = mixer_name_plate_inner(ui, kind, name, width, color, true);
+    let grip_rect = Rect::from_min_max(
+        plate.rect.min,
+        Pos2::new(
+            plate.rect.left() + crate::tokens::COMPACT_HEIGHT,
+            plate.rect.bottom(),
+        ),
+    );
+    let foreground = crate::theme::contrast_text(color);
+    let grip = crate::track_reorder_grip_tinted_at(
+        ui,
+        grip_rect.shrink2(Vec2::new(2.0, 6.0)),
+        plate.id.with("reorder_grip"),
+        track,
+        if enabled {
+            foreground
+        } else {
+            foreground.gamma_multiply(0.5)
+        },
+        enabled,
+    );
+    let name_rect = Rect::from_min_max(
+        Pos2::new(grip_rect.right(), plate.rect.top()),
+        plate.rect.max,
+    );
+    let name_response = ui.interact(name_rect, plate.id.with("name"), Sense::click());
+    name_response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), name));
+    if name_response.has_focus() {
+        ui.painter().rect_stroke(
+            plate.rect,
+            crate::tokens::RADIUS,
+            egui::Stroke::new(crate::tokens::FOCUS_WIDTH, foreground.gamma_multiply(0.65)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    (name_response, grip)
+}
+
+fn mixer_name_plate_inner(
+    ui: &mut Ui,
+    kind: MixerNamePlateKind,
+    name: &str,
+    width: f32,
+    color: Color32,
+    grip: bool,
+) -> Response {
     let master = kind == MixerNamePlateKind::Master;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
-        if master {
+        if master || grip {
             Sense::hover()
         } else {
             Sense::click()
@@ -243,6 +304,9 @@ pub fn mixer_name_plate(
             },
         );
         let mut text_area = rect.shrink2(Vec2::new(crate::tokens::SPACE_SM, 0.0));
+        if grip {
+            text_area.min.x = rect.left() + crate::tokens::COMPACT_HEIGHT;
+        }
         if kind == MixerNamePlateKind::Bus {
             // A chip of the plate's own text color: no outline inside the plate.
             let text = ui.painter().layout_no_wrap(
@@ -284,17 +348,19 @@ pub fn mixer_name_plate(
             );
         }
     }
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(
-            if master {
-                egui::WidgetType::Label
-            } else {
-                egui::WidgetType::Button
-            },
-            ui.is_enabled(),
-            name,
-        )
-    });
+    if !grip {
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                if master {
+                    egui::WidgetType::Label
+                } else {
+                    egui::WidgetType::Button
+                },
+                ui.is_enabled(),
+                name,
+            )
+        });
+    }
     if master {
         response.on_hover_text("Final stereo output · receives all channels routed to Master")
     } else {

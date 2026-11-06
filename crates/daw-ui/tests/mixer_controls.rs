@@ -475,7 +475,10 @@ fn channel_meter_follows_the_fader_scale_and_sanitizes_input() {
             for (fill, peak) in fills.iter().zip(peaks.iter().filter(|peak| **peak > 0.0)) {
                 assert!(response.rect.contains_rect(*fill));
                 let expected = bottom + (top - bottom) * daw_ui::gain_taper(*peak);
-                assert!((fill.top() - expected).abs() < 0.01);
+                assert!(
+                    (fill.top() - expected).abs() <= 1.0 / output.pixels_per_point,
+                    "meter fill snaps to the same physical pixel scale: {fill:?}, {expected}"
+                );
             }
         }
     }

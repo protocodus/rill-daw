@@ -361,8 +361,7 @@ fn automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve() {
     }
 }
 
-#[test]
-fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_units() {
+fn plugin_parameter_fixture() -> (Harness, u64, tempfile::TempDir, tempfile::TempDir) {
     // Reuse the production metadata/state IPC fixture. This test exercises
     // host parameter controls, not native plug-in DSP or its custom editor.
     let worker = tempfile::tempdir().unwrap();
@@ -433,6 +432,13 @@ fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_un
     };
     assert_eq!(before["native_editor"]["selected"], 7);
     assert!(visible(&before, "Plug-in unit · Hz"));
+    (app, source, worker, plugins)
+}
+
+#[test]
+fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_units() {
+    let (mut app, _, _worker, _plugins) = plugin_parameter_fixture();
+    let before = app.inspect();
     let dial = &before["native_editor"]["parameter_control"]["dial"];
     let opened = right_click(&mut app, dial);
     assert!(visible(&opened, "Range: 0 to 100 %"));
@@ -449,6 +455,77 @@ fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_un
     let actual = applied["native_editor"]["selected_value"].as_f64().unwrap();
     assert!((actual - 0.6123456789).abs() < 1e-12, "{actual}");
     one_edit(&applied, &before);
+    assert_eq!(undo(&mut app)["project"], before["project"]);
+    app.quit();
+}
+
+#[test]
+fn plugin_automation_footer_stays_reachable_below_a_keypad_in_a_short_window() {
+    let (mut app, source, _worker, _plugins) = plugin_parameter_fixture();
+    app.command(json!({"command":"viewport", "width":800, "height":600}));
+    let before = app.inspect();
+    let value = before["native_editor"]["selected_value"].as_f64().unwrap();
+    let opened = right_click(
+        &mut app,
+        &before["native_editor"]["parameter_control"]["dial"],
+    );
+    unchanged(&opened, &before);
+    let title = opened["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|text| text.starts_with("Mouse synth · ") && text.ends_with(" · Filter Cutoff"))
+        .expect("Exact entry must identify this plug-in parameter");
+    let expanded = toggle_keypad(&mut app, &opened, title);
+    unchanged(&expanded, &before);
+    assert!(visible(&expanded, "7"), "The keypad must be expanded");
+    for text in ["Apply value", "Cancel", "Automate"] {
+        let bounds = label(&expanded, text);
+        for (axis, maximum) in [(0, 800.0), (1, 600.0)] {
+            assert!(
+                bounds["min"][axis].as_f64().unwrap() >= 0.0,
+                "{text} begins outside the short viewport: {bounds}"
+            );
+            assert!(
+                bounds["max"][axis].as_f64().unwrap() <= maximum,
+                "{text} ends outside the short viewport: {bounds}"
+            );
+        }
+    }
+    // Enter an actual mouse-only draft, then create automation without Apply.
+    // The lane must start from the acknowledged value rather than this draft.
+    let drafted = enter_mouse(&mut app, &before, "12.5");
+    unchanged(&drafted, &before);
+    assert!(visible(&drafted, "12.5"));
+    let created = app.click("Automate");
+    one_edit(&created, &before);
+    assert_eq!(
+        track(&created, source)["instrument_parameters"],
+        track(&before, source)["instrument_parameters"]
+    );
+    let target = AutomationTarget {
+        track: source,
+        parameter: AutomationParameter::VstParameter {
+            effect: None,
+            id: 7,
+        },
+    };
+    let lanes: Vec<_> = created["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|track| track["automation"]["target"] == serde_json::to_value(target).unwrap())
+        .collect();
+    assert_eq!(
+        lanes.len(),
+        1,
+        "Automate must create this exact parameter's lane"
+    );
+    assert_eq!(created["selected_track"], lanes[0]["id"]);
+    for point in lanes[0]["automation"]["points"].as_array().unwrap() {
+        near(point["value"].as_f64().unwrap(), value);
+    }
     assert_eq!(undo(&mut app)["project"], before["project"]);
     app.quit();
 }

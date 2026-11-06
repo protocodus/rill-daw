@@ -1,6 +1,6 @@
-//! Channel strips read in signal order and line up across channels: source,
-//! effects, pan with mute/solo, the fader unit on the strip axis, then output
-//! and compact send rows. Master mirrors the rows with its summed input.
+//! Channel strips read in signal order: bus identities and controls start below
+//! their role heading, while the fader bottoms, outputs and sends remain aligned.
+//! Each strip centers its calibrated fader/meter unit on its own channel axis.
 mod common;
 
 use common::Harness;
@@ -74,15 +74,26 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
         assert_eq!(channels.len(), 5);
         let master = &state["mixer"]["master"];
 
-        // Every section starts at the same height on every strip.
+        // Buses reserve their role heading above identity and controls. Their
+        // shorter faders retain the same bottom edge and output/send positions.
         for channel in channels {
+            let offset = if channel["bus"] == true {
+                f64::from(daw_ui::MIXER_ROLE_HEIGHT)
+            } else {
+                0.0
+            };
             let sections = channel["sections"].as_array().unwrap();
             let first = channels[0]["sections"].as_array().unwrap();
             for (section, reference) in sections.iter().zip(first) {
                 assert_eq!(section["name"], reference["name"]);
                 for corner in ["min", "max"] {
+                    let expected_offset = match (section["name"].as_str().unwrap(), corner) {
+                        ("Source" | "Effects", _) | ("Volume & pan", "min") => offset,
+                        _ => 0.0,
+                    };
                     assert_eq!(
-                        section["rect"][corner][1], reference["rect"][corner][1],
+                        edge(&section["rect"], corner, 1),
+                        edge(&reference["rect"], corner, 1) + expected_offset,
                         "{}",
                         section["name"]
                     );
@@ -99,7 +110,10 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
                 ((unit_left + unit_right) * 0.5 - axis).abs() <= 1.0,
                 "fader unit off the strip axis: {channel}"
             );
-            assert_eq!(channel["meter"]["min"][1], master["meter"]["min"][1]);
+            assert_eq!(
+                edge(&channel["meter"], "min", 1),
+                edge(&master["meter"], "min", 1) + offset
+            );
             assert_eq!(channel["meter"]["max"][1], master["meter"]["max"][1]);
             assert_eq!(channel["target"]["min"][1], master["target"]["min"][1]);
         }
@@ -125,7 +139,11 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
         );
         // Outputs are named by destination only.
         assert!(inside(&state, "Master", &channels[0]["target"]));
-        assert!(inside(&state, "Room", &channels[3]["target"]));
+        let plate = channels
+            .iter()
+            .find(|channel| channel["track"] == buses[1])
+            .unwrap();
+        assert!(inside(&state, "Room", &plate["target"]));
         assert!(
             !state["visible_labels"]
                 .as_array()

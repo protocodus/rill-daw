@@ -261,15 +261,21 @@ fn adaptive_scale_uses_native_handle_centers_and_keeps_midpoint_at_every_density
                             .iter()
                             .all(|tick| geometry.rail.contains(tick.center))
                     );
+                    let center =
+                        daw_ui::slider_paint_center(geometry.handle, output.pixels_per_point);
                     let zero = output.shapes.iter().any(|shape| match shape.shape {
                         egui::Shape::Circle(circle) => {
-                            circle.fill == egui::Color32::TRANSPARENT
-                                && circle.stroke.width > 0.0
-                                && circle.center.distance(geometry.handle) < 0.001
+                            circle.fill != egui::Color32::TRANSPARENT
+                                && circle.stroke.width == 0.0
+                                && circle.radius <= 1.5
+                                && circle.center.distance(center) < 0.001
                         }
                         _ => false,
                     });
-                    assert!(zero, "zero circle must actually be painted at native value");
+                    assert!(
+                        zero,
+                        "a small solid zero point must be painted at the native value's physical pixel"
+                    );
                     for shape in &output.shapes {
                         if let egui::Shape::LineSegment { points, stroke } = shape.shape
                             && stroke.width == 1.0

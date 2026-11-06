@@ -291,7 +291,7 @@ fn short_track_rows_keep_exact_mix_entry_deliberate_and_undoable() {
             );
             let context = app.inspect();
             unchanged(&context, &before);
-            for action in ["Create automation", "Apply value"] {
+            for action in ["Automate", "Apply value"] {
                 assert!(
                     context["visible_labels"]
                         .as_array()

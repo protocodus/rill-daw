@@ -51,6 +51,36 @@ pub fn automation_badge(ui: &mut Ui, state: AutomationState) -> Response {
     .on_hover_text(state.hint())
 }
 
+/// A restrained automation outline and halo. This is paint only: it
+/// never changes a control's bounds, hit target, focus, or parameter value.
+/// Ownership stays visible while the curve is overridden or bypassed; red
+/// identifies manual takeover while orange identifies the saved automation. The
+/// separate state marker still explains what is currently driving the value.
+pub fn paint_automation_glow(ui: &Ui, rect: egui::Rect, state: AutomationState) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let density = ui.painter().pixels_per_point();
+    let rect = egui::emath::GuiRounding::round_to_pixels(rect, density);
+    let colors = theme::palette(ui.ctx());
+    let color = if state == AutomationState::Overridden {
+        colors.automation_override
+    } else {
+        colors.automation
+    };
+    for (spread, opacity) in [(2.0, 0.08), (1.0, 0.15), (0.0, 1.0)] {
+        ui.painter().rect_stroke(
+            rect.expand(spread),
+            tokens::RADIUS.saturating_add(spread as u8),
+            egui::Stroke::new(
+                if spread == 0.0 { 1.0 } else { 1.0 / density },
+                color.gamma_multiply(opacity),
+            ),
+            egui::StrokeKind::Inside,
+        );
+    }
+}
+
 /// A small state marker on an existing control. It never adds an overlapping
 /// hit target or changes the native control's layout, focus or accessible name.
 pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationState) {
@@ -68,16 +98,12 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
                 .expand(1.0 / ui.ctx().pixels_per_point())
                 .contains_rect(response.rect)
     }) {
+        // The knob itself paints the shared ownership glow around its dial.
         return;
     }
     let rect = response.rect;
     let color = state.color(ui.ctx());
-    ui.painter().rect_stroke(
-        rect,
-        tokens::RADIUS,
-        egui::Stroke::new(1.5_f32, color),
-        egui::StrokeKind::Inside,
-    );
+    paint_automation_glow(ui, rect, state);
     let marker = match state {
         AutomationState::Read => "A",
         AutomationState::Overridden => "!",

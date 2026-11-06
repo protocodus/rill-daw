@@ -291,8 +291,13 @@ Selected clips and mixer channels have a subtle glow in their track color. Hover
 
 Drag an Arrangement track's name or grip to reorder it. The insertion line shows
 Before or After; drop in the middle of a folder header to move inside it. Folders
-move with all their contents. Drag Mixer channel names the same way, including
-buses, and both workspaces follow the new order. Dropping before or after a track
+move with all their contents. In Mixer's **Song order** view, drag a channel's
+small grip or name the same way, including buses; both workspaces share this
+saved order. **Signal flow** sorts channels automatically: right-click a channel
+and choose **Use Song order** to enable manual ordering. The same context menu
+offers **Shift Left / Shift Right**; Arrangement offers **Move Up / Move Down**.
+These one-step moves stay in the current folder and move folders with their contents.
+Dropping before or after a track
 places it in that track's folder. Hold near a pane edge to scroll during a drag;
 Escape cancels. Each completed move supports Undo/Redo and saves with the song.
 
@@ -358,7 +363,7 @@ use their declared steps when edited, and automation state remains visible.
 
 Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
 
-Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. New lanes use **Spline**: drag the diamond between two points to bend that segment, or select it and choose **Log**, **Linear**, **Exp**, or adjust **Slope**. Each segment keeps its own shape without overshooting its endpoint values. Step, Linear and Smooth modes remain available.
+Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. New lanes start with straight **Linear** segments. Drag a line up or down, or drag its midpoint diamond, to bend only that segment toward a logarithmic or exponential shape. This works in Arrangement lanes, automation patterns and the focused editor. Select its starting point or diamond for **Log**, **Linear**, **Exp**, or precise **Slope** controls. Both endpoints and neighboring segments stay fixed, with no overshoot. Clicking a line still adds a point; each drag is one undoable edit. Existing Step, Smooth and Spline projects keep their saved shapes.
 
 Volume and send-gain points show **Gain** in dB, matching the graph. Click the
 readout for exact entry or the **123** mouse keypad; **Silence** sets zero gain.
@@ -368,7 +373,7 @@ when a new lane has points only in the first bar.
 
 Automation covers the entire song. The first point's value applies before that point and when playback starts; the last value is held indefinitely after the last point. Controls show the value at the playhead even while stopped. Orange curves and control markers identify automation consistently across the app. Automation itself does not extend the song's duration.
 
-Adjust an automated control to override its curve. **Overridden** and coral-red markers identify the manual value, while the original curve stays intact. Choose **Resume automation** in the lane editor, the control's right-click menu, the channel status menu, or plug-in parameter details to follow the curve again at the current playhead. The lane editor also offers **Override automation** and an exact override value. Overrides save with the project and support Undo/Redo. Disable or mute a lane to use the channel's stored manual value instead; this is shown as **Bypassed**.
+Adjust an automated control to override its curve. **Overridden** and coral-red markers identify the manual value, while the original curve stays intact. Choose **Resume automation** in the lane editor, the control's right-click menu, the channel status menu, or plug-in parameter details to follow the curve again at the current playhead. **Cancel automation override** appears beside AI in the menu bar while any overrides exist; it clears all manual overrides and resumes enabled curves together in one undoable action. **Edit → Cancel all automation overrides** provides the same action. Curve points, bypass states and selection stay unchanged. The lane editor also offers **Override automation** and an exact override value. Overrides save with the project and support Undo/Redo. Disable or mute a lane to use the channel's stored manual value instead; this is shown as **Bypassed**.
 
 For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Effects provide the same native editor, searchable parameter list, and last-touched automation workflow from their insert chain; parameters are also available in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
 

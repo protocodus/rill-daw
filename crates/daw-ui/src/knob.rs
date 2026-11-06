@@ -637,6 +637,9 @@ impl<'a> Knob<'a> {
                 ui.painter().circle_filled(center, 2.0, active);
             }
         }
+        if let Some(state) = self.automation {
+            crate::paint_automation_glow(ui, dial, state);
+        }
         if !self.compact
             && self.show_automation_label
             && let Some(state) = self.automation

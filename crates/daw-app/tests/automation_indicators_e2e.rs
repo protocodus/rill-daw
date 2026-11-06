@@ -124,7 +124,30 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
             "Edit automation opens one workspace"
         );
         assert_eq!(editing["selected_track"], pan);
-        app.click("Mixer");
+        let mixer = app.click("Mixer");
+        assert_eq!(
+            mixer["selected_track"], pan,
+            "Returning to Mixer reveals the owner without changing lane selection"
+        );
+        let channel = mixer["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["track"] == source)
+            .unwrap();
+        let pane = &mixer["mixer"]["reorder_viewport"];
+        for control in ["name", "source_menu"] {
+            for axis in 0..2 {
+                assert!(
+                    channel[control]["min"][axis].as_f64().unwrap()
+                        >= pane["min"][axis].as_f64().unwrap() - 0.5
+                        && channel[control]["max"][axis].as_f64().unwrap()
+                            <= pane["max"][axis].as_f64().unwrap() + 0.5,
+                    "Owning channel {control} must be immediately clickable inside {pane}: {}",
+                    channel[control]
+                );
+            }
+        }
         app.click("Source");
         let routing = app.click("Routing");
         let (room_x, room_y) = center(label(&routing, "Room"));

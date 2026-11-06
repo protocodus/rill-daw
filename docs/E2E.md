@@ -1264,6 +1264,11 @@ return and Master through silence, Pause and Stop, independent mouse reset with
 no project/history changes, fresh history on document replacement, and painted
 Mute/Solo colors in both themes.
 
+`automation_segment_bend_e2e` drags the actual automation line away from its
+midpoint handle in Arrangement, reusable patterns and the focused editor.
+Rising/falling up/down bends preserve endpoints and neighboring segments,
+commit one undo action, survive save/reload and match sampled WAV output.
+
 `signal_analysis_e2e` opens each channel's Analyze popup through the running
 app, consumes a known 1 kHz stereo sine through the production renderer and
 virtual audio output, and clicks Spectrum, Loudness, Correlation and Phase.

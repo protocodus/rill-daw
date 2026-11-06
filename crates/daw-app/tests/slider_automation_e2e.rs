@@ -77,7 +77,7 @@ fn native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_re
         };
         let state = app.inspect();
         right_click(&mut app, &control(&state, "timeline", source, "gain"));
-        let created = app.click("Create automation");
+        let created = app.click("Automate");
         let gain_lane = assert_created(&created, gain_target, 0.2);
         let curve = automation(&created, gain_target).0["points"].clone();
         assert_eq!(menu(&mut app, "Edit", "Undo")["project"], original);
@@ -108,7 +108,7 @@ fn native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_re
 
         let mixer = app.click("Mixer");
         right_click(&mut app, &control(&mixer, "mixer", source, "pan"));
-        let panned = app.click("Create automation");
+        let panned = app.click("Automate");
         assert_created(
             &panned,
             AutomationTarget {
@@ -123,7 +123,7 @@ fn native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_re
         // Properties exposes a visible automation menu before any lane exists.
         let properties = app.inspect();
         assert_eq!(properties["popups"]["properties"], true);
-        let created = menu(&mut app, "Automation", "Create automation");
+        let created = menu(&mut app, "Automation", "Automate");
         assert_created(
             &created,
             AutomationTarget {
@@ -136,7 +136,7 @@ fn native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_re
         app.click("Mixer");
         app.click("Drums");
         app.click("Routing");
-        let sent = menu(&mut app, "Automation", "Create automation");
+        let sent = menu(&mut app, "Automation", "Automate");
         assert_created(
             &sent,
             AutomationTarget {
@@ -148,7 +148,7 @@ fn native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_re
 
         let mixer = app.click("Mixer");
         right_click(&mut app, &control(&mixer, "mixer", bus, "pan"));
-        let panned = app.click("Create automation");
+        let panned = app.click("Automate");
         assert_created(
             &panned,
             AutomationTarget {
@@ -159,4 +159,96 @@ fn native_slider_contexts_create_exact_targets_and_preserve_mouse_history_and_re
         );
         app.quit();
     }
+}
+
+#[test]
+fn mixer_send_context_creates_undoable_automation_without_editing_the_send_level() {
+    let mut app = Harness::new();
+    app.command(json!({"command":"system_theme","dark":true}));
+    let mut project = Project::new();
+    let source = project.add_audio_track("Source");
+    let bus = project.add_bus("Room");
+    project.add_send(source, bus, 0.25, false).unwrap();
+    let path = app.directory.path().join("send-context.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.command(json!({"command":"viewport","width":1440,"height":1000}));
+    app.click("Mixer");
+    let before = app.inspect();
+    let channel = before["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == source)
+        .unwrap();
+    let opened = right_click(&mut app, &channel["send_automation"][0]["rect"]);
+    assert_eq!(opened["project"], before["project"]);
+    assert_eq!(opened["history"], before["history"]);
+    assert!(
+        opened["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Automate")
+    );
+    let created = app.click("Automate");
+    let target = AutomationTarget {
+        track: source,
+        parameter: AutomationParameter::SendGain { bus },
+    };
+    let lane = assert_created(&created, target, 0.25 / 16.0);
+    assert_eq!(created["project"]["tracks"][0]["sends"][0]["gain"], 0.25);
+    assert_eq!(menu(&mut app, "Edit", "Undo")["project"], before["project"]);
+    assert_eq!(automation(&menu(&mut app, "Edit", "Redo"), target).1, lane);
+
+    app.click("Mixer");
+    let painted = app.command(json!({"command":"inspect","paint":true}));
+    let channel = painted["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == source)
+        .unwrap();
+    assert_eq!(channel["send_automation"][0]["state"], "Automated");
+    let rect = &channel["send_automation"][0]["rect"];
+    let orange = daw_ui::theme::DARK.automation.to_array();
+    // The actual running app paints the ownership outline on the send row.
+    assert!(
+        painted["painted_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|shape| {
+                shape["stroke"] == json!(orange)
+                    && (0..2).all(|axis| {
+                        (shape["rect"]["min"][axis].as_f64().unwrap()
+                            - rect["min"][axis].as_f64().unwrap())
+                        .abs()
+                            <= 0.5
+                            && (shape["rect"]["max"][axis].as_f64().unwrap()
+                                - rect["max"][axis].as_f64().unwrap())
+                            .abs()
+                                <= 0.5
+                    })
+            }),
+        "Send automation must have an orange ownership outline"
+    );
+    let history = painted["history"].clone();
+    right_click(&mut app, rect);
+    let editing = app.click("Edit automation");
+    assert_eq!(editing["selected_track"], lane);
+    assert_eq!(
+        editing["history"], history,
+        "Editing an existing lane is navigation"
+    );
+    assert_eq!(
+        editing["project"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|track| track["automation"]["target"] == serde_json::to_value(target).unwrap())
+            .count(),
+        1
+    );
+    app.quit();
 }

@@ -67,25 +67,89 @@ pub fn track_reorder_source(ui: &Ui, response: &Response, track: u64) -> Respons
     {
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
     }
-    response.on_hover_text("Drag to reorder")
+    crate::hover_text(response, "Drag to reorder")
 }
 
 /// A dedicated, visible drag grip for compact canvas headers. It does not
 /// advance the caller's layout or share the color/disclosure button's hit area.
 pub fn track_reorder_grip_at(ui: &Ui, rect: Rect, id: Id, track: u64) -> Response {
-    let response = ui.interact(rect, id, Sense::click_and_drag());
-    if ui.is_rect_visible(rect) {
-        let color = if response.hovered() || response.dragged() {
-            theme::palette(ui.ctx()).text
+    let color = theme::palette(ui.ctx()).muted;
+    track_reorder_grip_tinted_at(ui, rect, id, track, color, true)
+}
+
+/// The same grip on a tinted channel name plate. Supplying its contrasting
+/// foreground keeps the small dots visible in either theme and at any hue.
+pub fn track_reorder_grip_tinted_at(
+    ui: &Ui,
+    rect: Rect,
+    id: Id,
+    track: u64,
+    color: egui::Color32,
+    draggable: bool,
+) -> Response {
+    let response = ui.interact(
+        rect,
+        id,
+        if draggable {
+            Sense::click_and_drag()
         } else {
-            theme::palette(ui.ctx()).muted
-        };
+            Sense::hover()
+        },
+    );
+    if ui.is_rect_visible(rect) {
         Icon::Grip.paint(ui.painter(), rect.shrink(2.0), color);
     }
-    let response = track_reorder_source(ui, &response, track);
-    response
-        .on_hover_cursor(CursorIcon::Grab)
-        .on_hover_text("Reorder track · drag to an insertion line")
+    if draggable {
+        let response = track_reorder_source(ui, &response, track);
+        crate::hover_text(
+            response.on_hover_cursor(CursorIcon::Grab),
+            "Reorder track · drag to an insertion line",
+        )
+    } else {
+        crate::hover_text(
+            response,
+            "Signal flow sets channel order automatically · Choose Song order to reorder",
+        )
+    }
+}
+
+/// Mouse-only alternatives to dragging. The caller owns sibling boundaries
+/// and commits the returned direction through the same history boundary.
+pub struct TrackReorderMenuResponse {
+    pub previous: Response,
+    pub next: Response,
+    /// `false` moves toward the beginning, `true` toward the end.
+    pub direction: Option<bool>,
+}
+
+pub fn track_reorder_menu(
+    ui: &mut Ui,
+    axis: TrackReorderAxis,
+    previous_enabled: bool,
+    next_enabled: bool,
+) -> TrackReorderMenuResponse {
+    let (previous_label, next_label) = match axis {
+        TrackReorderAxis::Horizontal => ("Shift Left", "Shift Right"),
+        TrackReorderAxis::Vertical => ("Move Up", "Move Down"),
+    };
+    let previous = ui
+        .add_enabled_ui(previous_enabled, |ui| crate::button(ui, previous_label))
+        .inner;
+    let next = ui
+        .add_enabled_ui(next_enabled, |ui| crate::button(ui, next_label))
+        .inner;
+    let direction = if previous.clicked() {
+        Some(false)
+    } else if next.clicked() {
+        Some(true)
+    } else {
+        None
+    };
+    TrackReorderMenuResponse {
+        previous,
+        next,
+        direction,
+    }
 }
 
 /// Inspect a broad row/strip as a drop destination without intercepting any

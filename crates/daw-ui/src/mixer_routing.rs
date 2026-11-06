@@ -58,7 +58,7 @@ pub fn mixer_send_row(ui: &mut Ui, width: f32, send: &MixerSend<'_>) -> Response
     } else {
         "Post-fader"
     };
-    crate::mixer_row(
+    let response = crate::mixer_row(
         ui,
         width,
         crate::MIXER_SEND_ROW_HEIGHT,
@@ -66,11 +66,14 @@ pub fn mixer_send_row(ui: &mut Ui, width: f32, send: &MixerSend<'_>) -> Response
         crate::MixerRowText::Caption,
         Some(send.color),
         Some((&trailing, colors.muted)),
+    );
+    crate::hover_text(
+        response,
+        format!(
+            "Send → {} · {placement} · {level} dB\nClick to edit sends",
+            send.destination,
+        ),
     )
-    .on_hover_text(format!(
-        "Send → {} · {placement} · {level} dB\nClick to edit sends",
-        send.destination,
-    ))
 }
 
 /// A summary row for sends beyond the visible rows ("+2 more").

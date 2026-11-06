@@ -62,7 +62,7 @@ pub fn automatable_menu_contents(
 ) -> Option<AutomationNavigation> {
     if let Some((lane, state)) = automation {
         automation_menu_contents(ui, lane, state)
-    } else if crate::button(ui, "Create automation").clicked() {
+    } else if crate::button(ui, "Automate").clicked() {
         ui.close();
         Some(AutomationNavigation::Create(control))
     } else {

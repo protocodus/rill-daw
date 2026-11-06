@@ -3,6 +3,71 @@ use crate::app::DawApp;
 use daw_core::{Project, TrackKind, TrackPlacement};
 use daw_ui::{TrackDropIntent, TrackDropPlacement};
 
+type TrackShiftTargets =
+    std::collections::HashMap<u64, (Option<TrackDropIntent>, Option<TrackDropIntent>)>;
+
+/// A one-step move keeps the owner's folder and moves its complete subtree.
+/// Mixer channels skip non-channel siblings that have no strip in that view.
+pub(crate) fn track_shift_intent(
+    project: &Project,
+    source: u64,
+    next: bool,
+    channels_only: bool,
+) -> Option<TrackDropIntent> {
+    let (previous, following) = track_shift_targets(project, channels_only)
+        .get(&source)
+        .copied()?;
+    if next { following } else { previous }
+}
+
+/// Build the visible sibling adjacency once, with indexed ownership lookups.
+/// The mixer queries every strip each frame; repeated project scans here would
+/// otherwise make even a read-only console expensive in larger sessions.
+pub(crate) fn track_shift_targets(project: &Project, channels_only: bool) -> TrackShiftTargets {
+    use std::collections::HashMap;
+    let tracks: HashMap<_, _> = project
+        .tracks
+        .iter()
+        .map(|track| (track.id, track))
+        .collect();
+    let mut siblings: HashMap<Option<u64>, Vec<u64>> = HashMap::new();
+    for id in project.ordered_track_ids() {
+        let track = tracks[&id];
+        if !channels_only
+            || matches!(
+                track.kind,
+                TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+            )
+        {
+            siblings.entry(track.parent_folder).or_default().push(id);
+        }
+    }
+    siblings
+        .values()
+        .flat_map(|group| {
+            group.iter().enumerate().map(move |(index, source)| {
+                let intent = |target, placement| TrackDropIntent {
+                    source: *source,
+                    target,
+                    placement,
+                };
+                (
+                    *source,
+                    (
+                        index
+                            .checked_sub(1)
+                            .and_then(|previous| group.get(previous))
+                            .map(|id| intent(*id, TrackDropPlacement::Before)),
+                        group
+                            .get(index + 1)
+                            .map(|id| intent(*id, TrackDropPlacement::After)),
+                    ),
+                )
+            })
+        })
+        .collect()
+}
+
 /// Cheap hover validation; the core validates the complete operation on drop.
 pub(crate) fn track_drop_allowed(project: &Project, intent: TrackDropIntent) -> bool {
     if intent.source == intent.target || project.track(intent.source).is_none() {

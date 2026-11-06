@@ -221,7 +221,8 @@ fn spline_shapes_follow_point_identity_and_survive_value_replacement() {
     let mut lane = curve(Interpolation::Linear, &[(0.0, 0.2), (2.0, 0.8), (4.0, 0.6)]);
     let id = lane.points[1].id;
     lane.set_point_curve(id, 0.7).unwrap();
-    assert_eq!(lane.interpolation, Interpolation::Spline);
+    assert_eq!(lane.interpolation, Interpolation::Linear);
+    assert_eq!(lane.points[1].interpolation, Some(Interpolation::Spline));
     lane.upsert_point(2.0, 0.9).unwrap();
     assert_eq!(lane.points[1].curve, 0.7);
     lane.move_point(id, 5.0, 0.1).unwrap();
@@ -237,6 +238,96 @@ fn spline_shapes_follow_point_identity_and_survive_value_replacement() {
     }
     assert!(lane.set_point_curve(u64::MAX, 0.0).is_err());
     assert_eq!(lane, before);
+}
+
+#[test]
+fn bending_one_segment_preserves_legacy_defaults_and_every_neighbor() {
+    for mode in [
+        Interpolation::Step,
+        Interpolation::Linear,
+        Interpolation::Smooth,
+        Interpolation::Spline,
+    ] {
+        let mut lane = curve(mode, &[(0.0, 0.1), (1.0, 0.8), (2.0, 0.3), (3.0, 0.7)]);
+        let before = lane.clone();
+        let neighbors: Vec<_> = (0..=1000)
+            .map(|sample| lane.value_at(1.0 + sample as f64 / 500.0))
+            .collect();
+        let point = lane.points[0].id;
+        lane.set_point_curve(point, -0.65).unwrap();
+        assert_eq!(lane.interpolation, mode);
+        assert_eq!(lane.points[1..], before.points[1..]);
+        assert_eq!(
+            (lane.points[0].id, lane.points[0].beat, lane.points[0].value),
+            (
+                before.points[0].id,
+                before.points[0].beat,
+                before.points[0].value
+            )
+        );
+        assert_eq!(lane.points[0].interpolation, Some(Interpolation::Spline));
+        assert_eq!(
+            (0..=1000)
+                .map(|sample| lane.value_at(1.0 + sample as f64 / 500.0))
+                .collect::<Vec<_>>(),
+            neighbors
+        );
+    }
+}
+
+#[test]
+fn new_automation_is_linear_and_local_bends_roundtrip_without_schema_migration() {
+    let mut project = Project::new();
+    let source = project.add_audio_track("Source");
+    let track = project
+        .add_automation_track_with_value(
+            "Gain",
+            AutomationTarget {
+                track: source,
+                parameter: Parameter::TrackGain,
+            },
+            0.3,
+        )
+        .unwrap();
+    let lane = project.automation_lane(track).unwrap();
+    assert_eq!(lane.interpolation, Interpolation::Linear);
+    assert!(
+        lane.points
+            .iter()
+            .all(|point| point.curve == 0.0 && point.interpolation.is_none())
+    );
+    project.upsert_automation_point(track, 2.0, 0.9).unwrap();
+    let lane = project.automation_lane(track).unwrap();
+    for pair in lane.points.windows(2) {
+        assert_eq!(
+            lane.value_at((pair[0].beat + pair[1].beat) * 0.5),
+            Some((pair[0].value + pair[1].value) * 0.5)
+        );
+    }
+    let point = project.automation_lane(track).unwrap().points[0].id;
+    let linear = project.clone();
+    project
+        .set_automation_point_curve(track, point, 0.7)
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("Local bend.rill");
+    project.save(&path).unwrap();
+    let loaded = Project::load(&path).unwrap();
+    assert_eq!(loaded, project);
+    for sample in 0..=800 {
+        let beat = sample as f64 / 100.0;
+        assert_eq!(
+            loaded.automation_lane(track).unwrap().value_at(beat),
+            project.automation_lane(track).unwrap().value_at(beat)
+        );
+    }
+    project
+        .set_automation_point_curve(track, point, 0.0)
+        .unwrap();
+    assert_eq!(
+        project, linear,
+        "Resetting a new segment to Linear clears the redundant local override"
+    );
 }
 
 #[test]
@@ -309,7 +400,7 @@ fn spline_override_semantic_edits_roundtrip_undo_and_reject_invalid_batches() {
     assert_eq!(project.automation_for_target(target).unwrap().0, lane_id);
     assert_eq!(
         project.automation_lane(lane_id).unwrap().interpolation,
-        Interpolation::Spline
+        Interpolation::Linear
     );
     let point = project.automation_lane(lane_id).unwrap().points[0].id;
     let original = project.clone();

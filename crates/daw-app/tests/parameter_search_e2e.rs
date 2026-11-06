@@ -614,7 +614,19 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     let value = precise["native_editor"]["selected_value"].as_f64().unwrap();
     assert!((value - 0.6123456789).abs() < 1e-12, "{value}");
 
-    let created = app.click("Automate parameter");
+    let before = app.inspect();
+    let center = &before["native_editor"]["parameter_control"]["center"];
+    let context = app.command(
+        json!({"command":"pointer","phase":"click","button":"secondary",
+        "x":center[0],"y":center[1]}),
+    );
+    assert!(visible(&context, "Automate"));
+    assert_eq!(
+        context["project"], before["project"],
+        "Opening automation must not edit the parameter"
+    );
+    assert_eq!(context["history"], before["history"]);
+    let created = app.click("Automate");
     assert_lane(lanes(&created)[0], track, None, 7, value);
     let points = lanes(&created)[0]["automation"]["points"].clone();
     app.key("Escape");

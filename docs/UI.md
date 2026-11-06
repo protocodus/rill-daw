@@ -283,8 +283,8 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
 | Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_with_peak_hold`, `channel_peak_indicator`, `channel_meter_readout` |
-| Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
-| Mixer identity, inserts and routing | `mixer_name_plate`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
+| Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_grip_tinted_at`, `track_reorder_menu`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
+| Mixer identity, inserts and routing | `mixer_name_plate`, `mixer_name_plate_with_grip`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
 | Live signal analysis | `mixer_analysis_button`, `signal_analyzer_tabs`, `signal_analyzer`, `SignalAnalyzerView`, `SignalAnalyzerData`, `SignalAnalyzerResponse` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
@@ -318,7 +318,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length` (current-value chooser **Length 1/16** beside Snap), `paint_clip_end_label` |
 | Clip editor toolbar end and analysis drawer | `editor_view_controls` (caption slot, zoom, View, Tool help; reservation measured from the controls), `editor_status_caption` (progress, errors, **Bar 3.2 – 4.1** or gesture guidance; drops whole trailing ` · ` clauses before truncating), `editor_bottom_drawer` (fixed panel under the canvas), `clip_nudge_section` (Nudge inside a Clip menu) |
 | Clip Editor and Mixer header | `clip_workspace_header` (Back, `HeaderSlot::Navigation` chevron pair, Subtitle title and context line, right-to-left actions), `clip_navigation_header_controls` |
-| Interactive parameter curves | `curve_editor`, `curve_timeline_editor`, `CurvePoint`, `CurveView`, `CurveTimeline` (`value_label` prints the value axis in the parameter's units: pan **L 100 / C / R 100**, gain **+3.5 dB … −∞**; `percent_value_label` otherwise), `CurveEdit`; bar/beat grid via `paint_beat_grid` and a quiet `automation × 0.10` fill under the curve |
+| Interactive parameter curves | `curve_editor`, `curve_editor_with_segments`, `curve_timeline_editor`, `curve_timeline_editor_with_segments`, `automation_canvas_with_segments_at`, `CurvePoint`, `CurveSegment`, `CurveView`, `CurveTimeline` (`value_label` prints the value axis in the parameter's units: pan **L 100 / C / R 100**, gain **+3.5 dB … −∞**; `percent_value_label` otherwise), `CurveEdit`; bar/beat grid via `paint_beat_grid` and a quiet `automation × 0.10` fill under the curve |
 | Bar.beat position entry | `musical_position_field(beat, beats_per_bar, prefix)` and `parse_musical_position`: a zero-based beat shown and typed as **12.3.2** (automation point position, take range) |
 | Automation state and segment shape | `AutomationState`, `AutomationControl`, `automation_badge`, `paint_automation_control`, `automatable_parameter_context`, `automatable_menu_contents`, `automation_parameter_context`, `automation_channel_menu`, `curve_timeline_editor_with_segments`, `CurveSegment`, `curve_segment_controls`, `curve_toolbar`, `curve_endpoint_summary`, `paint_curve_override` |
 | Searchable plugin parameters | `parameter_browser`, `ParameterItem`, `ParameterBrowserState`, `ParameterScope` |
@@ -399,16 +399,18 @@ It creates no interactive overlay and leaves the toolbar and canvas geometry int
 
 Standard controls use 13-point horizontal and eight-point vertical padding; canvas-owned controls retain their compact geometry. Popups use 21-point horizontal and 13-point vertical inner margins and scroll within the available viewport. The native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows use a φ-point border with a 21-point blurred shadow; menus use a smaller 13-point shadow. Blur and shadows add depth without changing native hit targets or focus behavior.
 
-`slider` retains native dragging, keyboard focus and exact numeric entry, with
-minimum/maximum captions and a value marker inside its handle. Minimum shows a
-small downward triangle, maximum an upward triangle, midpoint a filled dot,
-and zero a hollow circle. Endpoints take precedence when zero is also a limit;
+`slider` retains native dragging, keyboard focus and exact numeric entry. Every
+host slider, including track headers, shares one recessed rail, rectangular
+thumb and pixel-aligned index; compact controls use the same design at a smaller
+size. Minimum/maximum captions and a value marker identify the current value.
+Minimum shows a small downward triangle, maximum an upward triangle, and both
+midpoint and zero use a small solid point. Endpoints take precedence when zero is also a limit;
 zero takes precedence when it is also the midpoint. Ordinary values retain the
 center line. The same markers appear in track-header sliders, in both rail
 orientations and at compact sizes. They are paint-only: no snapping or value
 changes. Values outside the range keep their distinct overflow indicator.
 For a converted scale, `.zero_reference(...)` identifies its displayed zero:
-the Mixer fader uses linear gain 1.0 for the hollow circle at 0 dB.
+the Mixer fader uses linear gain 1.0 for the solid point at 0 dB.
 Scale positions use
 the handle's actual travel, so a tick and the handle center identify the same
 value. Short rails show halves; at 100 points of travel they add fifths, and at
@@ -781,6 +783,13 @@ sibling of its destination; Into folder appends it as a child. Invalid descendan
 targets are rejected. Hover cues identify the destination and folder, and edge
 dragging scrolls long sessions. Escape or releasing outside a target cancels.
 Only a valid drop commits one Undo step; previews leave the document unchanged.
+Right-click a track for **Move Up / Move Down**, or a mixer channel for
+**Shift Left / Shift Right**. These single-step actions preserve folder ownership
+and carry the complete subtree, with first/last siblings disabled. Mixer steps
+skip sibling automation/folder rows that have no channel strip. A shared
+`track_reorder_menu` supplies the same actions and boundary states in both views.
+Mixer name plates reserve a separate, contrasting small grip so dragging never
+shares the name's click/context-menu target.
 
 Arrangement and the mixer's **Song order** view share the project's complete hierarchy order. Collapsed
 folders keep their children in that order while hiding their arranger rows.
@@ -864,7 +873,7 @@ travel, −10/−20/−30 dB evenly spaced, linear in amplitude below −30 dB, 
 the top of the 0..1.5 model range. Gain dials move at the fader's rate however far
 their range extends. `paint_mixer_scale` paints the labelled dB stops (+3.5, 0,
 −6, −12, −20, −30, −∞) and minor ticks (−3, −9, −18, −24, −40) on the scale side
-only; 0 dB keeps its hollow-circle landmark on the cap. The fader unit
+only; 0 dB keeps its solid-point landmark on the cap. The fader unit
 `[scale 34][rail 21][gap 5][meter 13]` is centered on the strip and pixel
 snapped: one 5-point trough, a 21×13 cap, and `channel_meter_with_peak_hold`, a
 vertical stereo peak meter on the same scale. The engine captures block maxima
@@ -923,8 +932,9 @@ Mixer defaults to **Signal flow**: audio/MIDI sources come first, buses follow
 all their upstream channels and buses, and Master remains last. Both main outputs
 and sends determine this order; unrelated channels retain song order. Tracks and
 Buses have separate headings and spacing. **Signal flow → Song order** restores
-the Arrangement order and enables dragging channel names before or after other
-channels. Switching views never changes routing, project order, history, or
+the Arrangement order and enables dragging channel grips or names before or after
+other channels. Signal-flow grips and left/right steps are inactive; the channel
+context menu offers **Use Song order** explicitly. Switching views never changes routing, project order, history, or
 playback. Channel numbers retain their song identities in either view. Bus
 headers share the routing icon, BUS badge, and quiet tint with the arranger.
 Narrow source
@@ -1059,12 +1069,19 @@ dB readout opening exact entry with **123**, Apply, Cancel and **Silence**.
 axes respect their different maximums. The model retains normalized automation
 values; inspecting a value never converts or rounds the stored value.
 
-Automation defaults to **Spline**. `curve_timeline_editor_with_segments` adds a
-diamond between each sufficiently separated pair of points; drag it vertically
-to bend only that segment. Select its starting point or diamond to use **Log**,
+New automation defaults to **Linear**, with zero bend on each segment.
+`curve_editor_with_segments`, `curve_timeline_editor_with_segments` and
+`automation_canvas_with_segments_at` share the same line gestures in the focused
+editor, Arrangement lanes and reusable automation patterns. Drag a segment's
+line or its midpoint diamond vertically to bend only that segment while keeping
+both endpoints fixed. Clicking a line still adds a point. Select its starting
+point or diamond to use **Log**,
 **Linear**, **Exp**, and the continuous **Slope** control. The shared component
 returns an outgoing-point ID and shape intent; the core owns bounded cubic Bézier
-evaluation. Step, Linear and Smooth remain available for existing projects.
+evaluation. Bending sets a local Spline override on the outgoing point and
+preserves every neighboring segment's mode; Step, Linear, Smooth and existing
+Spline projects retain their saved behavior. Rise/fall bends remain monotone
+and bounded by their endpoints; equal endpoints remain a constant value.
 Curve painting submits one bounded polyline rather than a shape per sample.
 The compact toolbar uses an interpolation picker and keeps the point and slope
 controls visible at 800 × 600. `curve_endpoint_summary` identifies the held
@@ -1086,19 +1103,28 @@ value, and its numeric field adjusts that held value. Overrides persist with the
 project and participate in Undo/Redo. Lane/folder bypass instead uses the stored
 manual value and is labelled **Bypassed**. Changing a curve or override on an
 existing enabled lane uses the live edit path, preserving loaded plug-ins.
+While any lane retains a manual override, the menu bar exposes **Cancel
+automation override** beside AI. **Edit → Cancel all automation overrides**
+provides the same action. It clears every retained override in one history
+transaction, resuming enabled curves at the current playhead while preserving
+points, stored manual parameters, bypass states and selection. The button
+disappears when no overrides remain; the Edit action is then disabled.
 Automation has a reserved orange identity (`Palette::automation`) across curves,
 nodes, handles, parameter-browser markers, control outlines and status menus,
 independent of track colors. Manual takeover uses `automation_override` coral
-red; bypassed status remains gray. State wording supplements color in both
+red; bypassed status remains gray. App-owned automated controls retain a thin
+orange ownership border and subtle glow, including dial controls; manual
+overrides turn that highlight red until automation resumes. State wording supplements color in both
 themes, and the original curve stays muted beneath an override's held line.
 Tool mix edits use the same takeover behavior when a stored value changes.
 Explicit override or resume commands take precedence within an atomic batch.
-Channel volume, pan and send controls offer **Create automation** directly in
+Channel volume, pan and send controls offer **Automate** directly in
 their context menus before a lane exists, then **Edit automation** and **Resume
 automation** as appropriate. Properties, Routing and Mixer channel menus expose
 the same operations. Creation targets the control's owner, independently of the
 current selection, and starts at its current value. Send sliders cover their
-supported 0–16 gain range and retain precise numeric entry.
+supported 0–16 gain range and retain precise numeric entry. Mixer send summaries
+and the selected plug-in parameter's value control offer the same context action.
 
 Automation's **Add parameter** opens a chooser with the shared parameter browser for VST instruments and effects. Back, Escape and its close button restore the original curve, selected point and zoom. Choosing a parameter that already has a lane offers **Edit automation** instead of failing on duplicate creation; switching lanes does not add undo history. Creating a new lane consumes the chooser and preserves the outer workspace return path. Parameter metadata reads restore the selected instance's saved state and overrides in its sandbox, so a new lane starts from that instance's value rather than a plugin default. Switching between instances invalidates the selection and metadata.
 

@@ -42,11 +42,13 @@ fn center(rect: &Value) -> [f64; 2] {
 
 fn drag_before(app: &mut Harness, source: u64, target: u64) -> Value {
     let state = app.inspect();
-    let start = center(&channel(&state, source)["reorder_source"]);
+    let start = center(&channel(&state, source)["reorder_grip"]);
     let drop = &channel(&state, target)["drop"];
+    let top = drop["min"][1].as_f64().unwrap();
+    let bottom = drop["max"][1].as_f64().unwrap();
     app.command(json!({"command":"pointer", "phase":"drag",
         "x":start[0],"y":start[1],
-        "to_x":drop["min"][0].as_f64().unwrap() + 4.0,"to_y":start[1]}))
+        "to_x":drop["min"][0].as_f64().unwrap() + 4.0,"to_y":top+(bottom-top)*0.2}))
 }
 
 fn assert_engine(state: &Value, before: &Value) {

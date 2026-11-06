@@ -587,7 +587,12 @@ impl DawApp {
             .take(lane.points.len().saturating_sub(1))
             .map(|point| daw_ui::CurveSegment {
                 start: point.id,
-                curve: point.curve,
+                curve: if point.interpolation.unwrap_or(lane.interpolation) == Interpolation::Spline
+                {
+                    point.curve
+                } else {
+                    0.0
+                },
             })
             .collect();
         let response = daw_ui::curve_timeline_editor_with_fit(
@@ -740,7 +745,12 @@ impl DawApp {
                 });
             }
             if index + 1 < lane.points.len() {
-                let mut curve = point.curve;
+                let mut curve =
+                    if point.interpolation.unwrap_or(lane.interpolation) == Interpolation::Spline {
+                        point.curve
+                    } else {
+                        0.0
+                    };
                 let controls = daw_ui::curve_segment_controls(ui, &mut curve);
                 slope_rect = Some(controls.rect);
                 if controls.changed() {
@@ -820,6 +830,9 @@ impl DawApp {
                     x,
                     value,
                 } => self.project.move_automation_point(id, point, x, value),
+                CurveEdit::Bend { id: point, curve } => {
+                    self.project.set_automation_point_curve(id, point, curve)
+                }
                 CurveEdit::Delete { id: point } => {
                     let selected = if delete_selection {
                         response.selection.clone()

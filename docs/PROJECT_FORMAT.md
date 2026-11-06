@@ -20,7 +20,9 @@ identify the same instance.
 
 Automation points store an outgoing `curve` value from −1 (Log) through 0
 (Linear) to +1 (Exp). The `Spline` interpolation mode uses that value for a
-bounded cubic Bézier segment. Missing `curve` fields read as zero; existing
+bounded cubic Bézier segment. New lanes default to Linear with zero bend;
+changing a bend stores a per-point `interpolation: "Spline"` override and does
+not change the lane default or neighboring segments. Missing `curve` fields read as zero; existing
 Step, Linear and Smooth modes preserve their behavior. A lane's optional
 normalized `override_value` holds a manual value without changing its points;
 omission or null resumes the curve. Both shapes and override values are

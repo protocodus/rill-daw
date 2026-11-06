@@ -180,6 +180,8 @@ impl DawApp {
         let mut output_menus = Vec::new();
         let mut send_menus = Vec::new();
         let mut track_reorder = None;
+        let mut reorder_menu = None;
+        let mut use_song_order = false;
         let mut reorder_preview = None;
         let mut reorder_viewport = None;
         let automation: std::collections::HashMap<_, _> = self
@@ -215,6 +217,7 @@ impl DawApp {
         let song_channels =
             crate::mixer_flow::ordered_channels(&self.project, crate::mixer_flow::MixerOrder::Song);
         let channels = crate::mixer_flow::ordered_channels(&self.project, order);
+        let shift_targets = crate::track_order::track_shift_targets(&self.project, true);
         let channel_indices: Vec<_> = channels
             .iter()
             .filter_map(|id| channel_indices_by_id.get(id).copied())
@@ -257,9 +260,18 @@ impl DawApp {
                     .push((track.id, Some(send.pre_fader)));
             }
         }
-        let mut reveal_channel = self.mixer_reveal_channel.take().or(ui
-            .ctx()
-            .data_mut(|data| data.remove_temp::<u64>(egui::Id::new("mixer_reveal_channel"))));
+        let mut reveal_channel = self
+            .mixer_reveal_channel
+            .take()
+            .or(ui
+                .ctx()
+                .data_mut(|data| data.remove_temp::<u64>(egui::Id::new("mixer_reveal_channel"))))
+            .map(|id| {
+                self.project
+                    .track(id)
+                    .and_then(|track| track.automation.as_ref())
+                    .map_or(id, |lane| lane.target.track)
+            });
         if let Some((direction, extend)) = daw_ui::selection_navigation_input(ui, None) {
             let direction = match direction {
                 daw_ui::SelectionDirection::Up => daw_ui::SelectionDirection::Left,
@@ -500,11 +512,28 @@ impl DawApp {
                         Some(color(track.color)), selected_channels.contains(&track.id), |ui| {
                         ui.spacing_mut().item_spacing.y = spacing;
                         // Identity
-                        let name = daw_ui::mixer_name_plate(ui, if bus { daw_ui::MixerNamePlateKind::Bus } else { daw_ui::MixerNamePlateKind::Track },
-                            &track.name, content_width, color(track.color))
-                            .on_hover_text(format!("Open channel · {} · {} · Right-click for channel and selection actions · Shift-click to add/remove", track.name, if reorder_enabled { "Drag to reorder" } else { "Signal flow order; choose Song order to drag" }));
+                        let (name, grip) = daw_ui::mixer_name_plate_with_grip(ui, if bus { daw_ui::MixerNamePlateKind::Bus } else { daw_ui::MixerNamePlateKind::Track },
+                            &track.name, content_width, color(track.color), track.id, reorder_enabled);
+                        let name = daw_ui::hover_text(name, format!("Open channel · {} · {} · Right-click for channel and selection actions · Shift-click to add/remove", track.name, if reorder_enabled { "Drag to reorder" } else { "Signal flow order; choose Song order to drag" }));
                         let name = if reorder_enabled { daw_ui::track_reorder_source(ui, &name, track.id) } else { name };
                         name.context_menu(|ui| {
+                            let (previous, next) = shift_targets[&track.id];
+                            let actions = daw_ui::track_reorder_menu(ui, daw_ui::TrackReorderAxis::Horizontal,
+                                reorder_enabled && previous.is_some(), reorder_enabled && next.is_some());
+                            let switch = if !reorder_enabled {
+                                let switch = daw_ui::button(ui, "Use Song order");
+                                if switch.clicked() { use_song_order = true; ui.close(); }
+                                Some(rect_json(switch.rect))
+                            } else { None };
+                            reorder_menu = Some(serde_json::json!({"track":track.id,
+                                "previous":{"rect":rect_json(actions.previous.rect),"enabled":actions.previous.enabled()},
+                                "next":{"rect":rect_json(actions.next.rect),"enabled":actions.next.enabled()},
+                                "use_song_order":switch}));
+                            if let Some(direction) = actions.direction {
+                                track_reorder = if direction { next } else { previous };
+                                ui.close();
+                            }
+                            ui.separator();
                             if daw_ui::button(ui, "Show in Arranger").clicked() {
                                 arranger_target = Some(track.id); ui.close();
                             }
@@ -707,13 +736,25 @@ impl DawApp {
                             pre_fader: send.pre_fader,
                         }).collect();
                         let mut send_rows = Vec::new();
+                        let mut send_automation = Vec::new();
                         let send_area = ui.allocate_ui_with_layout(Vec2::new(content_width, send_area_height), egui::Layout::top_down(egui::Align::Min), |ui| {
                             ui.set_min_size(Vec2::new(content_width, send_area_height));
                             ui.spacing_mut().item_spacing.y = spacing;
                             let visible = if send_details.len() > 2 { 1 } else { send_details.len() };
                             let mut open = false;
-                            for send in &send_details[..visible] {
+                            for (index, send) in send_details[..visible].iter().enumerate() {
                                 let row = daw_ui::mixer_send_row(ui, content_width, send);
+                                let bus = track.sends[index].target_bus;
+                                let state = automation.get(&AutomationTarget { track: track.id,
+                                    parameter: AutomationParameter::SendGain { bus } }).copied();
+                                if let Some(action) = daw_ui::automatable_parameter_context(ui, &row,
+                                    daw_ui::AutomationControl::Send { track: track.id, bus },
+                                    state.map(|(lane, status, _)| (lane, status))) {
+                                    automation_navigation = Some(action);
+                                }
+                                send_automation.push(serde_json::json!({"bus":bus,"rect":rect_json(row.rect),
+                                    "lane":state.map(|(lane, _, _)| lane),
+                                    "state":state.map(|(_, status, _)| daw_ui::automation_state_label(status))}));
                                 open |= row.clicked();
                                 send_rows.push(rect_json(row.rect));
                             }
@@ -729,7 +770,7 @@ impl DawApp {
                         let level_rect = pan_response.rect.union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
                         let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
                         let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
-                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
+                        serde_json::json!({"track":track.id,"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_grip":rect_json(grip.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
                             "source_kind":source_kind,"source_menu":rect_json(source.inner.0),"source_label":rect_json(source.inner.1),
                             "automation_state":channel_state.map(daw_ui::automation_state_label),
                             "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
@@ -738,7 +779,7 @@ impl DawApp {
                             "pan":rect_json(pan_response.rect),"pan_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), pan_response.id)),
                             "mute_solo":rect_json(mute_solo_rect),"mute":rect_json(pan_row.mute.rect),"solo":rect_json(pan_row.solo.rect),
                             "meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":channel_peak_hold,"peak_clipped":channel_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(target.rect),"sends":rect_json(sends_rect),
-                            "send_rows":send_rows,"add_send":rect_json(add_send.rect),
+                            "send_rows":send_rows,"send_automation":send_automation,"add_send":rect_json(add_send.rect),
                             "analyze":rect_json(analyze.rect),"sections":section_diagnostics,
                             "stages":{"input":rect_json(source.response.rect),"processing":rect_json(effects.rect.union(insert_summary.rect)),
                                 "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}})
@@ -762,8 +803,11 @@ impl DawApp {
                         // Oversized strips cannot fit a short viewport. Reveal
                         // the bounded identity/source band instead of centering
                         // the full card and clipping its clickable name above it.
+                        // Navigation must make its mouse targets available on
+                        // arrival, rather than leaving them offscreen mid-animation.
                         let identity = role_heading.map_or(identity_rect, |heading| heading.union(identity_rect));
-                        ui.scroll_to_rect(identity.expand(daw_ui::MIXER_CHANNEL_MARGIN), Some(egui::Align::Center));
+                        ui.scroll_to_rect_animation(identity.expand(daw_ui::MIXER_CHANNEL_MARGIN),
+                            None, egui::style::ScrollAnimation::none());
                     }
                     if ui.is_enabled() && !panning && !egui::Popup::is_any_open(ui.ctx())
                         && ui.input(|input| input.pointer.hover_pos()).is_some_and(|pos| strip.response.rect.contains(pos))
@@ -883,8 +927,16 @@ impl DawApp {
         ui.ctx().data_mut(|data| {
             data.insert_temp(preview_id, (generation, frame, self.selected_track, flow_source));
             data.insert_temp(egui::Id::new("mixer_diagnostics"),
-                serde_json::json!({"order":order.label(),"channel_order":channels,"reorder_enabled":reorder_enabled,"channels":diagnostics,"master_strip":master_diagnostics,"master":master_details,"master_peaks":[meter.peak_left,meter.peak_right],"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport}));
+                serde_json::json!({"order":order.label(),"channel_order":channels,"reorder_enabled":reorder_enabled,"channels":diagnostics,"master_strip":master_diagnostics,"master":master_details,"master_peaks":[meter.peak_left,meter.peak_right],"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport,"reorder_menu":reorder_menu}));
         });
+        if use_song_order {
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(
+                    egui::Id::new("mixer_order"),
+                    crate::mixer_flow::MixerOrder::Song,
+                )
+            });
+        }
         for (target, value) in automation_overrides {
             self.override_automated_parameter(target, value);
         }

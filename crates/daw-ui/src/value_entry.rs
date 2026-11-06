@@ -125,7 +125,7 @@ pub fn value_entry_named(
 /// Reserve the caller's trailing menu actions when limiting the keypad's height.
 /// Only the keys scroll; the exact field, Apply/Cancel and caller actions remain
 /// visible, including when an automation menu has additional controls.
-pub(crate) fn value_entry_with_footer(
+pub fn value_entry_with_footer(
     ui: &mut Ui,
     id_salt: impl Hash,
     current: f64,

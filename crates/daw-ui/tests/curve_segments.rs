@@ -184,3 +184,58 @@ fn navigation_gestures_starting_on_spline_handles_never_change_the_curve() {
         assert!(editor.selected.is_none());
     }
 }
+
+#[test]
+fn line_drag_bends_away_from_diamond_but_an_ordinary_click_still_adds_a_point() {
+    let mut editor = Editor::new([0.2, 0.8]);
+    let initial = editor.frame(vec![], Modifiers::NONE, true);
+    let at = Pos2::new(
+        initial.plot_rect.left()
+            + ((3.0 - editor.viewport.start_beat) as f32 * editor.viewport.pixels_per_beat),
+        initial.plot_rect.bottom() - 0.35 * initial.plot_rect.height(),
+    );
+    assert!(!initial.segment_handles[0].rect.contains(at));
+    editor.frame(
+        pointer(at, PointerButton::Primary, true, Modifiers::NONE),
+        Modifiers::NONE,
+        false,
+    );
+    let bent = editor.frame(
+        vec![Event::PointerMoved(at + egui::vec2(0.0, -18.0))],
+        Modifiers::NONE,
+        false,
+    );
+    assert!(
+        bent.segment_edit
+            .is_some_and(|(id, curve)| id == 1 && curve < 0.0)
+    );
+    assert_eq!(bent.edit, None, "Bending cannot move either endpoint");
+    editor.frame(
+        pointer(
+            at + egui::vec2(0.0, -18.0),
+            PointerButton::Primary,
+            false,
+            Modifiers::NONE,
+        ),
+        Modifiers::NONE,
+        false,
+    );
+
+    let mut editor = Editor::new([0.2, 0.8]);
+    editor.frame(vec![], Modifiers::NONE, true);
+    editor.frame(
+        pointer(at, PointerButton::Primary, true, Modifiers::NONE),
+        Modifiers::NONE,
+        false,
+    );
+    let clicked = editor.frame(
+        pointer(at, PointerButton::Primary, false, Modifiers::NONE),
+        Modifiers::NONE,
+        false,
+    );
+    assert!(
+        matches!(clicked.edit, Some(daw_ui::CurveEdit::Add { .. })),
+        "Clicking a curve still adds a point"
+    );
+    assert!(clicked.segment_edit.is_none());
+}

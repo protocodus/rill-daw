@@ -77,6 +77,7 @@ fn assert_marker(
     expected: SliderValueMarker,
     color: Color32,
 ) {
+    let painted_center = daw_ui::slider_paint_center(geometry.handle, output.pixels_per_point);
     let matching: Vec<_> = shapes(output)
         .into_iter()
         .filter(|shape| match shape {
@@ -86,11 +87,11 @@ fn assert_marker(
                     && path.fill == color
                     && Rect::from_points(&path.points)
                         .center()
-                        .distance(geometry.handle)
+                        .distance(painted_center)
                         < 0.001
             }
             Shape::Circle(circle) => {
-                circle.center.distance(geometry.handle) < 0.001
+                circle.center.distance(painted_center) < 0.001
                     && (circle.fill == color || circle.stroke.color == color)
             }
             _ => false,
@@ -115,25 +116,19 @@ fn assert_marker(
                 .filter(|point| (point.y - tip_y).abs() < 0.001)
                 .collect();
             assert_eq!(tips.len(), 1, "triangle points down at min and up at max");
-            assert!((tips[0].x - geometry.handle.x).abs() < 0.001);
+            assert!((tips[0].x - painted_center.x).abs() < 0.001);
             assert!(bounds.width() >= 1.0 && bounds.height() >= 1.0);
             bounds
         }
-        (SliderValueMarker::Center, Shape::Circle(circle)) => {
-            assert_eq!(circle.fill, color, "center is a filled dot");
+        (SliderValueMarker::Center | SliderValueMarker::Zero, Shape::Circle(circle)) => {
+            assert_eq!(circle.fill, color, "center and zero are a filled point");
             assert!(circle.radius >= 0.5);
+            assert!(circle.radius <= 1.5, "neutral point must stay small");
+            assert_eq!(circle.stroke, egui::Stroke::NONE);
             Rect::from_center_size(
                 circle.center,
                 vec2(circle.radius * 2.0, circle.radius * 2.0),
             )
-        }
-        (SliderValueMarker::Zero, Shape::Circle(circle)) => {
-            assert_eq!(circle.fill, Color32::TRANSPARENT, "zero is a hollow circle");
-            assert_eq!(circle.stroke.color, color);
-            assert!(circle.stroke.width >= 0.5);
-            assert!(circle.radius >= 0.5);
-            let extent = circle.radius + circle.stroke.width * 0.5;
-            Rect::from_center_size(circle.center, vec2(extent * 2.0, extent * 2.0))
         }
         (expected, shape) => panic!("Wrong shape for {expected:?}: {shape:?}"),
     };
@@ -146,7 +141,7 @@ fn assert_marker(
     assert!(
         !shapes(output).iter().any(|shape| matches!(shape,
             Shape::LineSegment { points, stroke }
-                if stroke.width == 1.5 && points[0].lerp(points[1], 0.5).distance(geometry.handle) < 0.001)),
+                if stroke.width == 1.0 / output.pixels_per_point && points[0].lerp(points[1], 0.5).distance(painted_center) < 0.001)),
         "special glyph replaces the handle index instead of overlapping it"
     );
 }
@@ -192,10 +187,10 @@ fn slider_frame(
 }
 
 #[test]
-fn native_sliders_paint_distinct_bounded_landmarks_at_every_size_and_density() {
+fn shared_sliders_paint_bounded_landmarks_at_every_size_and_density() {
     use SliderValueMarker::{Center, Maximum, Minimum, Zero};
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
-        for density in [1.0, 1.25, 2.0] {
+        for density in [1.0, 1.25, 1.5, 2.0] {
             let ctx = Context::default();
             theme::apply(&ctx);
             theme::set_appearance(&ctx, appearance);

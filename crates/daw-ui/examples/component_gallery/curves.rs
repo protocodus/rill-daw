@@ -5,6 +5,7 @@ pub struct State {
     points: Vec<CurvePoint>,
     selected: Option<u64>,
     shapes: std::collections::HashMap<u64, daw_ui::CurveInterpolation>,
+    bends: std::collections::HashMap<u64, f32>,
     fade: daw_ui::CrossfadeCurve,
     gain: f32,
 }
@@ -41,6 +42,7 @@ impl Default for State {
             ],
             selected: Some(3),
             shapes: Default::default(),
+            bends: Default::default(),
             fade: daw_ui::CrossfadeCurve {
                 control1: [0.20, 0.64],
                 control2: [0.76, 0.90],
@@ -53,6 +55,7 @@ impl Default for State {
 fn sample(
     points: &[CurvePoint],
     shapes: &std::collections::HashMap<u64, daw_ui::CurveInterpolation>,
+    bends: &std::collections::HashMap<u64, f32>,
     at: f64,
 ) -> f32 {
     let Some(first) = points.first() else {
@@ -64,10 +67,21 @@ fn sample(
     for pair in points.windows(2) {
         if at <= pair[1].x {
             let amount = ((at - pair[0].x) / (pair[1].x - pair[0].x).max(f64::EPSILON)) as f32;
-            let amount = match shapes.get(&pair[0].id) {
-                Some(daw_ui::CurveInterpolation::Step) => 0.0,
-                Some(daw_ui::CurveInterpolation::Smooth) => amount * amount * (3.0 - 2.0 * amount),
-                _ => amount,
+            let amount = if let Some(curve) = bends.get(&pair[0].id) {
+                let bent = if *curve < 0.0 {
+                    1.0 - (1.0 - amount).powi(3)
+                } else {
+                    amount.powi(3)
+                };
+                amount + curve.abs() * (bent - amount)
+            } else {
+                match shapes.get(&pair[0].id) {
+                    Some(daw_ui::CurveInterpolation::Step) => 0.0,
+                    Some(daw_ui::CurveInterpolation::Smooth) => {
+                        amount * amount * (3.0 - 2.0 * amount)
+                    }
+                    _ => amount,
+                }
             };
             return egui::lerp(pair[0].value..=pair[1].value, amount);
         }
@@ -82,10 +96,19 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         daw_ui::text::note(left, "curve_editor · selected point · quarter-beat snap");
         left.add_space(daw_ui::tokens::SPACE_SM);
         let points = state.points.clone();
-        let response = daw_ui::curve_editor(
+        let segments: Vec<_> = points
+            .iter()
+            .take(points.len().saturating_sub(1))
+            .map(|point| daw_ui::CurveSegment {
+                start: point.id,
+                curve: state.bends.get(&point.id).copied().unwrap_or(0.0),
+            })
+            .collect();
+        let response = daw_ui::curve_editor_with_segments(
             left,
             Id::new("gallery_breakpoints"),
             &points,
+            &segments,
             &mut state.selected,
             CurveView {
                 start: 0.0,
@@ -93,8 +116,11 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 snap: 0.25,
                 height: 270.0,
             },
-            |at| sample(&points, &state.shapes, at),
+            |at| sample(&points, &state.shapes, &state.bends, at),
         );
+        if let Some((id, curve)) = response.segment_edit {
+            state.bends.insert(id, curve);
+        }
         match response.edit {
             Some(CurveEdit::Add { x, value }) => {
                 let id = state.points.iter().map(|point| point.id).max().unwrap_or(0) + 1;
@@ -108,12 +134,16 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             }
             Some(CurveEdit::Delete { id }) => state.points.retain(|point| point.id != id),
             Some(CurveEdit::Interpolation { id, mode }) => {
+                state.bends.remove(&id);
                 state.shapes.insert(id, mode);
+            }
+            Some(CurveEdit::Bend { id, curve }) => {
+                state.bends.insert(id, curve);
             }
             None => {}
         }
         state.points.sort_by(|a, b| a.x.total_cmp(&b.x));
-        daw_ui::text::note(left, "Click to add · drag to move · Delete to remove");
+        daw_ui::text::note(left, "Click to add · drag points to move or lines to bend");
         left.add_space(daw_ui::tokens::SPACE_SM);
         left.horizontal(|ui| {
             daw_ui::gain_value_button(ui, "gallery_gain", &mut state.gain, 1.5, "Gain");
@@ -142,7 +172,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             0.0,
             8.0,
             color,
-            |at| sample(&state.points, &state.shapes, at),
+            |at| sample(&state.points, &state.shapes, &state.bends, at),
         );
         daw_ui::text::note(&mut columns[1], "paint_crossfade");
         let width = columns[1].available_width();

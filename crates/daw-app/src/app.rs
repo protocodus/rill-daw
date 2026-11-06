@@ -2484,6 +2484,13 @@ impl DawApp {
                             self.open_popup(PopupKind::History);
                             ui.close();
                         }
+                        if daw_ui::menu_item_enabled(ui, self.automation_override_count() > 0,
+                            "Cancel all automation overrides", None)
+                            .on_hover_text("Clear all manual automation overrides. Enabled curves resume at the current playhead; bypass stays unchanged. Undo restores the overrides.")
+                            .clicked() {
+                            self.cancel_automation_overrides();
+                            ui.close();
+                        }
                         ui.separator();
                         let selected_automation_clip_linked = self
                             .selected_track
@@ -2738,6 +2745,12 @@ impl DawApp {
                             }
                             if self.assistant.busy() && daw_ui::small_button(ui, "Stop AI").clicked() {
                                 self.assistant.stop();
+                            }
+                            if self.automation_override_count() > 0
+                                && daw_ui::small_button(ui, "Cancel automation override")
+                                    .on_hover_text("Clear all manual automation overrides. Enabled curves resume at the current playhead; bypass stays unchanged. Undo restores the overrides.")
+                                    .clicked() {
+                                self.cancel_automation_overrides();
                             }
                             ui.add_space(daw_ui::tokens::SPACE_LG);
                             // The project identity is centered in the space the

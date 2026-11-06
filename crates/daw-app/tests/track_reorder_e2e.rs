@@ -28,7 +28,7 @@ impl View {
     fn source(self) -> &'static str {
         match self {
             Self::Arrangement => "reorder_grip",
-            Self::Mixer => "reorder_source",
+            Self::Mixer => "reorder_grip",
         }
     }
     fn target(self) -> &'static str {
@@ -191,7 +191,7 @@ fn undo_redo(app: &mut Harness, before: &Value, after: &Value) -> Value {
     assert_eq!(
         after["history"]["undo"].as_array().unwrap().len(),
         before["history"]["undo"].as_array().unwrap().len() + 1,
-        "A drop is one undoable edit"
+        "A reorder is one undoable edit"
     );
     let undone = menu(app, "Edit", "Undo");
     assert_eq!(undone["project"], before["project"]);
@@ -200,6 +200,63 @@ fn undo_redo(app: &mut Harness, before: &Value, after: &Value) -> Value {
     assert_eq!(redone["project"], after["project"]);
     assert_eq!(redone["selected_track"], after["selected_track"]);
     redone
+}
+
+fn context_shift(
+    app: &mut Harness,
+    view: View,
+    track: u64,
+    direction: &str,
+    enabled: bool,
+) -> (Value, Value) {
+    let before = app.inspect();
+    let at = point(&item(&before, view, track)["name"], 0.5, 0.5);
+    app.command(
+        json!({"command":"pointer", "phase":"click", "button":"secondary",
+        "x":at.0, "y":at.1}),
+    );
+    // Context menus can settle against the window edge on their first frame.
+    // Click their laid-out hit rectangles, rather than the opening-frame guess.
+    let opened = app.inspect();
+    document_unchanged(&before, &opened);
+    let label = match (view, direction) {
+        (View::Arrangement, "previous") => "Move Up",
+        (View::Arrangement, "next") => "Move Down",
+        (View::Mixer, "previous") => "Shift Left",
+        (View::Mixer, "next") => "Shift Right",
+        _ => unreachable!(),
+    };
+    assert!(
+        opened["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == label),
+        "Missing context action {label}: {}",
+        opened["visible_labels"]
+    );
+    let reorder = &opened[view.key()]["reorder_menu"];
+    assert_eq!(reorder["track"], track, "Missing reorder menu: {reorder}");
+    let action = &reorder[direction];
+    assert_eq!(action["enabled"], enabled, "{reorder}");
+    let at = point(&action["rect"], 0.5, 0.5);
+    pointer(app, "click", at);
+    let after = app.inspect();
+    if !enabled {
+        document_unchanged(&before, &after);
+        // egui may dismiss a context menu after a disabled-item click. Escape
+        // navigates back from Mixer when no inner menu remains to dismiss.
+        if !after[view.key()]["reorder_menu"].is_null() {
+            app.key("Escape");
+        }
+    }
+    assert_eq!(
+        after["view"], before["view"],
+        "Context shifting must retain its workspace"
+    );
+    assert_eq!(after["selected_track"], before["selected_track"]);
+    assert_eq!(after["selected_clip"], before["selected_clip"]);
+    (before, after)
 }
 
 fn fixture() -> (Project, [u64; 5]) {
@@ -521,4 +578,98 @@ fn compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations() {
         undo_redo(&mut app, &before, &after);
         app.quit();
     }
+}
+
+#[test]
+fn mixer_context_shifts_require_song_order_and_share_one_undoable_project_order() {
+    let mut app = Harness::new();
+    let (project, [audio, midi, bus, _, _]) = fixture();
+    open(&mut app, &project, true, 1.0);
+    let initial = app.click("Mixer");
+    assert_eq!(initial["mixer"]["order"], "Signal flow");
+    // Automatic signal order never silently becomes a manual order, including
+    // attempts through the visible but disabled handle or context commands.
+    for direction in ["previous", "next"] {
+        let (_, unchanged) = context_shift(&mut app, View::Mixer, midi, direction, false);
+        assert_eq!(unchanged["mixer"]["order"], "Signal flow");
+    }
+    let before = app.inspect();
+    let from = point(&item(&before, View::Mixer, midi)["reorder_grip"], 0.5, 0.5);
+    let to = point(&item(&before, View::Mixer, audio)["name"], 0.2, 0.5);
+    pointer(&mut app, "down", from);
+    pointer(&mut app, "move", (from.0 + 10.0, from.1 + 10.0));
+    pointer(&mut app, "move", to);
+    pointer(&mut app, "up", to);
+    document_unchanged(&before, &app.inspect());
+
+    let state = app.inspect();
+    let at = point(&item(&state, View::Mixer, midi)["name"], 0.5, 0.5);
+    app.command(
+        json!({"command":"pointer", "phase":"click", "button":"secondary", "x":at.0, "y":at.1}),
+    );
+    let song = app.click("Use Song order");
+    document_unchanged(&state, &song);
+    assert_eq!(song["mixer"]["order"], "Song order");
+    let content = tracks(&song);
+
+    context_shift(&mut app, View::Mixer, audio, "previous", false);
+    let (before, after) = context_shift(&mut app, View::Mixer, midi, "next", true);
+    assert_eq!(visible_order(&after, View::Mixer), vec![audio, bus, midi]);
+    assert_eq!(channel_order(&after), vec![audio, bus, midi]);
+    assert_eq!(
+        tracks(&after),
+        content,
+        "Reordering must not alter routing, inserts, notes or automation"
+    );
+    undo_redo(&mut app, &before, &after);
+    context_shift(&mut app, View::Mixer, midi, "next", false);
+    let (before, after) = context_shift(&mut app, View::Mixer, bus, "previous", true);
+    assert_eq!(visible_order(&after, View::Mixer), vec![bus, audio, midi]);
+    assert_eq!(tracks(&after), content);
+    undo_redo(&mut app, &before, &after);
+    context_shift(&mut app, View::Mixer, bus, "previous", false);
+    app.quit();
+}
+
+#[test]
+fn arranger_context_moves_whole_folders_and_keeps_child_shifts_within_their_parent() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let first = project.add_audio_track("Outside first");
+    let folder = project.add_folder("Ensemble");
+    let child_a = project.add_audio_track("Inside A");
+    let child_b = project.add_midi_track("Inside B");
+    let last = project.add_bus("Outside last");
+    for child in [child_a, child_b] {
+        project.set_parent_folder(child, Some(folder)).unwrap();
+    }
+    project.track_mut(folder).unwrap().collapsed = true;
+    let initial = open(&mut app, &project, false, 1.0);
+    let content = tracks(&initial);
+    context_shift(&mut app, View::Arrangement, first, "previous", false);
+    context_shift(&mut app, View::Arrangement, last, "next", false);
+    let (before, after) = context_shift(&mut app, View::Arrangement, folder, "previous", true);
+    assert_eq!(ids(&after), vec![folder, child_a, child_b, first, last]);
+    assert_eq!(tracks(&after), content);
+    assert_eq!(
+        visible_order(&after, View::Arrangement),
+        vec![folder, first, last]
+    );
+    undo_redo(&mut app, &before, &after);
+    let (before, after) = context_shift(&mut app, View::Arrangement, folder, "next", true);
+    assert_eq!(ids(&after), vec![first, folder, child_a, child_b, last]);
+    assert_eq!(tracks(&after), content);
+    undo_redo(&mut app, &before, &after);
+
+    app.click("Ensemble");
+    let expanded = app.click("Fit");
+    let content = tracks(&expanded);
+    // The first child cannot leave its folder by moving past its first sibling.
+    context_shift(&mut app, View::Arrangement, child_a, "previous", false);
+    let (before, after) = context_shift(&mut app, View::Arrangement, child_a, "next", true);
+    assert_eq!(ids(&after), vec![first, folder, child_b, child_a, last]);
+    assert_eq!(tracks(&after), content);
+    undo_redo(&mut app, &before, &after);
+    context_shift(&mut app, View::Arrangement, child_a, "next", false);
+    app.quit();
 }

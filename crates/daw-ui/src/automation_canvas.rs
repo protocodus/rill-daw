@@ -1,6 +1,9 @@
 //! Inline automation controls use the same curve model and theme as the
 //! focused editor. Application views supply data and own document history.
-use crate::{CurveEdit, CurveInterpolation, CurvePoint, TimelineViewport, theme, tokens};
+use crate::{
+    CurveEdit, CurveInterpolation, CurvePoint, CurveSegment, CurveSegmentHandle, TimelineViewport,
+    theme, tokens,
+};
 use egui::{Color32, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
 
 pub struct AutomationCanvas {
@@ -15,12 +18,24 @@ pub struct AutomationCanvasResponse {
     pub response: Response,
     pub edit: Option<CurveEdit>,
     pub points: Vec<(u64, Rect)>,
+    pub segments: Vec<CurveSegmentHandle>,
 }
 
 pub fn automation_canvas_at(
     ui: &mut Ui,
     id: Id,
     points: &[CurvePoint],
+    canvas: AutomationCanvas,
+    evaluate: impl Fn(f64) -> f32,
+) -> AutomationCanvasResponse {
+    automation_canvas_with_segments_at(ui, id, points, &[], canvas, evaluate)
+}
+
+pub fn automation_canvas_with_segments_at(
+    ui: &mut Ui,
+    id: Id,
+    points: &[CurvePoint],
+    segments: &[CurveSegment],
     canvas: AutomationCanvas,
     evaluate: impl Fn(f64) -> f32,
 ) -> AutomationCanvasResponse {
@@ -49,7 +64,7 @@ pub fn automation_canvas_at(
         viewport.start_beat,
         viewport.beat_at(rect, rect.right()),
         color,
-        evaluate,
+        &evaluate,
     );
     let snap = |beat: f64| {
         if snap > 0.0 && !bypass {
@@ -67,6 +82,40 @@ pub fn automation_canvas_at(
     let mut edit = None;
     let mut hit = false;
     let mut targets = Vec::new();
+    let mut segment_handles = Vec::new();
+    let mut segment_index = 0;
+    for pair in points.windows(2) {
+        let [a, b] = [pair[0], pair[1]];
+        let Some(segment) = segments.get(segment_index) else {
+            break;
+        };
+        if segment.start != a.id {
+            continue;
+        }
+        segment_index += 1;
+        let response = crate::curve_segment::segment_bend_at(
+            ui,
+            id,
+            a,
+            b,
+            segment.curve,
+            rect,
+            |beat| viewport.x_at(rect, beat),
+            &evaluate,
+            editable,
+        );
+        hit |= response.interacted;
+        if let Some((id, curve)) = response.edit {
+            edit = Some(CurveEdit::Bend { id, curve });
+        }
+        if let Some(position) = response.add {
+            edit = Some(CurveEdit::Add {
+                x: snap(viewport.beat_at(rect, position.x)),
+                value: ((rect.bottom() - position.y) / rect.height()).clamp(0.0, 1.0),
+            });
+        }
+        segment_handles.extend(response.handle);
+    }
     for point in points {
         let position = Pos2::new(
             viewport.x_at(rect, point.x),
@@ -147,6 +196,7 @@ pub fn automation_canvas_at(
         response,
         edit,
         points: targets,
+        segments: segment_handles,
     }
 }
 

@@ -430,7 +430,7 @@ impl AutomationLane {
         Ok(())
     }
 
-    /// Change the segment leaving this point and activate spline interpolation.
+    /// Change only the segment leaving this point to spline interpolation.
     /// Point identity, timing, value, and the other segment shapes are preserved.
     pub fn set_point_curve(&mut self, id: u64, curve: f32) -> Result<()> {
         validate_curve(curve)?;
@@ -440,8 +440,15 @@ impl AutomationLane {
             .find(|point| point.id == id)
             .context("Automation point not found")?;
         point.curve = curve;
-        point.interpolation = None;
-        self.interpolation = Interpolation::Spline;
+        point.interpolation = if curve == 0.0
+            && matches!(
+                self.interpolation,
+                Interpolation::Linear | Interpolation::Spline
+            ) {
+            None
+        } else {
+            Some(Interpolation::Spline)
+        };
         Ok(())
     }
 
@@ -612,7 +619,7 @@ impl Project {
                 AutomationPoint::new(0.0, value),
                 AutomationPoint::new(4.0, value),
             ],
-            interpolation: Interpolation::Spline,
+            interpolation: Interpolation::Linear,
             override_value: None,
         });
         Ok(self.insert_new_track(track))

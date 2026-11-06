@@ -544,6 +544,7 @@ impl DawApp {
         let mut automation_navigation = None;
         let mut track_reorder = None;
         let mut track_reorder_preview = None;
+        let mut reorder_menu = None;
         let automation: std::collections::HashMap<_, _> = self
             .project
             .tracks
@@ -1043,6 +1044,18 @@ impl DawApp {
                     }
                     row_response.context_menu(|ui| {
  daw_ui::command_menu_contents(ui, |ui| {
+                        let previous = crate::track_order::track_shift_intent(&self.project, track.id, false, false);
+                        let next = crate::track_order::track_shift_intent(&self.project, track.id, true, false);
+                        let actions = daw_ui::track_reorder_menu(ui, daw_ui::TrackReorderAxis::Vertical,
+                            previous.is_some(), next.is_some());
+                        reorder_menu = Some(serde_json::json!({"track":track.id,
+                            "previous":{"rect":rect_json(actions.previous.rect),"enabled":actions.previous.enabled()},
+                            "next":{"rect":rect_json(actions.next.rect),"enabled":actions.next.enabled()}}));
+                        if let Some(direction) = actions.direction {
+                            track_reorder = if direction { next } else { previous };
+                            ui.close();
+                        }
+                        ui.separator();
                         if track.kind == TrackKind::Midi
                             && daw_ui::button(ui, "Add pattern").clicked()
                         {
@@ -1990,6 +2003,7 @@ impl DawApp {
                 serde_json::json!({"source":preview.intent.source,"target":preview.intent.target,
                     "placement":format!("{:?}",preview.intent.placement),"indicator":rect_json(preview.indicator)})
             }));
+            diagnostics["reorder_menu"] = serde_json::json!(reorder_menu);
             diagnostics["ruler"] = rect_json(label_ruler);
             diagnostics["automation"] = serde_json::json!(automation_diagnostics);
             diagnostics["loop_lane"] = rect_json(loop_response.lane);

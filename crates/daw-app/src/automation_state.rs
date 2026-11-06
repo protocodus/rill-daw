@@ -62,6 +62,47 @@ pub(crate) fn capture_manual_parameter_changes(
 }
 
 impl DawApp {
+    /// Includes bypassed lanes: a retained override still needs an explicit
+    /// way to be discarded without changing the lane's enabled state.
+    pub(crate) fn automation_override_count(&self) -> usize {
+        self.project
+            .tracks
+            .iter()
+            .filter(|track| {
+                track
+                    .automation
+                    .as_ref()
+                    .is_some_and(|lane| lane.override_value.is_some())
+            })
+            .count()
+    }
+
+    /// Return every manually held parameter to its saved curve together.
+    /// Effective values are evaluated at the current cursor by the same
+    /// display/render path as per-lane Resume; saved manual values, curve
+    /// points, bypass state and selection are intentionally untouched.
+    pub(crate) fn cancel_automation_overrides(&mut self) -> bool {
+        if self.automation_override_count() == 0 {
+            return false;
+        }
+        // Keep the preceding manual gesture separate from this deliberate
+        // song-wide action, so one Undo restores all of its overrides.
+        self.flush_pending_edit();
+        self.begin_edit();
+        for lane in self
+            .project
+            .tracks
+            .iter_mut()
+            .filter_map(|track| track.automation.as_mut())
+        {
+            lane.override_value = None;
+        }
+        self.edit_label = Some("Cancel automation override".into());
+        self.changed();
+        self.flush_pending_edit();
+        true
+    }
+
     /// Status and sounding value at the current musical position. Reading this
     /// never writes fader positions back into the saved manual parameter.
     pub(crate) fn automation_control_state(

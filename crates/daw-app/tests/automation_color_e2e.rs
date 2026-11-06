@@ -74,7 +74,15 @@ fn assert_text(state: &Value, label: &str, color: Color32) {
                         .unwrap()
                         .contains(&json!(color.to_array()))
             }),
-        "Missing {label:?} painted in {color:?}"
+        "Missing {label:?} painted in {color:?}: {:?}",
+        state["painted_text"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|text| text["text"]
+                .as_str()
+                .is_some_and(|label| label.contains("Automat") || label.contains("Overri")))
+            .collect::<Vec<_>>()
     );
 }
 
@@ -277,14 +285,32 @@ fn automation_and_override_colors_follow_state_across_workspaces_and_themes() {
             let state = paint(&mut app, &baseline);
             assert_editor(&state, colors, overridden);
 
+            let before_mixer = app.inspect();
             app.click("Mixer");
             let state = paint(&mut app, &baseline);
+            assert_eq!(
+                state["selected_track"], before_mixer["selected_track"],
+                "Revealing a lane's owning channel must preserve selection"
+            );
             let channel = state["mixer"]["channels"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .find(|channel| channel["track"] == source)
                 .unwrap();
+            // Returning from the lane editor must reveal its owning channel,
+            // including after the prior Properties/Routing visit and a theme /
+            // density change. A wrapped transport must not hide its identity.
+            let pane = &state["mixer"]["reorder_viewport"];
+            for control in ["name", "source_menu"] {
+                for corner in ["min", "max"] {
+                    assert!(
+                        contains(pane, &channel[control][corner]),
+                        "Owning channel {control} must stay inside {pane}: {}",
+                        channel[control]
+                    );
+                }
+            }
             for control in ["gain", "fader"] {
                 assert_outline(&state, &channel[control], active);
             }

@@ -190,6 +190,15 @@ pub fn slider_scale_geometry(ctx: &egui::Context, id: Id) -> Option<SliderScaleG
     ctx.data(|data| data.get_temp(id.with("slider_scale_geometry")))
 }
 
+/// One physical pixel center used by slider indexes, detents and level meters.
+/// Input geometry stays unrounded so painting never changes value mapping.
+pub fn slider_paint_center(center: Pos2, pixels_per_point: f32) -> Pos2 {
+    egui::pos2(
+        egui::emath::GuiRounding::round_to_pixel_center(center.x, pixels_per_point),
+        egui::emath::GuiRounding::round_to_pixel_center(center.y, pixels_per_point),
+    )
+}
+
 /// Paint a value landmark inside the native thumb. Returns false for ordinary
 /// values so callers may retain their usual index. This adds no hit targets.
 pub fn paint_slider_value_marker(ui: &Ui, geometry: &SliderScaleGeometry) -> bool {
@@ -202,6 +211,7 @@ pub fn paint_slider_value_marker(ui: &Ui, geometry: &SliderScaleGeometry) -> boo
         return false;
     }
     let colors = crate::theme::palette(ui.ctx());
+    let center = slider_paint_center(geometry.handle, ui.pixels_per_point());
     let color = if ui.is_enabled() {
         colors.text
     } else {
@@ -217,28 +227,21 @@ pub fn paint_slider_value_marker(ui: &Ui, geometry: &SliderScaleGeometry) -> boo
             };
             ui.painter().add(egui::Shape::convex_polygon(
                 vec![
-                    geometry.handle + egui::vec2(-radius, -direction * height),
-                    geometry.handle + egui::vec2(radius, -direction * height),
-                    geometry.handle + egui::vec2(0.0, direction * height),
+                    center + egui::vec2(-radius, -direction * height),
+                    center + egui::vec2(radius, -direction * height),
+                    center + egui::vec2(0.0, direction * height),
                 ],
                 color,
                 Stroke::NONE,
             ));
         }
-        SliderValueMarker::Center => {
+        SliderValueMarker::Center | SliderValueMarker::Zero => {
+            // Neutral and midpoint positions use the same small solid point.
+            // A ring looked like a second thumb and obscured its exact center.
             ui.painter().circle_filled(
-                geometry.handle,
-                radius * crate::tokens::GOLDEN_RATIO_INVERSE,
+                center,
+                (geometry.handle_half_extent.min_elem() * 0.25).clamp(0.5, 1.5),
                 color,
-            );
-        }
-        SliderValueMarker::Zero => {
-            let width =
-                crate::tokens::BORDER_WIDTH.min(radius * crate::tokens::GOLDEN_RATIO_INVERSE);
-            ui.painter().circle_stroke(
-                geometry.handle,
-                radius - width * 0.5,
-                Stroke::new(width, color),
             );
         }
     }
@@ -265,7 +268,7 @@ fn paint_slider_ticks(ui: &Ui, geometry: &SliderScaleGeometry) {
     let marked = geometry.value_marker().is_some();
     for tick in &geometry.ticks {
         // At a landmark the thumb supplies the index. Keep a scale tick from
-        // crossing its hollow circle on the smallest compact rails.
+        // crossing its point on the smallest compact rails.
         if marked && tick.center.distance(geometry.handle) < 0.5 {
             continue;
         }
@@ -290,13 +293,11 @@ fn paint_slider_ticks(ui: &Ui, geometry: &SliderScaleGeometry) {
                 egui::vec2(0.0, distance)
             }
         };
+        let center = slider_paint_center(tick.center, ui.pixels_per_point());
         for sign in [-1.0, 1.0] {
             ui.painter().line_segment(
-                [
-                    tick.center + offset(sign * inner),
-                    tick.center + offset(sign * reach),
-                ],
-                Stroke::new(1.0_f32, color),
+                [center + offset(sign * inner), center + offset(sign * reach)],
+                Stroke::new(1.0 / ui.pixels_per_point(), color),
             );
         }
     }
@@ -316,10 +317,11 @@ fn paint_slider_index(ui: &Ui, geometry: &SliderScaleGeometry) {
         egui::vec2(0.0, (half - 2.0).max(1.0))
     };
     if !paint_slider_value_marker(ui, geometry) {
+        let center = slider_paint_center(geometry.handle, ui.pixels_per_point());
         ui.painter().line_segment(
-            [geometry.handle - offset, geometry.handle + offset],
+            [center - offset, center + offset],
             Stroke::new(
-                1.5_f32,
+                1.0 / ui.pixels_per_point(),
                 if ui.is_enabled() {
                     colors.text
                 } else {
@@ -371,10 +373,10 @@ pub const MIXER_CAP_SIZE: egui::Vec2 =
 /// Width of the mixer skin's visible trough.
 const MIXER_TROUGH: f32 = 5.0;
 
-/// Mixer skin over the native rail: a narrow pixel-snapped trough, a level
+/// Shared skin over the native rail: a narrow pixel-snapped trough, a level
 /// fill from silence (or from center on bipolar rails) and a rectangular cap
 /// with a center groove. The pointer target stays the full native rail.
-fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeometry) {
+pub fn paint_slider_rail(ui: &Ui, response: &Response, geometry: &SliderScaleGeometry) {
     if !ui.is_rect_visible(geometry.rail) {
         return;
     }
@@ -391,27 +393,42 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
     };
     let first = geometry.minimum.min(geometry.maximum);
     let last = geometry.minimum.max(geometry.maximum);
-    let cross = swap(egui::vec2(MIXER_TROUGH * 0.5, 0.0));
-    let along = swap(egui::vec2(0.0, MIXER_CAP_SIZE.y * 0.5));
+    let thickness = if vertical {
+        geometry.rail.width()
+    } else {
+        geometry.rail.height()
+    };
+    let cap_along = if vertical {
+        geometry.handle_half_extent.y
+    } else {
+        geometry.handle_half_extent.x
+    };
+    let trough_width = MIXER_TROUGH.min(thickness * 0.3);
+    let cross = swap(egui::vec2(trough_width * 0.5, 0.0));
+    let along = swap(egui::vec2(0.0, cap_along));
     let trough = egui::emath::GuiRounding::round_to_pixels(
         Rect::from_min_max(first - cross - along, last + cross + along),
         painter.pixels_per_point(),
     );
     painter.rect(
         trough,
-        MIXER_TROUGH * 0.5,
+        trough_width * 0.5,
         colors.bg,
         Stroke::new(hairline, colors.line),
         egui::StrokeKind::Inside,
     );
     let anchor = if !vertical && geometry.range[0] < 0.0 && geometry.range[1] > 0.0 {
         let fraction = (-geometry.range[0] / (geometry.range[1] - geometry.range[0])) as f32;
-        geometry.minimum.lerp(geometry.maximum, fraction)
+        slider_paint_center(
+            geometry.minimum.lerp(geometry.maximum, fraction),
+            ui.pixels_per_point(),
+        )
     } else {
-        geometry.minimum
+        slider_paint_center(geometry.minimum, ui.pixels_per_point())
     };
-    if anchor.distance(geometry.handle) > 0.5 {
-        let fill = Rect::from_two_pos(anchor, geometry.handle).expand2(swap(egui::vec2(1.0, 0.0)));
+    let handle = slider_paint_center(geometry.handle, ui.pixels_per_point());
+    if anchor.distance(handle) > 0.5 {
+        let fill = Rect::from_two_pos(anchor, handle).expand2(swap(egui::vec2(1.0, 0.0)));
         painter.rect_filled(
             egui::emath::GuiRounding::round_to_pixels(fill, painter.pixels_per_point()),
             1.0,
@@ -441,9 +458,18 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
             );
         }
     }
-    let cap = egui::emath::GuiRounding::round_to_pixels(
-        Rect::from_center_size(geometry.handle, swap(MIXER_CAP_SIZE)),
-        painter.pixels_per_point(),
+    // Odd physical dimensions keep a cap's center on the very same pixel as
+    // its index and the meter's peak line, including fractional/Retina scales.
+    let odd_pixels = |points: f32| {
+        let pixels = (points * painter.pixels_per_point()).round().max(3.0) as i32;
+        (if pixels % 2 == 0 { pixels - 1 } else { pixels }) as f32 / painter.pixels_per_point()
+    };
+    let cap = Rect::from_center_size(
+        handle,
+        swap(egui::vec2(
+            odd_pixels(thickness),
+            odd_pixels(cap_along * 2.0),
+        )),
     );
     let active = response.dragged() || response.has_focus();
     painter.rect(
@@ -468,33 +494,15 @@ fn paint_mixer_slider(ui: &Ui, response: &Response, geometry: &SliderScaleGeomet
         ),
         egui::StrokeKind::Inside,
     );
-    let marker = geometry.value_marker() == Some(SliderValueMarker::Zero);
-    if marker {
-        // The unity landmark: a hollow circle in place of the groove.
-        painter.circle_stroke(
-            geometry.handle,
-            MIXER_CAP_SIZE.y * 0.5 - 2.5,
-            Stroke::new(1.0_f32, colors.text),
-        );
-    } else {
-        let half = swap(egui::vec2(MIXER_CAP_SIZE.x * 0.5 - 3.0, 0.0));
+    if !paint_slider_value_marker(ui, geometry) {
+        let half = swap(egui::vec2((thickness * 0.5 - 3.0).max(1.0), 0.0));
         // Keep the groove on a pixel row (or column) across the cap.
         let ppp = painter.pixels_per_point();
-        let center = if vertical {
-            egui::pos2(
-                geometry.handle.x,
-                egui::emath::GuiRounding::round_to_pixel_center(geometry.handle.y, ppp),
-            )
-        } else {
-            egui::pos2(
-                egui::emath::GuiRounding::round_to_pixel_center(geometry.handle.x, ppp),
-                geometry.handle.y,
-            )
-        };
+        let center = slider_paint_center(geometry.handle, ppp);
         painter.line_segment(
             [center - half, center + half],
             Stroke::new(
-                1.5_f32,
+                hairline,
                 if ui.is_enabled() {
                     colors.text
                 } else {
@@ -618,14 +626,14 @@ impl<'a> Slider<'a> {
         self.compact = true;
         self
     }
-    /// A recessed console rail and indexed cap; native input and numeric
-    /// mapping stay unchanged. Other sliders retain the default shared skin.
     /// Calibrated `(fraction, major)` ticks instead of generic divisions; this
     /// also drops the midpoint landmark, which means nothing on such a scale.
     pub fn scale_ticks(mut self, ticks: &[(f32, bool)]) -> Self {
         self.scale_ticks = Some(ticks.to_vec());
         self
     }
+    /// Use the compact console row geometry without generic caption padding.
+    /// Its rail and thumb use the same skin as every other host slider.
     pub fn mixer_style(mut self) -> Self {
         self.mixer_style = true;
         self
@@ -723,23 +731,19 @@ impl<'a> Slider<'a> {
 
     fn add_rail(&mut self, ui: &mut Ui) -> (Response, SliderScaleGeometry) {
         let orientation = self.orientation;
-        let shape = self.handle_shape.unwrap_or(if self.mixer_style {
-            // The handle travel ends where the visible cap meets the trough ends.
-            egui::style::HandleShape::Rect {
-                aspect_ratio: MIXER_CAP_SIZE.y * 0.5 / (mixer_thickness(orientation) / 2.5),
-            }
-        } else {
-            ui.visuals().handle_shape
-        });
-        let thickness = if self.mixer_style {
-            mixer_thickness(orientation)
-        } else if self.compact {
+        let thickness = if self.compact {
             (ui.available_height().min(crate::tokens::COMPACT_HEIGHT) - 12.0).clamp(8.0, 12.0)
-        } else if orientation == SliderOrientation::Vertical {
-            crate::tokens::CONTROL_HEIGHT - crate::tokens::SPACE_XS
         } else {
-            crate::tokens::COMPACT_HEIGHT
+            mixer_thickness(orientation)
         };
+        let cap_along = if thickness >= MIXER_CAP_SIZE.x {
+            MIXER_CAP_SIZE.y
+        } else {
+            thickness * crate::tokens::GOLDEN_RATIO_INVERSE
+        };
+        let shape = self.handle_shape.unwrap_or(egui::style::HandleShape::Rect {
+            aspect_ratio: cap_along * 0.5 / (thickness / 2.5),
+        });
         let text_height = if self.compact {
             crate::tokens::FONT_SCALE
         } else {
@@ -874,11 +878,10 @@ impl<'a> Slider<'a> {
                     if let Some(fill) = self.trailing_fill {
                         native = native.trailing_fill(fill);
                     }
-                    if self.mixer_style {
-                        // Only suppress native paint in this child scope. Its
-                        // Slider still owns input, focus, value law, and identity.
-                        ui.set_opacity(0.0);
-                    }
+                    // Only suppress native paint in this child scope. Its
+                    // Slider still owns input, focus, value law, and identity.
+                    // Every host slider uses the same visible rail and thumb.
+                    ui.set_opacity(0.0);
                     let native = ui.add(native);
                     // The native slider consists solely of its rail here. Register
                     // that same identity and rectangle as click-and-drag so a
@@ -904,11 +907,7 @@ impl<'a> Slider<'a> {
             if let Some(ticks) = &self.scale_ticks {
                 geometry.set_custom_ticks(ticks);
             }
-            if self.mixer_style {
-                paint_mixer_slider(ui, &rail_response, &geometry);
-            } else {
-                paint_slider_scale(ui, &geometry);
-            }
+            paint_slider_rail(ui, &rail_response, &geometry);
             if self.scale_labels {
                 let width = if vertical {
                     minimum_width

@@ -23,7 +23,9 @@ fn point(value: &Value) -> [f64; 2] {
 }
 
 fn near(a: [f64; 2], b: [f64; 2]) -> bool {
-    (a[0] - b[0]).hypot(a[1] - b[1]) < 0.6
+    // The paint index is snapped independently to physical x/y pixel centers.
+    // At 1× it can move half a point along each axis from the native hit target.
+    (a[0] - b[0]).abs() <= 0.51 && (a[1] - b[1]).abs() <= 0.51
 }
 
 fn scale<'a>(state: &'a Value, name: &str) -> &'a Value {
@@ -108,20 +110,14 @@ fn assert_marker(state: &Value, scale_name: &str, expected: Marker) {
         }
         Marker::Center | Marker::Zero => {
             assert!(triangles.is_empty());
-            assert_eq!(
-                circles.len(),
-                1,
-                "Missing {expected:?} circle at {center:?}"
-            );
+            assert_eq!(circles.len(), 1, "Missing {expected:?} point at {center:?}");
             let circle = circles[0];
-            if matches!(expected, Marker::Zero) {
-                assert_eq!(number(&circle["fill"][3]), 0.0, "Zero must be hollow");
-                assert!(number(&circle["stroke"][3]) > 0.0);
-                assert!(number(&circle["stroke_width"]) > 0.0);
-            } else {
-                assert!(number(&circle["fill"][3]) > 0.0, "Midpoint must be filled");
-                assert_eq!(number(&circle["stroke_width"]), 0.0);
-            }
+            assert!(
+                number(&circle["fill"][3]) > 0.0,
+                "Landmark must be a solid point"
+            );
+            assert_eq!(number(&circle["stroke_width"]), 0.0, "No hollow ring");
+            assert!(number(&circle["radius"]) <= 2.0, "Landmark must stay small");
         }
         Marker::Ordinary => {
             assert!(triangles.is_empty() && circles.is_empty());
@@ -134,7 +130,8 @@ fn assert_marker(state: &Value, scale_name: &str, expected: Marker) {
                         let a = point(&line["points"][0]);
                         let b = point(&line["points"][1]);
                         near([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5], center)
-                            && (number(&line["stroke_width"]) - 1.5).abs() < 0.01
+                            && (0.49..=1.01).contains(&number(&line["stroke_width"]))
+                            && number(&line["stroke"][3]) > 0.0
                     }),
                 "Ordinary values retain a visible center index"
             );
@@ -160,7 +157,7 @@ fn mixer_fader_markers_follow_mouse_edits_and_undo_without_changing_stored_value
         let original = painted(&mut app);
         assert_marker(&original, "fader_scale", Marker::Ordinary);
 
-        // The calibrated dB fader keeps one landmark: the hollow 0 dB circle
+        // The calibrated dB fader keeps one landmark: the small solid 0 dB point
         // at 75 % travel. Its ends and midpoint show the ordinary groove.
         for (field, geometry, fraction, expected, marker) in [
             ("gain", "fader_scale", 0.0, 0.0, Marker::Ordinary),

@@ -98,6 +98,49 @@ fn native_splines_and_overrides_render_before_first_and_after_last_nodes() {
 }
 
 #[test]
+fn local_bend_is_rendered_per_sample_and_keeps_adjacent_linear_and_step_segments() {
+    let (mut project, _directory, source) = fixture();
+    let id = project
+        .add_automation_track(
+            "Gain",
+            AutomationTarget {
+                track: source,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    let lane = project.automation_lane_mut(id).unwrap();
+    lane.points = vec![
+        AutomationPoint::new(0.0, 0.1),
+        AutomationPoint::new(1.0, 0.9),
+        AutomationPoint::new(2.0, 0.3),
+        AutomationPoint::new(3.0, 0.7),
+    ];
+    lane.points[2].interpolation = Some(Interpolation::Step);
+    let point = lane.points[0].id;
+    lane.set_point_curve(point, -0.8).unwrap();
+    let audio = render(&project, 8_000, 3.0).unwrap();
+    for frame in 0..12_000 {
+        let beat = frame as f64 / 4000.0;
+        let normalized = if beat < 1.0 {
+            let shaped = beat + 0.8 * (1.0 - (1.0 - beat).powi(3) - beat);
+            0.1 + 0.8 * shaped
+        } else if beat < 2.0 {
+            0.9 - 0.6 * (beat - 1.0)
+        } else {
+            0.3
+        };
+        for (channel, input) in [0.5, 0.25].into_iter().enumerate() {
+            let expected = input * normalized * 1.5;
+            assert!(
+                (f64::from(audio[frame * 2 + channel]) - expected).abs() < 2e-6,
+                "Per-sample automation mismatch at frame {frame}"
+            );
+        }
+    }
+}
+
+#[test]
 fn spline_holds_survive_seeking_loop_wrap_and_streaming_export() {
     let (mut project, directory, source) = fixture();
     let id = add_curve(

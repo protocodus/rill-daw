@@ -60,7 +60,16 @@ impl TrackHeaderLayout {
                 tokens::COMPACT_HEIGHT.min((rect.height() - vertical_padding * 2.0).max(0.0)),
             ),
         );
-        let reorder = end_slot(identity, tokens::SPACE_MD);
+        // Keep the normal grip easy to see without stealing the minimum
+        // legible title width from the compact header's action slots.
+        let reorder = end_slot(
+            identity,
+            if rect.width() >= 223.0 {
+                tokens::COMPACT_HEIGHT
+            } else {
+                tokens::SPACE_MD
+            },
+        );
         let icon = start_slot(identity, tokens::SPACE_MD);
         let name_left = (icon.right() + tokens::SPACE_SM).min(reorder.left());
         let name_right = (reorder.left() - tokens::SPACE_SM).max(name_left);
@@ -182,7 +191,7 @@ impl TrackHeaderLayout {
     /// prevents deeply nested folder titles from appearing to the right of
     /// their children when their different action slots start to constrain text.
     pub fn with_depth(mut self, depth: usize) -> Self {
-        let possible_actions = tokens::SPACE_MD
+        let possible_actions = self.reorder.width()
             + tokens::SPACE_SM
             + tokens::COMPACT_HEIGHT
             + tokens::SPACE_SM

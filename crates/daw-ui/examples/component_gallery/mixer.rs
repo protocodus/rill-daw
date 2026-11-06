@@ -35,7 +35,10 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         ui.vertical(|ui| {
             ui.set_width(508.0);
             text::subtitle(ui, "Mixer channels");
-            text::note(ui, "mixer_role_heading · mixer_name_plate · mixer_fader");
+            text::note(
+                ui,
+                "mixer_role_heading · mixer_name_plate_with_grip · mixer_fader",
+            );
             ui.add_space(tokens::SPACE_SM);
             let mut endpoints = Vec::new();
             ui.horizontal_top(|ui| {
@@ -85,7 +88,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                                 index == 1,
                                 |ui| {
                                     let width = ui.available_width();
-                                    ui::mixer_name_plate(
+                                    ui::mixer_name_plate_with_grip(
                                         ui,
                                         if role.is_some() {
                                             ui::MixerNamePlateKind::Bus
@@ -95,6 +98,8 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                                         name,
                                         width,
                                         color,
+                                        index as u64,
+                                        true,
                                     );
                                     ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
                                     text::note(ui, format!("Input · {kind}"));

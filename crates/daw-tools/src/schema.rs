@@ -354,7 +354,7 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_automation_point_curve",
-        json!({"track":reference(),"point":id(),"curve":{"type":"number","minimum":-1,"maximum":1,"description":"Outgoing cubic spline segment shape: -1 logarithmic, 0 linear, +1 exponential. Intermediate values smoothly blend the shape. Activates Spline interpolation; endpoint holds remain unchanged."}}),
+        json!({"track":reference(),"point":id(),"curve":{"type":"number","minimum":-1,"maximum":1,"description":"Outgoing cubic spline segment shape: -1 logarithmic, 0 linear, +1 exponential. Intermediate values smoothly blend the shape. Bends only this point's outgoing segment; zero restores a straight line. Neighboring segment modes and endpoint holds remain unchanged."}}),
         ["track", "point", "curve"]
     );
     let mut override_value = nullable(normalized.clone());

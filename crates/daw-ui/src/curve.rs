@@ -32,6 +32,7 @@ pub enum CurveEdit {
     Add { x: f64, value: f32 },
     Move { id: u64, x: f64, value: f32 },
     Delete { id: u64 },
+    Bend { id: u64, curve: f32 },
     Interpolation { id: u64, mode: CurveInterpolation },
 }
 
@@ -139,17 +140,23 @@ pub fn curve_editor(
     view: CurveView,
     evaluate: impl Fn(f64) -> f32,
 ) -> CurveResponse {
+    curve_editor_with_segments(ui, id, points, &[], selected, view, evaluate)
+}
+
+/// A bounded breakpoint editor with the same direct segment bending as the
+/// musical-time editor. The caller supplies each segment's measured curve.
+#[allow(clippy::too_many_arguments)]
+pub fn curve_editor_with_segments(
+    ui: &mut Ui,
+    id: Id,
+    points: &[CurvePoint],
+    segments: &[CurveSegment],
+    selected: &mut Option<u64>,
+    view: CurveView,
+    evaluate: impl Fn(f64) -> f32,
+) -> CurveResponse {
     curve_editor_inner(
-        ui,
-        id,
-        points,
-        &[],
-        None,
-        selected,
-        view,
-        None,
-        None,
-        evaluate,
+        ui, id, points, segments, None, selected, view, None, None, evaluate,
     )
 }
 
@@ -593,8 +600,7 @@ fn curve_editor_inner(
     let mut point_hit = false;
     let mut segment_edit = None;
     let mut segment_handles = Vec::new();
-    // Pair iteration stays linear even for large lanes. Callers supply segment
-    // entries in point order; absent/legacy entries simply omit their handles.
+    // Both inline and focused editors use identical native segment gestures.
     let mut segment_index = 0;
     for pair in points.windows(2) {
         let [a, b] = [pair[0], pair[1]];
@@ -605,92 +611,34 @@ fn curve_editor_inner(
             continue;
         }
         segment_index += 1;
-        let midpoint = a.x + (b.x - a.x) * 0.5;
-        if midpoint < start || midpoint > end {
-            continue;
-        }
-        let a_screen = to_screen(a);
-        let b_screen = to_screen(b);
-        // Dense breakpoints still have precise footer controls; do not put a
-        // second hit target on top of either endpoint.
-        if (b_screen.x - a_screen.x).abs() < 2.0 * tokens::HIT_TARGET {
-            continue;
-        }
-        let position = to_screen(CurvePoint {
-            id: a.id,
-            x: midpoint,
-            value: evaluate(midpoint),
-        });
-        let handle = Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET));
-        let handle_response =
-            ui.interact(handle, id.with(("segment", a.id)), Sense::click_and_drag());
-        handle_response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Slider, ui.is_enabled(), "Segment slope")
-        });
-        point_hit |=
-            handle_response.hovered() || handle_response.dragged() || handle_response.clicked();
-        if editing && (handle_response.clicked() || handle_response.drag_started()) {
+        let segment_response = crate::curve_segment::segment_bend_at(
+            ui,
+            id,
+            a,
+            b,
+            segment.curve,
+            plot,
+            |beat| plot.left() + ((beat - start) / (end - start)) as f32 * plot.width(),
+            &evaluate,
+            editing,
+        );
+        point_hit |= segment_response.interacted;
+        if segment_response.interacted {
             selection.clear();
             selection.insert(a.id);
             *selected = Some(a.id);
             response.request_focus();
         }
-        if editing && handle_response.drag_started() {
-            let difference = b.value - a.value;
-            let travel = if difference.abs() > 0.001 {
-                0.375 * difference.signum() * difference.abs().max(0.05) * plot.height()
-            } else {
-                120.0
-            };
-            ui.ctx().data_mut(|data| {
-                data.insert_temp(id.with("segment_drag"), (segment.curve, travel))
+        segment_edit = segment_response.edit.or(segment_edit);
+        if let Some(position) = segment_response.add {
+            edit = Some(CurveEdit::Add {
+                x: snap(
+                    start + (position.x - plot.left()) as f64 / plot.width() as f64 * (end - start),
+                ),
+                value: ((plot.bottom() - position.y) / plot.height()).clamp(0.0, 1.0),
             });
         }
-        if editing && handle_response.dragged() {
-            let (origin, travel) = ui
-                .ctx()
-                .data(|data| data.get_temp::<(f32, f32)>(id.with("segment_drag")))
-                .unwrap_or((segment.curve, 120.0));
-            let delta = handle_response.total_drag_delta().unwrap_or_default();
-            segment_edit = Some((a.id, (origin + delta.y / travel).clamp(-1.0, 1.0)));
-        }
-        if !navigation.navigating {
-            handle_response.context_menu(|ui| {
-                for (label, curve) in [("Log", -1.0), ("Linear", 0.0), ("Exp", 1.0)] {
-                    if crate::button(ui, label).clicked() {
-                        selection.clear();
-                        selection.insert(a.id);
-                        *selected = Some(a.id);
-                        segment_edit = Some((a.id, curve));
-                        ui.close();
-                    }
-                }
-            });
-        }
-        let colors = theme::palette(ui.ctx());
-        let radius = if *selected == Some(a.id) || handle_response.hovered() {
-            5.0
-        } else {
-            4.0
-        };
-        painter.add(egui::Shape::convex_polygon(
-            vec![
-                position + Vec2::new(0.0, -radius),
-                position + Vec2::new(radius, 0.0),
-                position + Vec2::new(0.0, radius),
-                position + Vec2::new(-radius, 0.0),
-            ],
-            colors.bg,
-            Stroke::new(1.5_f32, colors.automation),
-        ));
-        handle_response
-            .on_hover_text("Segment slope · drag to bend · right-click for Log, Linear or Exp");
-        segment_handles.push(CurveSegmentHandle {
-            start: a.id,
-            end: b.id,
-            rect: handle,
-            curve: segment.curve,
-        });
+        segment_handles.extend(segment_response.handle);
     }
     for &point in points {
         if point.x < start || point.x > end {
