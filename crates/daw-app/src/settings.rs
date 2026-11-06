@@ -20,6 +20,7 @@ pub struct Settings {
     pub sample_rate: u32,
     pub buffer_frames: u32,
     pub resample_quality: daw_engine::ResampleQuality,
+    pub history_limit: usize,
     pub scratch_dir: PathBuf,
     pub vst_dirs: Vec<PathBuf>,
     /// Successful project saves seed the next new project's picker too.
@@ -80,6 +81,7 @@ impl Default for Settings {
             sample_rate: 48_000,
             buffer_frames: 256,
             resample_quality: daw_engine::ResampleQuality::High,
+            history_limit: daw_core::HISTORY_STEPS,
             scratch_dir: config_dir().join("Scratch"),
             vst_dirs: Vec::new(),
             last_project_directory: None,
@@ -101,6 +103,11 @@ impl Settings {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            (1..=daw_core::MAX_HISTORY_STEPS).contains(&self.history_limit),
+            "Undo history must keep between 1 and {} actions",
+            daw_core::MAX_HISTORY_STEPS
+        );
         anyhow::ensure!(
             (8_000..=192_000).contains(&self.sample_rate),
             "Invalid sample rate"
@@ -276,6 +283,8 @@ mod tests {
             br#"{"sample_rate":0}"#.as_slice(),
             br#"{"scratch_dir":""}"#.as_slice(),
             br#"{"device_name":" "}"#.as_slice(),
+            br#"{"history_limit":0}"#.as_slice(),
+            br#"{"history_limit":4097}"#.as_slice(),
             b"not json".as_slice(),
         ] {
             fs::write(&path, bytes).unwrap();
@@ -286,6 +295,19 @@ mod tests {
         assert_eq!(loaded.sample_rate, 44_100);
         assert_eq!(loaded.buffer_frames, 256);
         assert_eq!(loaded.last_project_directory, None);
+        assert_eq!(loaded.history_limit, daw_core::HISTORY_STEPS);
+    }
+
+    #[test]
+    fn custom_history_limit_roundtrips_without_changing_other_settings() {
+        let directory = TestDirectory::new();
+        let config = directory.0.join("config");
+        let settings = Settings {
+            history_limit: 75,
+            ..directory.settings()
+        };
+        settings.save_in(&config).unwrap();
+        assert_eq!(Settings::load_from(&config.join("settings.json")), settings);
     }
 
     #[test]

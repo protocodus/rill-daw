@@ -151,7 +151,7 @@ fn setup_recording_export_warning_history_and_about_keep_their_actions_in_view()
                     .find_map(|label| {
                         label
                             .as_str()
-                            .filter(|text| text.starts_with("Up to 128 steps"))
+                            .filter(|text| text.starts_with("Up to 128 actions"))
                     })
                     .expect("History storage footer remains visible");
                 visible(&history, &[metadata], width, height);

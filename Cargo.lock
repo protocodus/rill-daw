@@ -925,6 +925,7 @@ dependencies = [
  "hound",
  "midir",
  "rubato",
+ "rustfft",
  "serde",
  "tempfile",
 ]

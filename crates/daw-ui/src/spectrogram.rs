@@ -25,9 +25,14 @@ impl SpectrumPalette {
     }
 }
 
+/// Keep frequency detail visible behind the waveform without obscuring edits.
+pub const DEFAULT_SPECTRUM_OPACITY: f32 = 0.45;
+
 /// Presentation settings shared by every source-spectrum surface.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpectrumViewOptions {
+    pub enabled: bool,
+    pub waveform_coloring: bool,
     pub opacity: f32,
     pub palette: SpectrumPalette,
 }
@@ -35,13 +40,17 @@ pub struct SpectrumViewOptions {
 impl Default for SpectrumViewOptions {
     fn default() -> Self {
         Self {
-            opacity: 72.0 / 255.0,
+            enabled: true,
+            waveform_coloring: true,
+            opacity: DEFAULT_SPECTRUM_OPACITY,
             palette: SpectrumPalette::Monochrome,
         }
     }
 }
 
 pub struct SpectrumViewResponse {
+    pub enabled: egui::Response,
+    pub waveform_coloring: egui::Response,
     pub intensity: egui::Response,
     pub palette: egui::Response,
 }
@@ -52,7 +61,16 @@ pub fn spectrum_view_controls(
     ui: &mut egui::Ui,
     options: &mut SpectrumViewOptions,
 ) -> SpectrumViewResponse {
-    ui.label("Spectrum");
+    let waveform_coloring = crate::checkbox(
+        ui,
+        &mut options.waveform_coloring,
+        "Waveform coloring",
+    )
+    .on_hover_text(
+        "Blend quiet waveform columns from neutral gray into their clip color as amplitude rises",
+    );
+    let enabled = crate::checkbox(ui, &mut options.enabled, "Spectrum")
+        .on_hover_text("Show the source spectrum behind waveforms; hiding it retains intensity, palette and cached analysis");
     let mut intensity = options.opacity * 100.0;
     let mut slider_changed = false;
     let number = crate::parameter_row(ui, |ui| {
@@ -92,6 +110,8 @@ pub fn spectrum_view_controls(
         mono.union(color)
     });
     SpectrumViewResponse {
+        enabled,
+        waveform_coloring,
         intensity: number.inner,
         palette: palette.inner,
     }
@@ -141,7 +161,7 @@ pub fn spectrogram_palette_image(
 }
 
 /// Convert time-major low-to-high log bands into a top-high texture. Call from
-/// background work, then upload once on the UI thread. Fixed faint alpha leaves
+/// background work, then upload once on the UI thread. Bounded alpha leaves
 /// waveforms, selection and edit handles visually dominant in either theme.
 pub fn spectrogram_image(columns: usize, bands: usize, levels: &[u8]) -> Option<ColorImage> {
     if columns == 0
@@ -156,7 +176,7 @@ pub fn spectrogram_image(columns: usize, bands: usize, levels: &[u8]) -> Option<
     for column in 0..columns {
         for band in 0..bands {
             let intensity = f32::from(levels[column * bands + band]) / 255.0;
-            let alpha = (intensity.powf(1.6) * 72.0).round() as u8;
+            let alpha = (intensity.powf(1.6) * DEFAULT_SPECTRUM_OPACITY * 255.0).round() as u8;
             pixels[(bands - 1 - band) * columns + column] = Color32::from_white_alpha(alpha);
         }
     }
@@ -266,9 +286,9 @@ mod tests {
         let image = spectrogram_image(2, 2, &[255, 0, 128, 64]).unwrap();
         assert_eq!(image.size, [2, 2]);
         assert_eq!(image.pixels[0], Color32::TRANSPARENT);
-        assert_eq!(image.pixels[2].a(), 72);
+        assert_eq!(image.pixels[2].a(), 115);
         assert!(image.pixels[3].a() > image.pixels[1].a());
-        assert!(image.pixels.iter().all(|pixel| pixel.a() <= 72));
+        assert!(image.pixels.iter().all(|pixel| pixel.a() <= 115));
         assert!(spectrogram_image(0, 48, &[]).is_none());
         assert!(spectrogram_image(4096, 48, &[]).is_none());
         assert!(spectrogram_image(1, 2, &[0]).is_none());

@@ -665,7 +665,7 @@ pub(crate) fn view_options(ui: &mut egui::Ui) {
         let rect = |rect: egui::Rect| [rect.left(), rect.top(), rect.right(), rect.bottom()];
         data.insert_temp(
             egui::Id::new("spectrum_view_controls"),
-            serde_json::json!({"intensity":rect(response.intensity.rect),"palette":rect(response.palette.rect)}),
+            serde_json::json!({"enabled":rect(response.enabled.rect),"waveform_coloring":rect(response.waveform_coloring.rect),"intensity":rect(response.intensity.rect),"palette":rect(response.palette.rect)}),
         );
     });
 }
@@ -853,7 +853,7 @@ pub(crate) fn paint(
     };
     let settings = view_settings(painter.ctx());
     let opacity = settings.opacity.clamp(0.0, 1.0) * tint_scale;
-    if opacity <= 0.0 {
+    if !settings.enabled || opacity <= 0.0 {
         return;
     }
     let tint = match settings.palette {
@@ -928,7 +928,7 @@ pub(crate) fn diagnostics(ctx: &egui::Context) -> serde_json::Value {
     serde_json::json!({"generation":cache.generation,"jobs_started":cache.jobs_started,"analyses_started":cache.analyses_started,"completed":cache.completed,"discarded":cache.discarded,"cache_hits":cache.cache_hits,
         "cache_bytes":cache.bytes,"queued_count":cache.entries.values().filter(|entry| entry.queued).count(),"pending_count":usize::from(cache.inflight.is_some()),
         "ready_count":cache.entries.values().filter(|entry| entry.ready.is_some()).count(),"sources":sources,"painted":painted,
-        "view":{"intensity":settings.opacity,"palette":settings.palette.label()},
+        "view":{"enabled":settings.enabled,"waveform_coloring":settings.waveform_coloring,"intensity":settings.opacity,"palette":settings.palette.label()},
         "controls":ctx.data(|data| data.get_temp::<serde_json::Value>(egui::Id::new("spectrum_view_controls"))),
         "limits":{"entries":MAX_ENTRIES,"bytes":MAX_BYTES,"workers":1,"decode_bytes":crate::project_io::WAVEFORM_FILE_BYTES}})
 }

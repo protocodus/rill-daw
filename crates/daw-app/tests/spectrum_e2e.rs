@@ -123,8 +123,8 @@ fn painted<'a>(state: &'a Value, view: &str) -> Vec<&'a Value> {
 fn assert_real_underlay(state: &Value, paint: &Value) {
     let alpha = paint["opacity"].as_f64().unwrap();
     assert!(
-        alpha > 0.0 && alpha <= 0.3,
-        "Spectrum must remain a faint underlay: {paint}"
+        alpha > 0.0 && alpha <= 0.45,
+        "Spectrum must remain a translucent underlay: {paint}"
     );
     assert!(
         state["painted_images"]

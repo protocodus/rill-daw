@@ -161,10 +161,17 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                 );
                 // Height hugs the content (up to the viewport); a wider window can
                 // only unwrap text, never add a blank band below the actions.
-                assert!(
-                    large[3] - large[1] < before[3] - before[1] + 1.1,
-                    "{label} height must hug its content: {before:?} -> {large:?}"
-                );
+                if label == "Library" {
+                    assert!(
+                        large[3] - large[1] > before[3] - before[1] + 35.0,
+                        "The browser must honor vertical resize: {before:?} -> {large:?}"
+                    );
+                } else {
+                    assert!(
+                        large[3] - large[1] < before[3] - before[1] + 1.1,
+                        "{label} height must hug its content: {before:?} -> {large:?}"
+                    );
+                }
                 let shrunk = resize(&mut app, large, -70.0, -60.0);
                 assert_actions_at_bottom(&shrunk, label);
                 let small = window(&shrunk);
@@ -172,10 +179,17 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                     small[2] - small[0] < large[2] - large[0] - 45.0,
                     "{label} cannot shrink: {large:?} -> {small:?}"
                 );
-                assert!(
-                    small[3] - small[1] > large[3] - large[1] - 1.1,
-                    "{label} height must hug its content: {large:?} -> {small:?}"
-                );
+                if label == "Library" {
+                    assert!(
+                        small[3] - small[1] < large[3] - large[1] - 35.0,
+                        "The browser must shrink vertically: {large:?} -> {small:?}"
+                    );
+                } else {
+                    assert!(
+                        small[3] - small[1] > large[3] - large[1] - 1.1,
+                        "{label} height must hug its content: {large:?} -> {small:?}"
+                    );
+                }
             }
             app.command(json!({"command":"pointer","phase":"move","x":0,"y":0}));
             let idle = settle(&mut app);

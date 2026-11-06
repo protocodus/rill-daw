@@ -1,5 +1,11 @@
 # Application E2E tests
 
+`waveform_color_e2e` verifies real submitted waveform colors from silence through
+full scale, consistent colors with Fit, and shared Spectrum/Waveform coloring
+View toggles. It checks cached texture reuse, zero spectrum draw while disabled,
+unchanged envelope geometry and warm repaint work, source bytes and rendered audio.
+Run with `cargo test --locked -p daw-app --test waveform_color_e2e`.
+
 `buffer_setup_e2e` selects a manual audio buffer, verifies cancelling a
 recommendation preserves it, applies the rate-aware balanced recommendation at
 96 kHz, and checks persistence across app restart. Run with
@@ -626,6 +632,8 @@ The `project_io_e2e` target covers background bundle saving and loading, later e
 
 `worker_crash_e2e` injects an AI provider panic after a successful edit and a background workflow-tool panic, then checks retained song history, recovery on disk, prompt restoration, and a subsequent successful worker run. Fault switches belong only to the explicit headless `assistant_script` command and default to false.
 
+`history_settings_e2e` edits **Setup → Storage → Undo actions** through its real numeric control and checks Apply/Cancel, immediate truncation, saved document identity, mouse Undo/Redo and settings persistence across restart. `history_ai_budget_e2e` mixes manual edits with successful multi-operation AI batches under one small budget, then checks exact mouse Undo/Redo restoration and preservation of existing Redo after failed, stale and unchanged AI batches.
+
 `document_guard_e2e` covers New/Open/Quit and native close requests, Cancel/Escape preserving the previous workspace, blocked background edits, native picker cancellation, failed-save retry, and Save completing the actual archive before a transition. It exercises global Save/Open shortcuts from Properties and long Unicode project names in Light/Dark at 1×/2×. `document_guard` exposes the current intent, phase and error; `file_dialog_pending` reports an unconsumed picker result. The `--screenshot ... --view unsaved-changes` preview allows native rendering of the shared decision dialog with an isolated configuration.
 
 It also checks Unicode names and Select All after completed/cancelled pickers.
@@ -1046,7 +1054,7 @@ The fixtures contain alternating low and high tones, including opposing stereo
 channels. Tests wait for background results and check time/frequency summaries,
 then match spectral texture IDs to actual egui paint commands in the arranger,
 focused audio editor, neighbouring clips and take thumbnails. Both themes keep
-the spectral layer faint. Reverse, trim and stretch tests check the source-frame
+the spectral layer translucent. Reverse, trim and stretch tests check the source-frame
 mapping, and ghosts and repeated views must reuse one source analysis.
 
 The dummy device verifies that analysis and view changes leave transport,
@@ -1244,3 +1252,26 @@ centered project name with duration and the AI button at the right edge.
 menu row gaps in both themes at 1×, 1.25× and 2× scale. It clicks the resized
 menu geometry and verifies that every top-level menu stays inside a short
 viewport, scrolls with the mouse and keeps the final Window action reachable.
+
+`library_resize_e2e` opens the instrument-assignment browser and drags its bottom
+edge vertically in both directions in large and compact viewports. It verifies
+that the actual window and catalogue heights change, bounded panes stay inside
+the window, and footer actions remain reachable without editing the project.
+
+`mixer_peak_e2e` plays a clipped transient through the real renderer and virtual
+output while the mixer is closed. It checks held peaks for audio, MIDI, bus,
+return and Master through silence, Pause and Stop, independent mouse reset with
+no project/history changes, fresh history on document replacement, and painted
+Mute/Solo colors in both themes.
+
+`signal_analysis_e2e` opens each channel's Analyze popup through the running
+app, consumes a known 1 kHz stereo sine through the production renderer and
+virtual audio output, and clicks Spectrum, Loudness, Correlation and Phase.
+It checks measured frequency, sample peak/RMS, valid LUFS windows, actual
+submitted spectrum/phase meshes, vertical in-phase and horizontal antiphase,
+muted undefined measurements, and post-fader bus/Master levels. Opening,
+switching, resetting and closing leave the project, history and selection
+unchanged. Stop holds readings, Reset clears them, compact footer controls
+remain reachable, and deletion/Undo or a new document cannot reuse stale data.
+Hovering Analyze until its hint overlaps Effects also verifies that a native
+coalesced pointer arrival/press still opens Effects without editing the song.

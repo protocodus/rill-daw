@@ -148,7 +148,9 @@ fn assert_spectrum_behind(state: &Value, view: &str) {
     assert!(!layers.is_empty(), "Missing spectrum backdrop in {view}");
     for layer in layers {
         let opacity = layer["opacity"].as_f64().unwrap();
-        assert!(opacity > 0.0 && opacity <= 0.3);
+        assert!(
+            opacity > 0.0 && opacity <= f64::from(daw_ui::DEFAULT_SPECTRUM_OPACITY) * 0.80 + 1e-5
+        );
         assert!(
             state["painted_images"]
                 .as_array()

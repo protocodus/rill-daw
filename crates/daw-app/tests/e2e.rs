@@ -22,6 +22,7 @@ fn native_window_renders_and_exits_after_screenshot() {
         "arrangement",
         "instrument",
         "mixer",
+        "analysis",
         "setup",
         "properties",
         "automation",

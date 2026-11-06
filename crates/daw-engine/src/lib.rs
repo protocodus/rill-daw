@@ -6,7 +6,10 @@ mod join;
 mod meter;
 mod quality;
 mod render;
+mod signal_monitor;
 mod stretch;
+
+pub use signal_monitor::{SignalMonitorSnapshot, SignalMonitorTarget};
 
 pub use join::{export_audio_join, export_audio_join_cancelled, render_audio_join};
 pub use quality::{RenderOptions, ResampleQuality};

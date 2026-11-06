@@ -371,7 +371,8 @@ impl ToolHost for DawApp {
                 }
                 Ok(
                     json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
-                    "undo":self.history.undo_labels().collect::<Vec<_>>(),"redo":self.history.redo_labels().collect::<Vec<_>>()}),
+                    "undo":self.history.undo_labels().collect::<Vec<_>>(),"redo":self.history.redo_labels().collect::<Vec<_>>(),
+                    "action_limit":self.history.step_limit(),"memory_bytes":self.history.memory_bytes(),"memory_limit_bytes":HISTORY_BYTES}),
                 )
             }
             "list_plugins" => {

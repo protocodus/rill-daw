@@ -171,7 +171,14 @@ fn opacity_and_palette_reuse_cached_textures_across_arranger_editor_and_takes() 
     let original_texture_ids = before["spectrogram"]["sources"][0]["texture_ids"].clone();
     assert_eq!(original_texture_ids.as_array().unwrap().len(), 2);
     assert_eq!(before["spectrogram"]["view"]["palette"], "Monochrome");
-    assert_texture_paint(&before, 0, "arranger");
+    assert!((before["spectrogram"]["view"]["intensity"].as_f64().unwrap() - 0.45).abs() < 1e-5);
+    let initial_paints = assert_texture_paint(&before, 0, "arranger");
+    assert!(initial_paints.iter().all(|paint| {
+        // Even the lighter theme's subdued backdrop is stronger than the old
+        // 72/255 default in its darker theme. Check the submitted quad tint.
+        paint["opacity"].as_f64().unwrap() > (72.0 / 255.0) * 0.80
+            && paint["tint_alpha"].as_u64().unwrap() > 58
+    }));
     let colors = &before["spectrogram"]["sources"][0]["texture_colors"];
     assert!(
         colors[0]

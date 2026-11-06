@@ -350,6 +350,7 @@ impl AudioQueue {
 }
 
 pub struct AudioEngine {
+    signal_monitor: Arc<crate::signal_monitor::SignalMonitor>,
     midi: MidiController,
     input: InputController,
     live_updates: Option<LiveUpdates>,
@@ -553,6 +554,10 @@ impl AudioEngine {
             .input_sample_rate
             .store(settings.sample_rate, Ordering::Relaxed);
         let channel_meters = Arc::new(ChannelMeters::new(project));
+        let signal_monitor = Arc::new(crate::signal_monitor::SignalMonitor::new(
+            settings.sample_rate,
+        ));
+        let worker_signal_monitor = Arc::clone(&signal_monitor);
         let worker_meters = Arc::clone(&channel_meters);
         let queue = Arc::new(AudioQueue::new(settings.render_queue_frames()));
         let input = InputController::new(
@@ -607,6 +612,7 @@ impl AudioEngine {
                 ) {
                     Ok(mut renderer) => {
                         renderer.attach_channel_meters(&worker_meters);
+                        renderer.attach_signal_monitor(worker_signal_monitor);
                         let _ = preparer_tx.send(renderer.live_edit_preparer());
                         let _ = ready_tx.send(Ok(()));
                         #[cfg(test)]
@@ -734,6 +740,9 @@ impl AudioEngine {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
+                    renderer.signal_monitor_transport(generation,
+                        worker_controls.playing.load(Ordering::Acquire)
+                            || worker_controls.auditioning.load(Ordering::Acquire));
                     if !render_failure.attempt(&worker_controls, generation, || {
                         if preview {
                             renderer.render_preview(&mut frames, &mut positions)
@@ -783,6 +792,7 @@ impl AudioEngine {
             }
         };
         let mut engine = Self {
+            signal_monitor,
             midi,
             input,
             live_updates: Some(live_updates),
@@ -981,6 +991,9 @@ impl AudioEngine {
         // A failed device needs a fresh stream; toggling transport alone must
         // not make the stopped stream appear to be running again.
         let playing = playing && !self.controls.output_failed.load(Ordering::Acquire);
+        if playing != self.controls.playing.load(Ordering::Acquire) {
+            self.signal_monitor.reset();
+        }
         if !playing {
             self.controls.output_meter.clear();
             if self.controls.input.capture_requested() {
@@ -1025,6 +1038,7 @@ impl AudioEngine {
             return;
         }
         let beat = beat.clamp(0.0, 1_000_000.0);
+        self.signal_monitor.reset();
         self.controls
             .seek_beat
             .store(beat.to_bits(), Ordering::Release);
@@ -1139,6 +1153,27 @@ impl AudioEngine {
             consumed_frames: self.controls.consumed_frames.load(Ordering::Relaxed),
         }
     }
+
+    /// Start analysis only when explicitly requested. Channel samples are post
+    /// insert/fader/pan/mute; Master is the renderer sum before device additions.
+    pub fn set_signal_monitor(&self, target: Option<crate::SignalMonitorTarget>) -> Result<()> {
+        self.signal_monitor.set_target(target)
+    }
+
+    pub fn reset_signal_monitor(&self) {
+        self.signal_monitor.reset();
+    }
+
+    /// Bounded, nonblocking UI read. No samples or FFTs are processed here.
+    pub fn signal_monitor_snapshot(&self) -> Option<Arc<crate::SignalMonitorSnapshot>> {
+        if self.controls.output_failed.load(Ordering::Acquire)
+            || (!self.controls.playing.load(Ordering::Acquire)
+                && !self.controls.auditioning.load(Ordering::Acquire))
+        {
+            return None;
+        }
+        self.signal_monitor.snapshot()
+    }
     /// Post-insert, post-fader/pan stereo channel peaks (including buses), with
     /// instant attack and a 24 dB/second release. This nonconsuming atomic read
     /// never locks, allocates, or touches a plugin. Stopped/missing channels read
@@ -1153,6 +1188,29 @@ impl AudioEngine {
         } else {
             self.channel_meters.peaks(track)
         }
+    }
+    /// Highest post-fader channel samples since reset, including transients
+    /// observed while its strip was offscreen. Silence and Pause retain them.
+    pub fn channel_peak_hold(&self, track: u64) -> [f32; 2] {
+        self.channel_meters
+            .channel(track)
+            .map_or([0.0; 2], |meter| meter.held())
+    }
+
+    pub fn reset_channel_peak_hold(&self, track: u64) {
+        if let Some(meter) = self.channel_meters.channel(track) {
+            meter.reset_hold();
+        }
+    }
+
+    /// Highest samples delivered to the device since reset, after output
+    /// clamping. Full scale is reported as 0 dBFS and indicates clipping.
+    pub fn output_peak_hold(&self) -> [f32; 2] {
+        self.controls.output_meter.held()
+    }
+
+    pub fn reset_output_peak_hold(&self) {
+        self.controls.output_meter.reset_hold();
     }
     pub fn stop(&mut self) {
         self.controls.timing.cancel(&self.controls);
@@ -1432,6 +1490,7 @@ mod tests {
         let (parameters, _receiver) = mpsc::sync_channel(1);
         let controls = Arc::new(Controls::new());
         let engine = AudioEngine {
+            signal_monitor: Arc::new(crate::signal_monitor::SignalMonitor::new(48_000)),
             midi: MidiController::new(Arc::clone(&controls), true),
             input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,
@@ -1542,6 +1601,7 @@ mod tests {
         // No render worker: deterministically hold it between publishing ready
         // preview audio and its next iteration, as can happen with a full queue.
         let mut engine = AudioEngine {
+            signal_monitor: Arc::new(crate::signal_monitor::SignalMonitor::new(48_000)),
             midi: MidiController::new(Arc::clone(&controls), true),
             input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,
@@ -1595,6 +1655,7 @@ mod tests {
         let (parameters, receiver) = mpsc::sync_channel(128);
         let controls = Arc::new(Controls::new());
         let engine = AudioEngine {
+            signal_monitor: Arc::new(crate::signal_monitor::SignalMonitor::new(48_000)),
             midi: MidiController::new(Arc::clone(&controls), true),
             input: InputController::new(Arc::clone(&controls), 48000, 256, true),
             live_updates: None,

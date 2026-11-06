@@ -216,11 +216,12 @@ impl DawApp {
     }
 
     pub(crate) fn apply_settings_snapshot(&mut self, settings: crate::settings::Settings) {
-        // Appearance is independent of the audio graph and native editor state.
-        // Applying it must not interrupt a playing session or close its editor.
+        // Appearance, AI and history preferences are independent of the audio
+        // graph/native editor. Applying them must not interrupt playback.
         let mut same_audio_and_storage = self.settings.clone();
         same_audio_and_storage.appearance = settings.appearance;
         same_audio_and_storage.ai = settings.ai.clone();
+        same_audio_and_storage.history_limit = settings.history_limit;
         if same_audio_and_storage == settings {
             self.apply_appearance_settings(settings);
             return;

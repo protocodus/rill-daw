@@ -106,7 +106,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         &state.columns,
         2,
         1.0,
-        colors.accent,
+        egui::Color32::from_rgb(60, 160, 225),
     );
     ui::paint_timeline_selection(ui.painter(), plot, view, 2.5, 4.0);
     ui::paint_audio_clip_edges(ui.painter(), plot, view, 0.0, 7.0, colors.accent);

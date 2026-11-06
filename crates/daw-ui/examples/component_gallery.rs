@@ -28,12 +28,14 @@ mod mixer;
 mod navigation;
 #[path = "component_gallery/routing_choices.rs"]
 mod routing_choices;
+#[path = "component_gallery/signal_analysis.rs"]
+mod signal_analysis;
 #[path = "component_gallery/timeline.rs"]
 mod timeline;
 #[path = "component_gallery/tracks.rs"]
 mod tracks;
 
-const PAGES: [(&str, &str, &str); 11] = [
+const PAGES: [(&str, &str, &str); 12] = [
     (
         "actions",
         "Actions, tools, and views",
@@ -89,6 +91,11 @@ const PAGES: [(&str, &str, &str); 11] = [
         "Mixer routing choices",
         "Choose the main output, create a group bus, add sends, or open their full controls beside the source channel.",
     ),
+    (
+        "signal-analysis",
+        "Signal analysis",
+        "Switchable spectrum, loudness, stereo correlation, and phase displays for mixer channels.",
+    ),
 ];
 
 #[derive(Default)]
@@ -116,6 +123,7 @@ struct Gallery {
     device_details: device_details::State,
     feedback: feedback::State,
     tracks: tracks::State,
+    signal_analysis: signal_analysis::State,
 }
 
 impl Gallery {
@@ -145,6 +153,7 @@ impl Gallery {
             device_details: Default::default(),
             feedback: Default::default(),
             tracks: Default::default(),
+            signal_analysis: Default::default(),
         }
     }
 
@@ -291,6 +300,7 @@ impl eframe::App for Gallery {
                     8 => tracks::show(ui, &mut self.tracks),
                     9 => device_details::show(ui, &mut self.device_details),
                     10 => routing_choices::show(ui),
+                    11 => signal_analysis::show(ui, &mut self.signal_analysis),
                     _ => unreachable!(),
                 });
             });
@@ -314,7 +324,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         Some("--help" | "-h") => {
             println!(
-                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes eleven light/dark PNG pairs and exits."
+                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes twelve light/dark PNG pairs and exits."
             );
             return Ok(());
         }

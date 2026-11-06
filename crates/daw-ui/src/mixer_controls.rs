@@ -340,25 +340,27 @@ pub fn mixer_mute_solo(
 fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bool) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let accent = if mute { colors.mute } else { colors.solo };
-    // Fill-only until active; the active state takes its palette color.
+    // Color identifies the operation even while idle. A solid fill and
+    // contrasting label distinguish the active state without relying on hue.
     let mut response = ui.add_sized(
         Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
-        crate::IconButton::new(egui::RichText::new(label).color(if *value {
-            colors.text
-        } else {
-            colors.action
-        }))
-        .selected(*value)
-        .fill(if *value {
-            colors.panel.lerp_to_gamma(accent, 0.3)
-        } else {
-            colors.control_fill
-        })
-        .stroke(if *value {
-            Stroke::new(crate::tokens::FOCUS_WIDTH, accent)
-        } else {
-            Stroke::NONE
-        }),
+        crate::IconButton::new(label)
+            .label_color(if *value {
+                crate::theme::contrast_text(accent)
+            } else {
+                accent
+            })
+            .selected(*value)
+            .fill(if *value {
+                accent
+            } else {
+                colors.control_fill.lerp_to_gamma(accent, 0.1)
+            })
+            .stroke(if *value {
+                Stroke::new(crate::tokens::FOCUS_WIDTH, accent)
+            } else {
+                Stroke::NONE
+            }),
     );
     if response.clicked() && ui.is_enabled() {
         *value = !*value;
@@ -406,6 +408,30 @@ pub fn channel_meter(
     height: f32,
     inset: f32,
 ) -> Response {
+    channel_meter_inner(ui, id, peaks, None, height, inset)
+}
+
+/// Stereo meter with an engine-owned peak hold. A single hold drives its
+/// peak lines, clip lamp and the adjacent [`channel_peak_indicator`] badge.
+pub fn channel_meter_with_peak_hold(
+    ui: &mut Ui,
+    id: egui::Id,
+    peaks: [f32; 2],
+    held: [f32; 2],
+    height: f32,
+    inset: f32,
+) -> Response {
+    channel_meter_inner(ui, id, peaks, Some(held), height, inset)
+}
+
+fn channel_meter_inner(
+    ui: &mut Ui,
+    id: egui::Id,
+    peaks: [f32; 2],
+    held: Option<[f32; 2]>,
+    height: f32,
+    inset: f32,
+) -> Response {
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(crate::tokens::MIXER_METER_WIDTH, height.max(1.0)),
         Sense::click(),
@@ -413,18 +439,23 @@ pub fn channel_meter(
     let peaks = peaks.map(sanitize_peak);
     let now = ui.input(|input| input.time);
     let mut state = ui.data(|data| data.get_temp::<MeterHold>(id).unwrap_or_default());
-    for (index, peak) in peaks.into_iter().enumerate() {
-        if peak >= state.hold[index] || now - state.since[index] > METER_HOLD_SECONDS {
-            state.hold[index] = peak;
-            state.since[index] = now;
+    if let Some(held) = held {
+        state.hold = held.map(sanitize_peak);
+        state.clipped = state.hold.iter().any(|peak| *peak >= 1.0);
+    } else {
+        for (index, peak) in peaks.into_iter().enumerate() {
+            if peak >= state.hold[index] || now - state.since[index] > METER_HOLD_SECONDS {
+                state.hold[index] = peak;
+                state.since[index] = now;
+            }
         }
+        state.clipped |= peaks.iter().any(|peak| *peak >= 1.0);
     }
-    state.clipped |= peaks.iter().any(|peak| *peak >= 1.0);
     if response.clicked() {
         state.clipped = false;
     }
     ui.data_mut(|data| data.insert_temp(id, state));
-    if state.hold.iter().any(|hold| *hold > 0.0) {
+    if held.is_none() && state.hold.iter().any(|hold| *hold > 0.0) {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs_f64(METER_HOLD_SECONDS));
     }
@@ -511,26 +542,83 @@ pub fn channel_meter(
 /// `row`; warning color while clipping is latched. Click resets the latch.
 pub fn channel_meter_readout(ui: &mut Ui, id: egui::Id, center_x: f32, row: Rect) -> Response {
     let state = ui.data(|data| data.get_temp::<MeterHold>(id).unwrap_or_default());
+    let response = channel_peak_indicator_inner(ui, id, state.hold, state.clipped, center_x, row);
+    if response.clicked() {
+        ui.data_mut(|data| data.insert_temp(id, MeterHold::default()));
+    }
+    response
+}
+
+/// Resettable peak badge. The caller supplies engine-held block maxima and
+/// handles clicks by resetting that telemetry; painting never consumes peaks.
+/// A full-scale value retains a warning fill, including after signal stops.
+pub fn channel_peak_indicator(
+    ui: &mut Ui,
+    id: egui::Id,
+    peaks: [f32; 2],
+    center_x: f32,
+    row: Rect,
+) -> Response {
+    let clipped = peaks.iter().any(|peak| peak.is_finite() && *peak >= 1.0);
+    channel_peak_indicator_inner(ui, id, peaks, clipped, center_x, row)
+}
+
+fn channel_peak_indicator_inner(
+    ui: &mut Ui,
+    id: egui::Id,
+    peaks: [f32; 2],
+    clipped: bool,
+    center_x: f32,
+    row: Rect,
+) -> Response {
     let colors = crate::theme::palette(ui.ctx());
-    let text = peak_db_text(state.hold[0].max(state.hold[1]));
+    let peak = peaks.map(sanitize_peak).into_iter().fold(0.0, f32::max);
+    let text = peak_db_text(peak);
+    let color = if clipped {
+        colors.warning
+    } else {
+        colors.muted
+    };
     let galley = ui.painter().layout_no_wrap(
         text.clone(),
         FontId::proportional(crate::tokens::FONT_CAPTION),
-        if state.clipped {
-            colors.warning
+        color,
+    );
+    let size = Vec2::new(
+        (galley.size().x + 2.0 * crate::tokens::SPACE_XS).max(crate::tokens::CONTROL_HEIGHT),
+        row.height(),
+    );
+    let rect = Rect::from_center_size(Pos2::new(center_x, row.center().y), size).translate(
+        Vec2::new((row.right() - (center_x + size.x * 0.5)).min(0.0), 0.0),
+    );
+    let response = ui.interact(rect, id.with("readout"), Sense::click());
+    let badge = Rect::from_center_size(
+        rect.center(),
+        Vec2::new(rect.width(), crate::tokens::COMPACT_HEIGHT),
+    );
+    ui.painter().rect_filled(
+        badge,
+        crate::tokens::RADIUS,
+        if clipped {
+            colors.panel.lerp_to_gamma(colors.warning, 0.22)
         } else {
-            colors.muted
+            colors.control_fill
         },
     );
-    let rect = Rect::from_center_size(Pos2::new(center_x, row.center().y), galley.size())
-        .translate(Vec2::new(
-            (row.right() - (center_x + galley.size().x * 0.5)).min(0.0),
-            0.0,
-        ));
-    let response = ui.interact(rect, id.with("readout"), Sense::click());
-    if response.clicked() {
-        ui.data_mut(|data| data.get_temp_mut_or_default::<MeterHold>(id).clipped = false);
-    }
-    ui.painter().galley(rect.min, galley, colors.muted);
-    response.on_hover_text(format!("Peak {text} dBFS"))
+    ui.painter()
+        .galley(rect.center() - galley.size() * 0.5, galley, color);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            format!("Peak {text} dBFS · Reset peak"),
+        )
+    });
+    crate::hover_text(
+        response,
+        format!(
+            "Peak {text} dBFS{}\nHighest level since reset · Click to reset",
+            if clipped { " · Clipped" } else { "" }
+        ),
+    )
 }

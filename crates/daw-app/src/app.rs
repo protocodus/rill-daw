@@ -73,6 +73,7 @@ pub enum PopupKind {
     Recording,
     Join,
     Export,
+    Analysis,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -131,6 +132,7 @@ pub(crate) enum ClipCommand {
 }
 
 pub struct DawApp {
+    pub(crate) analysis: crate::analysis_ui::SignalAnalysis,
     render_context: egui::Context,
     pub(crate) assistant: crate::assistant::Assistant,
     pub(crate) tool_joins: crate::join_tools::JoinTools,
@@ -277,13 +279,14 @@ impl DawApp {
             .and_then(|t| t.clips.iter().find(|clip| !clip.is_take_source()))
             .map(|c| c.id);
         let mut app = Self {
+            analysis: Default::default(),
             render_context: ctx.clone(),
             assistant: Default::default(),
             tool_joins: Default::default(),
             song_session: Default::default(),
             about_open: false,
             project,
-            history: History::new(),
+            history: History::with_limits(settings.history_limit, daw_core::HISTORY_BYTES),
             selected_track,
             selected_clip,
             arranger_selection: Default::default(),
@@ -455,6 +458,7 @@ impl DawApp {
             (self.audio_takes_open, PopupKind::AudioTakes),
             (self.recording_open, PopupKind::Recording),
             (self.export_open, PopupKind::Export),
+            (self.analysis.open, PopupKind::Analysis),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -464,6 +468,7 @@ impl DawApp {
     }
 
     fn hide_focused_view(&mut self) {
+        self.stop_signal_analysis();
         self.assistant.clear_key_draft();
         self.assistant.open = false;
         self.midi_editor.cancel_generate();
@@ -598,6 +603,7 @@ impl DawApp {
                 self.recording_open = true;
             }
             PopupKind::Export => self.export_open = true,
+            PopupKind::Analysis => self.analysis.open = true,
         }
     }
 
@@ -645,6 +651,7 @@ impl DawApp {
                 let label = match kind {
                     PopupKind::Assistant => return "Assistant".into(),
                     PopupKind::About => return "About RILL".into(),
+                    PopupKind::Analysis => return self.analysis_title(),
                     PopupKind::Inspector => "Properties",
                     PopupKind::Instrument => "Instrument",
                     PopupKind::Effects => "Effects",
@@ -827,6 +834,7 @@ impl DawApp {
             | PopupKind::Automation
             | PopupKind::History
             | PopupKind::Export
+            | PopupKind::Analysis
             | PopupKind::About => {}
         }
     }
@@ -974,6 +982,7 @@ impl DawApp {
 
     pub(crate) fn prepare_engine(&mut self, playing: bool) {
         self.desired_playing = playing;
+        self.retain_mixer_peak_holds(&self.render_context);
         let previous = self.engine.take();
         if let Some(engine) = &previous {
             engine.set_playing(false);
@@ -1027,6 +1036,7 @@ impl DawApp {
                 && !self.automation_open
                 && !self.history_open
                 && !self.export_open
+                && !self.analysis.open
                 && !self.about_open
         });
         if note != self.audition_request {
@@ -1046,6 +1056,7 @@ impl DawApp {
         }
     }
     pub fn retire_engine(&mut self) {
+        self.retain_mixer_peak_holds(&self.render_context);
         let previous = self.engine.take();
         if let Some(engine) = &previous {
             engine.set_playing(false);
@@ -1223,7 +1234,14 @@ impl DawApp {
             return;
         }
         let restart = self.engine.is_some() || self.loading.is_some();
-        let previous = std::mem::replace(&mut self.settings, settings);
+        let mut previous = std::mem::replace(&mut self.settings, settings);
+        self.apply_history_limit();
+        // Audio rollback must not undo an independent history preference: its
+        // discarded snapshots cannot be restored by changing settings back.
+        previous.history_limit = self.settings.history_limit;
+        if let Some(rollback) = &mut self.settings_rollback {
+            rollback.history_limit = self.settings.history_limit;
+        }
         if restart {
             // Several Apply actions can arrive before preparation completes.
             // Keep the last verified settings, not an unverified intermediate.
@@ -1247,8 +1265,10 @@ impl DawApp {
                 if let Some(previous) = &mut self.settings_rollback {
                     previous.appearance = settings.appearance;
                     previous.ai = settings.ai.clone();
+                    previous.history_limit = settings.history_limit;
                 }
                 self.settings = settings;
+                self.apply_history_limit();
                 self.setup_open = false;
                 self.message(Ok(()), "Setup saved");
             }
@@ -2074,6 +2094,7 @@ impl DawApp {
             || self.audio_takes_open
             || self.recording_open
             || self.export_open
+            || self.analysis.open
             || self.about_open
             || self.midi_editor.generate_active()
         {
@@ -3134,6 +3155,19 @@ impl DawApp {
                         .on_hover_text(format!("The render queue adds up to {:.1} ms, with a 512-frame minimum. Device and plug-in latency may add more. Smaller buffers reduce device latency and increase callback overhead; larger buffers give demanding mixes more scheduling headroom.", self.setup_draft.audio().render_queue_frames() as f64 * 1000.0 / rate));
                 }
                 SetupPage::Storage => {
+                    daw_ui::text::section_heading(ui, "Undo history");
+                    daw_ui::form_grid(ui, "history_settings", |ui| {
+                        let label = daw_ui::form_label(ui, "Undo actions");
+                        ui.add_sized(
+                            [daw_ui::tokens::FORM_FIELD_WIDTH, daw_ui::tokens::CONTROL_HEIGHT],
+                            daw_ui::number(&mut self.setup_draft.history_limit)
+                                .range(1..=daw_core::MAX_HISTORY_STEPS)
+                                .speed(1.0),
+                        ).labelled_by(label.id).on_hover_text("Shared by manual edits, workflow tools and AI. Drag to change, or double-click to enter an exact count. Apply trims older history immediately; Cancel leaves it unchanged.");
+                        ui.end_row();
+                    });
+                    daw_ui::text::note(ui, "128 MiB memory cap may retain fewer actions");
+                    ui.add_space(daw_ui::tokens::SPACE_LG);
                     daw_ui::text::section_heading(ui, "Recovery folder");
                     daw_ui::text::truncated(ui, daw_ui::text::TextRole::Body, self.setup_draft.scratch_dir.display().to_string())
                         .on_hover_text("Committed edits are checkpointed here in the background. Plug-in state is refreshed every 30 seconds; the previous checkpoint is retained too.");
@@ -3255,6 +3289,7 @@ impl DawApp {
         }
         self.keyboard(ctx);
         self.poll_engine();
+        self.sync_signal_analysis();
         self.poll_live_edits();
         self.poll_instrument_editor(ctx);
         self.poll_recording(ctx);
@@ -3336,6 +3371,7 @@ impl DawApp {
             || self.audio_takes_open
             || self.recording_open
             || self.export_open
+            || self.analysis.open
             || self.about_open;
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
@@ -3537,6 +3573,7 @@ impl DawApp {
         self.export_popup(ctx);
         self.about_popup(ctx);
         self.assistant_popup(ctx);
+        self.signal_analysis_popup(ctx);
         self.audio_silence_dialog(ctx);
         self.audio_batch_fades_dialog(ctx);
         self.rename_overlay(ctx);
@@ -3610,6 +3647,14 @@ impl DawApp {
             "assistant" => self.open_global_assistant(),
             "setup" => self.open_popup(PopupKind::Setup),
             "mixer" => self.view = WorkspaceView::Mixer,
+            "analysis" => {
+                self.open_workspace(WorkspaceView::Mixer);
+                let target = self.selected_track.map_or(
+                    daw_engine::SignalMonitorTarget::Master,
+                    daw_engine::SignalMonitorTarget::Channel,
+                );
+                self.open_signal_analysis(target);
+            }
             "channel" => {
                 if let Some(track) = self.selected_track {
                     self.open_channel(track);

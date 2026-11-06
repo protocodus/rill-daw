@@ -20,6 +20,10 @@ use std::{
 mod worker_pool;
 use worker_pool::WorkerPool;
 
+#[cfg(test)]
+#[path = "signal_monitor_render_tests.rs"]
+mod signal_monitor_render_tests;
+
 #[path = "audio_schedule.rs"]
 mod audio_schedule;
 
@@ -893,6 +897,9 @@ impl RenderTrack {
 }
 
 pub(crate) struct Renderer {
+    signal_monitor: Option<Arc<crate::signal_monitor::SignalMonitor>>,
+    signal_monitor_transport: u64,
+    signal_monitor_active: bool,
     tracks: Vec<Option<Box<RenderTrack>>>,
     levels: Vec<Vec<usize>>,
     workers: Option<WorkerPool>,
@@ -1342,6 +1349,9 @@ impl Renderer {
             None
         };
         let mut renderer = Self {
+            signal_monitor: None,
+            signal_monitor_transport: 0,
+            signal_monitor_active: false,
             tracks: tracks
                 .into_iter()
                 .map(|track| Some(Box::new(track)))
@@ -1381,6 +1391,18 @@ impl Renderer {
             track.meter = meters.channel(track.id).cloned();
         }
         self.metering = true;
+    }
+
+    pub(crate) fn attach_signal_monitor(
+        &mut self,
+        monitor: Arc<crate::signal_monitor::SignalMonitor>,
+    ) {
+        self.signal_monitor = Some(monitor);
+    }
+
+    pub(crate) fn signal_monitor_transport(&mut self, generation: u64, active: bool) {
+        self.signal_monitor_transport = generation;
+        self.signal_monitor_active = active;
     }
 
     pub(crate) fn set_plugin_parameter(
@@ -1832,6 +1854,39 @@ impl Renderer {
         }
         for (output, accumulated) in output.iter_mut().zip(master) {
             *output = [accumulated[0] as f32, accumulated[1] as f32];
+        }
+        // Discarded delay-compensation priming must never advance analysis.
+        // Disabled/pruned/muted paths contribute actual silence, not stale DSP buffers.
+        if live_input
+            && self.signal_monitor_active
+            && let Some(monitor) = &self.signal_monitor
+            && let Some((target, epoch)) = monitor.target()
+        {
+            let mut frames = [[0.0; 2]; BLOCK];
+            match target {
+                crate::SignalMonitorTarget::Master => {
+                    frames[..context.count].copy_from_slice(output)
+                }
+                crate::SignalMonitorTarget::Channel(id) => {
+                    if let Some(track) = self.tracks.iter().flatten().find(|track| track.id == id)
+                        && track.enabled
+                        && !track.plugin_failed
+                    {
+                        for (index, frame) in frames[..context.count].iter_mut().enumerate() {
+                            *frame = [
+                                track.left[index] * track.insert_left[index],
+                                track.right[index] * track.insert_right[index],
+                            ];
+                        }
+                    }
+                }
+            }
+            monitor.capture(
+                target,
+                epoch,
+                self.signal_monitor_transport,
+                &frames[..context.count],
+            );
         }
         if !self.preview {
             self.source_sample += context.count as u64;

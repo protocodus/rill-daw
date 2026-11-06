@@ -3,6 +3,12 @@ use daw_core::{ClipContent, Project};
 use eframe::egui;
 
 impl DawApp {
+    pub(crate) fn apply_history_limit(&mut self) {
+        self.history.set_step_limit(self.settings.history_limit);
+        self.selection_history
+            .retain(self.history.retained_state_ids());
+    }
+
     pub(crate) fn flush_pending_edit(&mut self) {
         // Save/Undo can explicitly commit while the pointer is still held.
         // End that gesture before overlap merging replaces any of its IDs.
@@ -117,10 +123,12 @@ impl DawApp {
                     daw_ui::text::note(
                         ui,
                         format!(
-                            "Up to 128 steps · {:.1} / 128 MiB",
+                            "Up to {} actions · {:.1} / 128 MiB",
+                            self.history.step_limit(),
                             self.history.memory_bytes() as f64 / 1_048_576.0
                         ),
                     )
+                    .on_hover_text("Manual and AI edits share this history. The 128 MiB safety cap may retain fewer actions, especially with large plug-in states. Change the action count in Setup → Storage.")
                 });
             });
         self.history_open &= open;
@@ -229,6 +237,44 @@ fn edit_name(before: &Project, after: &Project) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn applying_history_limit_prunes_selection_states_without_editing_the_song() {
+        let context = egui::Context::default();
+        let mut app = DawApp::with_context(&context, Project::new(), None);
+        let mut states = Vec::new();
+        for index in 0..3 {
+            states.push(app.history.state_id());
+            app.begin_edit();
+            let track = app.project.add_audio_track(format!("Track {index}"));
+            app.selected_track = Some(track);
+            app.changed();
+            app.flush_pending_edit();
+        }
+        app.history.mark_saved_at(app.history.state_id());
+        app.modified = false;
+        let project = app.project.clone();
+        let state = app.history.state_id();
+        let session = app.song_session;
+        app.settings.history_limit = 1;
+        app.apply_history_limit();
+        assert_eq!(app.project, project);
+        assert_eq!(app.history.state_id(), state);
+        assert_eq!(app.song_session, session);
+        assert!(app.history.is_saved());
+        assert!(!app.modified);
+        assert!(app.selection_history.get(states[0]).is_none());
+        assert!(app.selection_history.get(states[1]).is_none());
+        assert!(app.selection_history.get(states[2]).is_some());
+        assert!(app.selection_history.get(state).is_some());
+        app.undo_redo_steps(false, 1);
+        assert_eq!(app.selected_track, Some(project.tracks[1].id));
+        assert!(app.project.track(app.selected_track.unwrap()).is_some());
+        app.undo_redo_steps(true, 1);
+        assert_eq!(app.selected_track, Some(project.tracks[2].id));
+        assert!(app.history.is_saved());
+        assert!(!app.modified);
+    }
 
     #[test]
     fn returning_a_gesture_to_its_original_value_keeps_saved_state_and_history() {

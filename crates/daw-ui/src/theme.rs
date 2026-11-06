@@ -54,9 +54,9 @@ pub struct Palette {
     pub automation_override: Color32,
     /// Armed inputs and active recording. Never used for ordinary commands.
     pub recording: Color32,
-    /// Active Mute state; distinct from Solo so both read at a glance.
+    /// Mute's idle label and active fill; distinct from Solo at a glance.
     pub mute: Color32,
-    /// Active Solo state.
+    /// Solo's idle label and active fill.
     pub solo: Color32,
     pub track_selected: Color32,
     pub track_alternate: Color32,

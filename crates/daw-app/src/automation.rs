@@ -1563,6 +1563,8 @@ impl Harness {
         state["boundary_fades_dialog"] = crate::audio_batch::diagnostics(&self.ctx);
         state["audio_batch_fades"] = state["boundary_fades_dialog"].clone();
         state["finishing"] = self.app.finishing_diagnostics();
+        state["signal_analysis"] = self.app.signal_analysis_diagnostics(&self.ctx);
+        state["popups"]["analysis"] = json!(self.app.analysis.open);
         state["menu_label_rects"] =
             json!(self.menu_labels.iter().map(|(label,rect)| json!({
             "text":label,"min":[rect.left(),rect.top()],"max":[rect.right(),rect.bottom()]

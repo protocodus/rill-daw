@@ -34,8 +34,7 @@ impl SelectionHistory {
     ) {
         self.states.insert(before.0, before.1);
         self.states.insert(after.0, after.1);
-        let retained: HashSet<_> = retained.collect();
-        self.states.retain(|id, _| retained.contains(id));
+        self.retain(retained);
         let mut bytes: usize = self.states.values().map(SelectionSnapshot::bytes).sum();
         while bytes > SELECTION_BYTES {
             let Some(id) = self
@@ -53,6 +52,11 @@ impl SelectionHistory {
 
     pub(crate) fn get(&self, state: u64) -> Option<SelectionSnapshot> {
         self.states.get(&state).cloned()
+    }
+
+    pub(crate) fn retain(&mut self, retained: impl Iterator<Item = u64>) {
+        let retained: HashSet<_> = retained.collect();
+        self.states.retain(|id, _| retained.contains(id));
     }
 }
 

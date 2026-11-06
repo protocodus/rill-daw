@@ -8,6 +8,9 @@ use std::{
 };
 
 pub const HISTORY_STEPS: usize = 128;
+/// Maximum action count offered by application settings. The independent byte
+/// budget still applies, so large documents may retain fewer actions.
+pub const MAX_HISTORY_STEPS: usize = 4096;
 pub const HISTORY_BYTES: usize = 128 * 1024 * 1024;
 
 struct Entry {
@@ -52,6 +55,19 @@ impl History {
             max_steps,
             max_bytes,
         }
+    }
+
+    /// Apply a new action budget without editing the document or changing its
+    /// current/saved identity. Keep the closest Undo states first, then the
+    /// closest Redo states; dropped states can never be jumped across.
+    pub fn set_step_limit(&mut self, max_steps: usize) {
+        self.max_steps = max_steps;
+        self.group = None;
+        self.trim(true);
+    }
+
+    pub fn step_limit(&self) -> usize {
+        self.max_steps
     }
 
     /// Record the state immediately before one complete edit gesture.
@@ -263,6 +279,85 @@ fn snapshot_bytes(project: &Project) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_budget_retains_more_than_fifty_actions_and_remains_bounded() {
+        let mut history = History::new();
+        let mut project = Project::new();
+        for step in 0..HISTORY_STEPS + 10 {
+            history.commit(&project);
+            project.name = format!("Revision {step}");
+        }
+        assert!(history.step_limit() >= 50);
+        assert_eq!(history.undo_labels().count(), HISTORY_STEPS);
+        assert!(history.memory_bytes() <= HISTORY_BYTES);
+    }
+
+    #[test]
+    fn changing_action_budget_keeps_current_and_saved_identity_and_contiguous_steps() {
+        let mut history = History::new();
+        let mut project = Project::new();
+        for step in 1..=5 {
+            history.commit_named(&project, format!("Action {step}"));
+            project.tempo = 100.0 + step as f64;
+        }
+        history.mark_saved_at(history.state_id());
+        let saved = history.state_id();
+        let unchanged = project.clone();
+        history.set_step_limit(4);
+        assert_eq!(project, unchanged);
+        assert_eq!(history.state_id(), saved);
+        assert!(history.is_saved());
+        for _ in 0..3 {
+            assert!(history.undo(&mut project));
+        }
+        let cursor = history.state_id();
+        assert_eq!(project.tempo, 102.0);
+        history.set_step_limit(2);
+        assert_eq!(history.state_id(), cursor);
+        assert_eq!(history.undo_labels().collect::<Vec<_>>(), vec!["Action 2"]);
+        assert_eq!(history.redo_labels().collect::<Vec<_>>(), vec!["Action 3"]);
+        assert!(!history.retained_state_ids().any(|id| id == saved));
+        assert!(history.redo(&mut project));
+        assert_eq!(project.tempo, 103.0);
+        assert!(!history.can_redo(), "Never skip a pruned redo boundary");
+        assert!(!history.is_saved());
+        history.set_step_limit(100);
+        assert!(
+            !history.can_redo(),
+            "Growing a budget cannot restore discarded states"
+        );
+        assert!(history.undo(&mut project));
+        assert!(history.undo(&mut project));
+        assert_eq!(project.tempo, 101.0);
+        assert!(!history.can_undo(), "Never skip a pruned undo boundary");
+        history.commit_named(&project, "New branch");
+        project.name = "Branch".into();
+        assert!(!history.can_redo());
+        assert!(history.state_id() > saved, "State IDs are never reused");
+        assert!(!history.is_saved());
+    }
+
+    #[test]
+    fn raising_action_limit_does_not_raise_memory_budget_or_cross_oversized_steps() {
+        let mut project = Project::new();
+        let track = project.add_midi_track("Large state");
+        project.track_mut(track).unwrap().instrument_state = vec![0; 4096];
+        let budget = snapshot_bytes(&project) * 3;
+        let mut history = History::with_limits(2, budget);
+        history.set_step_limit(MAX_HISTORY_STEPS);
+        for step in 0..100 {
+            history.commit(&project);
+            project.tempo = 90.0 + step as f64;
+            assert!(history.memory_bytes() <= budget);
+        }
+        assert!(history.undo_labels().count() < MAX_HISTORY_STEPS);
+        project.track_mut(track).unwrap().instrument_state = vec![0; budget + 1];
+        history.commit(&project);
+        assert!(!history.can_undo());
+        assert!(!history.can_redo());
+        assert_eq!(history.memory_bytes(), 0);
+    }
 
     #[test]
     fn branching_and_saved_checkpoints_survive_undo_redo() {

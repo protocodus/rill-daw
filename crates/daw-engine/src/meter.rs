@@ -14,10 +14,25 @@ pub(crate) fn release_factor(frames: usize, sample_rate: u32) -> f32 {
 #[derive(Default)]
 pub(crate) struct ChannelMeter {
     stereo: AtomicU64,
+    held: AtomicU64,
 }
 
 impl ChannelMeter {
     pub(crate) fn publish(&self, peaks: [f32; 2], decay: f32) {
+        let peaks = peaks.map(|peak| if peak.is_finite() { peak.abs() } else { 0.0 });
+        // Capture raw block maxima before ballistics. A UI frame may arrive
+        // much later, or the mixer may be closed when this transient occurs.
+        let _ = self
+            .held
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |packed| {
+                let previous = [
+                    f32::from_bits(packed as u32),
+                    f32::from_bits((packed >> 32) as u32),
+                ];
+                let next = u64::from(peaks[0].max(previous[0]).to_bits())
+                    | (u64::from(peaks[1].max(previous[1]).to_bits()) << 32);
+                (next != packed).then_some(next)
+            });
         let previous = self.peaks();
         let clean = |channel: usize| {
             let peak = peaks[channel];
@@ -38,6 +53,18 @@ impl ChannelMeter {
 
     pub(crate) fn clear(&self) {
         self.stereo.store(0, Ordering::Relaxed);
+    }
+
+    pub(crate) fn held(&self) -> [f32; 2] {
+        let packed = self.held.load(Ordering::Relaxed);
+        [
+            f32::from_bits(packed as u32),
+            f32::from_bits((packed >> 32) as u32),
+        ]
+    }
+
+    pub(crate) fn reset_hold(&self) {
+        self.held.store(0, Ordering::Relaxed);
     }
 }
 
@@ -93,5 +120,28 @@ mod tests {
         assert_eq!(meter.peaks(), [0.2, 0.1]);
         meter.clear();
         assert_eq!(meter.peaks(), [0.0; 2]);
+    }
+
+    #[test]
+    fn peak_hold_captures_transients_survives_silence_and_resets_independently() {
+        let meter = ChannelMeter::default();
+        meter.publish([1.25, -0.75], 0.0);
+        meter.publish([0.0; 2], 0.0);
+        assert_eq!(meter.peaks(), [0.0; 2]);
+        assert_eq!(meter.held(), [1.25, 0.75]);
+        meter.clear();
+        assert_eq!(meter.held(), [1.25, 0.75]);
+        meter.reset_hold();
+        assert_eq!(meter.held(), [0.0; 2]);
+        meter.publish([0.4, 0.2], 0.0);
+        meter.publish([f32::NAN, f32::INFINITY], 0.0);
+        assert_eq!(meter.held(), [0.4, 0.2]);
+        meter.reset_hold();
+        // Resetting must not clear audible meter levels or stop measurement.
+        meter.publish([1.1, 0.3], 0.0);
+        meter.reset_hold();
+        assert_eq!(meter.peaks(), [1.1, 0.3]);
+        meter.publish([1.1, 0.3], 0.0);
+        assert_eq!(meter.held(), [1.1, 0.3]);
     }
 }

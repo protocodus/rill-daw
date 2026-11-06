@@ -2230,12 +2230,15 @@ struct WaveformViewKey {
     headroom: f32,
     color: egui::Color32,
     center_color: egui::Color32,
+    quiet_color: egui::Color32,
+    background_colors: [egui::Color32; 2],
     density: f32,
     samples: usize,
     frames: usize,
     source_format: (u32, usize),
     peaks: usize,
     amplitude: daw_ui::WaveformAmplitudeScale,
+    amplitude_coloring: bool,
 }
 
 enum WaveformGeometry {
@@ -2245,6 +2248,7 @@ enum WaveformGeometry {
 
 struct CachedWaveform {
     geometry: WaveformGeometry,
+    peak_color: egui::Color32,
     path: Arc<str>,
     columns: usize,
     minimum: f32,
@@ -2532,7 +2536,10 @@ fn draw_waveform(
     // the louder channel per column.
     let mono = spectrum_view == "takes";
     let channels = if mono { 1 } else { source_channels };
-    let center_color = daw_ui::theme::palette(painter.ctx()).line;
+    let palette = daw_ui::theme::palette(painter.ctx());
+    let center_color = palette.line;
+    let quiet_color = daw_ui::waveform_quiet_color(color, palette.muted);
+    let amplitude_coloring = crate::spectrogram::view_settings(painter.ctx()).waveform_coloring;
     let key = WaveformViewKey {
         generation,
         rect,
@@ -2542,6 +2549,8 @@ fn draw_waveform(
         headroom,
         color,
         center_color,
+        quiet_color,
+        background_colors: [palette.bg, palette.raised],
         density,
         samples: data.samples.as_ptr() as usize,
         frames: data.frames(),
@@ -2550,6 +2559,7 @@ fn draw_waveform(
             .as_ref()
             .map_or(0, |peaks| Arc::as_ptr(peaks) as usize),
         amplitude,
+        amplitude_coloring,
     };
     let shared = waveform_views(painter.ctx());
     let cached = if let Ok(mut cache) = shared.lock() {
@@ -2574,6 +2584,8 @@ fn draw_waveform(
     };
     let was_cached = cached.is_some();
     let prepared = cached.unwrap_or_else(|| {
+        // Contrast adjustment belongs to preparation, not every cached repaint.
+        let peak_color = daw_ui::waveform_peak_color(color, palette);
         let (amplitude_reference, reference_reads) =
             if amplitude == daw_ui::WaveformAmplitudeScale::Fit {
                 waveform_amplitude_reference(painter.ctx(), data, clip, tempo, peaks.as_ref())
@@ -2660,15 +2672,20 @@ fn draw_waveform(
         }
         let count = columns.len();
         let geometry = if refined {
-            WaveformGeometry::Refined(daw_ui::prepare_audio_waveform(
+            WaveformGeometry::Refined(daw_ui::prepare_audio_waveform_styled(
                 rect,
                 view,
                 &columns,
                 channels,
                 headroom,
-                color,
                 density,
-                center_color,
+                daw_ui::WaveformColorStyle {
+                    peak: peak_color,
+                    quiet: quiet_color,
+                    center: center_color,
+                    amplitude_reference,
+                    amplitude_coloring,
+                },
             ))
         } else {
             WaveformGeometry::Raw(columns)
@@ -2681,6 +2698,7 @@ fn draw_waveform(
         };
         let value = Arc::new(CachedWaveform {
             geometry,
+            peak_color,
             path: Arc::from(path.as_str()),
             columns: count,
             minimum: low,
@@ -2719,8 +2737,20 @@ fn draw_waveform(
     });
     let (stage, stats) = match &prepared.geometry {
         WaveformGeometry::Raw(columns) => {
-            daw_ui::paint_audio_waveform_raw(
-                painter, rect, view, columns, channels, headroom, color,
+            daw_ui::paint_audio_waveform_styled(
+                painter,
+                rect,
+                view,
+                columns,
+                channels,
+                headroom,
+                daw_ui::WaveformColorStyle {
+                    peak: prepared.peak_color,
+                    quiet: quiet_color,
+                    center: center_color,
+                    amplitude_reference: prepared.amplitude_reference,
+                    amplitude_coloring,
+                },
             );
             ("raw", daw_ui::WaveformMeshStats::default())
         }

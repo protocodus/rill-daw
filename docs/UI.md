@@ -87,6 +87,18 @@ and creation/detail actions together.
 
 [`mixer_route_choices`](../crates/daw-ui/src/mixer_routing.rs) · [Light preview](assets/ui-gallery/routing-choices-light.png) · [Dark preview](assets/ui-gallery/routing-choices-dark.png)
 
+### Signal analysis
+
+The four focused mixer analysis views, shown with fixed demonstration readings.
+The running application supplies measured channel audio.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/signal-analysis-dark.png">
+  <img alt="Spectrum, LUFS loudness, stereo correlation, and a mid-side phase diagram." src="assets/ui-gallery/signal-analysis-light.png" width="1120">
+</picture>
+
+[`signal_analyzer`, `signal_analyzer_tabs`](../crates/daw-ui/src/signal_analyzer.rs) · [Light preview](assets/ui-gallery/signal-analysis-light.png) · [Dark preview](assets/ui-gallery/signal-analysis-dark.png)
+
 ### Track headers
 
 Track identity, volume/pan and M/S, routing, source selection, and a dedicated
@@ -270,9 +282,10 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Focused workspace structure | `workspace_header`, `workspace_header_with_context`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
-| Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_readout` |
+| Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_with_peak_hold`, `channel_peak_indicator`, `channel_meter_readout` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
 | Mixer identity, inserts and routing | `mixer_name_plate`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
+| Live signal analysis | `mixer_analysis_button`, `signal_analyzer_tabs`, `signal_analyzer`, `SignalAnalyzerView`, `SignalAnalyzerData`, `SignalAnalyzerResponse` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Boolean button | `toggle` |
@@ -813,10 +826,11 @@ entry never rounds the gain or its automation. Compact headers and Mixer pan exp
 menus; pan entry uses −100..100 percent consistently, with zero at center.
 Master peak is a readout rather than a gain field. Its engine-provided peaks
 measure the actual output mix and retain brief transients with a sample-rate-based
-release, including across silent callbacks; pause and stop clear the meters.
+release, including across silent callbacks; pause and stop clear the moving
+meters while retaining each channel's peak badge until reset.
 
 Mixer follows signal order from top to bottom: the name plate, the source
-("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), Effects and its inserts,
+("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), **Analyze**, Effects and its inserts,
 pan with **Mute**/**Solo**, the gain and peak readouts over the fader unit, then
 the output and sends. Strips are 144-point fill-only cards with 8-point margins
 (`MIXER_CHANNEL_WIDTH`); only the selected strip is outlined. Rows of one section
@@ -827,6 +841,24 @@ alone separates them, without frames or rules. The name plate, Effects row,
 an optional 3-point destination rail). Inside a strip only the gain field, the
 pan and fader troughs and the meter troughs carry an outline.
 
+**Analyze** opens a focused read-only popup for that channel, bus, return or
+Master without changing selection or starting playback. Spectrum, Loudness,
+Correlation and Phase share one measurement; switching tabs retains it. The
+channel tap follows inserts, gain, pan and mute; Master uses the unclamped mix
+before dry input monitoring and metronome, as its tooltip explains. Spectrum
+uses a logarithmic frequency scale. Loudness shows 400 ms momentary, 3 s short
+term and gated approximate integrated LUFS; unfilled windows and silence show
+dashes. The level footer explicitly reports sample peak, rather than true peak.
+Phase uses a mid/side goniometer: in-phase stereo is vertical and opposite phase
+is horizontal. Actual readings remain visible with a paused/stopped status;
+**Reset measurement** starts fresh, and close/reopen, a new engine or a target
+change also clears the measurement. Seeking or restarting playback begins a
+fresh segment; a loop wrap retains it. Before audio arrives the popup asks the
+user to play; it never substitutes demonstration curves. Closing restores the
+caller and stops capture. Deleting the target or replacing the document closes
+the popup safely. Shared components borrow immutable measured data and paint
+bounded spectrum and phase meshes using theme tokens.
+
 `mixer_fader` and `Knob::perceptual_gain` share `gain_taper`: 0 dB at 75 % of the
 travel, −10/−20/−30 dB evenly spaced, linear in amplitude below −30 dB, +3.5 dB at
 the top of the 0..1.5 model range. Gain dials move at the fader's rate however far
@@ -834,10 +866,16 @@ their range extends. `paint_mixer_scale` paints the labelled dB stops (+3.5, 0,
 −6, −12, −20, −30, −∞) and minor ticks (−3, −9, −18, −24, −40) on the scale side
 only; 0 dB keeps its hollow-circle landmark on the cap. The fader unit
 `[scale 34][rail 21][gap 5][meter 13]` is centered on the strip and pixel
-snapped: one 5-point trough, a 21×13 cap, and `channel_meter`, a vertical stereo
-peak meter on the same scale with a 1.5 s peak hold and a clip latch (warning
-color) that a click resets. `channel_meter_readout` shows the held peak above the
-meter in FONT_CAPTION; the gain field ("−∞ dB" at silence) sits left of it.
+snapped: one 5-point trough, a 21×13 cap, and `channel_meter_with_peak_hold`, a
+vertical stereo peak meter on the same scale. The engine captures block maxima
+even while the mixer is closed; its peak lines, clip lamp and
+`channel_peak_indicator` badge retain the highest level through silence, Pause,
+Stop and engine rebuilds. Click the badge or meter to reset only that channel's
+peak. New/Open starts fresh peak history. Every audio, MIDI, bus and return
+channel, plus Master, has this badge in FONT_CAPTION above its meter; the gain
+field ("−∞ dB" at silence) sits left of it. Full-scale peaks use the warning
+color. Master measures samples actually delivered after output clamping, so an
+overload holds 0 dBFS; channel peaks can show positive dBFS before clamping.
 `mixer_pan` is a 21-point horizontal rail in the same skin with a center detent:
 pointer edits within 3 % of center land on C, arrow keys keep their fine steps. Its
 value caption ("C", "L15", "R100") sits right of the rail in FONT_CAPTION. The
@@ -848,7 +886,8 @@ and one send) plus space for an ordinary notice. Faders retain their usable
 minimum height; shorter windows and additional lanes remain accessible by
 scrolling. Notices and added routing lanes keep existing controls in place.
 `mixer_mute_solo` gives the two independent switches equal-width, fill-only
-buttons; active Mute and Solo take `Palette::mute` and `Palette::solo`.
+buttons. Mute uses amber `Palette::mute` and Solo uses green `Palette::solo` even
+while idle; active switches use solid operation-color fills and contrasting text.
 
 The toolbar places **Add send…** beside **Add bus**. Its send menu uses the
 selected audio, MIDI or bus channel and requires an explicit eligible destination;
@@ -989,7 +1028,7 @@ Viewing a control must not normalize valid stored values to a narrower editing r
 
 The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; `IconButton::icon_only` requires an accessible action label. Reorder handles use the vector `Grip`, and native editor actions use `Editor`. Call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels.
 
-**Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views and utility popups; text fields retain their native text undo. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A new edit discards redo. History is session-local and limited to 128 steps or an estimated 128 MiB of snapshots, including opaque plugin state. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
+**Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views and utility popups; text fields retain their native text undo. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A successful new edit discards redo; a failed, stale or unchanged AI/tool batch leaves it intact. History is session-local, defaults to 128 actions, and uses the persisted **Setup → Storage → Undo actions** count (1–4,096) for manual, tool and AI edits together. Apply trims older history immediately without making a document edit; Cancel leaves it unchanged. Growing the count cannot restore discarded steps. The independent estimated 128 MiB snapshot cap, including opaque plugin state, may retain fewer actions. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
 
 Disable a group with `ui.add_enabled_ui(false, |ui| ...)`, or use `ui.add_enabled(enabled, button_widget(...))`. Disabled components do not change values from pointer or keyboard input. Scope repeated rows using `ui.push_id(model_id, ...)`; repeated labels alone are not sufficient persistent identity for every control.
 
@@ -1140,8 +1179,11 @@ primary notice, and the last-WAV re-export command keeps its own destination.
 
 ## Device library and effect chains
 
-**Window → Library** opens a movable, resizable card grid with Instruments,
-Effects, and Unverified tabs. Instrument and effect lists require a declared
+**Window → Library** opens a movable card grid with Instruments,
+Effects, and Unverified tabs. Drag any edge or lower corner to resize both its
+width and height, including when choosing an instrument or effect. Its catalogue,
+collections and details share the resized body height while actions remain
+reachable below them; each pane scrolls independently. Instrument and effect lists require a declared
 matching type. Bundles with missing, malformed, or unrecognized metadata remain
 in Unverified. Selecting one opens Device details with its bundle path, class,
 developer, metadata parsing result, preview capture status and available error.
@@ -1442,8 +1484,19 @@ source span mapping and selection remain with the caller.
 `paint_audio_waveform_raw` provides an immediate bounded fallback.
 `prepare_audio_waveform` creates a reusable `PreparedAudioWaveform` with a single
 stereo envelope mesh and physical-pixel coverage fringes; `paint` reuses its mesh
-storage and respects the parent clip. The app caches geometry until source/edit,
-viewport, density, or theme inputs change. Background peak publication precedes
+storage and respects the parent clip. Peak columns blend from a readable,
+desaturated tint of the clip's hue near silence into its saturated color at
+full-scale audio amplitude after clip gain and
+fades. The quiet endpoint is dark gray in Light and a lighter muted tint in
+Dark, independent of the faint center line. The saturated endpoint retains the
+clip hue and adjusts brightness only when needed to contrast with the canvas,
+including very bright Light-theme or very dark Dark-theme track colors. Fit and
+display headroom change height without changing these colors. The raw preview uses the same mapping; coloring changes existing vertices without adding geometry or
+repaint work. **View → Waveform coloring** switches to flat clip color, and
+**View → Spectrum** shows or hides the backdrop across Arrangement, Clip Editor
+and Audio Takes. Both start enabled. Hiding the spectrum preserves intensity,
+palette, cached textures and analysis. The app caches geometry until source/edit,
+viewport, density, color mode or theme inputs change. Background peak publication precedes
 FFT publication, so refinement does not wait for the complete spectrum. Faint
 spectral texture quads remain behind the foreground waveform in every view.
 
@@ -1602,6 +1655,8 @@ Popup windows keep the width the user drags them to; their height hugs the
 content up to the viewport budget (or a caller's `default_height`), so short
 forms and emptied lists never leave a blank band. Passive pointer movement never
 resizes a window. Native close icons change color and stroke weight on hover.
+The Library browser opts into vertical resizing so its scrollable catalogue can
+use the height chosen by the user.
 The VST category picker supports case-insensitive category search, an empty
 result, and clearing the search without changing the chosen category.
 
@@ -1647,6 +1702,6 @@ The menu bar centers the project name with its muted duration and ends with the
 
 Both clip editors use one toolbar skeleton: tools, **Snap**, editor choosers or menus, then `editor_view_controls` with zoom, **View** and Tool help at the trailing edge. The audio editor keeps one fixed slot after Pitch for the active tool's options (fade length and curve) or, otherwise, the gesture caption and status, so changing tools never changes how the row wraps and the ruler and canvas never move. Nudge is a section of the audio **Clip** menu. Transient detection and grid slicing open in `editor_bottom_drawer` below the canvas. Gain is a number field with a **Gain** prefix rather than a separate bold label.
 
-The audio canvas starts after a `PIANO_KEYS_WIDTH` gutter holding the **L**/**R** labels, so audio and MIDI canvases share one left edge. Channels are separated by a 1 px `line`, quiet −6 dB guides use `grid_minor`, the waveform takes the track color (selection keeps the accent) and the spectrogram is drawn per channel band with a neutral tint. Fade handles are 13-point rounded squares with a `bg` ring, inset `SPACE_SM` from the top, with a dotted guide while hovered; the gain envelope is inset `SPACE_XS` so unity stays visible as a quiet line.
+The audio canvas starts after a `PIANO_KEYS_WIDTH` gutter holding the **L**/**R** labels, so audio and MIDI canvases share one left edge. Channels are separated by a 1 px `line`, quiet −6 dB guides use `grid_minor`, the waveform blends neutral gray into the track color as audio amplitude rises (selection keeps the accent) and the spectrogram is drawn per channel band with a neutral tint. Fade handles are 13-point rounded squares with a `bg` ring, inset `SPACE_SM` from the top, with a dotted guide while hovered; the gain envelope is inset `SPACE_XS` so unity stays visible as a quiet line.
 
 The piano roll keys sit flush with the grid behind a 1 px divider. Note names use `TextRole::Note` and appear only when they fit, notes use `NOTE_RADIUS` corners, and the velocity lane (`VELOCITY_LANE_HEIGHT`) has its own background, 25/50/75/100 % guides and bar lines. **Local** sits on the ruler's clock baseline. The **Notes** menu is grouped by separators: edit, timing (Quantize…, Nudge, Legato), pitch and transform, then a Velocity `parameter_row`.
