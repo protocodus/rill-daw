@@ -170,6 +170,7 @@ pub struct DawApp {
     pub setup_draft: Settings,
     pub setup_page: SetupPage,
     pub view: WorkspaceView,
+    pub(crate) mixer_reveal_channel: Option<u64>,
     pub library_open: bool,
     pub inspector_open: bool,
     pub(crate) inspector_page: InspectorPage,
@@ -314,6 +315,7 @@ impl DawApp {
             settings,
             setup_page: SetupPage::Audio,
             view: WorkspaceView::Arrangement,
+            mixer_reveal_channel: None,
             library_open: false,
             inspector_open: false,
             inspector_page: InspectorPage::Clip,
@@ -775,6 +777,7 @@ impl DawApp {
                     backdrop_title: self.backdrop_title.clone(),
                 });
                 self.hide_focused_view();
+                self.mixer_reveal_channel = Some(id);
                 self.view = WorkspaceView::Mixer;
             }
             PluginEditor => return false,
@@ -829,7 +832,16 @@ impl DawApp {
     }
 
     pub fn open_workspace(&mut self, view: WorkspaceView) {
+        if self.view == WorkspaceView::Mixer
+            && view == WorkspaceView::Arrangement
+            && let Some(track) = self.selected_track
+        {
+            self.queue_arranger_channel_reveal(track);
+        }
         if self.view != view {
+            if view == WorkspaceView::Mixer {
+                self.mixer_reveal_channel = self.selected_track;
+            }
             if view != WorkspaceView::Mixer {
                 self.finishing.clear_channels();
             }
@@ -1325,18 +1337,7 @@ impl DawApp {
         );
     }
     pub(crate) fn autosave_recovery(&mut self) {
-        if !self.modified {
-            return;
-        }
-        let result = std::fs::create_dir_all(&self.settings.scratch_dir)
-            .map_err(anyhow::Error::from)
-            .and_then(|_| {
-                self.project
-                    .save(self.settings.scratch_dir.join("recovery.daw.json"))
-            });
-        if let Err(e) = result {
-            self.message(Err(e), "");
-        }
+        self.queue_recovery_snapshot();
     }
     pub(crate) fn import_dialog(&mut self) {
         if let Some(path) = self.pick_document_path(crate::document_ui::DocumentDialog::Import) {
@@ -1558,7 +1559,9 @@ impl DawApp {
         }
         self.edit_dirty = false;
         self.close_popups();
-        self.status = if recovery {
+        self.status = if recovery && loaded.previous_recovery {
+            "Previous recovery opened · Latest checkpoint unavailable"
+        } else if recovery {
             "Recovery session opened"
         } else {
             "Session opened"
@@ -2379,7 +2382,7 @@ impl DawApp {
             .show_separator_line(false)
             .frame(daw_ui::panel(ctx).fill(palette(ctx).bg).inner_margin(egui::Margin::symmetric(
                 daw_ui::tokens::SPACE_MD as i8,
-                daw_ui::tokens::SPACE_SM as i8,
+                daw_ui::tokens::SPACE_XS as i8,
             )).corner_radius(0))
             .show(ctx, |ui| {
                 if self.document_guard.is_some() { ui.disable(); }
@@ -3110,9 +3113,14 @@ impl DawApp {
                         }).response.labelled_by(sample_rate_label.id);
                         ui.end_row();
                         let buffer_label = daw_ui::form_label(ui, "Buffer");
+                        ui.horizontal(|ui| {
                         daw_ui::select("buffer", format!("{} samples", self.setup_draft.buffer_frames)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
                             for size in [64, 128, 256, 512, 1024, 2048] { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
                         }).response.labelled_by(buffer_label.id);
+                        if daw_ui::quiet_button(ui, "Recommended").on_hover_text("Balanced starting point for Apple Silicon MacBooks and other modern computers: 256 samples at 44.1/48 kHz, 512 at 88.2/96 kHz. Use a larger buffer if a demanding mix drops out.").clicked() {
+                            self.setup_draft.buffer_frames = daw_engine::DeviceSettings::recommended_buffer_frames(self.setup_draft.sample_rate);
+                        }
+                        });
                         ui.end_row();
                         let conversion_label = daw_ui::form_label(ui, "Resampling");
                         daw_ui::select("sample_conversion", match self.setup_draft.resample_quality { daw_engine::ResampleQuality::High => "High quality", daw_engine::ResampleQuality::Fast => "Fast" }).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
@@ -3123,12 +3131,12 @@ impl DawApp {
                     });
                     let rate = self.setup_draft.sample_rate.max(1) as f64;
                     daw_ui::text::note(ui, format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate))
-                        .on_hover_text(format!("The render queue adds up to {:.1} ms. Device and plug-in latency may add more.", self.setup_draft.buffer_frames.saturating_mul(2).max(512) as f64 * 1000.0 / rate));
+                        .on_hover_text(format!("The render queue adds up to {:.1} ms, with a 512-frame minimum. Device and plug-in latency may add more. Smaller buffers reduce device latency and increase callback overhead; larger buffers give demanding mixes more scheduling headroom.", self.setup_draft.audio().render_queue_frames() as f64 * 1000.0 / rate));
                 }
                 SetupPage::Storage => {
                     daw_ui::text::section_heading(ui, "Recovery folder");
                     daw_ui::text::truncated(ui, daw_ui::text::TextRole::Body, self.setup_draft.scratch_dir.display().to_string())
-                        .on_hover_text("Recovery snapshots are saved here every 30 seconds while editing.");
+                        .on_hover_text("Committed edits are checkpointed here in the background. Plug-in state is refreshed every 30 seconds; the previous checkpoint is retained too.");
                     ui.add_space(daw_ui::tokens::SPACE_MD);
                     if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) { self.setup_draft.scratch_dir = path; }
                     daw_ui::text::note(ui, "Recover from File → Recover last session…");
@@ -3442,6 +3450,7 @@ impl DawApp {
                         }
                     }
                     if workspace == WorkspaceView::Mixer {
+                        self.mixer_track_navigation(ui);
                         self.mixer_order_menu(ui);
                         self.mixer_add_send_menu(ui);
                         if daw_ui::button(ui, "Add bus").clicked() {

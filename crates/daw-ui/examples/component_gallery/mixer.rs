@@ -35,10 +35,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         ui.vertical(|ui| {
             ui.set_width(508.0);
             text::subtitle(ui, "Mixer channels");
-            text::note(
-                ui,
-                "mixer_name_plate · mixer_pan_row · mixer_fader · channel_meter",
-            );
+            text::note(ui, "mixer_role_heading · mixer_name_plate · mixer_fader");
             ui.add_space(tokens::SPACE_SM);
             let mut endpoints = Vec::new();
             ui.horizontal_top(|ui| {
@@ -51,14 +48,14 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         [0.48, 0.39],
                     ),
                     (
-                        "Warm keys",
-                        "MIDI",
+                        "Music",
+                        "Bus",
                         Color32::from_rgb(184, 166, 95),
                         [0.28, 0.34],
                     ),
                     (
-                        "Music",
-                        "Bus",
+                        "Reverb",
+                        "Send return",
                         Color32::from_rgb(145, 137, 190),
                         [0.65, 0.57],
                     ),
@@ -66,51 +63,70 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 .into_iter()
                 .enumerate()
                 {
-                    let strip = ui::mixer_strip(
-                        ui,
-                        ("gallery_channel", index),
-                        vec2(160.0, 460.0),
-                        Some(color),
-                        index == 1,
-                        |ui| {
-                            let width = ui.available_width();
-                            ui::mixer_name_plate(
+                    let role = match index {
+                        1 => Some(ui::MixerChannelRole::Bus),
+                        2 => Some(ui::MixerChannelRole::SendReturn),
+                        _ => None,
+                    };
+                    let strip = ui
+                        .vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 0.0;
+                            let offset = if let Some(role) = role {
+                                ui::mixer_role_heading(ui, role, 160.0, color);
+                                ui::MIXER_ROLE_HEIGHT
+                            } else {
+                                0.0
+                            };
+                            ui::mixer_strip(
                                 ui,
-                                if index == 2 {
-                                    ui::MixerNamePlateKind::Bus
-                                } else {
-                                    ui::MixerNamePlateKind::Track
+                                ("gallery_channel", index),
+                                vec2(160.0, 560.0 - offset),
+                                Some(color),
+                                index == 1,
+                                |ui| {
+                                    let width = ui.available_width();
+                                    ui::mixer_name_plate(
+                                        ui,
+                                        if role.is_some() {
+                                            ui::MixerNamePlateKind::Bus
+                                        } else {
+                                            ui::MixerNamePlateKind::Track
+                                        },
+                                        name,
+                                        width,
+                                        color,
+                                    );
+                                    ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
+                                    text::note(ui, format!("Input · {kind}"));
+                                    let mut db = ui::channel_gain_to_db(state.gain[index]);
+                                    if ui.add(ui::channel_gain_number(&mut db)).changed() {
+                                        state.gain[index] = ui::channel_gain_from_db(db);
+                                    }
+                                    ui::mixer_pan_row(
+                                        ui,
+                                        &mut state.pan[index],
+                                        &mut state.muted[index],
+                                        &mut state.solo[index],
+                                        width,
+                                    );
+                                    ui.horizontal(|ui| {
+                                        ui::mixer_fader(ui, &mut state.gain[index], 216.0 - offset);
+                                        ui::channel_meter(
+                                            ui,
+                                            Id::new(("gallery_meter", index)),
+                                            peaks,
+                                            216.0 - offset,
+                                            ui::MIXER_FADER_INSET,
+                                        );
+                                    });
+                                    ui::view_button(
+                                        ui,
+                                        if index == 2 { "Master" } else { "Music bus" },
+                                    );
                                 },
-                                name,
-                                width,
-                                color,
-                            );
-                            ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
-                            text::note(ui, format!("Input · {kind}"));
-                            let mut db = ui::channel_gain_to_db(state.gain[index]);
-                            if ui.add(ui::channel_gain_number(&mut db)).changed() {
-                                state.gain[index] = ui::channel_gain_from_db(db);
-                            }
-                            ui::mixer_pan_row(
-                                ui,
-                                &mut state.pan[index],
-                                &mut state.muted[index],
-                                &mut state.solo[index],
-                                width,
-                            );
-                            ui.horizontal(|ui| {
-                                ui::mixer_fader(ui, &mut state.gain[index], 116.0);
-                                ui::channel_meter(
-                                    ui,
-                                    Id::new(("gallery_meter", index)),
-                                    peaks,
-                                    116.0,
-                                    ui::MIXER_FADER_INSET,
-                                );
-                            });
-                            ui::view_button(ui, if index == 2 { "Master" } else { "Music bus" });
-                        },
-                    );
+                            )
+                        })
+                        .inner;
                     endpoints.push(ui::MixerRouteEndpoint {
                         position: strip.response.rect.center_bottom(),
                         color,
@@ -119,8 +135,8 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             });
             ui::mixer_route_lane(
                 ui,
+                endpoints[0],
                 endpoints[1],
-                endpoints[2],
                 "Output → Music bus",
                 ui.clip_rect(),
             );

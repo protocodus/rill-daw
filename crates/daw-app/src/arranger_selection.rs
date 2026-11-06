@@ -14,6 +14,8 @@ pub(crate) struct ArrangerSelection {
     pub(crate) audio_drag: Option<ArrangeAudioDrag>,
     pub(crate) drag: Option<GroupDrag>,
     pub(crate) reveal: Option<(u64, u64)>,
+    /// Navigation opens ancestors temporarily, without editing the saved song.
+    pub(crate) revealed_folders: HashSet<u64>,
     pub(crate) press_shift: Option<(u64, bool)>,
     /// A Select-tool press can collapse a group only after an unmodified click
     /// release; retaining the group while held keeps group dragging possible.
@@ -388,7 +390,8 @@ impl DawApp {
     }
 
     pub(crate) fn arranger_select_all(&mut self) {
-        let clips = crate::routing::visible_tracks(&self.project)
+        let clips = self
+            .visible_arranger_tracks()
             .into_iter()
             .flat_map(|(index, _)| {
                 let track = &self.project.tracks[index];
@@ -692,7 +695,8 @@ impl DawApp {
         if drag.source_track == target {
             return;
         }
-        let rows = crate::routing::visible_tracks(&self.project)
+        let rows = self
+            .visible_arranger_tracks()
             .into_iter()
             .map(|(index, _)| &self.project.tracks[index])
             .filter(|track| matches!(track.kind, TrackKind::Audio | TrackKind::Midi))
@@ -761,7 +765,7 @@ impl DawApp {
     }
 
     fn arranger_navigate(&mut self, direction: daw_ui::SelectionDirection, extend: bool) {
-        let visible = crate::routing::visible_tracks(&self.project);
+        let visible = self.visible_arranger_tracks();
         let items = visible
             .iter()
             .enumerate()

@@ -117,9 +117,10 @@ fn reveal_track(
     height: f32,
     label_width: f32,
     view: &mut daw_ui::TimelineViewport,
+    expanded: &std::collections::HashSet<u64>,
 ) {
     let visible_rows = (height / view.row_height).max(0.01);
-    let visible = crate::routing::visible_tracks(project);
+    let visible = crate::routing::visible_tracks_with_expanded(project, expanded);
     let lanes = folder_lanes(project, &visible);
     let (step, _) = daw_ui::folder_lane_padding(&lanes, label_width);
     let closures = daw_ui::folder_closures(&lanes);
@@ -336,7 +337,7 @@ impl DawApp {
             0.0
         });
         let end = (content_end + 16.0).max(48.0);
-        let visible_tracks = crate::routing::visible_tracks(&self.project);
+        let visible_tracks = self.visible_arranger_tracks();
         let mut folder_rows = folder_lanes(&self.project, &visible_tracks);
         let folder_closures = daw_ui::folder_closures(&folder_rows);
         let (folder_step, folder_padding) = daw_ui::folder_lane_padding(&folder_rows, header_width);
@@ -398,6 +399,7 @@ impl DawApp {
                 canvas.height(),
                 header_width,
                 &mut viewport,
+                &self.arranger_selection.revealed_folders,
             );
         }
         let restored_previous = view_action == daw_ui::TimelineViewAction::Previous
@@ -554,6 +556,7 @@ impl DawApp {
             .collect();
         let mut popup = None;
         let mut channel_target = None;
+        let mut mixer_target = None;
         let mut rename_track = None;
         let mut channel_controls = Vec::new();
         let mut track_colors = Vec::new();
@@ -813,7 +816,7 @@ impl DawApp {
                                 TrackKind::Automation => daw_ui::Icon::Automation,
                             },
                             tint: color(track.color), folder: track.kind == TrackKind::Folder,
-                            collapsed: track.collapsed,
+                            collapsed: track.collapsed && !self.arranger_selection.revealed_folders.contains(&track.id),
                         });
                     let name_response = ui.interact(name_rect,
                         ui.id().with((track.id, "reorder_name")), Sense::click_and_drag());
@@ -1079,6 +1082,12 @@ impl DawApp {
                             ui.close();
                         }
                         if matches!(track.kind, TrackKind::Audio | TrackKind::Midi | TrackKind::Bus)
+                            && daw_ui::button(ui, "Show in Mixer").clicked()
+                        {
+                            mixer_target = Some(track.id);
+                            ui.close();
+                        }
+                        if matches!(track.kind, TrackKind::Audio | TrackKind::Midi | TrackKind::Bus)
                             && daw_ui::button(ui, "Channel").clicked()
                         {
                             channel_target = Some(track.id);
@@ -1086,7 +1095,7 @@ impl DawApp {
                         }
                         if daw_ui::button(
                             ui,
-                            if track.collapsed {
+                            if track.collapsed && !self.arranger_selection.revealed_folders.contains(&track.id) {
                                 "Expand"
                             } else {
                                 "Collapse"
@@ -2016,6 +2025,9 @@ impl DawApp {
         if let Some(popup) = popup {
             self.open_popup(popup);
         }
+        if let Some(track) = mixer_target {
+            self.show_channel_in_mixer(ui.ctx(), track);
+        }
         if let Some(track) = channel_target {
             self.open_channel(track);
         }
@@ -2052,6 +2064,14 @@ impl DawApp {
             edits.push(Edit::TransferGroup(target));
         }
         for edit in edits {
+            // Closing a folder opened only for navigation restores its saved
+            // collapsed view without making a document edit.
+            if let Edit::Collapse(id) = &edit
+                && self.project.track(*id).is_some_and(|track| track.collapsed)
+                && self.arranger_selection.revealed_folders.remove(id)
+            {
+                continue;
+            }
             if !matches!(
                 edit,
                 Edit::Select(..)
@@ -2232,7 +2252,9 @@ impl DawApp {
                 }
                 Edit::Output(id, output) => self.project.set_output(id, output),
                 Edit::Collapse(id) => {
-                    if let Some(t) = self.project.track_mut(id) {
+                    if let Some(t) = self.project.track_mut(id)
+                        && (!self.arranger_selection.revealed_folders.remove(&id) || !t.collapsed)
+                    {
                         t.collapsed = !t.collapsed;
                     }
                     Ok(())
@@ -2245,6 +2267,7 @@ impl DawApp {
                         canvas.height(),
                         header_width,
                         &mut viewport,
+                        &self.arranger_selection.revealed_folders,
                     );
                     ui.ctx()
                         .data_mut(|data| data.insert_temp(viewport_id, viewport));
@@ -2268,6 +2291,7 @@ impl DawApp {
                             canvas.height(),
                             header_width,
                             &mut viewport,
+                            &self.arranger_selection.revealed_folders,
                         );
                         ui.ctx()
                             .data_mut(|data| data.insert_temp(viewport_id, viewport));

@@ -128,6 +128,8 @@ pub(crate) fn save(project: &Project, path: &Path) -> Result<()> {
     temporary
         .persist(path)
         .context("Atomically replace project bundle")?;
+    #[cfg(unix)]
+    File::open(parent)?.sync_all()?;
     Ok(())
 }
 

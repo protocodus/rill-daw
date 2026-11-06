@@ -18,6 +18,7 @@ pub(crate) struct LoadedProject {
     pub project: Project,
     pub waveforms: HashMap<String, AudioData>,
     pub waveform_warning: Option<String>,
+    pub previous_recovery: bool,
 }
 
 impl From<Project> for LoadedProject {
@@ -49,6 +50,7 @@ impl From<Project> for LoadedProject {
             project,
             waveforms,
             waveform_warning,
+            previous_recovery: false,
         }
     }
 }
@@ -84,11 +86,158 @@ pub(crate) struct ProjectIo {
     job: Option<Job>,
     queue: VecDeque<DocumentRequest>,
     dispatching: bool,
+    recovery: RecoveryIo,
+}
+
+/// Recovery is independent of document operations and native plug-in barriers.
+/// Only a running write and the newest pending snapshot per song are retained:
+/// dragging a control cannot create an unbounded backlog. Document requests
+/// wait for recovery, while a load completing during edits can cross one song
+/// boundary; that outgoing checkpoint must survive the first new-song edit.
+#[derive(Default)]
+struct RecoveryIo {
+    job: Option<mpsc::Receiver<Result<()>>>,
+    queued: VecDeque<(u64, Project, PathBuf)>,
+    requested: Option<(u64, u64)>,
+    quitting: bool,
+}
+
+fn write_recovery(snapshot: &Project, directory: &std::path::Path) -> Result<()> {
+    std::fs::create_dir_all(directory)?;
+    let latest = directory.join("recovery.daw.json");
+    // Preserve the preceding complete snapshot before atomically replacing the
+    // latest one. A crash/failure during either write leaves a complete copy.
+    if latest.exists() && Project::load(&latest).is_ok() {
+        let temporary = directory.join(format!(
+            ".recovery-previous-{}-{}.tmp",
+            std::process::id(),
+            daw_core::new_id()
+        ));
+        let result = (|| -> Result<()> {
+            std::fs::copy(&latest, &temporary)?;
+            std::fs::File::open(&temporary)?.sync_all()?;
+            std::fs::rename(&temporary, directory.join("recovery.previous.daw.json"))?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(temporary);
+        }
+        result?;
+    }
+    snapshot.save(latest)
 }
 
 impl DawApp {
+    pub(crate) fn recovery_pending(&self) -> bool {
+        self.project_io.recovery.job.is_some() || !self.project_io.recovery.queued.is_empty()
+    }
+
     pub(crate) fn project_io_pending(&self) -> bool {
-        self.project_io.job.is_some() || !self.project_io.queue.is_empty()
+        self.project_io.job.is_some()
+            || !self.project_io.queue.is_empty()
+            || self.project_io.recovery.quitting
+    }
+
+    /// Checkpoint each committed song revision, without making UI edits wait on
+    /// disk I/O or on a plug-in that may have stopped responding.
+    pub(crate) fn checkpoint_committed_work(&mut self) {
+        let key = (self.song_session.id, self.song_session.revision);
+        if self.modified && self.project_io.recovery.requested != Some(key) {
+            self.queue_recovery_snapshot();
+        }
+    }
+
+    pub(crate) fn queue_recovery_snapshot(&mut self) {
+        if !self.modified {
+            return;
+        }
+        self.project_io.recovery.requested =
+            Some((self.song_session.id, self.song_session.revision));
+        let pending = (
+            self.song_session.id,
+            self.project.clone(),
+            self.settings.scratch_dir.clone(),
+        );
+        if self
+            .project_io
+            .recovery
+            .queued
+            .back()
+            .is_some_and(|(id, _, _)| *id == pending.0)
+        {
+            *self.project_io.recovery.queued.back_mut().unwrap() = pending;
+        } else {
+            self.project_io.recovery.queued.push_back(pending);
+        }
+        self.start_recovery_write();
+    }
+
+    fn start_recovery_write(&mut self) {
+        if self.project_io.recovery.job.is_some() {
+            return;
+        }
+        let Some((_, snapshot, directory)) = self.project_io.recovery.queued.pop_front() else {
+            return;
+        };
+        let (sender, receiver) = mpsc::channel();
+        self.project_io.recovery.job = Some(receiver);
+        let startup = sender.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name("rill-recovery".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(|| write_recovery(&snapshot, &directory))
+                    .unwrap_or_else(|_| {
+                        Err(anyhow::anyhow!("Recovery worker stopped unexpectedly"))
+                    });
+                let _ = sender.send(result);
+            })
+        {
+            let _ = startup.send(Err(anyhow::anyhow!(
+                "Recovery worker could not start: {error}"
+            )));
+        }
+    }
+
+    pub(crate) fn finish_recovery_before_quit(&mut self) {
+        self.project_io.recovery.quitting = true;
+    }
+
+    fn poll_recovery(&mut self, ctx: &egui::Context) {
+        let result =
+            self.project_io
+                .recovery
+                .job
+                .as_ref()
+                .and_then(|receiver| match receiver.try_recv() {
+                    Ok(result) => Some(result),
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        Some(Err(anyhow::anyhow!("Recovery worker stopped unexpectedly")))
+                    }
+                    Err(mpsc::TryRecvError::Empty) => None,
+                });
+        if let Some(result) = result {
+            self.project_io.recovery.job = None;
+            if let Err(error) = result {
+                // Keep editing and retain the previous successful checkpoint.
+                // A failed shutdown checkpoint must never close this document.
+                self.project_io.recovery.quitting = false;
+                self.project_io.queue.clear();
+                self.message(Err(error.context("Recovery could not be saved; your work remains open. Check the recovery folder and save the project")), "");
+            }
+        }
+        self.start_recovery_write();
+        if self.project_io.recovery.quitting
+            && self.project_io.recovery.job.is_none()
+            && self.project_io.recovery.queued.is_empty()
+        {
+            self.project_io.recovery.quitting = false;
+            self.retire_engine();
+            self.close_ready = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        if self.project_io.recovery.job.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        }
     }
 
     /// Serialize public document requests, including requests made while an editor
@@ -100,6 +249,7 @@ impl DawApp {
         if self.project_io.dispatching
             || (!self.recording_busy()
                 && !self.project_io_pending()
+                && !self.recovery_pending()
                 && !self.state_sync_pending()
                 && self.export_job.is_none())
         {
@@ -146,9 +296,21 @@ impl DawApp {
     pub(crate) fn start_project_load(&mut self, path: PathBuf, recovery: bool) {
         let scratch = self.settings.scratch_dir.clone();
         self.start_project_job("Opening project…", move || {
-            let project = Project::load_with_assets(&path, scratch)?;
+            let (project, previous_recovery) = match Project::load_with_assets(&path, &scratch) {
+                Ok(project) => (project, false),
+                Err(error) if recovery => {
+                    let previous = path.with_file_name("recovery.previous.daw.json");
+                    let project = Project::load_with_assets(previous, &scratch).map_err(|_| {
+                        error.context("Latest and previous recovery snapshots are unavailable")
+                    })?;
+                    (project, true)
+                }
+                Err(error) => return Err(error),
+            };
+            let mut loaded = LoadedProject::from(project);
+            loaded.previous_recovery = previous_recovery;
             Ok(Completion::Loaded {
-                loaded: project.into(),
+                loaded,
                 path,
                 recovery,
             })
@@ -165,12 +327,25 @@ impl DawApp {
         self.project_io.job = Some(Job { receiver });
         self.status = status.into();
         self.error = false;
-        std::thread::spawn(move || {
-            let _ = sender.send(operation());
-        });
+        let startup = sender.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name("rill-project-io".into())
+            .spawn(move || {
+                let _ = sender.send(operation());
+            })
+        {
+            let _ = startup.send(Err(anyhow::anyhow!(
+                "Project worker could not start: {error}"
+            )));
+        }
     }
 
     pub(crate) fn poll_project_io(&mut self, ctx: &egui::Context) {
+        self.poll_recovery(ctx);
+        // Covers Undo/Redo and native state updates as well as UI/tool commits.
+        if !self.edit_dirty && !self.project_io.recovery.quitting && !self.close_ready {
+            self.checkpoint_committed_work();
+        }
         let result = self
             .project_io
             .job
@@ -230,6 +405,7 @@ impl DawApp {
         }
         if !self.recording_busy()
             && self.project_io.job.is_none()
+            && !self.recovery_pending()
             && !self.state_sync_pending()
             && self.export_job.is_none()
         {
@@ -263,6 +439,54 @@ impl DawApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_coalesces_edits_but_preserves_outgoing_song_checkpoint() {
+        let ctx = egui::Context::default();
+        let mut app = DawApp::with_context(&ctx, Project::new(), None);
+        let (_sender, receiver) = mpsc::channel();
+        app.project_io.recovery.job = Some(receiver);
+        app.modified = true;
+        app.project.add_audio_track("First edit");
+        app.queue_recovery_snapshot();
+        app.project.add_audio_track("Last outgoing edit");
+        app.queue_recovery_snapshot();
+        assert_eq!(app.project_io.recovery.queued.len(), 1);
+        app.song_session.reset();
+        app.project = Project::new();
+        app.project.add_audio_track("New song");
+        app.queue_recovery_snapshot();
+        assert_eq!(app.project_io.recovery.queued.len(), 2);
+        assert_eq!(app.project_io.recovery.queued[0].1.tracks.len(), 2);
+        assert_eq!(
+            app.project_io.recovery.queued[1].1.tracks[0].name,
+            "New song"
+        );
+    }
+
+    #[test]
+    fn recovery_failure_does_not_spin_or_close_the_document() {
+        let ctx = egui::Context::default();
+        let mut app = DawApp::with_context(&ctx, Project::new(), None);
+        app.modified = true;
+        let (sender, receiver) = mpsc::channel();
+        app.project_io.recovery.requested = Some((app.song_session.id, app.song_session.revision));
+        app.project_io.recovery.job = Some(receiver);
+        app.project_io.recovery.quitting = true;
+        sender.send(Err(anyhow::anyhow!("Disk full"))).unwrap();
+        app.poll_project_io(&ctx);
+        assert!(!app.recovery_pending());
+        assert!(!app.project_io_pending());
+        assert!(!app.close_ready);
+        for _ in 0..10 {
+            app.poll_project_io(&ctx);
+            assert!(
+                !app.recovery_pending(),
+                "Retry requires a new edit or periodic refresh"
+            );
+        }
+        assert!(app.error);
+    }
 
     #[test]
     fn failed_worker_cancels_queued_document_replacement_and_quit() {

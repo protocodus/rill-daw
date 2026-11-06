@@ -92,22 +92,33 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         "the active channel must have an output lane"
     );
     let routing_top = routes[0]["lane"]["min"][1].as_f64().unwrap();
-    for strip in &strips {
+    let channels = state["mixer"]["channels"].as_array().unwrap();
+    let offsets: Vec<_> = channels
+        .iter()
+        .map(|channel| {
+            if channel["bus"] == true {
+                f64::from(daw_ui::MIXER_ROLE_HEIGHT)
+            } else {
+                0.0
+            }
+        })
+        .chain(std::iter::once(0.0))
+        .collect();
+    for (strip, offset) in strips.iter().zip(&offsets) {
         assert!(
             strip.bottom <= routing_top + 0.1
                 && routing_top - strip.bottom <= f64::from(daw_ui::tokens::SPACE_SM),
             "channel controls must end immediately above the separate routing lanes at {height}: {strips:?}"
         );
         assert!(strip.bottom <= height);
-        assert!((strip.top - strips[0].top).abs() < 0.1);
+        assert!((strip.top - strips[0].top - offset).abs() < 0.1);
         assert!((strip.bottom - strips[0].bottom).abs() < 0.1);
     }
-    let channels = state["mixer"]["channels"].as_array().unwrap();
     let faders: Vec<_> = channels
         .iter()
         .map(|channel| Bounds::from(&channel["fader_scale"]["rail"]))
         .collect();
-    for (channel, fader) in channels.iter().zip(&faders) {
+    for ((channel, fader), offset) in channels.iter().zip(&faders).zip(&offsets) {
         let strip = Bounds::from(&channel["strip"]);
         let pan = Bounds::from(&channel["pan"]);
         let mute_solo = Bounds::from(&channel["mute_solo"]);
@@ -117,7 +128,7 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
             fader.height() >= 80.0,
             "A fader must retain usable travel: {fader:?}"
         );
-        assert!((fader.top - faders[0].top).abs() < 1.0);
+        assert!((fader.top - faders[0].top - offset).abs() < 1.0);
         assert!((fader.bottom - faders[0].bottom).abs() < 1.0);
         assert!(pan.bottom <= mute_solo.top && mute_solo.bottom <= fader.top);
         assert!(
@@ -141,13 +152,13 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
     ] {
         let controls = labels(state, label);
         assert_eq!(controls.len(), 3, "all {label} controls must be visible");
-        for control in &controls {
+        for (control, offset) in controls.iter().zip(&offsets) {
             assert!(control.bottom <= height, "{label}: {control:?}");
             assert!(
                 control.height() >= minimum_height,
                 "{label} must not be clipped"
             );
-            assert!((control.top - controls[0].top).abs() < 1.0);
+            assert!((control.top - controls[0].top - offset).abs() < 1.0);
         }
     }
     assert_aligned_targets(state, height);

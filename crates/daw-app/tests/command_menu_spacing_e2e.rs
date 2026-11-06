@@ -1,4 +1,4 @@
-//! Generous command menus remain bounded and mouse-scrollable on short displays.
+//! Compact command menus retain full mouse targets and scroll on short displays.
 mod common;
 
 use common::Harness;
@@ -12,6 +12,44 @@ fn label<'a>(state: &'a Value, name: &str) -> &'a Value {
         .rev()
         .find(|rect| rect["text"] == name)
         .unwrap_or_else(|| panic!("Missing {name}: {}", state["visible_labels"]))
+}
+
+fn center_y(label: &Value) -> f64 {
+    (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) * 0.5
+}
+
+#[test]
+fn main_menu_uses_tighter_vertical_insets_and_row_gaps() {
+    let mut app = Harness::new();
+    for dark in [false, true] {
+        for density in [1.0, 1.25, 2.0] {
+            app.command(json!({"command":"viewport", "width":800, "height":600,
+                "pixels_per_point":density}));
+            let state = app.command(json!({"command":"system_theme", "dark":dark}));
+            let expected = daw_ui::tokens::SPACE_XS + daw_ui::tokens::CONTROL_HEIGHT * 0.5;
+            assert!(
+                (center_y(label(&state, "File")) - f64::from(expected)).abs() <= 1.0,
+                "Menu titles use 5-point vertical panel padding at {density}×: {}",
+                label(&state, "File"),
+            );
+            app.click("File");
+            for _ in 0..3 {
+                app.inspect();
+            }
+            let state = app.inspect();
+            let stride = center_y(label(&state, "Open…")) - center_y(label(&state, "New"));
+            let expected = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_XS;
+            assert!(
+                (stride - f64::from(expected)).abs() <= 1.0,
+                "Full-height commands use only a 5-point row gap at {density}×: {stride}",
+            );
+            // Exercise a real mouse action after the geometry changed.
+            let state = app.click("New");
+            assert_eq!(state["native_menu"]["open"], false);
+            assert!(state["project"]["tracks"].as_array().unwrap().is_empty());
+        }
+    }
+    app.quit();
 }
 
 #[test]

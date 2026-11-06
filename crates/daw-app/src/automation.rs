@@ -41,6 +41,11 @@ enum Command {
     },
     AssistantScript {
         turns: Vec<daw_ai::ScriptedTurn>,
+        /// Explicit worker-crash fixtures, never enabled by the native app.
+        #[serde(default)]
+        crash_after: bool,
+        #[serde(default)]
+        crash_tool: bool,
     },
     WaitAssistant {
         #[serde(default = "default_timeout")]
@@ -726,7 +731,9 @@ impl Harness {
                 track.kind == daw_core::TrackKind::Audio,
                 "Target must be an audio track"
             );
-            let occurrence = crate::routing::visible_tracks(&self.app.project)
+            let occurrence = self
+                .app
+                .visible_arranger_tracks()
                 .iter()
                 .take_while(|(candidate, _)| *candidate != index)
                 .filter(|(candidate, _)| self.app.project.tracks[*candidate].name == track.name)
@@ -887,8 +894,14 @@ impl Harness {
                 self.mcp_server = server;
                 self.settle();
             }
-            Command::AssistantScript { turns } => {
-                self.app.assistant.set_script(turns);
+            Command::AssistantScript {
+                turns,
+                crash_after,
+                crash_tool,
+            } => {
+                self.app
+                    .assistant
+                    .set_script(turns, crash_after, crash_tool);
                 self.settle();
             }
             Command::WaitAssistant { timeout_ms } => {
@@ -1355,6 +1368,7 @@ impl Harness {
         while self.app.recording_busy()
             || self.app.state_sync_pending()
             || self.app.project_io_pending()
+            || self.app.recovery_pending()
             || self.app.document_guard_diagnostics()["phase"]
                 .as_str()
                 .is_some_and(|phase| !matches!(phase, "confirm" | "export_failed"))

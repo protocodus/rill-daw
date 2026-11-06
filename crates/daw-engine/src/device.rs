@@ -73,6 +73,37 @@ impl Default for DeviceSettings {
     }
 }
 
+impl DeviceSettings {
+    /// A balanced starting point, keeping roughly the same scheduling budget
+    /// as 256 frames at 48 kHz. Explicit lower/higher choices remain available
+    /// for live input or demanding plug-in graphs; hardware still sets its limits.
+    pub fn recommended_buffer_frames(sample_rate: u32) -> u32 {
+        let mut frames = 64_u32;
+        while frames < 4096 && u64::from(frames) * 48_000 < u64::from(sample_rate) * 256 {
+            frames *= 2;
+        }
+        frames
+    }
+
+    /// Two device buffers, with room for at least two complete renderer blocks.
+    /// This is also the bound used by the setup latency readout.
+    pub fn render_queue_frames(&self) -> usize {
+        (self.buffer_frames as usize)
+            .saturating_mul(2)
+            .max(BLOCK * 2)
+    }
+}
+
+/// Poll at most once per quarter render block when the queue is full. The
+/// two-block minimum leaves refill headroom while avoiding 4,000 wakeups/second
+/// at ordinary 44.1/48 kHz rates. This never runs on the device callback.
+fn refill_poll_interval(sample_rate: u32) -> Duration {
+    Duration::from_nanos(
+        (BLOCK as u64 * 1_000_000_000 / u64::from(sample_rate.max(1)) / 4)
+            .clamp(125_000, 1_000_000),
+    )
+}
+
 #[derive(Clone, Debug)]
 pub struct DeviceInfo {
     pub name: String,
@@ -259,16 +290,27 @@ impl AudioQueue {
                 .load(Ordering::Relaxed)
                 .wrapping_sub(self.read.load(Ordering::Acquire))
     }
+    #[cfg(test)]
     fn push(&self, frame: [f32; 2], beat: f64, generation: u64) {
+        self.push_block(&[frame], &[beat], generation);
+    }
+    fn push_block(&self, frames: &[[f32; 2]], positions: &[f64], generation: u64) {
+        debug_assert_eq!(frames.len(), positions.len());
+        debug_assert!(self.free() >= frames.len());
         let write = self.write.load(Ordering::Relaxed);
-        let slot = &self.slots[write % self.slots.len()];
-        slot.stereo.store(
-            frame[0].to_bits() as u64 | ((frame[1].to_bits() as u64) << 32),
-            Ordering::Relaxed,
-        );
-        slot.beat.store(beat.to_bits(), Ordering::Relaxed);
-        slot.generation.store(generation, Ordering::Relaxed);
-        self.write.store(write.wrapping_add(1), Ordering::Release);
+        for (offset, (frame, beat)) in frames.iter().zip(positions).enumerate() {
+            let slot = &self.slots[write.wrapping_add(offset) % self.slots.len()];
+            slot.stereo.store(
+                frame[0].to_bits() as u64 | ((frame[1].to_bits() as u64) << 32),
+                Ordering::Relaxed,
+            );
+            slot.beat.store(beat.to_bits(), Ordering::Relaxed);
+            slot.generation.store(generation, Ordering::Relaxed);
+        }
+        // Publish an entire rendered block with one release, rather than one
+        // cache-line handoff per sample. The callback sees only complete frames.
+        self.write
+            .store(write.wrapping_add(frames.len()), Ordering::Release);
     }
     fn pop(&self) -> Option<([f32; 2], f64, u64)> {
         let read = self.read.load(Ordering::Relaxed);
@@ -512,9 +554,7 @@ impl AudioEngine {
             .store(settings.sample_rate, Ordering::Relaxed);
         let channel_meters = Arc::new(ChannelMeters::new(project));
         let worker_meters = Arc::clone(&channel_meters);
-        let queue = Arc::new(AudioQueue::new(
-            (settings.buffer_frames as usize * 2).max(BLOCK * 2),
-        ));
+        let queue = Arc::new(AudioQueue::new(settings.render_queue_frames()));
         let input = InputController::new(
             Arc::clone(&controls),
             settings.sample_rate,
@@ -536,6 +576,7 @@ impl AudioEngine {
         let worker_controls = Arc::clone(&controls);
         let worker_queue = Arc::clone(&queue);
         let sample_rate = settings.sample_rate;
+        let refill_wait = refill_poll_interval(sample_rate);
         let render_options = crate::RenderOptions {
             resample_quality: settings.resample_quality,
         };
@@ -679,7 +720,7 @@ impl AudioEngine {
                         midi_monitor.update_suspended(&worker_controls.midi);
                     }
                     if worker_queue.free() < BLOCK {
-                        thread::sleep(Duration::from_micros(250));
+                        thread::sleep(refill_wait);
                         continue;
                     }
                     if !worker_controls.timing.suspends_midi_monitor() && !render_failure.attempt(&worker_controls, generation, || midi_monitor.update(&worker_controls.midi, &mut renderer)) {
@@ -712,9 +753,7 @@ impl AudioEngine {
                             .fetch_add(renderer.plugin_errors, Ordering::Relaxed);
                         renderer.plugin_errors = 0;
                     }
-                    for (frame, beat) in frames.iter().zip(positions) {
-                        worker_queue.push(*frame, beat, generation);
-                    }
+                    worker_queue.push_block(&frames, &positions, generation);
                     worker_controls
                         .rendered_frames
                         .fetch_add(BLOCK as u64, Ordering::Relaxed);
@@ -1336,6 +1375,53 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
 mod tests {
     use super::*;
     use anyhow::bail;
+
+    #[test]
+    fn balanced_buffer_budget_scales_with_sample_rate_and_retains_queue_floor() {
+        for (rate, recommended) in [
+            (8_000, 64),
+            (22_050, 128),
+            (44_100, 256),
+            (48_000, 256),
+            (88_200, 512),
+            (96_000, 512),
+            (192_000, 1024),
+        ] {
+            assert_eq!(DeviceSettings::recommended_buffer_frames(rate), recommended);
+        }
+        assert_eq!(DeviceSettings::default().buffer_frames, 256);
+        for (buffer, queue) in [(64, 512), (128, 512), (256, 512), (512, 1024), (2048, 4096)] {
+            let settings = DeviceSettings {
+                buffer_frames: buffer,
+                ..Default::default()
+            };
+            assert_eq!(settings.render_queue_frames(), queue);
+        }
+        assert_eq!(refill_poll_interval(48_000), Duration::from_millis(1));
+        assert!(refill_poll_interval(96_000) < refill_poll_interval(48_000));
+        assert!(refill_poll_interval(192_000) < refill_poll_interval(96_000));
+    }
+
+    #[test]
+    fn batched_queue_publication_preserves_sample_positions_generations_and_wrap() {
+        let queue = AudioQueue::new(7);
+        for cycle in 0..64 {
+            let frames = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]];
+            let positions = [1.0, 1.1, 1.2, 1.3];
+            assert_eq!(
+                crate::allocation_test_support::count_allocations(|| {
+                    queue.push_block(&frames, &positions, cycle);
+                }),
+                0
+            );
+            assert_eq!(queue.free(), 3);
+            for (frame, beat) in frames.into_iter().zip(positions) {
+                assert_eq!(queue.pop(), Some((frame, beat, cycle)));
+            }
+            assert!(queue.pop().is_none());
+            assert_eq!(queue.free(), 7);
+        }
+    }
 
     #[test]
     fn channel_peak_reads_are_nonblocking_and_silent_when_transport_is_stopped() {

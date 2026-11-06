@@ -213,7 +213,7 @@ Use the spacing scale consistently:
 | Relationship | Space |
 | --- | --- |
 | Tight caption/detail separation | 5 |
-| Related controls, compact toolbar groups, and menu frames | 8 |
+| Related controls, compact toolbar groups, and horizontal menu-frame insets | 8 |
 | Ordinary sibling rows, form rows, card/inset padding, menu-item horizontal padding | 13 |
 | Separate sections, pane gutters, horizontal window padding | 21 |
 | Major workspace separation | 34 |
@@ -222,9 +222,10 @@ Windows use 21-point horizontal and 13-point vertical padding. Standard actions
 retain 34-point targets and 13 × 8 padding; compact actions reduce horizontal
 padding to 8 without shrinking the target. Toolbars retain 8-point control gaps
 and vertical padding so small windows leave room for the musical canvas. Menus
-use 8-point outer insets, with 13-point horizontal padding inside shared items
-so text stays clear of its selection border. Shared command and choice menus
-use 8-point row gaps.
+use 8-point horizontal and 5-point vertical outer insets, with 13-point horizontal
+padding inside shared items so text stays clear of its selection border. Shared
+command and choice menus use 5-point row gaps while retaining 34-point mouse
+targets. The application menu bar also uses 5-point vertical frame insets.
 Label bands must reserve their measured height and a deliberate gap: empty
 space inside a font's line box is not a substitute for component padding.
 Derive list strides, scroll-body heights, and pinned footer reservations from
@@ -597,7 +598,8 @@ with balanced space around it and readable captions below. Use
 `parameter_row(ui, contents)` when mixing those sliders with other controls.
 `parameter_row_wrapped` and `parameter_toolbar` retain that alignment when rows
 wrap. Each reserves the height before painting. Form grids center each label beside
-its complete control. Structural columns, such as mixer strips, align at the top.
+its complete control. Structural columns align at the top; mixer bus and send-return
+cards reserve their type heading above the lower card edge.
 
 `editor_tools` keeps selection/drawing, cut/join/erase, copy, and timing tools
 together as individual quiet buttons. A fine vertical separator distinguishes
@@ -628,6 +630,19 @@ confirmation. `command_group` supplies one rounded surface, five-point padding
 and complete-group wrapping, without taking input itself.
 
 `mixer_strip(ui, id, size, color, selected, contents)` creates a vertical, fill-only channel card with a stable ID, a quiet wash of the track color and 8-point margins; the selected strip adds a glow and outline. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows measure their title/detail stack with 13-point insets and a 5-point text gap. They reserve the same preview space while thumbnails are loading so names and actions remain aligned.
+
+`mixer_role_heading` places a 34-point vector icon and a concise **Bus** or
+**Send return** caption above downstream channels. Bus cards begin 60 points
+below regular track cards and share their bottom baseline; their faders retain
+the same usable minimum. A bus receiving any send is a Send return, including
+mixed main-output/send destinations. This is presentation only: routing,
+identity and ordering are unchanged. The mixer header and channel-name context
+menu offer **Show in Arranger**; arranger track context menus offer **Show in
+Mixer**. Both reveal the same selected track, including horizontally distant
+strips and children of collapsed folders. Ancestors open temporarily without
+editing saved folder state or musical content. The persistent Arranger/Mixer
+workspace choices also reveal the selected track; a valid clip selection stays
+with its track.
 
 `device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections and producers. `filter_chip` shows an active filter and removes it when clicked; pair it with a **Clear filters** action.
 

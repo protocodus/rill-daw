@@ -240,12 +240,14 @@ impl DawApp {
     }
 
     pub(crate) fn request_recovery_save(&mut self) {
-        if self.modified
-            && !self.project_io_pending()
-            && !self.state_sync_pending()
-            && let Some(PendingAction::Recovery) = self.defer_for_editor(PendingAction::Recovery)
-        {
-            self.autosave_recovery();
+        // Save the last acknowledged state first. A hung/crashed native editor
+        // must not prevent unrelated edits from reaching recovery.
+        self.autosave_recovery();
+        if self.modified && !self.project_io_pending() && !self.state_sync_pending() {
+            // An immediate return means there is no editor state to add; the
+            // baseline above is sufficient. A deferred barrier checkpoints its
+            // newly acknowledged native state through finish_editor_action.
+            let _ = self.defer_for_editor(PendingAction::Recovery);
         }
     }
 
@@ -482,7 +484,7 @@ impl DawApp {
         }
     }
 
-    pub(crate) fn request_quit(&mut self, ctx: &egui::Context) {
+    pub(crate) fn request_quit(&mut self, _ctx: &egui::Context) {
         if matches!(
             self.instrument_ui
                 .pending
@@ -498,9 +500,7 @@ impl DawApp {
         self.error = false;
         if let Some(PendingAction::Quit) = self.defer_for_editor(PendingAction::Quit) {
             self.autosave_recovery();
-            self.retire_engine();
-            self.close_ready = true;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.finish_recovery_before_quit();
         }
     }
 
@@ -1650,7 +1650,7 @@ impl DawApp {
         }
     }
 
-    fn finish_editor_action(&mut self, action: PendingAction, ctx: &egui::Context) {
+    fn finish_editor_action(&mut self, action: PendingAction, _ctx: &egui::Context) {
         match action {
             PendingAction::Save(path) => self.finish_project_save(path),
             PendingAction::Export(path, include_effect_tails) => {
@@ -1667,9 +1667,7 @@ impl DawApp {
             } => self.finish_open_project(*loaded, path, recovery),
             PendingAction::Quit => {
                 self.autosave_recovery();
-                self.retire_engine();
-                self.close_ready = true;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                self.finish_recovery_before_quit();
             }
         }
     }
@@ -1817,6 +1815,15 @@ mod tests {
         app.modified = true;
         app.instrument_ui.owner = Some((id.into(), instrument));
         app
+    }
+
+    fn drain_recovery(app: &mut DawApp, ctx: &egui::Context) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.recovery_pending() || app.project_io_pending() {
+            assert!(Instant::now() < deadline, "Recovery did not finish");
+            app.poll_project_io(ctx);
+            std::thread::yield_now();
+        }
     }
 
     fn automation_parameter(id: u32, read_only: bool) -> ParameterInfo {
@@ -2408,6 +2415,7 @@ mod tests {
             saved: false,
         });
         app.poll_instrument_editor(&ctx);
+        drain_recovery(&mut app, &ctx);
         assert!(!app.state_sync_pending());
         assert!(app.error && app.modified);
         assert!(!output.exists());
@@ -2431,6 +2439,7 @@ mod tests {
         app.request_quit(&ctx);
         assert!(app.state_sync_pending());
         app.poll_instrument_editor(&ctx);
+        drain_recovery(&mut app, &ctx);
         assert!(!app.state_sync_pending());
         assert!(app.close_ready);
         assert!(!app.error);
@@ -2467,6 +2476,7 @@ mod tests {
             .unwrap();
         app.instrument_autolaunch = Some(track);
         app.request_quit(&ctx);
+        drain_recovery(&mut app, &ctx);
         assert!(
             app.close_ready,
             "The replaced class cannot save into the new class"
@@ -2498,6 +2508,7 @@ mod tests {
         app.request_quit(&ctx);
         assert!(app.state_sync_pending());
         app.poll_instrument_editor(&ctx);
+        drain_recovery(&mut app, &ctx);
         assert!(!app.state_sync_pending());
         assert!(app.error);
         assert!(!app.close_ready);

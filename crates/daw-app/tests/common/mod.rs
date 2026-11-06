@@ -249,6 +249,22 @@ impl Harness {
         )
     }
 
+    /// Kill the app without any Save/Quit or shutdown recovery, then start a
+    /// fresh process using only what was already persisted to its isolated disk.
+    pub fn crash_and_restart(mut self) -> Self {
+        self.child.kill().expect("kill application process");
+        self.child.wait().expect("reap crashed application");
+        let directory = std::mem::replace(&mut self.directory, tempfile::tempdir().unwrap());
+        Self::launch_configured(
+            self.vst_path.as_deref(),
+            directory,
+            None,
+            self.plugin_host.as_deref(),
+            self.plugin_previews,
+            self.virtual_audio,
+        )
+    }
+
     fn response(&self) -> Value {
         let line = self
             .output

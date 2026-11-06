@@ -55,6 +55,7 @@ impl DawApp {
         let mut changed = false;
         let mut popup = None;
         let mut channel_target = None;
+        let mut arranger_target = None;
         let mut device_target = None;
         let mut insert_target = None;
         let mut device_diagnostics = Vec::new();
@@ -143,9 +144,9 @@ impl DawApp {
                     .push((track.id, Some(send.pre_fader)));
             }
         }
-        let mut reveal_channel = ui
+        let mut reveal_channel = self.mixer_reveal_channel.take().or(ui
             .ctx()
-            .data_mut(|data| data.remove_temp::<u64>(egui::Id::new("mixer_reveal_channel")));
+            .data_mut(|data| data.remove_temp::<u64>(egui::Id::new("mixer_reveal_channel"))));
         if let Some((direction, extend)) = daw_ui::selection_navigation_input(ui, None) {
             let direction = match direction {
                 daw_ui::SelectionDirection::Up => daw_ui::SelectionDirection::Left,
@@ -216,6 +217,14 @@ impl DawApp {
         let spacing = daw_ui::MIXER_ROW_GAP;
         let section_gap = daw_ui::MIXER_SECTION_GAP;
         let control = daw_ui::tokens::CONTROL_HEIGHT;
+        let role_height = if channel_indices
+            .iter()
+            .any(|index| self.project.tracks[*index].kind == TrackKind::Bus)
+        {
+            daw_ui::MIXER_ROLE_HEIGHT
+        } else {
+            0.0
+        };
         let send_area_height = 2.0 * daw_ui::MIXER_SEND_ROW_HEIGHT + spacing;
         // Signal order: identity and source, effects, pan with mute/solo, the
         // gain and peak readouts over the fader unit, then output and sends.
@@ -264,7 +273,8 @@ impl DawApp {
                 - notice_reserve
                 - group_header_height
                 - fixed_height
-                - daw_ui::tokens::MIXER_FADER_MIN;
+                - daw_ui::tokens::MIXER_FADER_MIN
+                - role_height;
             let rows = (budget / (daw_ui::DEVICE_IDENTITY_HEIGHT + spacing))
                 .floor()
                 .max(1.0)
@@ -275,7 +285,7 @@ impl DawApp {
         fixed_height += device_height;
         let strip_height =
             (workspace_height - routing_overview_height - notice_reserve - group_header_height)
-                .max(fixed_height + daw_ui::tokens::MIXER_FADER_MIN);
+                .max(fixed_height + daw_ui::tokens::MIXER_FADER_MIN + role_height);
         // The `[scale][rail][gap][meter]` unit sits on the strip axis.
         let unit_offset = ((content_width - daw_ui::MIXER_FADER_UNIT_WIDTH) * 0.5)
             .max(0.0)
@@ -353,7 +363,23 @@ impl DawApp {
                     let destination = track.output_bus.and_then(|id| names.get(&id))
                         .map(String::as_str).unwrap_or("Master");
                     let channel_peaks = self.engine.as_ref().map(|engine| engine.channel_peaks(track.id)).unwrap_or([0.0; 2]);
-                    let strip = daw_ui::mixer_strip(ui, track.id, strip_size,
+                    let role = bus.then(|| {
+                        if incoming.get(&track.id).is_some_and(|routes| routes.iter().any(|(_, send)| send.is_some())) {
+                            daw_ui::MixerChannelRole::SendReturn
+                        } else { daw_ui::MixerChannelRole::Bus }
+                    });
+                    let mut role_heading = None;
+                    let mut identity_rect = egui::Rect::NOTHING;
+                    let strip = ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        let offset = if let Some(role) = role {
+                            let heading = daw_ui::mixer_role_heading(ui, role, strip_width, color(track.color));
+                            role_heading = Some(heading.rect);
+                            daw_ui::MIXER_ROLE_HEIGHT
+                        } else { 0.0 };
+                        let channel_size = Vec2::new(strip_width, strip_height - offset);
+                        let fader_height = channel_size.y - fixed_height;
+                        daw_ui::mixer_strip(ui, track.id, channel_size,
                         Some(color(track.color)), selected_channels.contains(&track.id), |ui| {
                         ui.spacing_mut().item_spacing.y = spacing;
                         // Identity
@@ -362,6 +388,9 @@ impl DawApp {
                             .on_hover_text(format!("Open channel · {} · {} · Right-click for channel and selection actions · Shift-click to add/remove", track.name, if reorder_enabled { "Drag to reorder" } else { "Signal flow order; choose Song order to drag" }));
                         let name = if reorder_enabled { daw_ui::track_reorder_source(ui, &name, track.id) } else { name };
                         name.context_menu(|ui| {
+                            if daw_ui::button(ui, "Show in Arranger").clicked() {
+                                arranger_target = Some(track.id); ui.close();
+                            }
                             if daw_ui::button(ui, "Open channel").clicked() {
                                 channel_target = Some(track.id); ui.close();
                             }
@@ -449,6 +478,7 @@ impl DawApp {
                             }).inner;
                             (menu.response.rect, kind.rect)
                         });
+                        identity_rect = name.rect.union(source.response.rect);
                         // Effects
                         ui.add_space(section_gap - spacing);
                         let effects = daw_ui::mixer_effects_button(ui, content_width,
@@ -590,7 +620,8 @@ impl DawApp {
                             "sections":section_diagnostics,
                             "stages":{"input":rect_json(source.response.rect),"processing":rect_json(effects.rect.union(insert_summary.rect)),
                                 "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}})
-                    });
+                    })
+                    }).inner;
                     let drop = if reorder_enabled {
                         daw_ui::track_reorder_target(ui, strip.response.rect, track.id,
                             daw_ui::TrackReorderAxis::Horizontal, false, |intent| intent.source != intent.target)
@@ -606,13 +637,19 @@ impl DawApp {
                     if let Some(intent) = drop.dropped { track_reorder = Some(intent); }
                     anchors.insert(Some(track.id), strip.response.rect.center_bottom());
                     if reveal_channel == Some(track.id) {
-                        ui.scroll_to_rect(strip.response.rect, Some(egui::Align::Center));
+                        // Oversized strips cannot fit a short viewport. Reveal
+                        // the bounded identity/source band instead of centering
+                        // the full card and clipping its clickable name above it.
+                        let identity = role_heading.map_or(identity_rect, |heading| heading.union(identity_rect));
+                        ui.scroll_to_rect(identity.expand(daw_ui::MIXER_CHANNEL_MARGIN), Some(egui::Align::Center));
                     }
                     if ui.is_enabled() && !panning && !egui::Popup::is_any_open(ui.ctx())
                         && ui.input(|input| input.pointer.hover_pos()).is_some_and(|pos| strip.response.rect.contains(pos))
                     { flow_source = Some(track.id); }
                     let mut channel_diagnostics = strip.inner;
                     channel_diagnostics["strip"] = rect_json(strip.response.rect);
+                    channel_diagnostics["role"] = role.map(|role| serde_json::json!(role.label())).unwrap_or(serde_json::json!("Track"));
+                    channel_diagnostics["role_heading"] = role_heading.map(rect_json).unwrap_or(serde_json::Value::Null);
                     channel_diagnostics["drop"] = if reorder_enabled { rect_json(strip.response.rect) } else { serde_json::Value::Null };
                     diagnostics.push(channel_diagnostics);
                 }
@@ -741,6 +778,9 @@ impl DawApp {
         }
         if let Some(popup) = popup {
             self.open_popup(popup);
+        }
+        if let Some(track) = arranger_target {
+            self.show_channel_in_arranger(track);
         }
         if let Some(track) = channel_target {
             self.open_channel(track);

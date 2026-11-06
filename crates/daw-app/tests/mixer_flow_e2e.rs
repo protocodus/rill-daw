@@ -140,8 +140,9 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         let before = app.click("Song order");
         assert_eq!(before["project"], flow_view["project"]);
         assert_eq!(before["history"], flow_view["history"]);
-        // The pointer remains over the workspace selector; this shows the
-        // selected channel rather than relying on a synthetic graph snapshot.
+        // Dismissed choices can overlap a lowered bus name. Move clear before
+        // checking idle colors so the name plate's hover tint is not included.
+        app.command(json!({"command":"pointer", "phase":"move", "x":10, "y":10}));
         let state = paint(&mut app);
         let visual = state["mixer"]["channels"].as_array().unwrap();
         assert_eq!(

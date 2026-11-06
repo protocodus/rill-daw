@@ -134,6 +134,7 @@ impl DawApp {
             (self.history.state_id(), after_selection),
             self.history.retained_state_ids(),
         );
+        self.checkpoint_committed_work();
         if audio_changed {
             self.revision = self.revision.wrapping_add(1);
             self.update_playback();

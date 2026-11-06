@@ -1068,7 +1068,9 @@ pub fn number_at(
 
 fn menu_item_spacing(style: &mut egui::Style) {
     style.spacing.button_padding = egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
-    style.spacing.item_spacing = egui::Vec2::splat(tokens::SPACE_SM);
+    // Full-height targets already supply text padding; use a tighter gap
+    // between rows so long menus do not spend their height on empty space.
+    style.spacing.item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_XS);
     let color = style
         .visuals
         .override_text_color

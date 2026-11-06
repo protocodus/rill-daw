@@ -47,6 +47,13 @@ Audio `Process` and `ProcessBuses` retain Rill's 100 ms deadline, so a stalled
 processor still terminates promptly. The native fixture delays lifecycle callbacks
 by 200 ms and checks both successful initialization and enforced timeout bounds.
 
+The isolated command pipe uses one persistent writer and a one-request queue.
+The response deadline covers request writes as well as response reads, including
+large state transfers to a helper that leaves stdin open without reading it.
+Shutdown never writes directly to that pipe, and kills an unresponsive child
+before bounded writer/reader cleanup. Protocol tests exercise a blocked 4 MiB
+state write and shutdown while the command pipe is full.
+
 Regression coverage lives with the upstream COM implementation unit tests and
 process-isolation serialization tests. A native test plugin terminates its worker
 if `createView` is reached: `native_dsp_load` checks DSP/state and capability queries,

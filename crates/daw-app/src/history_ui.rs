@@ -46,6 +46,7 @@ impl DawApp {
             }
         }
         self.modified = !self.history.is_saved();
+        self.checkpoint_committed_work();
         if audio_changed {
             self.revision = self.revision.wrapping_add(1);
             self.update_playback();

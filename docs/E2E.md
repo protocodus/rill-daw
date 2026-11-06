@@ -1,5 +1,17 @@
 # Application E2E tests
 
+`buffer_setup_e2e` selects a manual audio buffer, verifies cancelling a
+recommendation preserves it, applies the rate-aware balanced recommendation at
+96 kHz, and checks persistence across app restart. Run with
+`cargo test --locked -p daw-app --test buffer_setup_e2e`.
+
+`mixer_identity_navigation_e2e` checks lowered bus/send-return strips and large
+type headings in light/dark and compact/tall layouts. It follows a distant mixer
+channel into nested collapsed arranger folders and back, checks persistent
+workspace navigation and clip-selection retention, and verifies that viewing
+leaves the project and undo history unchanged. Run with
+`cargo test --locked -p daw-app --test mixer_identity_navigation_e2e`.
+
 `mixer_group_bus_e2e` creates a bus from a mouse-selected channel group, keeps
 shared downstream processing and existing sends, and checks cancellation and
 atomic Undo/Redo in compact/light and wide/dark layouts. Different previous
@@ -609,6 +621,10 @@ Headless runs disable automatic physical-device startup for held-note previews. 
 Headless automation and app unit tests also disable automatic native plugin preview capture; `RILL_E2E_PLUGIN_PREVIEWS=1` (set by `Harness::with_plugin_previews`) enables it for a test that supplies its own editor worker through `DAW_PLUGIN_HOST`. Scanning remains metadata-only and cached previews still display. **Capture preview** and **Refresh preview** remain explicit actions for opted-in native tests; normal desktop use still captures previews automatically. `library_e2e` verifies that merely scanning and drawing frames leaves previews missing, while an explicitly requested capture of its metadata-only fixture fails safely without executable plugin code.
 
 The `project_io_e2e` target covers background bundle saving and loading, later edits remaining dirty, failure preserving the previous archive/current document, Quit waiting for a save, deduplicated waveform preparation, and rejecting oversized WAV declarations before allocation. On Unix it uses a small OS pipe to hold a project read open while exercising real menus, then verifies ordered Save/New completion and outgoing recovery. It needs no device, display, or installed plugin.
+
+`crash_recovery_e2e` waits for committed edits to reach recovery, kills the actual app process without Save or Quit, restarts it, and restores the same song through **File → Recover last session…**. It also checks fallback from a corrupt latest checkpoint and that a failed recovery write retains an editable song that can still be saved explicitly. `wait_project` drains pending recovery writes as well as document operations and native barriers.
+
+`worker_crash_e2e` injects an AI provider panic after a successful edit and a background workflow-tool panic, then checks retained song history, recovery on disk, prompt restoration, and a subsequent successful worker run. Fault switches belong only to the explicit headless `assistant_script` command and default to false.
 
 `document_guard_e2e` covers New/Open/Quit and native close requests, Cancel/Escape preserving the previous workspace, blocked background edits, native picker cancellation, failed-save retry, and Save completing the actual archive before a transition. It exercises global Save/Open shortcuts from Properties and long Unicode project names in Light/Dark at 1×/2×. `document_guard` exposes the current intent, phase and error; `file_dialog_pending` reports an unconsumed picker result. The `--screenshot ... --view unsaved-changes` preview allows native rendering of the shared decision dialog with an isolated configuration.
 
@@ -1223,3 +1239,8 @@ that the Crossfade window carries the edited clip in its title.
 Edit ▸ Audio submenu), Track and Window menus, the right-aligned muted shortcut
 column, Track ▸ Delete track, the Library window title, and the menu bar's
 centered project name with duration and the AI button at the right edge.
+
+`command_menu_spacing_e2e` checks compact 5-point menu-bar vertical insets and
+menu row gaps in both themes at 1×, 1.25× and 2× scale. It clicks the resized
+menu geometry and verifies that every top-level menu stays inside a short
+viewport, scrolls with the mouse and keeps the final Window action reachable.

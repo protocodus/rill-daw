@@ -5,9 +5,9 @@
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -1126,13 +1126,17 @@ impl Write for ProtocolChannel {
 
 /// Manages a plugin running in an isolated process.
 ///
-/// Responses are read on a background thread and delivered over a channel, so
+/// Requests and responses use background pipe workers and bounded queues, so
 /// [`Self::send_command`] can wait with a deadline: a hung plugin yields a timeout
 /// error (and the child is killed) instead of blocking the host forever, and a
 /// crashed helper surfaces as a disconnect error rather than a silent wedge.
 pub struct PluginHostProcess {
     process: Option<Child>,
-    stdin: Option<ChildStdin>,
+    /// One persistent writer owns stdin. A helper that stops reading cannot
+    /// block the caller before its response deadline starts.
+    commands: Option<SyncSender<String>>,
+    writer: Option<JoinHandle<()>>,
+    writer_finished: Arc<AtomicBool>,
     /// Lines received from the helper's stdout (one JSON response each).
     responses: Receiver<String>,
     /// Background reader thread handle (joined, with a bound, on shutdown).
@@ -1360,8 +1364,30 @@ impl PluginHostProcess {
             .spawn()
             .map_err(|e| format!("Failed to spawn helper process: {}", e))?;
 
-        let stdin = child.stdin.take().ok_or("Failed to get stdin")?;
+        let mut stdin = child.stdin.take().ok_or("Failed to get stdin")?;
         let stdout = child.stdout.take().ok_or("Failed to get stdout")?;
+
+        // A pipe write can block too: plug-ins may stop the helper's command
+        // loop before it reads a large state/audio request. Keep exactly one
+        // persistent writer and at most one queued request. The caller waits
+        // for the response under a deadline covering both pipe directions;
+        // killing the child also releases a blocked writer.
+        let (commands, command_rx) = mpsc::sync_channel::<String>(1);
+        let writer_finished = Arc::new(AtomicBool::new(false));
+        let writer = std::thread::spawn({
+            let finished = Arc::clone(&writer_finished);
+            move || {
+                while let Ok(command) = command_rx.recv() {
+                    if writeln!(stdin, "{}", command)
+                        .and_then(|()| stdin.flush())
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                finished.store(true, Ordering::Release);
+            }
+        });
 
         // Read responses on a background thread so the caller can apply a deadline.
         // The thread ends (dropping the sender) when stdout hits EOF — i.e. when the
@@ -1407,7 +1433,9 @@ impl PluginHostProcess {
 
         Ok(Self {
             process: Some(child),
-            stdin: Some(stdin),
+            commands: Some(commands),
+            writer: Some(writer),
+            writer_finished,
             responses: rx,
             reader: Some(reader),
             reader_finished: finished,
@@ -1546,21 +1574,22 @@ impl PluginHostProcess {
         // Anything already queued predates this command.
         self.drop_stale_lines();
 
-        {
-            let Some(stdin) = self.stdin.as_mut() else {
-                return Err(ExchangeError::AlreadyDead("No stdin available".to_string()));
-            };
-            if let Err(e) = writeln!(stdin, "{}", command_json).and_then(|()| stdin.flush()) {
-                self.dead = true;
-                return Err(ExchangeError::DiedDuringCommand(format!(
-                    "Failed to write command (helper gone?): {}",
-                    e
-                )));
-            }
-        }
-
         let timeout = self.timeout_for(&command);
         let deadline = Instant::now() + timeout;
+        let Some(commands) = self.commands.as_ref() else {
+            return Err(ExchangeError::AlreadyDead(
+                "No command pipe available".to_string(),
+            ));
+        };
+        if let Err(error) = commands.try_send(command_json) {
+            self.dead = true;
+            if let Some(process) = self.process.as_mut() {
+                let _ = process.kill();
+            }
+            return Err(ExchangeError::DiedDuringCommand(format!(
+                "Failed to queue command (helper writer stopped?): {error}"
+            )));
+        }
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             match self.responses.recv_timeout(remaining) {
@@ -1591,7 +1620,7 @@ impl PluginHostProcess {
                         let _ = process.kill();
                     }
                     return Err(ExchangeError::TimedOut(format!(
-                        "Timed out after {:?} waiting for helper response (plugin may have hung)",
+                        "Timed out after {:?} sending command or waiting for helper response (plugin may have hung)",
                         timeout
                     )));
                 }
@@ -1642,21 +1671,20 @@ impl PluginHostProcess {
 
     /// Shutdown the helper process
     pub fn shutdown(&mut self) {
-        // Best-effort Shutdown command (no response expected — the helper just exits).
-        // We do NOT use send_command here: it waits for a reply, and Shutdown has none.
+        // Best-effort, nonblocking Shutdown command (no response expected).
+        // Never write directly here: a full pipe must not hang Drop either.
         if !self.dead {
-            if let (Some(stdin), Ok(json)) = (
-                self.stdin.as_mut(),
+            if let (Some(commands), Ok(json)) = (
+                self.commands.as_ref(),
                 serde_json::to_string(&HostCommand::Shutdown),
             ) {
-                let _ = writeln!(stdin, "{}", json);
-                let _ = stdin.flush();
+                let _ = commands.try_send(json);
             }
         }
 
-        // Dropping stdin gives the helper's read loop EOF, guaranteeing it exits even
-        // if it ignored the Shutdown command; that in turn ends the reader thread.
-        self.stdin = None;
+        // Once queued writes finish, dropping the command channel closes stdin.
+        // A blocked writer is released by the bounded child termination below.
+        self.commands = None;
 
         if let Some(mut process) = self.process.take() {
             // Bounded wait, then SIGKILL: this runs from Drop, so a wedged helper must not
@@ -1677,6 +1705,19 @@ impl PluginHostProcess {
                         break;
                     }
                 }
+            }
+        }
+        if let Some(writer) = self.writer.take() {
+            // A grandchild can inherit the read side too. As with the response
+            // reader below, join only after completion; never wait indefinitely.
+            let deadline = Instant::now() + Duration::from_millis(250);
+            while !self.writer_finished.load(Ordering::Acquire) && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            if self.writer_finished.load(Ordering::Acquire) {
+                let _ = writer.join();
+            } else {
+                log::debug!("isolation: helper stdin still blocked, detaching writer thread");
             }
         }
         if let Some(reader) = self.reader.take() {
@@ -2766,6 +2807,74 @@ mod wire_tests {
         assert!(proc.send_command(HostCommand::Shutdown).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A large request fills the OS pipe when a hung helper leaves stdin open
+    /// without reading. Its write must share the command deadline, rather than
+    /// blocking before the response timeout can start.
+    #[cfg(unix)]
+    #[test]
+    fn blocked_request_write_times_out_and_terminates_its_pipe_workers() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "vst3_blocked_write_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("not-reading-helper");
+        std::fs::write(&fake, "#!/bin/sh\nexec sleep 10\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let mut process = PluginHostProcess::spawn(fake, Duration::from_millis(200)).unwrap();
+        process.set_slow_command_timeout(Duration::from_millis(200));
+        let started = Instant::now();
+        let error = process
+            .send_command(HostCommand::LoadState {
+                data: vec![42; 4 * 1024 * 1024],
+                context: crate::plugin::StateContext::Project,
+            })
+            .expect_err("a helper that never reads cannot accept the state");
+        assert!(error.contains("Timed out"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(3), "{error}");
+        assert!(!process.is_alive());
+        assert!(process.send_command(HostCommand::Shutdown).is_err());
+        process.shutdown();
+        assert!(process.writer_finished.load(Ordering::Acquire));
+        assert!(process.reader_finished.load(Ordering::Acquire));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Shutdown itself is also bounded when the writer already owns a request
+    /// larger than a non-reading child's pipe.
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_does_not_write_to_a_blocked_command_pipe() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "vst3_blocked_shutdown_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("not-reading-helper");
+        std::fs::write(&fake, "#!/bin/sh\nexec sleep 10\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut process = PluginHostProcess::spawn(fake, Duration::from_millis(200)).unwrap();
+        process
+            .commands
+            .as_ref()
+            .unwrap()
+            .try_send("x".repeat(4 * 1024 * 1024))
+            .unwrap();
+        let started = Instant::now();
+        process.shutdown();
+        assert!(started.elapsed() < Duration::from_secs(4));
+        assert!(process.writer_finished.load(Ordering::Acquire));
+        assert!(process.reader_finished.load(Ordering::Acquire));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// A helper that dies on its Nth load and answers otherwise, so a test can pin exactly how

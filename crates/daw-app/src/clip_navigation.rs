@@ -9,7 +9,7 @@ impl DawApp {
         let Some(current) = self.selected() else {
             return [None, None];
         };
-        let visible = crate::routing::visible_tracks(&self.project);
+        let visible = self.visible_arranger_tracks();
         let Some(row) = visible
             .iter()
             .position(|&(index, _)| Some(self.project.tracks[index].id) == self.selected_track)
@@ -162,7 +162,8 @@ impl DawApp {
             SelectionDirection::Left | SelectionDirection::Right
         );
         let selected_track = self.selected_track;
-        let candidates: Vec<_> = crate::routing::visible_tracks(&self.project)
+        let candidates: Vec<_> = self
+            .visible_arranger_tracks()
             .into_iter()
             .enumerate()
             .flat_map(|(row, (index, _))| {

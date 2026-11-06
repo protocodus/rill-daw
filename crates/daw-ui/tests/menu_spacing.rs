@@ -176,13 +176,19 @@ fn choice_text_has_its_own_padding_inside_a_compact_menu_frame() {
                     "Frame inset must be 8px plus its border: {popup:?}, {:?}",
                     rows[0].1.rect,
                 );
+                assert!(
+                    (rows[0].1.rect.top() - popup.top() - border - tokens::SPACE_XS).abs()
+                        <= tolerance,
+                    "Vertical frame inset must be 5px plus its border: {popup:?}, {:?}",
+                    rows[0].1.rect,
+                );
                 if kind < 3 {
                     for pair in rows.windows(2) {
                         assert!(
-                            (pair[1].1.rect.top() - pair[0].1.rect.bottom() - tokens::SPACE_SM)
+                            (pair[1].1.rect.top() - pair[0].1.rect.bottom() - tokens::SPACE_XS)
                                 .abs()
                                 <= tolerance,
-                            "Shared menu rows retain 8px separation"
+                            "Shared menu rows retain compact 5px separation"
                         );
                     }
                 }

@@ -26,6 +26,86 @@ impl MixerOrder {
 }
 
 impl DawApp {
+    pub(crate) fn visible_arranger_tracks(&self) -> Vec<(usize, usize)> {
+        if self.arranger_selection.revealed_folders.is_empty() {
+            crate::routing::visible_tracks(&self.project)
+        } else {
+            crate::routing::visible_tracks_with_expanded(
+                &self.project,
+                &self.arranger_selection.revealed_folders,
+            )
+        }
+    }
+
+    /// Keep one shared track identity while moving between the two workspaces.
+    pub(crate) fn show_channel_in_mixer(&mut self, ctx: &egui::Context, track: u64) {
+        if self.project.track(track).is_none_or(|track| {
+            !matches!(
+                track.kind,
+                TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+            )
+        }) {
+            return;
+        }
+        if self.selected_track != Some(track) {
+            self.selected_clip = None;
+            self.arranger_selection.ids.clear();
+            self.arranger_selection.span = None;
+        }
+        self.selected_track = Some(track);
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("mixer_reveal_channel"), track));
+        self.open_workspace(crate::app::WorkspaceView::Mixer);
+    }
+
+    pub(crate) fn queue_arranger_channel_reveal(&mut self, track: u64) {
+        if self.project.track(track).is_none() {
+            return;
+        }
+        let mut parent = self
+            .project
+            .track(track)
+            .and_then(|track| track.parent_folder);
+        for _ in 0..self.project.tracks.len() {
+            let Some(folder) = parent.and_then(|id| self.project.track(id)) else {
+                break;
+            };
+            self.arranger_selection.revealed_folders.insert(folder.id);
+            parent = folder.parent_folder;
+        }
+        self.arranger_selection.reveal = Some((track, self.selected_clip.unwrap_or(0)));
+    }
+
+    pub(crate) fn show_channel_in_arranger(&mut self, track: u64) {
+        if self.project.track(track).is_none() {
+            return;
+        }
+        if self.selected_track != Some(track) {
+            self.selected_clip = None;
+            self.arranger_selection.ids.clear();
+            self.arranger_selection.span = None;
+        }
+        self.selected_track = Some(track);
+        self.queue_arranger_channel_reveal(track);
+        self.open_workspace(crate::app::WorkspaceView::Arrangement);
+    }
+
+    pub(crate) fn mixer_track_navigation(&mut self, ui: &mut egui::Ui) {
+        if let Some(track) = self
+            .selected_track
+            .filter(|id| self.project.track(*id).is_some())
+            && ui
+                .add(if ui.ctx().content_rect().width() < 1200.0 {
+                    daw_ui::IconButton::icon_only(daw_ui::Icon::Editor, "Show in Arranger").quiet()
+                } else {
+                    daw_ui::IconButton::with_icon(daw_ui::Icon::Editor, "Show in Arranger").quiet()
+                })
+                .on_hover_text("Reveal this channel's track in Arrangement")
+                .clicked()
+        {
+            self.show_channel_in_arranger(track);
+        }
+    }
+
     pub(crate) fn mixer_order_menu(&self, ui: &mut egui::Ui) {
         let mut order = MixerOrder::read(ui.ctx());
         let previous = order;

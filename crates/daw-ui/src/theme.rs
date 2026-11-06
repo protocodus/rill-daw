@@ -348,7 +348,8 @@ pub fn apply(ctx: &egui::Context) {
         style.spacing.button_padding =
             egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
         style.spacing.window_margin = tokens::WINDOW_MARGIN;
-        style.spacing.menu_margin = (tokens::SPACE_SM as i8).into();
+        style.spacing.menu_margin =
+            egui::Margin::symmetric(tokens::SPACE_SM as i8, tokens::SPACE_XS as i8);
         style.spacing.icon_spacing = tokens::SPACE_SM;
         style.spacing.interact_size.y = tokens::CONTROL_HEIGHT;
         style.spacing.combo_width = tokens::SELECT_WIDTH;

@@ -128,9 +128,33 @@ fn native_render_failure_details_are_copyable_while_healthy_audio_keeps_playing(
     ));
     let session = app.directory.path().join("render-failure.rill");
     project.save(&session).unwrap();
-    app.command(json!({"command":"open", "path":session}));
+    let opened = app.command(json!({"command":"open", "path":session}));
+    let edited = app.command(json!({"command":"song_tool", "name":"apply_edits", "arguments":{
+        "session_id":opened["song_session"]["id"],
+        "expected_revision":opened["song_session"]["revision"],
+        "label":"Keep unsaved work", "edits":[{"op":"rename_song", "name":"Unsaved mix before plugin failure"}]
+    }}));
+    assert_eq!(edited["tool_result"]["ok"], true);
     app.click("Play");
     let failure = wait_failure(&mut app);
+    assert_eq!(failure["project"], edited["project"]);
+    assert_eq!(failure["history"], edited["history"]);
+    let checkpoint = app.directory.path().join("scratch/recovery.daw.json");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if Project::load(&checkpoint)
+            .ok()
+            .is_some_and(|project| serde_json::to_value(project).unwrap() == edited["project"])
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Plugin failure must not block recovery of unsaved edits"
+        );
+        app.inspect();
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let engine_id = failure["engine"]["engine_id"].clone();
     assert_eq!(failure["native_editor"]["open"], false);
     assert_eq!(failure["playback_loading"], false);

@@ -48,6 +48,30 @@ fn wait_for(mut predicate: impl FnMut() -> bool) {
 }
 
 #[test]
+fn buffered_playback_stays_continuous_across_small_and_mixing_device_buffers() {
+    let (_directory, project, _id) = fixture();
+    for frames in [64, 128, 256, 512, 1024] {
+        let mut engine = AudioEngine::start_virtual_cancellable(
+            &project,
+            DeviceSettings {
+                buffer_frames: frames,
+                ..Default::default()
+            },
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
+        engine.set_playing(true);
+        // Include several non-block-aligned callback requests and queue wraps.
+        for count in [17, 333, 8192, 127, 2048] {
+            let audio = engine.pump_virtual(count).unwrap();
+            assert!(audio.iter().all(|frame| (frame[0] - 0.4).abs() < 1e-6));
+        }
+        assert_eq!(engine.snapshot().underruns, 0, "buffer {frames}");
+        assert_eq!(engine.snapshot().render_errors, 0, "buffer {frames}");
+    }
+}
+
+#[test]
 fn render_worker_exposes_parameter_failure_once_while_healthy_audio_continues() {
     let (_directory, project, id) = fixture();
     let mut engine = engine(&project);

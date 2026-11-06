@@ -524,7 +524,21 @@ fn send_level_text(gain: f32) -> String {
 /// Preorder traversal preserves track order within each parent and hides descendants
 /// of collapsed folders. The core model validates parent cycles before persistence.
 pub fn visible_tracks(project: &Project) -> Vec<(usize, usize)> {
-    fn visit(project: &Project, parent: Option<u64>, depth: usize, out: &mut Vec<(usize, usize)>) {
+    visible_tracks_with_expanded(project, &std::collections::HashSet::new())
+}
+
+/// Presentation-only folder expansion when jumping from a mixer channel.
+pub(crate) fn visible_tracks_with_expanded(
+    project: &Project,
+    expanded: &std::collections::HashSet<u64>,
+) -> Vec<(usize, usize)> {
+    fn visit(
+        project: &Project,
+        expanded: &std::collections::HashSet<u64>,
+        parent: Option<u64>,
+        depth: usize,
+        out: &mut Vec<(usize, usize)>,
+    ) {
         if depth > 64 {
             return;
         }
@@ -540,13 +554,15 @@ pub fn visible_tracks(project: &Project) -> Vec<(usize, usize)> {
                         out.push((automation_index, depth + 1));
                     }
                 }
-                if track.kind == TrackKind::Folder && !track.collapsed {
-                    visit(project, Some(track.id), depth + 1, out);
+                if track.kind == TrackKind::Folder
+                    && (!track.collapsed || expanded.contains(&track.id))
+                {
+                    visit(project, expanded, Some(track.id), depth + 1, out);
                 }
             }
         }
     }
     let mut out = Vec::new();
-    visit(project, None, 0, &mut out);
+    visit(project, expanded, None, 0, &mut out);
     out
 }

@@ -1044,6 +1044,10 @@ impl Project {
             writer.flush()?;
             writer.get_ref().sync_all()?;
             fs::rename(&temporary, path).context("Replace project file")?;
+            // Persist the replacement directory entry as well as the file's
+            // contents, so a successful checkpoint survives an OS restart.
+            #[cfg(unix)]
+            fs::File::open(parent)?.sync_all()?;
             Ok(())
         })();
         if result.is_err() {

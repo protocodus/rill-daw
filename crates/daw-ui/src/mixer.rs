@@ -17,6 +17,71 @@ pub const MIXER_SEND_ROW_HEIGHT: f32 = crate::tokens::COMPACT_HEIGHT;
 /// Width of the destination color rail at the leading edge of routing rows.
 pub const MIXER_RAIL_WIDTH: f32 = 3.0;
 
+/// A lowered bus strip reserves this band above its name. The icon is a full
+/// standard control tall, with a separate caption rather than a small badge.
+pub const MIXER_ROLE_HEIGHT: f32 =
+    crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_XS + crate::tokens::COMPACT_HEIGHT;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MixerChannelRole {
+    Bus,
+    SendReturn,
+}
+
+impl MixerChannelRole {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Bus => "Bus",
+            Self::SendReturn => "Send return",
+        }
+    }
+}
+
+/// Large, read-only channel type above downstream buses. Send destinations use
+/// an incoming-arrow icon; ordinary grouping buses use the routing graph icon.
+pub fn mixer_role_heading(
+    ui: &mut Ui,
+    role: MixerChannelRole,
+    width: f32,
+    color: Color32,
+) -> Response {
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(width, MIXER_ROLE_HEIGHT), Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let icon = Rect::from_center_size(
+            Pos2::new(
+                rect.center().x,
+                rect.top() + crate::tokens::CONTROL_HEIGHT * 0.5,
+            ),
+            Vec2::splat(crate::tokens::CONTROL_HEIGHT),
+        );
+        match role {
+            MixerChannelRole::Bus => crate::Icon::Routing,
+            MixerChannelRole::SendReturn => crate::Icon::Input,
+        }
+        .paint(ui.painter(), icon, color);
+        ui.painter().text(
+            Pos2::new(
+                rect.center().x,
+                rect.bottom() - crate::tokens::COMPACT_HEIGHT * 0.5,
+            ),
+            egui::Align2::CENTER_CENTER,
+            role.label(),
+            FontId::proportional(crate::tokens::FONT_CAPTION),
+            crate::theme::palette(ui.ctx()).text,
+        );
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), role.label())
+    });
+    response.on_hover_text(match role {
+        MixerChannelRole::Bus => "Bus · groups channels through their main outputs",
+        MixerChannelRole::SendReturn => {
+            "Send return · receives one or more sends; it can also receive main outputs"
+        }
+    })
+}
+
 /// Text style of a quiet strip row.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MixerRowText {

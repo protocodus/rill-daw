@@ -12,6 +12,58 @@ use std::sync::{
 };
 use zeroize::Zeroize;
 
+const TOOL_WORKER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Command edits build candidates before committing. A panic must release the
+/// dispatch boundary without replaying an operation that may already commit.
+fn guarded_tool<T>(work: impl FnOnce() -> Result<T, ToolError>) -> Result<T, ToolError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).unwrap_or_else(|_| {
+        Err(ToolError::new(
+            "tool_crashed",
+            "Tool stopped unexpectedly. Completed changes are kept; review the song before retrying.",
+        ))
+    })
+}
+
+#[cfg(test)]
+mod worker_failure_tests {
+    use super::*;
+
+    #[test]
+    fn expired_tool_result_never_commits_and_releases_its_slot() {
+        let ctx = egui::Context::default();
+        let mut app = DawApp::with_context(&ctx, daw_core::Project::new(), None);
+        let original = app.project.clone();
+        let (sender, receiver) = mpsc::channel();
+        let (reply, response) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        // A completed result is already waiting, but it arrived after this
+        // request's deadline. It must not edit the song on a later UI frame.
+        sender
+            .send(Ok(json!({"suggested_edits":{"normalize":{
+                "op":"rename_song","name":"Late worker edit"
+            }}})))
+            .unwrap();
+        app.assistant.pending.push(PendingTool {
+            receiver,
+            reply,
+            session: app.song_session,
+            cancel: cancel.clone(),
+            owner_cancel: Arc::new(AtomicBool::new(false)),
+            process: Some("normalize".into()),
+            metadata_target: None,
+            scope: None,
+            started: std::time::Instant::now() - TOOL_WORKER_TIMEOUT,
+        });
+        app.poll_assistant(&ctx);
+        assert_eq!(response.try_recv().unwrap().unwrap_err().code, "timeout");
+        assert!(app.assistant.pending.is_empty());
+        assert!(cancel.load(Ordering::Acquire));
+        assert_eq!(app.project, original);
+        assert!(!app.modified);
+    }
+}
+
 struct ToolRequest {
     profile: daw_tools::ToolProfile,
     cancel: Arc<AtomicBool>,
@@ -21,7 +73,7 @@ struct ToolRequest {
 }
 
 struct PendingTool {
-    receiver: Receiver<Result<Value, String>>,
+    receiver: Receiver<Result<Value, ToolError>>,
     reply: Sender<Result<Value, ToolError>>,
     session: daw_core::SongSession,
     cancel: Arc<AtomicBool>,
@@ -29,6 +81,7 @@ struct PendingTool {
     process: Option<String>,
     metadata_target: Option<(u64, Option<u64>)>,
     scope: Option<ToolScope>,
+    started: std::time::Instant,
 }
 
 #[derive(Default)]
@@ -58,6 +111,8 @@ pub(crate) struct Assistant {
     run: Option<AgentRun>,
     run_session: u64,
     next_script: Option<Vec<ScriptedTurn>>,
+    next_script_crashes: bool,
+    next_worker_crashes: bool,
     mcp_requests: Option<Receiver<ToolRequest>>,
     pending: Vec<PendingTool>,
 }
@@ -119,6 +174,8 @@ impl Assistant {
         self.new_chat();
         self.prompt.clear();
         self.next_script = None;
+        self.next_script_crashes = false;
+        self.next_worker_crashes = false;
         self.scope = ToolScope::Song;
         self.run_scope = ToolScope::Song;
         self.scope_instrument = None;
@@ -137,6 +194,7 @@ impl Assistant {
             self.failure = None;
             self.recover_prompt = true;
         }
+        self.next_worker_crashes = false;
     }
 
     fn fail(&mut self, message: String, recover_prompt: bool) {
@@ -154,8 +212,10 @@ impl Assistant {
     pub fn clear_key_draft(&mut self) {
         self.key_draft.zeroize();
     }
-    pub fn set_script(&mut self, turns: Vec<ScriptedTurn>) {
+    pub fn set_script(&mut self, turns: Vec<ScriptedTurn>, crash_after: bool, crash_tool: bool) {
         self.next_script = Some(turns);
+        self.next_script_crashes = crash_after;
+        self.next_worker_crashes = crash_tool;
     }
 
     pub fn start_mcp_stdio(&mut self, profile: daw_tools::ToolProfile) {
@@ -336,7 +396,11 @@ impl DawApp {
         };
         let request_prompt = daw_ai::request_message(&request);
         let result = if let Some(script) = self.assistant.next_script.take() {
-            daw_ai::spawn_scripted(request, script)
+            if std::mem::take(&mut self.assistant.next_script_crashes) {
+                daw_ai::spawn_scripted_crash(request, script)
+            } else {
+                daw_ai::spawn_scripted(request, script)
+            }
         } else {
             self.settings
                 .ai
@@ -408,9 +472,11 @@ impl DawApp {
                 .iter()
                 .any(|spec| spec.name == name)
         {
-            let result = self
-                .application_tool(&name, arguments)
-                .unwrap_or_else(|| Err(ToolError::new("unknown_tool", "Unknown application tool")));
+            let result = guarded_tool(|| {
+                self.application_tool(&name, arguments).unwrap_or_else(|| {
+                    Err(ToolError::new("unknown_tool", "Unknown application tool"))
+                })
+            });
             let _ = reply.send(result);
             return;
         }
@@ -429,6 +495,28 @@ impl DawApp {
     }
 
     fn dispatch_scoped_tool(
+        &mut self,
+        name: String,
+        arguments: Value,
+        reply: Sender<Result<Value, ToolError>>,
+        cancel: Arc<AtomicBool>,
+        scope: Option<ToolScope>,
+    ) {
+        let failure_reply = reply.clone();
+        let result = guarded_tool(|| {
+            self.dispatch_scoped_tool_inner(name, arguments, reply, cancel, scope);
+            Ok(())
+        });
+        self.assistant.executing_scope = None;
+        if let Err(error) = result {
+            if scope.is_some() {
+                self.record_assistant_tool_error(&error);
+            }
+            let _ = failure_reply.send(Err(error));
+        }
+    }
+
+    fn dispatch_scoped_tool_inner(
         &mut self,
         name: String,
         arguments: Value,
@@ -539,15 +627,27 @@ impl DawApp {
             let session = self.song_session;
             let worker_cancel = cancel.clone();
             let (sender, receiver) = mpsc::channel();
-            std::thread::spawn(move || {
-                let _ = sender.send(crate::tool_jobs::execute(
-                    project,
-                    rate,
-                    &name,
-                    arguments,
-                    &worker_cancel,
-                ));
-            });
+            let crash_worker =
+                scope.is_some() && std::mem::take(&mut self.assistant.next_worker_crashes);
+            let worker = std::thread::Builder::new()
+                .name("rill-song-tool".into())
+                .spawn(move || {
+                    let result = guarded_tool(|| {
+                        if crash_worker {
+                            panic!("scripted tool worker failure");
+                        }
+                        crate::tool_jobs::execute(project, rate, &name, arguments, &worker_cancel)
+                            .map_err(|message| ToolError::new("tool_failed", message))
+                    });
+                    let _ = sender.send(result);
+                });
+            if worker.is_err() {
+                let _ = reply.send(Err(ToolError::new(
+                    "unavailable",
+                    "Could not start tool worker",
+                )));
+                return;
+            }
             self.assistant.pending.push(PendingTool {
                 receiver,
                 reply,
@@ -557,10 +657,11 @@ impl DawApp {
                 process,
                 metadata_target,
                 scope,
+                started: std::time::Instant::now(),
             });
         } else {
             self.assistant.executing_scope = scope;
-            let result = self.call_tool(&name, arguments);
+            let result = guarded_tool(|| self.call_tool(&name, arguments));
             self.assistant.executing_scope = None;
             if scope.is_some()
                 && let Err(error) = &result
@@ -575,7 +676,7 @@ impl DawApp {
         self.assistant.last_tool_error = Some(json!({"code":error.code,"message":error.message}));
         self.assistant.messages.push(daw_ui::AssistantMessage {
             role: daw_ui::AssistantRole::Tool,
-            text: format!("Not applied: {}", error.message),
+            text: format!("Tool error: {}", error.message),
         });
     }
 
@@ -607,11 +708,14 @@ impl DawApp {
                         "conflict",
                         "Song changed during analysis; request fresh results",
                     )))
+                } else if job.started.elapsed() >= TOOL_WORKER_TIMEOUT {
+                    Some(Err(ToolError::new(
+                        "timeout",
+                        "Tool worker timed out. The song is unchanged by this unfinished job.",
+                    )))
                 } else {
                     match job.receiver.try_recv() {
-                        Ok(result) => {
-                            Some(result.map_err(|message| ToolError::new("tool_failed", message)))
-                        }
+                        Ok(result) => Some(result),
                         Err(mpsc::TryRecvError::Disconnected) => {
                             Some(Err(ToolError::new("unavailable", "Tool worker stopped")))
                         }
@@ -657,9 +761,11 @@ impl DawApp {
                                 )
                             }
                         } else {
-                            serde_json::from_value::<daw_core::SongEdit>(edit).map_err(|_|ToolError::new("tool_failed","Invalid prepared audio edit"))
+                            guarded_tool(|| {
+                                serde_json::from_value::<daw_core::SongEdit>(edit).map_err(|_|ToolError::new("tool_failed","Invalid prepared audio edit"))
                                 .and_then(|edit|self.apply_edits(daw_core::EditBatch{label:format!("Audio: {}",operation.replace('_'," ")),edits:vec![edit]}))
                                 .map(|commit|json!({"changed":commit.changed,"created":commit.created,"operation":operation,"session_id":self.song_session.id,"revision":self.song_session.revision}))
+                            })
                         };
                         self.assistant.executing_scope = None;
                     }
@@ -730,12 +836,18 @@ impl DawApp {
                         cancel,
                         Some(self.assistant.run_scope),
                     );
-                    std::thread::spawn(move || {
-                        let result = receiver.recv().unwrap_or_else(|_| {
-                            Err(ToolError::new("unavailable", "Tool dispatcher closed"))
+                    let failed_reply = reply.clone();
+                    let worker = std::thread::Builder::new()
+                        .name("rill-tool-reply".into())
+                        .spawn(move || {
+                            let result = receiver.recv().unwrap_or_else(|_| {
+                                Err(ToolError::new("unavailable", "Tool dispatcher closed"))
+                            });
+                            let _ = reply.send(result.map_err(|e| e.to_string()));
                         });
-                        let _ = reply.send(result.map_err(|e| e.to_string()));
-                    });
+                    if worker.is_err() {
+                        let _ = failed_reply.send(Err("Could not start tool reply worker".into()));
+                    }
                 }
                 AgentEvent::Finished(text) => {
                     self.assistant
@@ -748,16 +860,19 @@ impl DawApp {
                     self.assistant.failure = None;
                     self.assistant.recover_prompt = false;
                     self.assistant.run = None;
+                    self.assistant.next_worker_crashes = false;
                 }
                 AgentEvent::Failed(error) => {
                     self.assistant.fail(error, true);
                     self.assistant.run = None;
+                    self.assistant.next_worker_crashes = false;
                 }
                 AgentEvent::Cancelled => {
                     self.assistant.status = "Stopped".into();
                     self.assistant.failure = None;
                     self.assistant.recover_prompt = true;
                     self.assistant.run = None;
+                    self.assistant.next_worker_crashes = false;
                 }
             }
         }
