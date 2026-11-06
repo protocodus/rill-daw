@@ -952,7 +952,9 @@ impl Widget for IconButton {
         let background = ui.painter().add(egui::Shape::Noop);
         let has_frame = self.frame.unwrap_or(ui.visuals().button_frame);
         let frame_when_inactive = if in_menu {
-            self.selected
+            // Ordinary menu rows stay quiet, but a primary action's explicit
+            // idle fill must remain behind its contrasting label color.
+            self.selected || (self.fill.is_some() && self.frame_when_inactive)
         } else {
             self.frame_when_inactive
         };

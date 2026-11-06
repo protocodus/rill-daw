@@ -179,7 +179,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -378,6 +378,10 @@ immediate gesture feedback. Call it only while dragging; it paints within the
 viewport without adding a hit target, changing focus, or persisting state.
 Arranger trims use it to show the applied end time and clip duration in seconds
 and beats, including snapping and source limits, and hide it on release.
+`pointer_text_in_rect(ctx, id, pointer, bounds, text)` constrains the same surface
+to a caller-owned canvas. The MIDI editor uses it for immediate pitch feedback
+beside the pointer, including short notes and rows too small for key labels.
+It creates no interactive overlay and leaves the toolbar and canvas geometry intact.
 
 Standard controls use 13-point horizontal and eight-point vertical padding; canvas-owned controls retain their compact geometry. Popups use 21-point horizontal and 13-point vertical inner margins and scroll within the available viewport. The native title row keeps the complete close target clear of the titlebar's click region. Hover and keyboard focus remain visible. Utility windows use a φ-point border with a 21-point blurred shadow; menus use a smaller 13-point shadow. Blur and shadows add depth without changing native hit targets or focus behavior.
 
@@ -896,6 +900,16 @@ Tool keys retain the same meaning wherever supported: Q Select, W Pencil, E Cut,
 
 `clip_timing_fields` accepts the occurrence-specific supported stretch-duration range from its owner. Stretch intersects it with remaining timeline space and uses it consistently for the number, steppers and numeric keypad; Trim retains ordinary boundary limits. The app derives these bounds from the current source window and core playback-rate constants, so trimmed or already-stretched ghosts receive correct local limits without changing their peers. Invalid keypad drafts stay editable and cannot Apply.
 
+Start also offers `musical_position_entry`: a current **Bar · Beat** button opens
+separate staged Bar and Beat fields with mouse keypads. **Apply position** makes
+one edit; canceling or applying untouched fields preserves the original value.
+The caller supplies the song's beats per bar and valid position range. Fractional
+beats remain precise; the display never quantizes positions to sixteenths. The keypad
+is an edit step within the same popup: Apply, Cancel and Escape return to the
+staged Bar/Beat fields before the final position is committed. The idle beat
+field uses a concise display; focusing it or opening its keypad reveals the
+exact staged value, and an untouched focus/blur cycle preserves that value.
+
 Audio and MIDI clip context menus expose **Properties** directly. Opening the
 menu leaves selection unchanged; choosing Properties targets that occurrence's
 Clip page above Arrangement, without opening Clip Editor or creating an edit.
@@ -980,6 +994,16 @@ cargo clippy -p daw-ui --all-targets -- -D warnings
 `curve_editor` receives normalized points and a sampling callback, and returns add/move/delete intents. It does not depend on the project model or audio engine. The application owns interpolation, validation, and undo. Canvas points support click, drag, and deletion; precise numeric controls use the same edit path.
 
 `curve_timeline_editor` adds the shared musical ruler and caller-owned `TimelineViewport`. Automation uses the same middle/Alt-drag pan, Ctrl-wheel/Ctrl-right-drag zoom, plus/minus shortcuts, and Fit/F as the other editors. `TimelinePane::horizontal_only` keeps the complete parameter range visible; `keyboard_focus` allows canvas shortcuts without stealing text input. Fit spans every point, with a full bar for a single-point lane. Visible Beat input is one-based. Navigating cannot create, move, or delete points, and New/Open resets the automation viewport and selection.
+
+Automation also offers **Fit song**, framing the arrangement from its start to
+its final clip, with a one-bar fallback for an empty song. It changes only the
+viewport and retains selected points. `curve_timeline_editor_with_fit` accepts
+explicit bounds for this action; ordinary **Fit** continues to frame the curve's points.
+Track and send gain points and manual overrides use `gain_value_button`, a shared
+dB readout opening exact entry with **123**, Apply, Cancel and **Silence**.
+`gain_axis_label` formats the target's actual linear gain, so track and send
+axes respect their different maximums. The model retains normalized automation
+values; inspecting a value never converts or rounds the stored value.
 
 Automation defaults to **Spline**. `curve_timeline_editor_with_segments` adds a
 diamond between each sufficiently separated pair of points; drag it vertically

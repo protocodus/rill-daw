@@ -1,0 +1,274 @@
+[
+  {
+    "file": "screenshots/final-formatted-position-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "6d975d9bba486ead5c11b7120480c43d0e8b85a92ac76eeeff717c248d22656c"
+  },
+  {
+    "file": "screenshots/final-formatted-position-focused-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "c95576a885a220f5eb8f50e186779e67f45f98c69f661228f6b3553d710426d4"
+  },
+  {
+    "file": "screenshots/final-formatted-position-keypad-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "e1b154778e4ad7c768c2c6576fb482f1befc0e331c5893c11e7f8e74e8c164e7"
+  },
+  {
+    "file": "screenshots/final-properties-light-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "da1d4fc083a224ac02435dde20e2dd46813713e021b7794de9864c596920b2ea"
+  },
+  {
+    "file": "screenshots/final-position-light-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "f39c874f4bd65528a7d1300bc4d8b86879d23d284b5c84b0ab3282d6815b29a1"
+  },
+  {
+    "file": "screenshots/final-position-keypad-light-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "bb813b877bbeec51df39118c98925f214d229b6bdf9b0d546f53f3e3162f7799"
+  },
+  {
+    "file": "screenshots/final-position-cancel-light-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "5971c788de9c8e85d9b97c1ad35f4b4502d557e96e4830325c4afdfdb9ce43a7"
+  },
+  {
+    "file": "screenshots/final-position-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "66017cfec7a23dbad51787e0289fa10ec6d8e585d009332cc246743cad006487"
+  },
+  {
+    "file": "screenshots/final-position-keypad-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "67cdf0d7d2806337caf676d082a1bd425d0f838272ea996279caba8ba0e61ca6"
+  },
+  {
+    "file": "screenshots/final-position-escape-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "66017cfec7a23dbad51787e0289fa10ec6d8e585d009332cc246743cad006487"
+  },
+  {
+    "file": "screenshots/final-gain-light-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "34b84c3e1648b5ce155841620f35a8c3177d26600630cd652c4d2e2dbc94cef8"
+  },
+  {
+    "file": "screenshots/final-gain-keypad-light-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "edd573db51357ee8a80be4a7d50d9176a43900f659cad85b425a04f9055c03a1"
+  },
+  {
+    "file": "screenshots/final-automation-light-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "b1ec1aaeebca740b3154cb5e139e723e596537e84847e451bd988f6d4ac49052"
+  },
+  {
+    "file": "screenshots/final-fit-song-send-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "2b9d1b9051a25b1cfe770567a0f2b9e26349bab9874420eb29c5c913dc580e47"
+  },
+  {
+    "file": "screenshots/final-gain-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "047468320e4a5cc6776c55bc51ed1ea8a0e1f25f65516006a4d50b88ea23f7ec"
+  },
+  {
+    "file": "screenshots/final-gain-keypad-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "98d69ba1df5457663a85c9a8c582080a05fbe2ed8954f582662bc842a9ced81c"
+  },
+  {
+    "file": "screenshots/final-gain-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "aab91cbbb920fbd23b2b98bc7ca185ac51ea79b282186751ec90dece5467d01f"
+  },
+  {
+    "file": "screenshots/final-gain-keypad-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "9566f4d72221881b9d378c1eec3495bf3083c5665bb3defa5e4fdd8952a92fa6"
+  },
+  {
+    "file": "screenshots/final-silence-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "d5f6e96dbb8514bca98fd009c52de48a67e92d8aec69561eef4fa70d705485a6"
+  },
+  {
+    "file": "screenshots/final-silence-undo-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "2eab2ab067978638fdbe71109d0347ca1fcd86cc99c5f9775d2ac08b25f2cb25"
+  },
+  {
+    "file": "screenshots/final-pitch-short-light-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "34cd236d92e97e8f3f2e42f3b33fce5ab11436cb69ee27d64505991ebe5bec45"
+  },
+  {
+    "file": "screenshots/final-pitch-dense-light-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "91fc7d865923b578f66c2e94503c32491658b6d9c89bf3f065a6e82bdf9284cc"
+  },
+  {
+    "file": "screenshots/final-pitch-dense-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "bd2fe62598e3cbfa2c6521cf17ea066982009dcc3bb5eeaf6e3d1a8b29ce13ed"
+  },
+  {
+    "file": "screenshots/pitch-dense-dark-minimum.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "173fbb0854204cdb1bc353cc73e28f52837646cb4d14b6e2646c43311538251b"
+  },
+  {
+    "file": "screenshots/pitch-hint-click-through.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "7a3e5570ed88026c6febd2d26ea97c64d7e6f21047bed6de1a0800060bcd00bf"
+  },
+  {
+    "file": "screenshots/automation-dark-compact-settled.png",
+    "dimensions": [
+      800,
+      600
+    ],
+    "sha256": "0596c6baac7c6ef13f03b013f6a74a29547cb409fb4a85cd54a9fb4b2bc8bba9"
+  },
+  {
+    "file": "screenshots/automation-dark-compact-scrolled.png",
+    "dimensions": [
+      800,
+      600
+    ],
+    "sha256": "40d380da2b83fef100ceb3c24858367b370fc3eec72bfa31f84589d1284f3e87"
+  },
+  {
+    "file": "screenshots/position-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "d678f2e77cffb34f1a2e5ab2d12f042cba2646dd03589d0a257d5d0ed9deafd5"
+  },
+  {
+    "file": "screenshots/gain-dark-wide.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "f47d305a55bc7475d7fb7e54efa1a29c5d350ff72856ccb6d09add2540288471"
+  },
+  {
+    "file": "screenshots/focus-save-as-dialog.png",
+    "dimensions": [
+      1440,
+      1000
+    ],
+    "sha256": "0b50aca1bf839fcd11209492961ddb110c7d9b853324e5e03e25398096a6419b"
+  },
+  {
+    "file": "screenshots/focus-after-save-as.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "568f7349b507cfb2775d63add088683b560aa48f5bb6618aebdd569eb43d05a0"
+  },
+  {
+    "file": "screenshots/focus-ctrl-s-unfocused.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "b534ad1581516d3558147772094ead5028f870c779ca7ee2171ef8ea89945b8a"
+  },
+  {
+    "file": "screenshots/focus-file-save.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "14b722ef2060e4d1d6c76ca2a92c3254cd1a2e72ec7235735882d073fc6bee64"
+  },
+  {
+    "file": "screenshots/focus-recovered-ctrl-s.png",
+    "dimensions": [
+      1100,
+      720
+    ],
+    "sha256": "1279161a1d781d48db77d91a6d684d3c5cbfba5cd1119cc8b4a831253e5e859d"
+  }
+]

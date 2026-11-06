@@ -139,7 +139,18 @@ pub fn curve_editor(
     view: CurveView,
     evaluate: impl Fn(f64) -> f32,
 ) -> CurveResponse {
-    curve_editor_inner(ui, id, points, &[], None, selected, view, None, evaluate)
+    curve_editor_inner(
+        ui,
+        id,
+        points,
+        &[],
+        None,
+        selected,
+        view,
+        None,
+        None,
+        evaluate,
+    )
 }
 
 /// Musical-time curve editor using the same pan, zoom, Fit, and ruler as other
@@ -167,6 +178,7 @@ pub fn curve_timeline_editor(
             height: timeline.height,
         },
         Some((viewport, timeline)),
+        None,
         evaluate,
     )
 }
@@ -186,6 +198,35 @@ pub fn curve_timeline_editor_with_segments(
     timeline: CurveTimeline,
     evaluate: impl Fn(f64) -> f32,
 ) -> CurveResponse {
+    curve_timeline_editor_with_fit(
+        ui,
+        id,
+        points,
+        segments,
+        override_value,
+        selected,
+        viewport,
+        timeline,
+        None,
+        evaluate,
+    )
+}
+
+/// The segmented editor with an optional one-shot presentation fit. Explicit
+/// bounds frame a caller's song or region; ordinary Fit/F still frames points.
+#[allow(clippy::too_many_arguments)]
+pub fn curve_timeline_editor_with_fit(
+    ui: &mut Ui,
+    id: Id,
+    points: &[CurvePoint],
+    segments: &[CurveSegment],
+    override_value: Option<f32>,
+    selected: &mut Option<u64>,
+    viewport: &mut TimelineViewport,
+    timeline: CurveTimeline,
+    fit_bounds: Option<TimelineBounds>,
+    evaluate: impl Fn(f64) -> f32,
+) -> CurveResponse {
     curve_editor_inner(
         ui,
         id,
@@ -200,8 +241,21 @@ pub fn curve_timeline_editor_with_segments(
             height: timeline.height,
         },
         Some((viewport, timeline)),
+        fit_bounds,
         evaluate,
     )
+}
+
+/// Frame the caller's arrangement without changing the curve's point bounds.
+pub fn curve_fit_song_button(ui: &mut Ui) -> Response {
+    ui.add(crate::view_button_widget("Fit song").quiet())
+        .on_hover_text("Show the full arrangement without changing automation points")
+}
+
+/// Retain the point-based Fit/F action beside a caller's broader song fit.
+pub fn curve_fit_points_button(ui: &mut Ui) -> Response {
+    ui.add(crate::view_button_widget("Fit").quiet())
+        .on_hover_text("Fit automation points · F")
 }
 
 /// Responsive editor actions using the shared toolbar's styling and layout.
@@ -286,6 +340,7 @@ fn curve_editor_inner(
     selected: &mut Option<u64>,
     view: CurveView,
     timeline: Option<(&mut TimelineViewport, CurveTimeline)>,
+    fit_bounds: Option<TimelineBounds>,
     evaluate: impl Fn(f64) -> f32,
 ) -> CurveResponse {
     let mut start = view.start.max(0.0);
@@ -404,6 +459,9 @@ fn curve_editor_inner(
             end_row: 1.0,
         };
         if timeline.fit {
+            viewport.fit_bounds(plot, bounds);
+        }
+        if let Some(bounds) = fit_bounds {
             viewport.fit_bounds(plot, bounds);
         }
         let pane = TimelinePane::new(id.with("timeline"), plot)

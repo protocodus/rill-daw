@@ -1,0 +1,32 @@
+{
+  "display": ":980",
+  "directory": "/workspace/rill-study-20261105/visual-qa",
+  "started_at": 1793921140.8876476,
+  "owned": {
+    "xvfb": {
+      "pid": 59696,
+      "start_ticks": "471313"
+    },
+    "rill": {
+      "pid": 82361,
+      "start_ticks": "647072"
+    }
+  },
+  "binary_sha256": "00b0b84552f90caa289b6ff21b400bfd3b06afdf73fb521dcab31b4415df228b",
+  "binary_mtime": 1793922869.211469,
+  "window": "6291459",
+  "previous_apps": [
+    {
+      "pid": 59701,
+      "start_ticks": "471332"
+    },
+    {
+      "pid": 70463,
+      "start_ticks": "535373"
+    },
+    {
+      "pid": 76874,
+      "start_ticks": "577812"
+    }
+  ]
+}

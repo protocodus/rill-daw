@@ -1,0 +1,10 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+    Finished `test` profile [unoptimized] target(s) in 1.21s
+     Running tests/menu_primary.rs (target/debug/deps/menu_primary-e92062e1653a2bac)
+
+running 2 tests
+test primary_menu_buttons_retain_disabled_dimming_and_native_activation ... ok
+test primary_menu_fills_keep_readable_text_without_changing_quiet_or_selected_rows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+

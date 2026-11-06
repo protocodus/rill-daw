@@ -7,6 +7,7 @@ pub struct State {
     secret: String,
     gain: f64,
     duration: f64,
+    position: f64,
     pan: f64,
     slider_landmarks: [f64; 4],
     rotary: f64,
@@ -27,6 +28,7 @@ impl Default for State {
             secret: "sample-key-not-a-credential".into(),
             gain: -6.5,
             duration: 1.25,
+            position: 16.25,
             pan: 0.2,
             slider_landmarks: [0.0, 100.0, 50.0, 0.0],
             rotary: 42.375,
@@ -75,6 +77,14 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         )
                     },
                 );
+                ui.end_row();
+                text::label(ui, "Start position");
+                let (_, position) = controls::musical_position_entry(
+                    ui, "gallery_position", state.position, 4, 0.0..=1024.0,
+                );
+                if let Some(position) = position {
+                    state.position = position;
+                }
                 ui.end_row();
                 text::label(ui, "API key");
                 controls::secret_field(ui, &mut state.secret, "API key", 290.0);

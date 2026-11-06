@@ -286,7 +286,7 @@ fn explicit_override_resume_and_curve_edits_keep_live_engine_and_audio() {
     let (x, y) = center(override_field);
     app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));
-    app.command(json!({"command":"text","text":"0.9"}));
+    app.command(json!({"command":"text","text":(20.0_f64 * 0.9_f64.log10()).to_string()}));
     let manual = app.key("Enter");
     near(
         lane(&manual, automation)["override_value"]

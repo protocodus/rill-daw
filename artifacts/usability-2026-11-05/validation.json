@@ -1,0 +1,749 @@
+{
+  "targets": {
+    "ui:unittests src/lib.rs": {
+      "status": "ok",
+      "passed": 38,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/diagnostics-03/position-display-ui-lib.log"
+    },
+    "ui:tests/assistant.rs": {
+      "status": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/assistant_readiness.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/backdrop_blur.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/beat_ruler.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/bounded_panes.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/channel_controls.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/channel_readouts.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/clips.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/color.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/compact_tools.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/component_materials.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/control_roles.rs": {
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/crossfade.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/curve_segments.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/curves.rs": {
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/empty_workspace.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/error_details.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/forms.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/gain_value.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/icons.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/input_materials.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/interactions.rs": {
+      "status": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/knob.rs": {
+      "status": "ok",
+      "passed": 15,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/layout.rs": {
+      "status": "ok",
+      "passed": 14,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/menu_roles.rs": {
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/menu_spacing.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/menus.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/mixer_controls.rs": {
+      "status": "ok",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/mixer_flow.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/modals.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/musical_context.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/name_keyboard_spacing.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/navigation.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/notices.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/numeric_entry.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/parameter_browser.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/parameter_value_sync.rs": {
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/pointer_text_bounds.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/popup_backdrop.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/popup_close.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/popup_footer.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/popup_footer_spacing.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/row_controls.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/selection_glow.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/selection_navigation.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/slider_markers.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/slider_scale.rs": {
+      "status": "ok",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/surfaces.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/theme.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/timeline.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/timeline_views.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/tool_hint.rs": {
+      "status": "ok",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/tooltip.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/track_header.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/track_layout.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/track_mix.rs": {
+      "status": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/track_reorder.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/typography.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/value_entry.rs": {
+      "status": "ok",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:tests/waveform_refinement.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "ui:Doc-tests daw_ui": {
+      "status": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-final.log"
+    },
+    "app:unittests src/main.rs": {
+      "status": "ok",
+      "passed": 145,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-final.log"
+    },
+    "app:tests/arranger_automation_e2e.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/automation_color_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/automation_curves_e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/automation_e2e.rs": {
+      "status": "ok",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 1,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/automation_gain_units_e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-final.log"
+    },
+    "app:tests/clip_position_entry_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/diagnostics-03/position-display-app.log"
+    },
+    "app:tests/e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 1,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/empty_arranger_placement_e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/midi_note_entry_e2e.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/midi_toolbar_stability_e2e.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/number_stepper_e2e.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-followup.log"
+    },
+    "app:tests/numeric_keypad_e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-followup.log"
+    },
+    "app:tests/piano_pitch_hint_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-followup.log"
+    },
+    "app:tests/piano_roll_refinement_e2e.rs": {
+      "status": "ok",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/precise_clip_editing_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/properties_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/selection_click_e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/stretch_duration_range_e2e.rs": {
+      "status": "ok",
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/tool_hints_e2e.rs": {
+      "status": "ok",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app.log"
+    },
+    "app:tests/numeric_replacement_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-followup.log"
+    },
+    "ui:tests/menu_primary.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-ui-menu-verified.log"
+    },
+    "app:tests/main_toolbar_roles_e2e.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-final.log"
+    },
+    "app:tests/popup_backdrop_e2e.rs": {
+      "status": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-final.log"
+    },
+    "app:tests/popup_footer_e2e.rs": {
+      "status": "ok",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-final.log"
+    },
+    "app:tests/popup_interactions_e2e.rs": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-app-final.log"
+    },
+    "app:tests/e2e.rs:native_screenshot": {
+      "status": "ok",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/rill-study-20261105/tests-native-final.log"
+    }
+  },
+  "passed": 543,
+  "failed": 0,
+  "ignored_in_regular_runs": 2,
+  "note": "Latest complete result per target; separately invoked ignored native scenario counted once. Earlier failed development runs are retained in logs.",
+  "scope": "Complete daw-ui suite and affected daw-app unit/integration targets; not the entire repository test suite.",
+  "optional_case_unrun": "Installed-VST automation case. The ignored native screenshot case was explicitly run and passed.",
+  "clippy": {
+    "shared_ui": "cargo clippy --locked --offline -p daw-ui --all-targets -- -D warnings",
+    "app": "Strict Clippy on the application binary and modified integration targets; see retained logs.",
+    "status": "passed",
+    "existing_warning": "Unchanged vendored vst3-host LinuxModule.path dead-code warning."
+  },
+  "format_and_diff": "cargo fmt --all -- --check and git diff --check passed.",
+  "native_screenshot_views": 7,
+  "gallery_captures": 22,
+  "native_visual_review": "native-qa/notes.md",
+  "native_visual_review_source": {
+    "path": "/workspace/rill-study-20261105/visual-qa/notes.md",
+    "sha256": "14f46731b2180b9fef430a2cc0fb5875d116a0689268b66e2c6c56ad14051835",
+    "bytes": 8667
+  },
+  "final_application_binary": {
+    "path": "/workspace/rill-daw/target/debug/rill",
+    "sha256": "00b0b84552f90caa289b6ff21b400bfd3b06afdf73fb521dcab31b4415df228b",
+    "bytes": 122158592
+  },
+  "original_evidence_integrity": {
+    "hashes_verified": 35,
+    "verbatim_excerpts_verified": 32
+  },
+  "logs": [
+    {
+      "path": "/workspace/rill-study-20261105/baseline-placement-regression.log",
+      "sha256": "a836e83491544064a494f8b511b6d9fb26e793b06b0394f7027bb598ade33a9f",
+      "bytes": 705,
+      "retained_copy": "validation-logs/baseline-placement-regression.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/clippy-app.log",
+      "sha256": "ec2880932fd785f831ccb053f0d0897256912c3659a631b590c691f99da67b12",
+      "bytes": 6934,
+      "retained_copy": "validation-logs/clippy-app.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/clippy-ui-final.log",
+      "sha256": "4c1684cd2a65018ced67e4615578d4e17b67870ab50c59d14aee702cad460853",
+      "bytes": 123,
+      "retained_copy": "validation-logs/clippy-ui-final.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/diagnostics-03/position-display-app.log",
+      "sha256": "7442ca1c451e04c4dccae3948405dec579266095c1802ffd4040afc8db4eedad",
+      "bytes": 1261,
+      "retained_copy": "validation-logs/diagnostics-03/position-display-app.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/diagnostics-03/position-display-clippy.log",
+      "sha256": "24b402534e0b962bf4d8d9aede5d40757d936f9f141e2d5cdd35ee0b30022e69",
+      "bytes": 1349,
+      "retained_copy": "validation-logs/diagnostics-03/position-display-clippy.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/diagnostics-03/position-display-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "retained_copy": "validation-logs/diagnostics-03/position-display-fmt.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/diagnostics-03/position-display-ui-lib.log",
+      "sha256": "664fe18fb8c2cb80b31a3caca6fc56f75a261594b508bb2235b7fceaf829c2f4",
+      "bytes": 3927,
+      "retained_copy": "validation-logs/diagnostics-03/position-display-ui-lib.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/fmt-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "retained_copy": "validation-logs/fmt-final.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-app-final.log",
+      "sha256": "8aedcb77acd3265507bb6fc486d8c624901b7d0ffff1c11efb997397519be6c9",
+      "bytes": 17838,
+      "retained_copy": "validation-logs/tests-app-final.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-app-followup.log",
+      "sha256": "c389cca1d6e0524d228b6a42ae98be102d1001df57cf69b2954270059f078026",
+      "bytes": 3849,
+      "retained_copy": "validation-logs/tests-app-followup.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-app.log",
+      "sha256": "aaab17acb2de6a4ac1fb709e0f87ad233fe99ccdcf518b6ea9c0e741aa0f5ac4",
+      "bytes": 28561,
+      "retained_copy": "validation-logs/tests-app.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-native-final.log",
+      "sha256": "bd2d67cd3be2028987cc2e0271387262648a7358f3ace55f308a6984ac39eae3",
+      "bytes": 878,
+      "retained_copy": "validation-logs/tests-native-final.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-ui-final.log",
+      "sha256": "f1100ab3dd7569939952713b8201f18fd93134057ecb254ed6f580ccec5d8e65",
+      "bytes": 38581,
+      "retained_copy": "validation-logs/tests-ui-final.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-ui-menu-verified.log",
+      "sha256": "2e82885a9059f114bed452347423bf0a4b0cab650026abf4304917ce98f619ee",
+      "bytes": 491,
+      "retained_copy": "validation-logs/tests-ui-menu-verified.log"
+    },
+    {
+      "path": "/workspace/rill-study-20261105/tests-ui.log",
+      "sha256": "0d59ad45f467a2dea2f21c90b0a6344c267f1fd754ab2659903b5cde5f5d3975",
+      "bytes": 38061,
+      "retained_copy": "validation-logs/tests-ui.log"
+    }
+  ]
+}

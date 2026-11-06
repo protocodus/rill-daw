@@ -494,6 +494,7 @@ impl DawApp {
             .unwrap_or(daw_ui::AutomationState::Bypassed);
         let mut add_parameter = false;
         let mut fit = !state.fitted;
+        let mut fit_song = false;
         let mut override_edit = None;
         let compact = ui.available_width() < 900.0;
         daw_ui::curve_toolbar(ui, compact, |ui| {
@@ -546,7 +547,8 @@ impl DawApp {
             // space between, so no separate hint band takes plot height.
             daw_ui::toolbar_trailing(ui, AUTOMATION_TRAILING_WIDTH, |ui| {
                 add_parameter = daw_ui::button(ui, "Add parameter").clicked();
-                fit |= daw_ui::timeline_fit_button(ui).clicked();
+                fit_song = daw_ui::curve_fit_song_button(ui).clicked();
+                fit |= daw_ui::curve_fit_points_button(ui).clicked();
                 if let Some(caption) = daw_ui::editor_status_caption(
                     ui,
                     "Click to add · Drag to move · Drag diamonds to bend · Right-click for options",
@@ -588,7 +590,7 @@ impl DawApp {
                 curve: point.curve,
             })
             .collect();
-        let response = daw_ui::curve_timeline_editor_with_segments(
+        let response = daw_ui::curve_timeline_editor_with_fit(
             ui,
             egui::Id::new(("automation_curve", id)),
             &points,
@@ -621,6 +623,15 @@ impl DawApp {
                 keyboard_active: true,
                 value_label: value_axis_label(lane.target.parameter),
             },
+            fit_song.then_some(daw_ui::TimelineBounds {
+                start_beat: 0.0,
+                end_beat: self
+                    .project
+                    .end_beat()
+                    .max(f64::from(self.project.beats_per_bar.max(1))),
+                start_row: 0.0,
+                end_row: 1.0,
+            }),
             |beat| lane.value_at(beat).unwrap_or(0.5),
         );
         state.fitted = true;
@@ -634,6 +645,8 @@ impl DawApp {
         let mut edit = response.edit;
         let mut delete_selection = response.delete_selection;
         let mut point_beat_rect = None;
+        let mut point_value_rect = None;
+        let mut override_value_rect = None;
         let mut displayed_beat = None;
         let mut segment_edit = response.segment_edit;
         let mut slope_rect = None;
@@ -641,16 +654,28 @@ impl DawApp {
         daw_ui::parameter_toolbar(ui, |ui| {
             if let Some(value) = lane.override_value {
                 let mut manual = lane.target.parameter.denormalize(value);
-                if ui
-                    .add(
+                let manual_response = if matches!(
+                    lane.target.parameter,
+                    AutomationParameter::TrackGain | AutomationParameter::SendGain { .. }
+                ) {
+                    daw_ui::gain_value_button(
+                        ui,
+                        ("automation_override_gain", id),
+                        &mut manual,
+                        *lane.target.parameter.range().end(),
+                        "Override",
+                    )
+                } else {
+                    ui.add(
                         daw_ui::number(&mut manual)
                             .range(lane.target.parameter.range())
                             .speed(0.01)
                             .prefix("Override "),
                     )
                     .on_hover_text("Manual parameter value; Resume automation returns to the curve")
-                    .changed()
-                {
+                };
+                override_value_rect = Some(manual_response.rect);
+                if manual_response.changed() {
                     override_edit = Some(Some(lane.target.parameter.normalize(manual)));
                 }
             }
@@ -675,34 +700,43 @@ impl DawApp {
             displayed_beat = Some(beat + 1.0);
             let range = lane.target.parameter.range();
             let speed = (*range.end() - *range.start()) as f64 / 200.0;
-            let (prefix, suffix, tooltip) = match lane.target.parameter {
-                AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => (
-                    "Gain ",
-                    " ×",
-                    "Linear gain multiplier: 1× is unity, 0× is silence",
-                ),
-                AutomationParameter::TrackPan => ("Pan ", "", "−1 left · 0 center · 1 right"),
-                AutomationParameter::VstParameter { .. } => (
-                    "Value ",
-                    "",
-                    "Normalized plug-in parameter value from 0 to 1",
-                ),
+            let value_response = match lane.target.parameter {
+                AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => {
+                    daw_ui::gain_value_button(
+                        ui,
+                        ("automation_point_gain", id, point.id),
+                        &mut value,
+                        *range.end(),
+                        "Gain",
+                    )
+                }
+                parameter => {
+                    let (prefix, tooltip) = match parameter {
+                        AutomationParameter::TrackPan => ("Pan ", "−1 left · 0 center · 1 right"),
+                        _ => ("Value ", "Normalized plug-in parameter value from 0 to 1"),
+                    };
+                    ui.add(
+                        daw_ui::number(&mut value)
+                            .range(range)
+                            .speed(speed)
+                            .prefix(prefix),
+                    )
+                    .on_hover_text(tooltip)
+                }
             };
-            let value_changed = ui
-                .add(
-                    daw_ui::number(&mut value)
-                        .range(range)
-                        .speed(speed)
-                        .prefix(prefix)
-                        .suffix(suffix),
-                )
-                .on_hover_text(tooltip)
-                .changed();
+            point_value_rect = Some(value_response.rect);
+            let value_changed = value_response.changed();
             if beat_response.changed() || value_changed {
                 edit = Some(CurveEdit::Move {
                     id: point.id,
                     x: beat,
-                    value: lane.target.parameter.normalize(value),
+                    value: if value_changed {
+                        lane.target.parameter.normalize(value)
+                    } else {
+                        // Position-only edits must preserve the exact stored
+                        // normalized value, including quiet gains and sends.
+                        point.value
+                    },
                 });
             }
             if index + 1 < lane.points.len() {
@@ -739,6 +773,7 @@ impl DawApp {
             "pixels_per_beat":state.viewport.pixels_per_beat,
             "end_beat":state.viewport.beat_at(response.plot_rect,response.plot_rect.right()),
             "point_beat_rect":point_beat_rect.map(rect), "point_beat":displayed_beat,
+            "point_value_rect":point_value_rect.map(rect), "override_value_rect":override_value_rect.map(rect),
             "navigating":response.navigation.navigating,
             "selected_point":state.point,"selected_points":response.selection,
             "interpolation":format!("{:?}",lane.interpolation),"override_value":lane.override_value,
@@ -1021,25 +1056,18 @@ fn start_parameter_read(
     });
 }
 
-/// Room kept at the toolbar end for Add parameter, Fit and at least the
+/// Room kept at the toolbar end for Add parameter, both Fit actions and the
 /// caption's first clause; with less, the group starts its own row.
-const AUTOMATION_TRAILING_WIDTH: f32 = 377.0;
+const AUTOMATION_TRAILING_WIDTH: f32 = 480.0;
 
 /// Value-axis labels in the parameter's own units.
 fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {
     match parameter {
-        AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => |value| {
-            let gain = AutomationParameter::TrackGain.denormalize(value);
-            if gain <= 0.000_01 {
-                "−∞".into()
-            } else {
-                let db = 20.0 * gain.log10();
-                if db.abs() < 0.05 {
-                    "0 dB".into()
-                } else {
-                    format!("{:+.1} dB", db).replace('-', "−")
-                }
-            }
+        AutomationParameter::TrackGain => {
+            |value| daw_ui::gain_axis_label(AutomationParameter::TrackGain.denormalize(value))
+        }
+        AutomationParameter::SendGain { .. } => |value| {
+            daw_ui::gain_axis_label(AutomationParameter::SendGain { bus: 0 }.denormalize(value))
         },
         AutomationParameter::TrackPan => |value| {
             let pan = AutomationParameter::TrackPan.denormalize(value);

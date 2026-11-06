@@ -34,6 +34,7 @@ pub fn hover_text(response: Response, text: impl Into<WidgetText>) -> Response {
         ctx,
         response.id.with(("read_only_tooltip", count)),
         bounds,
+        ctx.content_rect(),
         text.into(),
     );
     ctx.data_mut(|data| {
@@ -46,17 +47,39 @@ pub fn hover_text(response: Response, text: impl Into<WidgetText>) -> Response {
 /// while the gesture is held; no hover delay, persistent state, or input target
 /// is created. The returned bounds and painting stay within the viewport.
 pub fn pointer_text(ctx: &Context, id: Id, pointer: Pos2, text: impl Into<WidgetText>) -> Rect {
+    pointer_text_in_rect(ctx, id, pointer, ctx.content_rect(), text)
+}
+
+/// Immediate pointer feedback constrained to a canvas, independent of its row
+/// height or zoom. The caller owns hover/gesture visibility. This paints only;
+/// it creates no input target, hover delay, or persistent state.
+pub fn pointer_text_in_rect(
+    ctx: &Context,
+    id: Id,
+    pointer: Pos2,
+    bounds: Rect,
+    text: impl Into<WidgetText>,
+) -> Rect {
     let anchor = Rect::from_center_size(
         pointer,
         egui::vec2(crate::tokens::SPACE_XL, crate::tokens::SPACE_XL),
     );
-    paint_read_only_text(ctx, id, anchor, text.into())
+    paint_read_only_text(ctx, id, anchor, bounds, text.into())
 }
 
-fn paint_read_only_text(ctx: &Context, id: Id, bounds: Rect, text: WidgetText) -> Rect {
+fn paint_read_only_text(
+    ctx: &Context,
+    id: Id,
+    anchor: Rect,
+    bounds: Rect,
+    text: WidgetText,
+) -> Rect {
+    let bounds = bounds.intersect(ctx.content_rect());
+    if !bounds.is_finite() || !bounds.is_positive() {
+        return Rect::NOTHING;
+    }
     let style = ctx.style();
     let frame = Frame::popup(&style);
-    let screen = ctx.content_rect();
     let galley = text.into_galley_impl(
         ctx,
         &style,
@@ -64,7 +87,7 @@ fn paint_read_only_text(ctx: &Context, id: Id, bounds: Rect, text: WidgetText) -
             max_width: style
                 .spacing
                 .tooltip_width
-                .min((screen.width() - frame.total_margin().sum().x).max(1.0)),
+                .min((bounds.width() - frame.total_margin().sum().x).max(1.0)),
             ..Default::default()
         },
         egui::TextStyle::Body.into(),
@@ -76,29 +99,29 @@ fn paint_read_only_text(ctx: &Context, id: Id, bounds: Rect, text: WidgetText) -
         std::iter::once(RectAlign::BOTTOM_START)
             .chain(RectAlign::BOTTOM_START.symmetries())
             .chain(RectAlign::MENU_ALIGNS),
-        screen,
         bounds,
+        anchor,
         gap,
         size,
     )
     .unwrap_or(RectAlign::BOTTOM_START);
-    let mut rect = align.align_rect(&bounds, size, gap);
+    let mut rect = align.align_rect(&anchor, size, gap);
     // Match native constrained popup placement when a long hint cannot fit in
     // its preferred direction; retain a bounded viewport clip for tiny windows.
     let shift = egui::vec2(
-        (screen.right() - rect.right())
+        (bounds.right() - rect.right())
             .min(0.0)
-            .max(screen.left() - rect.left()),
-        (screen.bottom() - rect.bottom())
+            .max(bounds.left() - rect.left()),
+        (bounds.bottom() - rect.bottom())
             .min(0.0)
-            .max(screen.top() - rect.top()),
+            .max(bounds.top() - rect.top()),
     );
     rect = rect.translate(shift);
     let content = rect - frame.total_margin();
     let layer = LayerId::new(Order::Tooltip, id);
     ctx.move_to_top(layer);
-    let painter = ctx.layer_painter(layer).with_clip_rect(screen);
+    let painter = ctx.layer_painter(layer).with_clip_rect(bounds);
     painter.add(frame.paint(content));
     painter.galley(content.min, galley, style.visuals.text_color());
-    rect.intersect(screen)
+    rect.intersect(bounds)
 }

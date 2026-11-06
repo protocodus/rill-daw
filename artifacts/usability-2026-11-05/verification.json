@@ -1,0 +1,676 @@
+{
+  "baseline_commit": "a5a9ce4b360ad9f303661d4e01039bcf3b7cda02",
+  "artifact_audit": [
+    {
+      "participant": 1,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 121,
+      "projects": {
+        "Neon Steps.rill": {
+          "name": "Neon Steps",
+          "version": 4,
+          "tracks": 2,
+          "clips": 7,
+          "midi_notes_in_all_clips": 45,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "8f09e81acfc7190f2b1ff69eebaae18384d771f1d9a074fc13a6ff08be2420d0"
+        }
+      },
+      "wavs": {
+        "Neon Steps.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.3423936665058136,
+          "rms": 0.041836365252921816,
+          "sha256": "c65611c80c8c9ef85df617faacab43d7cf1cedc4aa9cca9db9150fb85ba12485"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 2,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 148,
+      "projects": {
+        "Windowlight.rill": {
+          "name": "Midnight circuit",
+          "version": 4,
+          "tracks": 2,
+          "clips": 7,
+          "midi_notes_in_all_clips": 75,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "be4b5e90f393fc5f8700261cde56c65cd34b35c7d2e990509db7186e083591e4"
+        }
+      },
+      "wavs": {
+        "Windowlight.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.2787810266017914,
+          "rms": 0.033552966008091066,
+          "sha256": "03b37e337cb9e43a6cd13b637c5c0d818b3c9d9d5f71afddccfd36a31e85c9bc"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 3,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 141,
+      "projects": {
+        "Neon Underpass.rill": {
+          "name": "Neon Underpass",
+          "version": 4,
+          "tracks": 2,
+          "clips": 10,
+          "midi_notes_in_all_clips": 33,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "486acf959c5fc3a2ee7672d56b5c8b715e7955cbb6ed9e3005d07556034fed80"
+        }
+      },
+      "wavs": {
+        "Neon Underpass.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.41030099987983704,
+          "rms": 0.04694872071230863,
+          "sha256": "26b076849437076b2df72789e4a0a90e4a26585b365385606d87e5f90c8968e5"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 4,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 141,
+      "projects": {
+        "Still Water, Returning.rill": {
+          "name": "Still Water, Returning",
+          "version": 4,
+          "tracks": 2,
+          "clips": 6,
+          "midi_notes_in_all_clips": 10,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 80.0,
+          "embedded_audio_assets": 1,
+          "sha256": "8ed9f929aee2508c2d57ef8dbd236c3c31a8d1293c5cd46cb3bd7d13af4e757f"
+        }
+      },
+      "wavs": {
+        "Still Water, Returning.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "48.200000",
+          "finite": true,
+          "peak": 0.08287268877029419,
+          "rms": 0.007996551699503527,
+          "sha256": "0af2b1fa9dda425d3873e558e3a5bc61fb6ab1afaa105b3eb73232a683ee6f58"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 5,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 131,
+      "projects": {
+        "Glass Current.rill": {
+          "name": "Glass Current",
+          "version": 4,
+          "tracks": 2,
+          "clips": 7,
+          "midi_notes_in_all_clips": 51,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "6d940aee72b7d9814042cfdc0148f7c36bade455478c4836471e7623abf862a5"
+        }
+      },
+      "wavs": {
+        "Glass Current.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.3219292163848877,
+          "rms": 0.039794813424177775,
+          "sha256": "b9009d28bbfa98a5281bc05c4e3e0da95a14ef5e5610ce4a8ef54b6ea3dbfa11"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 6,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 140,
+      "projects": {
+        "Lantern Steps.rill": {
+          "name": "Midnight circuit",
+          "version": 4,
+          "tracks": 2,
+          "clips": 6,
+          "midi_notes_in_all_clips": 30,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "37cdde00ccd1cab55cfec8fc0b458c8cb6f1264b99820cc7c8e3d1205199126a"
+        }
+      },
+      "wavs": {
+        "Lantern Steps.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.2576074004173279,
+          "rms": 0.04463464194303931,
+          "sha256": "8b5d9a8350879d6d00669525e6fee65c393008898928f9706d0140a900400595"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 7,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 149,
+      "projects": {
+        "Copper Steps.rill": {
+          "name": "Copper Steps",
+          "version": 4,
+          "tracks": 2,
+          "clips": 10,
+          "midi_notes_in_all_clips": 36,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "89019da047ea6a20618690e8fccae0e9465e0da4709ffbdff400fb65e0112b90"
+        }
+      },
+      "wavs": {
+        "Copper Steps.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.4292335510253906,
+          "rms": 0.05328475837786399,
+          "sha256": "2f2cb95395fb28054dcb1e19ac989775d49273febc598145734af8a87e98692b"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 8,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 120,
+      "projects": {
+        "Glass Tides.rill": {
+          "name": "Glass Tides",
+          "version": 4,
+          "tracks": 2,
+          "clips": 4,
+          "midi_notes_in_all_clips": 99,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "a0079dc14380846958e94242226b0fcbe9279acbae2e4eb4acf0749c6d1e8283"
+        }
+      },
+      "wavs": {
+        "Glass Tides.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.43462151288986206,
+          "rms": 0.0483399528448177,
+          "sha256": "c52731b9852dc6ffd8c693c91752ab9a46fde4adf94dc465fd5b0f3ac3f1a1f2"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 9,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 141,
+      "projects": {
+        "Low Tide, High Water.rill": {
+          "name": "Low Tide, High Water",
+          "version": 4,
+          "tracks": 2,
+          "clips": 8,
+          "midi_notes_in_all_clips": 36,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "a02e45ae048c50d50ff72e663afe224fb53c92319427312858f95bbfe8cec0f7"
+        }
+      },
+      "wavs": {
+        "Low Tide, High Water.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.25929105281829834,
+          "rms": 0.039172130306483796,
+          "sha256": "af51fd3002f2b25fd8c18b5fe02347e142a9cbd613efdaa285471b3200eeef43"
+        }
+      },
+      "errors": []
+    },
+    {
+      "participant": 10,
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "native_actions": 159,
+      "projects": {
+        "Afterglow Steps.rill": {
+          "name": "Afterglow Steps",
+          "version": 4,
+          "tracks": 2,
+          "clips": 9,
+          "midi_notes_in_all_clips": 32,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "71bcb3ff5b0660b3017cf35e58f36eaa78148d8ed1431569ec3254152d97ec64"
+        }
+      },
+      "wavs": {
+        "Afterglow Steps.wav": {
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.43656593561172485,
+          "rms": 0.053420434335085275,
+          "sha256": "64948787f67ca7d01d865df6c6ddfd2e1f88bc8e318fcfae4edee39aa2188f8c"
+        }
+      },
+      "errors": []
+    }
+  ],
+  "offline_renders": [
+    {
+      "participant": 1,
+      "project_sha256": "8f09e81acfc7190f2b1ff69eebaae18384d771f1d9a074fc13a6ff08be2420d0",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.3423936665058136,
+          "rms": 0.041836365252921816,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.015825139358639717,
+          "rms": 0.00833983078510139
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.3383910357952118,
+          "rms": 0.04100252635380086
+        }
+      }
+    },
+    {
+      "participant": 2,
+      "project_sha256": "be4b5e90f393fc5f8700261cde56c65cd34b35c7d2e990509db7186e083591e4",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.2787810266017914,
+          "rms": 0.033552966008091066,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.05510378256440163,
+          "rms": 0.014749566667128995
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.26879361271858215,
+          "rms": 0.030153198955886733
+        }
+      }
+    },
+    {
+      "participant": 3,
+      "project_sha256": "486acf959c5fc3a2ee7672d56b5c8b715e7955cbb6ed9e3005d07556034fed80",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.41030099987983704,
+          "rms": 0.04694872071230863,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.011867179535329342,
+          "rms": 0.006184337733261818
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.40432479977607727,
+          "rms": 0.04658317139322049
+        }
+      }
+    },
+    {
+      "participant": 4,
+      "project_sha256": "8ed9f929aee2508c2d57ef8dbd236c3c31a8d1293c5cd46cb3bd7d13af4e757f",
+      "renders": {
+        "full": {
+          "samples": 4627200,
+          "finite": true,
+          "peak": 0.08287268877029419,
+          "rms": 0.007996551699503527,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 4627200,
+          "finite": true,
+          "peak": 0.010498267598450184,
+          "rms": 0.006232032177715167
+        },
+        "audio_only": {
+          "samples": 4627200,
+          "finite": true,
+          "peak": 0.07801079005002975,
+          "rms": 0.005016192752497072
+        }
+      }
+    },
+    {
+      "participant": 5,
+      "project_sha256": "6d940aee72b7d9814042cfdc0148f7c36bade455478c4836471e7623abf862a5",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.3219292163848877,
+          "rms": 0.039794813424177775,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.011867179535329342,
+          "rms": 0.004920902995683394
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.3219292163848877,
+          "rms": 0.039493741421087435
+        }
+      }
+    },
+    {
+      "participant": 6,
+      "project_sha256": "37cdde00ccd1cab55cfec8fc0b458c8cb6f1264b99820cc7c8e3d1205199126a",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.45804542303085327,
+          "rms": 0.05779980344516261,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.3926078975200653
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.03543306887149811,
+          "rms": 0.01766401435591472
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.42500001192092896,
+          "rms": 0.05505195786082863
+        }
+      }
+    },
+    {
+      "participant": 7,
+      "project_sha256": "89019da047ea6a20618690e8fccae0e9465e0da4709ffbdff400fb65e0112b90",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.4292335510253906,
+          "rms": 0.05328475837786399,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.020995907485485077,
+          "rms": 0.0061333854234759035
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.42500001192092896,
+          "rms": 0.05293843818072649
+        }
+      }
+    },
+    {
+      "participant": 8,
+      "project_sha256": "a0079dc14380846958e94242226b0fcbe9279acbae2e4eb4acf0749c6d1e8283",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.43462151288986206,
+          "rms": 0.0483399528448177,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.027986282482743263,
+          "rms": 0.00801957371977444
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.42500001192092896,
+          "rms": 0.04767639403554801
+        }
+      }
+    },
+    {
+      "participant": 9,
+      "project_sha256": "a02e45ae048c50d50ff72e663afe224fb53c92319427312858f95bbfe8cec0f7",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.25929105281829834,
+          "rms": 0.039172130306483796,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.04724409431219101,
+          "rms": 0.02878628128396509
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.21351034939289093,
+          "rms": 0.026595068137399445
+        }
+      }
+    },
+    {
+      "participant": 10,
+      "project_sha256": "71bcb3ff5b0660b3017cf35e58f36eaa78148d8ed1431569ec3254152d97ec64",
+      "renders": {
+        "full": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.43656593561172485,
+          "rms": 0.053420434335085275,
+          "matches_original_frames": true,
+          "maximum_original_difference": 0.0
+        },
+        "midi_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.014355183579027653,
+          "rms": 0.007923724322593126
+        },
+        "audio_only": {
+          "samples": 3310628,
+          "finite": true,
+          "peak": 0.42500001192092896,
+          "rms": 0.05283216843972744
+        }
+      }
+    }
+  ],
+  "participant_06_recovery": {
+    "samples": 3310628,
+    "original_samples": 3310628,
+    "maximum_difference": 0.0,
+    "recovered_project": "/workspace/rill-study-20261105/render-audit/participant-06/Lantern Steps (recovered final).rill",
+    "recovered_project_sha256": "707f7d2c9e3daabb6e3abdafbf3020cdac08fc62cb5b1eee84d0c4b32cdde34b",
+    "portable_maximum_difference": 0.0
+  },
+  "changed_source_validation": "validation.json",
+  "native_visual_review": "native-qa/notes.md",
+  "artifact_integrity_recheck": {
+    "hashes_verified": 35,
+    "verbatim_excerpts_verified": 32
+  },
+  "native_visual_review_source": {
+    "path": "/workspace/rill-study-20261105/visual-qa/notes.md",
+    "sha256": "14f46731b2180b9fef430a2cc0fb5875d116a0689268b66e2c6c56ad14051835",
+    "bytes": 8667
+  }
+}

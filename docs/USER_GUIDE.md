@@ -157,7 +157,7 @@ full precision. Simply viewing or cancelling an edit preserves the stored value.
 The Master meter follows the combined output, keeps short hits visible as the
 peaks fall, and clears when playback pauses or stops.
 
-In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start**, **Duration** and **Source offset** in beats. Visible **−/+** buttons step each value by one beat; drag the number for fine adjustment or click to type. Start is one-based, and each step supports Undo. Tempo has matching buttons that step by one BPM. While trimming an arrangement clip, a pointer readout shows its current end and duration in seconds and beats. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
+In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Double-clicking below the tracks creates a new MIDI track with its first clip at the clicked, snapped position. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start**, **Duration** and **Source offset** in beats. Visible **−/+** buttons step each value by one beat; drag the number for fine adjustment or click to type. Start is one-based, and each step supports Undo. Tempo has matching buttons that step by one BPM. While trimming an arrangement clip, a pointer readout shows its current end and duration in seconds and beats. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
 
 Right-click an audio or MIDI clip and choose **Properties** to edit that clip's
 timing directly above Arrangement. In Clip Editor, **Properties** stays at the
@@ -168,6 +168,10 @@ when that phrase repeats later in the song. Audio's ruler shows song positions.
 
 Clip Properties also shows **Starts at**, **Ends at** and **Elapsed** in clock time
 and bars/beats, so you can check a clip's exact timing without converting units.
+Beside **Start**, click the **Bar · Beat** position to enter a bar and beat
+directly. For example, Bar 5, Beat 1 places the clip after four bars. Each field
+has a **123** mouse keypad, and **Apply position** commits the move in one Undo
+step. The beat field accepts fractional beats and follows the song's meter.
 
 | Shortcut | Action |
 | --- | --- |
@@ -185,7 +189,7 @@ and bars/beats, so you can check a clip's exact timing without converting units.
 | Shift + click | Add/remove a note from selection |
 | Right-click a note | Open the selection menu to add or remove the note |
 
-The piano roll separates note actions from the **View** menu. Note-tool controls keep their positions when switching tools. Hover a row or the piano keyboard to reveal its pitch names. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. **Key C · Natural minor** shows the current root and scale, with root/scale/chord choices inside. The keys column is drawn as a keyboard; natural-key rows use a neutral base and black-key rows are slightly darker; scale and chord guides add a subtle green tint. Notes are blue, with stronger shades for higher velocities. Selected notes keep their shade and gain an outline. Notes outside the grid scale are red; turn off **View → Color out-of-scale notes** to keep every note blue. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
+The piano roll separates note actions from the **View** menu. Note-tool controls keep their positions when switching tools. Hover a row or the piano keyboard to reveal its pitch names. Inside the grid, a pitch cue follows the pointer, so short notes and dense rows stay identifiable. While drawing, it shows the starting pitch. **Highlight scale**, **Highlight chord**, and **Only scale keys** are independent view options; hidden notes remain intact. **Key C · Natural minor** shows the current root and scale, with root/scale/chord choices inside. The keys column is drawn as a keyboard; natural-key rows use a neutral base and black-key rows are slightly darker; scale and chord guides add a subtle green tint. Notes are blue, with stronger shades for higher velocities. Selected notes keep their shade and gain an outline. Notes outside the grid scale are red; turn off **View → Color out-of-scale notes** to keep every note blue. Folded dragging and arrow nudges follow visible scale steps, while Shift+Up/Down transposes by octaves.
 
 The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**, **Cursor**, **Cut**, **Glue**, **Erase**, and **Duplicate**. Separators distinguish related tool families; the toolbar wraps when needed. The active tool keeps its glowing border, and all shortcuts remain available.
 
@@ -355,6 +359,12 @@ use their declared steps when edited, and automation state remains visible.
 Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
 
 Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. New lanes use **Spline**: drag the diamond between two points to bend that segment, or select it and choose **Log**, **Linear**, **Exp**, or adjust **Slope**. Each segment keeps its own shape without overshooting its endpoint values. Step, Linear and Smooth modes remain available.
+
+Volume and send-gain points show **Gain** in dB, matching the graph. Click the
+readout for exact entry or the **123** mouse keypad; **Silence** sets zero gain.
+Manual gain overrides use the same units. **Fit** frames the existing points;
+**Fit song** shows the whole arrangement so you can place an ending fade even
+when a new lane has points only in the first bar.
 
 Automation covers the entire song. The first point's value applies before that point and when playback starts; the last value is held indefinitely after the last point. Controls show the value at the playhead even while stopped. Orange curves and control markers identify automation consistently across the app. Automation itself does not extend the song's duration.
 

@@ -1,0 +1,1825 @@
+{
+  "schema_version": 1,
+  "study": {
+    "date": "2026-11-05",
+    "type": "Simulated agent usability study; not human user research",
+    "distinct_agents_attempted": 10,
+    "baseline_commit": "a5a9ce4b360ad9f303661d4e01039bcf3b7cda02",
+    "baseline_executable_sha256": "ac0b1ad9679de34ac142197c7848acd3c2ac7441e502c0b5b6421c7e923ee137",
+    "all_participants_used_frozen_baseline": true,
+    "post_change_participant_study": false,
+    "native_only_during_composition": true,
+    "listening_performed": false,
+    "fixture_instrument": "Rill Lab Sine; study fixture, not bundled product feature; no native editor"
+  },
+  "coverage": {
+    "status": "complete_participant_evidence_and_relevant_changed_source_validation",
+    "reports_included": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "audited_participants_included": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "pending_participants": [],
+    "reported_composed_saved_exported_available": 10,
+    "audit_errors_available": 0
+  },
+  "method_limits": [
+    "Participants used logged native X11 pointer/keyboard input and screenshots; no source, peer reports, model inspection, project injection or headless interaction during composition.",
+    "Post-study audit and diagnostic probes are separate evidence, not participant observations.",
+    "No audio listening; meters, note placement and finite sample data do not establish sound quality or subjective balance.",
+    "No relocation/reopening or cross-machine plug-in availability test is claimed.",
+    "Initial missing fixture metadata was corrected and excluded from product findings.",
+    "Input timing/settling changed, then pointer injection moved to in-process XTest with 60 ms modifier delays; early apparent failures remain infrastructure-confounded.",
+    "Shared four-CPU software rendering, scheduling pauses and extra time prevent wall-clock/action-count comparisons.",
+    "Original ratings are descriptive agent self-reports only; no human generalization or causal before/after rating claim."
+  ],
+  "protocol_details_original": {
+    "audio_configuration": {
+      "participants_1_to_5": {
+        "buffer_frames": 1024,
+        "pulse_latency_ms": 60
+      },
+      "participants_6_to_10": {
+        "buffer_frames": 4096,
+        "pulse_latency_ms": 200
+      },
+      "reason": "Standalone CPAL probe outside Rill reproduced 1371 ALSA avail_delay I/O errors at 1024/60 in 8 s; 4096/200 completed 8 s with 110 callbacks and zero errors. Qualitative UI observations remain useful, but timing/audio reliability is not a controlled cross-group comparison."
+    },
+    "scheduling_adjustment": "Participants 9 and 10 paused in memory after completed gestures while 6–8 finish; at most three actively rendering desktops after this adjustment. Their study time is extended on resume; timing is excluded from comparisons.",
+    "input_adapter_update": {
+      "time": 1793919503.167452,
+      "detail": "Changed pointer injection from many xdotool subprocesses to in-process XTest, preserving ordinary native events while stabilizing double-click/drag timing under load. Keyboard modifier delays increased to 60 ms. Prior reports of failed double-clicks or rapid text input require independent reproduction."
+    }
+  },
+  "provenance": {
+    "source_root": "/workspace/rill-study-20261105",
+    "repository_report": "docs/USABILITY_2026-11-05.md",
+    "source_snapshots": [
+      {
+        "path": "/workspace/rill-study-20261105/protocol.json",
+        "sha256": "ac6ec3d2708a120fc2d8a653ccd52e29edda7e9a20e8d1c3d98264620f1603a8",
+        "bytes": 2419
+      },
+      {
+        "path": "/workspace/rill-study-20261105/artifact-audit.json",
+        "sha256": "8a508ffa1e85c6ac821cbc176a584e8bb20008e051e8d3f741026e5c0d383a20",
+        "bytes": 10166
+      },
+      {
+        "path": "/workspace/rill-study-20261105/diagnostics-02/pitch-hint-findings.md",
+        "sha256": "8e2371189c1786d44ae1ec758b44b5a72a07feb05a79eba30f636c4708597fbc",
+        "bytes": 6984
+      },
+      {
+        "path": "/workspace/rill-study-20261105/diagnostics-03/notes.md",
+        "sha256": "4a5918295b8153fb7c9e1b9b61ab82b9f8fe09016be9146ad5cb847b3576e235",
+        "bytes": 5411
+      },
+      {
+        "path": "/workspace/rill-study-20261105/diagnostics-04/diagnosis.md",
+        "sha256": "5eb4fbbd66ea3ab84a9a1c5d238f01353fb494010384505984f666ecc88784b6",
+        "bytes": 11301
+      }
+    ],
+    "original_reports_modified_by_consolidation": false,
+    "binary_or_screenshot_copies_added": true,
+    "excerpt_policy": "finding_verbatim and evidence_paths_original are copied without rewriting; editorial summaries and later dispositions are separate fields.",
+    "retained_copy_scope": "Selected post-change QA screenshots and validation logs only; original participant projects/WAVs/screenshots are packaged outside the repository."
+  },
+  "participants": [
+    {
+      "participant": 1,
+      "chosen_title": "Neon Steps",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-01/report.json",
+        "sha256": "6bdb6916a7c404a567777844e1db9d27d19c282a99d76d9f6853a1c8c90390fc",
+        "bytes": 8054
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 3
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-01/screenshots/final.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-01/Neon Steps.rill",
+          "name": "Neon Steps",
+          "version": 4,
+          "tracks": 2,
+          "clips": 7,
+          "midi_notes_in_all_clips": 45,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "8f09e81acfc7190f2b1ff69eebaae18384d771f1d9a074fc13a6ff08be2420d0",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-01/Neon Steps.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.3423936665058136,
+          "rms": 0.041836365252921816,
+          "sha256": "c65611c80c8c9ef85df617faacab43d7cf1cedc4aa9cca9db9150fb85ba12485"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 2,
+      "chosen_title": "Windowlight",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-02/report.json",
+        "sha256": "9c64b35ebdf4e12cb794cc0adaea65d4a5b53636b24f8f11f0931d4ec87960c3",
+        "bytes": 9535
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-02/screenshots/42-export-complete.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-02/Windowlight.rill",
+          "name": "Midnight circuit",
+          "version": 4,
+          "tracks": 2,
+          "clips": 7,
+          "midi_notes_in_all_clips": 75,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "be4b5e90f393fc5f8700261cde56c65cd34b35c7d2e990509db7186e083591e4",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-02/Windowlight.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.2787810266017914,
+          "rms": 0.033552966008091066,
+          "sha256": "03b37e337cb9e43a6cd13b637c5c0d818b3c9d9d5f71afddccfd36a31e85c9bc"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 3,
+      "chosen_title": "Neon Underpass",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-03/report.json",
+        "sha256": "a7cf6dc861d820b40972f7d3e085d52f57ec7a652d285c7bbcc2b73c54569bf8",
+        "bytes": 8093
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-03/screenshots/final.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-03/Neon Underpass.rill",
+          "name": "Neon Underpass",
+          "version": 4,
+          "tracks": 2,
+          "clips": 10,
+          "midi_notes_in_all_clips": 33,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "486acf959c5fc3a2ee7672d56b5c8b715e7955cbb6ed9e3005d07556034fed80",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-03/Neon Underpass.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.41030099987983704,
+          "rms": 0.04694872071230863,
+          "sha256": "26b076849437076b2df72789e4a0a90e4a26585b365385606d87e5f90c8968e5"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 4,
+      "chosen_title": "Still Water, Returning",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-04/report.json",
+        "sha256": "50658c2260687ef65556a5fc1cb2fdcc898837e702c0cfd9db24d895ca0befc4",
+        "bytes": 11619
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 3,
+        "visual_clarity": 4,
+        "composition_flow": 3
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-04/screenshots/export-status.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-04/Still Water, Returning.rill",
+          "name": "Still Water, Returning",
+          "version": 4,
+          "tracks": 2,
+          "clips": 6,
+          "midi_notes_in_all_clips": 10,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 80.0,
+          "embedded_audio_assets": 1,
+          "sha256": "8ed9f929aee2508c2d57ef8dbd236c3c31a8d1293c5cd46cb3bd7d13af4e757f",
+          "arrangement_duration_seconds": 48.0
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-04/Still Water, Returning.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "48.200000",
+          "finite": true,
+          "peak": 0.08287268877029419,
+          "rms": 0.007996551699503527,
+          "sha256": "0af2b1fa9dda425d3873e558e3a5bc61fb6ab1afaa105b3eb73232a683ee6f58"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 5,
+      "chosen_title": "Glass Current",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-05/report.json",
+        "sha256": "c45a03f41dc9650357adbcf7157cc91b0db8e6e7d1b890b97f1d786b5fb1b28f",
+        "bytes": 8846
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-05/screenshots/38-final-stopped.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-05/Glass Current.rill",
+          "name": "Glass Current",
+          "version": 4,
+          "tracks": 2,
+          "clips": 7,
+          "midi_notes_in_all_clips": 51,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "6d940aee72b7d9814042cfdc0148f7c36bade455478c4836471e7623abf862a5",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-05/Glass Current.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.3219292163848877,
+          "rms": 0.039794813424177775,
+          "sha256": "b9009d28bbfa98a5281bc05c4e3e0da95a14ef5e5610ce4a8ef54b6ea3dbfa11"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 6,
+      "chosen_title": "Lantern Steps",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-06/report.json",
+        "sha256": "eacc506408f6036fce4df0e7b9397c7e41d964f79be2ce68830cdb4a915caa49",
+        "bytes": 10604
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 3
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-06/screenshots/41-final-arrangement.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-06/Lantern Steps.rill",
+          "name": "Midnight circuit",
+          "version": 4,
+          "tracks": 2,
+          "clips": 6,
+          "midi_notes_in_all_clips": 30,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "37cdde00ccd1cab55cfec8fc0b458c8cb6f1264b99820cc7c8e3d1205199126a",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-06/Lantern Steps.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.2576074004173279,
+          "rms": 0.04463464194303931,
+          "sha256": "8b5d9a8350879d6d00669525e6fee65c393008898928f9706d0140a900400595"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 7,
+      "chosen_title": "Copper Steps",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-07/report.json",
+        "sha256": "9d0e813882dfc40fe826b6cc0f29cef6ca328ed75de79e90e6b1a35f06385558",
+        "bytes": 9676
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-07/screenshots/final-stopped.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-07/Copper Steps.rill",
+          "name": "Copper Steps",
+          "version": 4,
+          "tracks": 2,
+          "clips": 10,
+          "midi_notes_in_all_clips": 36,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "89019da047ea6a20618690e8fccae0e9465e0da4709ffbdff400fb65e0112b90",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-07/Copper Steps.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.4292335510253906,
+          "rms": 0.05328475837786399,
+          "sha256": "2f2cb95395fb28054dcb1e19ac989775d49273febc598145734af8a87e98692b"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 8,
+      "chosen_title": "Glass Tides",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-08/report.json",
+        "sha256": "455c9de55309d7a31747fce91cfcc6e259cce7fe848ce965740624898fee3e72",
+        "bytes": 9121
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-08/screenshots/36-export-completion.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-08/Glass Tides.rill",
+          "name": "Glass Tides",
+          "version": 4,
+          "tracks": 2,
+          "clips": 4,
+          "midi_notes_in_all_clips": 99,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "a0079dc14380846958e94242226b0fcbe9279acbae2e4eb4acf0749c6d1e8283",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-08/Glass Tides.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.43462151288986206,
+          "rms": 0.0483399528448177,
+          "sha256": "c52731b9852dc6ffd8c693c91752ab9a46fde4adf94dc465fd5b0f3ac3f1a1f2"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 9,
+      "chosen_title": "Low Tide, High Water",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-09/report.json",
+        "sha256": "3b7d0413b483fb0d21199e217c5b5f14aa69a27f133b3fc7355db521ab727234",
+        "bytes": 8015
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-09/screenshots/final-arrangement.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-09/Low Tide, High Water.rill",
+          "name": "Low Tide, High Water",
+          "version": 4,
+          "tracks": 2,
+          "clips": 8,
+          "midi_notes_in_all_clips": 36,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "a02e45ae048c50d50ff72e663afe224fb53c92319427312858f95bbfe8cec0f7",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-09/Low Tide, High Water.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.25929105281829834,
+          "rms": 0.039172130306483796,
+          "sha256": "af51fd3002f2b25fd8c18b5fe02347e142a9cbd613efdaa285471b3200eeef43"
+        }
+      ],
+      "audit_errors": []
+    },
+    {
+      "participant": 10,
+      "chosen_title": "Afterglow Steps",
+      "report_source": {
+        "path": "/workspace/rill-study-20261105/participant-10/report.json",
+        "sha256": "862b021ff09e16cf689e8b91f4f04726c4264ba291bce6540163298d17d401ce",
+        "bytes": 8073
+      },
+      "reported_completed": {
+        "composed": true,
+        "saved": true,
+        "exported": true
+      },
+      "ratings_1_to_5_original": {
+        "ease": 4,
+        "visual_clarity": 4,
+        "composition_flow": 4
+      },
+      "used_documentation_original": [],
+      "final_screenshot": "/workspace/rill-study-20261105/participant-10/screenshots/final.png",
+      "audited_projects": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-10/Afterglow Steps.rill",
+          "name": "Afterglow Steps",
+          "version": 4,
+          "tracks": 2,
+          "clips": 9,
+          "midi_notes_in_all_clips": 32,
+          "track_names": [
+            "Circuit drums",
+            "Rill Lab Sine"
+          ],
+          "arrangement_end_beats": 64.0,
+          "tempo": 112.0,
+          "embedded_audio_assets": 1,
+          "sha256": "71bcb3ff5b0660b3017cf35e58f36eaa78148d8ed1431569ec3254152d97ec64",
+          "arrangement_duration_seconds": 34.285714285714285
+        }
+      ],
+      "audited_wavs": [
+        {
+          "path": "/workspace/rill-study-20261105/participant-10/Afterglow Steps.wav",
+          "codec_name": "pcm_f32le",
+          "sample_rate": "48000",
+          "channels": 2,
+          "duration": "34.485708",
+          "finite": true,
+          "peak": 0.43656593561172485,
+          "rms": 0.053420434335085275,
+          "sha256": "64948787f67ca7d01d865df6c6ddfd2e1f88bc8e318fcfae4edee39aa2188f8c"
+        }
+      ],
+      "audit_errors": []
+    }
+  ],
+  "positive_themes": [
+    {
+      "id": "midi_entry_extension",
+      "editorial_summary": "Pencil and length controls support deliberate note entry; drawing beyond the initial boundary automatically extends clips.",
+      "participants": [
+        1,
+        2,
+        3,
+        5,
+        7,
+        8,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 1,
+          "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 2,
+          "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 5,
+          "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/great/0"
+        }
+      ]
+    },
+    {
+      "id": "duplication_structure",
+      "editorial_summary": "Adjacent clip duplication, undo, cut, trim, fades and note contours support building a visible short-song form.",
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 1,
+          "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 2,
+          "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 5,
+          "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/great/4"
+        },
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/great/1"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/great/2"
+        }
+      ]
+    },
+    {
+      "id": "mix_state",
+      "editorial_summary": "Numerical level/pan values, routing and meters make mix state visible in mixer and arranger.",
+      "participants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 1,
+          "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 2,
+          "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 5,
+          "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/great/4"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/great/4"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/great/3"
+        }
+      ]
+    },
+    {
+      "id": "timing_summaries",
+      "editorial_summary": "Properties combines musical and elapsed-time summaries for precise verification.",
+      "participants": [
+        4,
+        6,
+        7
+      ],
+      "sources": [
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/great/2"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/great/2"
+        }
+      ]
+    },
+    {
+      "id": "creation_and_fallback",
+      "editorial_summary": "Empty-arranger MIDI guidance, instrument assignment and context-menu Edit notes provide visible routes.",
+      "participants": [
+        6,
+        7,
+        9
+      ],
+      "sources": [
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/great/0"
+        }
+      ]
+    },
+    {
+      "id": "generator_preview",
+      "editorial_summary": "Local generator controls expose harmony, register, contour, velocity and articulation before committing a preview.",
+      "participants": [
+        8
+      ],
+      "sources": [
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/great/0"
+        },
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/great/1"
+        }
+      ]
+    },
+    {
+      "id": "save_export_feedback",
+      "editorial_summary": "File commands and export duration/format/success feedback support saving and rendering the full song.",
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 1,
+          "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 2,
+          "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 5,
+          "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/great/5"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/great/3"
+        },
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/great/4"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/great/4"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/great/4"
+        }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "id": "bar_beat_start",
+      "editorial_summary": "Desired bar placement required absolute-beat arithmetic.",
+      "disposition": "implemented_and_validated",
+      "disposition_detail": "Direct Bar / Beat in bar Start popup beside the existing exact Beat field; default snap and Duration entry remain unchanged.",
+      "participants": [
+        3,
+        5,
+        7,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/painful/0"
+        },
+        {
+          "participant": 5,
+          "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+          "json_pointer": "/painful/0"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/painful/1"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/diagnostics-03/notes.md"
+      ]
+    },
+    {
+      "id": "arranger_snap",
+      "editorial_summary": "Fine default snap at wide zoom allowed subtle structural clip offsets.",
+      "disposition": "deferred",
+      "disposition_detail": "No default/adaptive snap change. Existing 1 bar snap was used by P06 and P10. P10 initial drag offset is timing-confounded. Bar/Beat Start entry addresses arithmetic only.",
+      "participants": [
+        3,
+        6,
+        7,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/painful/0"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/painful/0"
+        },
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/painful/1"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "pointer_pitch",
+      "editorial_summary": "Pitch identification required counting rows or looking away from the pointer; short notes could have no in-note label.",
+      "disposition": "implemented_and_validated",
+      "disposition_detail": "Immediate pointer pitch cue supplements existing gutter hover feedback and uses the visible row mapping.",
+      "participants": [
+        2,
+        5
+      ],
+      "sources": [
+        {
+          "participant": 2,
+          "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+          "json_pointer": "/painful/0"
+        },
+        {
+          "participant": 5,
+          "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+          "json_pointer": "/painful/1"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/diagnostics-02/pitch-hint-findings.md"
+      ]
+    },
+    {
+      "id": "automation_units_framing",
+      "editorial_summary": "Automation framed one-bar default points and mixed linear gain inspection with a dB graph; the diagnostic also found incorrect send-axis scaling.",
+      "disposition": "implemented_and_validated",
+      "disposition_detail": "Target-correct dB point/override fields, Silence, track/send axis scaling, and Fit song. Send-axis mismatch was diagnostic-only evidence, not directly observed by P04.",
+      "participants": [
+        4
+      ],
+      "sources": [
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/painful/0"
+        },
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/painful/2"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/diagnostics-04/diagnosis.md"
+      ]
+    },
+    {
+      "id": "coalesced_input",
+      "editorial_summary": "The attempted automation ending fade failed; ordinary input succeeded in probes, while one-frame gestures and focus-plus-text reproduced lost edits.",
+      "disposition": "deferred",
+      "disposition_detail": "Generic curve/Number timing hardening is separate. The native action log cannot establish the frame boundaries that caused every failed gesture. Do not claim the dB/Fit song work fixes this.",
+      "participants": [
+        4
+      ],
+      "sources": [
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/diagnostics-04/diagnosis.md"
+      ]
+    },
+    {
+      "id": "empty_arranger_position",
+      "editorial_summary": "The first MIDI clip on a new track ignored the timeline position of the empty-area double-click.",
+      "disposition": "implemented_and_validated",
+      "disposition_detail": "Create the initial clip at the clicked, snapped beat.",
+      "participants": [
+        7
+      ],
+      "sources": [
+        {
+          "participant": 7,
+          "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "duplicate_mode",
+      "editorial_summary": "Duplicate was initially interpreted as an immediate selected-clip command.",
+      "disposition": "implemented_and_validated",
+      "disposition_detail": "Clearer Duplicate-tool hover text. Existing click-to-duplicate behavior remains.",
+      "participants": [
+        1,
+        6
+      ],
+      "sources": [
+        {
+          "participant": 1,
+          "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+          "json_pointer": "/painful/1"
+        },
+        {
+          "participant": 6,
+          "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+          "json_pointer": "/painful/1"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "gain_slider",
+      "editorial_summary": "The compact arranger gain slider overshot the intended reduction.",
+      "disposition": "deferred",
+      "disposition_detail": "Gain mapping/sensitivity unchanged. Existing exact entry on the readout/context menu was verified; do not claim it was absent or newly added.",
+      "participants": [
+        3
+      ],
+      "sources": [
+        {
+          "participant": 3,
+          "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+          "json_pointer": "/painful/1"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/diagnostics-03/notes.md"
+      ]
+    },
+    {
+      "id": "audio_tempo_source",
+      "editorial_summary": "After a tempo reduction, musical clip extent exceeded the visible source waveform without an immediate explanation.",
+      "disposition": "deferred",
+      "disposition_detail": "Clarify source duration, tempo, clip extent and stretching; no follow-tempo behavior change claimed.",
+      "participants": [
+        4
+      ],
+      "sources": [
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/painful/1"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "generator_follow",
+      "editorial_summary": "Next range could move the generation range offscreen until Fit preview was used.",
+      "disposition": "deferred",
+      "disposition_detail": "Preview following and discoverability remain unchanged.",
+      "participants": [
+        8
+      ],
+      "sources": [
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "key_spelling",
+      "editorial_summary": "Sharp-only root choices or pitch labels required enharmonic translation while composing in C minor.",
+      "disposition": "deferred",
+      "disposition_detail": "Key-aware or dual enharmonic spelling remains unchanged in the generator and piano-roll labels. The pointer pitch cue does not change note-spelling policy.",
+      "participants": [
+        8,
+        9,
+        10
+      ],
+      "sources": [
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/painful/1"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/painful/1"
+        },
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/painful/1"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "generator_default_quality",
+      "editorial_summary": "The first generator preview used a major triad while the displayed editor key was minor.",
+      "disposition": "deferred",
+      "disposition_detail": "Default chord quality and its relation to the editor key remain unchanged.",
+      "participants": [
+        8
+      ],
+      "sources": [
+        {
+          "participant": 8,
+          "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+          "json_pointer": "/painful/2"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "legacy_range_labels",
+      "editorial_summary": "Exact-volume and duration range text exposed excessive floating-point precision or technical limits.",
+      "disposition": "deferred",
+      "disposition_detail": "Verbose legacy numeric range labels were not generally revised by the automation unit change.",
+      "participants": [
+        4,
+        9
+      ],
+      "sources": [
+        {
+          "participant": 4,
+          "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+          "json_pointer": "/painful/2"
+        },
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/painful/2"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "shortcut_timing",
+      "editorial_summary": "Some shortcut/rapid-input attempts did not visibly produce expected results; visible menu/tool alternatives worked.",
+      "disposition": "excluded_as_general_product_defect",
+      "disposition_detail": "Input-adapter and shared-rendering changes confound the native observations. Independent reproduction is needed; automation coalescing is tracked separately.",
+      "participants": [
+        2
+      ],
+      "sources": [
+        {
+          "participant": 2,
+          "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+          "json_pointer": "/painful/1"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "virtual_audio_failure",
+      "editorial_summary": "Repeated output failure prevented sustained playback checks in early sessions.",
+      "disposition": "study_backend_limitation",
+      "disposition_detail": "Standalone CPAL reproduced the original ALSA failure outside Rill. Preserve P01 original wording, but qualify its unresolved-cause statement with the later diagnosis. Larger buffers are not claimed to eliminate all later failures.",
+      "participants": [
+        1
+      ],
+      "sources": [
+        {
+          "participant": 1,
+          "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/protocol.json"
+      ]
+    },
+    {
+      "id": "transpose_view",
+      "editorial_summary": "Transposing the selected phrase an octave moved its upper notes outside the visible piano roll.",
+      "disposition": "deferred",
+      "disposition_detail": "Selection following after transpose and discoverability of the existing Fit selection route remain unchanged. Do not describe fit capability as absent.",
+      "participants": [
+        9
+      ],
+      "sources": [
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "duration_bar_presets",
+      "editorial_summary": "A four-bar duration required a separate keypad and entry of 16 beats.",
+      "disposition": "deferred",
+      "disposition_detail": "Common bar-length Duration choices remain unchanged. The new Bar/Beat popup applies to Start only.",
+      "participants": [
+        9
+      ],
+      "sources": [
+        {
+          "participant": 9,
+          "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+          "json_pointer": "/painful/2"
+        }
+      ],
+      "diagnostic_sources": []
+    },
+    {
+      "id": "numeric_apply_contrast",
+      "editorial_summary": "P10 reported a very dark Apply value control in numeric Start entry, while Return committed successfully.",
+      "disposition": "implemented_and_validated",
+      "disposition_detail": "Native QA independently reproduced dark text without its explicit primary fill in valid numeric and gain popups. The shared IconButton menu framing now preserves explicit fills; ordinary menu rows remain quiet. Shared-component and running-app contrast regressions passed, and final native review confirmed readable fills in both themes.",
+      "participants": [
+        10
+      ],
+      "sources": [
+        {
+          "participant": 10,
+          "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+          "json_pointer": "/painful/0"
+        }
+      ],
+      "diagnostic_sources": [
+        "/workspace/rill-study-20261105/visual-qa/screenshots/gain-dark-wide.png",
+        "/workspace/rill-study-20261105/visual-qa/screenshots/position-dark-wide.png"
+      ]
+    }
+  ],
+  "selected_original_feedback": [
+    {
+      "participant": 1,
+      "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+      "json_pointer": "/great/0",
+      "finding_verbatim": "Pencil note entry was direct and gave useful feedback. Dragging set note length, each note displayed its pitch, and drawing beyond the initial one-bar clip automatically extended the clip. This let me make a four-bar original phrase without first configuring a clip length.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-01/screenshots/hook-bar-one.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/hook-three-bars.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/file-save-options.png"
+      ]
+    },
+    {
+      "participant": 1,
+      "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+      "json_pointer": "/great/1",
+      "finding_verbatim": "Once I understood the Duplicate tool, arranging was quick: successive clicks appended four-bar copies on the grid. Dragging moved the melody to bar 5, and dragging the final drum clip edge made a two-bar melody-only ending. The overview showed waveform and MIDI-note shapes clearly enough to judge the structure.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-01/screenshots/duplicate-result.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/full-arrangement.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/final.png"
+      ]
+    },
+    {
+      "participant": 1,
+      "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+      "json_pointer": "/great/2",
+      "finding_verbatim": "Mixer faders and pan had readable numerical feedback, and their settings remained visible in the arranger. I could set drums to -8 dB and the sine to -9.5 dB/R30 without opening separate property dialogs.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-01/screenshots/mixer.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/playback-mixer.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/final.png"
+      ]
+    },
+    {
+      "participant": 1,
+      "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+      "json_pointer": "/great/3",
+      "finding_verbatim": "Saving and exporting were easy to locate in File. The WAV dialog explicitly said Arrangement, 0:34.286 plus tails, and 48 kHz stereo 32-bit float, which confirmed it would export the whole song despite the four-bar loop region. Export completed with a named success message.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-01/screenshots/file-save-options.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/save-dialog-ready.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/export-dialog.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/export-progress.png"
+      ]
+    },
+    {
+      "participant": 1,
+      "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "Playback repeatedly failed after briefly running. Retry eventually produced a moving playhead and drum meters, but playback stopped again with an audio stream error. The underlying cause remains unresolved; this may involve the study audio environment.",
+      "severity_original": "high",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-01/screenshots/hook-three-bars.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/playback-status.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/playback-mixer.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/audio-error-details.png"
+      ]
+    },
+    {
+      "participant": 1,
+      "source_path": "/workspace/rill-study-20261105/participant-01/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "I initially read Duplicate as an action on the selected clip, but it switches into a tool mode that requires clicking a clip afterward.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-01/screenshots/drums-duplicated.png",
+        "/workspace/rill-study-20261105/participant-01/screenshots/duplicate-result.png"
+      ]
+    },
+    {
+      "participant": 2,
+      "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "The empty piano-roll keyboard prominently labeled octaves but left most target pitches unnamed until notes were entered. As a keyboard player entering custom voicings, I had to count semitone rows for E, G, A and B and reorient when the vertical view changed on reopening a clip.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-02/screenshots/11-piano-roll.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/25-development-editor.png"
+      ]
+    },
+    {
+      "participant": 2,
+      "source_path": "/workspace/rill-study-20261105/participant-02/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "The advertised Ctrl+D and Ctrl+Z routes did not visibly perform the expected operation in my attempts. Clicking the Duplicate tool and using Edit > Undo did work. The cause is unresolved and may involve the study input adapter or timing; this is observed workflow friction, not a confirmed application defect.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-02/screenshots/21-duplicate-harmony.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/22-duplicate-tool.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/23-duplicated-sections.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/26-melody-too-long.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/27-melody-undo-corrected.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/28-edit-menu.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/29-undo-via-menu.png",
+        "/workspace/rill-study-20261105/participant-02/screenshots/30-development-phrase.png"
+      ]
+    },
+    {
+      "participant": 3,
+      "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "At an arrangement overview zoom, creating the bass clip near bar 5 placed it at bar 5 beat 1.25. The default 1/16 snap allowed a small placement error that was not obvious from the clip overview.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-03/screenshots/17-clip-properties.png",
+        "/workspace/rill-study-20261105/participant-03/screenshots/18-position-entry.png",
+        "/workspace/rill-study-20261105/participant-03/screenshots/19-arrangement-aligned.png"
+      ]
+    },
+    {
+      "participant": 3,
+      "source_path": "/workspace/rill-study-20261105/participant-03/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "The small horizontal arranger level slider was too sensitive for my intended modest bass reduction: an approximately 20-pixel drag changed -2.5 dB to -21.2 dB.",
+      "severity_original": "medium",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-03/screenshots/24-drum-fade.png",
+        "/workspace/rill-study-20261105/participant-03/screenshots/25-mixer.png",
+        "/workspace/rill-study-20261105/participant-03/screenshots/26-playback-check.png"
+      ]
+    },
+    {
+      "participant": 4,
+      "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+      "json_pointer": "/great/2",
+      "finding_verbatim": "Clip Properties gives exact start, end, elapsed time, and musical duration together. This made it easy to verify that the ending occupied 36 to 48 seconds. Inline level/pan readouts also made the mix settings visible without opening a mixer.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-04/screenshots/ending-properties.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/export-status.png"
+      ]
+    },
+    {
+      "participant": 4,
+      "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "I could create automation points but could not make the intended ending fade with the visible drag and numeric controls. The editor initially fit only its default one-bar points, and attempts to enter a later position or zero gain did not visibly take effect. Point drags also left the curve unchanged in this session. This is an observed interaction failure; its exact cause is unverified and may include input-adapter timing.",
+      "severity_original": "medium",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-04/screenshots/automation-created.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/automation-full-song.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/automation-wide.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/fade-lowered.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/fade-zero.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/export-status.png"
+      ]
+    },
+    {
+      "participant": 4,
+      "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "Changing the song tempo from 112 to 80 BPM lengthened the four-bar audio clip to twelve seconds while the visible source waveform still occupied about 8.6 seconds. The newly empty tail was visible, but no immediate explanation clarified the relationship between tempo, clip length, and source playback.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-04/screenshots/start.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/midi-created.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/export-status.png"
+      ]
+    },
+    {
+      "participant": 4,
+      "source_path": "/workspace/rill-study-20261105/participant-04/report.json",
+      "json_pointer": "/painful/2",
+      "finding_verbatim": "The exact-volume popover exposed a range ending in 3.521825075149536 dB, and automation switched from dB on the graph to linear Gain values such as 0.22221×. The excess precision and unit switch added interpretation work during a simple fade task.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-04/screenshots/volume-menu.png",
+        "/workspace/rill-study-20261105/participant-04/screenshots/automation-created.png"
+      ]
+    },
+    {
+      "participant": 5,
+      "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "Placing a clip precisely at a musical bar required entering an absolute beat count in Properties. I wanted bar 5 and had to convert that to Beat 17.00.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-05/screenshots/18-clip-properties.png",
+        "/workspace/rill-study-20261105/participant-05/screenshots/19-hook-moved.png"
+      ]
+    },
+    {
+      "participant": 5,
+      "source_path": "/workspace/rill-study-20261105/participant-05/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "At the default piano-roll zoom, most keyboard rows were unlabeled, and the short Eb4 and Bb4 notes had no visible pitch text. I counted semitone rows from C to place and check those pitches.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-05/screenshots/14-piano-roll.png",
+        "/workspace/rill-study-20261105/participant-05/screenshots/16-hook-notes.png",
+        "/workspace/rill-study-20261105/participant-05/screenshots/17-four-bar-hook.png"
+      ]
+    },
+    {
+      "participant": 6,
+      "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+      "json_pointer": "/great/0",
+      "finding_verbatim": "The empty arranger area explicitly said 'Double-click for MIDI', and doing so opened the instrument library with an obvious Assign instrument button. I could add the study instrument without looking up a workflow.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-06/screenshots/01-start.png",
+        "/workspace/rill-study-20261105/participant-06/screenshots/04-midi-created.png",
+        "/workspace/rill-study-20261105/participant-06/screenshots/05-instrument-assigned.png"
+      ]
+    },
+    {
+      "participant": 6,
+      "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "The arranger's initial 1/16 snap was too fine for placing whole phrases accurately at the zoom level showing the whole song. A phrase looked almost aligned but its tooltip showed Bar 8, Beat 4.75.",
+      "severity_original": "medium",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-06/screenshots/28-align-second.png",
+        "/workspace/rill-study-20261105/participant-06/screenshots/29-arranger-snap.png",
+        "/workspace/rill-study-20261105/participant-06/screenshots/30-bar-aligned.png"
+      ]
+    },
+    {
+      "participant": 6,
+      "source_path": "/workspace/rill-study-20261105/participant-06/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "I initially expected the toolbar Duplicate button to duplicate the selected clip immediately, but it entered a tool mode and required clicking the clip again.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-06/screenshots/02-duplicate.png",
+        "/workspace/rill-study-20261105/participant-06/screenshots/03-first-copy.png"
+      ]
+    },
+    {
+      "participant": 7,
+      "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "Creating a new MIDI track by double-clicking the empty arrangement at bar 3 placed its initial clip at bar 1. The click position did not become the new clip's start.",
+      "severity_original": "medium",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-07/screenshots/initial.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/midi-created.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/instrument-assigned.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/clip-start-entry.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/arrangement-expanded.png"
+      ]
+    },
+    {
+      "participant": 7,
+      "source_path": "/workspace/rill-study-20261105/participant-07/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "At whole-song zoom, creating the coda near bar 15 produced a half-beat offset that was subtle in the arrangement. Precise correction required converting bar 15 to absolute beat 57.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-07/screenshots/ending-created.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/ending-length.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/ending-properties.png",
+        "/workspace/rill-study-20261105/participant-07/screenshots/ending-arranged.png"
+      ]
+    },
+    {
+      "participant": 8,
+      "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+      "json_pointer": "/great/0",
+      "finding_verbatim": "Generate is prominent in the clip editor, and its Chord/Arpeggio/Melody tabs made musical pattern construction discoverable without documentation. A purple note preview shows the result before Add notes commits it.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-08/screenshots/05-pattern-editor.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/06-generate.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/07-arpeggio-options.png"
+      ]
+    },
+    {
+      "participant": 8,
+      "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "After Next range advanced generation to later bars, the editor remained focused on the earlier bars, so the new preview was offscreen or mostly hidden behind the panel until I used Fit preview.",
+      "severity_original": "medium",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-08/screenshots/12-next-harmony.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/19-next-range-check.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/21-closing-preview.png"
+      ]
+    },
+    {
+      "participant": 8,
+      "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "The root picker uses sharp spellings only, including G# and A#, while I was composing in C minor and thinking in A-flat and B-flat.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-08/screenshots/12-next-harmony.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/15-root-quality.png"
+      ]
+    },
+    {
+      "participant": 8,
+      "source_path": "/workspace/rill-study-20261105/participant-08/report.json",
+      "json_pointer": "/painful/2",
+      "finding_verbatim": "The first generator preview defaulted to a C major triad even though the editor key was C natural minor.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-08/screenshots/05-pattern-editor.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/06-generate.png",
+        "/workspace/rill-study-20261105/participant-08/screenshots/08-pattern-choices.png"
+      ]
+    },
+    {
+      "participant": 9,
+      "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+      "json_pointer": "/great/0",
+      "finding_verbatim": "The empty arranger area explicitly says Double-click for MIDI. Following that hint opened the instrument library with the installed synth selected, and Assign instrument created a track and editable pattern. I could begin without consulting documentation.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-09/screenshots/start.png",
+        "/workspace/rill-study-20261105/participant-09/screenshots/midi-create.png",
+        "/workspace/rill-study-20261105/participant-09/screenshots/assigned.png"
+      ]
+    },
+    {
+      "participant": 9,
+      "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "After selecting all chorus notes and dragging them up an octave, the upper notes were clipped above the piano-roll viewport. The editor did not keep the entire selected phrase in view.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-09/screenshots/chorus-raised.png",
+        "/workspace/rill-study-20261105/participant-09/screenshots/chorus-scroll.png",
+        "/workspace/rill-study-20261105/participant-09/screenshots/chorus-pencil-ready.png"
+      ]
+    },
+    {
+      "participant": 9,
+      "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "The editor showed Key C · Natural minor, but note labels spelled the scale tones as D# and A# rather than Eb and Bb.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-09/screenshots/verse-notes.png"
+      ]
+    },
+    {
+      "participant": 9,
+      "source_path": "/workspace/rill-study-20261105/participant-09/report.json",
+      "json_pointer": "/painful/2",
+      "finding_verbatim": "Extending the default one-bar MIDI clip to four bars required opening Properties and a separate 123 duration keypad, then entering 16 beats. The keypad showed a technical range of 1e-9 to 1000000.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-09/screenshots/clip-properties.png",
+        "/workspace/rill-study-20261105/participant-09/screenshots/duration-16-input.png",
+        "/workspace/rill-study-20261105/participant-09/screenshots/note-1.png"
+      ]
+    },
+    {
+      "participant": 10,
+      "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+      "json_pointer": "/great/0",
+      "finding_verbatim": "The pencil immediately showed named notes, and drawing beyond the original one-bar clip automatically extended its duration to two bars. I could finish the phrase without a separate resize operation.",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-10/screenshots/piano-roll.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/two-bar-melody.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/pattern-properties.png"
+      ]
+    },
+    {
+      "participant": 10,
+      "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+      "json_pointer": "/painful/0",
+      "finding_verbatim": "Correcting an intended bar-aligned clip move required a detour through absolute beat entry. My first drag landed at Beat 7 / bar 2 beat 3, and the repeats inherited that offset. The Properties start editor uses an absolute beat number, so I had to translate bar 3 to Beat 9. The numeric popover also rendered Apply value very dark; Return was the clear successful commit route.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-10/screenshots/sixteen-bar-layout.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/start-entry.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/numeric-edit.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/start-applied.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/snap-options.png"
+      ]
+    },
+    {
+      "participant": 10,
+      "source_path": "/workspace/rill-study-20261105/participant-10/report.json",
+      "json_pointer": "/painful/1",
+      "finding_verbatim": "The piano-roll key selector said C Natural minor, but notes were labeled D#4, G#4, and A#4 rather than Eb4, Ab4, and Bb4. This made reading my C-minor phrase require mental enharmonic translation.",
+      "severity_original": "low",
+      "evidence_paths_original": [
+        "/workspace/rill-study-20261105/participant-10/screenshots/two-bar-melody.png",
+        "/workspace/rill-study-20261105/participant-10/screenshots/closing-notes.png"
+      ]
+    }
+  ],
+  "audit_discrepancies": [
+    {
+      "participants": [
+        2,
+        6
+      ],
+      "observation": "Windowlight.rill and Lantern Steps.rill retain stored project name Midnight circuit. Chosen titles and filenames differ from that metadata; P06 reports Save As adopted its filename as title.",
+      "disposition": "Retain both source statements; do not claim verified project-name synchronization."
+    },
+    {
+      "participants": [
+        6
+      ],
+      "observation": "Narrative describes four drum repeats plus three melody copies; audit records six total clips.",
+      "disposition": "The original Save As snapshot predates later edits. Recovery has the final arrangement/mix and reproduces the exported WAV exactly. A separate coordinator-recovered final .rill was packaged and verified; originals remain unchanged. Later Ctrl+S attempts were logged but their failure cause was not recorded."
+    },
+    {
+      "participants": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "observation": "WAV length exceeds the musical arrangement by approximately 0.2 seconds.",
+      "disposition": "Show arrangement and WAV durations separately; export tails account for different measured extents."
+    },
+    {
+      "participants": [
+        1
+      ],
+      "observation": "Original report still describes audio cause as unresolved.",
+      "disposition": "Preserve original wording; separately attach later standalone-backend diagnosis."
+    }
+  ],
+  "validation": {
+    "status": "passed_relevant_scope",
+    "tests_passed": 543,
+    "tests_failed": 0,
+    "details": "validation.json",
+    "native_visual_review": "native-qa/notes.md",
+    "native_supported_sizes": [
+      [
+        1100,
+        720
+      ],
+      [
+        1440,
+        1000
+      ]
+    ],
+    "note": "No follow-up participant cohort or improvement in ratings is claimed. Keypad settling and synthetic input timing qualifications remain documented."
+  },
+  "offline_verification": "See verification.json: nine original saved projects reproduce their WAVs sample-for-sample; P06 recovery and its separately packaged .rill reproduce its final WAV. All ten original projects have nonzero finite audio-only and MIDI-only renders. No listening or cross-machine relocation claim."
+}

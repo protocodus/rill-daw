@@ -1,0 +1,20 @@
+
+running 1 test
+test double_click_at_bar_three_creates_the_first_midi_clip_there_with_one_undo ... FAILED
+
+failures:
+
+---- double_click_at_bar_three_creates_the_first_midi_clip_there_with_one_undo stdout ----
+
+thread 'double_click_at_bar_three_creates_the_first_midi_clip_there_with_one_undo' (60583) panicked at crates/daw-app/tests/empty_arranger_placement_e2e.rs:58:5:
+assertion `left == right` failed
+  left: Number(0.0)
+ right: 8.0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    double_click_at_bar_three_creates_the_first_midi_clip_there_with_one_undo
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.24s
+

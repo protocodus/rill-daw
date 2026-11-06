@@ -6,6 +6,7 @@ pub struct State {
     selected: Option<u64>,
     shapes: std::collections::HashMap<u64, daw_ui::CurveInterpolation>,
     fade: daw_ui::CrossfadeCurve,
+    gain: f32,
 }
 
 impl Default for State {
@@ -44,6 +45,7 @@ impl Default for State {
                 control1: [0.20, 0.64],
                 control2: [0.76, 0.90],
             },
+            gain: 0.5,
         }
     }
 }
@@ -112,6 +114,10 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         }
         state.points.sort_by(|a, b| a.x.total_cmp(&b.x));
         daw_ui::text::note(left, "Click to add · drag to move · Delete to remove");
+        left.add_space(daw_ui::tokens::SPACE_SM);
+        left.horizontal(|ui| {
+            daw_ui::gain_value_button(ui, "gallery_gain", &mut state.gain, 1.5, "Gain");
+        });
 
         let right = &mut columns[1];
         daw_ui::text::subtitle(right, "Complementary crossfade");

@@ -71,29 +71,46 @@ pub fn clip_timing_fields(
     maximum_beat: f64,
     maximum_offset: f64,
     stretch_duration_range: std::ops::RangeInclusive<f64>,
+    beats_per_bar: u8,
 ) -> ClipTimingEdit {
     let mut edit = ClipTimingEdit::default();
     let label = crate::text::label(ui, "Start");
     let mut start = values.start + 1.0;
     let start_range = 1.0..=(maximum_beat - values.duration + 1.0).max(1.0);
-    let stepper = crate::number_stepper(
-        ui,
-        &mut start,
-        1.0,
-        start_range.clone(),
-        "start beat",
-        |ui, value| {
-            ui.add(
-                crate::number(value)
-                    .range(start_range)
-                    .clamp_existing_to_range(false)
-                    .speed(0.01)
-                    .min_decimals(2)
-                    .max_decimals(9)
-                    .prefix("Beat "),
-            )
-        },
-    );
+    let (stepper, position) = ui
+        .horizontal_wrapped(|ui| {
+            let stepper = crate::number_stepper(
+                ui,
+                &mut start,
+                1.0,
+                start_range.clone(),
+                "start beat",
+                |ui, value| {
+                    ui.add(
+                        crate::number(value)
+                            .range(start_range.clone())
+                            .clamp_existing_to_range(false)
+                            .speed(0.01)
+                            .min_decimals(2)
+                            .max_decimals(9)
+                            .prefix("Beat "),
+                    )
+                },
+            );
+            let position = musical_position_entry(
+                ui,
+                "clip_start_position",
+                if stepper.response.changed() {
+                    start - 1.0
+                } else {
+                    values.start
+                },
+                beats_per_bar,
+                0.0..=(*start_range.end() - 1.0),
+            );
+            (stepper, position)
+        })
+        .inner;
     let response = stepper
         .response
         .labelled_by(label.id)
@@ -104,6 +121,10 @@ pub fn clip_timing_fields(
         || response.drag_started();
     if response.changed() {
         edit.start = Some(start - 1.0);
+    }
+    edit.new_gesture |= position.0.clicked() || position.1.is_some();
+    if let Some(start) = position.1 {
+        edit.start = Some(start);
     }
     ui.end_row();
     let label = crate::text::label(ui, "Duration");
@@ -201,6 +222,288 @@ pub fn clip_timing_fields(
     }
     ui.end_row();
     edit
+}
+
+#[derive(Clone, Copy, Hash)]
+enum PositionField {
+    Bar,
+    Beat,
+}
+
+#[derive(Clone)]
+struct PositionDraft {
+    original: f64,
+    meter: u8,
+    bar: f64,
+    beat: f64,
+    initial_bar: f64,
+    initial_beat: f64,
+    keypad: Option<PositionField>,
+    last_frame: u64,
+}
+
+impl PositionDraft {
+    fn new(position: f64, beats_per_bar: u8, frame: u64) -> Self {
+        let meter = beats_per_bar.max(1);
+        let bar_start = (position / f64::from(meter)).floor() * f64::from(meter);
+        let bar = (position / f64::from(meter)).floor() + 1.0;
+        let beat = position - bar_start + 1.0;
+        Self {
+            original: position,
+            meter,
+            bar,
+            beat,
+            initial_bar: bar,
+            initial_beat: beat,
+            keypad: None,
+            last_frame: frame,
+        }
+    }
+
+    fn position(&self, range: &std::ops::RangeInclusive<f64>) -> Option<f64> {
+        if !self.bar.is_finite() || self.bar < 1.0 || self.bar.fract() != 0.0 {
+            return None;
+        }
+        let beat_unchanged = self.beat.to_bits() == self.initial_beat.to_bits();
+        if !beat_unchanged
+            && (!self.beat.is_finite()
+                || self.beat < 1.0
+                || self.beat >= f64::from(self.meter) + 1.0)
+        {
+            return None;
+        }
+        let position = if self.bar.to_bits() == self.initial_bar.to_bits() && beat_unchanged {
+            self.original
+        } else if beat_unchanged {
+            // Moving only the bar preserves a sub-beat remainder that may be
+            // too small to survive displaying it as a one-based beat.
+            self.original + (self.bar - self.initial_bar) * f64::from(self.meter)
+        } else {
+            (self.bar - 1.0) * f64::from(self.meter) + (self.beat - 1.0)
+        };
+        (position.is_finite() && range.contains(&position)).then_some(position)
+    }
+}
+
+fn position_beat_display(beat: f64, meter: u8) -> String {
+    let limit = f64::from(meter.max(1)) + 1.0;
+    if !beat.is_finite() || !(1.0..limit).contains(&beat) {
+        return crate::exact_value_text(beat);
+    }
+    let rounded = format!("{beat:.9}");
+    if rounded.parse::<f64>().is_ok_and(|value| value >= limit) {
+        // A concise field must not suggest a beat in the next bar while its
+        // staged bar is unchanged. Keep the exact near-boundary remainder.
+        crate::exact_value_text(beat)
+    } else {
+        rounded
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_owned()
+    }
+}
+
+/// A visible bar/beat alternative to scalar timing fields. The menu stages
+/// both values and commits one zero-based beat only on Apply position. Its
+/// numeric keypads provide the same operation without typing. Untouched values
+/// remain exact, including positions between sixteenths and beyond display
+/// precision; merely opening, closing or changing meter never retimes them.
+pub fn musical_position_entry(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    current: f64,
+    beats_per_bar: u8,
+    range: std::ops::RangeInclusive<f64>,
+) -> (Response, Option<f64>) {
+    let id = ui.make_persistent_id(("musical_position_entry", id_salt));
+    let meter = beats_per_bar.max(1);
+    let caption = crate::duration::musical_position(current, meter);
+    let mut applied = None;
+    let response = ui.push_id(id, |ui| {
+        crate::choice_menu(ui, caption, |ui| {
+            let frame = ui.ctx().cumulative_frame_nr();
+            let mut draft = ui.data(|data| data.get_temp::<PositionDraft>(id))
+                .filter(|draft| {
+                    frame <= draft.last_frame.saturating_add(1)
+                        && draft.original.to_bits() == current.to_bits()
+                        && draft.meter == meter
+                })
+                .unwrap_or_else(|| PositionDraft::new(current, meter, frame));
+            draft.last_frame = frame;
+            let maximum_bar = (*range.end() / f64::from(meter)).floor() + 1.0;
+            // The final beat may contain any fraction below the next bar.
+            let beat_limit = f64::from_bits((f64::from(meter) + 1.0).to_bits() - 1);
+            if let Some(field) = draft.keypad {
+                let (value, field_range, name, whole_numbers) = match field {
+                    PositionField::Bar => (
+                        &mut draft.bar, 1.0..=maximum_bar.max(1.0), "Start bar", true,
+                    ),
+                    PositionField::Beat => (
+                        &mut draft.beat, 1.0..=beat_limit, "Beat in bar", false,
+                    ),
+                };
+                // A native submenu forwards its Apply/Cancel close to the
+                // entire menu chain. Keep this edit step in the same popup,
+                // with a close boundary that returns to the staged position.
+                let entry = ui.scope_builder(
+                    egui::UiBuilder::new().id_salt(("keypad", field)).closable(),
+                    |ui| {
+                        // egui clears focus before drawing an Escape frame.
+                        // This edit step owns Escape even after its text field
+                        // loses focus, so dismiss only the keypad draft.
+                        if ui.is_enabled() && ui.input_mut(|input| {
+                            input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
+                        }) {
+                            crate::value_entry::clear_value_entry(ui, id.with(field));
+                            ui.close();
+                            None
+                        } else {
+                            crate::value_entry::numeric_value_entry(
+                                ui, id.with(field), *value, field_range, name, whole_numbers,
+                            )
+                        }
+                    },
+                );
+                if let Some(next) = entry.inner {
+                    *value = next;
+                }
+                if entry.response.should_close() {
+                    draft.keypad = None;
+                }
+                ui.data_mut(|data| data.insert_temp(id, draft));
+                return;
+            }
+            crate::text::label(ui, "Start position");
+            crate::form_grid(ui, id.with("fields"), |ui| {
+                crate::form_label(ui, "Bar");
+                let (_, keypad) = crate::number_stepper::number_stepper_controls(ui, &mut draft.bar, 1.0,
+                    1.0..=maximum_bar.max(1.0), "start bar", |ui, value| {
+                        ui.add(crate::number(value).speed(1.0)
+                            .clamp_existing_to_range(false).update_while_editing(false)
+                            .custom_formatter(|value, _| crate::exact_value_text(value)))
+                    });
+                if keypad.clicked() {
+                    draft.keypad = Some(PositionField::Bar);
+                }
+                ui.end_row();
+                crate::form_label(ui, "Beat in bar");
+                let (_, keypad) = crate::number_stepper::number_stepper_controls(ui, &mut draft.beat, 1.0,
+                    1.0..=beat_limit, "beat in bar", |ui, value| {
+                        let number_id = ui.next_auto_id();
+                        let context = ui.ctx().clone();
+                        ui.add(crate::number(value).speed(0.01)
+                            .clamp_existing_to_range(false).update_while_editing(false)
+                            .custom_formatter(move |value, _| {
+                                // Query after DragValue registers keyboard focus,
+                                // including focus acquired by Tab in this frame.
+                                // Only idle paint is concise; native text and its
+                                // subsequent blur parse always use exact digits.
+                                if context.memory(|memory| memory.has_focus(number_id)) {
+                                    crate::exact_value_text(value)
+                                } else {
+                                    position_beat_display(value, meter)
+                                }
+                            }))
+                    });
+                if keypad.clicked() {
+                    draft.keypad = Some(PositionField::Beat);
+                }
+                ui.end_row();
+            });
+            let candidate = draft.position(&range);
+            if candidate.is_none() {
+                crate::text::note(ui, format!(
+                    "Use a whole bar and a beat from 1 to below {} within the clip's range.", u16::from(meter) + 1
+                ));
+            }
+            let (apply, cancel) = crate::dialog_actions(ui, |ui| {
+                let apply = ui.add_enabled_ui(candidate.is_some(), |ui| {
+                    crate::dialog_primary(ui, "Apply position")
+                }).inner.clicked();
+                let cancel = crate::dialog_button(ui, "Cancel").clicked();
+                (apply, cancel)
+            }, |_| {}).inner.0;
+            if apply || cancel {
+                ui.data_mut(|data| data.remove::<PositionDraft>(id));
+                if apply {
+                    applied = candidate.filter(|value| value.to_bits() != current.to_bits());
+                }
+                ui.close();
+            } else {
+                ui.data_mut(|data| data.insert_temp(id, draft));
+            }
+        }).response
+    }).inner.on_hover_text("Place the clip by bar and beat; fractional beats stay exact");
+    (response, applied)
+}
+
+#[cfg(test)]
+mod position_entry_tests {
+    use super::PositionDraft;
+
+    #[test]
+    fn untouched_positions_keep_every_bit_in_all_supported_meters() {
+        for meter in 1..=32 {
+            for start in [
+                0.0,
+                -0.0,
+                1e-20,
+                0.123_456_789_123_456,
+                3.999_999_999_999,
+                f64::from_bits(4.0_f64.to_bits() - 1),
+                21.125_123_456_789,
+                999_990.123_456_789,
+            ] {
+                let draft = PositionDraft::new(start, meter, 0);
+                assert_eq!(
+                    draft.position(&(0.0..=1_000_000.0)).unwrap().to_bits(),
+                    start.to_bits()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bar_moves_preserve_the_fraction_and_beat_entry_uses_the_current_meter() {
+        for meter in [3, 4, 7, 11] {
+            let start = 1.123_456_789_123;
+            let mut draft = PositionDraft::new(start, meter, 0);
+            draft.bar = 5.0;
+            assert_eq!(
+                draft.position(&(0.0..=1_000.0)),
+                Some(start + 4.0 * f64::from(meter))
+            );
+            draft.beat = 2.125;
+            assert_eq!(
+                draft.position(&(0.0..=1_000.0)),
+                Some(4.0 * f64::from(meter) + 1.125)
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_positions_and_clip_end_overflows_cannot_apply() {
+        for (bar, beat) in [
+            (0.0, 1.0),
+            (1.5, 1.0),
+            (f64::NAN, 1.0),
+            (f64::INFINITY, 1.0),
+            (2.0, 0.0),
+            (2.0, 4.0),
+            (2.0, f64::NAN),
+            (2.0, f64::INFINITY),
+        ] {
+            let mut draft = PositionDraft::new(0.0, 3, 0);
+            draft.bar = bar;
+            draft.beat = beat;
+            assert!(draft.position(&(0.0..=100.0)).is_none(), "{bar}:{beat}");
+        }
+        let mut draft = PositionDraft::new(0.0, 3, 0);
+        draft.bar = 4.0;
+        draft.beat = 3.5;
+        assert_eq!(draft.position(&(0.0..=11.5)), Some(11.5));
+        assert!(draft.position(&(0.0..=11.25)).is_none());
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

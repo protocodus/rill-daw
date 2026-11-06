@@ -46,6 +46,60 @@ fn number_stepper_impl(
     whole_numbers: bool,
     field: impl FnOnce(&mut Ui, &mut f64) -> Response,
 ) -> NumberStepperResponse {
+    let (mut stepper, keypad) =
+        number_stepper_controls(ui, value, step, range.clone(), name, field);
+    let contents = |ui: &mut Ui| {
+        crate::value_entry::numeric_value_entry(
+            ui,
+            stepper.response.id,
+            *value,
+            range,
+            name,
+            whole_numbers,
+        )
+    };
+    let popup = if egui::containers::menu::is_in_menu(ui) {
+        // Native popup memory holds one root popup. A second root would
+        // replace Range and stop painting this field on the next frame.
+        // A submenu retains its caller and inherits the menu close chain.
+        let mut config = egui::containers::menu::MenuConfig::new();
+        config.close_behavior = if keypad.clicked() {
+            // Its provisional sizing area can cover the opening button.
+            egui::PopupCloseBehavior::IgnoreClicks
+        } else {
+            egui::PopupCloseBehavior::CloseOnClickOutside
+        };
+        egui::containers::menu::SubMenu::default()
+            .config(config)
+            .show(ui, &keypad, contents)
+    } else {
+        egui::Popup::menu(&keypad)
+            .id(stepper.response.id.with("numeric_keypad"))
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show(contents)
+    };
+    if let Some(next) = popup.and_then(|popup| popup.inner)
+        && ui.is_enabled()
+        && next != *value
+    {
+        *value = next;
+        stepper.stepped = true;
+        stepper.response.mark_changed();
+    }
+    stepper
+}
+
+/// Reuse the numeric row when its owner stages several fields in one popup.
+/// The owner decides where to show the keypad and how returning from it affects
+/// that draft; the second response is the unchanged, mouse-accessible 123 action.
+pub(crate) fn number_stepper_controls(
+    ui: &mut Ui,
+    value: &mut f64,
+    step: f64,
+    range: RangeInclusive<f64>,
+    name: &str,
+    field: impl FnOnce(&mut Ui, &mut f64) -> Response,
+) -> (NumberStepperResponse, Response) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
         // DragValue removes its prefix/suffix in text mode. Retain the measured
@@ -117,45 +171,7 @@ fn number_stepper_impl(
                 format!("Enter {name} using mouse"),
             )
         });
-        let contents = |ui: &mut Ui| {
-            crate::value_entry::numeric_value_entry(
-                ui,
-                response.id,
-                *value,
-                range,
-                name,
-                whole_numbers,
-            )
-        };
-        let popup = if egui::containers::menu::is_in_menu(ui) {
-            // Native popup memory holds one root popup. A second root would
-            // replace Range and stop painting this field on the next frame.
-            // A submenu retains its caller and inherits the menu close chain.
-            let mut config = egui::containers::menu::MenuConfig::new();
-            config.close_behavior = if keypad.clicked() {
-                // Its provisional sizing area can cover the opening button.
-                egui::PopupCloseBehavior::IgnoreClicks
-            } else {
-                egui::PopupCloseBehavior::CloseOnClickOutside
-            };
-            egui::containers::menu::SubMenu::default()
-                .config(config)
-                .show(ui, &keypad, contents)
-        } else {
-            egui::Popup::menu(&keypad)
-                .id(response.id.with("numeric_keypad"))
-                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                .show(contents)
-        };
-        if let Some(next) = popup.and_then(|popup| popup.inner)
-            && ui.is_enabled()
-            && next != *value
-        {
-            *value = next;
-            stepped = true;
-            response.mark_changed();
-        }
-        NumberStepperResponse { response, stepped }
+        (NumberStepperResponse { response, stepped }, keypad)
     })
     .inner
 }

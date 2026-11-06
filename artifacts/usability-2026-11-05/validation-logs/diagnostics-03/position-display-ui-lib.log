@@ -1,0 +1,46 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+    Finished `test` profile [unoptimized] target(s) in 2.27s
+     Running unittests src/lib.rs (target/debug/deps/daw_ui-f90b4f8ba657ed9d)
+
+running 38 tests
+test brand::tests::artwork_and_wordmark_follow_theme_and_cache_textures_per_context ... ok
+test brand::tests::embedded_native_icon_is_visible_transparent_and_decoded_once ... ok
+test clip_editing::position_entry_tests::bar_moves_preserve_the_fraction_and_beat_entry_uses_the_current_meter ... ok
+test clip_editing::position_entry_tests::invalid_positions_and_clip_end_overflows_cannot_apply ... ok
+test clip_editing::position_entry_tests::untouched_positions_keep_every_bit_in_all_supported_meters ... ok
+test device_cards::tests::card_activation_requires_consecutive_clicks_on_same_stable_identity ... ok
+test device_cards::tests::device_labels_keep_clearance_in_short_cards_and_list_rows_at_display_scales ... ok
+test device_cards::tests::favorite_toggle_count_items_and_filter_chips_report_their_actions ... ok
+test device_cards::tests::keyboard_scroll_reveals_the_entire_selected_card_in_short_viewports ... ok
+test device_cards::tests::list_rows_virtualize_keep_text_inside_and_double_click_activates ... ok
+test device_cards::tests::preview_arrival_preserves_card_geometry_and_full_unicode_text ... ok
+test device_cards::tests::requested_card_focus_wins_over_automatic_spatial_navigation ... ok
+test device_cards::tests::responsive_grid_fits_columns_without_clipping_or_building_hidden_cards ... ok
+test generation::tests::bar_fields_are_independent_native_drag_targets_with_bounded_values ... ok
+test generation::tests::preview_painters_clip_ranges_and_notes_in_both_themes ... ok
+test native_context_menu::tests::malformed_and_excessive_menus_are_rejected_before_rendering ... ok
+test native_context_menu::tests::menu_body_activates_zero_id_and_respects_disabled_actions_without_a_window ... ok
+test native_context_menu::tests::zero_id_unicode_and_nested_enabled_actions_are_preserved ... ok
+test parameter_browser::tests::cached_search_tracks_metadata_order_and_dynamic_scope_changes ... ok
+test parameter_browser::tests::parameter_labels_and_value_rail_have_clearance_at_display_scales ... ok
+test parameter_browser::tests::unchanged_large_search_reuses_results_while_parameter_values_remain_live ... ok
+test piano::tests::folded_pitch_mapping_is_reversible_and_group_moves_keep_boundaries ... ok
+test piano::tests::grid_levels_distinguish_bars_beats_and_subdivisions ... ok
+test piano::tests::short_notes_keep_a_move_target_between_both_resize_edges ... ok
+test recording::tests::record_arm_preserves_canvas_layout_and_clicks_only_its_control ... ok
+test snap::tests::labels_use_musical_fractions ... ok
+test spectrogram::tests::crop_reverse_and_pitch_shift_use_one_clipped_texture_quad ... ok
+test spectrogram::tests::image_has_quiet_transparent_low_bands_at_bottom_and_bounded_alpha ... ok
+test spectrogram::tests::palette_images_share_level_alpha_but_distinguish_blue_and_yellow ... ok
+test theme::tests::piano_rows_keep_close_neutral_bases_and_quiet_green_highlights ... ok
+test theme::tests::piano_velocity_shades_and_warning_hue_keep_neutral_selection_readable ... ok
+test theme::tests::selected_note_outlines_preserve_fill_in_dense_rows_and_short_notes ... ok
+test time::position_tests::positions_count_from_one_and_carry_into_bars ... ok
+test timeline::tests::fit_contains_late_content_and_all_rows_on_both_axes ... ok
+test timeline::tests::zoom_keeps_the_musical_point_and_row_under_the_pointer ... ok
+test value_entry::tests::numeric_pointer_keys_respect_selection_caret_sign_and_unicode ... ok
+test value_entry::tests::opening_precise_and_scientific_values_round_trips_without_rounding ... ok
+test waveform::tests::clipping_hides_offscreen_handles_without_losing_visible_selection ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+

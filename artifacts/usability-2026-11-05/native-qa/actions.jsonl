@@ -1,0 +1,254 @@
+{"unix": 1793921152.0581396, "action": "shot", "args": ["initial-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921166.41636, "action": "click", "args": [700, 350], "driver": "xtest-pointer-v2"}
+{"unix": 1793921167.1048024, "action": "click", "args": [319, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793921167.7866302, "action": "shot", "args": ["window-menu-dark.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921188.3650975, "action": "click", "args": [338, 438], "driver": "xtest-pointer-v2"}
+{"unix": 1793921189.0463967, "action": "shot", "args": ["properties-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921208.2802572, "action": "click", "args": [913, 524], "driver": "xtest-pointer-v2"}
+{"unix": 1793921208.9620523, "action": "shot", "args": ["position-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921210.390323, "action": "key", "args": ["Escape"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921210.959835, "action": "key", "args": ["Escape"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921211.5276968, "action": "click", "args": [95, 452], "driver": "xtest-pointer-v2"}
+{"unix": 1793921212.2086463, "action": "click", "args": [319, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793921212.8897038, "action": "click", "args": [339, 378], "driver": "xtest-pointer-v2"}
+{"unix": 1793921213.5708013, "action": "shot", "args": ["automation-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921229.0736294, "action": "click", "args": [1173, 264], "driver": "xtest-pointer-v2"}
+{"unix": 1793921229.7558653, "action": "click", "args": [237, 929], "driver": "xtest-pointer-v2"}
+{"unix": 1793921230.4368517, "action": "shot", "args": ["gain-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921251.0764756, "action": "click", "args": [419, 773], "driver": "xtest-pointer-v2"}
+{"unix": 1793921251.7579286, "action": "shot", "args": ["gain-keypad-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921270.7578595, "action": "click", "args": [328, 724], "driver": "xtest-pointer-v2"}
+{"unix": 1793921271.4389977, "action": "click", "args": [227, 679], "driver": "xtest-pointer-v2"}
+{"unix": 1793921272.119841, "action": "click", "args": [404, 598], "driver": "xtest-pointer-v2"}
+{"unix": 1793921272.8044674, "action": "click", "args": [390, 819], "driver": "xtest-pointer-v2"}
+{"unix": 1793921273.4852867, "action": "shot", "args": ["gain-applied-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921274.7772858, "action": "key", "args": ["ctrl+z"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921275.4091833, "action": "click", "args": [239, 929], "driver": "xtest-pointer-v2"}
+{"unix": 1793921276.090437, "action": "click", "args": [223, 884], "driver": "xtest-pointer-v2"}
+{"unix": 1793921276.7729137, "action": "shot", "args": ["gain-silence-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921303.7932045, "action": "key", "args": ["ctrl+z"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921304.5195308, "action": "shot", "args": ["automation-dark-compact.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921319.15616, "action": "shot", "args": ["automation-dark-compact-settled.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921339.9523761, "action": "key", "args": ["Escape"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921340.5200784, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793921341.2020588, "action": "shot", "args": ["window-menu-compact.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921361.4063203, "action": "click", "args": [420, 345], "driver": "xtest-pointer-v2"}
+{"unix": 1793921362.087393, "action": "shot", "args": ["automation-dark-compact-reopened.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921363.2614136, "action": "scroll", "args": [691, 511, -5], "driver": "xtest-pointer-v2"}
+{"unix": 1793921364.062778, "action": "shot", "args": ["automation-dark-compact-scrolled.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921391.994021, "action": "click", "args": [239, 467], "driver": "xtest-pointer-v2"}
+{"unix": 1793921392.6749275, "action": "shot", "args": ["gain-dark-compact.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921405.6768174, "action": "click", "args": [419, 309], "driver": "xtest-pointer-v2"}
+{"unix": 1793921406.3598955, "action": "shot", "args": ["gain-keypad-dark-compact.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921421.7951143, "action": "click", "args": [291, 508], "driver": "xtest-pointer-v2"}
+{"unix": 1793921422.4761672, "action": "key", "args": ["Escape"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921423.0428123, "action": "double", "args": [620, 437], "driver": "xtest-pointer-v2"}
+{"unix": 1793921423.8691168, "action": "shot", "args": ["piano-dark-compact.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921443.3509097, "action": "key", "args": ["f"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921443.9186957, "action": "shot", "args": ["piano-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921469.3964822, "action": "move", "args": [530, 631], "driver": "xtest-pointer-v2"}
+{"unix": 1793921469.897333, "action": "shot", "args": ["pitch-short-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921471.1563227, "action": "scroll", "args": ["530", "631", "-2"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921471.8805795, "action": "shot", "args": ["pitch-dense-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921507.7236187, "action": "click", "args": [270, 245], "driver": "xtest-pointer-v2"}
+{"unix": 1793921508.4053955, "action": "move", "args": [530, 631], "driver": "xtest-pointer-v2"}
+{"unix": 1793921508.906796, "action": "click", "args": [537, 591], "driver": "xtest-pointer-v2"}
+{"unix": 1793921509.587818, "action": "shot", "args": ["pitch-hint-click-through.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921510.964035, "action": "key", "args": ["ctrl+shift+s"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921547.5487683, "action": "text", "args": ["focus-base"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921548.1706321, "action": "click", "args": [776, 388], "driver": "xtest-pointer-v2"}
+{"unix": 1793921548.988168, "action": "shot", "args": ["focus-after-save-as.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921566.3583837, "action": "click", "args": [780, 612], "driver": "xtest-pointer-v2"}
+{"unix": 1793921567.0400872, "action": "key", "args": ["ctrl+s"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921567.6725585, "action": "shot", "args": ["focus-ctrl-s-unfocused.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921569.151641, "action": "click", "args": [120, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793921570.07218, "action": "click", "args": [138, 208], "driver": "xtest-pointer-v2"}
+{"unix": 1793921570.7570488, "action": "shot", "args": ["focus-file-save.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921586.795602, "action": "click", "args": [859, 559], "driver": "xtest-pointer-v2"}
+{"unix": 1793921587.479552, "action": "key", "args": ["ctrl+s"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921588.2136252, "action": "shot", "args": ["focus-recovered-ctrl-s.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921612.1478343, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793921612.8291523, "action": "shot", "args": ["window-menu-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921626.6490273, "action": "click", "args": [324, 590], "driver": "xtest-pointer-v2"}
+{"unix": 1793921627.3303165, "action": "shot", "args": ["setup-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921641.2535775, "action": "click", "args": [371, 273], "driver": "xtest-pointer-v2"}
+{"unix": 1793921641.9355645, "action": "shot", "args": ["appearance-options.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921782.7179463, "action": "shot", "args": ["properties-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921799.6364694, "action": "click", "args": [913, 455], "driver": "xtest-pointer-v2"}
+{"unix": 1793921800.3182766, "action": "shot", "args": ["position-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921818.3766658, "action": "click", "args": [721, 525], "driver": "xtest-pointer-v2"}
+{"unix": 1793921819.058239, "action": "shot", "args": ["position-keypad-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921833.857722, "action": "click", "args": [986, 326], "driver": "xtest-pointer-v2"}
+{"unix": 1793921834.6370466, "action": "click", "args": [959, 198], "driver": "xtest-pointer-v2"}
+{"unix": 1793921835.3782365, "action": "click", "args": [1023, 411], "driver": "xtest-pointer-v2"}
+{"unix": 1793921836.066939, "action": "shot", "args": ["position-staged-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921854.354011, "action": "click", "args": [959, 571], "driver": "xtest-pointer-v2"}
+{"unix": 1793921855.0382426, "action": "shot", "args": ["position-beat-keypad-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921874.1784441, "action": "click", "args": [986, 326], "driver": "xtest-pointer-v2"}
+{"unix": 1793921874.86606, "action": "click", "args": [879, 241], "driver": "xtest-pointer-v2"}
+{"unix": 1793921875.5470402, "action": "click", "args": [1022, 411], "driver": "xtest-pointer-v2"}
+{"unix": 1793921876.2285697, "action": "click", "args": [921, 614], "driver": "xtest-pointer-v2"}
+{"unix": 1793921876.9100766, "action": "shot", "args": ["position-applied-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921878.1746197, "action": "key", "args": ["ctrl+z"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921878.8035598, "action": "shot", "args": ["position-undo-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921899.2610495, "action": "click", "args": [1015, 292], "driver": "xtest-pointer-v2"}
+{"unix": 1793921899.9421678, "action": "shot", "args": ["arrangement-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921912.9041197, "action": "click", "args": [115, 499], "driver": "xtest-pointer-v2"}
+{"unix": 1793921913.5856555, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793921914.2671695, "action": "click", "args": [341, 378], "driver": "xtest-pointer-v2"}
+{"unix": 1793921914.9662368, "action": "shot", "args": ["automation-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793921933.0818634, "action": "click", "args": [837, 355], "driver": "xtest-pointer-v2"}
+{"unix": 1793921933.763069, "action": "click", "args": [240, 648], "driver": "xtest-pointer-v2"}
+{"unix": 1793921934.4442325, "action": "shot", "args": ["gain-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922035.1657445, "action": "click", "args": [420, 490], "driver": "xtest-pointer-v2"}
+{"unix": 1793922035.8777127, "action": "shot", "args": ["gain-keypad-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922058.1011522, "action": "click", "args": [226, 706], "driver": "xtest-pointer-v2"}
+{"unix": 1793922058.7853167, "action": "shot", "args": ["gain-keypad-silence-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922060.0855873, "action": "key", "args": ["ctrl+z"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922060.7188466, "action": "click", "args": [1046, 197], "driver": "xtest-pointer-v2"}
+{"unix": 1793922061.4001276, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922062.0813322, "action": "shot", "args": ["window-menu-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922099.4485586, "action": "click", "args": [337, 377], "driver": "xtest-pointer-v2"}
+{"unix": 1793922100.1315937, "action": "click", "args": [238, 648], "driver": "xtest-pointer-v2"}
+{"unix": 1793922100.8131104, "action": "click", "args": [419, 492], "driver": "xtest-pointer-v2"}
+{"unix": 1793922101.494687, "action": "move", "args": [226, 705], "driver": "xtest-pointer-v2"}
+{"unix": 1793922102.0016296, "action": "shot", "args": ["gain-silence-hover-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922103.2724817, "action": "click", "args": [226, 696], "driver": "xtest-pointer-v2"}
+{"unix": 1793922103.9537568, "action": "shot", "args": ["gain-silence-click696-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922135.2558746, "action": "click", "args": [238, 648], "driver": "xtest-pointer-v2"}
+{"unix": 1793922135.9395912, "action": "click", "args": [420, 491], "driver": "xtest-pointer-v2"}
+{"unix": 1793922136.6976085, "action": "move", "args": [226, 605], "driver": "xtest-pointer-v2"}
+{"unix": 1793922137.2006602, "action": "shot", "args": ["gain-keypad-dark-minimum-settled.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922138.8192952, "action": "click", "args": [226, 605], "driver": "xtest-pointer-v2"}
+{"unix": 1793922139.5018644, "action": "shot", "args": ["gain-silence-dark-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922140.8824277, "action": "key", "args": ["ctrl+z"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922141.5208247, "action": "click", "args": [1046, 197], "driver": "xtest-pointer-v2"}
+{"unix": 1793922142.2018247, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922142.882749, "action": "click", "args": [326, 590], "driver": "xtest-pointer-v2"}
+{"unix": 1793922143.6501486, "action": "shot", "args": ["setup-dark-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922156.676964, "action": "click", "args": [373, 273], "driver": "xtest-pointer-v2"}
+{"unix": 1793922157.3713083, "action": "click", "args": [522, 459], "driver": "xtest-pointer-v2"}
+{"unix": 1793922158.0567055, "action": "shot", "args": ["appearance-theme-menu.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922172.2701795, "action": "click", "args": [450, 547], "driver": "xtest-pointer-v2"}
+{"unix": 1793922172.9872246, "action": "click", "args": [822, 520], "driver": "xtest-pointer-v2"}
+{"unix": 1793922173.6702316, "action": "click", "args": [115, 499], "driver": "xtest-pointer-v2"}
+{"unix": 1793922174.3526742, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922175.033886, "action": "click", "args": [339, 377], "driver": "xtest-pointer-v2"}
+{"unix": 1793922175.71545, "action": "click", "args": [837, 355], "driver": "xtest-pointer-v2"}
+{"unix": 1793922176.397419, "action": "shot", "args": ["automation-light-minimum-updated.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922207.7178664, "action": "shot", "args": ["final-properties-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922219.0599456, "action": "click", "args": [913, 455], "driver": "xtest-pointer-v2"}
+{"unix": 1793922219.7714949, "action": "shot", "args": ["final-position-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922221.220254, "action": "click", "args": [721, 525], "driver": "xtest-pointer-v2"}
+{"unix": 1793922221.9132967, "action": "move", "args": [1057, 445], "driver": "xtest-pointer-v2"}
+{"unix": 1793922222.414664, "action": "shot", "args": ["final-position-keypad-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922234.670394, "action": "click", "args": [986, 326], "driver": "xtest-pointer-v2"}
+{"unix": 1793922235.3513994, "action": "click", "args": [960, 199], "driver": "xtest-pointer-v2"}
+{"unix": 1793922236.0332787, "action": "click", "args": [923, 412], "driver": "xtest-pointer-v2"}
+{"unix": 1793922236.7438018, "action": "shot", "args": ["final-position-cancel-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922251.4822936, "action": "click", "args": [813, 614], "driver": "xtest-pointer-v2"}
+{"unix": 1793922252.1773708, "action": "click", "args": [1015, 292], "driver": "xtest-pointer-v2"}
+{"unix": 1793922252.87642, "action": "click", "args": [115, 499], "driver": "xtest-pointer-v2"}
+{"unix": 1793922253.5768433, "action": "click", "args": [320, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922254.276348, "action": "click", "args": [339, 377], "driver": "xtest-pointer-v2"}
+{"unix": 1793922254.9775953, "action": "click", "args": [837, 355], "driver": "xtest-pointer-v2"}
+{"unix": 1793922255.6765678, "action": "click", "args": [238, 648], "driver": "xtest-pointer-v2"}
+{"unix": 1793922256.3733966, "action": "move", "args": [500, 400], "driver": "xtest-pointer-v2"}
+{"unix": 1793922256.8742716, "action": "shot", "args": ["final-gain-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922280.1786897, "action": "click", "args": [419, 476], "driver": "xtest-pointer-v2"}
+{"unix": 1793922280.8819122, "action": "move", "args": [500, 400], "driver": "xtest-pointer-v2"}
+{"unix": 1793922281.3910346, "action": "shot", "args": ["final-gain-keypad-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922309.8313663, "action": "click", "args": [330, 426], "driver": "xtest-pointer-v2"}
+{"unix": 1793922311.3149576, "action": "click", "args": [227, 385], "driver": "xtest-pointer-v2"}
+{"unix": 1793922313.3156328, "action": "click", "args": [405, 300], "driver": "xtest-pointer-v2"}
+{"unix": 1793922315.3611872, "action": "click", "args": [392, 522], "driver": "xtest-pointer-v2"}
+{"unix": 1793922316.6381085, "action": "shot", "args": ["final-gain-minus6-light-minimum.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922322.8262339, "action": "key", "args": ["ctrl+z"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922327.4427912, "action": "move", "args": [1300, 800], "driver": "xtest-pointer-v2"}
+{"unix": 1793922330.4708917, "action": "shot", "args": ["final-automation-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922365.0369568, "action": "click", "args": [1046, 197], "driver": "xtest-pointer-v2"}
+{"unix": 1793922365.7188847, "action": "double", "args": [650, 400], "driver": "xtest-pointer-v2"}
+{"unix": 1793922366.541622, "action": "key", "args": ["f"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922367.112238, "action": "shot", "args": ["final-piano-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922383.7079134, "action": "double", "args": [450, 360], "driver": "xtest-pointer-v2"}
+{"unix": 1793922385.176327, "action": "key", "args": ["f"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922386.2565835, "action": "shot", "args": ["final-piano-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922404.9844897, "action": "click", "args": [450, 310], "driver": "xtest-pointer-v2"}
+{"unix": 1793922405.6676025, "action": "click", "args": [321, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922406.3491077, "action": "click", "args": [334, 110], "driver": "xtest-pointer-v2"}
+{"unix": 1793922407.0312524, "action": "shot", "args": ["final-piano-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922419.651548, "action": "move", "args": [531, 688], "driver": "xtest-pointer-v2"}
+{"unix": 1793922420.1563292, "action": "shot", "args": ["final-pitch-short-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922421.471183, "action": "scroll", "args": ["531", "688", "-2"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922422.1848981, "action": "shot", "args": ["final-pitch-dense-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922435.0938315, "action": "click", "args": [321, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922435.7749932, "action": "click", "args": [325, 590], "driver": "xtest-pointer-v2"}
+{"unix": 1793922436.45729, "action": "shot", "args": ["final-appearance-light-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922464.3538535, "action": "click", "args": [542, 390], "driver": "xtest-pointer-v2"}
+{"unix": 1793922465.1955273, "action": "click", "args": [699, 576], "driver": "xtest-pointer-v2"}
+{"unix": 1793922465.931904, "action": "click", "args": [620, 704], "driver": "xtest-pointer-v2"}
+{"unix": 1793922466.6976595, "action": "click", "args": [992, 637], "driver": "xtest-pointer-v2"}
+{"unix": 1793922467.5233812, "action": "move", "args": [531, 688], "driver": "xtest-pointer-v2"}
+{"unix": 1793922468.3367395, "action": "shot", "args": ["final-pitch-dense-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922485.5023925, "action": "click", "args": [321, 24], "driver": "xtest-pointer-v2"}
+{"unix": 1793922486.6096084, "action": "click", "args": [325, 590], "driver": "xtest-pointer-v2"}
+{"unix": 1793922487.391729, "action": "click", "args": [542, 390], "driver": "xtest-pointer-v2"}
+{"unix": 1793922488.1948416, "action": "shot", "args": ["final-appearance-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922504.2555282, "action": "click", "args": [699, 576], "driver": "xtest-pointer-v2"}
+{"unix": 1793922504.9394891, "action": "shot", "args": ["final-theme-dropdown-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922522.5085504, "action": "click", "args": [620, 705], "driver": "xtest-pointer-v2"}
+{"unix": 1793922523.2769783, "action": "click", "args": [992, 637], "driver": "xtest-pointer-v2"}
+{"unix": 1793922524.4007223, "action": "move", "args": [531, 688], "driver": "xtest-pointer-v2"}
+{"unix": 1793922524.9039633, "action": "shot", "args": ["final-pitch-dense-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922550.9632218, "action": "down", "args": [620, 705], "driver": "xtest-pointer-v2"}
+{"unix": 1793922551.4640586, "action": "up", "args": [], "driver": "xtest-pointer-v2"}
+{"unix": 1793922551.964561, "action": "down", "args": [992, 637], "driver": "xtest-pointer-v2"}
+{"unix": 1793922552.4651735, "action": "up", "args": [], "driver": "xtest-pointer-v2"}
+{"unix": 1793922552.9676063, "action": "move", "args": [531, 688], "driver": "xtest-pointer-v2"}
+{"unix": 1793922553.4727943, "action": "shot", "args": ["final-pitch-dense-dark-wide.png"], "driver": "xtest-pointer-v2"}
+{"unix": 1793922573.814515, "action": "click", "args": [1372, 136], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922574.7860909, "action": "click", "args": [913, 455], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922575.757074, "action": "shot", "args": ["final-position-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922590.154961, "action": "click", "args": [1160, 524], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922591.1261113, "action": "move", "args": [700, 800], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922591.626642, "action": "shot", "args": ["final-position-keypad-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922593.1303337, "action": "key", "args": ["Escape"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922593.7031555, "action": "shot", "args": ["final-position-escape-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922595.2435577, "action": "click", "args": [1163, 614], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922596.2160194, "action": "click", "args": [1015, 292], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922597.1882439, "action": "click", "args": [55, 80], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922598.159599, "action": "click", "args": [117, 597], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922599.1313875, "action": "click", "args": [320, 24], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922600.1831145, "action": "click", "args": [338, 377], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922601.1552293, "action": "shot", "args": ["final-send-gain-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922623.8107855, "action": "click", "args": [833, 339], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922624.7830343, "action": "shot", "args": ["final-fit-song-send-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922626.3461068, "action": "click", "args": [238, 633], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922627.3195665, "action": "shot", "args": ["final-gain-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922656.3495972, "action": "click", "args": [420, 752], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922657.3220606, "action": "move", "args": [500, 800], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922657.8231616, "action": "shot", "args": ["final-gain-keypad-dark-wide.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922659.3510025, "action": "key", "args": ["Escape"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922660.0228245, "action": "click", "args": [238, 633], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922660.9941492, "action": "move", "args": [500, 400], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922661.4946308, "action": "shot", "args": ["final-gain-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922681.1934922, "action": "click", "args": [420, 476], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922682.1677125, "action": "move", "args": [500, 400], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922682.6685097, "action": "shot", "args": ["final-gain-keypad-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922683.940584, "action": "down", "args": [226, 589], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922684.441072, "action": "up", "args": [], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922684.9420197, "action": "shot", "args": ["final-silence-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922736.5402722, "action": "key", "args": ["ctrl+z"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922737.1714513, "action": "shot", "args": ["final-silence-undo-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922738.4518282, "action": "click", "args": [1046, 197], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922899.6951947, "action": "click", "args": [913, 455], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922900.669504, "action": "move", "args": [500, 700], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922901.1723216, "action": "shot", "args": ["final-formatted-position-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922920.6098268, "action": "click", "args": [605, 572], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922921.5813146, "action": "shot", "args": ["final-formatted-position-focused-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922922.8259282, "action": "click", "args": [470, 490], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922923.7968667, "action": "click", "args": [747, 572], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922924.7680542, "action": "move", "args": [500, 700], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922925.2685099, "action": "shot", "args": ["final-formatted-position-keypad-dark-minimum.png"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922926.5525334, "action": "key", "args": ["Escape"], "driver": "qa-xtest-pointer-350ms"}
+{"unix": 1793922927.1240294, "action": "key", "args": ["Escape"], "driver": "qa-xtest-pointer-350ms"}

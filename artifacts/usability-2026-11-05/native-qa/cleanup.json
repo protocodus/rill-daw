@@ -1,0 +1,60 @@
+{
+  "unix": 1793922927.757187,
+  "display": ":980",
+  "processes": [
+    {
+      "name": "rill",
+      "pid": 82361,
+      "start_ticks": "647072",
+      "before": {
+        "state": "S",
+        "start_ticks": "647072"
+      },
+      "after": {
+        "state": "Z",
+        "start_ticks": "647072"
+      },
+      "result": "terminated verified PID"
+    },
+    {
+      "name": "xvfb",
+      "pid": 59696,
+      "start_ticks": "471313",
+      "before": {
+        "state": "S",
+        "start_ticks": "471313"
+      },
+      "after": {
+        "state": "Z",
+        "start_ticks": "471313"
+      },
+      "result": "terminated verified PID"
+    }
+  ],
+  "previous_apps": [
+    {
+      "pid": 59701,
+      "start_ticks": "471332",
+      "current": {
+        "state": "Z",
+        "start_ticks": "471332"
+      }
+    },
+    {
+      "pid": 70463,
+      "start_ticks": "535373",
+      "current": {
+        "state": "Z",
+        "start_ticks": "535373"
+      }
+    },
+    {
+      "pid": 76874,
+      "start_ticks": "577812",
+      "current": {
+        "state": "Z",
+        "start_ticks": "577812"
+      }
+    }
+  ]
+}

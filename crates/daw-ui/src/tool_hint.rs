@@ -61,7 +61,7 @@ impl ToolHintContext {
             }
             (Self::Arrangement, Cut) => "Click a clip to split it at the pointer.",
             (Self::Arrangement, Duplicate) => {
-                "Click a clip to duplicate its selected group as independent copies. A selected time block retains its rests."
+                "Duplicate tool: choose this mode, then click a clip to duplicate its selected group as independent copies. A selected time block retains its rests."
             }
             (Self::Arrangement, Glue) => "Click a clip to choose the clips to join.",
             (Self::Arrangement, Erase) => {
@@ -80,7 +80,9 @@ impl ToolHintContext {
                 "Click empty space to draw a note; drag to set length. Fully overlapping notes of the same pitch merge on release."
             }
             (Self::Midi, Cut) => "Click a note to split it at the pointer.",
-            (Self::Midi, Duplicate) => "Click a note to create an independent copy after it.",
+            (Self::Midi, Duplicate) => {
+                "Duplicate tool: choose this mode, then click a note to create an independent copy after it."
+            }
             (Self::Midi, Glue) => "Click notes to join them with the selection.",
             (Self::Midi, Erase) => "Click a note to delete it; drag across notes to erase.",
             (Self::Midi, MultiDraw) => {

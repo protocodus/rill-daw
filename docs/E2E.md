@@ -65,6 +65,20 @@ and stable neighboring controls across narrow and wide layouts. Notes-menu
 transformations remain reachable by mouse, with cancellation preserving notes
 and history. Audio editor coverage checks the same direct-tool convention.
 
+The [ten-agent composition study](USABILITY_2026-11-05.md) adds focused running-app
+regressions. `clip_position_entry_e2e` places clips by bar and fractional beat
+using mouse keypads, including non-4/4 meter, precise no-ops, validation and Undo.
+`piano_pitch_hint_e2e` checks actual painted pitch text beside the pointer in
+dense and folded rows, click-through drawing, bounds and stable toolbar geometry.
+`automation_gain_units_e2e` covers target-specific dB units, silence, overrides,
+exact normalized-value preservation, recall and presentation-only Fit song.
+`empty_arranger_placement_e2e` checks snapped creation at the clicked position
+after zoom/pan, Undo/Redo and navigation/modal gating.
+
+```sh
+cargo test --locked -p daw-app --test clip_position_entry_e2e --test piano_pitch_hint_e2e --test automation_gain_units_e2e --test empty_arranger_placement_e2e -- --test-threads=1
+```
+
 The five-participant simulated beginner study is documented in
 [Mouse-only usability, 31 October 2026](USABILITY_2026-10-31.md).
 [Rounds 7–9](USABILITY_2026-11-01_ROUNDS7-9.md) record the subsequent mixer and

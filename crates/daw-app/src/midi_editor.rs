@@ -32,6 +32,7 @@ enum Gesture {
     Draw {
         originals: Vec<Note>,
         origin: Pos2,
+        pressed_pitch: u8,
         dragged: bool,
     },
     Marquee {
@@ -2141,12 +2142,13 @@ impl DawApp {
                     }
                 } else if matches!(self.tool, Tool::Pencil | Tool::MultiDraw) {
                     let beat = beat_at(pos);
+                    let pressed_pitch = pitch_at(pos);
                     let pitches = if self.tool == Tool::MultiDraw {
                         state
                             .stack
-                            .pitches(pitch_at(pos), self.root, state.chord, self.scale)
+                            .pitches(pressed_pitch, self.root, state.chord, self.scale)
                     } else {
-                        vec![pitch_at(pos)]
+                        vec![pressed_pitch]
                     };
                     // Keep the complete chord in this edit. Release-time
                     // overlap merging remaps a covered tone to its existing
@@ -2166,6 +2168,7 @@ impl DawApp {
                         state.gesture = Some(Gesture::Draw {
                             originals: drawn,
                             origin: pos,
+                            pressed_pitch,
                             dragged: false,
                         });
                     }
@@ -2290,6 +2293,7 @@ impl DawApp {
                         originals,
                         origin,
                         dragged,
+                        ..
                     } if dragged || (pos.x - origin.x).abs() > 4.0 => {
                         let length = (beat_at(pos) + clip_offset - originals[0].start)
                             .max(snap.max(MIN_NOTE));
@@ -2469,6 +2473,32 @@ impl DawApp {
             Rect::from_min_max(plot.min, velocity_rect.max),
             cursor,
         );
+        // Keep pitch identity beside the drawing/inspection target even when
+        // a short note or a dense row cannot fit its own label. The shared hint
+        // paints only, so a following press still reaches the piano roll.
+        let pitch_hint = if owns_pointer
+            && !navigation.navigating
+            && matches!(&state.gesture, None | Some(Gesture::Draw { .. }))
+            && let Some(pos) = pointer.filter(|pos| plot.contains(*pos))
+        {
+            let pitch = match &state.gesture {
+                // A chord/scale stack can start below the pressed key. Keep
+                // that key's identity through duration changes and vertical drift.
+                Some(Gesture::Draw { pressed_pitch, .. }) if down => *pressed_pitch,
+                _ => pitch_at(pos),
+            };
+            let text = daw_core::note_name(pitch);
+            let rect = daw_ui::pointer_text_in_rect(
+                ui.ctx(),
+                ui.id().with("midi_pitch_hint"),
+                pos,
+                plot,
+                egui::RichText::new(&text).font(daw_ui::text::TextRole::Note.font()),
+            );
+            serde_json::json!({"pitch":pitch,"text":text,"rect":rect_json(rect)})
+        } else {
+            serde_json::Value::Null
+        };
         ui.ctx().data_mut(|data|data.insert_temp(egui::Id::new("midi_editor_diagnostics"),serde_json::json!({
             "plot":rect_json(plot),"velocity":rect_json(velocity_rect),"keys":key_diagnostics,"notes":note_diagnostics,
             "ruler":rect_json(ruler),"time_origin":rect_json(time_origin),"time_basis":"clip-local",
@@ -2483,6 +2513,7 @@ impl DawApp {
             "quantize":quantize_controls,"randomize":randomize_controls,"color_out_of_scale":state.color_out_of_scale,"preview_notes":if state.transform.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),
             "generate":generate_diagnostics,
             "keyboard_pitch":state.keyboard_pitch,"keyboard_focus":state.keyboard_focus,"navigation_note":state.navigation_note,
+            "pitch_hint":pitch_hint,
         })));
         self.midi_editor = state;
         let edited = !actions.is_empty();

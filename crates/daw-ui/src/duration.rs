@@ -12,13 +12,18 @@ pub fn format_seconds(seconds: f64) -> String {
     )
 }
 
+/// Two-decimal one-based position. Round the complete display position before
+/// splitting it so the last fractional beat carries into the following bar.
+/// This is a readout only; editors retain the original beat value separately.
 pub fn musical_position(beat: f64, beats_per_bar: u8) -> String {
-    let beats_per_bar = f64::from(beats_per_bar.max(1));
-    let beat = beat.max(0.0);
+    let units = (beat.max(0.0) * 100.0).round() as u64;
+    let units_per_bar = u64::from(beats_per_bar.max(1)) * 100;
+    let bar = units / units_per_bar + 1;
+    let within_bar = units % units_per_bar + 100;
     format!(
-        "Bar {} · Beat {:.2}",
-        (beat / beats_per_bar).floor() as u64 + 1,
-        beat % beats_per_bar + 1.0,
+        "Bar {bar} · Beat {}.{:02}",
+        within_bar / 100,
+        within_bar % 100,
     )
 }
 

@@ -1,0 +1,79 @@
+warning: field `path` is never read
+  --> vendor/vst3-host/src/internal/module_loader/linux.rs:36:5
+   |
+29 | pub struct LinuxModule {
+   |            ----------- field in this struct
+...
+36 |     path: std::path::PathBuf,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vst3-host` (lib) generated 1 warning
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 37.73s
+     Running tests/clip_position_entry_e2e.rs (target/debug/deps/clip_position_entry_e2e-b2d16d839378c508)
+
+running 4 tests
+test cancelling_a_keypad_retains_the_staged_position_for_mouse_apply ... FAILED
+test mouse_bar_beat_placement_is_one_undoable_move_and_duplicate_still_appends_the_phrase ... ok
+test rounded_position_caption_carries_without_retiming_the_untouched_draft ... ok
+test untouched_cancelled_and_invalid_bar_beat_drafts_do_not_edit_exact_positions ... ok
+
+failures:
+
+---- cancelling_a_keypad_retains_the_staged_position_for_mouse_apply stdout ----
+
+thread 'cancelling_a_keypad_retains_the_staged_position_for_mouse_apply' (62801) panicked at crates/daw-app/tests/clip_position_entry_e2e.rs:194:9:
+Cancelling the keypad must return to the staged position
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    cancelling_a_keypad_retains_the_staged_position_for_mouse_apply
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.62s
+
+error: test failed, to rerun pass `-p daw-app --test clip_position_entry_e2e`
+     Running tests/number_stepper_e2e.rs (target/debug/deps/number_stepper_e2e-88adb77f2c4efc68)
+
+running 3 tests
+test boundary_buttons_do_not_round_clamp_or_create_history ... ok
+test clip_timing_steps_remain_visible_and_preserve_source_notes_and_fractional_values ... ok
+test tempo_steps_preserve_fractions_and_each_click_has_its_own_undo ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.52s
+
+     Running tests/numeric_keypad_e2e.rs (target/debug/deps/numeric_keypad_e2e-4e62e779cd043d7a)
+
+running 5 tests
+test clip_duration_and_nested_loop_keypads_commit_exact_values_with_independent_undo ... ok
+test existing_step_drag_and_keyboard_entry_still_work_after_keypad_cancel ... ok
+test invalid_cancelled_and_dismissed_keypad_drafts_never_clamp_or_create_history ... ok
+test nested_properties_keypad_keeps_its_footer_stable_in_short_fractional_density_viewports ... ok
+test tempo_keypad_preserves_precision_and_commits_once_in_both_themes_and_widths ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.32s
+
+     Running tests/numeric_replacement_e2e.rs (target/debug/deps/numeric_replacement_e2e-72fd576d710304e7)
+
+running 1 test
+test mouse_multiclick_replaces_tempo_gain_and_generator_length_without_keyboard_selection ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running tests/piano_pitch_hint_e2e.rs (target/debug/deps/piano_pitch_hint_e2e-4098f8024683e19f)
+
+running 4 tests
+test drawing_through_the_previous_hint_keeps_the_pressed_pitch_and_one_undo_step ... ok
+test held_multi_draw_keeps_the_pressed_pitch_for_chord_and_scale_stacks ... ok
+test pitch_hint_stays_in_the_plot_and_disappears_over_other_surfaces_and_menus ... ok
+test pointer_pitch_is_painted_before_entry_and_on_short_dense_and_folded_notes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.53s
+
+error: 1 target failed:
+    `-p daw-app --test clip_position_entry_e2e`

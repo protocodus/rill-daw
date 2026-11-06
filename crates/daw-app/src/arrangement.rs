@@ -1753,8 +1753,11 @@ impl DawApp {
                         self.arranger_selection.background_click_tracker.register(0, position,
                             ui.input(|input| input.time), self.tool == daw_ui::EditorTool::Select && !ui.input(|input| input.modifiers.shift))
                     });
-                if background_double {
-                    edits.push(Edit::New(0, 0.0));
+                if background_double && let Some(pos) = response.interact_pointer_pos() {
+                    edits.push(Edit::New(
+                        0,
+                        self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0),
+                    ));
                 }
                 if !ui.ctx().input(|i| i.raw.hovered_files.is_empty())
                     && let Some((target, beat)) = self.drop_target
@@ -2285,6 +2288,8 @@ impl DawApp {
                     result
                 }
                 Edit::New(id, start) => {
+                    // Keep the complete four-beat pattern inside the project range.
+                    let start = start.clamp(0.0, MAX_BEAT - 4.0);
                     let new_track = id == 0;
                     let id = if id == 0 {
                         self.project.add_midi_track("New instrument")
@@ -2620,7 +2625,8 @@ impl DawApp {
                                 timing_edit = daw_ui::clip_timing_fields(ui, daw_ui::ClipTimingValues {
                                     start: clip.start, duration: clip.length, source_offset: clip.offset,
                                 }, &mut duration_mode, MAX_BEAT, maximum_source_offset,
-                                clip.source_length() / MAX_SOURCE_RATE..=clip.source_length() / MIN_SOURCE_RATE);
+                                clip.source_length() / MAX_SOURCE_RATE..=clip.source_length() / MIN_SOURCE_RATE,
+                                timing_meter);
                                 ctx.data_mut(|data| data.insert_temp(duration_mode_id, duration_mode));
                                 daw_ui::form_label(ui, "Stretch");
                                 daw_ui::text::body(ui, format!("{:.1}%", 100.0 / clip.source_rate))
