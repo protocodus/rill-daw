@@ -301,7 +301,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `form_label`, `path_row`, `section_gap` |
 | Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
-| Arrangement clip surfaces and previews | `clip_surface`, `ClipSurfaceLayout`, `clip_note_preview` |
+| Arrangement clip surfaces and previews | `clip_surface`, `clip_surface_named`, `ClipSurfaceLayout`, `clip_note_preview` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Numeric mouse steps and exact entry | `number_stepper`, `number_stepper_integer`, `mouse_value_entry`, `NumberStepperResponse` |
@@ -769,7 +769,11 @@ the same `timeline_loop_editor` lane as the clip editors. The canvas starts
 clear the header border; it never scrolls before beat 0. Row stripes alternate by
 visible row. The empty area below the tracks continues the bar lines. Drag the label
 gutter to resize all track headers, or a header's lower edge to resize every track
-row together. View → Track layout provides precise dimensions. These dimensions
+row together. View → Track density uses shared `TrackDensity` presets:
+Compact (64 points, the default), Standard (89), and Detailed (144). Every preset
+reuses the adaptive header; compact rows retain mix/arm/meter controls and a
+one-click route to full channel details. The named choice is a persisted user
+preference, not a project edit. View → Track layout provides precise dimensions. These dimensions
 are session view state and leave content, selection and history intact. Folder
 headings use disclosure controls, folder icons, depth guides and spacing; Tracks
 and row context menus offer Add subfolder and Move to folder. Nesting choices
@@ -928,20 +932,20 @@ post-fader sends include both, and all sends respect channel mute.
 Selecting or hovering a channel previews its output and
 pre/post sends in separate routing lanes below the controls. `mixer_route_lane` connects actual `MixerRouteEndpoint` positions with a continuous three-point-wide U-shaped ribbon, including the arrowhead touching the destination. Vertex colors blend smoothly from source to destination along the path; Master uses the theme accent. Each route uses eleven vertices, with no textures or repaint requests. Offscreen endpoints retain their true coordinates and remain named. The model validates every routing change too.
 
-Mixer defaults to **Signal flow**: audio/MIDI sources come first, buses follow
-all their upstream channels and buses, and Master remains last. Both main outputs
-and sends determine this order; unrelated channels retain song order. Tracks and
-Buses have separate headings and spacing. **Signal flow → Song order** restores
-the Arrangement order and enables dragging channel grips or names before or after
-other channels. Signal-flow grips and left/right steps are inactive; the channel
+Mixer defaults to **Song order**, following Arrangement so channel grips and
+left/right steps work immediately. **Signal flow** is an explicit automatic
+presentation: audio/MIDI sources come first, buses follow all upstream channels
+and buses, and Master remains last. Both main outputs and sends determine this
+order; unrelated channels retain song order. Tracks and Buses have separate
+headings and spacing. Signal-flow grips and left/right steps are inactive; the channel
 context menu offers **Use Song order** explicitly. Switching views never changes routing, project order, history, or
-playback. Channel numbers retain their song identities in either view. Bus
-headers share the routing icon, BUS badge, and quiet tint with the arranger.
-Narrow source
-rows use `compact_action_menu`, which retains the normal action target height
-while removing the optional leading icon and reducing horizontal padding.
+playback. Channel numbers retain their song identities in either view. Bus and
+send-return role headings leave full nameplate width for their channel names.
+Narrow source rows use a fixed-width envelope icon, leaving the input/instrument
+caption readable. Its state color, full accessible name, owner-specific tooltip,
+and explicit state text inside the menu distinguish Read, Overridden and Bypassed.
 
-Channel strips reserve four points of canvas between their bordered surfaces;
+Channel strips reserve eight points of canvas between their bordered surfaces;
 their allocated width and control alignment remain unchanged. Selection uses a
 clear border, while track colors stay strongest in names and top markers. Bus
 input counts expose their named output/send sources on hover. Effects show an
@@ -1038,7 +1042,7 @@ Viewing a control must not normalize valid stored values to a narrower editing r
 
 The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; `IconButton::icon_only` requires an accessible action label. Reorder handles use the vector `Grip`, and native editor actions use `Editor`. Call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels.
 
-**Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views and utility popups; text fields retain their native text undo. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A successful new edit discards redo; a failed, stale or unchanged AI/tool batch leaves it intact. History is session-local, defaults to 128 actions, and uses the persisted **Setup → Storage → Undo actions** count (1–4,096) for manual, tool and AI edits together. Apply trims older history immediately without making a document edit; Cancel leaves it unchanged. Growing the count cannot restore discarded steps. The independent estimated 128 MiB snapshot cap, including opaque plugin state, may retain fewer actions. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
+**Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views, utility popups, and focused slider rails, dials and compact channel values; exact-entry and native numeric text fields retain their own text undo. Shared parameter controls register their non-text focus for the current frame; hosts use `parameter_owns_document_history` when dispatching document history shortcuts. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A successful new edit discards redo; a failed, stale or unchanged AI/tool batch leaves it intact. History is session-local, defaults to 128 actions, and uses the persisted **Setup → Storage → Undo actions** count (1–4,096) for manual, tool and AI edits together. Apply trims older history immediately without making a document edit; Cancel leaves it unchanged. Growing the count cannot restore discarded steps. The independent estimated 128 MiB snapshot cap, including opaque plugin state, may retain fewer actions. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
 
 Disable a group with `ui.add_enabled_ui(false, |ui| ...)`, or use `ui.add_enabled(enabled, button_widget(...))`. Disabled components do not change values from pointer or keyboard input. Scope repeated rows using `ui.push_id(model_id, ...)`; repeated labels alone are not sufficient persistent identity for every control.
 
@@ -1136,13 +1140,18 @@ state and handle rectangles for application undo and interaction tests.
 `paint_crossfade` reuses the same curve drawing in a timeline region without
 adding layout or input targets.
 
-Every audio clip exposes orange fade-in/out handles below its title in the
+Every audio clip retains fade-in/out hit targets below its title in the
 arranger and above its waveform in Clip Editor, including unselected, compact,
-reversed and stretched clips. Drag to change duration continuously;
-double-click removes that fade. Orange gain envelopes use the same source
-coordinates and curves as playback. Orange overlap diamonds edit crossfade
-duration, including from zero; double-click opens the spline editor. Crossfade
-gain curves use distinct orange tones, separate from the waveform. Fades change saved
+reversed, stretched and unnamed clips. Orange handles appear near their endpoint
+or corresponding upper clip corner, stay visible during an owned drag, and hide
+when the pointer leaves. Drag to change duration continuously; double-click
+removes that fade. Applied fades retain a subtle orange veil above their gain
+envelope even without hover; unity regions have no veil or line. The bounded
+visible-width painter evaluates the same source coordinates and curves as playback.
+Overlap diamonds follow the same near-target reveal and drag rule, with an
+additional lower incoming corner reveal. They edit crossfade duration, including
+from zero; double-click opens the spline editor. Crossfade gain curves use distinct
+orange tones, separate from the waveform. Fades change saved
 metadata without modifying source files, clip placement, trim or stretch; each
 drag is one Undo step.
 
@@ -1240,7 +1249,17 @@ Plugin discovery stays metadata-only. After discovery, one isolated helper at a 
 
 Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Drag the handle to another row to change processing order; Up/Down remains available for direct activation. Reordering moves the complete slot, preserving its ID, opaque state, normalized overrides, bypass state, and automation targets. The normal graph rebuild recomputes processing order and delay compensation.
 
-Mixer uses equal-width shared strips with aligned names, destinations, faders and pan controls. Click a channel name to open its Channel page or its output destination to choose a route; **Routing…** opens the full routing controls. The name plate's context menu provides **Open channel**, Instrument, Effects, and Routing where applicable; the source row's Automation menu holds the channel's automation actions. Channel, Instrument, Effects, and Routing share `utility_header`: one row with the page links in a fixed order (Channel · Instrument · Effects · Routing · Mixer, the current window shown as the selected tab; the Channel page sits under the Properties tabs, so its row omits Channel) leading and **AI for this context** trailing (shortened to **AI** where the full row would wrap), then a 21-point gap, so every body starts at the same height. Closing a utility returns to its caller. Each channel's vertical meter stands beside its fader on the fader's dB scale; Master shows the final stereo output on the same scale. Readings come from the running engine.
+Mixer uses equal-width shared strips with common processing, pan, fader/meter and routing baselines. Bus/return names sit slightly lower beneath their role heading, without shortening their faders. Click a channel name to open its Channel page or its output destination to choose a route; **Routing…** opens the full routing controls. The name plate's context menu provides **Open channel**, Instrument, Effects, and Routing where applicable; the source row's Automation menu holds the channel's automation actions. Channel, Instrument, Effects, and Routing share `utility_header`: one row with the page links in a fixed order (Channel · Instrument · Effects · Routing · Mixer, the current window shown as the selected tab; the Channel page sits under the Properties tabs, so its row omits Channel) leading and **AI for this context** trailing (shortened to **AI** where the full row would wrap), then a 21-point gap, so every body starts at the same height. Closing a utility returns to its caller. Each channel's vertical meter stands beside its fader on the fader's dB scale; Master shows the final stereo output on the same scale. Readings come from the running engine.
+
+Short mixer workspaces use the existing 21-point compact controls; taller
+windows retain 34-point comfortable rows. Effects and Analyze share one outlined
+processing row. The shared identity band aligns every role's gain travel,
+meter calibration and output/send controls. Up to two routing overview lanes
+remain below the strips; more routes use that pane's own scroll. The same
+channel details and Routing windows expose the complete controls on demand.
+Returning from an automation lane reveals and highlights its owning channel;
+routing preview and keyboard adjacency use that owner while the lane selection
+is retained until the user makes a channel selection.
 
 Routing follows the strip's signal order: **Output** first, then **Sends**, with
 pre-fader sends above post-fader ones. Each send is one `parameter_row`: the
@@ -1343,6 +1362,15 @@ precise Start, Duration and Source offset fields. Duration explicitly chooses
 Trim or Stretch. The Properties Stretch readout always occupies its row, including
 the initial **100.0%**, so changing duration mode does not move the fields below
 it. F2 accelerates the same Edit/context Rename command.
+
+Clip names may be empty: `clip_surface_named` reduces a blank or whitespace-only
+name to a thin top band and gives the content area the recovered height.
+`ClipSurfaceLayout::name_hit` exposes a generous interior band for double-click
+renaming without adding another widget over trim/fade targets. The arranger
+routes that gesture through the existing inline editor at its normal height;
+body double-click still opens Clip Editor, and context Rename remains available.
+Blank clip-name drafts commit as an empty string; project and track naming keep
+their nonempty GUI guard. Typed `rename_clip` normalizes blank names identically.
 
 `batch_fades` supplies millisecond edge settings. Edit → Smooth edit boundaries
 applies the last accepted settings; Edit → Audio → Boundary fades… opens the
@@ -1657,9 +1685,12 @@ uses a taller composer when space allows. Scope, browsing actions, and the
 primary and any available Stop/recovery or Undo actions remain reachable at
 compact window sizes.
 
-Shared direct editing controls live in `daw-ui`: `clip_fade_handles` and
-`crossfade_duration_handle` return source-independent gesture edits;
-`paint_clip_fades` paints the evaluated gain envelope. `timeline_loop_editor`
+Shared direct editing controls live in `daw-ui`: `clip_fade_handles` (or
+`clip_fade_handles_with_hover_bounds` for a separate title band) and
+`crossfade_duration_handle` return source-independent gesture edits and separate
+hit-target/paint visibility. Active IDs remain registered when a dragged endpoint
+leaves the viewport. `paint_clip_fades` paints the evaluated gain envelope and
+attenuation veil, returning its actual extent; zero fades add no paint. `timeline_loop_editor`
 returns loop bounds and handle geometry without advancing layout.
 `automation_canvas_at` returns point edits and per-point interpolation choices.
 `device_identity_button` shows a custom name, quiet model, and optional thumbnail.

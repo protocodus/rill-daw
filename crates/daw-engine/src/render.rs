@@ -2112,13 +2112,59 @@ pub fn export_project_wav(
     export_project_wav_with_options(project, path, sample_rate, RenderOptions::default())
 }
 
+/// WAV delivery encoding. Floating point retains mix headroom; PCM is bounded
+/// to nominal full scale and reports samples outside that range.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WavEncoding {
+    Pcm16,
+    Pcm24,
+    #[default]
+    Float32,
+}
+
+impl WavEncoding {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pcm16 => "16-bit PCM",
+            Self::Pcm24 => "24-bit PCM",
+            Self::Float32 => "32-bit float",
+        }
+    }
+
+    pub fn bits_per_sample(self) -> u16 {
+        match self {
+            Self::Pcm16 => 16,
+            Self::Pcm24 => 24,
+            Self::Float32 => 32,
+        }
+    }
+
+    pub fn is_pcm(self) -> bool {
+        self != Self::Float32
+    }
+}
+
+/// An exact, end-exclusive musical range. Rendering still starts at song zero
+/// so the selected section retains preceding instrument and effect history.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExportRange {
+    pub start_beat: f64,
+    pub end_beat: f64,
+}
+
 /// Project mixdown choices, independent of realtime playback preparation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExportOptions {
     pub render: RenderOptions,
     /// Include instrument releases and effect tails after the last clip.
     /// When false, stop at the arrangement end rounded to the nearest sample.
+    /// An explicit range always has exact length, irrespective of this choice.
     pub include_effect_tails: bool,
+    pub encoding: WavEncoding,
+    /// Add decorrelated triangular dither when reducing to integer PCM.
+    /// Floating-point exports never apply dither.
+    pub dither: bool,
+    pub range: Option<ExportRange>,
 }
 
 impl Default for ExportOptions {
@@ -2126,6 +2172,9 @@ impl Default for ExportOptions {
         Self {
             render: RenderOptions::default(),
             include_effect_tails: true,
+            encoding: WavEncoding::Float32,
+            dither: true,
+            range: None,
         }
     }
 }
@@ -2148,21 +2197,87 @@ pub fn export_project_wav_with_options(
     sample_rate: u32,
     options: impl Into<ExportOptions>,
 ) -> Result<()> {
+    export_project_wav_with_report(project, path, sample_rate, options).map(|_| ())
+}
+
+/// Measurements describe rendered source samples in the selected output range,
+/// before encoding/dither, not preroll or a true-peak/loudness assessment.
+/// Nominal +/-1 endpoints are not overloads;
+/// integer clipping counts only source samples outside [-1, 1], before dither.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExportReport {
+    pub sample_peak: f32,
+    pub clipped_samples: u64,
+    pub frames: u64,
+    pub sample_rate: u32,
+    pub encoding: WavEncoding,
+    pub dither: bool,
+}
+
+/// Stream a delivery WAV and report actual source peak and integer overloads.
+/// Explicit ranges are sample-rounded, end-exclusive and have no appended tail.
+pub fn export_project_wav_with_report(
+    project: &Project,
+    path: impl AsRef<Path>,
+    sample_rate: u32,
+    options: impl Into<ExportOptions>,
+) -> Result<ExportReport> {
     project.validate_audio_destination(path.as_ref())?;
     let options = options.into();
+    let range = options
+        .range
+        .map(|range| export_range_samples(project, sample_rate, range))
+        .transpose()?;
     let renderer = Renderer::new_offline_with_options(project, sample_rate, options.render)?;
-    let frames = if options.include_effect_tails {
-        renderer.end_sample
+    let (start, end) = if let Some(range) = range {
+        range
+    } else if options.include_effect_tails {
+        (0, renderer.end_sample)
     } else {
         // Use the same beat-to-sample conversion as prepared clip boundaries.
         let samples_per_beat = sample_rate as f64 * 60.0 / project.tempo;
-        (project.end_beat() * samples_per_beat).round() as u64
+        (0, (project.end_beat() * samples_per_beat).round() as u64)
     };
+    write_wav_encoded(
+        renderer,
+        path.as_ref(),
+        start,
+        end,
+        options.encoding,
+        options.dither,
+        None,
+    )
+}
+
+fn export_range_samples(
+    project: &Project,
+    sample_rate: u32,
+    range: ExportRange,
+) -> Result<(u64, u64)> {
     ensure!(
-        frames * 8 < u32::MAX as u64 - 128,
-        "Export exceeds the WAV 4 GiB size limit"
+        range.start_beat.is_finite()
+            && range.end_beat.is_finite()
+            && range.start_beat >= 0.0
+            && range.end_beat > range.start_beat,
+        "Export range must have finite, increasing, nonnegative bounds"
     );
-    write_wav(renderer, path.as_ref(), frames)
+    ensure!(
+        project.tempo.is_finite() && project.tempo > 0.0,
+        "Tempo must be positive and finite"
+    );
+    ensure!(
+        (8_000..=384_000).contains(&sample_rate),
+        "Sample rate must be between 8000 and 384000 Hz"
+    );
+    let samples_per_beat = sample_rate as f64 * 60.0 / project.tempo;
+    let start = (range.start_beat * samples_per_beat).round();
+    let end = (range.end_beat * samples_per_beat).round();
+    ensure!(
+        end <= sample_rate as f64 * 60.0 * 60.0 * 4.0,
+        "Export range exceeds the four-hour processing limit"
+    );
+    ensure!(end > start, "Export range contains no samples");
+    Ok((start as u64, end as u64))
 }
 
 pub(crate) fn write_wav(renderer: Renderer, path: &Path, frames: u64) -> Result<()> {
@@ -2179,11 +2294,61 @@ pub(crate) fn write_wav_cancelled(
 }
 
 fn write_wav_inner(
-    mut renderer: Renderer,
+    renderer: Renderer,
     path: &Path,
     frames: u64,
     cancel: Option<&AtomicBool>,
 ) -> Result<()> {
+    write_wav_encoded(
+        renderer,
+        path,
+        0,
+        frames,
+        WavEncoding::Float32,
+        false,
+        cancel,
+    )
+    .map(|_| ())
+}
+
+/// Each sample's noise is keyed to its absolute stereo position. Channels are
+/// decorrelated, repeat exports are reproducible, and range dither is the same
+/// as the corresponding section of a full-file export.
+fn triangular_dither(sample: u64) -> f64 {
+    let uniform = |index: u64| {
+        let mut value = index.wrapping_add(0x9e3779b97f4a7c15);
+        value = (value ^ (value >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+        value = (value ^ (value >> 27)).wrapping_mul(0x94d049bb133111eb);
+        ((value ^ (value >> 31)) >> 11) as f64 / ((1_u64 << 53) as f64)
+    };
+    uniform(sample.wrapping_mul(2)) - uniform(sample.wrapping_mul(2).wrapping_add(1))
+}
+
+fn encode_pcm(sample: f32, bits: u16, noise: f64) -> i32 {
+    let scale = (1_i64 << (bits - 1)) as f64;
+    let value = f64::from(sample).clamp(-1.0, 1.0) * scale + noise;
+    value.round().clamp(-scale, scale - 1.0) as i32
+}
+
+#[allow(clippy::too_many_arguments)] // The range and encoding are shared by legacy float and delivery exports.
+fn write_wav_encoded(
+    mut renderer: Renderer,
+    path: &Path,
+    start: u64,
+    end: u64,
+    encoding: WavEncoding,
+    dither: bool,
+    cancel: Option<&AtomicBool>,
+) -> Result<ExportReport> {
+    ensure!(end >= start, "Export range ends before its start");
+    let frames = end - start;
+    let bytes_per_frame = u64::from(encoding.bits_per_sample() / 8) * 2;
+    ensure!(
+        frames
+            .checked_mul(bytes_per_frame)
+            .is_some_and(|bytes| bytes < u32::MAX as u64 - 128),
+        "Export exceeds the WAV 4 GiB size limit"
+    );
     let check_cancelled = || -> Result<()> {
         ensure!(
             !cancel.is_some_and(|cancel| cancel.load(Ordering::Relaxed)),
@@ -2195,8 +2360,12 @@ fn write_wav_inner(
     let spec = hound::WavSpec {
         channels: 2,
         sample_rate: renderer.sample_rate,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
+        bits_per_sample: encoding.bits_per_sample(),
+        sample_format: if encoding.is_pcm() {
+            hound::SampleFormat::Int
+        } else {
+            hound::SampleFormat::Float
+        },
     };
     let filename = path
         .file_name()
@@ -2210,30 +2379,58 @@ fn write_wav_inner(
         .write(true)
         .create_new(true)
         .open(&temp)?;
-    let result = (|| -> Result<()> {
+    let result = (|| -> Result<ExportReport> {
+        let sync_file = file.try_clone()?;
         let mut writer = hound::WavWriter::new(std::io::BufWriter::new(file), spec)?;
+        let mut report = ExportReport {
+            sample_peak: 0.0,
+            clipped_samples: 0,
+            frames,
+            sample_rate: renderer.sample_rate,
+            encoding,
+            dither: dither && encoding.is_pcm(),
+        };
         let mut block = [[0.0; 2]; BLOCK];
         let mut positions = [0.0; BLOCK];
-        let mut remaining = frames as usize;
-        while remaining > 0 {
+        let mut rendered = 0;
+        while rendered < end {
             check_cancelled()?;
-            let count = remaining.min(BLOCK);
+            let count = (end - rendered).min(BLOCK as u64) as usize;
             renderer.render(&mut block[..count], &mut positions[..count])?;
-            for frame in &block[..count] {
+            let first = start.saturating_sub(rendered).min(count as u64) as usize;
+            for (index, frame) in block[first..count].iter().enumerate() {
                 ensure!(
                     frame[0].is_finite() && frame[1].is_finite(),
                     "Mix produced non-finite samples; reduce track or insert gain"
                 );
-                writer.write_sample(frame[0])?;
-                writer.write_sample(frame[1])?;
+                for (channel, sample) in frame.iter().copied().enumerate() {
+                    report.sample_peak = report.sample_peak.max(sample.abs());
+                    if encoding.is_pcm() {
+                        report.clipped_samples += u64::from(!(-1.0..=1.0).contains(&sample));
+                        let sample_index = (rendered + (first + index) as u64) * 2 + channel as u64;
+                        let noise = if dither {
+                            triangular_dither(sample_index)
+                        } else {
+                            0.0
+                        };
+                        writer.write_sample(encode_pcm(
+                            sample,
+                            encoding.bits_per_sample(),
+                            noise,
+                        ))?;
+                    } else {
+                        writer.write_sample(sample)?;
+                    }
+                }
             }
-            remaining -= count;
+            rendered += count as u64;
         }
         check_cancelled()?;
         writer.finalize()?;
+        sync_file.sync_all()?;
         check_cancelled()?;
         std::fs::rename(&temp, path)?;
-        Ok(())
+        Ok(report)
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&temp);
@@ -2244,6 +2441,36 @@ fn write_wav_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancelled_delivery_does_not_replace_a_previous_file_or_leave_temporary_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("previous.wav");
+        let original = b"previous successful delivery";
+        std::fs::write(&output, original).unwrap();
+        for encoding in [WavEncoding::Float32, WavEncoding::Pcm16, WavEncoding::Pcm24] {
+            let renderer = Renderer::new_offline_with_options(
+                &Project::new(),
+                8_000,
+                RenderOptions::default(),
+            )
+            .unwrap();
+            let cancel = AtomicBool::new(true);
+            let error = write_wav_encoded(
+                renderer,
+                &output,
+                8_000,
+                16_000,
+                encoding,
+                true,
+                Some(&cancel),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("cancelled"));
+            assert_eq!(std::fs::read(&output).unwrap(), original);
+            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+        }
+    }
 
     #[test]
     fn live_midi_merge_preserves_equal_offset_edges_without_allocating() {

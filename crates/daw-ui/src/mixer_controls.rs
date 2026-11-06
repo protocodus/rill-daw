@@ -308,11 +308,13 @@ pub fn mixer_pan_row(
     solo: &mut bool,
     width: f32,
 ) -> MixerPanRowResponse {
+    let height =
+        crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::mixer_control_height(ui);
     ui.allocate_ui_with_layout(
-        Vec2::new(width, MIXER_PAN_ROW_HEIGHT),
+        Vec2::new(width, height),
         egui::Layout::top_down(egui::Align::Min),
         |ui| {
-            ui.set_min_size(Vec2::new(width, MIXER_PAN_ROW_HEIGHT));
+            ui.set_min_size(Vec2::new(width, height));
             ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
             let pan = mixer_pan(ui, pan, width);
             let switches = mixer_mute_solo(ui, mute, solo, width);
@@ -338,7 +340,7 @@ pub fn mixer_mute_solo(
     let gap = crate::tokens::SPACE_XS;
     let button_width = (width - gap) * 0.5;
     ui.allocate_ui_with_layout(
-        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
+        Vec2::new(width, crate::mixer_control_height(ui)),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = gap;
@@ -357,9 +359,11 @@ fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bo
     let accent = if mute { colors.mute } else { colors.solo };
     // Color identifies the operation even while idle. A solid fill and
     // contrasting label distinguish the active state without relying on hue.
+    let height = crate::mixer_control_height(ui);
     let mut response = ui.add_sized(
-        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
+        Vec2::new(width, height),
         crate::IconButton::new(label)
+            .min_size(Vec2::new(width, height))
             .label_color(if *value {
                 crate::theme::contrast_text(accent)
             } else {

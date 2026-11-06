@@ -116,7 +116,12 @@ fn signal_flow_orders_nested_main_and_send_routes_without_editing_the_song() {
         app.command(json!({"command":"system_theme", "dark":dark}));
         app.command(json!({"command":"viewport", "width":1600, "height":1100,
             "pixels_per_point":density}));
-        let baseline = app.click("Mixer");
+        let default = app.click("Mixer");
+        assert_eq!(default["mixer"]["order"], "Song order");
+        assert_eq!(order(&default), song);
+        assert_eq!(default["mixer"]["reorder_enabled"], true);
+        let baseline = choose_order(&mut app, "Song order", "Signal flow");
+        unchanged(&baseline, &default);
         assert_eq!(baseline["mixer"]["order"], "Signal flow");
         assert_eq!(order(&baseline), flow);
         assert_eq!(baseline["mixer"]["reorder_enabled"], false);

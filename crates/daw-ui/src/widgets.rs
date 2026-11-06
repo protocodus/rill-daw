@@ -439,24 +439,6 @@ pub(crate) fn semantic_compact_action_menu<R>(
     InnerResponse::new(inner.map(|inner| inner.inner), response)
 }
 
-/// Text-first automation state in a fixed-width channel source row. Full
-/// control height and menu semantics remain native; only horizontal space is compact.
-pub(crate) fn semantic_narrow_action_menu<R>(
-    ui: &mut Ui,
-    label: impl Into<WidgetText>,
-    contents: impl FnOnce(&mut Ui) -> R,
-) -> InnerResponse<Option<R>> {
-    let (response, inner) = semantic_picker(
-        ui,
-        label,
-        MenuRole::Action,
-        true,
-        Some(tokens::SPACE_XS),
-        contents,
-    );
-    InnerResponse::new(inner.map(|inner| inner.inner), response)
-}
-
 fn semantic_picker<R>(
     ui: &mut Ui,
     label: impl Into<WidgetText>,

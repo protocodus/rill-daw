@@ -22,8 +22,9 @@ pub use device::{
     list_output_devices,
 };
 pub use render::{
-    CompensationDelay, ExportOptions, export_project_wav, export_project_wav_with_options,
-    export_wav, export_wav_with_options, render, render_range_cancellable, render_with_options,
+    CompensationDelay, ExportOptions, ExportRange, ExportReport, WavEncoding, export_project_wav,
+    export_project_wav_with_options, export_project_wav_with_report, export_wav,
+    export_wav_with_options, render, render_range_cancellable, render_with_options,
     render_with_workers,
 };
 

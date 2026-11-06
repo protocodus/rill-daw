@@ -33,7 +33,7 @@ pub(crate) type EditorStateSignature =
 
 enum PendingAction {
     Save(PathBuf),
-    Export(PathBuf, bool),
+    Export(PathBuf, crate::export_ui::ExportSpecification),
     Quit,
     New,
     Recovery,
@@ -216,12 +216,14 @@ impl DawApp {
     }
 
     pub(crate) fn apply_settings_snapshot(&mut self, settings: crate::settings::Settings) {
-        // Appearance, AI and history preferences are independent of the audio
+        // Presentation, delivery, AI and history preferences are independent of the audio
         // graph/native editor. Applying them must not interrupt playback.
         let mut same_audio_and_storage = self.settings.clone();
         same_audio_and_storage.appearance = settings.appearance;
         same_audio_and_storage.ai = settings.ai.clone();
         same_audio_and_storage.history_limit = settings.history_limit;
+        same_audio_and_storage.track_density = settings.track_density;
+        same_audio_and_storage.export = settings.export.clone();
         if same_audio_and_storage == settings {
             self.apply_appearance_settings(settings);
             return;
@@ -470,22 +472,33 @@ impl DawApp {
     }
 
     pub(crate) fn export_to_with_tails(&mut self, path: PathBuf, include_effect_tails: bool) {
-        if self.defer_document_request(DocumentRequest::Export(path.clone(), include_effect_tails))
-        {
+        self.export_to_with_specification(
+            path,
+            self.legacy_export_specification(include_effect_tails),
+        );
+    }
+
+    pub(crate) fn export_to_with_specification(
+        &mut self,
+        path: PathBuf,
+        specification: crate::export_ui::ExportSpecification,
+    ) {
+        if self.defer_document_request(DocumentRequest::Export(path.clone(), specification)) {
             return;
         }
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
         }
-        if let Some(PendingAction::Export(path, include_effect_tails)) =
-            self.defer_for_editor(PendingAction::Export(path, include_effect_tails))
+        if let Some(PendingAction::Export(path, specification)) =
+            self.defer_for_editor(PendingAction::Export(path, specification))
         {
-            self.start_export(path, include_effect_tails);
+            self.start_export(path, specification);
         }
     }
 
     pub(crate) fn request_quit(&mut self, _ctx: &egui::Context) {
+        self.cancel_audio_import();
         if matches!(
             self.instrument_ui
                 .pending
@@ -1672,9 +1685,7 @@ impl DawApp {
     fn finish_editor_action(&mut self, action: PendingAction, _ctx: &egui::Context) {
         match action {
             PendingAction::Save(path) => self.finish_project_save(path),
-            PendingAction::Export(path, include_effect_tails) => {
-                self.start_export(path, include_effect_tails)
-            }
+            PendingAction::Export(path, specification) => self.start_export(path, specification),
             PendingAction::New => self.finish_new_session(),
             PendingAction::Recovery => self.autosave_recovery(),
             PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),

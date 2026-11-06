@@ -103,6 +103,10 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                                     );
                                     ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
                                     text::note(ui, format!("Input · {kind}"));
+                                    if role.is_none() {
+                                        ui.add_space(ui::MIXER_ROLE_HEIGHT);
+                                    }
+                                    ui::mixer_processing_row(ui, width, 0, 0);
                                     let mut db = ui::channel_gain_to_db(state.gain[index]);
                                     if ui.add(ui::channel_gain_number(&mut db)).changed() {
                                         state.gain[index] = ui::channel_gain_from_db(db);
@@ -115,12 +119,12 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                                         width,
                                     );
                                     ui.horizontal(|ui| {
-                                        ui::mixer_fader(ui, &mut state.gain[index], 216.0 - offset);
+                                        ui::mixer_fader(ui, &mut state.gain[index], 180.0);
                                         ui::channel_meter(
                                             ui,
                                             Id::new(("gallery_meter", index)),
                                             peaks,
-                                            216.0 - offset,
+                                            180.0,
                                             ui::MIXER_FADER_INSET,
                                         );
                                     });

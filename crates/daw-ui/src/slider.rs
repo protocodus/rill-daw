@@ -992,6 +992,7 @@ impl<'a> Slider<'a> {
         if rail.changed() {
             full.mark_changed();
         }
+        crate::parameter_focus::register_parameter_history_focus(&full);
         (full, geometry)
     }
 

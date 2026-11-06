@@ -2,6 +2,7 @@
 /dist/
 .DS_Store
 *.wav
+!crates/daw-core/tests/fixtures/audio-import/*.wav
 *.daw.json
 !fixtures/**
 

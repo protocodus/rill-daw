@@ -18,6 +18,11 @@ Normalized parameter overrides are restored after opaque state. Effect slot IDs
 remain stable across saves, allowing routing/editor and automation references to
 identify the same instance.
 
+Clip `name` remains a required string but may be empty. Empty or whitespace-only
+names suppress the arrangement title band without changing timing, audio/MIDI
+data or clip identity. Rename edits normalize all-blank text to an empty string;
+linked copies retain their shared name. No format-version change is required.
+
 Automation points store an outgoing `curve` value from −1 (Log) through 0
 (Linear) to +1 (Exp). The `Spline` interpolation mode uses that value for a
 bounded cubic Bézier segment. New lanes default to Linear with zero bend;
@@ -68,6 +73,13 @@ canonical source path; two different files with the same basename remain separat
 Referenced files are included in full, preserving non-destructive offsets, trims,
 and duplicate clips. Assets use ZIP Stored compression to avoid compressing large
 audio files during save; the manifest uses Deflate.
+
+WAV/MP3/FLAC/OGG imports are normalized into managed 32-bit float WAV assets
+before they enter the project. Source sample rate and mono/stereo channels are
+preserved without re-encoding to MP3/Vorbis; normalized samples use 32-bit float
+precision. Bundles contain this decoded audio, so opening a project does not
+require the original compressed files or invoke their decoders. Original tags
+and cover art are not stored in the WAV.
 
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when

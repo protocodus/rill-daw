@@ -13,6 +13,9 @@ pub struct ClipSurfaceLayout {
     pub title: Rect,
     pub content: Rect,
     pub title_color: Color32,
+    /// Generous interior target for restoring an intentionally hidden name.
+    /// It is geometry only; the caller retains body, edge and fade ownership.
+    pub name_hit: Rect,
 }
 
 /// An opaque clip surface with a quiet track-colored title band and a soft
@@ -25,12 +28,39 @@ pub fn clip_surface(
     color: Color32,
     selected: bool,
 ) -> ClipSurfaceLayout {
+    clip_surface_with_name(painter, rect, color, selected, true)
+}
+
+/// An optional clip name uses space only when present. Blank/whitespace names
+/// leave a thin top strip while their musical preview recovers the title area.
+pub fn clip_surface_named(
+    painter: &Painter,
+    rect: Rect,
+    color: Color32,
+    selected: bool,
+    name: &str,
+) -> ClipSurfaceLayout {
+    clip_surface_with_name(painter, rect, color, selected, !name.trim().is_empty())
+}
+
+fn clip_surface_with_name(
+    painter: &Painter,
+    rect: Rect,
+    color: Color32,
+    selected: bool,
+    named: bool,
+) -> ClipSurfaceLayout {
     let colors = crate::theme::palette(painter.ctx());
     // Whole physical pixels keep the rounded outline continuous where the
     // title band meets it, at any display density.
     let pixel = 1.0 / painter.pixels_per_point();
     let rect = rect.round_to_pixels(painter.pixels_per_point());
-    let header_bottom = (rect.top() + tokens::FONT_CANVAS + tokens::SPACE_SM)
+    let header_height = if named {
+        tokens::FONT_CANVAS + tokens::SPACE_SM
+    } else {
+        3.0
+    };
+    let header_bottom = (rect.top() + header_height)
         .min(rect.bottom())
         .round_to_pixels(painter.pixels_per_point());
     let inset_x = tokens::SPACE_XS.min(rect.width().max(0.0) * 0.5);
@@ -50,6 +80,13 @@ pub fn clip_surface(
             Pos2::new(rect.right() - inset_x, content_bottom),
         ),
         title_color: crate::theme::contrast_text(header_fill),
+        name_hit: Rect::from_min_max(
+            Pos2::new(rect.left() + 12.0_f32.min(rect.width() * 0.25), rect.top()),
+            Pos2::new(
+                rect.right() - 12.0_f32.min(rect.width() * 0.25),
+                (rect.top() + 16.0).min(rect.top() + rect.height() * 0.4),
+            ),
+        ),
     };
     if !rect.is_positive() || !rect.is_finite() {
         return layout;
@@ -155,6 +192,9 @@ pub fn clip_title(
         icon: None,
         text: rect,
     };
+    if title.trim().is_empty() {
+        return layout;
+    }
     if linked && rect.is_positive() {
         let size = rect.width().min(rect.height()).min(tokens::SPACE_LG);
         let icon = Rect::from_min_size(

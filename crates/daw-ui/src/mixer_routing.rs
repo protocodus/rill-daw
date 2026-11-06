@@ -15,7 +15,7 @@ pub fn mixer_output_button(
     crate::mixer_row(
         ui,
         width,
-        tokens::CONTROL_HEIGHT,
+        crate::mixer_control_height(ui),
         destination,
         crate::MixerRowText::Body,
         Some(destination_color.unwrap_or(colors.accent)),

@@ -298,6 +298,32 @@ fn automation_and_override_colors_follow_state_across_workspaces_and_themes() {
                 .iter()
                 .find(|channel| channel["track"] == source)
                 .unwrap();
+            assert_eq!(
+                state["selected_track"], lanes[0],
+                "Presentation keeps the selected automation lane"
+            );
+            assert_eq!(state["mixer"]["focused_channel"], source);
+            assert_eq!(state["mixer"]["flow_source"], source);
+            assert_eq!(channel["selected"], true);
+            assert!(
+                state["painted_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|shape| {
+                        shape["stroke"] == json!(colors.accent.to_array())
+                            && shape["stroke_width"].as_f64().unwrap_or(0.0) > 0.0
+                            && ["min", "max"].into_iter().all(|corner| {
+                                (0..2).all(|axis| {
+                                    (shape["rect"][corner][axis].as_f64().unwrap()
+                                        - channel["strip"][corner][axis].as_f64().unwrap())
+                                    .abs()
+                                        <= 0.6
+                                })
+                            })
+                    }),
+                "The owning channel must have its real painted selection outline"
+            );
             // Returning from the lane editor must reveal its owning channel,
             // including after the prior Properties/Routing visit and a theme /
             // density change. A wrapped transport must not hide its identity.
@@ -314,15 +340,43 @@ fn automation_and_override_colors_follow_state_across_workspaces_and_themes() {
             for control in ["gain", "fader"] {
                 assert_outline(&state, &channel[control], active);
             }
-            assert_text(
-                &state,
-                if overridden {
-                    "Overridden"
-                } else {
-                    "Automated"
-                },
-                active,
+            let status = if overridden {
+                "Overridden"
+            } else {
+                "Automated"
+            };
+            assert_eq!(channel["automation_state"], status);
+            assert!(
+                state["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|label| label == status),
+                "The icon retains its full accessible state name"
             );
+            assert!(
+                state["painted_paths"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|path| {
+                        path["stroke"] == json!(active.to_array())
+                            && path["points"].as_array().is_some_and(|points| {
+                                points.len() == 5
+                                    && points
+                                        .iter()
+                                        .all(|point| contains(&channel["source_menu"], point))
+                            })
+                    }),
+                "The channel's envelope icon must show its actual state color"
+            );
+            let menu = &channel["source_menu"];
+            app.command(json!({"command":"pointer","phase":"click",
+                "x":(menu["min"][0].as_f64().unwrap()+menu["max"][0].as_f64().unwrap())*0.5,
+                "y":(menu["min"][1].as_f64().unwrap()+menu["max"][1].as_f64().unwrap())*0.5}));
+            let opened = app.command(json!({"command":"inspect","paint":true}));
+            assert_text(&opened, status, active);
+            app.key("Escape");
 
             app.click("Source");
             let state = paint(&mut app, &baseline);

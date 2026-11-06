@@ -38,6 +38,30 @@ impl Harness {
         Self::launch_configured(Some(path), directory, None, Some(host), false, false)
     }
 
+    /// Exercise the audio-import supervisor with one controlled helper and
+    /// deadline, scoped to this app process rather than the host environment.
+    pub fn with_audio_import_helper(helper: &std::path::Path, timeout_ms: u64) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated E2E directory");
+        Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            false,
+            &[
+                (
+                    "RILL_E2E_AUDIO_IMPORT_HELPER",
+                    helper.as_os_str().to_owned(),
+                ),
+                (
+                    "RILL_E2E_AUDIO_IMPORT_TIMEOUT_MS",
+                    timeout_ms.to_string().into(),
+                ),
+            ],
+        )
+    }
+
     /// Like `with_plugin_host`, with the desktop's automatic background
     /// capture of missing previews. Only supply a test editor worker here.
     pub fn with_plugin_previews(path: &std::path::Path, host: &std::path::Path) -> Self {

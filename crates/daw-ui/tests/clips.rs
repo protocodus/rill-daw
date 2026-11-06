@@ -2,6 +2,68 @@ use daw_ui::{Icon, clip_label, clip_title, text::TextRole, theme};
 use egui::{Context, RawInput, Rect, Shape};
 
 #[test]
+fn unnamed_clips_recover_the_title_space_and_keep_a_thin_restorable_border() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for scale in [1.0, 1.25, 2.0] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            theme::set_appearance(&ctx, appearance);
+            ctx.set_pixels_per_point(scale);
+            let mut empty_region = Rect::NOTHING;
+            let output = ctx.run(RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    for height in [32.0, 48.0, 128.0] {
+                        let rect =
+                            Rect::from_min_size(egui::pos2(20.0, 20.0), egui::vec2(320.0, height));
+                        let named = daw_ui::clip_surface_named(
+                            ui.painter(),
+                            rect,
+                            egui::Color32::LIGHT_BLUE,
+                            false,
+                            "Phrase",
+                        );
+                        for name in ["", " \t "] {
+                            let blank = daw_ui::clip_surface_named(
+                                ui.painter(),
+                                rect,
+                                egui::Color32::LIGHT_BLUE,
+                                true,
+                                name,
+                            );
+                            assert!(blank.title.height() <= 3.5);
+                            assert!(blank.content.height() >= named.content.height() + 16.0);
+                            assert!(rect.contains_rect(blank.name_hit));
+                            assert!(
+                                !blank.name_hit.contains(rect.center()),
+                                "Ordinary body double-click stays outside rename area"
+                            );
+                            assert!(
+                                blank.name_hit.width() >= 280.0 && blank.name_hit.height() >= 12.0
+                            );
+                            let title = clip_title(
+                                ui.painter(),
+                                blank.title,
+                                TextRole::Label.font(),
+                                blank.title_color,
+                                name,
+                                true,
+                            );
+                            assert!(
+                                title.icon.is_none(),
+                                "A hidden name has no cramped chain icon or fallback text"
+                            );
+                            empty_region = rect;
+                        }
+                    }
+                });
+            });
+            assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape, Shape::Text(text) if empty_region.intersects(text.galley.rect.translate(text.pos.to_vec2())))),
+                "Hidden names must not paint a generic replacement title");
+        }
+    }
+}
+
+#[test]
 fn linked_clone_and_independent_copy_actions_have_distinct_vector_icons() {
     assert_eq!(Icon::for_label("Ghost copy"), Some(Icon::Link));
     assert_eq!(Icon::for_label("Make independent"), Some(Icon::Unlink));

@@ -1,6 +1,9 @@
 # Rill feature comparison and development direction
 
-## Current product priorities
+Research date: **6 November 2026**. This report supersedes the historical
+25 October comparison, whose implementation claims no longer describe Rill.
+
+## Product focus
 
 Rill is an AI-first DAW for bedroom producers. Simplicity takes precedence over
 feature parity: make it easier to start an idea, hear it, refine it, and finish a
@@ -9,101 +12,245 @@ continue, and leave edits recoverable. Keep sound selection and editing close to
 the phrase without adding permanent panels. New work should improve these
 everyday paths before adding specialist studio or integration capabilities.
 
-The comparison below is a historical implementation snapshot. Its missing-feature
-lists and proposed sequence are research context, not a requirement to reproduce
-every competitor feature or defer Rill's now-implemented AI workflows.
+Rill is intentionally a plugin-based composition and arrangement workstation.
+Built-in instruments and effects remain outside its scope. That decision reduces
+development and interface breadth, but puts sound installation, compatibility
+and preset discovery into the user's starting workflow. Improve that workflow
+rather than treating a bundled synthesizer collection as the next requirement.
 
-## Historical comparison
+Rill is a functioning early DAW with substantial editing, recording, mixing and
+AI tooling. It is more than a sketchpad, but it is not yet a general replacement
+for the mature production systems below. Its strongest opportunity is a focused,
+open-source arrangement workstation where ordinary musical work is quick,
+understandable and reversible.
 
-Research date: 25 October 2026. Rill implementation reviewed at commit `48fed63`.
+The latest refinements close everyday gaps: WAV/MP3/FLAC/OGG import, standard PCM
+delivery, exact loop export, compact track layouts, better mixer alignment and
+optional clip names with quiet fade previews. These improve the complete import,
+edit, mix and delivery workflow more than another isolated feature would. The
+next most valuable functional addition is a genuine Master processing path,
+followed by reversible
+freeze/commit. Both extend existing capabilities and help users finish songs.
 
-**Recommendation: prioritize depth in the next development cycle, with live MIDI performance recording as the first substantial addition.** Rill already has a broad editing surface. The next milestone should make composing, editing during playback, automating, saving, recovering, and exporting one complete song dependable.
+## Evidence and limitations
 
-The initial product focus should be a focused, plugin-based composition and arrangement workstation. This fits Rill's existing design and the requested instrument-driven workflows. Built-in instruments and effects remain an intentional exclusion. Broad post-production, notation, and live-performance capabilities do not need to define the first release.
+Rill was assessed through repository source, documentation, automated tests and
+native Linux/Xvfb screenshots. Current compact-arranger and mixer captures were
+inspected directly. These establish implemented behavior and visible layout;
+they do not establish MacBook performance, broad plugin compatibility or
+long-session reliability. See [architecture](ARCHITECTURE.md),
+[project/history limits](PROJECT_FORMAT.md) and [running-app tests](E2E.md).
 
-## Comparison scope
+Competitor findings come from official product pages, manuals and release notes.
+No commercial DAW was installed or benchmarked. Official screenshot assets were
+located, but their pixels could not be inspected because the available
+image/browser paths failed or were blocked. The screenshot links below are
+reference material, not a basis for firsthand visual rankings. Documented layout
+principles can still guide Rill's design.
 
-The reference products are Cubase Pro 15, Reason 14 standalone, Ableton Live 12 Suite, and Pro Tools Studio in the 2026.4 family. The official pages checked list Live 12.4.3 and Pro Tools 2026.4.1; patch versions are not essential to this comparison. Pro Tools Ultimate adds capacity and specialized production workflows; Studio already includes advanced automation, Freeze/Commit, and substantial routing. Reason Rack Plugin's ability to run inside other hosts is separate from the formats hosted by Reason standalone. Sources: [Cubase 15 manual](https://www.steinberg.help/r/cubase-pro/15.0/en), [Reason 14 release](https://www.reasonstudios.com/news/post/reason-14-is-out), [Live release notes](https://www.ableton.com/en/release-notes/live-12/), [Pro Tools releases](https://www.avid.com/pro-tools/whats-new), [Pro Tools editions](https://www.avid.com/pro-tools/comparison).
+No numerical ranking for sound quality, CPU efficiency, latency, stability or
+usability follows from this evidence. Feature availability also depends on
+edition; an entry here is not a claim that every edition includes everything.
 
-The matrices describe documented capabilities, not comparative sound quality, speed, reliability, or usability scores. “Present” for Rill means implemented, with the stated limitations; it does not establish parity with years of workflow development in another DAW. Rill evidence comes from its code, architecture, editor documentation, and tests.
+## Competitive position
 
-## Creating and editing music
-
-| Capability | Rill today | Cubase Pro 15 | Reason 14 | Live 12 Suite | Pro Tools Studio |
-| --- | --- | --- | --- | --- | --- |
-| Audio and MIDI performance recording | **Absent.** Imported audio and drawn/imported notes | [Audio/MIDI and cycle takes](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/track_handling/track_handling_lanes_working_with_c.html) | [Audio/MIDI recording](https://docs.reasonstudios.com/reason14/recording-in-the-sequencer) | [Audio/MIDI take lanes](https://www.ableton.com/en/live-manual/12/comping/) | [Audio takes](https://www.avid.com/pro-tools/user-guide/playlists) and [MIDI capture](https://www.avid.com/pro-tools/midi) |
-| Take management and comping | Absent | [Take lanes and comping](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/track_handling/track_handling_lanes_working_with_c.html) | [Audio comp editor](https://docs.reasonstudios.com/reason14/audio-editing-in-the-sequencer) | [Audio/MIDI comping](https://www.ableton.com/en/live-manual/12/comping/) | [Playlists and comping](https://www.avid.com/pro-tools/user-guide/playlists) |
-| Piano roll and note tools | Present: scale/chord highlighting, chord stacks, both note edges, velocity painting, quantize/swing, legato, transpose, clipboard | [Scale Assistant, pitch guides and chord-track integration](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/midi_editors/midi_editors_musical_scales_chord_track_finding_t.html) | [Piano roll and velocity-handle improvements](https://www.reasonstudios.com/press/reason-studios-introduces-reason-14) | [Scale tools, transformations, generators and probability](https://www.ableton.com/en/live-manual/12/editing-midi/) | [Note/velocity editing, quantization and MIDI playlists](https://www.avid.com/pro-tools/midi) |
-| Expressive MIDI | Notes/velocity only; no CC, sustain, bend or MPE | [MPE/note-expression input](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/note_expression/note_expression_mpe_device_page_r.html) | [Performance-controller recording](https://docs.reasonstudios.com/reason14/recording-in-the-sequencer); full MPE not established here | [Per-note pitch, slide and pressure](https://www.ableton.com/en/live/compare-editions/) | [MIDI editing/recording](https://www.avid.com/pro-tools/midi); full MPE not established here |
-| Audio edits and timing correction | Splits, fades, reverse, normalize, transient slicing, crossfades and join; **no time stretching** | [AudioWarp](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/sample_editor_window/sample_editor_inspector_audiowarp_r.html) | [Slice warping, stretching and pitch editing](https://docs.reasonstudios.com/reason14/audio-editing-in-the-sequencer) | [Real-time warping/time stretching](https://www.ableton.com/en/live/compare-editions/) | [Elastic Audio and Beat Detective](https://www.avid.com/pro-tools/comparison) |
-| Tempo changes within a song | One constant tempo; variable-tempo MIDI import rejected | [Tempo track](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/tracks_about/tracks_about_tempo_track_c.html) | [Tempo automation](https://docs.reasonstudios.com/reason14/recording-in-the-sequencer) | [Tempo automation](https://www.ableton.com/en/live-manual/12/automation/) | Detailed current tempo-map behavior not assessed |
-| Parameter automation | Curves and VST discovery/native menu; no gesture recording modes; VST updates once per 256-frame block | [Read/write, Touch, Auto-Latch, trim and fill](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/automation/automation_operations_tab_r.html) | [Recorded parameter/controller lanes](https://docs.reasonstudios.com/reason14/recording-in-the-sequencer) | [Recorded gestures, clip/arrangement envelopes and re-enable](https://www.ableton.com/en/live-manual/12/automation/) | [Advanced automation in Studio and Ultimate](https://www.avid.com/pro-tools/comparison) |
-
-Rill's corresponding implementation: [editor capabilities](EDITORS.md), [audio execution and scope](ARCHITECTURE.md), [note model](../crates/daw-core/src/model.rs), [MIDI import](../crates/daw-core/src/midi.rs), [automation rendering](../crates/daw-engine/src/render.rs). Its channel automation is evaluated sample-accurately; the 256-frame limitation concerns VST parameter updates. At 48 kHz that interval is about 5.3 ms, not a measurement of total monitoring latency.
-
-## Hosting, mixing and delivery
-
-| Capability | Rill today | Cubase Pro 15 | Reason 14 | Live 12 Suite | Pro Tools Studio |
-| --- | --- | --- | --- | --- | --- |
-| Hosted plugin formats | VST3 | [VST3; VST2 optional but unsupported, unavailable in native Apple Silicon mode](https://www.steinberg.net/cubase/faq/) | [VST2, VST3, Rack Extensions](https://docs.reasonstudios.com/reason14/working-with-vst-plugins) | [VST2, VST3; AU2/AU3 on macOS](https://www.ableton.com/en/live-manual/12/using-plug-ins/) | [AAX Native/AudioSuite; DSP requires suitable hardware](https://www.avid.com/pro-tools/comparison) |
-| Inserts, sends and buses | Present, with nested buses and path delay compensation | [Send effects and effect channels](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/audio_effects/audio_effects_send_effects_c.html) | [Mixer, sends and output buses](https://docs.reasonstudios.com/reason14/the-main-mixer) | [Returns, groups and routing](https://www.ableton.com/en/live-manual/12/routing-and-i-o/) | [Auxes, routing folders and VCA](https://www.avid.com/pro-tools/comparison) |
-| Sidechain routing | **Absent**; auxiliary plugin inputs remain silent | [Compatible VST3 sidechain inputs](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/vst_instruments/vst_instruments_side_chain_input_c.html) | [Plugin audio-input routing](https://docs.reasonstudios.com/reason14/working-with-vst-plugins) | [Sidechain routing](https://www.ableton.com/en/live-manual/12/routing-and-i-o/) | [AAX key/sidechain inputs](https://learn-cdn.avid.com/AAX_SDK_2p1p1/Documentation/Doxygen/output/html/a00274.html) |
-| Freeze or instrument bounce | Absent; audio clip joining excludes plugins and routing | [Reversible track freeze](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/track_handling/track_handling_multiple_tracks_freezing_t.html) | [Bounce in Place](https://docs.reasonstudios.com/reason14/arranging-in-the-sequencer); not equated with reversible freeze | [Freeze and bounce](https://www.ableton.com/en/manual/computer-audio-resources-and-strategies/) | [Freeze/Commit](https://www.avid.com/pro-tools/comparison) |
-| Song delivery | Stereo float WAV with optional tails; no range/stem/PCM delivery controls | [Channel/range export and job queue](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/export_audio_mixdown/export_audio_mixdown_options_r.html) | [Song/channel audio export](https://docs.reasonstudios.com/reason14/importing-and-exporting-audio) | [Range and individual-track export](https://www.ableton.com/en/live-manual/12/managing-files-and-sets/) | [Mix/stem delivery](https://www.avid.com/pro-tools/comparison) |
-| Discovery and previews | Cached editor cards, name/developer search, contextual insertion; no standalone preset browser | [MediaBay preview](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/mediabay/mediabay_previewer_section_c.html) | [Patch browser](https://docs.reasonstudios.com/reason14/sounds-patches-and-the-browser) and [VST screenshots](https://docs.reasonstudios.com/reason14/working-with-vst-plugins) | [Tags, filters, audition and similarity search](https://www.ableton.com/en/live-manual/12/working-with-the-browser/) | [Track Presets](https://www.avid.com/pro-tools/comparison) and [Splice/media workflow](https://www.avid.com/pro-tools/whats-new) |
-| Plugin crash containment | Separate processes for instruments/effects; recovery needs refinement | Per-instance process isolation not established in sources reviewed | Per-instance VST process isolation not established in sources reviewed | [Plugins load in Live and can crash the app](https://help.ableton.com/hc/en-us/articles/5301568366354-Reading-Ableton-Live-Crash-Reports) | Per-instance process isolation not established in sources reviewed |
-
-Rill's hosting is crash isolation, not an OS permissions sandbox. Plugin helpers retain normal filesystem/network permissions. The native right-click automation action depends on the plugin exposing the optional VST3 host-menu hook. Multi-output instrument routing is also absent: the adapter processes the first active audio buses in a stereo graph. See [plugin boundaries](ARCHITECTURE.md) and [the adapter](../crates/daw-plugins/src/lib.rs).
-
-Do not infer that Rill is already more reliable or faster from its architecture. Published competitor features are not comparative benchmarks. Rill's recorded native tests principally cover Surge XT and CHOWTapeModel; the documented hardware playback smoke check lasted 250 ms. Those are useful engineering checks, not prolonged hardware or broad plugin-compatibility evidence. See [verification limits](ARCHITECTURE.md).
-
-## The largest gaps are continuity and trust
-
-**Ordinary edits can restart the musical state.** Audio-affecting project changes, including mixer values and note/clip edits, currently invalidate the playback graph. Rebuilding recreates plugin instances and may interrupt playback. Native parameter gestures have a live update path, but full plugin-state changes rebuild. Preserve unaffected instances and distinguish control/event changes from structural graph changes. This should precede additional editor tools. Evidence: [history updates](../crates/daw-app/src/history_ui.rs), [audio-equivalence checks](../crates/daw-app/src/app.rs), [architecture](ARCHITECTURE.md).
-
-**A VST instrument cannot yet be performed into the song.** Drawing notes and holding the mouse to audition are useful, but do not replace keyboard input, sustain, pitch bend, or recording. This is the most consequential new workflow for the proposed audience.
-
-**Automation discovery is ahead of automation performance.** Finding a parameter and drawing a curve works. Recording a knob gesture, understanding whether manual movement overrides a curve, and returning cleanly to playback automation need a complete interaction model. Start with Read and Touch; add Latch when those semantics and undo behavior are dependable.
-
-**Large projects have hard memory boundaries.** Sources are decoded/resampled before playback, with a 512 MiB per-source limit and 1 GiB prepared-source-cache limit. There is no disk streaming. Reversible freeze should be paired with streaming work: converting many long instruments to audio otherwise trades CPU pressure for the existing memory ceiling. Live's documented distinction between streamed and RAM clips, plus freeze for processing relief, illustrates why these concerns belong together. [Rill limits](ARCHITECTURE.md), [Live resource management](https://www.ableton.com/en/manual/computer-audio-resources-and-strategies/).
-
-**Recovery exists, but needs a stronger lifecycle.** Rill already makes periodic recovery snapshots every 30 seconds; it should not be described as lacking autosave. Recovery already flushes native state and atomically replaces its JSON snapshot. Its remaining limitations are synchronous serialization/writing and only one retained revision. Move recovery to the background, retain bounded versions, and provide clear recovery selection. Missing-plugin/media relinking and scratch cleanup also matter: plugin paths are absolute and each project open currently creates another retained extraction directory. [Project format](PROJECT_FORMAT.md), [recovery implementation](../crates/daw-app/src/app.rs).
-
-## Recommended development sequence
-
-| Order | Deliverable | Completion condition |
+| Product and verified version | Established strengths | Implication for Rill |
 | --- | --- | --- |
-| 1 | Continuous playback and dependable recall | Ordinary gain/pan, note and clip edits preserve unaffected plugin instances. State, selection, loop position and automation remain coherent across editor changes, undo and reopen. A failed plugin can be identified and recovered without restarting the whole song. |
-| 2 | MIDI performance capture | Select input, arm/monitor, hear the chosen instrument, count in, record/overdub, edit and replay. Capture timestamped notes, sustain, pitch bend and CC; provide panic/all-notes-off and predictable loop boundaries. |
-| 3 | Performed automation and project safety | Native gestures record into the correct lane; Read/Touch and override state are clear. Undo groups the gesture. Recovery is background, versioned and tested; missing assets/plugins have a recovery path. |
-| 4 | Practical production completion | Add sidechains, range/stem export and standard PCM delivery options. Build disk streaming with reversible freeze/bounce, preserving source MIDI/state, latency compensation and effect tails. Profile real projects before replacing IPC. |
-| 5 | Broader recording and timing workflows | Add basic audio input recording and monitoring, then take management as needed. Add tempo maps and time stretching as a deliberate time-model project. Prioritize this phase earlier if vocal/guitar recording becomes the primary audience. |
+| **Reason 14.1.0** | Integrated instruments, effects, sampling, patchable audio/CV Rack, Combinators, Players, comping, vocal editing and a substantial mixer. Reason 14's Track Panel connects devices, levels and sends to the selected track. | VST3 hosting alone does not replace Reason's ready-to-play ecosystem. Adopt its selected-track continuity while retaining Rill's plugin-only scope. |
+| **Cubase Pro 16.0.0**, released 4 November | Deep MIDI/composition, articulation/expression, scoring, pitch/time editing, Control Room and advanced automation/mixing. Version 16 adds Instrument Stacks, Spectral AudioWarp and expanded MIDI 2.0. | Rill's piano roll, generators and stretch controls are useful but substantially narrower. Prioritize predictable core editing and mixing over specialist composition breadth. |
+| **Nuendo 15** | Music-production foundation plus ADR, dialogue, picture reconform, immersive delivery, post interchange and game-audio integration. | Rill is not a substitute for professional audio-for-picture or post delivery. These missing categories should not dictate its near-term roadmap. |
+| **Ableton Live 12.4.16**, released 30 October | Complementary Session/Arrangement workflows, Warp, racks, comping, freeze, MPE, Push integration and Max for Live in Suite. | Compete on a focused linear workflow. A piano roll and clip stretching do not provide Live's integrated performance and sound-design workflow. |
+| **Logic Pro 13.0** | Strong bundled instruments/effects, Session Players, detailed audio/MIDI editing, Flex Time/Pitch, comping, Live Loops, scoring and Spatial Audio. | Logic is much more complete immediately after installation. Rill's openness, Linux availability and explicit editing transactions are meaningful distinctions; sound onboarding must be excellent. |
+| **Pro Tools 2026.11**, released 3 November | Detailed recording/editing, playlists, freeze/commit, studio exchange and control/hardware integration; Studio/Ultimate add immersive and advanced post workflows. | Rill recording and comping deserve credit, but do not establish equivalent studio workflow or interchange. Learn from retained take alternatives and predictable editing. |
+| **REAPER 7.85**, released 5 November | Low-cost cross-platform production, flexible multichannel routing, deep rendering, broad plugin formats, scripting, customization and optional plugin firewalling. | The strongest direct comparator. Rill needs a clearer integrated workflow, not a claim that inexpensive, extensible or crash-contained DAWs are new. |
 
-These are ordered outcomes, not calendar estimates. Sidechain routing is particularly valuable for instrument-based electronic production; multi-output instrument routing follows when target plugins require it. Basic audio recording is essential before presenting Rill as a general replacement for a recording DAW. MPE, full comping, sophisticated tempo editing and controller integration can follow a reliable basic capture path.
+Sources: [Reason DAW](https://www.reasonstudios.com/reason-daw) and
+[releases](https://www.reasonstudios.com/reason/updates/release-notes),
+[Cubase 16 releases](https://www.steinberg.net/cubase/release-notes/16/),
+[Nuendo features](https://www.steinberg.net/nuendo/features/),
+[Live editions](https://www.ableton.com/en/live/compare-editions/) and
+[releases](https://www.ableton.com/en/release-notes/live-12/),
+[Logic Mac listing](https://apps.apple.com/us/app/logic-pro/id634148309?mt=12),
+[Pro Tools releases](https://kb.avid.com/pkb/articles/Knowledge/Pro-Tools-2026-11-Release-Notes)
+and [editions](https://www.avid.com/pro-tools/comparison),
+[REAPER features](https://www.reaper.fm/about.php) and
+[download](https://www.reaper.fm/download.php?hashes=1).
 
-## What to borrow and what to simplify
+Version and edition boundaries matter. Live Suite's complete content and Max
+bundle are not standard in every edition. Pro Tools Ultimate's post/hardware
+capabilities should not be attributed to Artist. Available Steinberg comparison
+tables and the inspected Cubase manual baseline still name **Cubase 15**; the
+16 release notes establish newer additions. Nuendo 15 incorporates the Cubase 15
+foundation and should not be described as “Cubase 16 plus post.” Reason 14.1.0
+is verified from product release notes, which did not print its release date;
+Logic 13.0 is verified from the current Mac App Store listing rather than stale
+indexed release-note excerpts.
 
-**From Cubase:** connect the editor to musical context and expose useful diagnostics. Scale/chord guidance can grow into shared project context later. More immediately, a performance view should identify the affected track, plugin, latency or dropout and offer a relevant action. Cubase's [Scale Assistant](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/midi_editors/midi_editors_musical_scales_chord_track_finding_t.html) and [performance monitor](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/optimizing/optimizing_vst_performance_window_r.html) provide useful reference points.
+Free pricing is insufficient differentiation: Reason Free and Pro Tools Intro
+exist, and REAPER's discounted licence is inexpensive. Rill's MIT source, Linux
+support and integrated workflow are more durable distinctions.
 
-**From Reason:** preserve track context while moving through the signal chain. Reason 14 itself now emphasizes a selected-track panel, per-track rack and contextual floating rack. Rill should make track identity, instrument, inserts, routing and automation feel connected, preserving selection, scroll and zoom on return. Focused navigation alone is no longer a distinctive feature. [Reason 14 workflow](https://www.reasonstudios.com/news/post/reason-14-is-out).
+## What Rill already does well
 
-**From Live:** make creating, playing, recording, tweaking and committing a part one continuous workflow. Borrow the speed of [native parameter access](https://www.ableton.com/en/live-manual/12/using-plug-ins/) and [reversible freeze](https://www.ableton.com/en/manual/computer-audio-resources-and-strategies/) before considering a second Session-style composition model.
+Rill combines non-destructive audio/MIDI arrangement, recording, loop takes and
+comping, clip gain/reverse/fades, stretch/pitch, piano-roll editing, composition
+generators, folders, buses, pre/post-fader sends, ordered inserts and delay
+compensation. Those are meaningful production foundations, not feature parity
+with every mature implementation of those categories.
 
-**From Pro Tools:** finish contextual editing and provide practical commit options. Body/edge/corner gestures should behave consistently across audio, MIDI and automation; dedicated tools can remain available for precision. The [Smart Tool](https://www.avid.com/pro-tools/user-guide/smart-tool) is a useful interaction reference, while [Freeze/Commit](https://www.avid.com/pro-tools/comparison) addresses both workflow and processing load. For Rill, preserve source MIDI and plugin state explicitly so users can return to editing.
+The current import pipeline supports WAV, MP3, FLAC and OGG/Vorbis through a
+separate decoder process. Files become managed WAV assets; originals remain
+untouched. Imports are validated before an atomic project edit, and a batch is
+one Undo action. The scope is mono/stereo at 8–384 kHz, up to eight files and a
+512 MiB decoded batch limit—not arbitrary media interchange.
 
-For Rill's focused UI, keep one main workspace, but reduce repeated navigation. Give each channel a coherent route through instrument, effects, automation and output. Keep simple edits near the selected object; use a popup when the task needs depth. Consolidate duplicated parameter lists into the existing searchable automation browser. Keep each automated parameter as its own track, but allow its lanes to be revealed or collapsed together under the owning channel. Preserve one authoritative value for mixer controls wherever they appear. Distinguish **Duplicate**, **Ghost copy**, **Join**, **Bounce**, and **Freeze** with concise contextual explanations when needed.
+WAV delivery offers 16/24-bit PCM or 32-bit float, independent sample rate,
+optional TPDF dither and exact loop bounds. Temporary output is replaced only
+after successful rendering. PCM overload reporting and preserved float headroom
+are useful. The reported peak is a rendered sample peak, not true peak or a
+compliance certificate. Stem/batch export, compressed delivery and professional
+session interchange remain separate gaps. See the [user guide](USER_GUIDE.md).
 
-Defer additional plugin formats, a clip launcher, notation, immersive audio, generative/AI composition and a broader collection of drawing tools. Keep the plugin-only product decision. These additions would each create compatibility and interaction work while the existing song workflow still has important gaps.
+Rill's AI architecture is a strength: scoped typed operations, revision checks,
+candidate validation and shared manual/tool/AI Undo provide a reviewable editing
+boundary. This is more useful than a chat panel that merely describes actions.
+It does not establish superior musical judgment or complete GUI/tool parity.
 
-## A release gate based on finishing music
+Natural-language DAW editing is not unique to Rill. Apple has announced a Logic
+intelligent-assistant beta; its platform and entitlement conditions require
+care. Other products offer AI stem separation, generated performances or sound
+services. Distinguish Rill's editing architecture and openness rather than
+claiming exclusive ownership of AI.
+[Apple announcement](https://www.apple.com/uk/newsroom/2026/10/apple-creator-studio-adds-powerful-new-ai-features-and-even-more-creative-tools/),
+[Rill AI boundaries](AI_TOOLS.md).
 
-Use a repeatable 3–5 minute project with six real VST instruments, three audio tracks, inserts, two returns, bus routing and automation. The proposed gate is:
+## Important remaining gaps
 
-1. Create, perform and edit the song while playback continues; verify consistent audio/MIDI/automation gestures and retained popup context.
-2. Save and reopen with matching musical content, routing, native state and automation. Check deterministic fixtures exactly; use appropriate tolerances/state checks for randomized plugins.
-3. Terminate or stall a plugin worker, identify the failed instance, recover it, and verify the remaining session and saved project survive.
-4. Export a chosen range, tails and aligned stems; validate duration, audible/finite samples, routing and preservation of an existing destination after failure.
-5. Run a sustained session on declared reference hardware. Measure underruns, render-deadline percentiles, memory and recovery time; include editing, saving and plugin UI activity. Publish the tested hardware/plugin set rather than claiming universal performance.
-6. Observe several producers completing the same workflow and record task time, navigation detours, mistakes and recovery. Repeat after fixes. Automated E2Es and paint inspection remain regression protection; these sessions establish whether the workflow feels clear.
+Rill's Master meters and analyzes the output but has no genuine insert chain or
+gain fader. Routing everything through a bus is a workaround, not an adequate
+finished mixing workflow. There is also no reversible track freeze or instrument
+commit. This affects CPU use, plugin dependency, recall and the transition from
+composition to mixing. Clip consolidation is not equivalent to rendering a
+complete instrument/effect path while retaining its editable origin.
 
-The next concrete engineering task should be **an audit and fix of playback-affecting edits so gain, pan and common note/clip changes preserve running plugin instances**. Follow it with MIDI input/recording. That sequence strengthens the current product while closing its most important creative gap.
+Routing remains stereo and acyclic, without sidechains or multi-output
+instrument routing. MIDI clips primarily preserve note pitch, timing, length and
+velocity; sustain is represented in recorded note lengths, not retained as
+general controller data. CC, bend, pressure and MPE need a richer event model.
+Tempo and meter are constant, and playback sources are prepared in RAM rather
+than streamed from disk.
+
+VST3 support does not imply AU, CLAP, AAX, LV2 or ARA compatibility. A few tested
+plugins do not establish a broad vendor matrix. Conversely, Cubase 16 no longer
+supports VST2, so a stale checklist would unfairly overstate its advantage.
+[Steinberg format guidance](https://helpcenter.steinberg.de/hc/en-us/articles/22554401894162-Using-VST-2-Plug-ins-in-Cubase-Nuendo-14-and-15).
+
+Rill does not provide the score, video, timecode, ADR, immersive, AAF/OMF/ADM and
+hardware-control ecosystems of specialist products. These are substantive
+differences, but mostly lower priorities for its focused production audience.
+
+## Safety and MacBook performance
+
+Rill has useful containment mechanisms: separate plugin processes, bounded worker
+exchanges, protected AI/tool execution, validation before project mutation,
+atomic saves and background recovery snapshots. History defaults to 128 actions,
+is customizable from 1–4,096, and has a separate estimated 128 MiB memory budget.
+The selected action count is therefore a ceiling, not guaranteed retention.
+
+These mechanisms reduce risk. They do not establish that work can never be
+lost. History is session-local; recovery has an asynchronous checkpoint window;
+unfinished gestures and unacknowledged opaque plugin changes may not survive.
+Referenced media can disappear, and disk, OS and power failures remain possible.
+Process isolation contains crashes; it is not an OS-permissions security sandbox.
+
+Established DAWs also have limits. Live history resets when a Set closes, and
+its recovery documentation does not promise every unsaved recording. REAPER
+supports optional persistent/branching history and dedicated plugin processes.
+Cubase/Nuendo have edit histories and autosave, with operation-specific
+exceptions. Compare restoration coverage and fault tests, not just counts.
+[Live recovery](https://help.ableton.com/hc/en-us/articles/115001878844-Recovering-a-Set-manually-after-a-crash),
+[REAPER guide](https://dlx.reaper.fm/userguide/html/),
+[Cubase history](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/project_window/project_window_edit_history_dialog_r.html).
+
+A 256-frame device buffer at 48 kHz is a starting configuration, not a
+demonstrated optimum for every M1-or-newer MacBook. Rill's render queue and
+plugin/device latency also contribute; device-buffer duration is not round-trip
+latency. Historical M1 Max render measurements demonstrate independent-chain
+scaling on that setup, not base-M1 realtime capacity or competitive leadership.
+Long-session reference tests should measure recording round trip, dropouts,
+callback timing, thermals, memory, reconnects and representative plugins.
+
+## Visual findings and useful references
+
+Current Rill captures show a coherent restrained style, recognizable track
+colors, readable clips and explicit actions. Compact density fits eight complete
+source-track rows at 1280×800, versus three in the earlier detailed layout.
+Standard and Detailed retain larger controls as deliberate options. This is an
+observable practical improvement, not a cross-DAW usability score.
+
+The revised mixer aligns gain travel, meters and processing rows. Bus/return
+headings sit lower without shortening faders; full “Music bus” and “Reverb
+return” names remain readable. Sends are reachable in the initial laptop-height
+view. These address the earlier hierarchy and vertical-space problems.
+
+Further work should increase usable musical canvas and preserve selected-track
+continuity. The toolbar/ruler stack still consumes substantial height. Keep
+common tools stable and move uncommon processing into contextual menus.
+Analysis should remain accessible without obscuring transport and mixer context.
+Validate long names, populated plugin lists, many sends and 24–48-track projects
+at actual small-window sizes.
+
+Useful documented ideas include Reason's selected-track panel, REAPER's
+coordinated track/mixer visibility, Cubase's organized mixer racks, Logic's track
+stacks and inspectors, Pro Tools' retained playlists, and Live's connected track,
+clip and device context. Adopt their behavior and hierarchy while retaining
+Rill's visual language. A sparse screenshot alone does not prove easier use.
+
+Official screenshot references, **not firsthand pixel comparisons**:
+
+| Reference | Provenance |
+| --- | --- |
+| [Live Arrangement](https://beta-ableton.imgix.net/media/tgll5joj/screenshot-arrangement-view.png) / [Session](https://beta-ableton.imgix.net/media/b2qnxryw/screenshot-session-view.png) | Official “What is Live” page |
+| [Reason 14 Track Panel](https://www.reasonstudios.com/shop/static/img/product_page/14/shop-reason14_one-track-mind_940x590.webp) / [mixer](https://www.reasonstudios.com/shop/static/img/product_page/14/shop-reason14_black-theme-mixer_940x590.webp) | Official Reason 14 product page |
+| [Cubase Project window](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/project_window/project_window_overview_r.html) | Official **15.0** illustrated manual, not a Cubase 16 screenshot |
+| [Nuendo MixConsole](https://www.steinberg.help/r/nuendo/15.0/en/cubase_nuendo/topics/mixconsole/mixconsole_mixconsole_window_r.html) | Official 15.0 illustrated manual |
+| [Logic 13-era arrangement](https://www.apple.com/newsroom/images/2026/10/apple-creator-studio-adds-powerful-new-ai-features-and-even-more-creative-tools/article/Apple-Creator-Studio-Logic-Pro-for-Mac-261027_big.jpg.large.jpg) | October announcement for November update |
+| [Pro Tools mixer](https://edge.sitecorecloud.io/avidtech-d6a2e9a9/media/images/pro-tools/audio-mixing-software/hero--mix-in-pro-tools.jpg?h=675&iar=0&w=1200) | Official current mixing page; exact pictured build unspecified |
+| [REAPER tracks](https://www.reaper.fm/v7img/tcp.jpg) / [render dialog](https://www.reaper.fm/v7img/render.jpg) | Official About page; its separate screenshot gallery is explicitly v3-era |
+
+## Recommended order of work
+
+1. **Finish the Master path.** Add real gain/inserts to the project model,
+   live/offline engine, automation, history and state recall. Validate delay
+   compensation and clear meter-tap semantics. This closes an ordinary mixing
+   blocker without creating a new product category.
+2. **Add reversible freeze/commit.** Render existing instrument/effect paths
+   while retaining the original track, plugin state and media. Provide explicit
+   invalidation/unfreeze behavior. Measure CPU and recall benefits; coordinate
+   long rendered media with the current RAM limits and future streaming.
+3. **Strengthen production trust continuously.** Add missing-media relink and
+   explicit media-lifetime handling, verify recovery across native failures, and
+   maintain long-session M1 reference projects. Signing/notarization and tested
+   plugin compatibility matter more to adoption than decorative controls.
+4. **Extend routing with sidechains.** Start with source/tap selection, graph
+   validation and tested plugin bus handling. Multi-output instruments can follow
+   once that contract is stable. Preserve clear destinations and safe Undo.
+5. **Preserve expressive performance.** Extend MIDI/controller storage and
+   predictable automation recording before adding more generators. Start with
+   dependable Read/Touch semantics. Performance should survive capture,
+   playback, editing, undo and export.
+6. **Continue measured interface refinement.** Reduce secondary toolbar height,
+   preserve mixer/arranger selection, improve analysis context and test dense
+   sessions. Use screenshots to identify hierarchy problems, then interaction
+   tests to verify that tasks became easier.
+
+These are ordered outcomes, not calendar estimates. Keep built-in sound devices,
+a Session-style launcher, notation and specialist post/immersive work outside
+the immediate scope. Validate a repeatable 3–5-minute song with real plugins,
+recording, buses, returns, automation, Undo, save/reopen and delivery; include
+worker failure and sustained hardware playback. Publish tested configurations
+and practical limits rather than promising universal safety or performance.
+
+Rill's credible position is a focused, open-source workstation that makes editing
+and recovery understandable. Its advantage should come from finishing a simple
+song with fewer interruptions and recoverable decisions.

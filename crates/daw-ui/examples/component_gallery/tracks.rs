@@ -42,6 +42,7 @@ impl Channel {
 
 pub struct State {
     channels: [Channel; 6],
+    row_height: f32,
 }
 
 impl Default for State {
@@ -55,6 +56,7 @@ impl Default for State {
                 Channel::new("Glass keys", Kind::Midi, [184, 166, 95], -0.12),
                 Channel::new("Music", Kind::Bus, [145, 137, 190], 0.0),
             ],
+            row_height: controls::TrackDensity::default().row_height(),
         }
     }
 }
@@ -65,6 +67,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         ui,
         "Name and color → mix → routing and source. The meter has its own column.",
     );
+    controls::track_density_choices(ui, &mut state.row_height);
     ui.add_space(tokens::SPACE_MD);
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_LG;
@@ -73,7 +76,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 ui,
                 index,
                 &mut state.channels[index],
-                vec2(controls::TRACK_HEADER_WIDTH, controls::TRACK_HEADER_HEIGHT),
+                vec2(controls::TRACK_HEADER_WIDTH, state.row_height),
             );
         }
     });
@@ -89,7 +92,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         for (index, label, size) in [
             (
                 3,
-                "Compact · 89 points high",
+                "Standard · 89 points high",
                 vec2(
                     controls::TRACK_HEADER_WIDTH,
                     controls::TRACK_HEADER_COMPACT_HEIGHT,

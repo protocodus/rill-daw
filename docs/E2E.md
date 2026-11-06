@@ -1194,7 +1194,7 @@ cargo test --locked -p daw-app --test empty_workspace_e2e --test novice_clip_e2e
 The feedback interaction suites run without a desktop or audio device:
 
 ```sh
-cargo test --locked -p daw-app --test clip_fades_e2e --test loop_e2e --test arranger_automation_e2e --test device_feedback_e2e --test midi_editor_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test clip_fades_e2e --test fade_visibility_e2e --test loop_e2e --test arranger_automation_e2e --test device_feedback_e2e --test midi_editor_e2e -- --test-threads=1
 ```
 
 They exercise real pointer gestures for fades, crossfades, ruler loops, inline
@@ -1203,6 +1203,15 @@ plugin diagnostics, direct mixer access, device naming and piano-roll creation,
 movement and both resize edges. Audio tests compare exported samples against
 independent analytic gains and verify unchanged source bytes. Recall and Undo
 checks cover the saved model and gesture grouping.
+
+`fade_visibility_e2e` covers light/dark and standard/Retina density in Arrangement
+and Clip Editor: idle handles keep their hit targets, endpoint hover reveals
+them without a song edit, held drags retain visibility outside the reveal band,
+applied fades leave an actual low-opacity mesh bounded to attenuation (including
+after trim and zoom), zero fades paint no preview, crossfade diamonds follow the same reveal rule, and Undo restores
+the model. `daw-ui`'s `fade_visibility` tests additionally verify upper-corner
+reveal, exact unity suppression, bounded mesh geometry and endpoint ownership
+when a drag leaves the viewport and returns before its final release.
 
 Headless discovery uses only `VST3_PATH` and explicitly configured plug-in folders,
 keeping installed system devices out of fixture inventories. Display-density
@@ -1268,6 +1277,12 @@ Mute/Solo colors in both themes.
 midpoint handle in Arrangement, reusable patterns and the focused editor.
 Rising/falling up/down bends preserve endpoints and neighboring segments,
 commit one undo action, survive save/reload and match sampled WAV output.
+
+`audio_import_e2e` imports real WAV/MP3/FLAC/OGG fixtures using File and raw native
+drop events. It checks captured placement, one atomic batch/Undo, managed WAV
+independence, portable saving, malformed-file rejection and no empty tracks.
+Controlled isolated helpers exercise process failure, deadlines, cancellation,
+deleted targets and document changes; discarded staging files are removed.
 
 `signal_analysis_e2e` opens each channel's Analyze popup through the running
 app, consumes a known 1 kHz stereo sine through the production renderer and

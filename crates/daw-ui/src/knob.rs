@@ -421,6 +421,7 @@ impl<'a> Knob<'a> {
         if response.drag_stopped() {
             ui.data_mut(|data| data.remove::<DragState>(drag_id));
         }
+        crate::parameter_focus::register_parameter_history_focus(&response);
         let dial_response = response
             .clone()
             .on_hover_cursor(egui::CursorIcon::ResizeVertical);

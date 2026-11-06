@@ -213,6 +213,74 @@ pub fn resize_value_at(
     response
 }
 
+/// Useful arranger densities reuse the same adaptive header rather than hiding
+/// controls in a second layout. This is a user presentation preference, not a
+/// property of the song or individual tracks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackDensity {
+    #[default]
+    Compact,
+    Standard,
+    Detailed,
+}
+
+impl TrackDensity {
+    pub const ALL: [Self; 3] = [Self::Compact, Self::Standard, Self::Detailed];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Compact => "Compact",
+            Self::Standard => "Standard",
+            Self::Detailed => "Detailed",
+        }
+    }
+
+    pub fn row_height(self) -> f32 {
+        match self {
+            Self::Compact => 64.0,
+            Self::Standard => crate::TRACK_HEADER_COMPACT_HEIGHT,
+            Self::Detailed => crate::TRACK_HEADER_HEIGHT,
+        }
+    }
+
+    fn hint(self) -> &'static str {
+        match self {
+            Self::Compact => {
+                "More tracks in view · volume, pan, mute, solo and metering remain accessible"
+            }
+            Self::Standard => "Room for volume and pan rails beside each track",
+            Self::Detailed => "Show routing and source controls directly beside each track",
+        }
+    }
+}
+
+/// Named presets make the existing continuous track sizing discoverable. The
+/// caller persists the selected preference and owns the viewport; this control
+/// never changes a track's collapsed state or creates an edit-history entry.
+pub fn track_density_choices(ui: &mut Ui, row_height: &mut f32) -> Option<TrackDensity> {
+    let mut chosen = None;
+    crate::choice_menu(ui, "Track density", |ui| {
+        for density in TrackDensity::ALL {
+            if crate::hover_text(
+                crate::selectable(
+                    ui,
+                    (*row_height - density.row_height()).abs() < 0.5,
+                    density.label(),
+                ),
+                density.hint(),
+            )
+            .clicked()
+            {
+                *row_height = density.row_height();
+                chosen = Some(density);
+                ui.close();
+            }
+        }
+    });
+    chosen
+}
+
 /// Related view dimensions stay together in the on-demand View menu.
 pub fn track_dimensions(ui: &mut Ui, header: &mut f32, row_height: &mut f32, max_header: f32) {
     ui.separator();

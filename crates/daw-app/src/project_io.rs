@@ -60,7 +60,7 @@ pub(crate) enum DocumentRequest {
     Open(PathBuf, bool),
     New,
     Quit,
-    Export(PathBuf, bool),
+    Export(PathBuf, crate::export_ui::ExportSpecification),
     Settings(Box<Settings>),
 }
 
@@ -243,6 +243,12 @@ impl DawApp {
     /// Serialize public document requests, including requests made while an editor
     /// snapshot is outstanding. Internal completions bypass this queue exactly once.
     pub(crate) fn defer_document_request(&mut self, request: DocumentRequest) -> bool {
+        if matches!(
+            request,
+            DocumentRequest::New | DocumentRequest::Open(..) | DocumentRequest::Quit
+        ) {
+            self.cancel_audio_import();
+        }
         if self.recording_busy() {
             self.finish_recording(crate::recording_ui::AfterRecording::Pause);
         }
@@ -252,6 +258,7 @@ impl DawApp {
                 && !self.recovery_pending()
                 && !self.state_sync_pending()
                 && self.export_job.is_none())
+                && !self.audio_import_busy()
         {
             return false;
         }
@@ -404,6 +411,7 @@ impl DawApp {
             _ => {}
         }
         if !self.recording_busy()
+            && !self.audio_import_busy()
             && self.project_io.job.is_none()
             && !self.recovery_pending()
             && !self.state_sync_pending()
@@ -422,8 +430,8 @@ impl DawApp {
                     }
                     DocumentRequest::New => self.new_session(),
                     DocumentRequest::Quit => self.request_quit(ctx),
-                    DocumentRequest::Export(path, include_effect_tails) => {
-                        self.export_to_with_tails(path, include_effect_tails)
+                    DocumentRequest::Export(path, specification) => {
+                        self.export_to_with_specification(path, specification)
                     }
                     DocumentRequest::Settings(settings) => self.apply_settings_snapshot(*settings),
                 }

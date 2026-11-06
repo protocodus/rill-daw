@@ -1,5 +1,5 @@
-//! Channel strips read in signal order: bus identities and controls start below
-//! their role heading, while the fader bottoms, outputs and sends remain aligned.
+//! Channel identities retain role headings while every functional console row
+//! shares a common baseline and calibrated fader travel.
 //! Each strip centers its calibrated fader/meter unit on its own channel axis.
 mod common;
 
@@ -74,11 +74,11 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
         assert_eq!(channels.len(), 5);
         let master = &state["mixer"]["master"];
 
-        // Buses reserve their role heading above identity and controls. Their
-        // shorter faders retain the same bottom edge and output/send positions.
+        // Only bus identity/source is lowered; effects, pan, faders and routes
+        // follow one shared console grid.
         for channel in channels {
             let offset = if channel["bus"] == true {
-                f64::from(daw_ui::MIXER_ROLE_HEIGHT)
+                state["mixer"]["role_height"].as_f64().unwrap()
             } else {
                 0.0
             };
@@ -88,7 +88,7 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
                 assert_eq!(section["name"], reference["name"]);
                 for corner in ["min", "max"] {
                     let expected_offset = match (section["name"].as_str().unwrap(), corner) {
-                        ("Source" | "Effects", _) | ("Volume & pan", "min") => offset,
+                        ("Source", _) => offset,
                         _ => 0.0,
                     };
                     assert_eq!(
@@ -112,7 +112,7 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
             );
             assert_eq!(
                 edge(&channel["meter"], "min", 1),
-                edge(&master["meter"], "min", 1) + offset
+                edge(&master["meter"], "min", 1)
             );
             assert_eq!(channel["meter"]["max"][1], master["meter"]["max"][1]);
             assert_eq!(channel["target"]["min"][1], master["target"]["min"][1]);

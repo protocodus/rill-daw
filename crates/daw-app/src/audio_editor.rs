@@ -1466,7 +1466,7 @@ impl DawApp {
             // Neutral text, so edges never read as the accent-tinted selection.
             palette(ui.ctx()).text.gamma_multiply(0.8),
         );
-        daw_ui::paint_clip_fades(
+        let fade_preview = daw_ui::paint_clip_fades(
             &painter,
             canvas,
             state.view,
@@ -2097,7 +2097,10 @@ impl DawApp {
             d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
                 "ruler":{"min":[ruler.min.x,ruler.min.y],"max":[ruler.max.x,ruler.max.y]},
                 "fade_handles":fades.handles.map(|handle|handle.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))),
+                "fade_handles_visible":fades.visible,
+                "fade_preview":fade_preview.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]})),
                 "crossfade_handle":blend.as_ref().and_then(|handle|handle.handle).map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]})),
+                "crossfade_handle_visible":blend.as_ref().is_some_and(|handle|handle.visible),
                 "loop_lane":{"min":[loop_response.lane.min.x,loop_response.lane.min.y],"max":[loop_response.lane.max.x,loop_response.lane.max.y]},
                 "loop_handles":loop_response.handles.map(|handle|handle.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))),
                 "range":state.range,"snap_target":snap_target,"snap_edges":state.snap_edges,"snap_transients":state.snap_transients,"snap_zero_crossings":state.snap_zero_crossings,"nudge_unit":nudge_unit,"show_markers":state.show_markers,"show_neighbours":state.show_neighbours,"grid_preview":grid_points,"grid_slice_open":state.grid_slice_open,

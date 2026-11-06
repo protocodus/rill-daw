@@ -133,9 +133,13 @@ impl DawApp {
         }
     }
 
-    fn commit_inline_name(&mut self, draft: RenameDraft) {
+    fn commit_inline_name(&mut self, mut draft: RenameDraft) {
         if draft.text.trim().is_empty() {
-            return;
+            if matches!(draft.target, RenameTarget::Clip(..)) {
+                draft.text.clear();
+            } else {
+                return;
+            }
         }
         self.flush_pending_edit();
         let unchanged = match draft.target {

@@ -96,6 +96,11 @@ fn all_audio_clips_have_non_destructive_handles_including_compact_reverse_and_st
         let handles = &diagnostic(&before, id)["fade_handles"];
         assert_eq!(handles.as_array().unwrap().len(), 2);
         for handle in handles.as_array().unwrap() {
+            assert!(
+                handle.is_object(),
+                "Missing handle for clip {id}: {}",
+                diagnostic(&before, id)
+            );
             center(handle);
         }
     }

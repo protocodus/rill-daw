@@ -204,6 +204,11 @@ fn section_bounds_stay_separate_and_compact_headers_keep_channel_access() {
 fn channel_sections_route_actions_to_the_correct_track_and_preserve_undo() {
     let mut app = Harness::new();
     let [audio, midi, bus] = fixture(&mut app);
+    // This workflow exercises the direct routing/source rows in Detailed
+    // headers. Compact access is covered separately through Channel details.
+    app.click("View");
+    app.click("Track density");
+    app.click("Detailed");
     let original = app.inspect();
     for (control, field) in [("mute", "mute"), ("solo", "solo")] {
         let state = app.inspect();

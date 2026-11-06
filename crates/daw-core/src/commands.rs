@@ -811,10 +811,11 @@ fn apply_one(
         SongEdit::RenameClip { track, clip, name } => {
             text(name)?;
             let (track, clip) = (r(track)?, r(clip)?);
-            p.clip_mut(track, clip)
-                .context("Clip not found")?
-                .name
-                .clone_from(name);
+            p.clip_mut(track, clip).context("Clip not found")?.name = if name.trim().is_empty() {
+                String::new()
+            } else {
+                name.clone()
+            };
             p.synchronize_linked_clip(track, clip)?;
         }
         SongEdit::MoveClip { track, clip, start } => p.move_clip(r(track)?, r(clip)?, *start)?,

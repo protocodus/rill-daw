@@ -17,10 +17,31 @@ pub const MIXER_SEND_ROW_HEIGHT: f32 = crate::tokens::COMPACT_HEIGHT;
 /// Width of the destination color rail at the leading edge of routing rows.
 pub const MIXER_RAIL_WIDTH: f32 = 3.0;
 
-/// A lowered bus strip reserves this band above its name. The icon is a full
-/// standard control tall, with a separate caption rather than a small badge.
-pub const MIXER_ROLE_HEIGHT: f32 =
-    crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_XS + crate::tokens::COMPACT_HEIGHT;
+/// A role row above bus identities. Functional console rows share a baseline
+/// below this identity band, so a return never has a shorter fader than a track.
+pub const MIXER_ROLE_HEIGHT: f32 = crate::tokens::CONTROL_HEIGHT;
+
+/// Apply the console's existing compact control scale in short workspaces.
+/// The style is local to the strip; it never changes document or parameter state.
+pub fn mixer_density_style(ui: &mut Ui, compact: bool) {
+    if compact {
+        ui.spacing_mut().interact_size.y = crate::tokens::COMPACT_HEIGHT;
+        ui.spacing_mut().button_padding.y = 2.0;
+        ui.style_mut().drag_value_text_style = egui::TextStyle::Small;
+        ui.style_mut().text_styles.insert(
+            egui::TextStyle::Button,
+            FontId::proportional(crate::tokens::FONT_CAPTION),
+        );
+    }
+}
+
+/// Console rows use either the standard or compact shared hit-target height.
+pub fn mixer_control_height(ui: &Ui) -> f32 {
+    ui.spacing()
+        .interact_size
+        .y
+        .clamp(crate::tokens::COMPACT_HEIGHT, crate::tokens::CONTROL_HEIGHT)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MixerChannelRole {
@@ -45,27 +66,29 @@ pub fn mixer_role_heading(
     width: f32,
     color: Color32,
 ) -> Response {
-    let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(width, MIXER_ROLE_HEIGHT), Sense::hover());
+    let height = mixer_control_height(ui);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
     if ui.is_rect_visible(rect) {
+        let icon_size = height.min(crate::tokens::CONTROL_HEIGHT);
         let icon = Rect::from_center_size(
             Pos2::new(
-                rect.center().x,
-                rect.top() + crate::tokens::CONTROL_HEIGHT * 0.5,
+                rect.left() + icon_size * 0.5 + crate::tokens::SPACE_XS,
+                rect.center().y,
             ),
-            Vec2::splat(crate::tokens::CONTROL_HEIGHT),
+            Vec2::splat(icon_size),
         );
         match role {
             MixerChannelRole::Bus => crate::Icon::Routing,
             MixerChannelRole::SendReturn => crate::Icon::Input,
         }
-        .paint(ui.painter(), icon, color);
+        .paint(
+            ui.painter(),
+            icon,
+            color.lerp_to_gamma(crate::theme::palette(ui.ctx()).text, 0.6),
+        );
         ui.painter().text(
-            Pos2::new(
-                rect.center().x,
-                rect.bottom() - crate::tokens::COMPACT_HEIGHT * 0.5,
-            ),
-            egui::Align2::CENTER_CENTER,
+            Pos2::new(icon.right() + crate::tokens::SPACE_XS, rect.center().y),
+            egui::Align2::LEFT_CENTER,
             role.label(),
             FontId::proportional(crate::tokens::FONT_CAPTION),
             crate::theme::palette(ui.ctx()).text,
@@ -74,12 +97,15 @@ pub fn mixer_role_heading(
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), role.label())
     });
-    response.on_hover_text(match role {
-        MixerChannelRole::Bus => "Bus · groups channels through their main outputs",
-        MixerChannelRole::SendReturn => {
-            "Send return · receives one or more sends; it can also receive main outputs"
-        }
-    })
+    crate::hover_text(
+        response,
+        match role {
+            MixerChannelRole::Bus => "Bus · groups channels through their main outputs",
+            MixerChannelRole::SendReturn => {
+                "Send return · receives one or more sends; it can also receive main outputs"
+            }
+        },
+    )
 }
 
 /// Text style of a quiet strip row.
@@ -204,8 +230,8 @@ fn one_line(
 }
 
 /// One channel identity for tracks, buses and master: a full-height plate with
-/// centered text. Tracks and buses take the channel color (buses add the BUS
-/// badge inside the plate); master is neutral and not interactive.
+/// centered text. Tracks and buses take the channel color; their separate role
+/// heading leaves the full name width available. Master is neutral.
 pub fn mixer_name_plate(
     ui: &mut Ui,
     kind: MixerNamePlateKind,
@@ -238,7 +264,14 @@ pub fn mixer_name_plate_with_grip(
     let foreground = crate::theme::contrast_text(color);
     let grip = crate::track_reorder_grip_tinted_at(
         ui,
-        grip_rect.shrink2(Vec2::new(2.0, 6.0)),
+        grip_rect.shrink2(Vec2::new(
+            2.0,
+            if grip_rect.height() <= crate::tokens::COMPACT_HEIGHT {
+                2.0
+            } else {
+                6.0
+            },
+        )),
         plate.id.with("reorder_grip"),
         track,
         if enabled {
@@ -276,7 +309,7 @@ fn mixer_name_plate_inner(
 ) -> Response {
     let master = kind == MixerNamePlateKind::Master;
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
+        Vec2::new(width, mixer_control_height(ui)),
         if master || grip {
             Sense::hover()
         } else {
@@ -306,29 +339,6 @@ fn mixer_name_plate_inner(
         let mut text_area = rect.shrink2(Vec2::new(crate::tokens::SPACE_SM, 0.0));
         if grip {
             text_area.min.x = rect.left() + crate::tokens::COMPACT_HEIGHT;
-        }
-        if kind == MixerNamePlateKind::Bus {
-            // A chip of the plate's own text color: no outline inside the plate.
-            let text = ui.painter().layout_no_wrap(
-                "BUS".to_owned(),
-                FontId::proportional(crate::tokens::FONT_CAPTION),
-                foreground,
-            );
-            let badge = egui::emath::GuiRounding::round_to_pixels(
-                Rect::from_min_size(
-                    Pos2::new(
-                        text_area.right() - crate::tokens::SPACE_XL,
-                        rect.center().y - crate::tokens::COMPACT_HEIGHT * 0.5,
-                    ),
-                    Vec2::new(crate::tokens::SPACE_XL, crate::tokens::COMPACT_HEIGHT),
-                ),
-                ui.painter().pixels_per_point(),
-            );
-            ui.painter()
-                .rect_filled(badge, 3.0, foreground.gamma_multiply(0.16));
-            ui.painter()
-                .galley(badge.center() - text.size() * 0.5, text, foreground);
-            text_area.max.x = badge.left() - crate::tokens::SPACE_XS;
         }
         let galley = one_line(
             ui,
@@ -370,24 +380,24 @@ fn mixer_name_plate_inner(
 
 /// The empty-chain slot: a quiet "+ Insert" row; one click adds the first insert.
 pub fn mixer_insert_slot(ui: &mut Ui, width: f32) -> Response {
-    mixer_row(
-        ui,
-        width,
-        MIXER_SLOT_HEIGHT,
-        "+ Insert",
-        MixerRowText::Placeholder,
-        None,
-        None,
+    crate::hover_text(
+        mixer_row(
+            ui,
+            width,
+            MIXER_SLOT_HEIGHT,
+            "+ Insert",
+            MixerRowText::Placeholder,
+            None,
+            None,
+        ),
+        "Add an effect to this channel",
     )
-    .on_hover_text("Add an effect to this channel")
 }
 
 /// The source row's caption: the kind plus the actual source, e.g. "Audio · In 1".
 pub fn mixer_source_caption(ui: &mut Ui, text: &str, width: f32) -> Response {
-    let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(width, crate::tokens::CONTROL_HEIGHT),
-        Sense::hover(),
-    );
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(width, mixer_control_height(ui)), Sense::hover());
     if ui.is_rect_visible(rect) {
         let color = crate::theme::palette(ui.ctx()).muted;
         let left = rect.left() + crate::tokens::SPACE_SM;
@@ -438,25 +448,86 @@ pub fn mixer_bus_input_summary<'a>(
 pub fn mixer_effects_button(ui: &mut Ui, width: f32, count: usize, active: usize) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let summary = format!("{active}/{count}");
-    mixer_row(
-        ui,
-        width,
-        crate::tokens::CONTROL_HEIGHT,
-        "Effects",
-        MixerRowText::Body,
-        None,
-        (count > 0).then_some((
-            summary.as_str(),
-            if active > 0 {
-                colors.accent
-            } else {
-                colors.muted
-            },
-        )),
+    crate::hover_text(
+        mixer_row(
+            ui,
+            width,
+            mixer_control_height(ui),
+            "Effects",
+            MixerRowText::Body,
+            None,
+            (count > 0).then_some((
+                summary.as_str(),
+                if active > 0 {
+                    colors.accent
+                } else {
+                    colors.muted
+                },
+            )),
+        ),
+        format!("{active} active / {count} inserts · before volume and pan"),
     )
-    .on_hover_text(format!(
-        "{active} active / {count} inserts · before volume and pan"
-    ))
+}
+
+pub struct MixerProcessingResponse {
+    pub effects: Response,
+    pub analyze: Response,
+}
+
+/// One outlined analysis action for channel and Master processing rows.
+pub fn mixer_analysis_action(ui: &mut Ui) -> Response {
+    let height = mixer_control_height(ui);
+    let colors = crate::theme::palette(ui.ctx());
+    let response = ui
+        .scope(|ui| {
+            ui.spacing_mut().button_padding = Vec2::ZERO;
+            ui.add_sized(
+                Vec2::splat(height),
+                crate::IconButton::icon_only(crate::Icon::Waveform, "Analyze")
+                    .min_size(Vec2::splat(height))
+                    .small()
+                    .quiet()
+                    .stroke(egui::Stroke::new(
+                        1.0 / ui.ctx().pixels_per_point(),
+                        colors.line,
+                    )),
+            )
+        })
+        .inner;
+    crate::hover_text(
+        response,
+        "Live spectrum, LUFS loudness, stereo correlation and phase",
+    )
+}
+
+/// Adjacent, explicitly outlined processing actions. The analysis utility does
+/// not consume a full extra row or compete with the channel's identity.
+pub fn mixer_processing_row(
+    ui: &mut Ui,
+    width: f32,
+    count: usize,
+    active: usize,
+) -> MixerProcessingResponse {
+    let height = mixer_control_height(ui);
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
+            let effects =
+                mixer_effects_button(ui, width - height - crate::tokens::SPACE_XS, count, active);
+            let colors = crate::theme::palette(ui.ctx());
+            ui.painter().rect_stroke(
+                effects.rect,
+                crate::tokens::RADIUS,
+                egui::Stroke::new(1.0 / ui.ctx().pixels_per_point(), colors.line),
+                egui::StrokeKind::Inside,
+            );
+            let analyze = mixer_analysis_action(ui);
+            MixerProcessingResponse { effects, analyze }
+        },
+    )
+    .inner
 }
 
 /// A quiet visual group label aligned with the channel name controls beneath it.
@@ -514,8 +585,31 @@ pub fn mixer_route_lane(
     caption: &str,
     connection_clip: Rect,
 ) -> MixerRouteResponse {
+    mixer_route_lane_with_height(
+        ui,
+        source,
+        target,
+        caption,
+        connection_clip,
+        MIXER_ROUTE_LANE,
+    )
+}
+
+/// A shorter routing overview uses the same connections and nested scrolling
+/// in laptop workspaces, keeping the channel's real controls above the fold.
+pub fn mixer_route_lane_with_height(
+    ui: &mut Ui,
+    source: MixerRouteEndpoint,
+    target: MixerRouteEndpoint,
+    caption: &str,
+    connection_clip: Rect,
+    height: f32,
+) -> MixerRouteResponse {
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), MIXER_ROUTE_LANE),
+        Vec2::new(
+            ui.available_width(),
+            height.max(crate::tokens::COMPACT_HEIGHT),
+        ),
         Sense::hover(),
     );
     let visible = rect.intersect(ui.clip_rect());
@@ -544,8 +638,13 @@ pub fn mixer_route_lane(
     let to = target.position;
     let half = crate::tokens::MIXER_ROUTE_WIDTH * 0.5;
     let head_height = crate::tokens::MIXER_ROUTE_HEAD;
-    let turn_y =
-        (rect.bottom() - crate::tokens::SPACE_XS).max(from.y.max(to.y) + head_height + half);
+    let compact_lane = rect.height() < crate::tokens::CONTROL_HEIGHT;
+    let turn_inset = if compact_lane {
+        half
+    } else {
+        crate::tokens::SPACE_XS
+    };
+    let turn_y = (rect.bottom() - turn_inset).max(from.y.max(to.y) + head_height + half);
     let path = [from, Pos2::new(from.x, turn_y), Pos2::new(to.x, turn_y), to];
     let clip = Rect::from_min_max(
         Pos2::new(visible.left(), from.y.min(to.y)),
@@ -611,13 +710,19 @@ pub fn mixer_route_lane(
         (visible.right() - caption_width - crate::tokens::SPACE_SM)
             .max(visible.left() + crate::tokens::SPACE_SM),
     );
+    let caption_top = rect.top()
+        + if compact_lane {
+            0.0
+        } else {
+            crate::tokens::SPACE_XS
+        };
     crate::clip_title(
         &ui.painter().with_clip_rect(visible),
         Rect::from_min_max(
-            Pos2::new(caption_left, rect.top() + crate::tokens::SPACE_XS),
+            Pos2::new(caption_left, caption_top),
             Pos2::new(
                 (caption_left + caption_width).min(visible.right() - crate::tokens::SPACE_SM),
-                rect.top() + crate::tokens::SPACE_XS + crate::tokens::FONT_CAPTION + 3.0,
+                caption_top + crate::tokens::FONT_CAPTION + 3.0,
             ),
         ),
         FontId::proportional(crate::tokens::FONT_CAPTION),

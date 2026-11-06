@@ -6,8 +6,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum MixerOrder {
-    #[default]
     SignalFlow,
+    #[default]
     Song,
 }
 
@@ -23,6 +23,20 @@ impl MixerOrder {
         ctx.data(|data| data.get_temp(egui::Id::new("mixer_order")))
             .unwrap_or_default()
     }
+}
+
+/// Automation retains its own arranger selection, while the mixer presents the
+/// channel that owns the parameter. Pure resolution never changes the song.
+pub(crate) fn channel_owner(project: &Project, track: u64) -> Option<u64> {
+    let track = project.track(track)?;
+    let owner = track.automation.as_ref().map_or(track, |lane| {
+        project.track(lane.target.track).unwrap_or(track)
+    });
+    matches!(
+        owner.kind,
+        TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+    )
+    .then_some(owner.id)
 }
 
 impl DawApp {

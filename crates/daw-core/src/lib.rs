@@ -3,6 +3,7 @@
 
 mod archive;
 mod audio;
+mod audio_decode;
 mod audio_edit;
 mod audio_overlap;
 mod audio_processing;
@@ -30,6 +31,7 @@ mod track_order;
 mod waveform;
 
 pub use audio::AudioData;
+pub use audio_decode::*;
 pub use audio_edit::*;
 pub use audio_overlap::*;
 pub use audio_processing::*;

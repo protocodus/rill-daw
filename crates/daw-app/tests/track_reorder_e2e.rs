@@ -585,7 +585,10 @@ fn mixer_context_shifts_require_song_order_and_share_one_undoable_project_order(
     let mut app = Harness::new();
     let (project, [audio, midi, bus, _, _]) = fixture();
     open(&mut app, &project, true, 1.0);
-    let initial = app.click("Mixer");
+    let before = app.click("Mixer");
+    app.click("Song order");
+    let initial = app.click("Signal flow");
+    document_unchanged(&before, &initial);
     assert_eq!(initial["mixer"]["order"], "Signal flow");
     // Automatic signal order never silently becomes a manual order, including
     // attempts through the visible but disabled handle or context commands.

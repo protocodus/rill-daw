@@ -180,6 +180,14 @@ enum Command {
         track: Option<usize>,
         #[serde(default)]
         beat: f64,
+        #[serde(default = "wait_by_default")]
+        wait: bool,
+        #[serde(default)]
+        header: bool,
+    },
+    WaitAudioImport {
+        #[serde(default = "project_timeout")]
+        timeout_ms: u64,
     },
     Open {
         path: PathBuf,
@@ -211,6 +219,7 @@ enum TestDocumentDialog {
     Save,
     Open,
     Import,
+    ImportAudio,
     Export,
     ExportMidi,
 }
@@ -714,12 +723,48 @@ impl Harness {
         Ok(())
     }
 
-    fn drop_files(&mut self, paths: Vec<PathBuf>, track: Option<usize>, beat: f64) -> Result<()> {
+    fn drop_files(
+        &mut self,
+        paths: Vec<PathBuf>,
+        track: Option<usize>,
+        beat: f64,
+        wait: bool,
+        header: bool,
+    ) -> Result<()> {
         ensure!(!paths.is_empty(), "Provide at least one audio file");
         ensure!(
             beat.is_finite() && beat >= 0.0,
             "Drop beat must be nonnegative and finite"
         );
+        let mut position = None;
+        if header {
+            let index = track.context("A header drop needs a track index")?;
+            let id = self
+                .app
+                .project
+                .tracks
+                .get(index)
+                .context("Track index is out of bounds")?
+                .id;
+            let timeline = self
+                .ctx
+                .data(|data| data.get_temp::<Value>(egui::Id::new("timeline_diagnostics")))
+                .context("Arrangement geometry is unavailable")?;
+            let bounds = &timeline["tracks"]
+                .as_array()
+                .context("Arrangement tracks unavailable")?
+                .iter()
+                .find(|track| track["track"] == id)
+                .context("Track header is not visible")?["header"];
+            position = Some(Pos2::new(
+                ((bounds["min"][0].as_f64().context("Header missing")?
+                    + bounds["max"][0].as_f64().context("Header missing")?)
+                    * 0.5) as f32,
+                ((bounds["min"][1].as_f64().context("Header missing")?
+                    + bounds["max"][1].as_f64().context("Header missing")?)
+                    * 0.5) as f32,
+            ));
+        }
         let (target, y) = if let Some(index) = track {
             let track = self
                 .app
@@ -727,10 +772,6 @@ impl Harness {
                 .tracks
                 .get(index)
                 .context("Track index is out of bounds")?;
-            ensure!(
-                track.kind == daw_core::TrackKind::Audio,
-                "Target must be an audio track"
-            );
             let occurrence = self
                 .app
                 .visible_arranger_tracks()
@@ -740,7 +781,13 @@ impl Harness {
                 .count();
             (
                 Some(track.id),
-                self.label_rect(&track.name, occurrence)?.center().y,
+                position.map_or_else(
+                    || {
+                        self.label_rect(&track.name, occurrence)
+                            .map(|rect| rect.center().y)
+                    },
+                    |position| Ok(position.y),
+                )?,
             )
         } else {
             let timeline = self
@@ -760,8 +807,7 @@ impl Harness {
         // Locate the requested beat using the arrangement's own hit testing. This
         // avoids duplicating its header, scroll, zoom, and snap geometry here.
         let (mut low, mut high) = (0.0, self.size.x - 1.0);
-        let mut position = None;
-        for _ in 0..24 {
+        for _ in 0..if header { 0 } else { 24 } {
             let pos = Pos2::new((low + high) * 0.5, y);
             self.frame(RawInput {
                 events: vec![Event::PointerMoved(pos)],
@@ -808,6 +854,27 @@ impl Harness {
             ..Default::default()
         });
         self.settle();
+        if wait {
+            self.wait_audio_import(300_000)?;
+        }
+        ensure!(!self.app.error, "{}", self.app.status);
+        Ok(())
+    }
+
+    fn wait_audio_import(&mut self, timeout_ms: u64) -> Result<()> {
+        ensure!(
+            (1..=300_000).contains(&timeout_ms),
+            "Audio import timeout must be between 1 and 300000 ms"
+        );
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        while self.app.audio_import_busy() {
+            ensure!(
+                Instant::now() < deadline,
+                "Audio import did not finish before the test deadline"
+            );
+            self.settle();
+            std::thread::sleep(Duration::from_millis(2));
+        }
         ensure!(!self.app.error, "{}", self.app.status);
         Ok(())
     }
@@ -1085,6 +1152,7 @@ impl Harness {
                         TestDocumentDialog::Save => DocumentDialog::Save,
                         TestDocumentDialog::Open => DocumentDialog::Open,
                         TestDocumentDialog::Import => DocumentDialog::Import,
+                        TestDocumentDialog::ImportAudio => DocumentDialog::ImportAudio,
                         TestDocumentDialog::Export => DocumentDialog::Export,
                         TestDocumentDialog::ExportMidi => DocumentDialog::ExportMidi,
                     },
@@ -1303,7 +1371,14 @@ impl Harness {
                 });
                 self.settle();
             }
-            Command::Drop { paths, track, beat } => self.drop_files(paths, track, beat)?,
+            Command::Drop {
+                paths,
+                track,
+                beat,
+                wait,
+                header,
+            } => self.drop_files(paths, track, beat, wait, header)?,
+            Command::WaitAudioImport { timeout_ms } => self.wait_audio_import(timeout_ms)?,
             Command::Open { path, wait } => {
                 self.app.request_open_project(path, false);
                 if wait {
@@ -1595,7 +1670,9 @@ impl Harness {
             "gpu_available": blur.gpu_available,
         })).collect::<Vec<_>>());
         state["popups"]["export"] = json!(self.app.export_open);
-        state["export_include_effect_tails"] = json!(self.app.export_include_effect_tails);
+        state["export_include_effect_tails"] = json!(self.app.settings.export.include_effect_tails);
+        state["export_preferences"] = json!(self.app.settings.export);
+        state["audio_import"] = self.app.audio_import_diagnostics();
         state["clipboard_text"] = json!(self.clipboard_text);
         state["recording"] = self.app.recording_diagnostics(&self.ctx);
         state["popups"]["recording"] = json!(self.app.recording_open);

@@ -76,6 +76,28 @@ fn editing_nonselected_ghost_updates_all_peers_but_keeps_placements() {
 }
 
 #[test]
+fn blank_clip_names_are_optional_and_linked_names_remain_consistent() {
+    let mut project = Project::new();
+    let track = project.add_midi_track("Keys");
+    let clip = Clip::midi("Phrase", 0.0, 4.0, vec![Note::new(60, 0.0, 1.0, 90)]);
+    let id = clip.id;
+    project.track_mut(track).unwrap().clips.push(clip);
+    let ghost = project.clone_clip(track, id).unwrap();
+    for name in ["", " \t ", "Restored"] {
+        batch(json!([{"op":"rename_clip","track":track,"clip":id,"name":name}]))
+            .apply(&mut project)
+            .unwrap();
+        let expected = if name.trim().is_empty() { "" } else { name };
+        assert_eq!(project.clip(track, id).unwrap().name, expected);
+        assert_eq!(project.clip(track, ghost).unwrap().name, expected);
+        assert_eq!(project.track(track).unwrap().name, "Keys");
+        assert_eq!(project.clip(track, id).unwrap().start, 0.0);
+        assert_eq!(project.clip(track, ghost).unwrap().start, 4.0);
+        project.validate().unwrap();
+    }
+}
+
+#[test]
 fn routing_cycles_are_rejected_atomically() {
     let mut p = Project::new();
     let a = p.add_bus("A");

@@ -136,8 +136,8 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
         );
         let before_audio = export(&mut app, "Before group view.wav");
         let flow_view = app.click("Mixer");
-        app.click("Signal flow");
-        let before = app.click("Song order");
+        assert_eq!(flow_view["mixer"]["order"], "Song order");
+        let before = flow_view.clone();
         assert_eq!(before["project"], flow_view["project"]);
         assert_eq!(before["history"], flow_view["history"]);
         // Dismissed choices can overlap a lowered bus name. Move clear before
@@ -211,7 +211,7 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
             );
             assert!(
                 bottom(&channel["source_menu"]) - top(&channel["source_menu"])
-                    >= f64::from(daw_ui::tokens::CONTROL_HEIGHT) - 0.1
+                    >= f64::from(daw_ui::tokens::COMPACT_HEIGHT) - 0.1
             );
             assert!(
                 state["label_rects"]
@@ -231,31 +231,35 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 .unwrap()
                 .iter()
                 .find(|paint| {
-                    (0..2).all(|corner| {
-                        (0..2).all(|axis| {
-                            let key = if corner == 0 { "min" } else { "max" };
-                            (paint["rect"][key][axis].as_f64().unwrap()
-                                - channel["name"][key][axis].as_f64().unwrap())
-                            .abs()
-                                <= 0.5
-                        })
-                    })
+                    let rect = &paint["rect"];
+                    (top(rect) - top(&channel["name"])).abs() <= 0.5
+                        && (bottom(rect) - bottom(&channel["name"])).abs() <= 0.5
+                        && (rect["max"][0].as_f64().unwrap()
+                            - channel["name"]["max"][0].as_f64().unwrap())
+                        .abs()
+                            <= 0.5
+                        && rect["min"][0].as_f64().unwrap()
+                            <= channel["reorder_grip"]["min"][0].as_f64().unwrap()
                 })
                 .unwrap();
-            // One name plate for tracks and buses: the channel color, centered
-            // text; buses add the BUS badge inside the plate.
+            // One name plate retains the channel color and readable name.
+            // The separate role heading identifies buses without consuming it.
             assert_eq!(header["fill"], json!([140, 160, 180, 255]));
             if channel["bus"] == true {
+                let role = channel["role"].as_str().unwrap();
+                let heading = &channel["role_heading"];
                 assert!(
                     state["label_rects"]
                         .as_array()
                         .unwrap()
                         .iter()
-                        .any(|paint| paint["text"] == "BUS"
-                            && paint["min"][0].as_f64().unwrap()
-                                >= channel["name"]["min"][0].as_f64().unwrap()
-                            && paint["max"][0].as_f64().unwrap()
-                                <= channel["name"]["max"][0].as_f64().unwrap())
+                        .any(|paint| {
+                            paint["text"] == role
+                                && paint["min"][0].as_f64().unwrap()
+                                    >= heading["min"][0].as_f64().unwrap()
+                                && paint["max"][0].as_f64().unwrap()
+                                    <= heading["max"][0].as_f64().unwrap()
+                        })
                 );
             }
         }

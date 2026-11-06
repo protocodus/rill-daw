@@ -157,14 +157,15 @@ pub struct DawApp {
     settings_rollback: Option<Settings>,
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
+    pub(crate) audio_import: crate::audio_import::AudioImportState,
     pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
     pub(crate) next_document_dialog: Option<crate::document_ui::DocumentDialogSelection>,
-    pub export_job: Option<std::sync::mpsc::Receiver<anyhow::Result<PathBuf>>>,
+    pub export_job:
+        Option<std::sync::mpsc::Receiver<anyhow::Result<crate::export_ui::ExportCompletion>>>,
     pub(crate) export_run: Option<crate::export_ui::ExportRun>,
     pub(crate) finishing: crate::finishing_actions::FinishingActions,
     pub(crate) exported_file: Option<PathBuf>,
     pub(crate) export_open: bool,
-    pub(crate) export_include_effect_tails: bool,
     pub revision: u64,
     pub desired_playing: bool,
     pub cursor: f64,
@@ -303,6 +304,7 @@ impl DawApp {
             settings_rollback: None,
             retiring: None,
             project_io: Default::default(),
+            audio_import: Default::default(),
             document_guard: None,
             next_document_dialog: None,
             export_job: None,
@@ -310,7 +312,6 @@ impl DawApp {
             finishing: Default::default(),
             exported_file: None,
             export_open: false,
-            export_include_effect_tails: true,
             revision: 0,
             desired_playing: false,
             cursor: 0.0,
@@ -1113,6 +1114,8 @@ impl DawApp {
                     if let Some(mut previous) = self.settings_rollback.take() {
                         previous.last_project_directory =
                             self.settings.last_project_directory.clone();
+                        previous.track_density = self.settings.track_density;
+                        previous.export = self.settings.export.clone();
                         self.settings = previous;
                         self.setup_draft = self.settings.clone();
                         let _ = self.settings.save();
@@ -1228,6 +1231,10 @@ impl DawApp {
     }
     pub(crate) fn finish_settings_apply(&mut self, mut settings: Settings) {
         settings.last_project_directory = self.settings.last_project_directory.clone();
+        // A native-editor barrier may have delayed this audio request while
+        // the user changed a presentation or delivery preference.
+        settings.track_density = self.settings.track_density;
+        settings.export = self.settings.export.clone();
         self.assistant.known_parameters.clear();
         if let Err(error) = settings.save() {
             self.message(Err(error), "");
@@ -1239,8 +1246,12 @@ impl DawApp {
         // Audio rollback must not undo an independent history preference: its
         // discarded snapshots cannot be restored by changing settings back.
         previous.history_limit = self.settings.history_limit;
+        previous.track_density = self.settings.track_density;
+        previous.export = self.settings.export.clone();
         if let Some(rollback) = &mut self.settings_rollback {
             rollback.history_limit = self.settings.history_limit;
+            rollback.track_density = self.settings.track_density;
+            rollback.export = self.settings.export.clone();
         }
         if restart {
             // Several Apply actions can arrive before preparation completes.
@@ -1266,6 +1277,8 @@ impl DawApp {
                     previous.appearance = settings.appearance;
                     previous.ai = settings.ai.clone();
                     previous.history_limit = settings.history_limit;
+                    previous.track_density = settings.track_density;
+                    previous.export = settings.export.clone();
                 }
                 self.settings = settings;
                 self.apply_history_limit();
@@ -1274,6 +1287,19 @@ impl DawApp {
             }
             Err(error) => self.message(Err(error), ""),
         }
+    }
+
+    /// Persist view/delivery choices without touching the song or audio graph.
+    /// Pending audio settings and a later device rollback must retain them.
+    pub(crate) fn save_independent_preferences(&mut self) -> anyhow::Result<()> {
+        self.settings.save()?;
+        self.setup_draft.track_density = self.settings.track_density;
+        self.setup_draft.export = self.settings.export.clone();
+        if let Some(previous) = &mut self.settings_rollback {
+            previous.track_density = self.settings.track_density;
+            previous.export = self.settings.export.clone();
+        }
+        Ok(())
     }
 
     pub fn cache_audio(&mut self) {
@@ -1299,67 +1325,15 @@ impl DawApp {
         }
     }
     pub fn import_audio(&mut self, path: &Path, track_id: Option<u64>, beat: f64) {
-        let mut preview_limited = false;
-        self.begin_edit();
-        let result = (|| -> anyhow::Result<()> {
-            let source = AudioData::load_wav(path)?;
-            let length = source.duration_seconds() * self.project.tempo / 60.0;
-            anyhow::ensure!(length > 0.0, "Audio file is empty");
-            let name = path
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            let id = track_id
-                .filter(|id| {
-                    self.project
-                        .track(*id)
-                        .is_some_and(|t| t.kind == TrackKind::Audio)
-                })
-                .unwrap_or_else(|| self.project.add_audio_track(&name));
-            let path = std::fs::canonicalize(path)?.to_string_lossy().to_string();
-            let clip = Clip::audio(name, beat.max(0.0), length, path.clone());
-            self.selected_track = Some(id);
-            self.selected_clip = Some(clip.id);
-            self.selected_notes.clear();
-            self.midi_editor.clear_hidden_selection();
-            let bytes = source.samples.len() * std::mem::size_of::<f32>();
-            let used = self
-                .waveforms
-                .values()
-                .map(|audio| audio.samples.len() * std::mem::size_of::<f32>())
-                .sum::<usize>();
-            let previous = self
-                .waveforms
-                .get(&path)
-                .map_or(0, |audio| audio.samples.len() * std::mem::size_of::<f32>());
-            if bytes <= crate::project_io::WAVEFORM_FILE_BYTES
-                && bytes
-                    <= crate::project_io::WAVEFORM_CACHE_BYTES
-                        .saturating_sub(used.saturating_sub(previous))
-            {
-                self.waveforms.insert(path, source);
-            } else {
-                self.waveforms.remove(&path);
-                preview_limited = true;
-            }
-            self.project.track_mut(id).unwrap().clips.push(clip);
-            self.changed();
-            Ok(())
-        })();
-        self.message(
-            result,
-            if preview_limited {
-                "Audio imported · Waveform preview exceeds cache limit"
-            } else {
-                "Audio imported · Drag clip to move, drag its right edge to trim"
-            },
-        );
+        self.queue_audio_import(vec![path.to_path_buf()], track_id, beat);
     }
     pub(crate) fn autosave_recovery(&mut self) {
         self.queue_recovery_snapshot();
     }
     pub(crate) fn import_dialog(&mut self) {
+        if !self.import_picker_ready() {
+            return;
+        }
         if let Some(path) = self.pick_document_path(crate::document_ui::DocumentDialog::Import) {
             if path
                 .extension()
@@ -1391,6 +1365,7 @@ impl DawApp {
         }
     }
     pub(crate) fn finish_new_session(&mut self) {
+        self.cancel_audio_import();
         self.invalidate_assistant_session();
         self.autosave_recovery();
         self.reset_instrument_ui();
@@ -1538,6 +1513,7 @@ impl DawApp {
         path: PathBuf,
         recovery: bool,
     ) {
+        self.cancel_audio_import();
         self.invalidate_assistant_session();
         self.autosave_recovery();
         self.reset_instrument_ui();
@@ -1594,9 +1570,10 @@ impl DawApp {
             Some(Ok(result)) => {
                 self.export_job = None;
                 match result {
-                    Ok(path) => {
+                    Ok(completion) => {
+                        let path = completion.path;
                         self.export_run = None;
-                        self.finishing.export_finished(&path);
+                        self.finishing.export_finished(&path, completion.report);
                         // A finished render must not erase an unrelated error.
                         if !self.error
                             && self.loading.is_none()
@@ -1627,7 +1604,8 @@ impl DawApp {
         let busy = self.loading.is_some()
             || self.export_job.is_some()
             || self.state_sync_pending()
-            || self.project_io_pending();
+            || self.project_io_pending()
+            || self.audio_import_busy();
         let export_report = self.export_error_report().cloned();
         let show_export_failure = export_report
             .as_ref()
@@ -1638,6 +1616,8 @@ impl DawApp {
                 "Saving or opening project…".into()
             } else if self.state_sync_pending() {
                 "Finishing instrument changes…".into()
+            } else if let Some(message) = self.audio_import_message() {
+                message
             } else if self.loading.is_some() {
                 "Preparing audio…".into()
             } else {
@@ -1653,6 +1633,15 @@ impl DawApp {
             })
             .map(|snapshot| snapshot.output_dropouts);
         let mut showing_output_dropout = false;
+        let clipped_samples = self
+            .exported_file
+            .as_deref()
+            .map_or(0, |path| self.completed_export_clipped_samples(path));
+        let completion_summary = self
+            .exported_file
+            .as_deref()
+            .and_then(|path| self.completed_export_summary(path));
+        let showing_completion = self.exported_file.is_some() && !self.error && !busy;
         let (kind, message) = if show_export_failure {
             (
                 NoticeKind::Error,
@@ -1674,7 +1663,14 @@ impl DawApp {
                 .file_name()
                 .unwrap_or(path.as_os_str())
                 .to_string_lossy();
-            (NoticeKind::Success, format!("Exported · {name}"))
+            if clipped_samples > 0 {
+                (
+                    NoticeKind::Warning,
+                    format!("Exported · {name} · {clipped_samples} clipped samples"),
+                )
+            } else {
+                (NoticeKind::Success, format!("Exported · {name}"))
+            }
         } else if let Some(count) = output_dropouts {
             showing_output_dropout = true;
             (
@@ -1696,6 +1692,8 @@ impl DawApp {
         let show_playback_retry = !show_export_failure && self.has_failed_output_notice();
         let playback_retry_enabled = self.can_retry_playback();
         let mut audio_setup = false;
+        let mut edit_export = false;
+        let mut cancel_import = false;
         let has_audio_recovery = showing_output_dropout
             || kind == NoticeKind::Error
                 && self
@@ -1712,6 +1710,9 @@ impl DawApp {
                     daw_ui::notice(ui, NoticeKind::Busy, &busy_message, |_| {});
                 }
                 let response = daw_ui::notice(ui, kind, &message, |ui| {
+                    if self.audio_import_busy() {
+                        cancel_import = daw_ui::button(ui, "Cancel import").clicked();
+                    }
                     if show_export_failure {
                         retry_export = ui.add_enabled(
                             !busy,
@@ -1740,10 +1741,10 @@ impl DawApp {
                             self.show_status_error_details();
                         }
                     }
-                    if showing_output_dropout || matches!(kind, NoticeKind::Error | NoticeKind::Success) {
+                    if showing_output_dropout || showing_completion || matches!(kind, NoticeKind::Error | NoticeKind::Success) {
                         dismiss = daw_ui::small_button(ui, "Dismiss").clicked();
                     }
-                    if kind == NoticeKind::Success
+                    if showing_completion
                         && daw_ui::button(ui, "Copy path")
                             .on_hover_text("Copy the full export path")
                             .clicked()
@@ -1751,15 +1752,26 @@ impl DawApp {
                     {
                         ctx.copy_text(path.to_string_lossy().into_owned());
                     }
+                    if showing_completion && clipped_samples > 0 {
+                        edit_export = daw_ui::button(ui, "Export options")
+                            .on_hover_text("PCM has clipped. Lower the mix level before re-exporting, or choose 32-bit float to preserve headroom.")
+                            .clicked();
+                    }
                 });
-                if kind == NoticeKind::Success
+                if showing_completion
                     && let Some(path) = &self.exported_file
                 {
-                    response.response.on_hover_text(path.display().to_string());
+                    response.response.on_hover_text(completion_summary.as_ref().map_or_else(
+                        || path.display().to_string(),
+                        |summary| format!("{summary}\n{}", path.display())));
                 }
                 if let Some(path) = &secondary_completion {
                     let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
-                    daw_ui::notice(ui, NoticeKind::Success, &format!("Exported · {name}"), |ui| {
+                    let result_kind = if clipped_samples > 0 { NoticeKind::Warning } else { NoticeKind::Success };
+                    let result_message = if clipped_samples > 0 {
+                        format!("Exported · {name} · {clipped_samples} clipped samples")
+                    } else { format!("Exported · {name}") };
+                    daw_ui::notice(ui, result_kind, &result_message, |ui| {
                         dismiss_result = daw_ui::small_button(ui, "Dismiss result").clicked();
                         if daw_ui::button(ui, "Copy path").clicked() {
                             ctx.copy_text(path.to_string_lossy().into_owned());
@@ -1772,6 +1784,12 @@ impl DawApp {
         }
         if retry_export {
             self.retry_export();
+        }
+        if cancel_import {
+            self.cancel_audio_import();
+        }
+        if edit_export {
+            self.export();
         }
         if retry_playback {
             self.retry_failed_playback();
@@ -2042,7 +2060,10 @@ impl DawApp {
                 && ctx
                     .data(|data| data.get_temp::<egui::Id>(egui::Id::new("automation_curve_focus")))
                     .is_some_and(|id| ctx.memory(|memory| memory.has_focus(id)));
-        if !ctx.wants_keyboard_input() || curve_focused {
+        if !ctx.wants_keyboard_input()
+            || curve_focused
+            || daw_ui::parameter_owns_document_history(ctx)
+        {
             // A chord may be pressed and released between repaints. Match the
             // modifiers captured by each key event, not the final held state.
             // Preserve arrival order when several undo/redo keys share a frame.
@@ -2442,7 +2463,11 @@ impl DawApp {
                             ui.close();
                         }
                         ui.separator();
-                        if daw_ui::button(ui, "Import…").clicked() {
+                        if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Import audio…")).clicked() {
+                            self.import_audio_dialog();
+                            ui.close();
+                        }
+                        if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Import…")).clicked() {
                             self.import_dialog();
                             ui.close();
                         }
@@ -3307,6 +3332,7 @@ impl DawApp {
         self.poll_instrument_editor(ctx);
         self.poll_recording(ctx);
         self.poll_project_io(ctx);
+        self.poll_audio_import(ctx);
         self.poll_export();
         self.poll_join(ctx);
         self.update_note_audition(ctx);
@@ -3613,16 +3639,15 @@ impl DawApp {
         } else {
             Vec::new()
         };
-        for file in files {
-            if let Some(path) = file.path {
-                let (track, beat) = if self.view == WorkspaceView::Arrangement {
-                    self.drop_target.unwrap_or((None, self.cursor))
-                } else {
-                    (None, self.cursor)
-                };
-                self.close_popups();
-                self.import_audio(&path, track, beat);
-            }
+        let paths: Vec<_> = files.into_iter().filter_map(|file| file.path).collect();
+        if !paths.is_empty() {
+            let (track, beat) = if self.view == WorkspaceView::Arrangement {
+                self.drop_target.unwrap_or((None, self.cursor))
+            } else {
+                (None, self.cursor)
+            };
+            self.close_popups();
+            self.queue_audio_import(paths, track, beat);
         }
         if !ctx.input(|i| i.pointer.any_down()) {
             self.flush_pending_edit();
@@ -3822,7 +3847,18 @@ mod export_feedback_tests {
         app.error = true;
         app.status = "Audio device disconnected".into();
         let path = PathBuf::from("Finished.wav");
-        tx.send(Ok(path.clone())).unwrap();
+        tx.send(Ok(crate::export_ui::ExportCompletion {
+            path: path.clone(),
+            report: daw_engine::ExportReport {
+                sample_peak: 0.0,
+                clipped_samples: 0,
+                frames: 0,
+                sample_rate: 48_000,
+                encoding: daw_engine::WavEncoding::Float32,
+                dither: false,
+            },
+        }))
+        .unwrap();
         app.poll_export();
         assert!(app.export_job.is_none());
         assert!(app.error);

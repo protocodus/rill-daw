@@ -2,17 +2,65 @@
 use crate::{
     app::{DawApp, PopupKind},
     document_ui::DocumentDialog,
+    settings::ExportRangeMode,
 };
+use anyhow::{Result, ensure};
 use daw_core::{ClipContent, Instrument, TrackKind};
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc, time::Instant};
+
+/// Freeze every delivery choice before native editor synchronization or queued
+/// document work. A retry keeps this specification and its original project;
+/// re-export applies it to the current acknowledged project snapshot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ExportSpecification {
+    pub sample_rate: u32,
+    pub options: daw_engine::ExportOptions,
+}
+
+impl ExportSpecification {
+    pub(crate) fn diagnostics(self) -> serde_json::Value {
+        serde_json::json!({
+            "sample_rate":self.sample_rate,
+            "encoding":self.options.encoding,
+            "dither":self.options.dither && self.options.encoding != daw_engine::WavEncoding::Float32,
+            "include_effect_tails":self.options.include_effect_tails,
+            "range":self.options.range.map(|range| serde_json::json!({"start_beat":range.start_beat,"end_beat":range.end_beat})),
+        })
+    }
+
+    pub(crate) fn summary(self) -> String {
+        format!(
+            "{} kHz · Stereo · {}{}",
+            f64::from(self.sample_rate) / 1000.0,
+            encoding_label(self.options.encoding),
+            if self.options.dither && self.options.encoding != daw_engine::WavEncoding::Float32 {
+                " · TPDF dither"
+            } else {
+                ""
+            }
+        )
+    }
+}
+
+pub(crate) struct ExportCompletion {
+    pub path: PathBuf,
+    pub report: daw_engine::ExportReport,
+}
+
+pub(crate) fn encoding_label(encoding: daw_engine::WavEncoding) -> &'static str {
+    match encoding {
+        daw_engine::WavEncoding::Pcm16 => "16-bit PCM",
+        daw_engine::WavEncoding::Pcm24 => "24-bit PCM",
+        daw_engine::WavEncoding::Float32 => "32-bit float",
+    }
+}
 
 #[derive(Clone)]
 struct ExportRequest {
     project: Arc<daw_core::Project>,
     path: PathBuf,
-    sample_rate: u32,
-    options: daw_engine::ExportOptions,
+    specification: ExportSpecification,
     identity: String,
 }
 
@@ -24,7 +72,23 @@ pub(crate) struct ExportRun {
 }
 
 impl DawApp {
-    pub(crate) fn start_export(&mut self, path: PathBuf, include_effect_tails: bool) {
+    pub(crate) fn legacy_export_specification(
+        &self,
+        include_effect_tails: bool,
+    ) -> ExportSpecification {
+        ExportSpecification {
+            sample_rate: self.settings.sample_rate,
+            options: daw_engine::ExportOptions {
+                render: daw_engine::RenderOptions {
+                    resample_quality: self.settings.resample_quality,
+                },
+                include_effect_tails,
+                ..Default::default()
+            },
+        }
+    }
+
+    pub(crate) fn start_export(&mut self, path: PathBuf, specification: ExportSpecification) {
         if self.export_job.is_some() {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
@@ -32,13 +96,7 @@ impl DawApp {
         let request = ExportRequest {
             project: Arc::new(self.project.clone()),
             path,
-            sample_rate: self.settings.sample_rate,
-            options: daw_engine::ExportOptions {
-                render: daw_engine::RenderOptions {
-                    resample_quality: self.settings.resample_quality,
-                },
-                include_effect_tails,
-            },
+            specification,
             identity: self.document_identity(),
         };
         self.begin_export_request(request);
@@ -62,23 +120,26 @@ impl DawApp {
             return;
         }
         self.finishing
-            .export_started(request.path.clone(), request.options.include_effect_tails);
+            .export_started(request.path.clone(), request.specification);
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
         self.status = "Rendering stereo mixdown in background…".into();
         self.error = false;
         std::thread::spawn(move || {
             use anyhow::Context;
-            let result = daw_engine::export_project_wav_with_options(
+            let result = daw_engine::export_project_wav_with_report(
                 &request.project,
                 &request.path,
-                request.sample_rate,
-                request.options,
+                request.specification.sample_rate,
+                request.specification.options,
             )
             .with_context(|| format!("Rendering {}", request.identity))
             .with_context(|| format!("Exporting WAV to {}", request.path.display()))
             .context("WAV export failed")
-            .map(|_| request.path);
+            .map(|report| ExportCompletion {
+                path: request.path,
+                report,
+            });
             let _ = tx.send(result);
         });
     }
@@ -132,19 +193,30 @@ impl DawApp {
         self.export_run
             .as_ref()
             .map_or(serde_json::Value::Null, |run| {
-                serde_json::json!({
+                let mut diagnostic = run.request.specification.diagnostics();
+                let details = serde_json::json!({
                     "path": run.request.path,
                     "identity": run.request.identity,
-                    "include_effect_tails": run.request.options.include_effect_tails,
-                    "sample_rate": run.request.sample_rate,
                     "failed": run.failure.is_some(),
                     "elapsed_seconds": run.started.elapsed().as_secs_f64(),
-                })
+                });
+                diagnostic
+                    .as_object_mut()
+                    .unwrap()
+                    .extend(details.as_object().unwrap().clone());
+                diagnostic
             })
     }
 
     /// Source notes outside a trimmed occurrence are retained, but never rendered.
     pub(crate) fn export_missing_instruments(&self) -> Vec<&str> {
+        self.export_missing_instruments_in_range(None)
+    }
+
+    fn export_missing_instruments_in_range(
+        &self,
+        range: Option<daw_engine::ExportRange>,
+    ) -> Vec<&str> {
         let audible = daw_engine::audible_track_ids(&self.project).unwrap_or_default();
         self.project
             .tracks
@@ -158,9 +230,13 @@ impl DawApp {
                 track.clips.iter().any(|clip| {
                     clip.length > 0.0
                         && matches!(&clip.content, ClipContent::Midi { notes }
-                        if notes.iter().any(|note| note.velocity > 0
-                            && note.start.max(clip.offset)
-                                < (note.start + note.length).min(clip.source_end())))
+                        if notes.iter().any(|note| {
+                            let start = note.start.max(clip.offset);
+                            let end = (note.start + note.length).min(clip.source_end());
+                            note.velocity > 0 && start < end && range.is_none_or(|range|
+                                clip.start + clip.source_to_local(start) < range.end_beat
+                                && clip.start + clip.source_to_local(end) > range.start_beat)
+                        }))
                 })
             })
             .map(|track| track.name.as_str())
@@ -202,16 +278,67 @@ impl DawApp {
         self.open_popup(PopupKind::Export);
     }
 
+    fn preferred_export_specification(&self) -> Result<ExportSpecification> {
+        let preferences = &self.settings.export;
+        let range = match preferences.range_mode {
+            ExportRangeMode::Arrangement => None,
+            ExportRangeMode::Loop => {
+                ensure!(
+                    self.project.loop_start.is_finite()
+                        && self.project.loop_end.is_finite()
+                        && self.project.loop_start >= 0.0
+                        && self.project.loop_end > self.project.loop_start
+                        && self.project.loop_end <= daw_core::MAX_BEAT,
+                    "Set increasing loop markers before exporting a loop range"
+                );
+                Some(daw_engine::ExportRange {
+                    start_beat: self.project.loop_start,
+                    end_beat: self.project.loop_end,
+                })
+            }
+        };
+        let sample_rate = preferences.sample_rate.unwrap_or(self.settings.sample_rate);
+        ensure!(
+            (8_000..=384_000).contains(&sample_rate),
+            "Export sample rate must be between 8000 and 384000 Hz"
+        );
+        Ok(ExportSpecification {
+            sample_rate,
+            options: daw_engine::ExportOptions {
+                render: daw_engine::RenderOptions {
+                    resample_quality: self.settings.resample_quality,
+                },
+                include_effect_tails: preferences.include_effect_tails && range.is_none(),
+                encoding: preferences.encoding,
+                dither: preferences.dither,
+                range,
+            },
+        })
+    }
+
     pub(crate) fn export_popup(&mut self, ctx: &egui::Context) {
         let mut open = self.export_open;
         if !open {
             return;
         }
-        let duration = self.project.end_beat() * 60.0 / self.project.tempo;
+        let previous_preferences = self.settings.export.clone();
+        let specification = self.preferred_export_specification();
+        let loop_mode = self.settings.export.range_mode == ExportRangeMode::Loop;
+        let duration_beats = if loop_mode {
+            self.project.loop_end - self.project.loop_start
+        } else {
+            self.project.end_beat()
+        };
+        let duration = duration_beats * 60.0 / self.project.tempo;
         let duration = format!(
-            "Arrangement · {}{}",
+            "{} · {}{}",
+            if loop_mode {
+                "Loop range"
+            } else {
+                "Arrangement"
+            },
             daw_ui::format_clock_time(duration, 3),
-            if self.export_include_effect_tails {
+            if self.settings.export.include_effect_tails && !loop_mode {
                 " + tails"
             } else {
                 ""
@@ -219,7 +346,14 @@ impl DawApp {
         );
         let mut export = false;
         let mut cancel = false;
-        let missing_instruments = self.export_missing_instruments().join(", ");
+        let missing_instruments = self
+            .export_missing_instruments_in_range(
+                specification
+                    .as_ref()
+                    .ok()
+                    .and_then(|spec| spec.options.range),
+            )
+            .join(", ");
         daw_ui::popup("Export WAV", ctx)
             .id(egui::Id::new("export_options"))
             .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
@@ -231,19 +365,55 @@ impl DawApp {
                 let ui = footer.body();
                 daw_ui::popup_scroll_body(ui, "export_summary", 0.0, |ui| {
                 daw_ui::text::body(ui, duration).on_hover_text(
-                    if self.export_include_effect_tails {
+                    if self.settings.export.include_effect_tails && !loop_mode {
                         "The file includes releases and effect tails beyond this arrangement duration."
                     } else {
                         "The file ends exactly at this arrangement duration."
                     }
                 );
-                daw_ui::text::note(ui, format!(
-                    "{} kHz · Stereo · 32-bit float",
-                    f64::from(self.settings.sample_rate) / 1000.0,
-                )).on_hover_text("Change the sample rate in Window → Setup → Audio.");
+                if let Ok(specification) = &specification {
+                    daw_ui::text::note(ui, specification.summary());
+                }
                 ui.add_space(daw_ui::tokens::SPACE_MD);
-                daw_ui::checkbox(ui, &mut self.export_include_effect_tails, "Include effect tails")
-                    .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary.");
+                daw_ui::form_grid(ui, "wav_delivery_choices", |ui| {
+                    daw_ui::form_label(ui, "Format");
+                    daw_ui::choice_menu(ui, encoding_label(self.settings.export.encoding), |ui| {
+                        for encoding in [daw_engine::WavEncoding::Pcm16, daw_engine::WavEncoding::Pcm24, daw_engine::WavEncoding::Float32] {
+                            if daw_ui::selectable_value(ui, &mut self.settings.export.encoding, encoding, encoding_label(encoding)).clicked() { ui.close(); }
+                        }
+                    });
+                    ui.end_row();
+                    daw_ui::form_label(ui, "Rate");
+                    let rate_label = self.settings.export.sample_rate.map_or_else(|| "Follow audio setup".to_owned(), |rate| format!("{} kHz", f64::from(rate) / 1000.0));
+                    daw_ui::choice_menu(ui, rate_label, |ui| {
+                        if daw_ui::selectable_value(ui, &mut self.settings.export.sample_rate, None, "Follow audio setup").clicked() { ui.close(); }
+                        for rate in [44_100,48_000,88_200,96_000,176_400,192_000] {
+                            if daw_ui::selectable_value(ui, &mut self.settings.export.sample_rate, Some(rate), format!("{} kHz", f64::from(rate) / 1000.0)).clicked() { ui.close(); }
+                        }
+                    });
+                    ui.end_row();
+                    daw_ui::form_label(ui, "Range");
+                    daw_ui::choice_menu(ui, if loop_mode { "Loop range" } else { "Arrangement" }, |ui| {
+                        for (mode, label) in [(ExportRangeMode::Arrangement,"Arrangement"),(ExportRangeMode::Loop,"Loop range")] {
+                            if daw_ui::selectable_value(ui, &mut self.settings.export.range_mode, mode, label).clicked() { ui.close(); }
+                        }
+                    });
+                    ui.end_row();
+                });
+                ui.add_space(daw_ui::tokens::SPACE_MD);
+                ui.add_enabled_ui(!loop_mode, |ui| daw_ui::checkbox(ui, &mut self.settings.export.include_effect_tails, "Include effect tails")
+                    .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary."));
+                let integer = self.settings.export.encoding != daw_engine::WavEncoding::Float32;
+                ui.add_enabled_ui(integer, |ui| daw_ui::checkbox(ui, &mut self.settings.export.dither, "Dither (TPDF)"));
+                if loop_mode {
+                    daw_ui::text::note(ui, format!("Loop markers · Beats {}–{} · exact length",
+                        daw_ui::parameter_value_text(self.project.loop_start+1.0), daw_ui::parameter_value_text(self.project.loop_end+1.0)));
+                }
+                if integer {
+                    daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note,
+                        "PCM levels above 0 dBFS are clipped and reported after export.", 2);
+                }
+                if let Err(error) = &specification { daw_ui::text::body(ui, error.to_string()); }
                 if !missing_instruments.is_empty() {
                     ui.add_space(daw_ui::tokens::SPACE_LG);
                     daw_ui::notice(ui, daw_ui::NoticeKind::Warning, "MIDI notes need an instrument", |_| {});
@@ -253,16 +423,27 @@ impl DawApp {
                 }
                 });
                 footer.show(window_ui, |ui| daw_ui::dialog_actions(ui, |ui| {
-                    export = daw_ui::dialog_primary(ui, "Export…").clicked();
+                    export = ui.add_enabled_ui(specification.is_ok(), |ui| daw_ui::dialog_primary(ui, "Export…")).inner.clicked();
                     cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
                 }, |_| {}));
             });
         self.export_open = open && !cancel;
+        if self.settings.export != previous_preferences
+            && let Err(error) = self.save_independent_preferences()
+        {
+            self.message(Err(error.context("Saving export preferences")), "");
+        }
         if export {
-            let include_effect_tails = self.export_include_effect_tails;
+            let specification = match self.preferred_export_specification() {
+                Ok(specification) => specification,
+                Err(error) => {
+                    self.message(Err(error), "");
+                    return;
+                }
+            };
             self.close_popup();
             if let Some(path) = self.pick_document_path(DocumentDialog::Export) {
-                self.export_to_with_tails(path, include_effect_tails);
+                self.export_to_with_specification(path, specification);
             }
         }
     }

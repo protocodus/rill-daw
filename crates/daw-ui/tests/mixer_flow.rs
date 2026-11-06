@@ -2,6 +2,61 @@ use daw_ui::{MixerRouteEndpoint, mixer_route_lane, theme};
 use egui::{Context, RawInput, Rect, Sense, Shape, Vec2};
 
 #[test]
+fn compact_route_captions_do_not_intersect_the_connection_ribbon() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let mut lane = None;
+    let output = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(
+                egui::Pos2::ZERO,
+                Vec2::new(800.0, 200.0),
+            )),
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.add_space(36.0);
+                lane = daw_ui::mixer_route_lane_with_height(
+                    ui,
+                    MixerRouteEndpoint {
+                        position: egui::pos2(90.0, 30.0),
+                        color: theme::DARK.accent,
+                    },
+                    MixerRouteEndpoint {
+                        position: egui::pos2(690.0, 30.0),
+                        color: theme::DARK.accent,
+                    },
+                    "Output → Music bus",
+                    ui.clip_rect(),
+                    daw_ui::tokens::COMPACT_HEIGHT,
+                )
+                .painted;
+            });
+        },
+    );
+    let lane = lane.unwrap();
+    let text = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            Shape::Text(text) if text.galley.text() == "Output → Music bus" => {
+                Some(text.galley.rect.translate(text.pos.to_vec2()))
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        lane.lane.contains_rect(text),
+        "The complete caption must remain visible"
+    );
+    assert!(
+        text.bottom() < lane.path[1].y - lane.stroke_width * 0.5,
+        "The actual caption glyphs must not cross the horizontal ribbon"
+    );
+}
+
+#[test]
 fn compact_channel_actions_leave_readable_source_kinds_without_smaller_tap_targets() {
     for dark in [false, true] {
         let ctx = Context::default();
@@ -42,6 +97,23 @@ fn compact_channel_actions_leave_readable_source_kinds_without_smaller_tap_targe
                     },
                 );
                 assert!(menu.height() >= daw_ui::tokens::CONTROL_HEIGHT);
+                assert_eq!(
+                    menu.width(),
+                    daw_ui::tokens::COMPACT_HEIGHT,
+                    "Automation state must not consume the source name's width"
+                );
+                let color = state.map_or(theme::palette(&ctx).muted, |state| state.color(&ctx));
+                assert!(
+                    output.shapes.iter().any(|shape| match &shape.shape {
+                        Shape::Path(path) =>
+                            !path.closed
+                                && path.points.len() == 5
+                                && path.stroke.color == egui::epaint::ColorMode::Solid(color)
+                                && path.points.iter().all(|point| menu.contains(*point)),
+                        _ => false,
+                    }),
+                    "The envelope icon must paint the current automation state"
+                );
                 let gap = if state.is_some() {
                     daw_ui::tokens::SPACE_XS
                 } else {

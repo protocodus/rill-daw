@@ -7,11 +7,11 @@
 
 Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Compose with audio and MIDI, get help from an integrated AI assistant, and bring everything together in the mixer. Focused workspaces keep the music in view and the tools within reach.
 
-- **Build your song.** Layer audio and MIDI, organize tracks with colors and folders, and reshape clips with non-destructive edits and undo.
+- **Build your song.** Drop WAV, MP3, FLAC or OGG audio into the arrangement. Layer audio and MIDI, organize tracks with colors and folders, and reshape clips with non-destructive edits and undo.
 - **Find your next phrase.** Write notes by hand or explore chords, arpeggios, and melodies with editable previews and scale highlighting.
 - **Make music with AI.** Ask the integrated assistant to write a part, reshape a phrase, or adjust the mix directly in your current song. Review its edits and undo them through normal song history.
 - **Shape your sound.** Bring your VST3 instruments and effects, then connect them with buses, sends, and automation. Plug-ins run in isolated processes.
-- **Capture and finish.** Record audio and MIDI, choose loop takes, and export a stereo WAV or MIDI. Portable `.rill` projects keep the arrangement and its source audio together.
+- **Capture and finish.** Record audio and MIDI, choose loop takes, and export songs or loops as 16/24-bit PCM or 32-bit float WAV, or export MIDI. Portable `.rill` projects keep the arrangement and its source audio together.
 
 [Download](#download) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md)
 
@@ -82,7 +82,7 @@ Balance channels, place sounds in stereo, and reach instruments, effects, and ro
 ## Start making music
 
 1. Launch Rill and click **Play** to hear the included drum loop, or choose **File → New** for an empty song.
-2. Drag in WAV files, or choose **Track → Add MIDI track** and assign a VST3 instrument.
+2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track** and assign a VST3 instrument.
 3. Double-click a clip to edit its audio or notes. Open **Window → Mixer** to balance the tracks.
 4. Save a portable `.rill` project, then use **File → Export WAV…** to share a mix.
 
@@ -94,6 +94,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 - [Audio editing](docs/AUDIO_EDITOR.md) — clip processing, comping, stretching, and workflow details.
 - [AI assistant and MCP](docs/AI_TOOLS.md) — optional OpenAI/Anthropic assistance and tools for the current song.
 - [Project format](docs/PROJECT_FORMAT.md) — portable projects, stored assets, and limits.
+- [DAW comparison and priorities](docs/PRODUCT_DIRECTION.md) — current capabilities, market gaps, evidence and limits.
 - [Architecture](docs/ARCHITECTURE.md) · [UI components](docs/UI.md) · [End-to-end testing](docs/E2E.md) — for contributors.
 
 ## Build from source

@@ -6,7 +6,9 @@ mod arranger_automation;
 mod arranger_selection;
 mod assistant;
 mod audio_batch;
+mod audio_decode_worker;
 mod audio_editor;
+mod audio_import;
 mod audio_silence;
 mod audio_takes_ui;
 mod automation;
@@ -57,6 +59,12 @@ fn demo() -> Project {
 }
 
 fn main() -> anyhow::Result<()> {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "--decode-audio-worker")
+    {
+        return audio_decode_worker::run(std::env::args_os().skip(2));
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mcp = args
         .first()

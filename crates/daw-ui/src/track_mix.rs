@@ -432,6 +432,7 @@ fn compact_value_at(
     if response.clicked() || response.drag_started() {
         response.request_focus();
     }
+    crate::parameter_focus::register_parameter_history_focus(&response);
     if released {
         child.data_mut(|data| data.remove::<(f32, egui::Pos2)>(drag_id));
     }
@@ -585,6 +586,7 @@ fn rail_at(
     if native.changed() {
         response.mark_changed();
     }
+    crate::parameter_focus::register_parameter_history_focus(&response);
     child.output_mut(|output| {
         if output.events.get(event_index).is_some_and(|event| {
             let info = event.widget_info();
@@ -736,7 +738,7 @@ fn state_button_at(
         if selected {
             theme::contrast_text(active)
         } else {
-            colors.text
+            active
         },
     );
     response.on_hover_text(label)

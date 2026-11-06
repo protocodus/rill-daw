@@ -97,7 +97,7 @@ fn buses_and_send_returns_have_large_headings_and_lowered_usable_strips() {
                     - channel(&before, source)["strip"]["min"][1]
                         .as_f64()
                         .unwrap()
-                    - f64::from(daw_ui::MIXER_ROLE_HEIGHT))
+                    - before["mixer"]["role_height"].as_f64().unwrap())
                 .abs()
                     < 1.0
             );

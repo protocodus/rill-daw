@@ -9,6 +9,7 @@ pub(crate) enum DocumentDialog {
     Save,
     Open,
     Import,
+    ImportAudio,
     Export,
     ExportMidi,
 }
@@ -67,7 +68,10 @@ impl DawApp {
     }
 
     pub(crate) fn document_dialog_filename(&self, kind: DocumentDialog) -> Option<String> {
-        if matches!(kind, DocumentDialog::Open | DocumentDialog::Import) {
+        if matches!(
+            kind,
+            DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio
+        ) {
             return None;
         }
         if kind == DocumentDialog::Save
@@ -92,7 +96,9 @@ impl DawApp {
             DocumentDialog::Save => "rill",
             DocumentDialog::Export => "wav",
             DocumentDialog::ExportMidi => "mid",
-            DocumentDialog::Open | DocumentDialog::Import => unreachable!(),
+            DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => {
+                unreachable!()
+            }
         };
         Some(format!("{stem}.{extension}"))
     }
@@ -147,9 +153,13 @@ impl DawApp {
             )
         } else {
             let dialog = match kind {
-                DocumentDialog::Import => {
-                    rfd::FileDialog::new().add_filter("Audio / MIDI", &["wav", "mid", "midi"])
+                DocumentDialog::ImportAudio => {
+                    rfd::FileDialog::new().add_filter("Audio", &["wav", "mp3", "flac", "ogg"])
                 }
+                DocumentDialog::Import => rfd::FileDialog::new().add_filter(
+                    "Audio / MIDI",
+                    &["wav", "mp3", "flac", "ogg", "mid", "midi"],
+                ),
                 DocumentDialog::Export => rfd::FileDialog::new().add_filter("Wave audio", &["wav"]),
                 DocumentDialog::ExportMidi => {
                     rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
@@ -169,7 +179,9 @@ impl DawApp {
                 dialog
             };
             let chosen = daw_ui::with_native_dialog_menu(|| match kind {
-                DocumentDialog::Open | DocumentDialog::Import => dialog.pick_file_result(),
+                DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => {
+                    dialog.pick_file_result()
+                }
                 _ => dialog.save_file_result(),
             });
             let chosen = match chosen {
@@ -187,14 +199,16 @@ impl DawApp {
             };
             (chosen, None)
         };
-        if !matches!(kind, DocumentDialog::Open | DocumentDialog::Import)
-            && let Err(error) = self
-                .project
-                .validate_audio_destination(&chosen)
-                .and_then(|_| {
-                    self.project
-                        .validate_audio_destination(&normalize_document_path(chosen.clone(), kind))
-                })
+        if !matches!(
+            kind,
+            DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio
+        ) && let Err(error) = self
+            .project
+            .validate_audio_destination(&chosen)
+            .and_then(|_| {
+                self.project
+                    .validate_audio_destination(&normalize_document_path(chosen.clone(), kind))
+            })
         {
             // Selecting active source media remains an error even when a file
             // suffix would redirect the write. Check the final name as well,
@@ -211,6 +225,7 @@ impl DawApp {
     }
 
     pub(crate) fn request_document_transition(&mut self, transition: DocumentTransition) {
+        self.cancel_audio_import();
         if self.document_guard.is_some() {
             return;
         }
@@ -276,7 +291,8 @@ impl DawApp {
         };
         match stage {
             Stage::Waiting
-                if !self.recording_busy()
+                if !self.audio_import_busy()
+                    && !self.recording_busy()
                     && !self.project_io_pending()
                     && !self.state_sync_pending()
                     && self.export_job.is_none()
@@ -620,7 +636,7 @@ impl DawApp {
 /// Appending preserves dots in names without producing `Song.RILL.rill`.
 fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
     let (extension, accepted): (&str, &[&str]) = match kind {
-        DocumentDialog::Open | DocumentDialog::Import => return path,
+        DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => return path,
         DocumentDialog::Save => ("rill", &["rill", "json"]),
         DocumentDialog::Export => ("wav", &["wav"]),
         DocumentDialog::ExportMidi => ("mid", &["mid", "midi"]),

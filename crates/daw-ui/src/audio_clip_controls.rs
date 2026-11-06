@@ -12,6 +12,14 @@ pub fn audio_fade_handle(
 ) -> Response {
     let target = Rect::from_center_size(center, Vec2::splat(14.0)).intersect(clip);
     let response = ui.interact(target, id, Sense::drag());
+    if !(ui.is_enabled()
+        && (response.hovered()
+            || response.dragged()
+            || response.is_pointer_button_down_on()
+            || ui.rect_contains_pointer(target.expand(6.0))))
+    {
+        return response;
+    }
     let painter = ui.painter().with_clip_rect(clip);
     let foreground = if response.hovered() || response.dragged() {
         crate::theme::palette(ui.ctx()).text

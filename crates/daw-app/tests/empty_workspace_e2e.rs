@@ -152,8 +152,11 @@ fn native_import_action_cancels_cleanly_and_imports_audio_and_midi_with_undo() {
     let wav = source_audio(&app);
     let original_bytes = std::fs::read(&wav).unwrap();
     picker(&mut app, Some(&wav));
-    let imported = app.click("Import audio or MIDI…");
-    assert_eq!(imported["file_dialog_pending"], false);
+    let started = app.click("Import audio or MIDI…");
+    assert_eq!(started["file_dialog_pending"], false);
+    // Native selection starts background decoding; completion is the document
+    // boundary, not the picker returning to the event loop.
+    let imported = app.command(json!({"command":"wait_audio_import"}));
     assert_eq!(imported["project"]["tracks"].as_array().unwrap().len(), 1);
     let track = &imported["project"]["tracks"][0];
     assert_eq!(track["kind"], "Audio");

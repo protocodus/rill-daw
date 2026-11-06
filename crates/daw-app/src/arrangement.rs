@@ -15,7 +15,10 @@ fn track_row_units(track: &Track, row_height: f32) -> f32 {
     if track.kind == TrackKind::Folder {
         daw_ui::TRACK_HEADER_FOLDER_HEIGHT / row_height.max(1.0)
     } else if track.collapsed {
-        COMPACT_ROW / ROW
+        // A global compact view should not make an individually collapsed
+        // channel lose its basic mix controls. Fit can still go smaller when
+        // the user deliberately asks to see an entire large arrangement.
+        (row_height * COMPACT_ROW / ROW).max(56.0).min(row_height) / row_height.max(1.0)
     } else {
         1.0
     }
@@ -145,6 +148,29 @@ fn reveal_track(
 impl DawApp {
     pub fn arrangement(&mut self, ui: &mut egui::Ui) {
         self.drop_target = None;
+        let audio_file_drop = ui.input(|input| {
+            input
+                .raw
+                .hovered_files
+                .iter()
+                .filter_map(|file| file.path.as_ref())
+                .chain(
+                    input
+                        .raw
+                        .dropped_files
+                        .iter()
+                        .filter_map(|file| file.path.as_ref()),
+                )
+                .any(|path| {
+                    path.extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| {
+                            ["wav", "mp3", "flac", "ogg"]
+                                .iter()
+                                .any(|supported| extension.eq_ignore_ascii_case(supported))
+                        })
+                })
+        });
         self.sync_arranger_selection();
         // A popup can dismiss in the menu/toolbar code before clip responses
         // are read. Keep its entry/previous-frame state so that same pointer
@@ -209,7 +235,7 @@ impl DawApp {
             .data_mut(|data| data.get_temp::<daw_ui::TimelineViewport>(viewport_id))
             .unwrap_or(daw_ui::TimelineViewport {
                 pixels_per_beat: self.zoom,
-                row_height: ROW,
+                row_height: self.settings.track_density.row_height(),
                 ..Default::default()
             });
         let view_before = viewport;
@@ -240,6 +266,7 @@ impl DawApp {
         let mut fit = false;
         let mut nudge = 0;
         let mut add_pattern = false;
+        let mut density_choice = None;
         let amplitude_id = egui::Id::new("arrangement_waveform_amplitude");
         let mut waveform_amplitude = ui.ctx().data_mut(|data| {
             data.get_temp::<daw_ui::WaveformAmplitudeScale>(amplitude_id)
@@ -293,6 +320,7 @@ impl DawApp {
                         view_action = action;
                     }
                     ui.separator();
+                    density_choice = daw_ui::track_density_choices(ui, &mut viewport.row_height);
                     daw_ui::waveform_amplitude_control(ui, &mut waveform_amplitude);
                     crate::spectrogram::view_options(ui);
                     daw_ui::track_dimensions(
@@ -326,6 +354,14 @@ impl DawApp {
                 daw_ui::editor_tool_caption(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
             });
         });
+        if let Some(density) = density_choice
+            && self.settings.track_density != density
+        {
+            self.settings.track_density = density;
+            if let Err(error) = self.save_independent_preferences() {
+                self.message(Err(error), "");
+            }
+        }
         ui.ctx()
             .data_mut(|data| data.insert_temp(amplitude_id, waveform_amplitude));
         if nudge != 0 {
@@ -1179,7 +1215,7 @@ impl DawApp {
                         let p = p.with_clip_rect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
                         let col = color(track_color);
                         let is_selected = self.arranger_selection.ids.contains(&clip.id);
-                        let surface = daw_ui::clip_surface(&p, rect, col, is_selected);
+                        let surface = daw_ui::clip_surface_named(&p, rect, col, is_selected, &clip.name);
                         let cp = p.with_clip_rect(rect.shrink(3.0).intersect(Rect::from_min_max(
                             Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom()))));
                         let title = daw_ui::clip_title(&p, surface.title,
@@ -1187,7 +1223,7 @@ impl DawApp {
                         folder_rows[row_index].color = color(track_color);
                     let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
                         let visible_clip = rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
-                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"linked":clip.link_group.is_some(),"link_icon":title.icon.map(rect_json)}));
+                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"name_hit_rect":rect_json(surface.name_hit),"named_header":!clip.name.trim().is_empty(),"linked":clip.link_group.is_some(),"link_icon":title.icon.map(rect_json)}));
                         if !compact && row_height >= 44.0 {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
@@ -1247,12 +1283,13 @@ impl DawApp {
                                 .flatten()
                         });
                         let clip_view = daw_ui::TimelineViewport { start_beat: clip.start, ..viewport };
+                        let mut fade_preview = None;
                         let fades = if matches!(clip.content, ClipContent::Audio { .. }) {
                             let fade_canvas = Rect::from_min_max(Pos2::new(rect.left(), surface.content.top()), Pos2::new(rect.right(), surface.content.bottom()));
-                            daw_ui::paint_clip_fades(&p, fade_canvas, clip_view, clip.start, clip.end(), |beat| clip.audio_envelope_gain(beat - clip.start));
+                            fade_preview = daw_ui::paint_clip_fades(&p, fade_canvas, clip_view, clip.start, clip.end(), |beat| clip.audio_envelope_gain(beat - clip.start));
                             let mut fade_ui = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
                             fade_ui.set_clip_rect(p.clip_rect().intersect(rect));
-                            Some(daw_ui::clip_fade_handles(&mut fade_ui, ui.id().with(("clip_fades", clip.id)), fade_canvas, clip_view,
+                            Some(daw_ui::clip_fade_handles_with_hover_bounds(&mut fade_ui, ui.id().with(("clip_fades", clip.id)), fade_canvas, rect, clip_view,
                                 crate::audio_editor::audio_fade_bounds(clip), !navigation.navigating))
                         } else { None };
                         if let Some((edge, beat)) = fades.as_ref().and_then(|fades| fades.edit) {
@@ -1273,6 +1310,8 @@ impl DawApp {
                         let editing_fade = fades.as_ref().is_some_and(|fades| fades.interacting);
                         let pressed_fade = editing_fade && primary_press.is_some();
                         if let Some(diagnostic) = clip_diagnostics.last_mut() {
+                            diagnostic["fade_preview"] = fade_preview.map(rect_json).into();
+                            diagnostic["fade_handles_visible"] = serde_json::json!(fades.as_ref().map(|fades| fades.visible));
                             diagnostic["fade_handles"] = serde_json::json!(fades.as_ref().map(|fades| fades.handles.map(|handle| handle.map(rect_json))));
                             if let Some(fades) = &fades {
                                 diagnostic["fade_in_handle"] = serde_json::json!(fades.handles[0].map(rect_json));
@@ -1412,13 +1451,25 @@ impl DawApp {
                         if double {
                             self.selected_track = Some(track.id);
                             self.selected_clip = Some(clip.id);
-                            open_editor = true;
+                            let restore_name = clip.name.trim().is_empty()
+                                && response.interact_pointer_pos().is_some_and(|pos| {
+                                    surface.name_hit.contains(pos)
+                                        && !fades.as_ref().is_some_and(|fades| fades.handles.iter().flatten().any(|handle| handle.contains(pos)))
+                                });
+                            if restore_name {
+                                edits.push(Edit::Rename(track.id, clip.id));
+                            } else {
+                                open_editor = true;
+                            }
                         }
                         if response.hovered()
                             && !editing_fade
                             && let Some(pos) = response.hover_pos()
                         {
                             let icon = match self.tool {
+                                daw_ui::EditorTool::Select if clip.name.trim().is_empty()
+                                    && surface.name_hit.contains(pos)
+                                    && !fades.as_ref().is_some_and(|fades| fades.handles.iter().flatten().any(|handle| handle.contains(pos))) => egui::CursorIcon::Text,
                                 daw_ui::EditorTool::Select
                                     if pos.x > rect.right() - 8.0 || pos.x < rect.left() + 8.0 =>
                                 {
@@ -1668,6 +1719,7 @@ impl DawApp {
                             }
                             if let Some(diagnostic) = clip_diagnostics.iter_mut().find(|value| value["id"] == incoming.id) {
                                 diagnostic["crossfade_handle"] = handle.handle.map(|rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})).into();
+                                diagnostic["crossfade_handle_visible"] = handle.visible.into();
                             }
                         }
                     }
@@ -1677,17 +1729,22 @@ impl DawApp {
                     }
                     if let Some(pos) = ui.ctx().input(|i| i.pointer.hover_pos())
                         && row.contains(pos)
-                        && pos.x >= grid_left && pos.x <= canvas.right()
+                        && (pos.x >= grid_left && pos.x <= canvas.right()
+                            || audio_file_drop && header.contains(pos))
                     {
-                        let beat = self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0);
+                        // External files can target the channel identity too.
+                        // Internal clip drags keep their existing grid-only hit
+                        // area; a header file drop uses the captured playhead.
+                        let beat = if pos.x < grid_left { self.cursor }
+                            else { self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0) };
                         self.drop_target = Some((Some(track.id), beat));
-                        if !ui.ctx().input(|i| i.raw.hovered_files.is_empty()) {
+                        if ui.ctx().input(|i| !i.raw.hovered_files.is_empty() || !i.raw.dropped_files.is_empty()) {
                             let x = origin + beat as f32 * self.zoom;
                             p.rect_filled(row, 0.0, palette(ui.ctx()).accent.gamma_multiply(0.08));
-                            p.line_segment(
+                            if x >= grid_left && x <= canvas.right() { p.line_segment(
                                 [Pos2::new(x, row.top()), Pos2::new(x, row.bottom())],
                                 Stroke::new(3.0_f32, palette(ui.ctx()).accent),
-                            );
+                            ); }
                         }
                     }
                     let resize_rect = Rect::from_min_max(
@@ -1733,7 +1790,7 @@ impl DawApp {
                     let response = ui.scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
                         daw_ui::empty_workspace(ui, "Start a song", "Choose a sound, import a recording, or compose with AI.", &[
                             daw_ui::EmptyWorkspaceAction { id: "instrument", label: "Choose instrument…", description: "Browse installed instruments. Choosing a sound creates its MIDI track.", primary: true },
-                            daw_ui::EmptyWorkspaceAction { id: "import", label: "Import audio or MIDI…", description: "Bring a WAV recording or MIDI file into the song. You can also drop files onto the arranger.", primary: false },
+                            daw_ui::EmptyWorkspaceAction { id: "import", label: "Import audio or MIDI…", description: "Import WAV, MP3, FLAC, Ogg or MIDI files. Drop audio files onto a track or the arranger.", primary: false },
                             daw_ui::EmptyWorkspaceAction { id: "ai", label: "Compose with AI", description: "Explore editable starting points in the song assistant. Nothing runs until you choose Send.", primary: false },
                         ])
                     }).inner;
@@ -1987,6 +2044,8 @@ impl DawApp {
             let mut diagnostics = serde_json::json!({
                 "start_beat": viewport.start_beat, "pixels_per_beat": viewport.pixels_per_beat,
                 "row_offset": viewport.row_offset, "row_height": viewport.row_height,
+                "density": daw_ui::TrackDensity::ALL.into_iter().find(|density| (density.row_height() - viewport.row_height).abs() < 0.5).map_or("Custom", daw_ui::TrackDensity::label),
+                "preferred_density": self.settings.track_density.label(),
                 "canvas": {"min": [canvas.min.x, canvas.min.y], "max": [canvas.max.x, canvas.max.y]},
                 "bounds": {"start_beat": bounds.start_beat, "end_beat": bounds.end_beat,
                     "start_row": bounds.start_row, "end_row": bounds.end_row},

@@ -3,39 +3,62 @@ use crate::AutomationState;
 use egui::{Response, Ui};
 use std::ops::RangeInclusive;
 
-/// The channel's automation menu: an icon-only "Automation" opener, or the
-/// current automation state as its label once the channel has a lane.
+/// A fixed-width, state-colored envelope keeps source names readable. The full
+/// state remains in the accessible name, tooltip, and opened menu.
 pub fn automation_channel_menu<R>(
     ui: &mut Ui,
     state: Option<AutomationState>,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> egui::InnerResponse<Option<R>> {
-    match state {
-        Some(state) => {
-            crate::widgets::semantic_narrow_action_menu(ui, state.rich_label(ui.ctx()), contents)
-        }
-        None => {
-            // A narrow quiet icon leaves the source caption its width.
-            let response = ui
-                .scope(|ui| {
-                    ui.spacing_mut().button_padding.x = 0.0;
-                    ui.add(
-                        crate::IconButton::icon_only(crate::Icon::Automation, "Automation")
-                            .min_size(egui::Vec2::new(
-                                crate::tokens::COMPACT_HEIGHT,
-                                crate::tokens::CONTROL_HEIGHT,
-                            ))
-                            .quiet(),
-                    )
-                })
-                .inner
-                .on_hover_text("Automation · volume, pan, sends and parameters");
-            let inner = egui::Popup::menu(&response)
-                .show(contents)
-                .map(|shown| shown.inner);
-            egui::InnerResponse::new(inner, response)
-        }
-    }
+    automation_channel_menu_named(ui, state, "Channel", contents)
+}
+
+/// A channel-specific owner name keeps a narrow icon unambiguous on hover.
+pub fn automation_channel_menu_named<R>(
+    ui: &mut Ui,
+    state: Option<AutomationState>,
+    owner: &str,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<Option<R>> {
+    let height = crate::mixer_control_height(ui);
+    let label = state.map_or("Automation", AutomationState::label);
+    let color = state.map_or(crate::theme::palette(ui.ctx()).muted, |state| {
+        state.color(ui.ctx())
+    });
+    let response = ui
+        .scope(|ui| {
+            ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+            ui.add(
+                crate::IconButton::icon_only(crate::Icon::Automation, label)
+                    .min_size(egui::vec2(crate::tokens::COMPACT_HEIGHT, height))
+                    .label_color(color)
+                    .quiet(),
+            )
+        })
+        .inner;
+    let response = crate::hover_text(
+        response,
+        state.map_or_else(
+            || format!("{owner} · Automation\nVolume, pan, sends and parameters"),
+            |state| {
+                format!(
+                    "{owner} · {}\n{}\nClick for volume, pan, send and parameter automation",
+                    state.label(),
+                    state.hint()
+                )
+            },
+        ),
+    );
+    let inner = egui::Popup::menu(&response)
+        .show(|ui| {
+            if let Some(state) = state {
+                crate::automation_badge(ui, state);
+                ui.separator();
+            }
+            contents(ui)
+        })
+        .map(|shown| shown.inner);
+    egui::InnerResponse::new(inner, response)
 }
 
 #[derive(Clone, Copy, Debug)]

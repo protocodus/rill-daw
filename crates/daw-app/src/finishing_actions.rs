@@ -31,12 +31,14 @@ impl ExportKind {
 struct ExportReceipt {
     kind: ExportKind,
     path: PathBuf,
+    summary: Option<String>,
 }
 
 #[derive(Clone)]
 struct ExportTarget {
     path: PathBuf,
-    include_effect_tails: bool,
+    specification: crate::export_ui::ExportSpecification,
+    report: Option<daw_engine::ExportReport>,
 }
 
 #[derive(Default)]
@@ -52,29 +54,40 @@ impl FinishingActions {
         self.channels.clear();
     }
 
-    pub(crate) fn export_started(&mut self, path: PathBuf, include_effect_tails: bool) {
+    pub(crate) fn export_started(
+        &mut self,
+        path: PathBuf,
+        specification: crate::export_ui::ExportSpecification,
+    ) {
         self.pending_export = Some(ExportTarget {
             path,
-            include_effect_tails,
+            specification,
+            report: None,
         });
     }
 
-    pub(crate) fn export_finished(&mut self, path: &Path) {
-        if let Some(target) = self
+    pub(crate) fn export_finished(&mut self, path: &Path, report: daw_engine::ExportReport) {
+        if let Some(mut target) = self
             .pending_export
             .take()
             .filter(|target| target.path == path)
         {
+            target.report = Some(report);
+            let summary = Some(format!(
+                "{} · {}",
+                target.specification.summary(),
+                daw_ui::format_clock_time(report.frames as f64 / f64::from(report.sample_rate), 3)
+            ));
             self.last_export = Some(target);
-            self.record_export(ExportKind::Wav, path);
+            self.record_export(ExportKind::Wav, path, summary);
         }
     }
 
     pub(crate) fn midi_export_finished(&mut self, path: &Path) {
-        self.record_export(ExportKind::Midi, path);
+        self.record_export(ExportKind::Midi, path, None);
     }
 
-    fn record_export(&mut self, kind: ExportKind, path: &Path) {
+    fn record_export(&mut self, kind: ExportKind, path: &Path, summary: Option<String>) {
         self.recent_exports
             .retain(|receipt| receipt.kind != kind || receipt.path != path);
         self.recent_exports.insert(
@@ -82,6 +95,7 @@ impl FinishingActions {
             ExportReceipt {
                 kind,
                 path: path.to_owned(),
+                summary,
             },
         );
         self.recent_exports.truncate(MAX_RECENT_EXPORTS);
@@ -93,12 +107,58 @@ impl FinishingActions {
 }
 
 impl DawApp {
+    pub(crate) fn completed_export_summary(&self, path: &Path) -> Option<String> {
+        let target = self
+            .finishing
+            .last_export
+            .as_ref()
+            .filter(|target| target.path == path)?;
+        let report = target.report.as_ref()?;
+        let peak = if report.sample_peak > 0.0 {
+            format!("{:.1} dBFS", 20.0 * report.sample_peak.log10())
+        } else {
+            "−∞ dBFS".to_owned()
+        };
+        let range = target
+            .specification
+            .options
+            .range
+            .map_or(String::new(), |range| {
+                format!(
+                    " · Loop beats {}–{}",
+                    daw_ui::parameter_value_text(range.start_beat + 1.0),
+                    daw_ui::parameter_value_text(range.end_beat + 1.0)
+                )
+            });
+        Some(format!(
+            "{} · {}{} · Rendered sample peak {peak}",
+            target.specification.summary(),
+            daw_ui::format_clock_time(report.frames as f64 / f64::from(report.sample_rate), 3),
+            range
+        ))
+    }
+
+    pub(crate) fn completed_export_clipped_samples(&self, path: &Path) -> u64 {
+        self.finishing
+            .last_export
+            .as_ref()
+            .filter(|target| target.path == path)
+            .and_then(|target| target.report.as_ref())
+            .map_or(0, |report| report.clipped_samples)
+    }
+
     pub(crate) fn finishing_diagnostics(&self) -> serde_json::Value {
         serde_json::json!({
             "selected_channels": self.finishing_selected_channels(),
-            "last_export": self.finishing.last_export.as_ref().map(|target| serde_json::json!({
-                "path": target.path, "include_effect_tails": target.include_effect_tails,
-            })),
+            "last_export": self.finishing.last_export.as_ref().map(|target| {
+                let mut diagnostic = target.specification.diagnostics();
+                diagnostic["path"] = serde_json::json!(target.path);
+                diagnostic["report"] = target.report.map(|report| serde_json::json!({
+                    "sample_peak":report.sample_peak,"clipped_samples":report.clipped_samples,"frames":report.frames,
+                    "sample_rate":report.sample_rate,"encoding":report.encoding,"dither":report.dither,
+                })).unwrap_or(serde_json::Value::Null);
+                diagnostic
+            }),
             "recent_exports": self.finishing.recent_exports.iter().map(|receipt| serde_json::json!({
                 "kind": receipt.kind.label(), "path": receipt.path,
             })).collect::<Vec<_>>(),
@@ -119,6 +179,9 @@ impl DawApp {
                     let label = format!("{} · {}", receipt.kind.label(), name.to_string_lossy());
                     ui.push_id((receipt.kind, &receipt.path), |ui| {
                         daw_ui::menu_button(ui, label, |ui| {
+                            if let Some(summary) = &receipt.summary {
+                                daw_ui::text::body(ui, summary);
+                            }
                             if daw_ui::button(ui, "Copy path")
                                 .on_hover_text(path.as_ref())
                                 .clicked()
@@ -387,7 +450,7 @@ impl DawApp {
         };
         if response.clicked() {
             if let Some(target) = self.finishing.last_export.clone() {
-                self.export_to_with_tails(target.path, target.include_effect_tails);
+                self.export_to_with_specification(target.path, target.specification);
             }
             ui.close();
         }

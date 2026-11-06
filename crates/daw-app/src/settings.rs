@@ -14,6 +14,8 @@ use std::{
 pub struct Settings {
     pub ai: AiSettings,
     pub appearance: daw_ui::theme::Appearance,
+    pub track_density: daw_ui::TrackDensity,
+    pub export: ExportSettings,
     pub device_name: Option<String>,
     pub input_device_name: Option<String>,
     pub midi_input_device: Option<String>,
@@ -25,6 +27,39 @@ pub struct Settings {
     pub vst_dirs: Vec<PathBuf>,
     /// Successful project saves seed the next new project's picker too.
     pub last_project_directory: Option<PathBuf>,
+}
+
+/// Presentation defaults for delivery. Exact loop bounds belong to each
+/// captured export request, rather than leaking between unrelated projects.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportRangeMode {
+    #[default]
+    Arrangement,
+    Loop,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExportSettings {
+    /// None follows playback; a chosen rate never reconfigures the audio device.
+    pub sample_rate: Option<u32>,
+    pub encoding: daw_engine::WavEncoding,
+    pub dither: bool,
+    pub include_effect_tails: bool,
+    pub range_mode: ExportRangeMode,
+}
+
+impl Default for ExportSettings {
+    fn default() -> Self {
+        Self {
+            sample_rate: None,
+            encoding: daw_engine::WavEncoding::Float32,
+            dither: true,
+            include_effect_tails: true,
+            range_mode: ExportRangeMode::Arrangement,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +110,8 @@ impl Default for Settings {
         Self {
             ai: AiSettings::default(),
             appearance: daw_ui::theme::Appearance::System,
+            track_density: daw_ui::TrackDensity::default(),
+            export: ExportSettings::default(),
             device_name: None,
             input_device_name: None,
             midi_input_device: None,
@@ -111,6 +148,12 @@ impl Settings {
         anyhow::ensure!(
             (8_000..=192_000).contains(&self.sample_rate),
             "Invalid sample rate"
+        );
+        anyhow::ensure!(
+            self.export
+                .sample_rate
+                .is_none_or(|rate| (8_000..=192_000).contains(&rate)),
+            "Invalid export sample rate"
         );
         anyhow::ensure!(
             (32..=4096).contains(&self.buffer_frames),
@@ -285,6 +328,7 @@ mod tests {
             br#"{"device_name":" "}"#.as_slice(),
             br#"{"history_limit":0}"#.as_slice(),
             br#"{"history_limit":4097}"#.as_slice(),
+            br#"{"export":{"sample_rate":0}}"#.as_slice(),
             b"not json".as_slice(),
         ] {
             fs::write(&path, bytes).unwrap();
@@ -296,6 +340,34 @@ mod tests {
         assert_eq!(loaded.buffer_frames, 256);
         assert_eq!(loaded.last_project_directory, None);
         assert_eq!(loaded.history_limit, daw_core::HISTORY_STEPS);
+        assert_eq!(loaded.track_density, daw_ui::TrackDensity::Compact);
+        assert_eq!(loaded.export, ExportSettings::default());
+    }
+
+    #[test]
+    fn delivery_and_density_preferences_roundtrip_without_reconfiguring_audio() {
+        let directory = TestDirectory::new();
+        let config = directory.0.join("config");
+        let settings = Settings {
+            track_density: daw_ui::TrackDensity::Detailed,
+            export: ExportSettings {
+                sample_rate: Some(44_100),
+                encoding: daw_engine::WavEncoding::Pcm24,
+                dither: true,
+                include_effect_tails: false,
+                range_mode: ExportRangeMode::Loop,
+            },
+            ..directory.settings()
+        };
+        let audio = settings.audio();
+        settings.save_in(&config).unwrap();
+        let restored = Settings::load_from(&config.join("settings.json"));
+        assert_eq!(restored, settings);
+        let restored_audio = restored.audio();
+        assert_eq!(restored_audio.sample_rate, audio.sample_rate);
+        assert_eq!(restored_audio.buffer_frames, audio.buffer_frames);
+        assert_eq!(restored_audio.device_name, audio.device_name);
+        assert_eq!(restored_audio.resample_quality, audio.resample_quality);
     }
 
     #[test]

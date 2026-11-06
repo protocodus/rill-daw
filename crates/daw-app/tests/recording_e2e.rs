@@ -687,6 +687,11 @@ fn compact_recording_failure_keeps_a_complete_input_target_and_all_take_actions_
 #[test]
 fn input_selection_can_be_cleared_without_mutating_existing_recordings() {
     let mut app = fixture(false, true);
+    // This case exercises the expanded inline input selector. Compact rows
+    // expose the same recording panel through their channel details action.
+    app.click("View");
+    app.click("Track density");
+    app.click("Detailed");
     let state = app.inspect();
     let track = project(&state).tracks[0].id;
     let arm = state["timeline"]["recording_controls"]

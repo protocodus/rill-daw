@@ -274,6 +274,15 @@ impl DawApp {
         if self.recording_busy() {
             return;
         }
+        if self.audio_import_busy() {
+            self.message(
+                Err(anyhow::anyhow!(
+                    "Finish or cancel audio import before recording"
+                )),
+                "",
+            );
+            return;
+        }
         if self
             .engine
             .as_ref()

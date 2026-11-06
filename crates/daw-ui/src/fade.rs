@@ -21,6 +21,8 @@ pub struct ClipFadeBounds {
 
 pub struct ClipFadeResponse {
     pub handles: [Option<Rect>; 2],
+    /// Paint state is independent of the permanent interaction rectangles.
+    pub visible: [bool; 2],
     /// Arrangement beat of the moved endpoint. Snap and map to the source in
     /// the caller, preserving the other fade and both curve shapes.
     pub edit: Option<(ClipFadeEdge, f64)>,
@@ -61,7 +63,7 @@ pub fn paint_clip_fades(
     start: f64,
     end: f64,
     gain: impl Fn(f64) -> f32,
-) {
+) -> Option<Rect> {
     let visible = rect
         .intersect(painter.clip_rect())
         .intersect(Rect::from_min_max(
@@ -69,51 +71,71 @@ pub fn paint_clip_fades(
             Pos2::new(view.x_at(rect, end), rect.bottom()),
         ));
     if !visible.is_positive() {
-        return;
+        return None;
     }
     let painter = painter.with_clip_rect(visible);
     let color = theme::palette(painter.ctx()).orange;
     let samples = (visible.width().ceil() as usize).clamp(2, 2048);
     let mut points = Vec::with_capacity(samples + 1);
-    let mut unity = Vec::with_capacity(samples + 1);
-    // Inset unity from the canvas edge so an untouched envelope stays visible.
-    let top = rect.top() + crate::tokens::SPACE_XS;
+    let top = rect.top() + 1.0 / painter.pixels_per_point();
     let height = (rect.bottom() - top).max(0.0);
     for index in 0..=samples {
         let x = egui::lerp(visible.x_range(), index as f32 / samples as f32);
         let value = gain(view.beat_at(rect, x)).clamp(0.0, 1.0);
         points.push(Pos2::new(x, rect.bottom() - value * height));
-        unity.push(value >= 0.999);
     }
     // A quiet veil above the envelope distinguishes attenuated audio without
     // repainting or baking the source waveform.
     let mut mesh = egui::Mesh::default();
-    for point in &points {
-        mesh.colored_vertex(Pos2::new(point.x, rect.top()), color.gamma_multiply(0.12));
-        mesh.colored_vertex(*point, color.gamma_multiply(0.12));
-    }
-    for index in 0..samples as u32 {
-        let a = index * 2;
-        mesh.add_triangle(a, a + 1, a + 2);
-        mesh.add_triangle(a + 1, a + 3, a + 2);
-    }
-    painter.add(Shape::mesh(mesh));
-    // Unity runs are quiet; attenuated runs (fades, lowered envelope) are solid.
-    let mut run = vec![points[0]];
-    for index in 1..points.len() {
-        run.push(points[index]);
-        let quiet = unity[index - 1] && unity[index];
-        let next_quiet = index + 1 < points.len() && unity[index] && unity[index + 1];
-        if index + 1 == points.len() || quiet != next_quiet {
-            let stroke = if quiet {
-                Stroke::new(1.0_f32, color.gamma_multiply(0.5))
-            } else {
-                Stroke::new(2.0_f32, color)
-            };
-            painter.add(Shape::line(std::mem::take(&mut run), stroke));
-            run.push(points[index]);
+    let mut extent: Option<Rect> = None;
+    let mut run = Vec::new();
+    let mut lines = Vec::new();
+    let mut previous_tail = None;
+    for pair in points.windows(2) {
+        let active = pair.iter().any(|point| point.y > top + 0.001);
+        if active {
+            let base = previous_tail.unwrap_or_else(|| {
+                let base = mesh.vertices.len() as u32;
+                mesh.colored_vertex(Pos2::new(pair[0].x, rect.top()), color.gamma_multiply(0.10));
+                mesh.colored_vertex(pair[0], color.gamma_multiply(0.10));
+                base
+            });
+            let tail = mesh.vertices.len() as u32;
+            mesh.colored_vertex(Pos2::new(pair[1].x, rect.top()), color.gamma_multiply(0.10));
+            mesh.colored_vertex(pair[1], color.gamma_multiply(0.10));
+            mesh.add_triangle(base, base + 1, tail);
+            mesh.add_triangle(base + 1, tail + 1, tail);
+            previous_tail = Some(tail);
+            let region = Rect::from_min_max(
+                Pos2::new(pair[0].x, rect.top()),
+                Pos2::new(pair[1].x, pair[0].y.max(pair[1].y)),
+            );
+            extent = Some(extent.map_or(region, |previous| previous.union(region)));
+            if run.is_empty() {
+                run.push(pair[0]);
+            }
+            run.push(pair[1]);
+        } else {
+            previous_tail = None;
+            if !run.is_empty() {
+                lines.push(Shape::line(
+                    std::mem::take(&mut run),
+                    Stroke::new(1.0_f32, color.gamma_multiply(0.8)),
+                ));
+            }
         }
     }
+    if !run.is_empty() {
+        lines.push(Shape::line(
+            run,
+            Stroke::new(1.0_f32, color.gamma_multiply(0.8)),
+        ));
+    }
+    if !mesh.indices.is_empty() {
+        painter.add(Shape::mesh(mesh));
+    }
+    painter.extend(lines);
+    extent
 }
 
 /// Visible fade handle edge length (`SPACE_MD`); the hit target stays 16.
@@ -129,8 +151,24 @@ pub fn clip_fade_handles(
     bounds: ClipFadeBounds,
     editable: bool,
 ) -> ClipFadeResponse {
+    clip_fade_handles_with_hover_bounds(ui, id, rect, rect, view, bounds, editable)
+}
+
+/// Same hit targets, with the whole clip supplied for familiar corner reveal.
+/// Title bands can therefore reveal a handle without intercepting their clicks.
+#[allow(clippy::too_many_arguments)]
+pub fn clip_fade_handles_with_hover_bounds(
+    ui: &mut Ui,
+    id: Id,
+    rect: Rect,
+    hover_bounds: Rect,
+    view: TimelineViewport,
+    bounds: ClipFadeBounds,
+    editable: bool,
+) -> ClipFadeResponse {
     let mut result = ClipFadeResponse {
         handles: [None, None],
+        visible: [false, false],
         edit: None,
         interacting: false,
     };
@@ -154,19 +192,25 @@ pub fn clip_fade_handles(
         // Square handles sit SPACE_SM below the canvas top, clear of the
         // loop lane and of waveform peaks at full scale.
         let half = HANDLE_SIZE * 0.5;
+        let vertical_inset = half.min(rect.height() * 0.5);
         let position = Pos2::new(
             positions[index],
-            rect.top()
+            (rect.top()
                 + crate::tokens::SPACE_SM
                 + half
                 + if separate && index == 1 {
                     HANDLE_SIZE + crate::tokens::SPACE_XS
                 } else {
                     0.0
-                },
+                })
+            .clamp(rect.top() + vertical_inset, rect.bottom() - vertical_inset),
         );
         let target = Rect::from_center_size(position, Vec2::splat(16.0)).intersect(rect);
-        if !ui.clip_rect().contains(position) || !rect.contains(position) {
+        let origin_id = id.with(("origin", index));
+        let active_origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
+        if active_origin.is_none()
+            && (!ui.clip_rect().contains(position) || !rect.contains(position))
+        {
             continue;
         }
         result.handles[index] = Some(target);
@@ -188,7 +232,6 @@ pub fn clip_fade_handles(
                         .hover_pos()
                         .is_some_and(|point| target.contains(point))
                 }) && ui.rect_contains_pointer(target);
-            let origin_id = id.with(("origin", index));
             if response.is_pointer_button_down_on()
                 && ui.input(|input| input.pointer.primary_pressed())
             {
@@ -241,10 +284,40 @@ pub fn clip_fade_handles(
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Slider, editable && ui.is_enabled(), label)
         });
-        let hovered = response.hovered() || response.dragged();
-        response
-            .on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
-            .on_hover_text(format!("{label} · Drag to adjust · Double-click to remove"));
+        let corner = Rect::from_min_max(
+            Pos2::new(
+                if index == 0 {
+                    hover_bounds.left()
+                } else {
+                    (hover_bounds.right() - 32.0).max(hover_bounds.left())
+                },
+                hover_bounds.top(),
+            ),
+            Pos2::new(
+                if index == 0 {
+                    (hover_bounds.left() + 32.0).min(hover_bounds.right())
+                } else {
+                    hover_bounds.right()
+                },
+                (hover_bounds.top() + 24.0).min(hover_bounds.bottom()),
+            ),
+        );
+        let near = editable
+            && ui.is_enabled()
+            && ui
+                .input(|input| input.pointer.hover_pos())
+                .is_some_and(|pointer| {
+                    (target.expand(6.0).contains(pointer) || corner.contains(pointer))
+                        && ui.rect_contains_pointer(hover_bounds)
+                });
+        let hovered = editable
+            && ui.is_enabled()
+            && (response.hovered() || response.dragged() || response.is_pointer_button_down_on());
+        result.visible[index] = near || hovered;
+        crate::hover_text(
+            response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal),
+            format!("{label} · Drag to adjust · Double-click to remove"),
+        );
         let colors = theme::palette(ui.ctx());
         let painter = ui.painter_at(rect);
         if hovered {
@@ -257,14 +330,16 @@ pub fn clip_fade_handles(
                 0.75,
             ));
         }
-        let marker = Rect::from_center_size(position, Vec2::splat(HANDLE_SIZE));
-        painter.rect_filled(marker, crate::tokens::NOTE_RADIUS, colors.orange);
-        painter.rect_stroke(
-            marker,
-            crate::tokens::NOTE_RADIUS,
-            Stroke::new(1.5_f32, colors.bg),
-            StrokeKind::Inside,
-        );
+        if result.visible[index] {
+            let marker = Rect::from_center_size(position, Vec2::splat(HANDLE_SIZE));
+            painter.rect_filled(marker, crate::tokens::NOTE_RADIUS, colors.orange);
+            painter.rect_stroke(
+                marker,
+                crate::tokens::NOTE_RADIUS,
+                Stroke::new(1.5_f32, colors.bg),
+                StrokeKind::Inside,
+            );
+        }
     }
     result
 }
@@ -275,6 +350,7 @@ pub struct CrossfadeHandleResponse {
     pub duration: Option<f64>,
     pub interacting: bool,
     pub open_curve: bool,
+    pub visible: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -377,7 +453,32 @@ pub fn crossfade_duration_handle(
         )
     });
     let open_curve = next.is_none() && handle_double_click(ui, id, &response);
-    if visible {
+    let lower_corner = Rect::from_min_max(
+        Pos2::new(
+            view.x_at(rect, start),
+            (rect.bottom() - 24.0).max(rect.top()),
+        ),
+        Pos2::new(
+            (view.x_at(rect, start) + 32.0).min(rect.right()),
+            rect.bottom(),
+        ),
+    );
+    let near = editable
+        && ui.is_enabled()
+        && ui
+            .input(|input| input.pointer.hover_pos())
+            .is_some_and(|pointer| {
+                (target.expand(6.0).contains(pointer) || lower_corner.contains(pointer))
+                    && ui.rect_contains_pointer(rect)
+            });
+    let painted = editable
+        && ui.is_enabled()
+        && visible
+        && (near
+            || response.hovered()
+            || response.dragged()
+            || response.is_pointer_button_down_on());
+    if painted {
         let color = theme::palette(ui.ctx()).automation_override;
         ui.painter_at(rect).add(Shape::convex_polygon(
             vec![
@@ -391,10 +492,13 @@ pub fn crossfade_duration_handle(
         ));
     }
     CrossfadeHandleResponse {
+        visible: painted,
         open_curve,
         interacting,
-        response: response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
-            .on_hover_text("Crossfade · Drag to blend the overlap · Double-click to shape the curve · Shift bypasses snap"),
+        response: crate::hover_text(
+            response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal),
+            "Crossfade · Drag to blend the overlap · Double-click to shape the curve · Shift bypasses snap",
+        ),
         handle: visible.then_some(target),
         duration: next,
     }

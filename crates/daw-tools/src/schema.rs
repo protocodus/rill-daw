@@ -164,7 +164,7 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "rename_clip",
-        json!({"track":reference(),"clip":reference(),"name":string()}),
+        json!({"track":reference(),"clip":reference(),"name":{"type":"string","maxLength":1024,"description":"Clip display name. Empty or whitespace-only names hide the title band; the clip remains editable and can be named again."}}),
         ["track", "clip", "name"]
     );
     add!(

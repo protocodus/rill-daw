@@ -11,7 +11,7 @@ The initial session contains an original generated audio loop. Rill includes no 
 An empty song offers three starting points: **Choose instrument…** opens your
 installed sounds, **Import audio or MIDI…** brings in a recording or sequence,
 and **Compose with AI** opens editable composition examples. Browsing sounds or
-examples leaves the song untouched. **Add pattern** and dropping WAV files onto
+examples leaves the song untouched. **Add pattern** and dropping audio files onto
 the arranger remain available; the starting actions disappear once a track exists.
 
 ## Included
@@ -20,7 +20,7 @@ the arranger remain available; the starting actions disappear once a track exist
 - Parallel processing of independent instrument/effect chains, with persistent workers, ordered buses, and a serial path for lightweight sessions.
 - Non-destructive clip movement, trimming, splitting, duplication, cross-track movement, and undo/redo.
 - Live volume, pan, note, and clip edits retain running plugins, sustained notes, effect tails, and transport position; new audio prepares in the background.
-- Drag WAV files onto an existing audio track or empty arrangement space to create a track. Dropping on a MIDI/bus/folder track creates a new audio track.
+- Drag WAV, MP3, FLAC or OGG/Vorbis files onto an existing audio track to place clips there. Dropping elsewhere inside the app creates a new audio track for each file. Dropping on a MIDI/bus/folder track also creates a new audio track.
 - Non-destructive audio gain, normalization, reverse, curve fades, range clipboard editing, and transient split preview.
 - Exclusive audio overlaps, optional spline crossfades, and audio/MIDI clip joining.
 - Transport loop toggle and on-demand start/end beat controls, saved with the project.
@@ -108,6 +108,20 @@ See [AI architecture, tool inventory, and verification](AI_TOOLS.md).
 
 The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose a VST3 to assign it and return to your caller; closing the chooser leaves the pattern unassigned.
 
+**File → Import audio…** always creates a new audio track and clip at the cursor.
+WAV, MP3, FLAC and OGG/Vorbis decoding runs in an isolated background worker;
+the progress notice offers **Cancel import**. A drop captures its track and
+position before decoding, so later selection changes cannot redirect it. A
+deleted destination fails clearly. New/Open/Quit cancels unfinished imports.
+The existing **Import…** command also retains MIDI-file import.
+
+Up to eight files form one atomic import and one Undo action. If any file is
+corrupt, unsupported, too large or cannot finish, the batch creates no tracks or
+clips. Mono/stereo audio at 8–384 kHz is supported, with a 512 MiB decoded batch
+limit. Successful imports use unique managed WAV copies in the scratch folder;
+original files are untouched. Undo retains those copies for Redo and recovery,
+and saved `.rill` projects include them for portable reopening.
+
 The MIDI Clip Editor keeps **Instrument** beside its editing actions after a sound
 is assigned. Open it to inspect or change the sound, then close it or press Escape
 to return to the same phrase, selected notes, and editing position. An unassigned
@@ -150,7 +164,11 @@ In the piano roll, **Generate…** opens Chord, Arpeggio and Melody modes. Start
 
 Arrangement track headers separate the title, icon and color from the mix controls. Volume and pan sit beside **M**ute and **S**olo; **Routing** and **Instrument** or **Input** each have their own row. Stereo output meters occupy a dedicated column. Drag a volume or pan rail, or click its value for exact entry. Pan shows **C** at center and **L/R** percentages elsewhere. Cancel, Escape or clicking outside the value popup discards the draft; displaying a rounded caption never changes stored precision. −60 dB silences the channel.
 
-Click **Routing** to choose Master or an eligible output bus. **Instrument** chooses or replaces the MIDI track's VST; **Input** opens audio recording and monitoring settings. The default header is 288 × 144 points. Compact tracks keep mix controls and expose the complete Channel view through the sliders icon beside the title. Very short rows use readable value controls instead of miniature rails. Folders and automation tracks have no audio meter or gain/pan controls; folder mute/solo acts on descendants.
+**View → Track density** offers **Compact**, **Standard** and **Detailed**. Compact is the default: 64-point rows keep volume, pan, M/S, arm and metering available while showing more of the song. Standard adds room for volume/pan rails; Detailed exposes routing and source controls directly. The sliders icon beside a compact track's title opens its complete Channel view. The density preference is remembered across projects and restarts without changing the song or Undo history. Fit and manual row resizing remain temporary view changes.
+
+In Detailed headers, click **Routing** to choose Master or an eligible output bus. **Instrument** chooses or replaces the MIDI track's VST; **Input** opens audio recording and monitoring settings. The default label width is 288 points. Very short rows use readable value controls instead of miniature rails. Folders and automation tracks have no audio meter or gain/pan controls; folder mute/solo acts on descendants.
+
+Clip names are optional. Use the clip's context menu **Rename…**, clear its name and choose **Apply name** to hide the title band. A thin top border remains while the waveform or notes gain the space. Double-click that border to enter a name again, or use **Rename…** from the context menu. Double-clicking the body still opens Clip Editor. Clearing/restoring a name supports Undo/Redo and saved projects; linked copies share the name.
 
 Gain captions show one decimal place; hover or open the value editor to see its
 full precision. Simply viewing or cancelling an edit preserves the stored value.
@@ -239,6 +257,13 @@ Choose **Edit → Ghost copy** (or the clip context menu) to place another insta
 
 Hover an arrangement clip to see its full name, track and start/end timing. This distinguishes repeated occurrences even when their titles are shortened by the current zoom.
 
+Hover near an audio clip's upper corners or fade endpoints to reveal its orange
+fade handles, in Arrangement or Clip Editor. Drag to adjust; double-click to
+remove that fade. Handles hide when you move away, while applied fades retain a
+subtle shaded envelope over the waveform. The lower incoming corner reveals an
+overlap's crossfade diamond; drag its duration or double-click to shape its curve.
+Each drag remains one Undo step.
+
 **Duplicate** creates an independent copy; in the MIDI editor with notes selected, it duplicates those notes instead. **Make independent** detaches the selected clip with its current name and edits intact. Deleting the original leaves the remaining ghosts connected. Splitting keeps linked parts in the group; joining produces an independent clip. Links survive undo/redo and portable project save/reopen.
 
 Audio clips on one track are exclusive: the active clip with the latest start wins. If starts match, the later entry in the track wins; an earlier clip resumes when a shorter overlapping clip ends. Splitting creates a new start and can therefore change overlap priority. Overlaps switch immediately unless you enable **Edit → Crossfade…** (also in the clip context menu). Set its duration, choose Linear or Smooth, or drag the two spline handles. The complementary gain curves appear over the overlap in Arrangement. Crossfades are limited to the available overlap and next clip takeover; they apply at clip entry, not when an older clip resumes.
@@ -291,7 +316,7 @@ Selected clips and mixer channels have a subtle glow in their track color. Hover
 
 Drag an Arrangement track's name or grip to reorder it. The insertion line shows
 Before or After; drop in the middle of a folder header to move inside it. Folders
-move with all their contents. In Mixer's **Song order** view, drag a channel's
+move with all their contents. Mixer defaults to **Song order**, following Arrangement. Drag a channel's
 small grip or name the same way, including buses; both workspaces share this
 saved order. **Signal flow** sorts channels automatically: right-click a channel
 and choose **Use Song order** to enable manual ordering. The same context menu
@@ -427,7 +452,13 @@ Setup persists at `~/Library/Application Support/Rill/settings.json` on macOS, `
 
 New projects save as `.rill` ZIP archives containing `manifest.json` and source WAV files; edits, MIDI, routing, automation, and instrument/effect state live in the manifest. Extracted audio uses the configured scratch directory. Plugins and their own sample libraries must remain installed. Legacy `.daw.json` files stay supported. See [project format and limits](PROJECT_FORMAT.md).
 
-After Save as, the project header shows the saved filename with a dirty marker for later edits; hover it for the full path. Save and WAV/MIDI export pickers reuse that directory and filename stem. Extensionless project saves receive `.rill`. **Export WAV…** warns when visible notes on contributing MIDI tracks have no instrument; Cancel to assign a VST3, or continue to export without those notes. The WAV dialog shows its sample rate, stereo layout and 32-bit float format. Its duration summary says **+ tails** when **Include effect tails** is enabled; turn it off to end exactly at the arrangement boundary. WAV and MIDI completion show the resulting filename and **Copy path**. MIDI export waits for a pending WAV export or session update to finish. Offline WAV rendering does not require an output device.
+After Save as, the project header shows the saved filename with a dirty marker for later edits; hover it for the full path. Save and WAV/MIDI export pickers reuse that directory and filename stem. Extensionless project saves receive `.rill`. **Export WAV…** warns when visible notes on contributing MIDI tracks have no instrument; Cancel to assign a VST3, or continue without those notes.
+
+The WAV dialog offers **16-bit PCM**, **24-bit PCM**, and **32-bit float**, with an export sample rate independent of playback. **Follow audio setup** uses the current audio rate when Export is pressed. Choose the entire **Arrangement**, or **Loop range** to export between the loop markers at an exact length. The duration summary says **+ tails** when arrangement tails are enabled; loop-range exports always end at the end marker. These choices do not move the transport or change the song.
+
+**Dither (TPDF)** adds low-level noise when converting to integer PCM. It is ignored for float output. PCM samples above 0 dBFS are clipped; completion reports the clipped sample count. Float output preserves headroom. The completion summary's **Rendered sample peak** describes the mix before PCM conversion, rather than a true-peak measurement of the encoded file.
+
+WAV and MIDI completion show the filename and **Copy path**. Hover the completed WAV notice to see its format, sample rate, duration, and captured loop bounds. **Retry export** retains the original song snapshot and all export choices. **Re-export last WAV (replace)** renders the current song with the last completed WAV's choices, including its captured loop bounds. MIDI export waits for a pending WAV export or session update to finish. Offline WAV rendering does not require an output device.
 
 On Linux, if a document file picker reports a portal or Zenity helper failure,
 Rill shows **Could not open the file picker** and retains your work. **Details**
@@ -461,7 +492,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats, and PDC model. Current media scope is PCM/float WAV, audio input recording, and constant-tempo note MIDI; MIDI controller/expressive recording, disk-streamed playback, tempo maps, automatic tempo-following warp markers, and surround are not implemented. Volume, pan, note, and clip edits update the existing playback graph; failed audio preparation keeps the last valid audio playing. Structural, plugin-state, and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
+See [architecture and limitations](ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats, and PDC model. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, audio input recording, and constant-tempo note MIDI; MIDI controller/expressive recording, disk-streamed playback, tempo maps, automatic tempo-following warp markers, and surround are not implemented. Volume, pan, note, and clip edits update the existing playback graph; failed audio preparation keeps the last valid audio playing. Structural, plugin-state, and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Build from source
 

@@ -97,7 +97,7 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         .iter()
         .map(|channel| {
             if channel["bus"] == true {
-                f64::from(daw_ui::MIXER_ROLE_HEIGHT)
+                state["mixer"]["role_height"].as_f64().unwrap()
             } else {
                 0.0
             }
@@ -118,7 +118,7 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         .iter()
         .map(|channel| Bounds::from(&channel["fader_scale"]["rail"]))
         .collect();
-    for ((channel, fader), offset) in channels.iter().zip(&faders).zip(&offsets) {
+    for (channel, fader) in channels.iter().zip(&faders) {
         let strip = Bounds::from(&channel["strip"]);
         let pan = Bounds::from(&channel["pan"]);
         let mute_solo = Bounds::from(&channel["mute_solo"]);
@@ -128,7 +128,7 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
             fader.height() >= 80.0,
             "A fader must retain usable travel: {fader:?}"
         );
-        assert!((fader.top - faders[0].top - offset).abs() < 1.0);
+        assert!((fader.top - faders[0].top).abs() < 1.0);
         assert!((fader.bottom - faders[0].bottom).abs() < 1.0);
         assert!(pan.bottom <= mute_solo.top && mute_solo.bottom <= fader.top);
         assert!(
@@ -146,8 +146,8 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
     }
     for (label, minimum_height) in [
         ("C", 12.0),
-        ("Mute", 17.0),
-        ("Solo", 17.0),
+        ("Mute", f64::from(daw_ui::tokens::FONT_CAPTION)),
+        ("Solo", f64::from(daw_ui::tokens::FONT_CAPTION)),
         ("Automation", 17.0),
     ] {
         let controls = labels(state, label);
@@ -158,7 +158,11 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
                 control.height() >= minimum_height,
                 "{label} must not be clipped"
             );
-            assert!((control.top - controls[0].top - offset).abs() < 1.0);
+            assert!(
+                (control.top - controls[0].top - if label == "Automation" { *offset } else { 0.0 })
+                    .abs()
+                    < 1.0
+            );
         }
     }
     assert_aligned_targets(state, height);

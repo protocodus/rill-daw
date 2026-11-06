@@ -1,7 +1,7 @@
 //! Exercise egui's real pointer handling without a native window or audio device.
 
 use crate::app::{DawApp, PopupKind, SetupPage, Tool, WorkspaceView};
-use daw_core::{Clip, ClipContent, Note, Project, TrackKind};
+use daw_core::{Clip, ClipContent, Note, Project};
 use eframe::egui::{self, Event, FullOutput, PointerButton, Pos2, RawInput, Rect, Vec2};
 
 struct Harness {
@@ -192,6 +192,9 @@ impl Harness {
             }],
             ..Default::default()
         });
+        // A native drop is admitted at the end of this frame. Leave the job
+        // queued: the unit-test executable is not the isolated decoder binary.
+        // Running-app audio_import_e2e covers decoding, commit and Undo.
         self.full_frame(RawInput {
             events: vec![Event::PointerMoved(pos)],
             dropped_files: vec![egui::DroppedFile {
@@ -299,7 +302,7 @@ fn has_text(output: &FullOutput, text: &str) -> bool {
     })
 }
 
-/// A tenth of a second of mono PCM, sufficient to exercise decoding and waveform caching.
+/// A real mono PCM source for native-drop admission tests.
 fn wav_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("drop-fixture.wav");
@@ -461,11 +464,12 @@ fn cut_and_glue_tools_split_then_rejoin_a_note_through_pointer_input() {
 }
 
 #[test]
-fn dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_edit() {
+fn dropping_wav_on_an_audio_row_queues_the_captured_target_and_pointer_beat() {
     let (_dir, path) = wav_fixture();
     let mut harness = Harness::new(0.0);
     let target = harness.app.project.add_audio_track("Drop target");
     let before = harness.app.project.clone();
+    let history_before = harness.app.history.state_id();
     harness.settle_full();
     let timeline = harness
         .ctx
@@ -484,39 +488,43 @@ fn dropping_wav_on_an_audio_row_imports_at_the_pointer_beat_and_undoes_as_one_ed
         ((header["min"][1].as_f64().unwrap() + header["max"][1].as_f64().unwrap()) * 0.5) as f32,
     );
     harness.drop_wav(pos, &path);
-    assert_eq!(harness.app.project.tracks.len(), 2);
-    let clips = &harness.app.project.track(target).unwrap().clips;
-    assert_eq!(clips.len(), 1);
-    assert_eq!(clips[0].start, 2.0);
-    assert!((clips[0].length - 0.2).abs() < 1e-6);
-    let canonical = path.canonicalize().unwrap().to_string_lossy().to_string();
-    assert!(matches!(&clips[0].content, ClipContent::Audio { path, .. } if path == &canonical));
-    assert!(harness.app.waveforms.contains_key(&canonical));
-    assert_eq!(harness.app.selected_track, Some(target));
-    assert!(harness.app.history.undo(&mut harness.app.project));
+    let import = harness.app.audio_import_diagnostics();
+    assert_eq!(import["busy"], true);
+    assert_eq!(import["queued"], 1);
+    assert_eq!(import["next"]["target"], target);
+    assert_eq!(import["next"]["beat"], 2.0);
+    assert_eq!(import["next"]["files"], 1);
+    assert_eq!(import["next"]["session"], harness.app.song_session.id);
     assert_eq!(harness.app.project, before);
+    assert_eq!(harness.app.history.state_id(), history_before);
+    assert!(!harness.app.history.can_undo());
+    assert!(harness.app.waveforms.is_empty());
+    harness.app.cancel_audio_import();
+    assert!(!harness.app.audio_import_busy());
 }
 
 #[test]
-fn dropping_wav_in_empty_arrangement_creates_an_audio_track_at_the_pointer_beat() {
+fn dropping_wav_in_empty_arrangement_queues_a_new_track_at_the_pointer_beat() {
     let (_dir, path) = wav_fixture();
     let mut harness = Harness::new(0.0);
+    let before = harness.app.project.clone();
+    let history_before = harness.app.history.state_id();
     let output = harness.settle_full();
     let label = text_position(&output, "Drop audio here · Double-click for MIDI", 0.0);
     // The hint is inset SPACE_LG from the canvas edge, where beat 0 sits.
     let pos = label + Vec2::new(harness.app.zoom * 3.0 - daw_ui::tokens::SPACE_LG, 5.0);
     harness.drop_wav(pos, &path);
-    assert_eq!(harness.app.project.tracks.len(), 2);
-    let track = harness.app.project.tracks.last().unwrap();
-    assert_eq!(track.kind, TrackKind::Audio);
-    assert_eq!(track.name, "drop-fixture");
-    assert_eq!(track.clips.len(), 1);
-    assert_eq!(track.clips[0].start, 3.0);
-    assert_eq!(harness.app.selected_track, Some(track.id));
-    assert_eq!(harness.app.selected_clip, Some(track.clips[0].id));
-    assert!(harness.app.history.undo(&mut harness.app.project));
-    assert_eq!(harness.app.project.tracks.len(), 1);
-    assert_eq!(harness.app.project.tracks[0].clips[0].name, "Pattern");
+    let import = harness.app.audio_import_diagnostics();
+    assert_eq!(import["busy"], true);
+    assert_eq!(import["queued"], 1);
+    assert!(import["next"]["target"].is_null());
+    assert_eq!(import["next"]["beat"], 3.0);
+    assert_eq!(import["next"]["files"], 1);
+    assert_eq!(harness.app.project, before);
+    assert_eq!(harness.app.history.state_id(), history_before);
+    assert!(!harness.app.history.can_undo());
+    harness.app.cancel_audio_import();
+    assert!(!harness.app.audio_import_busy());
 }
 
 #[test]

@@ -593,8 +593,8 @@ fn mixer_and_midi_note_edits_keep_sandboxes_sustained_notes_and_continuous_pcm()
     // Render real blocks while the mouse remains held, not only after the
     // synthetic drag command has completed. Both intermediate fader positions
     // must reach the same running voice and count as one undoable gesture.
-    let state = app.inspect();
-    let rect = state["timeline"]["channels"]
+    let before_fader = app.inspect();
+    let rect = before_fader["timeline"]["channels"]
         .as_array()
         .unwrap()
         .iter()
@@ -633,6 +633,11 @@ fn mixer_and_midi_note_edits_keep_sandboxes_sustained_notes_and_continuous_pcm()
     // A second gesture returning to its starting value must restore the audio
     // preview without introducing an empty undo step.
     let before_return = app.inspect();
+    assert_eq!(
+        before_return["history"]["undo"].as_array().unwrap().len(),
+        before_fader["history"]["undo"].as_array().unwrap().len() + 1,
+        "The entire held fader gesture is one history action"
+    );
     pointer(&mut app, "down", last, last);
     for fraction in [0.8, 0.6] {
         last = at_fraction(fraction);
@@ -664,8 +669,10 @@ fn mixer_and_midi_note_edits_keep_sandboxes_sustained_notes_and_continuous_pcm()
     assert_eq!(
         track(&state, synth)["gain"],
         1.0,
-        "One undo restores the entire live fader gesture"
+        "One undo restores the entire live fader gesture while its field keeps focus"
     );
+    assert_eq!(state["project"], before_fader["project"]);
+    assert_eq!(state["history"]["undo"], before_fader["history"]["undo"]);
     previous = pump_frames(&mut app, &previous, [0.1, 0.1], true, 2048);
     fixture.assert_instances(&ids);
     for (control, target) in [("gain", 0.9), ("pan", 0.8), ("gain", 0.85), ("pan", 0.2)] {
@@ -1023,7 +1030,66 @@ fn audio_pitch_and_algorithm_edits_keep_running_plugins_queue_and_audible_output
 }
 
 #[test]
-fn rapid_edits_and_failed_source_preparation_keep_old_audio_then_recover() {
+fn focused_parameter_history_shortcuts_leave_exact_value_text_undo_local() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let channel = project.add_audio_track("Focused parameter");
+    project.track_mut(channel).unwrap().gain = 1.0;
+    let path = app.directory.path().join("focused-history.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open", "path":path}));
+    let before = app.inspect();
+    assert_eq!(before["timeline"]["density"], "Compact");
+    drag_channel(&mut app, channel, "gain", 0.8);
+    let edited = app.inspect();
+    assert_ne!(edited["project"], before["project"]);
+    undo(&mut app, false);
+    assert_eq!(app.inspect()["project"], before["project"]);
+    undo(&mut app, true);
+    let redone = app.inspect();
+    assert_eq!(redone["project"], edited["project"]);
+
+    // The same focused parameter opens a separate text draft. Undo/Redo here
+    // belongs to that draft, even though song Undo is available underneath it.
+    let rect = redone["timeline"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["track"] == channel)
+        .unwrap()["gain"]
+        .clone();
+    let at = center(&rect);
+    pointer(&mut app, "click", at, at);
+    let opened = app.inspect();
+    assert!(
+        opened["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Apply value")
+    );
+    app.command(json!({"command":"text", "text":"-12.34567"}));
+    for redo in [false, true] {
+        undo(&mut app, redo);
+        let drafting = app.inspect();
+        assert_eq!(drafting["project"], redone["project"]);
+        assert_eq!(drafting["history"], redone["history"]);
+        assert!(
+            drafting["visible_labels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| label == "Apply value")
+        );
+    }
+    app.click("Cancel");
+    undo(&mut app, false);
+    assert_eq!(app.inspect()["project"], before["project"]);
+    app.quit();
+}
+
+#[test]
+fn rapid_edits_and_rejected_audio_import_keep_old_audio_then_recover() {
     let fixture = Fixture::new();
     let (mut app, synth, audio, _, _) = fixture.app();
     let state = app.inspect();
@@ -1039,10 +1105,11 @@ fn rapid_edits_and_failed_source_preparation_keep_old_audio_then_recover() {
     let expected = expected_synth(&state, synth, 60);
     previous = pump(&mut app, &previous, expected, true);
     fixture.assert_instances(&ids);
+    let held_ons = fixture.note_events(60, true);
+    let held_offs = fixture.note_events(60, false);
 
-    // This is a valid importable WAV but its 1 Hz sample rate exceeds the
-    // renderer's bounded conversion ratio. Failure is deterministic, without
-    // file races, huge allocations, or delay hooks in production code.
+    // The decoder rejects this WAV's 1 Hz sample rate before admitting any
+    // document edit or playback revision. The old graph must keep playing.
     let unsupported = app.directory.path().join("unsupported-rate.wav");
     AudioData {
         sample_rate: 1,
@@ -1053,46 +1120,78 @@ fn rapid_edits_and_failed_source_preparation_keep_old_audio_then_recover() {
     .unwrap();
     let before = app.inspect();
     let count = track(&before, audio)["clips"].as_array().unwrap().len();
-    // The background preparation may report its failure during Drop's UI settle
-    // or on the next inspect; both timings represent the same rejected edit.
-    app.raw_command(json!({"command":"drop", "paths":[unsupported], "track":1, "beat":0.0}));
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let failed = loop {
-        let state = app.inspect();
-        if state["engine"]["edit_errors"].as_u64().unwrap_or(0) > 0 && state["error"] == true {
-            break state;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Preparation failure not reported: {state}"
+    app.raw_command(json!({"command":"drop", "paths":[unsupported], "track":1,
+        "beat":0.0, "wait":false}));
+    let failed = wait(&mut app, |state| {
+        state["audio_import"]["busy"] == false && state["error"] == true
+    });
+    assert_eq!(failed["audio_import"]["queued"], 0);
+    for field in ["project", "history", "modified", "revision"] {
+        assert_eq!(
+            failed[field], before[field],
+            "Rejected import changed {field}"
         );
-        std::thread::sleep(Duration::from_millis(2));
-    };
+    }
     assert_eq!(
         track(&failed, audio)["clips"].as_array().unwrap().len(),
-        count + 1
+        count
     );
-    assert_eq!(
-        failed["engine"]["engine_id"],
-        previous["engine"]["engine_id"]
-    );
-    assert_eq!(
-        failed["engine"]["applied_revision"],
-        before["engine"]["applied_revision"]
-    );
-    assert!(failed["status"].as_str().unwrap().contains("range"));
-    previous = pump(&mut app, &failed, expected, true);
+    for field in [
+        "engine_id",
+        "generation",
+        "applied_revision",
+        "requested_revision",
+        "edit_errors",
+    ] {
+        assert_eq!(
+            failed["engine"][field], before["engine"][field],
+            "Rejected import changed engine {field}"
+        );
+    }
+    assert!(failed["status"].as_str().unwrap().contains("Importing"));
+    let details = app.click("Details");
+    let diagnostic = details["error_details"]["details"].as_str().unwrap();
+    assert!(diagnostic.contains("sample rate"), "{diagnostic}");
+    assert!(diagnostic.contains("8000"), "{diagnostic}");
+    app.click("Close");
+    previous = pump(&mut app, &previous, expected, true);
     fixture.assert_instances(&ids);
-    undo(&mut app, false);
+    assert_eq!(fixture.note_events(60, true), held_ons);
+    assert_eq!(fixture.note_events(60, false), held_offs);
+
+    // A later valid import resolves its own notice and creates precisely one
+    // undoable edit. Put it ahead of playback so the sustained PCM is unchanged.
+    let valid = app.directory.path().join("recovered-import.wav");
+    AudioData {
+        sample_rate: 48_000,
+        channels: 1,
+        samples: vec![0.0; 4_800],
+    }
+    .write_wav(&valid)
+    .unwrap();
+    app.command(json!({"command":"drop", "paths":[valid], "track":1, "beat":16.0}));
     let recovered = settled(&mut app);
     assert_eq!(
         recovered["error"], false,
-        "Successful undo clears its own preparation error"
+        "A valid import clears its own older import failure"
     );
     assert_eq!(
         track(&recovered, audio)["clips"].as_array().unwrap().len(),
-        count
+        count + 1
     );
+    assert_eq!(
+        recovered["history"]["undo"].as_array().unwrap().len(),
+        before["history"]["undo"].as_array().unwrap().len() + 1
+    );
+    assert_eq!(recovered["history"]["undo"][0], "Import audio");
+    previous = pump(&mut app, &previous, expected, true);
+    fixture.assert_instances(&ids);
+    assert_eq!(fixture.note_events(60, true), held_ons);
+    assert_eq!(fixture.note_events(60, false), held_offs);
+    undo(&mut app, false);
+    let restored = settled(&mut app);
+    assert_eq!(restored["project"], before["project"]);
+    assert_eq!(restored["history"]["undo"], before["history"]["undo"]);
     previous = pump(&mut app, &previous, expected, true);
     drag_channel(&mut app, synth, "gain", 0.92);
     let recovered = settled(&mut app);
