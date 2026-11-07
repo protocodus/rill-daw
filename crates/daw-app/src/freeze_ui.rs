@@ -269,7 +269,9 @@ fn render(request: &Request, cancel: &AtomicBool) -> Result<Rendered> {
             }
             ensure!(sample?.is_finite(), "Freeze produced invalid audio samples");
         }
-        if usize::try_from(bytes).is_ok_and(|bytes| bytes <= preview_budget) {
+        if bytes < daw_core::AUDIO_STREAM_THRESHOLD_BYTES
+            && usize::try_from(bytes).is_ok_and(|bytes| bytes <= preview_budget)
+        {
             let preview = AudioData::load_wav_with_limit(&output.path, preview_budget)?;
             preview_budget -= preview.samples.len() * std::mem::size_of::<f32>();
             previews.insert(output.path.clone(), preview);

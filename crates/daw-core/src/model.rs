@@ -1328,15 +1328,35 @@ impl Project {
         Ok(())
     }
 
-    /// Atomically save a portable ZIP bundle for `.rill`, or legacy JSON for other
-    /// extensions. Bundles include referenced WAV assets and saved plug-in state.
+    /// Atomically save a self-contained ZIP project, regardless of its filename.
+    /// Includes every referenced WAV (including muted/retained originals) and
+    /// saved plug-in state. Plug-in binaries and their own libraries stay external.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         self.validate()?;
         let path = path.as_ref();
         self.validate_audio_destination(path)?;
-        if crate::archive::is_bundle(path) {
-            return crate::archive::save(self, path);
-        }
+        crate::archive::save(self, path, None)
+    }
+
+    /// As `save`, with cooperative cancellation during bounded media copying.
+    /// Cancellation never replaces an existing destination.
+    pub fn save_cancelled(
+        &self,
+        path: impl AsRef<Path>,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<()> {
+        self.validate()?;
+        let path = path.as_ref();
+        self.validate_audio_destination(path)?;
+        crate::archive::save(self, path, Some(cancel))
+    }
+
+    /// Explicit external-reference JSON for internal recovery and legacy-format
+    /// interchange. This is not a portable project; ordinary Save uses `save`.
+    pub fn save_legacy_json(&self, path: impl AsRef<Path>) -> Result<()> {
+        self.validate()?;
+        let path = path.as_ref();
+        self.validate_audio_destination(path)?;
         let parent = path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -1390,14 +1410,43 @@ impl Project {
         path: impl AsRef<Path>,
         scratch_root: impl AsRef<Path>,
     ) -> Result<Self> {
-        let path = path.as_ref();
-        if crate::archive::is_bundle(path) {
-            return crate::archive::load(path, scratch_root.as_ref());
-        }
-        let file =
+        Self::load_with_assets_inner(path.as_ref(), scratch_root.as_ref(), None)
+    }
+
+    /// Cooperatively cancel ZIP validation/extraction without publishing or
+    /// retaining a partial extraction directory.
+    pub fn load_with_assets_cancelled(
+        path: impl AsRef<Path>,
+        scratch_root: impl AsRef<Path>,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<Self> {
+        Self::load_with_assets_inner(path.as_ref(), scratch_root.as_ref(), Some(cancel))
+    }
+
+    fn load_with_assets_inner(
+        path: &Path,
+        scratch_root: &Path,
+        cancel: Option<&std::sync::atomic::AtomicBool>,
+    ) -> Result<Self> {
+        use std::io::Read;
+        ensure!(
+            !cancel.is_some_and(|flag| flag.load(Ordering::Acquire)),
+            "Project operation cancelled"
+        );
+        let mut file =
             fs::File::open(path).with_context(|| format!("Open project {}", path.display()))?;
+        let mut signature = Vec::with_capacity(4);
+        Read::by_ref(&mut file)
+            .take(4)
+            .read_to_end(&mut signature)?;
+        if crate::archive::is_bundle(&signature) {
+            return crate::archive::load(file, scratch_root, cancel);
+        }
+        // Retain one handle and replay the consumed signature for JSON. Besides
+        // avoiding a replacement race, this preserves legacy stream/FIFO input.
         let envelope: ProjectFile =
-            serde_json::from_reader(BufReader::new(file)).context("Read project JSON")?;
+            serde_json::from_reader(BufReader::new(std::io::Cursor::new(signature).chain(file)))
+                .context("Read project JSON")?;
         ensure!(
             (1..=6).contains(&envelope.version),
             "Unsupported project version {}",

@@ -39,16 +39,246 @@ pub struct RenderOptions {
     pub resample_quality: ResampleQuality,
 }
 
-pub(crate) fn load_source(path: &Path) -> Result<AudioData> {
-    let reader =
-        hound::WavReader::open(path).with_context(|| format!("Open WAV {}", path.display()))?;
-    let decoded_bytes = u64::from(reader.len()) * size_of::<f32>() as u64;
+fn read_exact(
+    reader: &mut daw_core::AudioFileReader,
+    start: usize,
+    output: &mut [f32],
+    channels: usize,
+) -> Result<()> {
+    let chunk = (daw_core::AUDIO_FILE_READ_MAX_BYTES / size_of::<f32>() / channels) * channels;
+    let mut offset = start;
+    for block in output.chunks_mut(chunk) {
+        let frames = block.len() / channels;
+        ensure!(
+            reader.read_frames(offset, block)? == frames,
+            "Audio source was truncated"
+        );
+        offset += frames;
+    }
+    Ok(())
+}
+pub(crate) fn prepare_source(
+    path: &Path,
+    target_rate: u32,
+    quality: ResampleQuality,
+    cancel: Option<&AtomicBool>,
+) -> Result<std::sync::Arc<crate::audio_asset::AudioAsset>> {
+    let file = daw_core::AudioFile::open(path)
+        .with_context(|| format!("Open audio {}", path.display()))?;
+    prepare_file(&file, target_rate, quality, cancel)
+}
+pub(crate) fn prepare_file(
+    file: &daw_core::AudioFile,
+    target_rate: u32,
+    quality: ResampleQuality,
+    cancel: Option<&AtomicBool>,
+) -> Result<std::sync::Arc<crate::audio_asset::AudioAsset>> {
+    prepare_file_mode(file, target_rate, quality, cancel, false)
+}
+fn prepare_file_mode(
+    file: &daw_core::AudioFile,
+    target_rate: u32,
+    quality: ResampleQuality,
+    cancel: Option<&AtomicBool>,
+    force_disk: bool,
+) -> Result<std::sync::Arc<crate::audio_asset::AudioAsset>> {
+    use crate::audio_asset::AudioAsset;
+    let check = || -> Result<()> {
+        ensure!(
+            !cancel.is_some_and(|flag| flag.load(Ordering::Acquire)),
+            "Audio conversion cancelled"
+        );
+        Ok(())
+    };
+    check()?;
+    let info = file.info();
     ensure!(
-        decoded_bytes <= MAX_ASSET_BYTES as u64,
-        "Audio source exceeds the 512 MiB decoded asset limit"
+        (8000..=384000).contains(&target_rate),
+        "Unsupported output sample rate"
     );
-    drop(reader);
-    AudioData::load_wav(path)
+    ensure!(
+        (1..=64).contains(&info.channels),
+        "Unsupported source channel count"
+    );
+    let ratio = f64::from(target_rate) / f64::from(info.sample_rate);
+    ensure!(
+        (1.0 / 128.0..=128.0).contains(&ratio),
+        "Sample-rate ratio exceeds the supported preparation range"
+    );
+    let frames =
+        (info.frames as u128 * u128::from(target_rate)).div_ceil(u128::from(info.sample_rate));
+    ensure!(
+        frames <= usize::MAX as u128,
+        "Resampled frame count overflow"
+    );
+    let frames = frames as usize;
+    let channels = info.channels.min(2);
+    let bytes = (frames as u128) * (channels as u128) * 4;
+    let disk = force_disk
+        || info.should_stream()
+        || bytes >= u128::from(daw_core::AUDIO_STREAM_THRESHOLD_BYTES);
+    if !disk {
+        let count = info
+            .frames
+            .checked_mul(info.channels)
+            .context("Audio sample count overflow")?;
+        let mut samples = vec![0.0; count];
+        let mut reader = file.reader()?;
+        let mut offset = 0;
+        for block in samples.chunks_mut(4096 * info.channels) {
+            check()?;
+            let frames = block.len() / info.channels;
+            ensure!(
+                reader.read_frames(offset, block)? == frames,
+                "Audio source was truncated"
+            );
+            offset += frames;
+        }
+        file.check_unchanged()?;
+        check()?;
+        let source = AudioData {
+            sample_rate: info.sample_rate,
+            channels: info.channels,
+            samples,
+        };
+        return Ok(AudioAsset::from_resident(prepare_audio_cancelled(
+            source,
+            target_rate,
+            quality,
+            cancel,
+        )?));
+    }
+    if info.sample_rate == target_rate && info.channels <= 2 {
+        return Ok(AudioAsset::from_source_file(file.clone()));
+    }
+    let mut writer = crate::stretch::StreamWriter::new(target_rate, channels, frames, cancel)?;
+    let mut reader = file.reader()?;
+    if info.sample_rate == target_rate {
+        let mut input = vec![0.0; 4096 * info.channels];
+        let mut mapped = vec![0.0; 4096 * channels];
+        let mut offset = 0;
+        while offset < info.frames {
+            check()?;
+            let count = (info.frames - offset).min(4096);
+            read_exact(
+                &mut reader,
+                offset,
+                &mut input[..count * info.channels],
+                info.channels,
+            )?;
+            for frame in 0..count {
+                for channel in 0..channels {
+                    mapped[frame * channels + channel] = input[frame * info.channels + channel];
+                }
+            }
+            writer.write(&mapped[..count * channels])?;
+            offset += count;
+        }
+    } else {
+        match quality {
+            ResampleQuality::High => {
+                let mut resampler = Fft::<f32>::new(
+                    info.sample_rate as usize,
+                    target_rate as usize,
+                    1024,
+                    channels,
+                    FixedSync::Both,
+                )?;
+                let max_input = resampler.input_frames_max();
+                let max_output = resampler.output_frames_max();
+                ensure!(
+                    max_input
+                        .checked_mul(info.channels)
+                        .and_then(|n| n.checked_mul(4))
+                        .is_some_and(|bytes| bytes <= 32 * 1024 * 1024),
+                    "Resampler workspace exceeds streaming bound"
+                );
+                let mut raw = vec![0.0; max_input * info.channels];
+                let mut input = vec![0.0; max_input * channels];
+                let mut output = vec![0.0; max_output * channels];
+                let mut offset = 0;
+                let mut produced = 0;
+                let mut trim = resampler.output_delay();
+                while produced < frames {
+                    check()?;
+                    let needed = resampler.input_frames_next();
+                    ensure!(
+                        needed <= max_input,
+                        "Resampler input exceeded streaming bound"
+                    );
+                    let available = (info.frames - offset).min(needed);
+                    input[..needed * channels].fill(0.0);
+                    if available > 0 {
+                        read_exact(
+                            &mut reader,
+                            offset,
+                            &mut raw[..available * info.channels],
+                            info.channels,
+                        )?;
+                        for frame in 0..available {
+                            for channel in 0..channels {
+                                input[frame * channels + channel] =
+                                    raw[frame * info.channels + channel];
+                            }
+                        }
+                    }
+                    let (_, count) = resampler.process_into_buffer(
+                        &InterleavedSlice::new(&input[..needed * channels], channels, needed)?,
+                        &mut InterleavedSlice::new_mut(&mut output, channels, max_output)?,
+                        Some(&Indexing {
+                            partial_len: Some(available),
+                            ..Indexing::default()
+                        }),
+                    )?;
+                    ensure!(count > 0, "Audio converter made no progress");
+                    offset += available;
+                    let skip = trim.min(count);
+                    trim -= skip;
+                    let keep = (frames - produced).min(count - skip);
+                    writer.write(&output[skip * channels..(skip + keep) * channels])?;
+                    produced += keep;
+                }
+            }
+            ResampleQuality::Fast => {
+                let ratio = f64::from(info.sample_rate) / f64::from(target_rate);
+                let capacity = (512.0 * ratio).ceil() as usize + 2;
+                let mut raw = vec![0.0; capacity * info.channels];
+                let mut output = vec![0.0; 512 * channels];
+                let mut produced = 0;
+                while produced < frames {
+                    check()?;
+                    let count = (frames - produced).min(512);
+                    let start = (produced as f64 * ratio).floor() as usize;
+                    let last = (((produced + count - 1) as f64 * ratio).floor() as usize + 1)
+                        .min(info.frames - 1);
+                    let needed = last - start + 1;
+                    ensure!(needed <= capacity, "Linear converter window exceeded bound");
+                    read_exact(
+                        &mut reader,
+                        start,
+                        &mut raw[..needed * info.channels],
+                        info.channels,
+                    )?;
+                    for frame in 0..count {
+                        let position = (produced + frame) as f64 * ratio;
+                        let index = (position.floor() as usize).min(info.frames - 1);
+                        let next = (index + 1).min(info.frames - 1);
+                        let fraction = position - index as f64;
+                        for channel in 0..channels {
+                            let a = f64::from(raw[(index - start) * info.channels + channel]);
+                            let b = f64::from(raw[(next - start) * info.channels + channel]);
+                            output[frame * channels + channel] = (a + (b - a) * fraction) as f32;
+                        }
+                    }
+                    writer.write(&output[..count * channels])?;
+                    produced += count;
+                }
+            }
+        }
+    }
+    check()?;
+    file.check_unchanged()?;
+    writer.finish()
 }
 
 #[cfg(test)]
@@ -204,6 +434,40 @@ pub(crate) fn prepare_audio_cancelled(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn streamed_rate_conversion_matches_resident_samples_and_exact_tail_lengths() {
+        for (from, to) in [(44100, 48000), (96000, 44100), (22050, 96000)] {
+            for channels in [1, 2] {
+                for frames in [17, 8193] {
+                    let source = AudioData {
+                        sample_rate: from,
+                        channels,
+                        samples: (0..frames * channels)
+                            .map(|sample| ((sample as f64 * 0.013).sin() * 0.8) as f32)
+                            .collect(),
+                    };
+                    let directory = tempfile::tempdir().unwrap();
+                    let path = directory.path().join("source.wav");
+                    source.write_wav(&path).unwrap();
+                    let file = daw_core::AudioFile::open(&path).unwrap();
+                    for quality in [ResampleQuality::High, ResampleQuality::Fast] {
+                        let expected = prepare_audio(source.clone(), to, quality).unwrap();
+                        let streamed = prepare_file_mode(&file, to, quality, None, true).unwrap();
+                        assert!(streamed.is_streamed());
+                        assert_eq!(streamed.resident_bytes(), 0);
+                        let mut samples = vec![0.0; expected.samples.len()];
+                        let mut reader = streamed.file().unwrap().reader().unwrap();
+                        read_exact(&mut reader, 0, &mut samples, channels).unwrap();
+                        assert_eq!(
+                            samples, expected.samples,
+                            "{from}->{to},channels={channels},frames={frames},quality={quality:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn tone(rate: u32, hz: f64) -> AudioData {
         AudioData {
             sample_rate: rate,

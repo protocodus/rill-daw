@@ -6,6 +6,7 @@
 
 pub mod assistant;
 pub mod audio_clip_controls;
+pub mod audio_clip_storage;
 pub mod automation;
 pub mod automation_canvas;
 pub mod automation_navigation;
@@ -83,6 +84,7 @@ pub mod widgets;
 
 pub use assistant::*;
 pub use audio_clip_controls::*;
+pub use audio_clip_storage::*;
 pub use automation::*;
 pub use automation_canvas::*;
 pub use automation_navigation::*;

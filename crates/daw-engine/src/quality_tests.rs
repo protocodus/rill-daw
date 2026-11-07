@@ -98,7 +98,7 @@ fn source_conversion_is_shared_and_processing_remains_allocation_free() {
         .filter(|track| track.id != 0)
     {
         assert!(Arc::ptr_eq(first, &track.audio[0].data));
-        assert_eq!(track.audio[0].data.sample_rate, 48_000);
+        assert_eq!(track.audio[0].data.sample_rate(), 48_000);
     }
     let mut output = [[0.0; 2]; BLOCK];
     let mut positions = [0.0; BLOCK];

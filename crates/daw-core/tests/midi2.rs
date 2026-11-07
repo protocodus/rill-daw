@@ -334,7 +334,11 @@ fn ghost_copy_independent_copy_stretch_and_archive_keep_exact_performance() {
     let dir = tempfile::tempdir().unwrap();
     for extension in ["json", "rill"] {
         let path = dir.path().join(format!("midi2.{extension}"));
-        project.save(&path).unwrap();
+        if extension == "json" {
+            project.save_legacy_json(&path).unwrap();
+        } else {
+            project.save(&path).unwrap();
+        }
         let restored = Project::load(&path).unwrap();
         assert_eq!(restored, project);
     }

@@ -1253,6 +1253,8 @@ impl DawApp {
                     let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
                         let visible_clip = rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
                         clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"name_hit_rect":rect_json(surface.name_hit),"named_header":!clip.name.trim().is_empty(),"linked":clip.link_group.is_some(),"muted":clip.muted,"link_icon":title.icon.map(rect_json)}));
+                        let disk_streamed=self.clip_is_disk_streamed(track.id,clip);
+                        if let Some(diagnostic)=clip_diagnostics.last_mut(){diagnostic["source_mode"]=serde_json::json!(if disk_streamed{"disk"}else{match &clip.content{ClipContent::Audio{path,..}=>self.audio_source_info(path).map_or("pending",|_|"memory"),_=>"memory"}});diagnostic["disk_badge"]=serde_json::Value::Null;}
                         if !compact && row_height >= 44.0 {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
@@ -1294,6 +1296,8 @@ impl DawApp {
                                             col,
                                             waveform_amplitude,
                                         );
+                                    } else if let Some(file)=self.audio_files.get(path) {
+                                        crate::audio_editor::paint_audio_file_clip(&cp,Rect::from_min_max(Pos2::new(rect.left(),surface.content.top()),Pos2::new(rect.right(),surface.content.bottom())),file,clip,self.project.tempo,col,"arranger",waveform_amplitude);
                                     }
                                 }
                             }
@@ -1304,6 +1308,7 @@ impl DawApp {
                             &clip.name, &track.name, clip.start..clip.end(),
                             self.project.tempo, self.project.beats_per_bar, clip.link_group.is_some(),
                         );
+                        let response=if disk_streamed {daw_ui::hover_text(response,daw_ui::DISK_STREAMED_AUDIO)}else{response};
                         let edge_handles = [true, false].map(|start| {
                             (self.tool == daw_ui::EditorTool::Select && !navigation.navigating)
                                 .then(|| daw_ui::clip_edge_handle(
@@ -1346,6 +1351,12 @@ impl DawApp {
                                 diagnostic["fade_in_handle"] = serde_json::json!(fades.handles[0].map(rect_json));
                                 diagnostic["fade_out_handle"] = serde_json::json!(fades.handles[1].map(rect_json));
                             }
+                        }
+                        if disk_streamed {
+                            let mut excluded=vec![surface.name_hit];
+                            if let Some(fades)=&fades{excluded.extend(fades.handles.iter().flatten().copied());}
+                            let badge=daw_ui::paint_audio_streaming_badge_avoiding(&p,rect,&excluded);
+                            if let Some(diagnostic)=clip_diagnostics.last_mut(){diagnostic["disk_badge"]=badge.map(rect_json).into();}
                         }
                         if let Some((position, modifiers)) = primary_press
                             && visible_clip.contains(position) {
@@ -2746,8 +2757,8 @@ impl DawApp {
                         let mut timing_edit = daw_ui::ClipTimingEdit::default();
                         let maximum_source_offset = self.selected().map_or(MAX_BEAT, |clip| {
                             if let ClipContent::Audio { path, .. } = &clip.content {
-                                self.waveforms.get(path).map_or(MAX_BEAT - clip.source_length(), |source| {
-                                    (source.duration_seconds() * self.project.tempo / 60.0 - clip.source_length())
+                                self.audio_source_info(path).map_or(MAX_BEAT - clip.source_length(), |source| {
+                                    (source.frames as f64 / f64::from(source.sample_rate) * self.project.tempo / 60.0 - clip.source_length())
                                         .max(0.0).min(MAX_BEAT - clip.source_length())
                                 })
                             } else {
@@ -2766,6 +2777,7 @@ impl DawApp {
                         let mut make_independent = false;
                         let timing_tempo = self.project.tempo;
                         let timing_meter = self.project.beats_per_bar;
+                        if self.selected().is_some_and(|clip|self.clip_is_disk_streamed(id,clip)){daw_ui::audio_streaming_status(ui);}
                         if let Some(clip) = self.selected_mut() {
                             if let Some(count) = count {
                                 ui.horizontal_wrapped(|ui| {

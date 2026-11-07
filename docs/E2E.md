@@ -628,6 +628,15 @@ Headless automation and app unit tests also disable automatic native plugin prev
 
 The `project_io_e2e` target covers background bundle saving and loading, later edits remaining dirty, failure preserving the previous archive/current document, Quit waiting for a save, deduplicated waveform preparation, and rejecting oversized WAV declarations before allocation. On Unix it uses a small OS pipe to hold a project read open while exercising real menus, then verifies ordered Save/New completion and outgoing recovery. It needs no device, display, or installed plugin.
 
+`project_portability_e2e` checks GUI Save of a legacy JSON document offers a
+portable `.rill` destination without replacing the original JSON. It deletes the
+original audio, restarts the actual app, moves the archive and checks exact PCM
+delivery after reopen, including retained muted clips. Its second case saves to
+an explicit `.json` application path and verifies portable ZIP contents/load
+sniffing rather than external-reference JSON. Core archive tests also cover
+hardlink deduplication, cancellation, unsafe/oversized ZIP entries, CRC failure
+and changed/truncated media during bounded copying.
+
 `crash_recovery_e2e` waits for committed edits to reach recovery, kills the actual app process without Save or Quit, restarts it, and restores the same song through **File → Recover last session…**. It also checks fallback from a corrupt latest checkpoint and that a failed recovery write retains an editable song that can still be saved explicitly. `wait_project` drains pending recovery writes as well as document operations and native barriers.
 
 `worker_crash_e2e` injects an AI provider panic after a successful edit and a background workflow-tool panic, then checks retained song history, recovery on disk, prompt restoration, and a subsequent successful worker run. Fault switches belong only to the explicit headless `assistant_script` command and default to false.

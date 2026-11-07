@@ -18,9 +18,9 @@ const TOOLS: &[EditorTool] = &[
     EditorTool::FadeOut,
 ];
 // A new project or editor may discard its result, but it must not multiply
-// whole-file analysis workers while a previous file is still being decoded.
+// source-analysis workers while a previous analysis is still finishing.
 static ANALYSIS_RUNNING: AtomicBool = AtomicBool::new(false);
-type AnalysisResult = Arc<Mutex<Option<Result<Analysis, String>>>>;
+type AnalysisResult = Arc<Mutex<Option<Result<(Analysis, AudioFile), String>>>>;
 #[derive(Clone)]
 enum Analysis {
     Gain(f32),
@@ -28,10 +28,15 @@ enum Analysis {
 }
 #[derive(Clone)]
 struct Pending {
+    track: u64,
+    session: u64,
+    revision: u64,
+    transients: bool,
     clip: Clip,
     tempo: f64,
     settings: TransientSettings,
     result: AnalysisResult,
+    cancel: Arc<AtomicBool>,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum AudioDragMode {
@@ -60,6 +65,7 @@ struct AudioView {
     settings: TransientSettings,
     preview: Vec<f64>,
     preview_source: Option<(Clip, f64)>,
+    preview_file: Option<AudioFile>,
     pending: Option<Pending>,
     error: String,
     amplitude_reference: f32,
@@ -86,6 +92,7 @@ impl Default for AudioView {
             settings: TransientSettings::default(),
             preview: Vec::new(),
             preview_source: None,
+            preview_file: None,
             pending: None,
             error: String::new(),
             amplitude_reference: 1.0,
@@ -149,9 +156,33 @@ pub(crate) fn clear_audio_clipboard(ctx: &egui::Context) {
 pub(crate) fn reset_audio_editor(ctx: &egui::Context) {
     crate::audio_silence::reset(ctx);
     ctx.data_mut(|data| {
+        if let Some(state) = data.get_temp::<AudioView>(egui::Id::new("audio_editor_state"))
+            && let Some(pending) = state.pending
+        {
+            pending.cancel.store(true, Ordering::Release);
+        }
         data.remove::<AudioView>(egui::Id::new("audio_editor_state"));
         data.remove::<serde_json::Value>(egui::Id::new("audio_editor_diagnostics"));
     });
+}
+
+/// This setting is private to isolated headless app children, like Freeze's
+/// test delay. Cancellation remains checked while a deterministic job is held.
+pub(crate) fn analysis_test_delay(cancel: &AtomicBool) -> anyhow::Result<()> {
+    if std::env::var_os("RILL_AUTOMATION_DIR").is_some() {
+        let delay = std::env::var("RILL_E2E_AUDIO_ANALYSIS_DELAY_MS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(0)
+            .min(5_000);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(delay);
+        while std::time::Instant::now() < deadline {
+            anyhow::ensure!(!cancel.load(Ordering::Acquire), "Audio analysis cancelled");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+    anyhow::ensure!(!cancel.load(Ordering::Acquire), "Audio analysis cancelled");
+    Ok(())
 }
 
 pub(crate) fn audio_fade_bounds(clip: &Clip) -> daw_ui::ClipFadeBounds {
@@ -380,8 +411,8 @@ impl DawApp {
         let ClipContent::Audio { path, .. } = &clip.content else {
             return None;
         };
-        self.waveforms.get(path).map(|audio| {
-            audio.frames() as f64 / f64::from(audio.sample_rate) * self.project.tempo / 60.0
+        self.audio_source_info(path).map(|info| {
+            info.frames as f64 / f64::from(info.sample_rate) * self.project.tempo / 60.0
         })
     }
     fn audio_clipboard_edit(
@@ -632,6 +663,75 @@ impl DawApp {
         handled
     }
 
+    /// Poll independently of workspace navigation. A valid Normalize can commit
+    /// in the background; obsolete documents/sources cancel before publication.
+    pub(crate) fn poll_audio_analysis(&mut self, ctx: &egui::Context) {
+        crate::audio_silence::poll_source_cancellation(self, ctx);
+        let id = egui::Id::new("audio_editor_state");
+        let Some(mut state) = ctx.data(|data| data.get_temp::<AudioView>(id)) else {
+            return;
+        };
+        let Some(pending) = state.pending.clone() else {
+            return;
+        };
+        let stale = pending.session != self.song_session.id
+            || pending.revision != self.song_session.revision
+            || self.edit_dirty
+            || pending.tempo != self.project.tempo
+            || self.project.clip(pending.track, pending.clip.id) != Some(&pending.clip)
+            || pending.transients
+                && (state.owner != pending.clip.id || state.settings != pending.settings);
+        if stale {
+            pending.cancel.store(true, Ordering::Release);
+            state.pending = None;
+        } else {
+            let finished = pending
+                .result
+                .lock()
+                .ok()
+                .and_then(|mut result| result.take());
+            if let Some(result) = finished {
+                state.pending = None;
+                if !pending.cancel.load(Ordering::Acquire) {
+                    let result = result.and_then(|(analysis, file)| {
+                        file.check_unchanged().map_err(|error| error.to_string())?;
+                        Ok((analysis, file))
+                    });
+                    match result {
+                        Ok((Analysis::Transients(points), file)) => {
+                            state.preview = points;
+                            state.preview_source = Some((pending.clip, pending.tempo));
+                            state.preview_file = Some(file);
+                        }
+                        Ok((Analysis::Gain(gain), _)) => {
+                            let result = (|| -> anyhow::Result<()> {
+                                let mut candidate = self.project.clone();
+                                candidate.set_audio_gain(pending.track, pending.clip.id, gain)?;
+                                candidate.validate()?;
+                                if candidate != self.project {
+                                    self.flush_pending_edit();
+                                    self.begin_edit();
+                                    self.project = candidate;
+                                    self.edit_label = Some("Normalize audio clip".into());
+                                    self.changed();
+                                    self.flush_pending_edit();
+                                }
+                                Ok(())
+                            })();
+                            if let Err(error) = result {
+                                state.error = error.to_string();
+                            }
+                        }
+                        Err(error) => state.error = error,
+                    }
+                }
+            } else {
+                ctx.request_repaint_after(std::time::Duration::from_millis(25));
+            }
+        }
+        ctx.data_mut(|data| data.insert_temp(id, state));
+    }
+
     pub(crate) fn audio_editor(&mut self, ui: &mut egui::Ui) {
         let Some(clip) = self.selected().cloned() else {
             return;
@@ -664,8 +764,12 @@ impl DawApp {
             state.fitted = false;
             state.preview.clear();
             state.preview_source = None;
-            // Keep the sole in-flight worker until completion, even when its
-            // result belongs to another clip. The identity check below drops it.
+            state.preview_file = None;
+            if let Some(pending) = &state.pending
+                && pending.transients
+            {
+                pending.cancel.store(true, Ordering::Release);
+            }
             state.drag = None;
             state.range = None;
             state.error.clear();
@@ -682,32 +786,6 @@ impl DawApp {
         let mut open_crossfade = false;
         let mut clipboard_action = None;
         let mut nudge = 0;
-        if let Some(pending) = state.pending.clone() {
-            let finished = pending
-                .result
-                .lock()
-                .ok()
-                .and_then(|mut result| result.take());
-            if let Some(result) = finished {
-                state.pending = None;
-                if pending.clip == clip
-                    && pending.tempo == self.project.tempo
-                    && pending.settings == state.settings
-                {
-                    match result {
-                        Ok(Analysis::Gain(gain)) => edit = Some(Edit::Gain(gain)),
-                        Ok(Analysis::Transients(points)) => {
-                            state.preview = points;
-                            state.preview_source = Some((clip.clone(), self.project.tempo));
-                        }
-                        Err(error) => state.error = error,
-                    }
-                }
-            } else {
-                ui.ctx()
-                    .request_repaint_after(std::time::Duration::from_millis(25));
-            }
-        }
         daw_ui::editor_tool_shortcuts(ui, &mut state.tool, TOOLS);
         if !ui.input(|input| input.pointer.primary_down()) {
             state.drag = None;
@@ -1006,7 +1084,22 @@ impl DawApp {
                 ui,
                 field_width + daw_ui::tokens::SELECT_WIDTH + daw_ui::tokens::SPACE_SM,
                 |ui| {
-                    if matches!(tool, EditorTool::FadeIn | EditorTool::FadeOut) {
+                    if let Some(pending) = &state.pending {
+                        let cancelled = pending.cancel.load(Ordering::Acquire);
+                        if ui
+                            .add_enabled(
+                                !cancelled,
+                                daw_ui::button_widget(if cancelled {
+                                    "Cancelling…"
+                                } else {
+                                    "Cancel analysis"
+                                }),
+                            )
+                            .clicked()
+                        {
+                            pending.cancel.store(true, Ordering::Release);
+                        }
+                    } else if matches!(tool, EditorTool::FadeIn | EditorTool::FadeOut) {
                         let (duration, curve) = if tool == EditorTool::FadeIn {
                             (&mut fi, &mut fic)
                         } else {
@@ -1124,6 +1217,11 @@ impl DawApp {
                 if previous != state.settings {
                     state.preview.clear();
                     state.preview_source = None;
+                    if let Some(pending) = &state.pending
+                        && pending.transients
+                    {
+                        pending.cancel.store(true, Ordering::Release);
+                    }
                 }
                 if ui
                     .add_enabled(state.pending.is_none(), daw_ui::button_widget("Analyze"))
@@ -1182,6 +1280,11 @@ impl DawApp {
                 });
                 if daw_ui::button(ui, "Close transients").clicked() {
                     state.transients_open = false;
+                    if let Some(pending) = &state.pending
+                        && pending.transients
+                    {
+                        pending.cancel.store(true, Ordering::Release);
+                    }
                 }
             });
         }
@@ -1192,14 +1295,18 @@ impl DawApp {
             {
                 state.error = "Previous analysis is finishing. Try again shortly.".into();
             } else {
+                self.flush_pending_edit();
                 state.error.clear();
                 let result = Arc::new(Mutex::new(None));
                 let destination = result.clone();
+                let cancel = Arc::new(AtomicBool::new(false));
+                let worker_cancel = Arc::clone(&cancel);
                 let source = clip.clone();
                 let tempo = self.project.tempo;
                 let settings = state.settings;
-                let cached = self.waveforms.get(path.as_str()).cloned();
+                let admitted = self.audio_files.get(path.as_str()).cloned();
                 let path = path.clone();
+                let wake = ui.ctx().clone();
                 let spawned = std::thread::Builder::new()
                     .name("audio-analysis".into())
                     .spawn(move || {
@@ -1210,34 +1317,58 @@ impl DawApp {
                             }
                         }
                         let _release = ReleaseWorker;
-                        let loaded = match cached {
-                            Some(data) => Ok(data),
-                            None => AudioData::load_wav(path),
-                        };
-                        let value = loaded
-                            .and_then(|data| {
-                                if transients {
-                                    detect_transients(&source, &data, tempo, settings)
-                                        .map(Analysis::Transients)
+                        let value = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                            || -> anyhow::Result<(Analysis, AudioFile)> {
+                                analysis_test_delay(&worker_cancel)?;
+                                let file = admitted.map_or_else(|| AudioFile::open(path), Ok)?;
+                                let analysis = if transients {
+                                    detect_transients_file(
+                                        &source,
+                                        &file,
+                                        tempo,
+                                        settings,
+                                        &worker_cancel,
+                                    )
+                                    .map(Analysis::Transients)
                                 } else {
-                                    normalization_gain(&source, &data, tempo, -1.0)
-                                        .map(Analysis::Gain)
-                                }
-                            })
-                            .map_err(|e| e.to_string());
+                                    normalization_gain_file(
+                                        &source,
+                                        &file,
+                                        tempo,
+                                        -1.0,
+                                        &worker_cancel,
+                                    )
+                                    .map(Analysis::Gain)
+                                }?;
+                                Ok((analysis, file))
+                            },
+                        ))
+                        .unwrap_or_else(|_| {
+                            Err(anyhow::anyhow!(
+                                "Audio analysis stopped unexpectedly; source files are unchanged"
+                            ))
+                        })
+                        .map_err(|error| error.to_string());
+                        drop(_release);
                         if let Ok(mut slot) = destination.lock() {
                             *slot = Some(value);
                         }
+                        wake.request_repaint();
                     });
                 if let Err(error) = spawned {
                     ANALYSIS_RUNNING.store(false, Ordering::Release);
                     state.error = error.to_string();
                 } else {
                     state.pending = Some(Pending {
+                        track,
+                        session: self.song_session.id,
+                        revision: self.song_session.revision,
+                        transients,
                         clip: clip.clone(),
                         tempo,
                         settings,
                         result,
+                        cancel,
                     });
                 }
             }
@@ -1271,7 +1402,10 @@ impl DawApp {
         );
         let data = self.waveforms.get(path);
         crate::spectrogram::prioritize(ui.ctx(), path, data);
-        let channels = data.map_or(1, |audio| audio.channels.min(2));
+        let channels = self.audio_source_info(path).map_or_else(
+            || data.map_or(1, |audio| audio.channels.min(2)),
+            |info| info.channels.min(2),
+        );
         let bounds = TimelineBounds {
             start_beat: clip.start,
             end_beat: clip.end(),
@@ -1279,8 +1413,19 @@ impl DawApp {
             end_row: channels as f32 * 2.0,
         };
         if fit || !state.fitted {
-            state.amplitude_reference =
-                data.map_or(1.0, |data| visible_peak(data, &clip, self.project.tempo));
+            state.amplitude_reference = data.map_or_else(
+                || {
+                    self.audio_files.get(path).map_or(1.0, |file| {
+                        crate::spectrogram::streamed_waveform::fit_reference(
+                            ui.ctx(),
+                            file,
+                            &clip,
+                            self.project.tempo,
+                        )
+                    })
+                },
+                |data| visible_peak(data, &clip, self.project.tempo),
+            );
             state.view.fit_bounds(canvas, bounds);
             state.fitted = true;
         }
@@ -1314,8 +1459,19 @@ impl DawApp {
             .keyboard_active()
             .navigate(ui, &mut state.view, bounds);
         if navigation.fit {
-            state.amplitude_reference =
-                data.map_or(1.0, |data| visible_peak(data, &clip, self.project.tempo));
+            state.amplitude_reference = data.map_or_else(
+                || {
+                    self.audio_files.get(path).map_or(1.0, |file| {
+                        crate::spectrogram::streamed_waveform::fit_reference(
+                            ui.ctx(),
+                            file,
+                            &clip,
+                            self.project.tempo,
+                        )
+                    })
+                },
+                |data| visible_peak(data, &clip, self.project.tempo),
+            );
         }
         if had_view && !previous_view {
             daw_ui::remember_timeline_view(
@@ -1422,6 +1578,21 @@ impl DawApp {
                         "audio_neighbour",
                         daw_ui::WaveformAmplitudeScale::Default,
                     );
+                } else if let ClipContent::Audio { path, .. } = &other.content
+                    && let Some(file) = self.audio_files.get(path)
+                {
+                    crate::spectrogram::streamed_waveform::paint(
+                        &painter,
+                        canvas,
+                        state.view,
+                        file,
+                        other,
+                        self.project.tempo,
+                        headroom,
+                        palette(ui.ctx()).muted.gamma_multiply(0.45),
+                        "audio_neighbour",
+                        daw_ui::WaveformAmplitudeScale::Default,
+                    );
                 }
             }
         }
@@ -1431,6 +1602,19 @@ impl DawApp {
                 canvas,
                 state.view,
                 data,
+                &clip,
+                self.project.tempo,
+                headroom,
+                track_color,
+                "audio_editor",
+                daw_ui::WaveformAmplitudeScale::Default,
+            );
+        } else if let Some(file) = self.audio_files.get(path) {
+            crate::spectrogram::streamed_waveform::paint(
+                &painter,
+                canvas,
+                state.view,
+                file,
                 &clip,
                 self.project.tempo,
                 headroom,
@@ -1899,7 +2083,7 @@ impl DawApp {
             canvas,
             state.view.x_at(canvas, self.cursor),
         );
-        let edit = edit.filter(|edit| match edit {
+        let mut edit = edit.filter(|edit| match edit {
             Edit::Fades(fi, fo, fic, foc) => {
                 (*fi, *fo, *fic, *foc) != (*fade_in, *fade_out, *fade_in_curve, *fade_out_curve)
                     || (clip.link_group.is_none() && envelope.is_some())
@@ -1927,6 +2111,16 @@ impl DawApp {
             }
             _ => true,
         });
+        if matches!(&edit, Some(Edit::Transients(_)))
+            && let Some(file) = &state.preview_file
+            && let Err(error) = file.check_unchanged()
+        {
+            state.error = error.to_string();
+            state.preview.clear();
+            state.preview_source = None;
+            state.preview_file = None;
+            edit = None;
+        }
         if let Some(edit) = edit {
             self.begin_edit();
             let grid_slice = matches!(&edit, Edit::GridSlices(_));
@@ -2094,7 +2288,7 @@ impl DawApp {
             !navigation.navigating && !strip_open,
         );
         ui.ctx().data_mut(|d| {
-            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
+            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"analysis_running":ANALYSIS_RUNNING.load(Ordering::Acquire),"cancel_requested":state.pending.as_ref().is_some_and(|pending|pending.cancel.load(Ordering::Acquire)),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
                 "ruler":{"min":[ruler.min.x,ruler.min.y],"max":[ruler.max.x,ruler.max.y]},
                 "fade_handles":fades.handles.map(|handle|handle.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))),
                 "fade_handles_visible":fades.visible,
@@ -2266,12 +2460,16 @@ struct CachedWaveform {
 #[derive(Default)]
 struct WaveformViews {
     generation: u64,
-    entries: std::collections::VecDeque<(Clip, WaveformViewKey, Arc<CachedWaveform>)>,
+    entries: std::collections::VecDeque<(
+        crate::spectrogram::streamed_waveform::ClipKey,
+        WaveformViewKey,
+        Arc<CachedWaveform>,
+    )>,
     bytes: usize,
     amplitudes: std::collections::VecDeque<(WaveformAmplitudeKey, f64)>,
 }
 
-fn source_frame_ceil(frame: f64) -> f64 {
+pub(crate) fn source_frame_ceil(frame: f64) -> f64 {
     if (frame - frame.round()).abs() < 1e-7 {
         frame.round()
     } else {
@@ -2564,6 +2762,7 @@ fn draw_waveform(
         amplitude,
         amplitude_coloring,
     };
+    let clip_key = crate::spectrogram::streamed_waveform::ClipKey::new(clip);
     let shared = waveform_views(painter.ctx());
     let cached = if let Ok(mut cache) = shared.lock() {
         if cache.generation != generation {
@@ -2575,7 +2774,9 @@ fn draw_waveform(
         cache
             .entries
             .iter()
-            .position(|(candidate_clip, candidate, _)| candidate_clip == clip && *candidate == key)
+            .position(|(candidate_clip, candidate, _)| {
+                *candidate_clip == clip_key && *candidate == key
+            })
             .map(|index| {
                 let entry = cache.entries.remove(index).unwrap();
                 let value = Arc::clone(&entry.2);
@@ -2731,9 +2932,11 @@ fn draw_waveform(
             }
             if bytes <= WAVEFORM_VIEW_BYTES {
                 cache.bytes += bytes;
-                cache
-                    .entries
-                    .push_front((clip.clone(), key, Arc::clone(&value)));
+                cache.entries.push_front((
+                    crate::spectrogram::streamed_waveform::ClipKey::new(clip),
+                    key,
+                    Arc::clone(&value),
+                ));
             }
         }
         value
@@ -2783,6 +2986,33 @@ fn draw_waveform(
             cached: was_cached,
             amplitude_reference: prepared.amplitude_reference,
         },
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn paint_audio_file_clip(
+    painter: &egui::Painter,
+    rect: Rect,
+    file: &daw_core::AudioFile,
+    clip: &Clip,
+    tempo: f64,
+    color: egui::Color32,
+    view_name: &'static str,
+    amplitude: daw_ui::WaveformAmplitudeScale,
+) {
+    let channels = if view_name == "takes" {
+        1
+    } else {
+        file.info().channels.min(2)
+    };
+    let view = TimelineViewport {
+        start_beat: clip.start,
+        pixels_per_beat: rect.width() / clip.length as f32,
+        row_offset: 0.0,
+        row_height: rect.height() / (channels * 2) as f32,
+    };
+    crate::spectrogram::streamed_waveform::paint(
+        painter, rect, view, file, clip, tempo, 1.0, color, view_name, amplitude,
     );
 }
 

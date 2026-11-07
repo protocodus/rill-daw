@@ -16,6 +16,12 @@ tests. The relevant implementation is linked below. “This batch” identifies 
 behavior, not a claim that every external device or plug-in has been tested.
 Supported plug-in ports and expression capabilities still depend on the plug-in.
 
+This audit covers audio/MIDI music production. Video import/playback, scoring to
+picture, picture synchronization, ADR, reconform and film/TV post-production
+workflows are permanently outside RILL's product scope. They do not count as
+missing tools, deficiencies or roadmap priorities. Competitor references to
+those capabilities provide context only.
+
 Competitor references are official manuals, release notes and product pages
 researched on 6–7 November. The comparison covers Reason 14, Cubase Pro 16,
 Nuendo 15, Live 12, Logic Pro 13, Pro Tools 2026.11 and REAPER 7.85. Some detailed
@@ -49,7 +55,7 @@ captures.
 | Master, sidechain and instrument output handling | **This batch.** Real Master processing, additional plug-in input routes and independent instrument output channels. Collapsible groups organize the mixer; hiding a strip must not disable its DSP. This remains a stereo-channel graph, not an immersive speaker-layout system. |
 | Freeze | **This batch.** Print source material and channel insert processing to new audio below the source, retain and mute originals, and restore them through the retained-source workflow. Volume/pan/sends remain live. This explicit print-to-a-new-track policy differs from hosts that temporarily replace an instrument track internally. |
 | Level and phase diagnostics | **Implemented and extended this batch.** Calibrated sample-peak meters and holds, 300 ms exponential RMS, spectrum, stereo correlation/phase and K-weighted LUFS. The new Levels view separates sample peaks from oversampled true-peak estimates. These are engineering measurements with stated scope, not a certified broadcast-compliance claim. |
-| Export and session hand-off | **Partial.** Exact-loop/arrangement WAV, PCM/float, independent rate and PCM dither are present. Freeze is not a batch stem-delivery dialog, and portable RILL projects are not AAF/OMF/ADM/DAWproject session exchange. |
+| Export and music-session hand-off | **Partial.** Exact-loop/arrangement WAV, PCM/float, independent rate and PCM dither are present. Freeze is not a batch stem-delivery dialog, and portable RILL projects do not provide cross-DAW music-session exchange such as DAWproject. Film/TV interchange is outside this audit's product scope. |
 
 Implementation and executable workflow coverage:
 
@@ -74,10 +80,10 @@ Implementation and executable workflow coverage:
 | --- | --- |
 | **Ableton Live 12** | Pitch/time utilities keep stretching, half/double timing, reverse/invert and legato near the note selection. RILL's new clip and note actions adopt these ordinary musical operations, while retaining an explicit distinction between the whole clip and selected notes. Live's groove/warp and multi-clip workflows remain substantially deeper. [MIDI editing](https://www.ableton.com/en/live-manual/12/editing-midi/), [audio timing](https://www.ableton.com/en/live-manual/12/audio-clips-tempo-and-warping/). |
 | **Reason 14** | The sequencer connects clip selection, note editing, precise inspector values and quantization; the track-centric layout keeps device context nearby. Borrow that continuity, and make the scope of each command visible. RILL need not reproduce the virtual rack. [Sequencer functions](https://docs.reasonstudios.com/reason14/sequencer-functions), [Reason 14 workflow](https://www.reasonstudios.com/press/reason-studios-introduces-reason-14). |
-| **Cubase Pro 16** | Rich quantization, musical context and structured parameter editing reduce repetitive manual corrections. RILL should extend its existing preview and scale tools before attempting a comparable score/articulation ecosystem. The detailed reference remains the 15 manual; newer 16 additions come from release notes. [Cubase Pro 15 manual](https://www.steinberg.help/r/cubase-pro/15.0/en), [Cubase 16 changes](https://www.steinberg.net/cubase/release-notes/16/). |
-| **Nuendo 15** | Retained alternatives, precise range editing and mature edit/automation history are useful even in a small music application. Its ADR, reconform, field-recording and post interchange workflows solve a broader professional problem and should not determine RILL's next small-editor controls. [Nuendo manual](https://www.steinberg.help/r/nuendo/15.0/en), [post features](https://www.steinberg.net/nuendo/features/). |
+| **Cubase Pro 16** | Rich quantization, musical context and structured parameter editing reduce repetitive manual corrections. RILL should extend its existing preview and scale tools to deepen musical editing. The detailed reference remains the 15 manual; newer 16 additions come from release notes. [Cubase Pro 15 manual](https://www.steinberg.help/r/cubase-pro/15.0/en), [Cubase 16 changes](https://www.steinberg.net/cubase/release-notes/16/). |
+| **Nuendo 15** | Retained alternatives, precise range editing and mature edit/automation history are useful in a music application. Its video, ADR, picture reconform and film/TV interchange workflows serve a different audience and are outside RILL's product scope, not missing editor requirements. [Nuendo manual](https://www.steinberg.help/r/nuendo/15.0/en), [post features](https://www.steinberg.net/nuendo/features/). |
 | **Logic Pro 13** | The MIDI Transform workflow makes batch musical edits explicit and reusable, and inspectors expose note/region values without moving between unrelated windows. RILL's previews and precise fields follow this principle. A mature transform/preset system remains broader than a few flip and transpose commands. [MIDI Transform overview](https://support.apple.com/en-mz/guide/logicpro/lgcp2158341a/mac), [Logic guide](https://support.apple.com/guide/logicpro/welcome/mac). |
-| **Pro Tools** | Predictable body/edge/corner editing and retained playlist alternatives matter more than the number of toolbar buttons. RILL can refine its current gestures, take recall and print workflow using these ideas. Studio/Ultimate interchange and hardware/post tools are not implied by basic comping. [Smart Tool](https://www.avid.com/pro-tools/user-guide/smart-tool), [edition/workflow boundaries](https://www.avid.com/pro-tools/comparison). |
+| **Pro Tools** | Predictable body/edge/corner editing and retained playlist alternatives matter more than the number of toolbar buttons. RILL can refine its current gestures, take recall and print workflow using these ideas. Music-session exchange and studio hardware are separate capabilities; video and film/TV post tools are outside RILL's scope. [Smart Tool](https://www.avid.com/pro-tools/user-guide/smart-tool), [edition/workflow boundaries](https://www.avid.com/pro-tools/comparison). |
 | **REAPER 7.85** | Precise item properties, several MIDI event views, a large action system and deep render choices illustrate the value of extending existing operations consistently. RILL should preserve discoverability and one authoritative operation behind menu, context and tool actions rather than reproducing every customizable action. [Current user guide](https://dlx.reaper.fm/userguide/html/), [official feature overview](https://www.reaper.fm/about.php). |
 
 These references establish available workflows. They do not prove that one DAW
@@ -99,14 +105,15 @@ is faster, easier or more reliable for a matched RILL task.
 4. **Finishing and media continuity.** Extend Freeze with understandable source
    ownership and asset lifetime, missing-media relink and measured larger-session
    behavior. Add aligned stem/range batch delivery before specialist interchange.
-   Coordinate longer rendered tracks with current RAM/preparation limits.
+   Build on bounded disk streaming and portable Save; measure long-session cache
+   preparation, storage performance and source lifetime before adding cleanup.
 5. **Musical context and repeatability.** Reusable transform/groove presets,
    clear section markers and better simultaneous clip inspection can reduce
    repeated edits. Validate these through complete song-editing tasks before
    adding another permanent panel.
 
-Integrated vocal-note correction, spectral repair, notation, video/ADR and
-immersive delivery remain substantial absent categories. They should be driven
+Integrated vocal-note correction, spectral repair, score notation and immersive
+music delivery are separate specialist capabilities. They should be driven
 by an explicit audience need rather than a feature-count comparison. The next
 release should demonstrate one coherent song workflow, correct recall and
 recoverable edits on declared hardware and plug-ins.

@@ -187,7 +187,13 @@ fn surface_fixture() -> (Harness, PathBuf, u64) {
         2.0,
         primary.to_string_lossy(),
     ));
-    open(&mut app, &project, "refinement-surfaces");
+    let loaded = open(&mut app, &project, "refinement-surfaces");
+    let admitted: Project = serde_json::from_value(loaded["project"].clone()).unwrap();
+    let ClipContent::Audio { path: primary, .. } = &admitted.clip(track, selected).unwrap().content
+    else {
+        unreachable!()
+    };
+    let primary = PathBuf::from(primary);
     app.click("Fit");
     (app, primary, selected)
 }
@@ -209,7 +215,7 @@ fn raw_previews_refine_to_real_aa_meshes_with_exact_transients_and_shared_source
         .as_array()
         .unwrap()
         .iter()
-        .find(|entry| Path::new(entry["path"].as_str().unwrap()).file_name() == primary.file_name())
+        .find(|entry| Path::new(entry["path"].as_str().unwrap()) == primary.as_path())
         .unwrap();
     assert_eq!(source["frames"], FRAMES);
     assert_eq!(source["channels"], 2);
@@ -531,16 +537,23 @@ fn refinement_preserves_playing_samples_and_new_documents_discard_previous_sourc
         next_path.to_string_lossy(),
     ));
     let replaced = open(&mut app, &next, "replacement-refinement");
+    let admitted: Project = serde_json::from_value(replaced["project"].clone()).unwrap();
+    let ClipContent::Audio {
+        path: admitted_path,
+        ..
+    } = &admitted.track(track).unwrap().clips[0].content
+    else {
+        unreachable!()
+    };
+    let admitted_path = Path::new(admitted_path);
+
     let state = ready(&mut app, 1);
     assert!(waveform(&state)["generation"].as_u64().unwrap() > generation);
     assert_eq!(waveform(&state)["sources"].as_array().unwrap().len(), 1);
     assert_unchanged(&state, &replaced);
     let state = paint(&mut app);
     for preview in painted(&state, "arranger") {
-        assert_eq!(
-            Path::new(preview["path"].as_str().unwrap()).file_name(),
-            next_path.file_name()
-        );
+        assert_eq!(Path::new(preview["path"].as_str().unwrap()), admitted_path);
         assert_refined_mesh(&state, preview, 1.0);
     }
     app.quit();

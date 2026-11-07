@@ -291,6 +291,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Exact note expression | `midi_expression_editor`, `MidiExpressionControls`, `MidiExpressionKind`, `MidiExpressionPoint`, `MidiExpressionAction` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
+| Disk-streamed clip status | `Icon::Disk`, `DISK_STREAMED_AUDIO`, `AUDIO_STREAMING_BADGE_SIZE`, `paint_audio_streaming_badge`, `paint_audio_streaming_badge_avoiding`, `audio_streaming_status` |
 | Boolean button | `toggle` |
 | Boolean setting | `switch`, `checkbox` |
 | Exclusive choices | `radio_value`, `selectable_value` |
@@ -1796,3 +1797,18 @@ Both clip editors use one toolbar skeleton: tools, **Snap**, editor choosers or 
 The audio canvas starts after a `PIANO_KEYS_WIDTH` gutter holding the **L**/**R** labels, so audio and MIDI canvases share one left edge. Channels are separated by a 1 px `line`, quiet −6 dB guides use `grid_minor`, the waveform blends neutral gray into the track color as audio amplitude rises (selection keeps the accent) and the spectrogram is drawn per channel band with a neutral tint. Fade handles are 13-point rounded squares with a `bg` ring, inset `SPACE_SM` from the top, with a dotted guide while hovered; the gain envelope is inset `SPACE_XS` so unity stays visible as a quiet line.
 
 The piano roll keys sit flush with the grid behind a 1 px divider. Note names use `TextRole::Note` and appear only when they fit, notes use `NOTE_RADIUS` corners, and the velocity lane (`VELOCITY_LANE_HEIGHT`) has its own background, 25/50/75/100 % guides and bar lines. **Local** sits on the ruler's clock baseline. The **Notes** menu is grouped by separators: edit, timing (Quantize…, Nudge, Legato), pitch and transform, then a Velocity `parameter_row`.
+
+### Disk-backed audio indicators
+
+`Icon::Disk` uses a storage enclosure distinct from Save. The shared
+`paint_audio_streaming_badge` and `paint_audio_streaming_badge_avoiding` paint a
+16-point badge without allocating interaction or changing clip/header bounds.
+The avoiding variant tests at most eight visible placements against title,
+trim and fade targets, and returns `Option<Rect>` for diagnostics. Narrow clips
+can omit the badge; Properties retains `audio_streaming_status`. Named, blank
+and ghost clips use the same component and **Disk-streamed audio** tooltip.
+
+The caller uses admitted source metadata and positive engine mapping for large
+derived variants. A cache miss or absent waveform does not imply disk storage.
+Views perform no filesystem checks while painting and keep existing pointer,
+rename and fade-handle behavior.

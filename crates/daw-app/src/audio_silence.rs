@@ -1,6 +1,7 @@
 //! Reviewed, source-preserving silence removal from the focused audio selection.
 use crate::app::DawApp;
-use daw_core::{AudioData, AudioSilenceSettings, Clip, ClipContent, detect_audio_silence};
+use anyhow::Context;
+use daw_core::{AudioFile, AudioSilenceSettings, Clip, ClipContent, detect_audio_silence_file};
 use eframe::egui;
 use std::{
     sync::{
@@ -12,21 +13,25 @@ use std::{
 
 const STATE: &str = "audio_strip_silence";
 static ANALYZING: AtomicBool = AtomicBool::new(false);
-type Analysis = Result<Vec<(f64, f64)>, String>;
+type Analysis = Result<(Vec<(f64, f64)>, AudioFile), String>;
 type SharedResult = Arc<Mutex<Option<Analysis>>>;
 #[derive(Clone)]
 struct Pending {
     settings: AudioSilenceSettings,
     result: SharedResult,
+    cancel: Arc<AtomicBool>,
 }
 #[derive(Clone)]
 struct Dialog {
+    session: u64,
+    revision: u64,
     track: u64,
     clip: Clip,
     tempo: f64,
     range: (f64, f64),
     settings: AudioSilenceSettings,
     preview: Option<Vec<(f64, f64)>>,
+    preview_file: Option<AudioFile>,
     pending: Option<Pending>,
     requested: Option<Instant>,
     error: Option<String>,
@@ -37,13 +42,32 @@ pub(crate) fn is_open(ctx: &egui::Context) -> bool {
 }
 pub(crate) fn reset(ctx: &egui::Context) {
     ctx.data_mut(|data| {
+        if let Some(state) = data.get_temp::<Dialog>(egui::Id::new(STATE))
+            && let Some(pending) = state.pending
+        {
+            pending.cancel.store(true, Ordering::Release);
+        }
         data.remove::<Dialog>(egui::Id::new(STATE));
     });
+}
+pub(crate) fn poll_source_cancellation(app: &DawApp, ctx: &egui::Context) {
+    if let Some(state) = ctx.data(|data| data.get_temp::<Dialog>(egui::Id::new(STATE)))
+        && (state.session != app.song_session.id
+            || state.revision != app.song_session.revision
+            || app.edit_dirty
+            || app.project.clip(state.track, state.clip.id) != Some(&state.clip)
+            || app.project.tempo != state.tempo)
+    {
+        reset(ctx);
+    }
 }
 pub(crate) fn diagnostics(ctx: &egui::Context) -> serde_json::Value {
     ctx.data(|data| data.get_temp::<Dialog>(egui::Id::new(STATE))).map_or(serde_json::Value::Null, |state| {
         serde_json::json!({"range":state.range,"retained":state.preview,
             "pending":state.pending.is_some() || state.requested.is_some(),"error":state.error,
+            "worker_started":state.pending.is_some(),
+            "worker_running":ANALYZING.load(Ordering::Acquire),
+            "cancel_requested":state.pending.as_ref().is_some_and(|pending|pending.cancel.load(Ordering::Acquire)),
             "threshold_db":state.settings.threshold_db,"minimum_silence_ms":state.settings.minimum_silence_ms,
             "padding_ms":state.settings.padding_ms,
             "controls":ctx.data(|data| data.get_temp::<Vec<[f32;4]>>(egui::Id::new("audio_silence_controls")))})
@@ -92,16 +116,20 @@ impl DawApp {
             self.message(Err(error), "");
             return;
         }
+        reset(ctx);
         ctx.data_mut(|data| {
             data.insert_temp(
                 egui::Id::new(STATE),
                 Dialog {
+                    session: self.song_session.id,
+                    revision: self.song_session.revision,
                     track,
                     clip,
                     tempo: self.project.tempo,
                     range,
                     settings: AudioSilenceSettings::default(),
                     preview: None,
+                    preview_file: None,
                     pending: None,
                     requested: Some(Instant::now() - Duration::from_secs(1)),
                     error: None,
@@ -115,6 +143,9 @@ impl DawApp {
             return;
         };
         if self.project.clip(state.track, state.clip.id) != Some(&state.clip)
+            || state.session != self.song_session.id
+            || state.revision != self.song_session.revision
+            || self.edit_dirty
             || self.project.tempo != state.tempo
             || self.selected_clip != Some(state.clip.id)
             || self.document_guard.is_some()
@@ -129,13 +160,21 @@ impl DawApp {
                 .ok()
                 .and_then(|mut result| result.take());
             if let Some(result) = result {
-                if pending.settings == state.settings {
-                    match result {
-                        Ok(regions) => {
+                if pending.settings == state.settings && !pending.cancel.load(Ordering::Acquire) {
+                    match result.and_then(|(regions, file)| {
+                        file.check_unchanged().map_err(|error| error.to_string())?;
+                        Ok((regions, file))
+                    }) {
+                        Ok((regions, file)) => {
                             state.preview = Some(regions);
+                            state.preview_file = Some(file);
                             state.error = None;
                         }
-                        Err(error) => state.error = Some(error),
+                        Err(error) => {
+                            state.preview = None;
+                            state.preview_file = None;
+                            state.error = Some(error);
+                        }
                     }
                 }
                 state.pending = None;
@@ -151,7 +190,14 @@ impl DawApp {
         {
             let result: SharedResult = Arc::new(Mutex::new(None));
             let target = Arc::clone(&result);
+            let cancel = Arc::new(AtomicBool::new(false));
+            let worker_cancel = Arc::clone(&cancel);
             let source = state.clip.clone();
+            let admitted = if let ClipContent::Audio { path, .. } = &source.content {
+                self.audio_files.get(path.as_str()).cloned()
+            } else {
+                None
+            };
             let (tempo, range, settings) = (state.tempo, state.range, state.settings);
             let wake = ctx.clone();
             let worker = std::thread::Builder::new()
@@ -165,17 +211,27 @@ impl DawApp {
                     }
                     let _reset = Reset;
                     let analysis = std::panic::catch_unwind(|| -> anyhow::Result<_> {
+                        crate::audio_editor::analysis_test_delay(&worker_cancel)?;
                         let ClipContent::Audio { path, .. } = &source.content else {
                             unreachable!()
                         };
-                        let data = AudioData::load_wav_with_limit(path, 512 * 1024 * 1024)?;
-                        detect_audio_silence(&source, &data, tempo, range, settings)
+                        let file = admitted.map_or_else(|| AudioFile::open(path), Ok)?;
+                        let regions = detect_audio_silence_file(
+                            &source,
+                            &file,
+                            tempo,
+                            range,
+                            settings,
+                            &worker_cancel,
+                        )?;
+                        Ok((regions, file))
                     })
                     .map_err(|_| {
                         "Silence analysis stopped unexpectedly; source files are unchanged"
                             .to_owned()
                     })
                     .and_then(|result| result.map_err(|error| format!("{error:#}")));
+                    drop(_reset);
                     if let Ok(mut slot) = target.lock() {
                         *slot = Some(analysis);
                     }
@@ -187,6 +243,7 @@ impl DawApp {
                     state.pending = Some(Pending {
                         settings: state.settings,
                         result,
+                        cancel,
                     })
                 }
                 Err(error) => {
@@ -251,7 +308,9 @@ impl DawApp {
                 ui.end_row();
             });
             if before != state.settings {
+                if let Some(pending) = &state.pending { pending.cancel.store(true, Ordering::Release); }
                 state.preview = None;
+                state.preview_file = None;
                 state.error = None;
                 state.requested = Some(Instant::now());
             }
@@ -323,17 +382,28 @@ impl DawApp {
             )
         });
         if !open || cancel {
+            if let Some(pending) = &state.pending {
+                pending.cancel.store(true, Ordering::Release);
+            }
             reset(ctx);
             return;
         }
         if apply {
             let mut project = self.project.clone();
-            match project.strip_audio_silence(
-                state.track,
-                state.clip.id,
-                state.range,
-                state.preview.as_deref().unwrap_or_default(),
-            ) {
+            let result = state
+                .preview_file
+                .as_ref()
+                .context("Analyze the source before applying silence edits")
+                .and_then(AudioFile::check_unchanged)
+                .and_then(|()| {
+                    project.strip_audio_silence(
+                        state.track,
+                        state.clip.id,
+                        state.range,
+                        state.preview.as_deref().unwrap_or_default(),
+                    )
+                });
+            match result {
                 Ok(ids) => {
                     self.begin_edit();
                     self.project = project;
@@ -347,7 +417,11 @@ impl DawApp {
                     reset(ctx);
                     return;
                 }
-                Err(error) => state.error = Some(format!("{error:#}")),
+                Err(error) => {
+                    state.preview = None;
+                    state.preview_file = None;
+                    state.error = Some(format!("{error:#}"));
+                }
             }
         }
         if state.pending.is_some() || state.requested.is_some() {

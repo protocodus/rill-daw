@@ -75,7 +75,8 @@ impl DawApp {
             return None;
         }
         if kind == DocumentDialog::Save
-            && let Some(name) = self.project_path.as_ref().and_then(|path| path.file_name())
+            && let Some(path) = self.portable_save_path()
+            && let Some(name) = path.file_name()
         {
             return Some(name.to_string_lossy().into_owned());
         }
@@ -164,9 +165,12 @@ impl DawApp {
                 DocumentDialog::ExportMidi => {
                     rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
                 }
-                _ => rfd::FileDialog::new()
+                DocumentDialog::Open => rfd::FileDialog::new()
                     .add_filter("Rill project", &["rill"])
                     .add_filter("Legacy Rill session", &["json"]),
+                DocumentDialog::Save => {
+                    rfd::FileDialog::new().add_filter("Rill project", &["rill"])
+                }
             };
             let dialog = if let Some(parent) = self.document_dialog_directory() {
                 dialog.set_directory(parent)
@@ -612,8 +616,7 @@ impl DawApp {
             self.finish_document_transition(ctx);
         } else if save {
             let path = self
-                .project_path
-                .clone()
+                .portable_save_path()
                 .or_else(|| self.pick_document_path(DocumentDialog::Save));
             if let Some(path) = path {
                 let guard = self.document_guard.as_mut().unwrap();
@@ -640,7 +643,7 @@ impl DawApp {
 fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
     let (extension, accepted): (&str, &[&str]) = match kind {
         DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => return path,
-        DocumentDialog::Save => ("rill", &["rill", "json"]),
+        DocumentDialog::Save => ("rill", &["rill"]),
         DocumentDialog::Export => ("wav", &["wav"]),
         DocumentDialog::ExportMidi => ("mid", &["mid", "midi"]),
     };

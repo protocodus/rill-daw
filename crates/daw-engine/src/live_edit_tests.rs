@@ -735,7 +735,8 @@ fn live_preview_refines_from_original_and_export_cannot_reuse_preview_assets() {
         let offline_audio = &offline.tracks[0].as_ref().unwrap().audio[0];
         assert!(!offline_audio.is_preview);
         assert_eq!(
-            offline_audio.data.samples, final_data.samples,
+            offline_audio.data.resident().unwrap().samples,
+            final_data.resident().unwrap().samples,
             "export and final playback must prepare from original at full rate"
         );
         let cached = prepare.prepare_cancelled(&project, &cancel, true).unwrap();

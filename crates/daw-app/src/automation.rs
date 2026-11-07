@@ -948,6 +948,7 @@ impl Harness {
                     let deadline = Instant::now() + Duration::from_secs(120);
                     while self.app.project_io_pending()
                         || self.app.state_sync_pending()
+                        || self.app.audio_import_busy()
                         || self.app.document_guard.is_some()
                         || self.app.export_job.is_some()
                         || self.app.loading.is_some()
@@ -1528,10 +1529,12 @@ impl Harness {
         );
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         while self.app.recording_busy()
+            || self.app.audio_import_busy()
             || self.app.freeze_busy()
             || self.app.state_sync_pending()
             || self.app.project_io_pending()
             || self.app.recovery_pending()
+            || self.app.audio_admission.is_some()
             || self.app.document_guard_diagnostics()["phase"]
                 .as_str()
                 .is_some_and(|phase| !matches!(phase, "confirm" | "export_failed"))
@@ -1604,7 +1607,7 @@ impl Harness {
                 "panel": self.ctx.style().visuals.panel_fill.to_array(),
             },
             "project": self.app.project,
-            "project_pending": self.app.project_io_pending() || self.app.state_sync_pending(),
+            "project_pending": self.app.project_io_pending() || self.app.state_sync_pending() || self.app.audio_admission.is_some(),
             "modified": self.app.modified,
             "history": { "undo": self.app.history.undo_labels().collect::<Vec<_>>(),
                 "redo": self.app.history.redo_labels().collect::<Vec<_>>(),
@@ -1702,6 +1705,13 @@ impl Harness {
                 "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
                 "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,
                 "generation": s.generation, "refining_audio": s.refining_audio,
+                "audio_streaming": {
+                    "streamed_clips": s.audio_streaming.streamed_clips,
+                    "resident_bytes": s.audio_streaming.resident_bytes,
+                    "window_bytes": s.audio_streaming.window_bytes,
+                    "disk_read_operations": s.audio_streaming.disk_read_operations,
+                    "disk_frames_read": s.audio_streaming.disk_frames_read,
+                },
             })
         });
         state["audio_output"] = json!(self.audio_output);
@@ -1764,6 +1774,7 @@ impl Harness {
         state["export_include_effect_tails"] = json!(self.app.settings.export.include_effect_tails);
         state["export_preferences"] = json!(self.app.settings.export);
         state["audio_import"] = self.app.audio_import_diagnostics();
+        state["audio_sources"] = self.app.audio_source_diagnostics();
         state["freeze"] = self.app.freeze_diagnostics();
         state["clipboard_text"] = json!(self.clipboard_text);
         state["recording"] = self.app.recording_diagnostics(&self.ctx);

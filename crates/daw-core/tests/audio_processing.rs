@@ -132,7 +132,7 @@ fn portable_project_keeps_original_audio_and_recalls_processing_and_local_stretc
     };
     project.set_audio_processing(track, ghost, value).unwrap();
     let json = temp.path().join("processing.json");
-    project.save(&json).unwrap();
+    project.save_legacy_json(&json).unwrap();
     assert_eq!(Project::load(&json).unwrap(), project);
     let json: serde_json::Value = serde_json::from_slice(&std::fs::read(json).unwrap()).unwrap();
     assert_eq!(json["version"], 6);

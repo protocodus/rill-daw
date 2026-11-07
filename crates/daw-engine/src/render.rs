@@ -1,9 +1,11 @@
 use crate::meter::{ChannelMeter, ChannelMeters};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
+#[cfg(test)]
+use daw_core::AudioData;
 use daw_core::{
-    AudioData, AutomationLane, AutomationParameter, ClipContent, Effect, FadeCurve, Instrument,
-    Project, TrackKind,
+    AutomationLane, AutomationParameter, ClipContent, Effect, FadeCurve, Instrument, Project,
+    TrackKind,
 };
 use daw_plugins::{MidiMessage, ProcessingMode, StereoBusInput, VstEffect, VstInstrument};
 use std::{
@@ -51,6 +53,9 @@ mod stretch_render_tests;
 #[path = "effect_state_tests.rs"]
 mod effect_state_tests;
 
+#[cfg(test)]
+#[path = "audio_stream_tests.rs"]
+mod audio_stream_tests;
 #[cfg(test)]
 #[path = "quality_tests.rs"]
 mod quality_tests;
@@ -142,7 +147,7 @@ struct AudioClip {
     source_rate: f64,
     processing: daw_core::AudioProcessing,
     is_preview: bool,
-    original: Arc<AudioData>,
+    original: Arc<crate::audio_asset::AudioAsset>,
     start: u64,
     source_offset: f64,
     gain: f32,
@@ -155,56 +160,97 @@ struct AudioClip {
     boundary_fades: Option<daw_core::AudioBoundaryFades>,
     source_length: f64,
     reverse: bool,
-    data: Arc<AudioData>,
+    data: Arc<crate::audio_asset::AudioAsset>,
+    id: u64,
 }
 
 impl AudioClip {
-    #[inline]
-    fn sample(&self, position: u64, sample_rate: u32) -> [f32; 2] {
+    fn source_position(&self, position: u64, sample_rate: u32) -> f64 {
         let elapsed = position - self.start;
-        let source_delta = elapsed as f64 * self.data.sample_rate as f64 / sample_rate as f64;
-        let source = self.source_offset
+        let delta = elapsed as f64 * self.data.sample_rate() as f64 / sample_rate as f64;
+        self.source_offset
             + if self.reverse {
-                self.source_length - 1.0 - source_delta
+                self.source_length - 1.0 - delta
             } else {
-                source_delta
+                delta
+            }
+    }
+    fn read_block(
+        &self,
+        position: u64,
+        sample_rate: u32,
+        mut window: Option<&mut crate::audio_stream::StreamWindow>,
+        output: &mut [[f32; 2]],
+    ) -> Result<()> {
+        output.fill([0.0; 2]);
+        let frames = self.data.frames();
+        if output.is_empty() || frames == 0 {
+            return Ok(());
+        }
+        if let Some(file) = self.data.file() {
+            let first = self.source_position(position, sample_rate);
+            let last = self.source_position(position + output.len() as u64 - 1, sample_rate);
+            let lower = first.min(last);
+            let upper = first.max(last);
+            if upper < -1e-8 || lower >= frames as f64 {
+                return Ok(());
+            }
+            let first = lower.max(0.0).floor() as usize;
+            let last = (upper.max(0.0).floor() as usize)
+                .min(frames - 1)
+                .saturating_add(1)
+                .min(frames - 1);
+            window
+                .as_mut()
+                .context("Streamed audio window was not prepared")?
+                .prepare(file, first.min(frames - 1), last)?;
+        }
+        for (index, output) in output.iter_mut().enumerate() {
+            let elapsed = position + index as u64 - self.start;
+            let source = self.source_position(position + index as u64, sample_rate);
+            if source < -1e-8 {
+                continue;
+            }
+            let source = source.max(0.0);
+            let frame = source.floor() as usize;
+            if frame >= frames {
+                continue;
+            }
+            let next = (frame + 1).min(frames - 1);
+            let fraction = (source - frame as f64) as f32;
+            let time = elapsed as f64 + self.envelope_offset;
+            let fade_in = if self.fade_in > 0.0 {
+                self.fade_in_curve.value(time / self.fade_in)
+            } else {
+                1.0
             };
-        if source < -1e-8 {
-            return [0.0; 2];
+            let fade_out = if self.fade_out > 0.0 {
+                self.fade_out_curve
+                    .value((self.envelope_length - time) / self.fade_out)
+            } else {
+                1.0
+            };
+            let gain = self.gain
+                * fade_in
+                * fade_out
+                * self
+                    .boundary_fades
+                    .map_or(1.0, |boundary| boundary.gain(elapsed as f64));
+            for (channel, destination) in output.iter_mut().enumerate() {
+                let channel = channel.min(self.data.channels() - 1);
+                let (a, b) = if let Some(data) = self.data.resident() {
+                    (
+                        data.samples[frame * data.channels + channel],
+                        data.samples[next * data.channels + channel],
+                    )
+                } else {
+                    let window = window.as_ref().expect("prepared streamed source");
+                    (window.sample(frame, channel), window.sample(next, channel))
+                };
+                *destination = (a + (b - a) * fraction) * gain;
+            }
         }
-        let source = source.max(0.0);
-        let frame = source.floor() as usize;
-        let frames = self.data.samples.len() / self.data.channels;
-        if frame >= frames {
-            return [0.0; 2];
-        }
-        let fraction = (source - frame as f64) as f32;
-        let next = (frame + 1).min(frames - 1);
-        let time = elapsed as f64 + self.envelope_offset;
-        let fade_in = if self.fade_in > 0.0 {
-            self.fade_in_curve.value(time / self.fade_in)
-        } else {
-            1.0
-        };
-        let fade_out = if self.fade_out > 0.0 {
-            self.fade_out_curve
-                .value((self.envelope_length - time) / self.fade_out)
-        } else {
-            1.0
-        };
-        let gain = self.gain
-            * fade_in
-            * fade_out
-            * self
-                .boundary_fades
-                .map_or(1.0, |boundary| boundary.gain(elapsed as f64));
-        let channel = |channel: usize| {
-            let channel = channel.min(self.data.channels - 1);
-            let a = self.data.samples[frame * self.data.channels + channel];
-            let b = self.data.samples[next * self.data.channels + channel];
-            (a + (b - a) * fraction) * gain
-        };
-        [channel(0), channel(1)]
+        Ok(())
     }
 }
 
@@ -739,6 +785,9 @@ struct RenderTrack {
     // Preallocated at graph construction; no retained asset is dropped by DSP.
     audio_transition: Vec<[f32; 2]>,
     audio_transition_cursor: usize,
+    stream_windows: Option<Box<crate::audio_stream::WindowPair>>,
+    audio_incoming: Vec<[f32; 2]>,
+    audio_outgoing: Vec<[f32; 2]>,
     notes: Arc<Vec<ScheduledNote>>,
     events: Arc<Vec<Event>>,
     note_order: Arc<Vec<usize>>,
@@ -1070,8 +1119,28 @@ impl RenderTrack {
                 let first = segment.start.saturating_sub(start) as usize;
                 let last = (segment.end - start).min(count as u64) as usize;
                 let incoming = &self.audio[segment.incoming];
+                incoming
+                    .read_block(
+                        start + first as u64,
+                        context.sample_rate,
+                        self.stream_windows.as_mut().map(|windows| &mut windows[0]),
+                        &mut self.audio_incoming[first..last],
+                    )
+                    .with_context(|| {
+                        format!("Read audio source {}", incoming.source_path.display())
+                    })?;
                 if let (Some(outgoing), Some(curve)) = (segment.outgoing, &segment.fade) {
                     let outgoing = &self.audio[outgoing];
+                    outgoing
+                        .read_block(
+                            start + first as u64,
+                            context.sample_rate,
+                            self.stream_windows.as_mut().map(|windows| &mut windows[1]),
+                            &mut self.audio_outgoing[first..last],
+                        )
+                        .with_context(|| {
+                            format!("Read audio source {}", outgoing.source_path.display())
+                        })?;
                     let duration = (segment.end - segment.start) as f64;
                     let mut curve_cursor =
                         curve.cursor((start + first as u64 - segment.start) as f64 / duration);
@@ -1081,8 +1150,8 @@ impl RenderTrack {
                             (position - segment.start) as f64 / duration,
                             &mut curve_cursor,
                         );
-                        let a = outgoing.sample(position, context.sample_rate);
-                        let b = incoming.sample(position, context.sample_rate);
+                        let a = self.audio_outgoing[index];
+                        let b = self.audio_incoming[index];
                         self.mix_left[index] += f64::from(a[0]) * f64::from(1.0 - gain)
                             + f64::from(b[0]) * f64::from(gain);
                         self.mix_right[index] += f64::from(a[1]) * f64::from(1.0 - gain)
@@ -1090,7 +1159,7 @@ impl RenderTrack {
                     }
                 } else {
                     for index in first..last {
-                        let sample = incoming.sample(start + index as u64, context.sample_rate);
+                        let sample = self.audio_incoming[index];
                         self.mix_left[index] += f64::from(sample[0]);
                         self.mix_right[index] += f64::from(sample[1]);
                     }
@@ -1282,6 +1351,10 @@ pub(crate) struct Renderer {
     midi_input_notes: Vec<(u64, u8, u8)>,
     expressive_input: Vec<(u64, u8, u8, daw_plugins::ExpressiveMidiData)>,
     live_edit_context: Arc<LiveEditContext>,
+    streamed_clips: Arc<Vec<(u64, u64)>>,
+    resident_audio_bytes: u64,
+    retired_audio_reads: u64,
+    retired_audio_frames: u64,
 }
 
 impl Renderer {
@@ -1453,7 +1526,8 @@ impl Renderer {
             .collect();
         let mut tracks = Vec::new();
         let mut end_sample = to_sample(project.end_beat());
-        let mut audio_cache = HashMap::<live_edit::AudioAssetKey, Arc<AudioData>>::new();
+        let mut audio_cache =
+            HashMap::<live_edit::AudioAssetKey, Arc<crate::audio_asset::AudioAsset>>::new();
         let mut cache_bytes = 0usize;
         let mut tail_samples = sample_rate as u64 / 5;
         for id in &order {
@@ -1696,6 +1770,12 @@ impl Renderer {
             };
             let expression =
                 ExpressionRuntime::new(Arc::clone(&content.expression), expression_support);
+            let stream_windows = content
+                .audio
+                .iter()
+                .any(|clip| clip.data.is_streamed())
+                .then(crate::audio_stream::windows)
+                .transpose()?;
             tracks.push(RenderTrack {
                 id: track.id,
                 name: track.name.clone(),
@@ -1704,6 +1784,9 @@ impl Renderer {
                 audio_segments: content.audio_segments,
                 audio_transition: vec![[0.0; 2]; (sample_rate as usize / 200).max(2)],
                 audio_transition_cursor: (sample_rate as usize / 200).max(2),
+                stream_windows,
+                audio_incoming: vec![[0.0; 2]; BLOCK],
+                audio_outgoing: vec![[0.0; 2]; BLOCK],
                 notes: content.notes,
                 events: content.events,
                 note_order: content.note_order,
@@ -2014,7 +2097,23 @@ impl Renderer {
         } else {
             None
         };
+        let mut streamed_clips: Vec<_> = tracks
+            .iter()
+            .flat_map(|track| {
+                track
+                    .audio
+                    .iter()
+                    .filter(|clip| clip.data.is_streamed())
+                    .map(|clip| (track.id, clip.id))
+            })
+            .collect();
+        streamed_clips.sort_unstable();
+        let streamed_clips = Arc::new(streamed_clips);
         let mut renderer = Self {
+            streamed_clips,
+            resident_audio_bytes: cache_bytes as u64,
+            retired_audio_reads: 0,
+            retired_audio_frames: 0,
             signal_monitor: None,
             signal_monitor_transport: 0,
             signal_monitor_active: false,
@@ -2358,6 +2457,27 @@ impl Renderer {
     /// Normalize the complete held MIDI input chord on the render worker. A
     /// route or device disappearing releases every voice, and seek/reset clears
     /// the remembered set so currently held keys are restored on the next block.
+    pub(crate) fn streamed_clips(&self) -> Arc<Vec<(u64, u64)>> {
+        Arc::clone(&self.streamed_clips)
+    }
+    pub(crate) fn audio_streaming_snapshot(&self) -> crate::audio_stream::AudioStreamingSnapshot {
+        let (mut reads, mut frames) = (self.retired_audio_reads, self.retired_audio_frames);
+        for track in self.tracks.iter().flatten() {
+            if let Some(windows) = &track.stream_windows {
+                for window in windows.iter() {
+                    reads += window.metrics.operations.load(Ordering::Relaxed);
+                    frames += window.metrics.frames.load(Ordering::Relaxed);
+                }
+            }
+        }
+        crate::audio_stream::AudioStreamingSnapshot {
+            streamed_clips: self.streamed_clips.len() as u32,
+            resident_bytes: self.resident_audio_bytes,
+            window_bytes: crate::audio_stream::window_bytes(),
+            disk_read_operations: reads,
+            disk_frames_read: frames,
+        }
+    }
     pub(crate) fn unsupported_midi(&self) -> (u64, u64) {
         self.tracks
             .iter()

@@ -7,12 +7,14 @@
 
 Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Compose with audio and MIDI, get help from an integrated AI assistant, and bring everything together in the mixer. Focused workspaces keep the music in view and the tools within reach.
 
-- **Build your song.** Drop WAV, MP3, FLAC or OGG audio into the arrangement. Layer audio and MIDI, organize tracks with colors and folders, and reshape clips with non-destructive edits and undo.
+Rill focuses on audio/MIDI music production. Video workflows and scoring to picture are outside its product scope.
+
+- **Build your song.** Drop WAV, MP3, FLAC or OGG audio into the arrangement. Large samples stream from disk and show a disk badge. Layer audio and MIDI, organize tracks with colors and folders, and reshape clips with non-destructive edits and undo.
 - **Find your next phrase.** Write notes by hand or explore chords, arpeggios, and melodies with editable previews and scale highlighting. Preview quantize/humanize, adjust note lengths together, and edit precise note expression.
 - **Make music with AI.** Ask the integrated assistant to write a part, reshape a phrase, or adjust the mix directly in your current song. Review its edits and undo them through normal song history.
 - **Shape your sound.** Bring your VST3 instruments and effects, then connect buses, sends, auxiliary inputs and grouped instrument outputs. Automate channel and Master gain, volume and pan; inspect spectrum, loudness and stereo levels. Plug-ins run in isolated processes.
 - **Print and return.** Freeze clips or tracks into new audio below their source, printing configured instrument outputs together. Originals stay retained and muted; **Return to originals** restores them without deleting the prints.
-- **Capture and finish.** Record audio and MIDI, choose loop takes, and export songs or loops as 16/24-bit PCM or 32-bit float WAV, or export MIDI. Portable `.rill` projects keep the arrangement and its source audio together.
+- **Capture and finish.** Record audio and MIDI, choose loop takes, and export songs or loops as 16/24-bit PCM or 32-bit float WAV, or export MIDI. Every normal project save embeds the referenced audio, including retained takes and Freeze originals, in a portable song file.
 
 `.rill` projects retain high-resolution MIDI note/controller data. Native UMP input is available on macOS 11 and newer; Linux and Windows use MIDI 1.0 input. VST3 playback uses supported musical mappings, and exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility.
 

@@ -865,7 +865,29 @@ impl DawApp {
                 project.validate()?;
                 self.begin_edit();
                 self.project = project;
-                self.waveforms.extend(done.previews);
+                // Admission may have completed while this recording's preview
+                // worker was reading. Recheck the live quota at publication.
+                let mut remaining = crate::project_io::WAVEFORM_CACHE_BYTES.saturating_sub(
+                    self.waveforms
+                        .values()
+                        .map(|audio| audio.samples.len() * size_of::<f32>())
+                        .sum(),
+                );
+                let mut retired = Vec::new();
+                for (path, preview) in done.previews {
+                    let bytes = preview.samples.len() * size_of::<f32>();
+                    if bytes <= remaining && bytes <= crate::project_io::WAVEFORM_FILE_BYTES {
+                        remaining -= bytes;
+                        if let Some(previous) = self.waveforms.insert(path, preview) {
+                            retired.push(previous);
+                        }
+                    } else {
+                        retired.push(preview);
+                    }
+                }
+                if !retired.is_empty() {
+                    std::thread::spawn(move || drop(retired));
+                }
                 self.edit_label = Some(
                     if midi_count > 0 && !done.result.takes.is_empty() {
                         "Record MIDI and audio"

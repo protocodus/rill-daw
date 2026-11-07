@@ -91,7 +91,7 @@ pub(crate) struct LiveEditPreparer {
     previous: Arc<Project>,
     content: HashMap<u64, CompiledContent>,
     maximum_notes: HashMap<u64, usize>,
-    assets: HashMap<AudioAssetKey, Weak<AudioData>>,
+    assets: HashMap<AudioAssetKey, Weak<crate::audio_asset::AudioAsset>>,
 }
 
 struct TrackEdit {
@@ -116,6 +116,10 @@ struct TrackEdit {
     pitch_next: Vec<usize>,
     expression_messages: Vec<daw_plugins::ExpressiveMidiMessage>,
     expression_chase: Vec<midi_expression::Timed>,
+    stream_windows: Option<Box<crate::audio_stream::WindowPair>>,
+    bridge_old: Vec<[f32; 2]>,
+    bridge_new: Vec<[f32; 2]>,
+    bridge_scratch: Vec<[f32; 2]>,
 }
 
 pub(crate) struct PreparedLiveEdit {
@@ -124,6 +128,8 @@ pub(crate) struct PreparedLiveEdit {
     end_sample: u64,
     loop_range: Option<(u64, u64)>,
     automation_sequence: u64,
+    streamed_clips: Arc<Vec<(u64, u64)>>,
+    resident_audio_bytes: u64,
 }
 
 impl PreparedLiveEdit {
@@ -274,7 +280,7 @@ impl LiveEditPreparer {
         // Weak entries do not keep deleted audio alive. A prepared plan and the
         // renderer own the live sources; stale plans can be retired independently.
         self.assets.retain(|_, asset| asset.strong_count() > 0);
-        let mut cache: HashMap<AudioAssetKey, Arc<AudioData>> = self
+        let mut cache: HashMap<AudioAssetKey, Arc<crate::audio_asset::AudioAsset>> = self
             .assets
             .iter()
             .filter_map(|(path, asset)| asset.upgrade().map(|asset| (path.clone(), asset)))
@@ -346,7 +352,7 @@ impl LiveEditPreparer {
                 );
                 for data in [&audio.data, &audio.original] {
                     if used_sources.insert(Arc::as_ptr(data)) {
-                        cache_bytes += data.samples.len() * size_of::<f32>();
+                        cache_bytes += data.resident_bytes();
                     }
                 }
             }
@@ -418,6 +424,16 @@ impl LiveEditPreparer {
                     content.expression.events.len() + content.events.len() + 8192,
                 ),
                 expression_chase: Vec::with_capacity(content.expression.events.len() + 8192),
+                stream_windows: (content.audio.iter().any(|clip| clip.data.is_streamed())
+                    && self
+                        .content
+                        .get(&id)
+                        .is_none_or(|old| !Arc::ptr_eq(&old.audio, &content.audio)))
+                .then(crate::audio_stream::windows)
+                .transpose()?,
+                bridge_old: vec![[0.0; 2]; (self.context.sample_rate as usize / 200).max(2)],
+                bridge_new: vec![[0.0; 2]; (self.context.sample_rate as usize / 200).max(2)],
+                bridge_scratch: vec![[0.0; 2]; (self.context.sample_rate as usize / 200).max(2)],
             });
             next_content.insert(id, content);
         }
@@ -438,6 +454,19 @@ impl LiveEditPreparer {
         } else {
             None
         };
+        let mut streamed_clips: Vec<_> = tracks
+            .iter()
+            .flat_map(|track| {
+                track
+                    .content
+                    .audio
+                    .iter()
+                    .filter(|clip| clip.data.is_streamed())
+                    .map(|clip| (track.id, clip.id))
+            })
+            .collect();
+        streamed_clips.sort_unstable();
+        let streamed_clips = Arc::new(streamed_clips);
         Ok(PreparedLiveEdit {
             context: Arc::clone(&self.context),
             tracks,
@@ -445,6 +474,8 @@ impl LiveEditPreparer {
                 + self.context.tail_samples,
             loop_range,
             automation_sequence: 0,
+            streamed_clips,
+            resident_audio_bytes: cache_bytes as u64,
         })
     }
 }
@@ -522,6 +553,32 @@ impl Renderer {
                     })),
             "Prepared edit belongs to a different audio graph"
         );
+        for (next, old) in edit.tracks.iter_mut().zip(&mut self.tracks) {
+            let track = old.as_mut().expect("owned graph track");
+            if !self.preview
+                && !Arc::ptr_eq(&track.audio, &next.content.audio)
+                && (!track.audio.is_empty() || !next.content.audio.is_empty())
+            {
+                timeline_block(
+                    &track.audio,
+                    &track.audio_segments,
+                    self.source_sample,
+                    self.sample_rate,
+                    track.stream_windows.as_deref_mut(),
+                    &mut next.bridge_scratch,
+                    &mut next.bridge_old,
+                )?;
+                timeline_block(
+                    &next.content.audio,
+                    &next.content.audio_segments,
+                    self.source_sample,
+                    self.sample_rate,
+                    next.stream_windows.as_deref_mut(),
+                    &mut next.bridge_scratch,
+                    &mut next.bridge_new,
+                )?;
+            }
+        }
         let mut content_changed = false;
         for (next, old) in edit.tracks.iter_mut().zip(&mut self.tracks) {
             let track = old.as_mut().unwrap();
@@ -648,19 +705,8 @@ impl Renderer {
                 let old_cursor = track.audio_transition_cursor;
                 let length = track.audio_transition.len();
                 for index in 0..length {
-                    let position = self.source_sample + index as u64;
-                    let old = timeline_sample(
-                        &track.audio,
-                        &track.audio_segments,
-                        position,
-                        self.sample_rate,
-                    );
-                    let new = timeline_sample(
-                        &next.content.audio,
-                        &next.content.audio_segments,
-                        position,
-                        self.sample_rate,
-                    );
+                    let old = next.bridge_old[index];
+                    let new = next.bridge_new[index];
                     let retiring = if old_cursor + index < length {
                         let gain = 1.0 - (old_cursor + index) as f32 / (length - 1).max(1) as f32;
                         track.audio_transition[old_cursor + index].map(|sample| sample * gain)
@@ -671,6 +717,16 @@ impl Renderer {
                         [old[0] + retiring[0] - new[0], old[1] + retiring[1] - new[1]];
                 }
                 track.audio_transition_cursor = 0;
+            }
+            if !Arc::ptr_eq(&track.audio, &next.content.audio) {
+                if let Some(windows) = &track.stream_windows {
+                    for window in windows.iter() {
+                        self.retired_audio_reads +=
+                            window.metrics.operations.load(Ordering::Relaxed);
+                        self.retired_audio_frames += window.metrics.frames.load(Ordering::Relaxed);
+                    }
+                }
+                std::mem::swap(&mut track.stream_windows, &mut next.stream_windows);
             }
             std::mem::swap(&mut track.audio, &mut next.content.audio);
             std::mem::swap(&mut track.audio_segments, &mut next.content.audio_segments);
@@ -697,6 +753,11 @@ impl Renderer {
                 event.sample < note_frontier || (event.sample == note_frontier && !event.on)
             });
         }
+        std::mem::swap(&mut self.streamed_clips, &mut edit.streamed_clips);
+        std::mem::swap(
+            &mut self.resident_audio_bytes,
+            &mut edit.resident_audio_bytes,
+        );
         self.timeline_end_sample = edit.end_sample;
         if self.tolerate_plugin_failure {
             self.loop_range = edit.loop_range;
@@ -791,32 +852,52 @@ fn swap_plugin_automation(
     std::mem::swap(current, next);
 }
 
-/// Bounded lookup used only for the 5 ms edit bridge, never a whole asset render.
-fn timeline_sample(
+/// The edit bridge reads bounded windows at the current graph frontier.
+fn timeline_block(
     audio: &[AudioClip],
     segments: &[audio_schedule::Segment],
     position: u64,
     sample_rate: u32,
-) -> [f32; 2] {
-    let index = segments.partition_point(|segment| segment.end <= position);
-    let Some(segment) = segments
-        .get(index)
-        .filter(|segment| segment.start <= position)
-    else {
-        return [0.0; 2];
-    };
-    let b = audio[segment.incoming].sample(position, sample_rate);
-    if let (Some(outgoing), Some(curve)) = (segment.outgoing, &segment.fade) {
-        let progress = (position - segment.start) as f64 / (segment.end - segment.start) as f64;
-        let gain = curve.value(progress, &mut curve.cursor(progress));
-        let a = audio[outgoing].sample(position, sample_rate);
-        [
-            a[0] * (1.0 - gain) + b[0] * gain,
-            a[1] * (1.0 - gain) + b[1] * gain,
-        ]
-    } else {
-        b
+    mut windows: Option<&mut crate::audio_stream::WindowPair>,
+    scratch: &mut [[f32; 2]],
+    output: &mut [[f32; 2]],
+) -> Result<()> {
+    output.fill([0.0; 2]);
+    let end = position + output.len() as u64;
+    let first = segments.partition_point(|segment| segment.end <= position);
+    for segment in &segments[first..] {
+        if segment.start >= end {
+            break;
+        }
+        let begin = segment.start.saturating_sub(position) as usize;
+        let stop = (segment.end - position).min(output.len() as u64) as usize;
+        audio[segment.incoming].read_block(
+            position + begin as u64,
+            sample_rate,
+            windows.as_mut().map(|windows| &mut windows[0]),
+            &mut output[begin..stop],
+        )?;
+        if let (Some(outgoing), Some(curve)) = (segment.outgoing, &segment.fade) {
+            audio[outgoing].read_block(
+                position + begin as u64,
+                sample_rate,
+                windows.as_mut().map(|windows| &mut windows[1]),
+                &mut scratch[begin..stop],
+            )?;
+            for index in begin..stop {
+                let progress = (position + index as u64 - segment.start) as f64
+                    / (segment.end - segment.start) as f64;
+                let gain = curve.value(progress, &mut curve.cursor(progress));
+                let a = scratch[index];
+                let b = output[index];
+                output[index] = [
+                    a[0] * (1.0 - gain) + b[0] * gain,
+                    a[1] * (1.0 - gain) + b[1] * gain,
+                ];
+            }
+        }
     }
+    Ok(())
 }
 
 pub(super) struct CompileSettings<'a> {
@@ -831,7 +912,7 @@ pub(super) fn compile_content(
     track: &Track,
     enabled: bool,
     settings: CompileSettings<'_>,
-    audio_cache: &mut HashMap<AudioAssetKey, Arc<AudioData>>,
+    audio_cache: &mut HashMap<AudioAssetKey, Arc<crate::audio_asset::AudioAsset>>,
     cache_bytes: &mut usize,
 ) -> Result<CompiledContent> {
     let CompileSettings {
@@ -1026,18 +1107,16 @@ pub(super) fn compile_content(
                 let original = if let Some(data) = audio_cache.get(&original_key(&source_path)) {
                     Arc::clone(data)
                 } else {
-                    let source = quality::load_source(&source_path)
-                        .with_context(|| format!("Loading audio clip {} ({path})", clip.name))?;
-                    check_cancelled()?;
-                    let data = Arc::new(quality::prepare_audio_cancelled(
-                        source,
+                    let data = quality::prepare_source(
+                        &source_path,
                         sample_rate,
                         options.resample_quality,
                         cancel,
-                    )?);
+                    )
+                    .with_context(|| format!("Loading audio clip {} ({path})", clip.name))?;
                     check_cancelled()?;
                     *cache_bytes = cache_bytes
-                        .checked_add(data.samples.len() * size_of::<f32>())
+                        .checked_add(data.resident_bytes())
                         .context("Audio cache size overflow")?;
                     ensure!(
                         *cache_bytes <= quality::MAX_CACHE_BYTES,
@@ -1047,8 +1126,14 @@ pub(super) fn compile_content(
                     data
                 };
                 let full_key = asset_key(&source_path, clip.source_rate, *processing, false);
+                let prepared_bytes = (original.frames() as f64 / clip.source_rate).ceil() as u128
+                    * original.channels() as u128
+                    * 4;
                 let is_preview = preview
-                    && crate::stretch::preview_worthwhile(&original)
+                    && prepared_bytes < u128::from(daw_core::AUDIO_STREAM_THRESHOLD_BYTES)
+                    && original
+                        .resident()
+                        .is_some_and(crate::stretch::preview_worthwhile)
                     && !(clip.source_rate == 1.0 && processing.transpose_semitones == 0.0)
                     && !audio_cache.contains_key(&full_key);
                 let key = if is_preview {
@@ -1063,34 +1148,51 @@ pub(super) fn compile_content(
                 } else {
                     check_cancelled()?;
                     let prepared_bytes = (original.frames() as f64 / clip.source_rate).ceil()
-                        as usize
-                        * original.channels
-                        * size_of::<f32>();
-                    ensure!(
-                        cache_bytes.saturating_add(prepared_bytes) <= quality::MAX_CACHE_BYTES,
-                        "Prepared audio exceeds the 1 GiB session cache limit"
-                    );
-                    let prepare = if is_preview {
-                        crate::stretch::prepare_preview
+                        as u128
+                        * original.channels() as u128
+                        * 4;
+                    let disk = original.is_streamed()
+                        || prepared_bytes >= u128::from(daw_core::AUDIO_STREAM_THRESHOLD_BYTES);
+                    if !disk {
+                        ensure!(
+                            cache_bytes.saturating_add(prepared_bytes as usize)
+                                <= quality::MAX_CACHE_BYTES,
+                            "Prepared audio exceeds the 1 GiB session cache limit"
+                        );
+                    }
+                    let data = if disk {
+                        let input = original.ensure_file(cancel)?;
+                        crate::stretch::prepare_file(
+                            input.file().expect("prepared file"),
+                            clip.source_rate,
+                            processing.transpose_semitones,
+                            processing.algorithm,
+                            cancel,
+                        )?
                     } else {
-                        crate::stretch::prepare_processed
+                        let prepare = if is_preview {
+                            crate::stretch::prepare_preview
+                        } else {
+                            crate::stretch::prepare_processed
+                        };
+                        crate::audio_asset::AudioAsset::from_resident(prepare(
+                            original.resident().expect("resident source"),
+                            clip.source_rate,
+                            processing.transpose_semitones,
+                            processing.algorithm,
+                            cancel,
+                        )?)
                     };
-                    let data = Arc::new(prepare(
-                        &original,
-                        clip.source_rate,
-                        processing.transpose_semitones,
-                        processing.algorithm,
-                        cancel,
-                    )?);
-                    *cache_bytes += data.samples.len() * size_of::<f32>();
+                    *cache_bytes += data.resident_bytes();
                     audio_cache.insert(key, Arc::clone(&data));
                     data
                 };
                 ensure!(
-                    data.channels > 0 && data.sample_rate > 0,
+                    data.channels() > 0 && data.sample_rate() > 0,
                     "Invalid WAV format"
                 );
                 audio.push(AudioClip {
+                    id: clip.id,
                     source_path,
                     source_alias: PathBuf::from(path),
                     source_rate: clip.source_rate,
@@ -1099,7 +1201,7 @@ pub(super) fn compile_content(
                     original,
                     start: to_sample(clip.start),
                     source_offset: clip.offset / clip.source_rate * 60.0 / tempo
-                        * data.sample_rate as f64,
+                        * data.sample_rate() as f64,
                     gain: *gain,
                     fade_in: fade_in.max(0.0) * samples_per_beat / clip.source_rate,
                     fade_out: fade_out.max(0.0) * samples_per_beat / clip.source_rate,
@@ -1121,7 +1223,7 @@ pub(super) fn compile_content(
                             fade_out: boundary.fade_out * scale,
                         }
                     }),
-                    source_length: clip.length * 60.0 / tempo * data.sample_rate as f64,
+                    source_length: clip.length * 60.0 / tempo * data.sample_rate() as f64,
                     reverse: *reverse,
                     data,
                 });

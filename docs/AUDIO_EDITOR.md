@@ -118,24 +118,40 @@ These session view settings apply across the arranger, audio editor and takes;
 they change neither audio nor project history. Both palettes reuse one analysis,
 and intensity changes only the painted opacity.
 
-An immediate coarse waveform remains usable while a background worker prepares
-source peaks, then the spectral image, from one decode. Peaks retain single-sample
-transients and stereo channel differences. The refined outline is a continuous
-envelope with a one-physical-pixel antialiasing fringe; at close zoom it becomes a
-thin trace. No new control or analysis action is needed.
+Small sources keep an immediate coarse waveform while a background worker
+prepares source peaks and then the spectral image. Larger sources are read from
+disk in bounded blocks. Their overview retains extrema, including single-sample
+transients and stereo differences; its bin size adapts to a 128 KiB source index.
+At close zoom, a separate background worker loads small PCM tiles for exact
+fractional edges and sample detail. A pending overview shows “Preparing waveform…”;
+a failed source preview is reported without removing the clip or its source link.
+The refined outline has a one-physical-pixel antialiasing fringe and becomes a
+thin trace at close zoom.
 
-Ghosts, repeated clips and views reuse one source analysis. Trim, reverse, stretch,
+Ghosts, repeated clips and views reuse source analysis. Trim, reverse, stretch,
 gain and fade changes update the displayed passage; gain and fades are represented
 at display resolution. The spectral underlay remains a source-frequency overview,
-with transposition shifting its frequency display. Loading another project rejects
-late results from the previous document. Reimport or reopen a changed source to
-replace its loaded audio and previews together.
+with transposition shifting its frequency display. Its overlapping read chunks
+retain complete FFT windows and pool into the same fixed frequency/time grid.
+Each source publishes its peaks before optional spectral preparation. Newly
+focused work can preempt background scans; repainting a ready clip does not
+continually cancel other previews. Loading another project rejects stale results.
+Reopen a changed source to admit its audio and previews together.
 
-Only visible pixel columns are prepared, capped at 4,096. Unchanged views reuse
-ready mesh geometry without scanning PCM again. Peak and spectral analysis share
-a 32 MiB cache and one worker; view geometry has a separate 8 MiB / 512-entry cache.
-These budgets are additional to the existing decoded-source cache. Under memory
-pressure a coarse preview remains available; analysis does not enter a retry loop.
+Only visible pixel columns are prepared, capped at 4,096, and unchanged views
+reuse geometry. Peak indices and spectral textures share a 32 MiB / 128-source
+cache; optional textures yield to new outlines under pressure. Small decoded
+previews are limited to less than 32 MiB per source and 128 MiB total. Disk detail
+has a separate 16 MiB cache of 16,384-frame tiles, with bounded visible-window
+requests; its geometry cache is 4 MiB. The existing small-source geometry cache
+remains 8 MiB / 512 entries. These are visualization budgets, separate from the
+audio engine's stream buffers. No waveform paint performs file I/O.
+
+A small disk icon marks disk-streamed audio, including unnamed and ghost clips,
+without restoring a hidden name header. Its read-only hover text and Clip
+Properties identify the storage mode. Source duration and stereo layout remain
+available independently of cached PCM, so Slip and source-offset limits work
+for long recordings too.
 
 Arranger Fit uses a cached full-clip amplitude reference shared by stereo
 channels. Unfaded source extrema refine with the peak cache; faded references

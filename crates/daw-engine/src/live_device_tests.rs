@@ -288,6 +288,7 @@ fn stopping_cancels_a_pending_preparation_without_waiting_for_its_gate() {
 
 #[test]
 fn progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_edit() {
+    let _cpu = crate::allocation_test_support::heavy_audio_test_guard();
     let (_directory, mut project, id) = fixture();
     let daw_core::ClipContent::Audio { path, .. } = &project.track(id).unwrap().clips[0].content
     else {

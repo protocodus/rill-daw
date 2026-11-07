@@ -46,6 +46,7 @@ pub enum Icon {
     Mixer,
     Routing,
     Automation,
+    Disk,
     Save,
     Open,
     Editor,
@@ -132,6 +133,7 @@ impl Icon {
                 Self::Automation
             }
             "Save" | "Save as…" => Self::Save,
+            "Disk-streamed audio" => Self::Disk,
             "Open…" => Self::Open,
             "Open editor" | "Show editor" => Self::Editor,
             "Export WAV…" | "Export MIDI…" => Self::Export,
@@ -479,6 +481,22 @@ impl Icon {
                 // Alternating slopes keep the envelope recognizable even at
                 // compact control size, rather than resembling a flat rail.
                 line(&[(2., 16.), (7., 7.), (12., 17.), (17., 6.), (22., 13.)]);
+            }
+            Self::Disk => {
+                // A drive enclosure and its status light, distinct from the
+                // floppy-disk Save action.
+                line(&[
+                    (5., 3.),
+                    (19., 3.),
+                    (22., 15.),
+                    (22., 21.),
+                    (2., 21.),
+                    (2., 15.),
+                    (5., 3.),
+                ]);
+                line(&[(2., 15.), (22., 15.)]);
+                circle(18., 18., 1.);
+                line(&[(6., 18.), (11., 18.)]);
             }
             Self::Save => {
                 line(&[

@@ -50,7 +50,7 @@ impl DawApp {
         edit: daw_ui::ClipTimingEdit,
     ) -> anyhow::Result<()> {
         use anyhow::{Context, ensure};
-        use daw_core::{AudioData, ClipContent};
+        use daw_core::ClipContent;
         let (track, clip) = self
             .selected_track
             .zip(self.selected_clip)
@@ -85,11 +85,10 @@ impl DawApp {
                 "Source offset must be finite and nonnegative"
             );
             if let ClipContent::Audio { path, reverse, .. } = &original.content {
-                let seconds = if let Some(source) = self.waveforms.get(path) {
-                    source.duration_seconds()
-                } else {
-                    AudioData::wav_duration_seconds(path)?
-                };
+                let seconds = self
+                    .audio_source_info(path)
+                    .context("Audio source metadata is loading or unavailable")?
+                    .duration_seconds();
                 let source_beats = seconds * candidate.tempo / 60.0;
                 ensure!(
                     offset + original.source_length() <= source_beats + 1e-9,

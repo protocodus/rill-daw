@@ -107,8 +107,24 @@ fn bypassed_effect_presets_roundtrip_without_loading_and_preserve_audio() -> Res
     project.track_mut(track).unwrap().inserts.push(slot);
     let path = temp.path().join("project.daw.json");
     project.save(&path)?;
+    std::fs::remove_file(&audio)?;
     let restored = Project::load(path)?;
-    assert_eq!(restored, project);
+    let daw_core::ClipContent::Audio { path: bundled, .. } =
+        &restored.track(track).unwrap().clips[0].content
+    else {
+        unreachable!()
+    };
+    assert_ne!(Path::new(bundled), audio);
+    let daw_core::ClipContent::Audio { path: expected, .. } =
+        &mut project.track_mut(track).unwrap().clips[0].content
+    else {
+        unreachable!()
+    };
+    *expected = bundled.clone();
+    assert_eq!(
+        restored, project,
+        "all state except relocated media is preserved"
+    );
     assert_eq!(render(&restored, 8_000, 1.0)?, reference);
     Ok(())
 }

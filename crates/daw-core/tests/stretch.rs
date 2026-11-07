@@ -234,7 +234,11 @@ fn versioned_projects_round_trip_rates_and_version_one_defaults_to_unstretched()
     project.stretch_clip(track, id, 8.0).unwrap();
     for extension in ["json", "rill"] {
         let path = temp.path().join(format!("session.{extension}"));
-        project.save(&path).unwrap();
+        if extension == "json" {
+            project.save_legacy_json(&path).unwrap();
+        } else {
+            project.save(&path).unwrap();
+        }
         assert_eq!(Project::load(&path).unwrap(), project);
         if extension == "json" {
             let value: serde_json::Value =

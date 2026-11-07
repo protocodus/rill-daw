@@ -1,9 +1,11 @@
 //! Song-scoped worker jobs. Never call these helpers on the UI or audio thread.
 //! Jobs return measurements and discovered controls, not filesystem capabilities.
+#[cfg(test)]
+use daw_core::AudioData;
 use daw_core::{
-    AudioData, AudioSilenceSettings, ClipContent, Effect, Instrument, Project, TrackKind,
-    TransientAlgorithm, TransientSettings, detect_audio_silence, detect_transients,
-    normalization_gain,
+    AudioFile, AudioSilenceSettings, ClipContent, Effect, Instrument, Project, TrackKind,
+    TransientAlgorithm, TransientSettings, detect_audio_silence_file, detect_transients_file,
+    normalization_gain_file,
 };
 use daw_plugins::{ParameterInfo, VstEffect, VstInstrument};
 use serde::Deserialize;
@@ -441,11 +443,11 @@ fn analyze_clip(
         );
     }
     check_cancelled(cancel)?;
-    let data = AudioData::load_wav_with_limit(path, 64 * 1024 * 1024).map_err(|_| {
-        "Unable to decode this clip's audio source (maximum decoded size 64 MiB)".to_string()
-    })?;
+    let file =
+        AudioFile::open(path).map_err(|_| "Unable to read this clip's audio source".to_string())?;
+    let info = file.info();
     check_cancelled(cancel)?;
-    if data.channels > 32 || data.sample_rate > 192_000 {
+    if info.channels > 32 || info.sample_rate > 192_000 {
         return Err(
             "Clip analysis supports at most 32 channels and source sample rates up to 192000 Hz"
                 .into(),
@@ -453,8 +455,8 @@ fn analyze_clip(
     }
     let source_samples = (end - start) * 60.0 / project.tempo
         * clip.source_rate
-        * f64::from(data.sample_rate)
-        * data.channels as f64;
+        * f64::from(info.sample_rate)
+        * info.channels as f64;
     if source_samples > 16_777_216.0 {
         return Err(
             "The source range is too large for clip analysis; choose a shorter range".into(),
@@ -468,8 +470,8 @@ fn analyze_clip(
         sensitivity: args.sensitivity,
         minimum_gap_ms: args.minimum_gap_ms,
     };
-    let region_onsets =
-        detect_transients(&region, &data, project.tempo, settings).map_err(|_| {
+    let region_onsets = detect_transients_file(&region, &file, project.tempo, settings, cancel)
+        .map_err(|_| {
             "Unable to analyze transients; shorten the range or increase the minimum gap"
                 .to_string()
         })?;
@@ -479,9 +481,9 @@ fn analyze_clip(
         .map(|beat| start - clip.start + beat)
         .collect();
     let arrangement_onsets: Vec<_> = region_onsets.iter().map(|beat| start + beat).collect();
-    let retained = detect_audio_silence(
+    let retained = detect_audio_silence_file(
         clip,
-        &data,
+        &file,
         project.tempo,
         (start, end),
         AudioSilenceSettings {
@@ -489,12 +491,23 @@ fn analyze_clip(
             minimum_silence_ms: args.minimum_silence_ms,
             padding_ms: args.padding_ms,
         },
+        cancel,
     )
     .map_err(|_| {
         "Unable to analyze silence; shorten the range or increase minimum silence".to_string()
     })?;
     check_cancelled(cancel)?;
-    let gain = normalization_gain(clip, &data, project.tempo, args.normalize_target_db).ok();
+    let gain =
+        match normalization_gain_file(clip, &file, project.tempo, args.normalize_target_db, cancel)
+        {
+            Ok(gain) => Some(gain),
+            Err(error) if error.to_string() == "Cannot normalize a silent clip" => None,
+            Err(_) => {
+                return Err(
+                    "Unable to analyze the clip's complete normalization source window".into(),
+                );
+            }
+        };
     let normalization_peak = gain
         .map(|gain| 10.0_f64.powf(f64::from(args.normalize_target_db) / 20.0) / f64::from(gain));
     let normalize_edit = gain.map(
@@ -513,7 +526,7 @@ fn analyze_clip(
     check_cancelled(cancel)?;
     Ok(json!({
         "track_id":args.track_id,"clip_id":args.clip_id,"range":{"start_beat":start,"end_beat":end,"end_exclusive":true},
-        "source":{"sample_rate":data.sample_rate,"channels":data.channels,"frames":data.frames(),"duration_seconds":data.duration_seconds(),"source_beats":data.duration_seconds()*project.tempo/60.0},
+        "source":{"sample_rate":info.sample_rate,"channels":info.channels,"frames":info.frames,"duration_seconds":info.duration_seconds(),"source_beats":info.duration_seconds()*project.tempo/60.0},
         "transients":{"clip_relative_beats":clip_onsets,"arrangement_beats":arrangement_onsets},
         "silence":{"retained_arrangement_ranges":retained,"threshold_dbfs":args.silence_threshold_db,"minimum_silence_ms":args.minimum_silence_ms,"padding_ms":args.padding_ms},
         "normalization":{"target_dbfs":args.normalize_target_db,"source_peak_linear":normalization_peak,"recommended_absolute_gain":gain,"scope":"Entire current clip source window, before gain/fades/pitch processing, even when a smaller analysis range is selected","linked_occurrences_affected":linked_occurrences,"unavailable_reason":gain.is_none().then_some("Source window is silent or below the normalization floor")},

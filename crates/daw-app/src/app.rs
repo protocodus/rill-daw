@@ -1,3 +1,5 @@
+#[path = "audio_sources.rs"]
+pub(crate) mod audio_sources;
 use crate::{settings::Settings, theme::*};
 use daw_core::*;
 use daw_engine::{AudioEngine, DeviceInfo};
@@ -237,6 +239,10 @@ pub struct DawApp {
     workspace_tools: WorkspaceTools,
     pub drag: Option<Drag>,
     pub waveforms: HashMap<String, AudioData>,
+    pub(crate) audio_files: HashMap<String, AudioFile>,
+    pub(crate) audio_admission: Option<std::sync::mpsc::Receiver<audio_sources::Admission>>,
+    pub(crate) audio_admission_failed: HashSet<String>,
+    pub(crate) audio_source_revision: u64,
     pub(crate) waveform_warning: Option<String>,
     pub drop_target: Option<(Option<u64>, f64)>,
     pub vst_paths: Vec<PathBuf>,
@@ -388,6 +394,10 @@ impl DawApp {
             workspace_tools: Default::default(),
             drag: None,
             waveforms: HashMap::new(),
+            audio_files: HashMap::new(),
+            audio_admission: None,
+            audio_admission_failed: HashSet::new(),
+            audio_source_revision: u64::MAX,
             waveform_warning: None,
             drop_target: None,
             vst_paths: Vec::new(),
@@ -1326,28 +1336,6 @@ impl DawApp {
         Ok(())
     }
 
-    pub fn cache_audio(&mut self) {
-        use crate::project_io::{WAVEFORM_CACHE_BYTES, WAVEFORM_FILE_BYTES};
-        let mut used = self
-            .waveforms
-            .values()
-            .map(|audio| audio.samples.len() * std::mem::size_of::<f32>())
-            .sum::<usize>();
-        for t in &self.project.tracks {
-            for c in &t.clips {
-                if let ClipContent::Audio { path, .. } = &c.content
-                    && !self.waveforms.contains_key(path)
-                    && let Ok(data) = AudioData::load_wav_with_limit(
-                        path,
-                        WAVEFORM_FILE_BYTES.min(WAVEFORM_CACHE_BYTES.saturating_sub(used)),
-                    )
-                {
-                    used += data.samples.len() * std::mem::size_of::<f32>();
-                    self.waveforms.insert(path.clone(), data);
-                }
-            }
-        }
-    }
     pub fn import_audio(&mut self, path: &Path, track_id: Option<u64>, beat: f64) {
         self.queue_audio_import(vec![path.to_path_buf()], track_id, beat);
     }
@@ -1381,7 +1369,7 @@ impl DawApp {
         let path = if save_as {
             None
         } else {
-            self.project_path.clone()
+            self.portable_save_path()
         }
         .or_else(|| self.pick_document_path(crate::document_ui::DocumentDialog::Save));
         if let Some(path) = path {
@@ -1402,6 +1390,8 @@ impl DawApp {
         self.reset_views = true;
         self.recording = Default::default();
         self.project = Project::new();
+        self.audio_files.clear();
+        self.audio_admission_failed.clear();
         let old_waveforms = std::mem::take(&mut self.waveforms);
         if !old_waveforms.is_empty() {
             std::thread::spawn(move || drop(old_waveforms));
@@ -1564,6 +1554,8 @@ impl DawApp {
         self.exported_file = None;
         self.export_run = None;
         self.waveform_warning = loaded.waveform_warning;
+        self.audio_files = loaded.audio_files;
+        self.audio_admission_failed.clear();
         let old_waveforms = std::mem::replace(&mut self.waveforms, loaded.waveforms);
         std::thread::spawn(move || drop(old_waveforms));
         self.project_path = if recovery { None } else { Some(path) };
@@ -3377,6 +3369,8 @@ impl DawApp {
             crate::spectrogram::reset(ctx);
             crate::automation_editor::reset_automation_editor(ctx);
         }
+        self.poll_audio_sources(ctx);
+        self.poll_audio_analysis(ctx);
         crate::spectrogram::begin_frame(ctx);
         if !self.close_ready && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -3830,6 +3824,7 @@ impl DawApp {
         if let Some(path) = &self.screenshot {
             if self.frame_count >= 8
                 && !self.plugin_sync.scanning()
+                && self.audio_admission.is_none()
                 && !self.screenshot_requested
                 && (!crate::spectrogram::has_pending_analysis(ctx) || self.frame_count >= 180)
             {

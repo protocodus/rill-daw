@@ -378,7 +378,6 @@ impl DawApp {
             drop(result);
             return;
         }
-        let mut preview_limited = false;
         let result = result.and_then(|mut source| {
             anyhow::ensure!(
                 job.revision == self.revision
@@ -408,23 +407,12 @@ impl DawApp {
             }) {
                 self.waveforms
                     .insert(source.path.to_string_lossy().into_owned(), waveform);
-            } else {
-                preview_limited = true;
             }
             Ok(())
         });
-        if result.is_ok() && preview_limited {
-            self.waveform_warning =
-                Some("Joined audio waveform preview unavailable · Audio remains linked".into());
-        }
-        self.message(
-            result,
-            if preview_limited {
-                "Clips joined; waveform preview limited"
-            } else {
-                "Clips joined"
-            },
-        );
+        // Large outputs use the ordinary metadata/streamed-waveform pipeline;
+        // absence of a resident PCM preview is no longer a warning condition.
+        self.message(result, "Clips joined");
     }
 
     fn finish_join(&mut self, track: u64, clip: u64) {

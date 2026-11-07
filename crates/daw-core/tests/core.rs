@@ -201,7 +201,7 @@ fn project_roundtrip_and_future_ids_are_safe() {
 }
 
 #[test]
-fn relative_media_paths_resolve_against_project_directory() {
+fn legacy_relative_media_paths_resolve_against_project_directory() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("session.daw");
     let mut project = Project::new();
@@ -211,7 +211,7 @@ fn relative_media_paths_resolve_against_project_directory() {
         .unwrap()
         .clips
         .push(Clip::audio("Sample", 0.0, 4.0, "media/kick.wav"));
-    project.save(&path).unwrap();
+    project.save_legacy_json(&path).unwrap();
     let loaded = Project::load(&path).unwrap();
     let ClipContent::Audio { path: media, .. } = &loaded.tracks[0].clips[0].content else {
         panic!("expected audio")

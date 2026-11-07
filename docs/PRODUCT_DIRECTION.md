@@ -12,6 +12,12 @@ continue, and leave edits recoverable. Keep sound selection and editing close to
 the phrase without adding permanent panels. New work should improve these
 everyday paths before adding specialist studio or integration capabilities.
 
+Rill's product scope is audio/MIDI music production. Video import or playback,
+scoring to picture, picture synchronization, ADR, picture reconform and film/TV
+post-production delivery are permanently outside that scope. Their absence is
+not a product deficiency or a roadmap gap. Competitor video capabilities below
+provide context only; priorities and comparisons concern making music.
+
 Rill is intentionally a plugin-based composition and arrangement workstation.
 Built-in instruments and effects remain outside its scope. That decision reduces
 development and interface breadth, but puts sound installation, compatibility
@@ -28,8 +34,10 @@ The latest refinements close ordinary production gaps: standard audio import and
 PCM delivery, compact layouts, a real Master processing path, routable VST3 input
 buses, grouped multi-output instruments, reversible Freeze and richer MIDI
 performance data. These extend the existing import, edit, mix and delivery
-workflow. The next high-value work is dependable media management and streaming,
-performed automation, and measured reference sessions on the intended hardware.
+workflow. Large sources now stream through bounded disk windows and normal Save
+always bundles referenced clip media. The next high-value work is media relinking
+and lifecycle management, performed automation, and measured reference sessions
+on the intended hardware.
 
 ## Evidence and limitations
 
@@ -56,11 +64,11 @@ edition; an entry here is not a claim that every edition includes everything.
 | Product and verified version | Established strengths | Implication for Rill |
 | --- | --- | --- |
 | **Reason 14.1.0** | Integrated instruments, effects, sampling, patchable audio/CV Rack, Combinators, Players, comping, vocal editing and a substantial mixer. Reason 14's Track Panel connects devices, levels and sends to the selected track. | VST3 hosting alone does not replace Reason's ready-to-play ecosystem. Adopt its selected-track continuity while retaining Rill's plugin-only scope. |
-| **Cubase Pro 16.0.0**, released 4 November | Deep MIDI/composition, articulation/expression, scoring, pitch/time editing, Control Room and advanced automation/mixing. Version 16 adds Instrument Stacks, Spectral AudioWarp and expanded MIDI 2.0. | Rill's piano roll, generators and stretch controls are useful but substantially narrower. Prioritize predictable core editing and mixing over specialist composition breadth. |
-| **Nuendo 15** | Music-production foundation plus ADR, dialogue, picture reconform, immersive delivery, post interchange and game-audio integration. | Rill is not a substitute for professional audio-for-picture or post delivery. These missing categories should not dictate its near-term roadmap. |
+| **Cubase Pro 16.0.0**, released 4 November | Deep MIDI/composition, articulation/expression, score notation, pitch/time editing, Control Room and advanced automation/mixing. Version 16 adds Instrument Stacks, Spectral AudioWarp and expanded MIDI 2.0. | Rill's piano roll, generators and stretch controls are useful but substantially narrower. Prioritize predictable core editing and mixing over specialist composition breadth. |
+| **Nuendo 15** | Music-production foundation plus ADR, dialogue, picture reconform, immersive delivery, post interchange and game-audio integration. | Compare the music-editing, automation and mixing foundation. Video, ADR, picture reconform and film/TV post delivery are outside Rill's product scope, not missing roadmap items. |
 | **Ableton Live 12.4.16**, released 30 October | Complementary Session/Arrangement workflows, Warp, racks, comping, freeze, MPE, Push integration and Max for Live in Suite. | Compete on a focused linear workflow. A piano roll and clip stretching do not provide Live's integrated performance and sound-design workflow. |
-| **Logic Pro 13.0** | Strong bundled instruments/effects, Session Players, detailed audio/MIDI editing, Flex Time/Pitch, comping, Live Loops, scoring and Spatial Audio. | Logic is much more complete immediately after installation. Rill's openness, Linux availability and explicit editing transactions are meaningful distinctions; sound onboarding must be excellent. |
-| **Pro Tools 2026.11**, released 3 November | Detailed recording/editing, playlists, freeze/commit, studio exchange and control/hardware integration; Studio/Ultimate add immersive and advanced post workflows. | Rill recording and comping deserve credit, but do not establish equivalent studio workflow or interchange. Learn from retained take alternatives and predictable editing. |
+| **Logic Pro 13.0** | Strong bundled instruments/effects, Session Players, detailed audio/MIDI editing, Flex Time/Pitch, comping, Live Loops, score notation and Spatial Audio. | Logic is much more complete immediately after installation. Rill's openness, Linux availability and explicit editing transactions are meaningful distinctions; sound onboarding must be excellent. |
+| **Pro Tools 2026.11**, released 3 November | Detailed recording/editing, playlists, freeze/commit, studio exchange and control/hardware integration; Studio/Ultimate add immersive and advanced post workflows. | Compare music recording, comping and music-session exchange. Rill does not yet establish equivalent studio workflow or interchange; retained take alternatives and predictable editing are useful references. Video and film/TV post capabilities are outside Rill's scope. |
 | **REAPER 7.85**, released 5 November | Low-cost cross-platform production, flexible multichannel routing, deep rendering, broad plugin formats, scripting, customization and optional plugin firewalling. | The strongest direct comparator. Rill needs a clearer integrated workflow, not a claim that inexpensive, extensible or crash-contained DAWs are new. |
 
 Sources: [Reason DAW](https://www.reasonstudios.com/reason-daw) and
@@ -117,7 +125,9 @@ The current import pipeline supports WAV, MP3, FLAC and OGG/Vorbis through a
 separate decoder process. Files become managed WAV assets; originals remain
 untouched. Imports are validated before an atomic project edit, and a batch is
 one Undo action. The scope is mono/stereo at 8–384 kHz, up to eight files and a
-512 MiB decoded batch limit—not arbitrary media interchange.
+roughly 4 GiB per canonical float WAV and an 8 GiB decoded batch budget. Large
+files do not require full-file PCM residency. Other container/codec limits remain
+explicit; this is not arbitrary media interchange.
 
 WAV delivery offers 16/24-bit PCM or 32-bit float, independent sample rate,
 optional TPDF dither and exact loop bounds. Temporary output is replaced only
@@ -141,11 +151,14 @@ claiming exclusive ownership of AI.
 
 ## Important remaining gaps
 
-Playback sources are prepared in RAM rather than streamed from disk. Freeze
-reduces native processing dependencies but does not remove this media ceiling.
-Missing-media relink, explicit asset lifetime/cleanup and sustained reference
-sessions remain important finishing-workflow gaps. Live latency changes still
-require graph rebuilding; broad plug-in/driver compatibility needs real testing.
+Sources at or above 32 MiB decoded stream through bounded read windows. Large
+resampled and time/pitch-processed variants use private disk caches; those caches
+can still take time to prepare and need disk space. Running-app tests verify
+seek, reverse, portable recall, PCM output and buffer bounds, without establishing
+every storage device's sustained real-time performance. Missing-media relink,
+explicit asset cleanup and sustained reference sessions remain finishing-workflow
+gaps. Live latency changes still require graph rebuilding; broad plug-in/driver
+compatibility needs real testing.
 
 The channel graph is stereo and acyclic. Wide plug-in buses are exposed as
 independent stereo/mono pairs, not a surround/immersive mixing model. Tempo and
@@ -178,9 +191,11 @@ No safe dependency-only addition was verified during this audit.
 | AAX | No practical generic host path was verified. [Avid's public SDK](https://developer.avid.com/aax/) primarily supports producing plug-ins for Avid products; public SDK availability/licensing does not establish arbitrary commercial AAX hosting. |
 | ARA | A deeper document/random-access extension, not another ordinary loader. [Celemony's SDK](https://github.com/Celemony/ARA_SDK) is Apache-2.0; integration needs source readers, region/modification graphs, archive state and edit/Undo lifecycle coordination. |
 
-Rill does not provide the score, video, timecode, ADR, immersive, AAF/OMF/ADM and
-hardware-control ecosystems of specialist products. These are substantive
-differences, but mostly lower priorities for its focused production audience.
+Score notation, immersive music delivery and hardware-control ecosystems are
+separate specialist music capabilities; their value must follow an explicit
+audience need. Video, scoring to picture, picture/timecode synchronization, ADR,
+reconform and film/TV interchange or delivery are excluded from Rill's product
+scope and from its deficiency and priority judgments.
 
 ## Safety and MacBook performance
 
@@ -271,7 +286,8 @@ Official screenshot references, **not firsthand pixel comparisons**:
 
 1. **Make media management dependable.** Add missing-media relink, clear asset
    ownership/lifetime and safe cleanup for extracted/imported/frozen media.
-   Coordinate disk streaming with existing cache limits and long frozen tracks.
+   Extend the bounded streaming and portable-Save foundation to cleanup/relink
+   workflows without deleting sources retained by Undo or pending work.
 2. **Verify complete sessions on reference hardware.** Measure sustained base
    M-series playback/recording, memory, dropout deadlines, native state recall
    and recovery. Publish the tested plug-in/device set; improve release signing
@@ -288,7 +304,7 @@ Official screenshot references, **not firsthand pixel comparisons**:
    tests to verify that tasks became easier.
 
 These are ordered outcomes, not calendar estimates. Keep built-in sound devices,
-a Session-style launcher, notation and specialist post/immersive work outside
+a Session-style launcher, notation and specialist immersive music work outside
 the immediate scope. Validate a repeatable 3–5-minute song with real plugins,
 recording, buses, returns, automation, Undo, save/reopen and delivery; include
 worker failure and sustained hardware playback. Publish tested configurations

@@ -11,6 +11,10 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+#[path = "stretch_file.rs"]
+mod file;
+pub(crate) use file::{StreamWriter, prepare_file};
+
 unsafe extern "C" {
     fn rill_stretch_create(channels: u32, sample_rate: u32, semitones: f64) -> *mut c_void;
     fn rill_stretch_destroy(handle: *mut c_void);

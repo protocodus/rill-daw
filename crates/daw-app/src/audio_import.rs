@@ -1,7 +1,7 @@
 //! Background, isolated decoding and atomic import into the captured document.
 use crate::app::DawApp;
 use anyhow::{Context, Result, bail, ensure};
-use daw_core::{AudioData, Clip, MAX_BEAT, TrackKind};
+use daw_core::{AudioData, AudioFile, Clip, MAX_BEAT, TrackKind};
 use eframe::egui;
 use serde::Deserialize;
 use std::{
@@ -20,7 +20,7 @@ use std::{
 
 const MAX_FILES: usize = 8;
 const MAX_QUEUED: usize = 4;
-const DECODE_BUDGET: usize = 512 * 1024 * 1024;
+const DECODE_BUDGET: usize = 8 * 1024 * 1024 * 1024;
 const PREVIEW_BUDGET: usize = 128 * 1024 * 1024;
 const MAX_LOG: u64 = 8192;
 
@@ -100,6 +100,7 @@ struct Imported {
     frames: u64,
     sample_rate: u32,
     preview: Option<AudioData>,
+    source: AudioFile,
 }
 
 struct Batch {
@@ -132,8 +133,8 @@ fn decoder_timeout() -> Duration {
         .then(|| std::env::var("RILL_E2E_AUDIO_IMPORT_TIMEOUT_MS").ok())
         .flatten()
         .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(30_000);
-    Duration::from_millis(millis.clamp(10, 120_000))
+        .unwrap_or(120_000);
+    Duration::from_millis(millis.clamp(10, 600_000))
 }
 
 fn read_log(path: &Path) -> Result<Vec<u8>> {
@@ -230,8 +231,13 @@ fn decode_batch(
     let mut files = Vec::with_capacity(paths.len());
     for (index, input) in paths.iter().enumerate() {
         let output = assets.directory.join(format!("{}.wav", index + 1));
-        let info = decode_one(input, &output, remaining, cancel)
-            .with_context(|| format!("Importing {}", input.display()))?;
+        let info = decode_one(
+            input,
+            &output,
+            remaining.min(daw_core::MAX_IMPORTED_AUDIO_BYTES),
+            cancel,
+        )
+        .with_context(|| format!("Importing {}", input.display()))?;
         // Verify the managed WAV, its full finite payload and metadata off the
         // UI thread before any document mutation. Never trust a partial output.
         let mut reader = hound::WavReader::open(&output).context("Verifying managed audio")?;
@@ -253,7 +259,7 @@ fn decode_batch(
         // The main process streams verification. Optional visualization memory
         // is much smaller than the decoder budget and allocation is fallible.
         let mut preview = None;
-        if bytes <= crate::project_io::WAVEFORM_FILE_BYTES && bytes <= preview_remaining {
+        if (bytes as u64) < daw_core::AUDIO_STREAM_THRESHOLD_BYTES && bytes <= preview_remaining {
             let mut data = Vec::new();
             if usize::try_from(samples).is_ok_and(|samples| data.try_reserve_exact(samples).is_ok())
             {
@@ -278,7 +284,7 @@ fn decode_batch(
         ensure!(count == samples, "Incomplete managed audio payload");
         remaining = remaining
             .checked_sub(bytes)
-            .context("Audio import batch exceeds 512 MiB")?;
+            .context("Audio import batch exceeds the 8 GiB media budget")?;
         let preview = preview.map(|samples| {
             preview_remaining -= bytes;
             AudioData {
@@ -287,8 +293,15 @@ fn decode_batch(
                 samples,
             }
         });
+        let source = AudioFile::open(&output).context("Admit verified managed audio")?;
+        ensure!(
+            source.info().decoded_bytes == info.decoded_bytes
+                && source.info().frames as u64 == info.frames
+                && source.info().sample_rate == info.sample_rate,
+            "Managed audio changed after verification"
+        );
         files.push(Imported {
-            path: fs::canonicalize(output)?,
+            path: source.path().to_path_buf(),
             name: input
                 .file_stem()
                 .map(|name| name.to_string_lossy().into_owned())
@@ -297,6 +310,7 @@ fn decode_batch(
             frames: info.frames,
             sample_rate: info.sample_rate,
             preview,
+            source,
         });
         completed.store(index + 1, Ordering::Release);
     }
@@ -581,6 +595,10 @@ impl DawApp {
             .map(|audio| audio.samples.len() * 4)
             .sum();
         for file in &mut batch.files {
+            self.audio_files.insert(
+                file.path.to_string_lossy().into_owned(),
+                file.source.clone(),
+            );
             if let Some(preview) = file.preview.take() {
                 let bytes = preview.samples.len() * 4;
                 if bytes <= crate::project_io::WAVEFORM_CACHE_BYTES.saturating_sub(used) {

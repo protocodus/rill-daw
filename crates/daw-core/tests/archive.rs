@@ -250,11 +250,117 @@ fn rejects_symlinks_duplicate_headers_and_oversized_declarations() {
         .windows(4)
         .rposition(|bytes| bytes == b"PK\x03\x04")
         .unwrap();
-    oversized[central + 24..central + 28].copy_from_slice(&(2_147_483_649u32).to_le_bytes());
-    oversized[local + 22..local + 26].copy_from_slice(&(2_147_483_649u32).to_le_bytes());
+    oversized[central + 24..central + 28].copy_from_slice(&u32::MAX.to_le_bytes());
+    oversized[local + 22..local + 26].copy_from_slice(&u32::MAX.to_le_bytes());
     fs::write(&saved, oversized).unwrap();
     assert!(Project::load_with_assets(&saved, &scratch).is_err());
     assert!(!scratch.exists());
+}
+
+#[test]
+fn every_save_extension_is_portable_and_hardlinks_share_one_embedded_asset() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source.wav");
+    let alias = temp.path().join("hardlink.wav");
+    let audio = AudioData {
+        sample_rate: 8_000,
+        channels: 2,
+        samples: [0.25, -0.125].repeat(1024),
+    };
+    audio.write_wav(&source).unwrap();
+    fs::hard_link(&source, &alias).unwrap();
+    let mut project = audio_project(&source);
+    let mut muted = Clip::audio("Retained original", 2.0, 1.0, alias.to_string_lossy());
+    muted.muted = true;
+    project.tracks[0].clips.push(muted);
+    for filename in [
+        "portable.json",
+        "portable.rill",
+        "portable-without-extension",
+    ] {
+        let saved = temp.path().join(filename);
+        project.save(&saved).unwrap();
+        let mut archive = ZipArchive::new(fs::File::open(&saved).unwrap()).unwrap();
+        assert_eq!(archive.len(), 2, "hardlink media must not be duplicated");
+        let manifest: serde_json::Value =
+            serde_json::from_reader(archive.by_name("manifest.json").unwrap()).unwrap();
+        let clips = manifest["project"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap();
+        assert_eq!(clips[0]["content"]["Audio"]["path"], "assets/00000000.wav");
+        assert_eq!(clips[1]["content"]["Audio"]["path"], "assets/00000000.wav");
+        assert_eq!(clips[1]["muted"], true);
+    }
+    fs::remove_file(source).unwrap();
+    fs::remove_file(alias).unwrap();
+    let moved = temp.path().join("moved.unknown");
+    fs::rename(temp.path().join("portable.json"), &moved).unwrap();
+    let reopened = Project::load_with_assets(moved, temp.path().join("scratch")).unwrap();
+    for clip in &reopened.tracks[0].clips {
+        let ClipContent::Audio { path, .. } = &clip.content else {
+            unreachable!()
+        };
+        assert_eq!(AudioData::load_wav(path).unwrap().samples, audio.samples);
+    }
+}
+
+#[test]
+fn legacy_json_is_explicit_and_load_uses_contents_instead_of_extension() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("external.wav");
+    AudioData {
+        sample_rate: 8_000,
+        channels: 1,
+        samples: vec![0.25; 64],
+    }
+    .write_wav(&source)
+    .unwrap();
+    let project = audio_project(&source);
+    let legacy = temp.path().join("legacy.rill");
+    project.save_legacy_json(&legacy).unwrap();
+    let json: serde_json::Value =
+        serde_json::from_reader(fs::File::open(&legacy).unwrap()).unwrap();
+    assert_eq!(json["version"], 6);
+    let loaded = Project::load(&legacy).unwrap();
+    assert_eq!(loaded, project);
+    let portable = temp.path().join("new.json");
+    loaded.save(&portable).unwrap();
+    assert!(fs::read(&portable).unwrap().starts_with(b"PK\x03\x04"));
+    fs::remove_file(source).unwrap();
+    assert!(Project::load_with_assets(portable, temp.path().join("scratch")).is_ok());
+}
+
+#[test]
+fn cancelled_save_and_load_keep_previous_files_and_do_not_create_extraction() {
+    use std::sync::atomic::AtomicBool;
+    let temp = tempfile::tempdir().unwrap();
+    let saved = temp.path().join("song.rill");
+    Project::new().save(&saved).unwrap();
+    let original = fs::read(&saved).unwrap();
+    let cancel = AtomicBool::new(true);
+    assert!(Project::new().save_cancelled(&saved, &cancel).is_err());
+    assert_eq!(fs::read(&saved).unwrap(), original);
+    let scratch = temp.path().join("scratch");
+    assert!(Project::load_with_assets_cancelled(&saved, &scratch, &cancel).is_err());
+    assert!(!scratch.exists());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+}
+
+#[test]
+#[cfg(unix)]
+fn oversized_sparse_riff_source_fails_before_copying_or_replacing_the_project() {
+    let temp = tempfile::tempdir().unwrap();
+    let saved = temp.path().join("song.rill");
+    Project::new().save(&saved).unwrap();
+    let original = fs::read(&saved).unwrap();
+    let source = temp.path().join("too-large.wav");
+    fs::File::create(&source)
+        .unwrap()
+        .set_len(u64::from(u32::MAX) - 127)
+        .unwrap();
+    let error = audio_project(source).save(&saved).unwrap_err();
+    assert!(error.to_string().contains("RIFF WAV"), "{error:#}");
+    assert_eq!(fs::read(saved).unwrap(), original);
 }
 
 #[test]

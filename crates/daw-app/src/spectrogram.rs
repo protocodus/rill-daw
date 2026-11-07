@@ -1,6 +1,10 @@
 //! Bounded source previews. File reads, FFT work and image conversion stay on
 //! one background worker; the UI only uploads completed, small textures.
-use daw_core::{AudioData, AudioWaveformPeaks, Clip, ClipContent};
+use daw_core::{AudioData, AudioFile, AudioWaveformPeaks, Clip, ClipContent};
+#[path = "source_spectrum.rs"]
+mod source_spectrum;
+#[path = "streamed_waveform.rs"]
+pub(crate) mod streamed_waveform;
 use eframe::egui;
 use std::{
     collections::HashMap,
@@ -15,6 +19,7 @@ use std::{
 const KEY: &str = "source_spectrogram_cache";
 const MAX_ENTRIES: usize = 128;
 const MAX_BYTES: usize = 32 * 1024 * 1024;
+const STREAMED_PEAK_BYTES: usize = 128 * 1024;
 const CHECK_INTERVAL: Duration = Duration::from_secs(2);
 const RETRY_INTERVAL: Duration = Duration::from_secs(15);
 type Shared = Arc<Mutex<Cache>>;
@@ -81,6 +86,7 @@ enum Outcome {
     Peaks(Arc<AudioWaveformPeaks>, FileStamp),
     Ready(Prepared),
     Unchanged,
+    Continue,
     Stale,
     Failed(String),
 }
@@ -94,6 +100,7 @@ struct Job {
     has_spectrum: bool,
     blocked: bool,
     hint: Option<Hint>,
+    file: Option<AudioFile>,
     ctx: egui::Context,
     cancel: Arc<AtomicBool>,
 }
@@ -150,6 +157,7 @@ pub(crate) struct WaveformPaint {
 struct Entry {
     revision: u64,
     hint: Option<Hint>,
+    file: Option<AudioFile>,
     last_seen: u64,
     priority: u8,
     queued: bool,
@@ -171,6 +179,7 @@ struct Cache {
     receiver: mpsc::Receiver<Completion>,
     inflight: Option<u64>,
     inflight_cancel: Option<Arc<AtomicBool>>,
+    inflight_path: Option<String>,
     entries: HashMap<String, Entry>,
     painted: Vec<Painted>,
     bytes: usize,
@@ -210,7 +219,11 @@ fn prepare(job: &Job, generation: &AtomicU64, results: &mpsc::SyncSender<Complet
     if cancelled() {
         return Outcome::Stale;
     }
+    let mut published_peaks = false;
     let result = (|| -> anyhow::Result<Option<Prepared>> {
+        if let Some(file) = &job.file {
+            file.check_unchanged()?;
+        }
         let stamp = FileStamp::read(&job.path)?;
         // A file replaced behind the current in-memory PCM must not contribute
         // interior peaks to the old PCM's edge samples. Reimport/open supplies
@@ -221,42 +234,66 @@ fn prepare(job: &Job, generation: &AtomicU64, results: &mpsc::SyncSender<Complet
         if job.stamp == Some(stamp) && (job.blocked || job.has_peaks && job.has_spectrum) {
             return Ok(None);
         }
-        // Match the existing waveform loader's admitted source size. Only one
-        // such temporary decode can exist, and it is dropped by this worker.
-        let audio =
-            AudioData::load_wav_with_limit(&job.path, crate::project_io::WAVEFORM_FILE_BYTES)?;
-        anyhow::ensure!(audio.frames() > 0, "Audio source is empty");
+        let file = match &job.file {
+            Some(file) => file.clone(),
+            None => AudioFile::open(&job.path)?,
+        };
+        let info = file.info();
+        anyhow::ensure!(info.frames > 0, "Audio source is empty");
+        let audio = if info.should_stream() {
+            None
+        } else {
+            Some(AudioData::load_wav_with_limit(
+                &job.path,
+                crate::project_io::WAVEFORM_FILE_BYTES,
+            )?)
+        };
         anyhow::ensure!(
-            job.hint.is_none_or(|hint| hint.matches_audio(&audio)),
+            job.hint.is_none_or(|hint| audio
+                .as_ref()
+                .is_some_and(|audio| hint.matches_audio(audio))),
             "Audio source changed before waveform refinement; reimport or reopen it"
         );
         if cancelled() {
             return Ok(None);
         }
-        // Publish exact source extrema first, then retain this same decode for
-        // the more expensive FFT. Neither stage clones PCM on the UI thread.
-        let peaks = Arc::new(AudioWaveformPeaks::build_cancellable(&audio, &job.cancel)?);
-        anyhow::ensure!(
-            FileStamp::read(&job.path)? == stamp,
-            "Audio source changed during waveform refinement"
-        );
-        if cancelled() {
+        if !job.has_peaks {
+            let peaks = Arc::new(match &audio {
+                Some(audio) => AudioWaveformPeaks::build_cancellable(audio, &job.cancel)?,
+                None => AudioWaveformPeaks::build_file_cancellable(
+                    &file,
+                    &job.cancel,
+                    STREAMED_PEAK_BYTES,
+                )?,
+            });
+            file.check_unchanged()?;
+            anyhow::ensure!(
+                FileStamp::read(&job.path)? == stamp,
+                "Audio source changed during waveform refinement"
+            );
+            if cancelled() {
+                return Ok(None);
+            }
+            results
+                .send(Completion {
+                    serial: job.serial,
+                    generation: job.generation,
+                    revision: job.revision,
+                    path: job.path.clone(),
+                    outcome: Outcome::Peaks(peaks, stamp),
+                })
+                .map_err(|_| anyhow::anyhow!("Source preview cache closed"))?;
+            job.ctx.request_repaint();
+            published_peaks = true;
             return Ok(None);
         }
-        results
-            .send(Completion {
-                serial: job.serial,
-                generation: job.generation,
-                revision: job.revision,
-                path: job.path.clone(),
-                outcome: Outcome::Peaks(peaks, stamp),
-            })
-            .map_err(|_| anyhow::anyhow!("Source preview cache closed"))?;
-        job.ctx.request_repaint();
         if job.stamp == Some(stamp) && job.has_spectrum {
             return Ok(None);
         }
-        let spectrum = daw_core::compute_audio_spectrogram_cancellable(&audio, &job.cancel)?;
+        let spectrum = match &audio {
+            Some(audio) => daw_core::compute_audio_spectrogram_cancellable(audio, &job.cancel)?,
+            None => source_spectrum::compute(&file, &job.cancel)?,
+        };
         let peak_hz = [0.25, 0.75].map(|fraction| {
             let column = ((spectrum.columns as f64 * fraction) as usize)
                 .min(spectrum.columns.saturating_sub(1));
@@ -313,6 +350,7 @@ fn prepare(job: &Job, generation: &AtomicU64, results: &mpsc::SyncSender<Complet
     }
     match result {
         Ok(Some(ready)) => Outcome::Ready(ready),
+        Ok(None) if published_peaks => Outcome::Continue,
         Ok(None) => Outcome::Unchanged,
         Err(error) => Outcome::Failed(format!("{error:#}")),
     }
@@ -361,6 +399,7 @@ impl Cache {
             receiver,
             inflight: None,
             inflight_cancel: None,
+            inflight_path: None,
             entries: HashMap::new(),
             painted: Vec::new(),
             bytes: 0,
@@ -400,6 +439,20 @@ impl Cache {
         }
     }
     fn request(&mut self, path: &str, hint: Option<Hint>, priority: u8) -> Option<Ready> {
+        let focused_work = self.entries.get(path).is_none_or(|entry| {
+            entry.queued
+                && (entry.peaks.is_none() || entry.ready.is_none() && entry.blocked_bytes.is_none())
+        });
+        if priority >= 3
+            && focused_work
+            && self
+                .inflight_path
+                .as_deref()
+                .is_some_and(|active| active != path)
+            && let Some(cancel) = &self.inflight_cancel
+        {
+            cancel.store(true, Ordering::Release);
+        }
         if !self.entries.contains_key(path) {
             while self.entries.len() >= MAX_ENTRIES {
                 if !self.evict_one(None) {
@@ -412,6 +465,7 @@ impl Cache {
                 Entry {
                     revision: self.revision,
                     hint,
+                    file: None,
                     last_seen: self.frame,
                     priority,
                     queued: true,
@@ -486,6 +540,7 @@ impl Cache {
             if !intermediate && self.inflight == Some(result.serial) {
                 self.inflight = None;
                 self.inflight_cancel = None;
+                self.inflight_path = None;
             }
             if result.generation != self.generation
                 || self
@@ -500,6 +555,24 @@ impl Cache {
                 let bytes = peaks.byte_size();
                 let previous = self.entries.get_mut(&result.path).unwrap().peaks.take();
                 self.bytes -= previous.map_or(0, |peaks| peaks.byte_size());
+                while self.bytes + bytes > MAX_BYTES {
+                    let candidate = self
+                        .entries
+                        .iter()
+                        .filter(|(path, entry)| **path != result.path && entry.ready.is_some())
+                        .min_by_key(|(_, entry)| (entry.priority, entry.last_seen))
+                        .map(|(path, _)| path.clone());
+                    let Some(path) = candidate else {
+                        break;
+                    };
+                    let entry = self.entries.get_mut(&path).unwrap();
+                    if let Some(ready) = entry.ready.take() {
+                        self.bytes -= ready.bytes;
+                        entry.blocked_bytes = Some(ready.bytes);
+                        entry.queued = false;
+                        entry.checked = Instant::now();
+                    }
+                }
                 while self.bytes + bytes > MAX_BYTES && self.evict_one(Some(&result.path)) {}
                 if self.bytes + bytes <= MAX_BYTES {
                     self.bytes += bytes;
@@ -520,6 +593,9 @@ impl Cache {
                     entry.checked = Instant::now();
                     match other {
                         Outcome::Failed(error) => entry.error = Some(error),
+                        Outcome::Continue => {
+                            entry.queued = true;
+                        }
                         Outcome::Stale => {
                             entry.queued = true;
                             self.discarded += 1;
@@ -591,8 +667,9 @@ impl Cache {
             .filter(|(_, entry)| entry.queued && entry.last_seen == self.frame)
             .max_by_key(|(_, entry)| {
                 (
-                    entry.ready.is_none(),
                     entry.priority,
+                    entry.peaks.is_none(),
+                    entry.ready.is_none(),
                     std::cmp::Reverse(entry.revision),
                 )
             })
@@ -612,14 +689,17 @@ impl Cache {
             has_spectrum: entry.ready.is_some(),
             blocked: entry.blocked_bytes.is_some(),
             hint: entry.hint,
+            file: entry.file.clone(),
             path,
             ctx: ctx.clone(),
             cancel: Arc::clone(&cancel),
         };
-        let analyzes_spectrum = !job.has_spectrum && !job.blocked;
+        let active_path = job.path.clone();
+        let analyzes_spectrum = job.has_peaks && !job.has_spectrum && !job.blocked;
         match self.sender.try_send(job) {
             Ok(()) => {
                 self.inflight = Some(self.serial);
+                self.inflight_path = Some(active_path);
                 self.inflight_cancel = Some(cancel);
                 entry.loading = true;
                 entry.queued = false;
@@ -670,6 +750,7 @@ pub(crate) fn view_options(ui: &mut egui::Ui) {
     });
 }
 pub(crate) fn reset(ctx: &egui::Context) {
+    streamed_waveform::reset(ctx);
     let cache = shared(ctx);
     if let Ok(mut cache) = cache.lock() {
         cache.generation = cache.generation.wrapping_add(1);
@@ -733,6 +814,28 @@ pub(crate) fn waveform_peaks(
     peaks
 }
 
+pub(crate) fn waveform_file_peaks(
+    ctx: &egui::Context,
+    path: &str,
+    file: &AudioFile,
+    priority: u8,
+) -> Option<Arc<AudioWaveformPeaks>> {
+    let shared = shared(ctx);
+    let mut cache = shared.lock().ok()?;
+    cache.request(path, None, priority);
+    let entry = cache.entries.get_mut(path)?;
+    entry.file = Some(file.clone());
+    let peaks = entry.peaks.clone();
+    if peaks.is_some() {
+        cache.peak_cache_hits += 1;
+    }
+    peaks
+}
+
+pub(crate) fn waveform_error(ctx: &egui::Context, path: &str) -> Option<String> {
+    shared(ctx).lock().ok()?.entries.get(path)?.error.clone()
+}
+
 pub(crate) fn waveform_generation(ctx: &egui::Context) -> u64 {
     shared(ctx).lock().map_or(0, |cache| cache.generation)
 }
@@ -750,7 +853,7 @@ pub(crate) fn has_pending_analysis(ctx: &egui::Context) -> bool {
 
 pub(crate) fn record_waveform_paint(ctx: &egui::Context, paint: WaveformPaint) {
     if let Ok(mut cache) = shared(ctx).lock() {
-        if paint.stage == "refined" {
+        if matches!(paint.stage, "refined" | "disk_overview" | "disk_detail") {
             cache.refined_paints += 1;
         } else {
             cache.raw_paints += 1;
@@ -769,6 +872,7 @@ pub(crate) fn record_waveform_paint(ctx: &egui::Context, paint: WaveformPaint) {
 }
 
 pub(crate) fn waveform_diagnostics(ctx: &egui::Context) -> serde_json::Value {
+    let disk_details = streamed_waveform::diagnostics(ctx);
     let shared = shared(ctx);
     let Ok(cache) = shared.lock() else {
         return serde_json::Value::Null;
@@ -797,7 +901,7 @@ pub(crate) fn waveform_diagnostics(ctx: &egui::Context) -> serde_json::Value {
         "cache_bytes":cache.bytes,"peak_bytes":cache.entries.values().filter_map(|entry| entry.peaks.as_ref()).map(|peaks| peaks.byte_size()).sum::<usize>(),
         "queued_count":cache.entries.values().filter(|entry| entry.queued).count(),"pending_count":usize::from(cache.inflight.is_some()),
         "ready_count":cache.entries.values().filter(|entry| entry.peaks.is_some()).count(),"sources":sources,"painted":painted,
-        "raw_paints":cache.raw_paints,"refined_paints":cache.refined_paints,"geometry_builds":cache.geometry_builds,"geometry_cache_hits":cache.geometry_cache_hits,
+        "streamed_peak_limit":STREAMED_PEAK_BYTES,"disk_detail":disk_details,"raw_paints":cache.raw_paints,"refined_paints":cache.refined_paints,"geometry_builds":cache.geometry_builds,"geometry_cache_hits":cache.geometry_cache_hits,
         "limits":{"entries":MAX_ENTRIES,"bytes":MAX_BYTES,"workers":1,"decode_bytes":crate::project_io::WAVEFORM_FILE_BYTES}})
 }
 
@@ -1145,6 +1249,7 @@ mod tests {
                     has_spectrum: false,
                     blocked: false,
                     hint: None,
+                    file: None,
                     ctx: ctx.clone(),
                     cancel: Arc::new(AtomicBool::new(false)),
                 })
@@ -1157,6 +1262,28 @@ mod tests {
                 assert!(matches!(completion.outcome, Outcome::Failed(_)));
             } else {
                 assert!(matches!(completion.outcome, Outcome::Peaks(..)));
+                let completion = cache
+                    .receiver
+                    .recv_timeout(Duration::from_secs(10))
+                    .unwrap();
+                assert!(matches!(completion.outcome, Outcome::Continue));
+                cache
+                    .sender
+                    .send(Job {
+                        serial: serial + 100,
+                        generation: cache.generation,
+                        revision: serial,
+                        path: path.to_string_lossy().into_owned(),
+                        stamp: Some(FileStamp::read(&path.to_string_lossy()).unwrap()),
+                        has_peaks: true,
+                        has_spectrum: false,
+                        blocked: false,
+                        hint: None,
+                        file: None,
+                        ctx: ctx.clone(),
+                        cancel: Arc::new(AtomicBool::new(false)),
+                    })
+                    .unwrap();
                 let completion = cache
                     .receiver
                     .recv_timeout(Duration::from_secs(10))
@@ -1265,6 +1392,48 @@ mod tests {
     }
 
     #[test]
+    fn ready_focused_source_does_not_starve_background_waveform_work() {
+        let mut cache = Cache::new();
+        cache.request("focused.wav", None, 3);
+        let Outcome::Ready(prepared) = prepared() else {
+            panic!()
+        };
+        let ready = Ready {
+            path: Arc::from("focused.wav"),
+            summary: prepared.summary,
+            textures: prepared.images.map(|image| {
+                egui::Context::default().load_texture("test", image, egui::TextureOptions::LINEAR)
+            }),
+            colors: prepared.colors,
+            bytes: 1,
+        };
+        let entry = cache.entries.get_mut("focused.wav").unwrap();
+        entry.ready = Some(ready);
+        entry.peaks = Some(Arc::new(
+            AudioWaveformPeaks::build(&AudioData {
+                sample_rate: 48000,
+                channels: 1,
+                samples: vec![0.1; 128],
+            })
+            .unwrap(),
+        ));
+        entry.queued = false;
+        let cancel = Arc::new(AtomicBool::new(false));
+        cache.inflight_cancel = Some(cancel.clone());
+        cache.inflight_path = Some("background.wav".into());
+        cache.request("focused.wav", None, 3);
+        assert!(
+            !cancel.load(Ordering::Acquire),
+            "Repainting a ready focused clip must not continually cancel other previews"
+        );
+        cache.request("new-focus.wav", None, 3);
+        assert!(
+            cancel.load(Ordering::Acquire),
+            "New visible work can preempt a background scan"
+        );
+    }
+
+    #[test]
     fn admission_blocked_sources_use_metadata_checks_without_redecoding() {
         let ctx = egui::Context::default();
         let directory = tempfile::tempdir().unwrap();
@@ -1284,6 +1453,7 @@ mod tests {
             has_spectrum: false,
             blocked: true,
             hint: None,
+            file: None,
             ctx,
             cancel: Arc::new(AtomicBool::new(false)),
         };
@@ -1309,6 +1479,7 @@ mod tests {
         audio.write_wav(&path).unwrap();
         let path = path.to_string_lossy().into_owned();
         let stamp = FileStamp::read(&path).unwrap();
+        let descriptor = AudioFile::open(&path).unwrap();
         AudioData {
             samples: vec![0.8; 128],
             ..audio.clone()
@@ -1333,6 +1504,7 @@ mod tests {
             has_spectrum: true,
             blocked: false,
             hint: Some(Hint::new(&audio)),
+            file: None,
             ctx,
             cancel: Arc::new(AtomicBool::new(false)),
         };
@@ -1345,6 +1517,16 @@ mod tests {
         let initial = Job { stamp: None, ..job };
         assert!(matches!(
             prepare(&initial, &AtomicU64::new(1), &sender),
+            Outcome::Failed(_)
+        ));
+        assert!(receiver.try_recv().is_err());
+        let disk = Job {
+            hint: None,
+            file: Some(descriptor),
+            ..initial
+        };
+        assert!(matches!(
+            prepare(&disk, &AtomicU64::new(1), &sender),
             Outcome::Failed(_)
         ));
         assert!(receiver.try_recv().is_err());
@@ -1421,6 +1603,7 @@ mod tests {
             has_spectrum: entry.ready.is_some(),
             blocked: entry.blocked_bytes.is_some(),
             hint: entry.hint,
+            file: None,
             ctx: ctx.clone(),
             cancel: Arc::new(AtomicBool::new(false)),
         };
@@ -1456,6 +1639,7 @@ mod tests {
             has_spectrum: false,
             blocked: false,
             hint: None,
+            file: None,
             ctx: ctx.clone(),
             cancel: Arc::new(AtomicBool::new(false)),
         };

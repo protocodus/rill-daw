@@ -2,7 +2,7 @@
 //! native plugin snapshots are still acknowledged before saving or swapping a project.
 use crate::{app::DawApp, settings::Settings};
 use anyhow::Result;
-use daw_core::{AudioData, ClipContent, Project};
+use daw_core::{AudioData, AudioFile, ClipContent, Project};
 use eframe::egui;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -11,44 +11,53 @@ use std::{
     time::Duration,
 };
 
-pub(crate) const WAVEFORM_FILE_BYTES: usize = 256 * 1024 * 1024;
-pub(crate) const WAVEFORM_CACHE_BYTES: usize = 512 * 1024 * 1024;
+pub(crate) const WAVEFORM_FILE_BYTES: usize = daw_core::AUDIO_STREAM_THRESHOLD_BYTES as usize - 1;
+pub(crate) const WAVEFORM_CACHE_BYTES: usize = 128 * 1024 * 1024;
 
 pub(crate) struct LoadedProject {
     pub project: Project,
     pub waveforms: HashMap<String, AudioData>,
+    pub audio_files: HashMap<String, AudioFile>,
     pub waveform_warning: Option<String>,
     pub previous_recovery: bool,
 }
 
 impl From<Project> for LoadedProject {
     fn from(project: Project) -> Self {
+        let paths: HashSet<_> = project
+            .tracks
+            .iter()
+            .flat_map(|track| &track.clips)
+            .filter_map(|clip| match &clip.content {
+                ClipContent::Audio { path, .. } => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
         let mut waveforms = HashMap::new();
-        let mut visited = HashSet::new();
-        let mut decoded_bytes = 0;
+        let mut audio_files = HashMap::new();
         let mut skipped = 0;
-        for track in &project.tracks {
-            for clip in &track.clips {
-                if let ClipContent::Audio { path, .. } = &clip.content
-                    && visited.insert(path.clone())
-                {
-                    match AudioData::load_wav_with_limit(
-                        path,
-                        WAVEFORM_FILE_BYTES.min(WAVEFORM_CACHE_BYTES - decoded_bytes),
-                    ) {
-                        Ok(audio) => {
-                            decoded_bytes += audio.samples.len() * std::mem::size_of::<f32>();
-                            waveforms.insert(path.clone(), audio);
-                        }
-                        Err(_) => skipped += 1,
+        for (path, result) in
+            crate::app::audio_sources::load_paths(paths.into_iter().collect(), WAVEFORM_CACHE_BYTES)
+        {
+            match result {
+                Ok((file, pcm)) => {
+                    audio_files.insert(path.clone(), file);
+                    if let Some(pcm) = pcm {
+                        waveforms.insert(path, pcm);
                     }
                 }
+                Err(_) => skipped += 1,
             }
         }
-        let waveform_warning = (skipped > 0).then(|| format!("{skipped} waveform preview(s) unavailable · Missing, invalid, or too large · Audio files remain linked"));
+        let waveform_warning = (skipped > 0).then(|| {
+            format!(
+                "{skipped} audio source(s) unavailable · Missing or invalid · Files remain linked"
+            )
+        });
         Self {
             project,
             waveforms,
+            audio_files,
             waveform_warning,
             previous_recovery: false,
         }
@@ -124,10 +133,22 @@ fn write_recovery(snapshot: &Project, directory: &std::path::Path) -> Result<()>
         }
         result?;
     }
-    snapshot.save(latest)
+    snapshot.save_legacy_json(latest)
 }
 
 impl DawApp {
+    /// GUI Save migrates legacy filenames through the portable project picker.
+    /// Explicit tool/API paths are honored and still contain portable ZIP bytes.
+    pub(crate) fn portable_save_path(&self) -> Option<PathBuf> {
+        self.project_path
+            .as_ref()
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("rill"))
+            })
+            .cloned()
+    }
+
     pub(crate) fn recovery_pending(&self) -> bool {
         self.project_io.recovery.job.is_some() || !self.project_io.recovery.queued.is_empty()
     }

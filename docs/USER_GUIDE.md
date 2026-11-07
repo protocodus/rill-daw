@@ -118,8 +118,9 @@ The existing **Import…** command also retains MIDI-file import.
 
 Up to eight files form one atomic import and one Undo action. If any file is
 corrupt, unsupported, too large or cannot finish, the batch creates no tracks or
-clips. Mono/stereo audio at 8–384 kHz is supported, with a 512 MiB decoded batch
-limit. Successful imports use unique managed WAV copies in the scratch folder;
+clips. Mono/stereo audio at 8–384 kHz is supported, up to just below 4 GiB
+of canonical decoded audio per file and 8 GiB per batch. This is bounded RIFF
+WAV media, not RF64 or unlimited-length audio. Successful imports use unique managed WAV copies in the scratch folder;
 original files are untouched. Undo retains those copies for Redo and recovery,
 and saved `.rill` projects include them for portable reopening.
 
@@ -571,6 +572,21 @@ The transport's **Click** toggle enables the metronome during playback and recor
 
 ## Setup and recovery
 
+Large audio uses disk-backed playback automatically at 32 MiB of decoded PCM,
+or when its processed variant needs a large buffer. A small disk icon identifies
+streamed clips; Properties shows **Disk-streamed audio**. Small clips can stay in
+memory. The indicator describes source storage, independently of whether a page
+or waveform preview is currently cached.
+
+Rate conversion, pitch changes and Signalsmith/Bungee stretching can prepare a
+private PCM disk cache before playback. That preparation takes time and disk
+space; the original remains intact. Reads run on audio graph workers, while the
+device callback consumes its queue. Slow or cold storage can still cause the
+existing dropout warning. Changed, truncated or unreadable media reports a
+failure while retaining the song; offline export keeps its prior destination.
+Normalization, transient analysis and Strip silence also scan large sources in
+bounded chunks instead of loading the full file into memory.
+
 **Window → Setup → Audio** lists input/output devices and supported sample rates, buffer sizes, and High quality/Fast sample conversion. Input must support the selected project rate and channels. Rill defaults to 48 kHz, 32-bit float audio buffers, and 64-bit summing. High quality uses filtered source-rate conversion; Fast trades alias rejection for preparation speed. Changes finish recording, flush native editor state, stop and retire old device/plugin workers, then initialize replacements in the background. Failed device initialization restores the previous settings and reports the error; device errors offer **Audio setup…** directly in the notification. A restart includes a brief pause. **Storage** selects the scratch directory; **Plug-ins** adds VST3 scan roots. Unsupported device settings report an error rather than silently substituting a configuration. The render queue holds two requested buffers, with a minimum of 512 frames; hover the device buffer latency to see its contribution. Setup edits apply only after **Apply**; Cancel, Escape, and closing the popup discard them.
 
 A recoverable audio-output dropout shows a warning with its count and **Audio setup…**; ordinary playback continues while the audio backend recovers. Try a larger buffer if dropouts recur. The warning stays in one notification instead of repeating for every dropout. If a dropout occurs while recording starts, during pre-count, or during capture, Rill stops capture to preserve timing and retains any recorded prefix; after capture finishes, choose **Retry playback** or press **Play** to reconnect before recording again.
@@ -579,7 +595,7 @@ If the output stream fails with a device error, Rill stops that stream and repor
 
 Setup persists at `~/Library/Application Support/Rill/settings.json` on macOS, `%APPDATA%/Rill/settings.json` on Windows, or `$XDG_CONFIG_HOME/rill/settings.json` (default `~/.config/rill`) on Linux. The scratch directory holds demo audio and `recovery.daw.json`. Unsaved edits are also saved to recovery on a normal close or before switching sessions. Use **Setup → Storage → Recover session**; recovery opens without an existing document save path.
 
-New projects save as `.rill` ZIP archives containing `manifest.json` and source WAV files; edits, MIDI, routing, automation, and instrument/effect state live in the manifest. Extracted audio uses the configured scratch directory. Plugins and their own sample libraries must remain installed. Legacy `.daw.json` files stay supported. See [project format and limits](PROJECT_FORMAT.md).
+Projects save as self-contained `.rill` archives containing every referenced source WAV, including muted clips, retained takes, frozen originals and prints. Edits, MIDI, routing, automation and instrument/effect state live in the manifest. Opening a legacy `.daw.json` remains supported; its next GUI Save offers a new `.rill` filename and keeps the legacy file intact. Explicit application/tool save paths also contain portable audio regardless of their extension. Extracted audio uses the configured scratch directory. Plugins and their own sample libraries must remain installed. Recovery checkpoints still reference managed media, so keep the scratch folder while recovery or unsaved work may need it. See [project format and limits](PROJECT_FORMAT.md).
 
 After Save as, the project header shows the saved filename with a dirty marker for later edits; hover it for the full path. Save and WAV/MIDI export pickers reuse that directory and filename stem. Extensionless project saves receive `.rill`. **Export WAV…** warns when visible notes on contributing MIDI tracks have no instrument; Cancel to assign a VST3, or continue without those notes.
 
@@ -628,7 +644,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats and PDC model. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, audio input recording and constant-tempo MIDI with rich project performance data. Disk-streamed playback, tempo maps, automatic tempo-following warp markers and surround are not implemented. Input gain, volume, pan, note and clip edits update the existing playback graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
+See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp markers and surround remain absent. Input gain, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Build from source
 

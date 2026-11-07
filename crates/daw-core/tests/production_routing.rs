@@ -456,13 +456,22 @@ fn pre_insert_mix_and_clip_mute_are_atomic_undoable_and_occurrence_local() {
 
 #[test]
 fn freeze_provenance_survives_split_and_recall_without_owning_deleted_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let print_path = dir.path().join("print.wav");
+    AudioData {
+        sample_rate: 8_000,
+        channels: 1,
+        samples: vec![0.0; 16_000],
+    }
+    .write_wav(&print_path)
+    .unwrap();
     let mut project = Project::new();
     let source = instrument(&mut project, "Original");
     let source_clip = Clip::midi("Source", 0.0, 4.0, vec![Note::new(60, 0.0, 1.0, 90)]);
     let source_id = source_clip.id;
     project.track_mut(source).unwrap().clips.push(source_clip);
     let print = project.add_audio_track("Print");
-    let mut clip = Clip::audio("Printed", 0.0, 4.0, "print.wav");
+    let mut clip = Clip::audio("Printed", 0.0, 4.0, print_path.to_string_lossy());
     let id = clip.id;
     let master_effect = effect(&mut project, MASTER_CHANNEL_ID);
     let mut provenance = FreezeLink {
@@ -498,7 +507,6 @@ fn freeze_provenance_survives_split_and_recall_without_owning_deleted_sources() 
     assert!(!project.clip(print, id).unwrap().muted);
     project.delete_track(source).unwrap();
     project.validate().unwrap();
-    let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("provenance.daw.json");
     project.save(&path).unwrap();
     let loaded = Project::load(&path).unwrap();

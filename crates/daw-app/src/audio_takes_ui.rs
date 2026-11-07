@@ -27,12 +27,11 @@ fn read_audio_takes(
     let mut imported = Vec::with_capacity(files.len());
     for path in files {
         ensure!(!cancel.load(Ordering::Acquire), "Take import cancelled");
-        // Preview capacity is optional; a full cache must not prevent importing
-        // valid media. Only one bounded decoder allocation exists outside it.
-        let audio = AudioData::load_wav_with_limit(&path, crate::project_io::WAVEFORM_FILE_BYTES)
+        let file = daw_core::AudioFile::open(&path)
             .with_context(|| format!("Import take {}", path.display()))?;
+        let info = file.info();
         ensure!(!cancel.load(Ordering::Acquire), "Take import cancelled");
-        ensure!(audio.frames() > 0, "Take {} is empty", path.display());
+        ensure!(info.frames > 0, "Take {} is empty", path.display());
         let name = path
             .file_stem()
             .unwrap_or_default()
@@ -44,16 +43,29 @@ fn read_audio_takes(
         let clip = Clip::audio(
             name,
             start,
-            audio.duration_seconds() * tempo / 60.0,
+            info.duration_seconds() * tempo / 60.0,
             path.to_string_lossy(),
         );
-        let bytes = audio.samples.len() * size_of::<f32>();
-        let preview = if bytes <= remaining {
-            remaining -= bytes;
+        let preview = if !info.should_stream() && info.decoded_bytes <= remaining as u64 {
+            let audio =
+                AudioData::load_wav_with_limit(&path, crate::project_io::WAVEFORM_FILE_BYTES)?;
+            file.check_unchanged()?;
+            remaining = remaining.saturating_sub(audio.samples.len() * size_of::<f32>());
             Some(audio)
         } else {
+            let mut reader = file.reader()?;
+            let frames = (65536 / info.channels).max(1);
+            let mut samples = vec![0.0; frames * info.channels];
+            let mut first = 0;
+            while first < info.frames {
+                ensure!(!cancel.load(Ordering::Acquire), "Take import cancelled");
+                let count = reader.read_frames(first, &mut samples)?;
+                ensure!(count > 0, "Incomplete take source");
+                first += count;
+            }
+            file.check_unchanged()?;
             None
-        }; // Release excess PCM here, away from the UI thread.
+        };
         imported.push((clip, preview));
     }
     Ok(imported)
@@ -218,11 +230,10 @@ impl DawApp {
                 .first()
                 .map(|clip| clip.id);
             for (clip, audio) in imported {
-                if let ClipContent::Audio { path, .. } = clip.content {
-                    if let Some(audio) = audio { self.waveforms.insert(path, audio); }
-                    else if !self.waveforms.contains_key(&path) {
-                        self.waveform_warning = Some("Some take waveforms are unavailable because the preview cache is full · Audio remains linked".into());
-                    }
+                if let ClipContent::Audio { path, .. } = clip.content
+                    && let Some(audio) = audio
+                {
+                    self.waveforms.insert(path, audio);
                 }
             }
             self.audio_takes_ui.source = first;
@@ -461,11 +472,10 @@ impl DawApp {
                             crate::audio_editor::paint_audio_clip_in_view(
                                 painter, rect, audio, clip, self.project.tempo, color, "takes",
                             );
+                        } else if let ClipContent::Audio{path,..}=&clip.content && let Some(file)=self.audio_files.get(path) {
+                            crate::audio_editor::paint_audio_file_clip(painter,rect,file,clip,self.project.tempo,color,"takes",daw_ui::WaveformAmplitudeScale::Default);
                         } else {
-                            crate::spectrogram::paint(
-                                painter, rect, clip, self.project.tempo,
-                                (clip.start, clip.end()), color, "takes", None,
-                            );
+                            crate::spectrogram::paint(painter,rect,clip,self.project.tempo,(clip.start,clip.end()),color,"takes",None);
                         }
                     })).inner;
                     self.audio_takes_ui.rows.push((clip.id, response.rect));

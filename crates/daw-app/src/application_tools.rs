@@ -1,7 +1,7 @@
 //! Explicitly authorized application tools. Never expose this host to the
 //! embedded current-song agent; the application MCP profile opts into it.
 use crate::{app::DawApp, document_ui::DocumentTransition, settings::Settings};
-use daw_core::{AudioData, Clip, MAX_BEAT, TrackKind};
+use daw_core::{MAX_BEAT, TrackKind};
 use daw_tools::{ToolError, parse_arguments};
 use serde::{Deserialize, Deserializer};
 use serde_json::{Value, json};
@@ -163,7 +163,8 @@ impl DawApp {
             "name":self.project.name,"path":self.project_path,"modified":self.modified,
             "session_id":self.song_session.id,"revision":self.song_session.revision,
             "pending":self.project_io_pending() || self.state_sync_pending()
-                || self.export_job.is_some() || self.loading.is_some() || self.document_guard.is_some(),
+                || self.export_job.is_some() || self.loading.is_some() || self.document_guard.is_some()
+                || self.audio_import_busy() || self.freeze_busy(),
             "recording":self.recording_busy(),"status":self.status,"error":self.error
         })
     }
@@ -239,51 +240,39 @@ impl DawApp {
                 "Import beat must be finite and between 0 and 1000000",
             ));
         }
-        let mut candidate = self.project.clone();
-        let result: anyhow::Result<Option<(u64, u64)>> = (|| {
-            let extension = source
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or_default();
-            if extension.eq_ignore_ascii_case("mid") || extension.eq_ignore_ascii_case("midi") {
-                anyhow::ensure!(
-                    track_id.is_none(),
-                    "MIDI import creates tracks; omit track_id"
-                );
-                candidate.import_midi(source, beat)?;
-                Ok(None)
-            } else {
-                let audio = AudioData::load_wav(source)?;
-                let length = audio.duration_seconds() * candidate.tempo / 60.0;
-                anyhow::ensure!(length > 0.0, "Audio file is empty");
-                let name = source.file_stem().unwrap_or_default().to_string_lossy();
-                let track = match track_id {
-                    Some(id) => {
-                        anyhow::ensure!(
-                            candidate
-                                .track(id)
-                                .is_some_and(|track| track.kind == TrackKind::Audio),
-                            "Choose an existing audio track"
-                        );
-                        id
-                    }
-                    None => candidate.add_audio_track(name.as_ref()),
-                };
-                let canonical = std::fs::canonicalize(source)?;
-                let clip = Clip::audio(name.as_ref(), beat, length, canonical.to_string_lossy());
-                let clip_id = clip.id;
-                candidate.track_mut(track).unwrap().clips.push(clip);
-                Ok(Some((track, clip_id)))
+        let extension = source
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        if !extension.eq_ignore_ascii_case("mid") && !extension.eq_ignore_ascii_case("midi") {
+            if track_id.is_some_and(|id| {
+                self.project
+                    .track(id)
+                    .is_none_or(|track| track.kind != TrackKind::Audio)
+            }) {
+                return Err(invalid("Choose an existing audio track"));
             }
-        })();
-        let selection =
-            result.map_err(|error| ToolError::new("import_failed", error.to_string()))?;
-        self.commit_song_candidate(candidate, "Import media")?;
-        if let Some((track, clip)) = selection {
-            self.selected_track = Some(track);
-            self.selected_clip = Some(clip);
-            self.selected_notes.clear();
+            if !self.import_picker_ready() {
+                return Err(ToolError::new("busy", self.status.clone()));
+            }
+            // Reuse the same isolated, bounded, managed-media pipeline as file
+            // drops and File → Import. The application capability returns an
+            // accepted job; document_status reports it pending until committed.
+            self.queue_audio_import(vec![source.to_path_buf()], track_id, beat);
+            return if self.error {
+                Err(ToolError::new("import_failed", self.status.clone()))
+            } else {
+                Ok(())
+            };
         }
+        if track_id.is_some() {
+            return Err(invalid("MIDI import creates tracks; omit track_id"));
+        }
+        let mut candidate = self.project.clone();
+        candidate
+            .import_midi(source, beat)
+            .map_err(|error| ToolError::new("import_failed", error.to_string()))?;
+        self.commit_song_candidate(candidate, "Import media")?;
         self.cache_audio();
         self.error = false;
         self.status = "Media imported".into();

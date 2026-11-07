@@ -1088,10 +1088,16 @@ fn export_and_save_requests_include_capture_finalized_by_the_document_guard() {
 fn recording_output_prepare_failure_returns_to_idle_and_recovers_after_restoring_the_source() {
     let mut app = fixture(false, true);
     arm(&mut app, "Mono 1");
-    let before = app.inspect()["project"].clone();
-    let missing = app.directory.path().join("Backing.wav");
-    // The project opened successfully. Removing its fixture source now makes
-    // the real output renderer fail when Record prepares playback.
+    let opened = app.inspect();
+    let before = opened["project"].clone();
+    let admitted = project(&opened);
+    let ClipContent::Audio { path, .. } = &admitted.tracks[0].clips[0].content else {
+        unreachable!()
+    };
+    let missing = std::path::PathBuf::from(path);
+    assert_ne!(missing, app.directory.path().join("Backing.wav"));
+    // Portable Save relocated the source on Open. Remove the actual admitted
+    // asset so the real renderer fails when Record prepares playback.
     std::fs::remove_file(&missing).unwrap();
     app.click("Record");
     let failed = wait(&mut app, |state| {
@@ -1104,7 +1110,7 @@ fn recording_output_prepare_failure_returns_to_idle_and_recovers_after_restoring
         failed["recording"]["error"]
             .as_str()
             .unwrap()
-            .contains("Backing.wav")
+            .contains(missing.to_str().unwrap())
     );
     app.click("Dismiss");
     recording(&mut app);

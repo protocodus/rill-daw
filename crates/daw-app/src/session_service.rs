@@ -170,7 +170,8 @@ impl SongToolHost for DawApp {
         let mut candidate = self.project.clone();
         let result = batch
             .apply_with_source_durations(&mut candidate, &|path| {
-                self.waveforms.get(path).map(AudioData::duration_seconds)
+                self.audio_source_info(path)
+                    .map(|info| info.frames as f64 / f64::from(info.sample_rate))
             })
             .map_err(failure)?;
         // An explicit override/resume is authoritative for its lane within

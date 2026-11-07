@@ -677,7 +677,11 @@ fn freeze_cancel_stale_failure_and_removed_original_never_publish_partial_work()
         1.0,
         "missing-freeze-source.wav",
     ));
-    let initial = open(&mut app, &broken);
+    // Only the legacy reader can legitimately open external/missing media;
+    // normal portable Save now rejects a missing asset before creating a file.
+    let broken_path = app.directory.path().join("missing-media-legacy.daw.json");
+    broken.save_legacy_json(&broken_path).unwrap();
+    let initial = app.command(json!({"command":"open","path":broken_path}));
     let failure = app.raw_command(json!({"command":"freeze","track":bad}));
     assert_eq!(failure["ok"], false, "{failure}");
     assert_eq!(failure["state"]["project"], initial["project"]);

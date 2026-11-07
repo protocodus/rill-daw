@@ -4,6 +4,7 @@ mod common;
 use common::Harness;
 use daw_core::AudioData;
 use serde_json::{Value, json};
+use std::io::{Seek, SeekFrom, Write};
 
 fn application(app: &mut Harness, name: &str, arguments: Value) -> Value {
     app.command(json!({"command":"application_tool","name":name,"arguments":arguments}))
@@ -34,6 +35,80 @@ fn import_tone(app: &mut Harness) -> Value {
         "document_action",
         json!({"action":"import","path":source,"beat":0.0}),
     )
+}
+
+#[test]
+fn privileged_large_audio_import_uses_managed_disk_media_and_portable_save() {
+    let mut app = Harness::new();
+    let source = app.directory.path().join("large-application-source.wav");
+    let bytes = daw_core::AUDIO_STREAM_THRESHOLD_BYTES + 8;
+    let mut file = std::fs::File::create(&source).unwrap();
+    file.write_all(b"RIFF").unwrap();
+    file.write_all(&((bytes + 36) as u32).to_le_bytes())
+        .unwrap();
+    file.write_all(b"WAVEfmt ").unwrap();
+    file.write_all(&16_u32.to_le_bytes()).unwrap();
+    file.write_all(&3_u16.to_le_bytes()).unwrap();
+    file.write_all(&2_u16.to_le_bytes()).unwrap();
+    file.write_all(&48_000_u32.to_le_bytes()).unwrap();
+    file.write_all(&384_000_u32.to_le_bytes()).unwrap();
+    file.write_all(&8_u16.to_le_bytes()).unwrap();
+    file.write_all(&32_u16.to_le_bytes()).unwrap();
+    file.write_all(b"data").unwrap();
+    file.write_all(&(bytes as u32).to_le_bytes()).unwrap();
+    file.set_len(bytes + 44).unwrap();
+    file.seek(SeekFrom::Start(44)).unwrap();
+    file.write_all(&0.25_f32.to_le_bytes()).unwrap();
+    file.write_all(&(-0.125_f32).to_le_bytes()).unwrap();
+    file.sync_all().unwrap();
+    drop(file);
+
+    let imported = application(
+        &mut app,
+        "document_action",
+        json!({
+            "action":"import","path":source,"beat":0.0
+        }),
+    );
+    assert_ok(&imported);
+    assert_eq!(imported["project"]["tracks"].as_array().unwrap().len(), 1);
+    assert_eq!(imported["audio_sources"]["resident_pcm_bytes"], 0);
+    assert_eq!(imported["audio_sources"]["streamed_sources"], 1);
+    let managed = imported["project"]["tracks"][0]["clips"][0]["content"]["Audio"]["path"]
+        .as_str()
+        .unwrap();
+    assert_ne!(std::path::Path::new(managed), source);
+    let archive = app.directory.path().join("application-portable.rill");
+    assert_ok(&application(
+        &mut app,
+        "document_action",
+        json!({
+            "action":"save_as","path":archive
+        }),
+    ));
+    std::fs::remove_file(&source).unwrap();
+    std::fs::remove_file(managed).unwrap();
+    app = app.restart();
+    let opened = application(
+        &mut app,
+        "document_action",
+        json!({
+            "action":"open","path":archive
+        }),
+    );
+    assert_ok(&opened);
+    assert_eq!(opened["audio_sources"]["streamed_sources"], 1);
+    let restored = opened["project"]["tracks"][0]["clips"][0]["content"]["Audio"]["path"]
+        .as_str()
+        .unwrap();
+    let mut reader = daw_core::AudioFile::open(restored)
+        .unwrap()
+        .reader()
+        .unwrap();
+    let mut first = [0.0; 4];
+    reader.read_frames(0, &mut first).unwrap();
+    assert_eq!(first, [0.25, -0.125, 0.0, 0.0]);
+    app.quit();
 }
 
 #[test]

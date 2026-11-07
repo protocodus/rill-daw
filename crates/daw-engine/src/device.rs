@@ -137,6 +137,7 @@ pub struct EngineSnapshot {
     pub edit_errors: u64,
     pub rendered_frames: u64,
     pub consumed_frames: u64,
+    pub audio_streaming: crate::AudioStreamingSnapshot,
 }
 
 pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
@@ -199,6 +200,8 @@ struct Controls {
     render_errors: AtomicU64,
     render_error: Mutex<Option<String>>,
     finished_generation: AtomicU64,
+    audio_streaming: crate::audio_stream::SharedStreaming,
+    streamed_clips: Mutex<Arc<Vec<(u64, u64)>>>,
 }
 impl Controls {
     fn new() -> Self {
@@ -225,6 +228,19 @@ impl Controls {
             render_errors: AtomicU64::new(0),
             render_error: Mutex::new(None),
             finished_generation: AtomicU64::new(u64::MAX),
+            audio_streaming: crate::audio_stream::SharedStreaming::default(),
+            streamed_clips: Mutex::new(Arc::new(Vec::new())),
+        }
+    }
+
+    fn publish_streaming(&self, renderer: &Renderer) {
+        self.audio_streaming
+            .publish(renderer.audio_streaming_snapshot());
+        if let Ok(mut current) = self.streamed_clips.try_lock() {
+            let next = renderer.streamed_clips();
+            if !Arc::ptr_eq(&current, &next) {
+                *current = next;
+            }
         }
     }
 
@@ -613,6 +629,7 @@ impl AudioEngine {
                     Ok(mut renderer) => {
                         renderer.attach_channel_meters(&worker_meters);
                         renderer.attach_signal_monitor(worker_signal_monitor);
+                        worker_controls.publish_streaming(&renderer);
                         let _ = preparer_tx.send(renderer.live_edit_preparer());
                         let _ = ready_tx.send(Ok(()));
                         #[cfg(test)]
@@ -638,6 +655,7 @@ impl AudioEngine {
                             .finished_generation
                             .store(u64::MAX, Ordering::Release);
                     }
+                    worker_controls.publish_streaming(&renderer);
                     // UI edits never touch the callback. Coalesce rapid drags before
                     // issuing bounded IPC on the render worker, including while paused.
                     collect_parameter_changes(&parameter_rx, &mut pending_parameters);
@@ -765,6 +783,7 @@ impl AudioEngine {
                             .fetch_add(renderer.plugin_errors, Ordering::Relaxed);
                         renderer.plugin_errors = 0;
                     }
+                    worker_controls.publish_streaming(&renderer);
                     worker_queue.push_block(&frames, &positions, generation);
                     worker_controls
                         .rendered_frames
@@ -1120,6 +1139,15 @@ impl AudioEngine {
         }
         Ok(())
     }
+    /// Actual streamed backing is known after graph/plan admission; the UI can
+    /// use its header-only size policy while a source has not been prepared.
+    pub fn is_clip_streamed(&self, track: u64, clip: u64) -> Option<bool> {
+        let sources = self.controls.streamed_clips.try_lock().ok()?;
+        sources
+            .binary_search(&(track, clip))
+            .is_ok()
+            .then_some(true)
+    }
     pub fn snapshot(&self) -> EngineSnapshot {
         let output_failed = self.controls.output_failed.load(Ordering::Acquire);
         let [peak_left, peak_right] = if output_failed {
@@ -1154,6 +1182,7 @@ impl AudioEngine {
                 .map_or(0, |updates| updates.mailbox.errors.load(Ordering::Relaxed)),
             rendered_frames: self.controls.rendered_frames.load(Ordering::Relaxed),
             consumed_frames: self.controls.consumed_frames.load(Ordering::Relaxed),
+            audio_streaming: self.controls.audio_streaming.snapshot(),
         }
     }
 

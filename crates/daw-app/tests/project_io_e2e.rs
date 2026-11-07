@@ -76,7 +76,8 @@ fn failed_save_and_failed_open_preserve_document_and_existing_bundle() {
     let mut broken = Project::new();
     add_source(&mut broken, &source);
     let seed = app.directory.path().join("current.json");
-    broken.save(&seed).unwrap();
+    // Deliberately external media: portable Save would retain its own source copy.
+    broken.save_legacy_json(&seed).unwrap();
     app.command(json!({"command":"open","path":seed}));
     rename_track(&mut app, "Audio source", "Keep this work");
     std::fs::remove_file(&source).unwrap();
@@ -160,11 +161,13 @@ fn declared_huge_waveform_is_skipped_without_allocating_it_or_losing_the_clip() 
     project.save(&bundle).unwrap();
     let state = app.command(json!({"command":"open","path":bundle}));
     assert_eq!(state["waveform_count"], 0);
+    assert_eq!(state["audio_sources"]["metadata_sources"], 0);
+    assert_eq!(state["audio_sources"]["resident_pcm_bytes"], 0);
     assert!(
         state["waveform_warning"]
             .as_str()
             .unwrap()
-            .contains("1 waveform")
+            .contains("1 audio source")
     );
     assert_eq!(
         state["project"]["tracks"][0]["clips"]
@@ -200,7 +203,7 @@ fn blocked_load_keeps_ui_responsive_and_serializes_following_save_and_new() {
     let mut incoming = Project::new();
     incoming.add_audio_track("Incoming document");
     let json_path = app.directory.path().join("incoming.json");
-    incoming.save(&json_path).unwrap();
+    incoming.save_legacy_json(&json_path).unwrap();
     let bytes = std::fs::read(&json_path).unwrap();
     let (release, wait) = mpsc::channel();
     let writer = std::thread::spawn(move || {

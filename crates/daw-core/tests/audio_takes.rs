@@ -432,7 +432,7 @@ fn portable_archive_preserves_inactive_sources_and_legacy_projects_have_no_takes
     assert_eq!(Project::load(&legacy).unwrap(), project);
     let group = project.group_audio_takes(track, &[a, b]).unwrap();
     let json = temp.path().join("takes.json");
-    project.save(&json).unwrap();
+    project.save_legacy_json(&json).unwrap();
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
     assert_eq!(manifest["version"], 6);
@@ -474,7 +474,8 @@ fn loading_reserves_take_group_ids_and_untrusted_group_collisions_are_rejected()
         clip.audio_take.as_mut().unwrap().group = high_group;
     }
     let file = temp.path().join("reserved.json");
-    project.save(&file).unwrap();
+    // This model-only legacy fixture intentionally has no backing WAV files.
+    project.save_legacy_json(&file).unwrap();
     Project::load(&file).unwrap();
     assert!(new_id() > high_group);
     let comp = project.audio_take_regions(track, high_group)[0].id;

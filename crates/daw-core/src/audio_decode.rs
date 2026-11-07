@@ -15,7 +15,7 @@ use symphonia::core::{
     meta::MetadataOptions,
 };
 
-pub const MAX_IMPORTED_AUDIO_BYTES: usize = 512 * 1024 * 1024;
+pub const MAX_IMPORTED_AUDIO_BYTES: usize = crate::MAX_STREAMED_AUDIO_BYTES as usize;
 const MAX_PACKET_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,7 +60,7 @@ pub fn decode_audio_to_wav(
     ensure!(metadata.is_file(), "Choose an audio file");
     ensure!(
         metadata.len() <= MAX_IMPORTED_AUDIO_BYTES as u64,
-        "Encoded audio exceeds the 512 MiB import limit"
+        "Encoded audio exceeds the 4 GiB import limit"
     );
     ensure!(metadata.len() >= 4, "Audio file is empty or truncated");
     let mut file = File::open(input).context("Open audio source")?;

@@ -77,6 +77,23 @@ impl Harness {
         )
     }
 
+    /// Hold source-analysis workers only in this isolated app child.
+    pub fn with_audio_analysis_delay(delay_ms: u64) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated analysis E2E directory");
+        Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            false,
+            &[(
+                "RILL_E2E_AUDIO_ANALYSIS_DELAY_MS",
+                delay_ms.to_string().into(),
+            )],
+        )
+    }
+
     /// Like `with_plugin_host`, with the desktop's automatic background
     /// capture of missing previews. Only supply a test editor worker here.
     pub fn with_plugin_previews(path: &std::path::Path, host: &std::path::Path) -> Self {

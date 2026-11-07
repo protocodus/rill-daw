@@ -1,6 +1,8 @@
 //! Modular stereo renderer and device output. The device callback does no heap allocation,
 //! locking, file access, or plugin processing. A bounded atomic queue connects it to a
 //! render worker, so plugin work cannot block the hardware callback.
+mod audio_asset;
+mod audio_stream;
 mod device;
 mod join;
 mod meter;
@@ -8,6 +10,8 @@ mod quality;
 mod render;
 mod signal_monitor;
 mod stretch;
+
+pub use audio_stream::AudioStreamingSnapshot;
 
 pub use signal_monitor::{SignalMonitorSnapshot, SignalMonitorTarget};
 
@@ -73,6 +77,13 @@ mod allocation_test_support {
     }
     #[global_allocator]
     static ALLOCATOR: CountingAllocator = CountingAllocator;
+    /// Avoid CPU starvation between a long disk-DSP oracle and the deadline-based
+    /// live-edit regression on small CI machines. Production code is unaffected.
+    pub(crate) fn heavy_audio_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        GATE.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
     pub fn count_allocations(action: impl FnOnce()) -> usize {
         ALLOCATIONS.with(|count| count.set(0));
         TRACKING.with(|tracking| tracking.set(true));

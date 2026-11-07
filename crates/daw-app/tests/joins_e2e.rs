@@ -8,11 +8,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-fn open(app: &mut Harness, project: &Project, clip: &str) {
+fn open(app: &mut Harness, project: &mut Project, clip: &str) {
     let path = app.directory.path().join("join-fixture.daw.json");
     project.save(&path).unwrap();
     app.command(json!({"command":"open", "path":path}));
-    app.click(clip);
+    // Portable loading relocates source paths; compare later Undo/Cancel
+    // against the exact admitted document, including its managed asset paths.
+    *project = document(&app.click(clip));
 }
 fn join_dialog(app: &mut Harness) {
     app.click("Edit");
@@ -87,7 +89,7 @@ fn midi_join_clips_visible_note_windows_undo_redo_and_portable_recall() {
         })
         .collect();
     project.track_mut(track).unwrap().clips = vec![a, b, outside.clone()];
-    open(&mut app, &project, "Trimmed phrase");
+    open(&mut app, &mut project, "Trimmed phrase");
     join_dialog(&mut app);
     app.click("Keep separate"); // Exercise selection without changing the final scope.
     app.click("Keep separate");
@@ -186,7 +188,7 @@ fn audio_join_bakes_edits_and_crossfade_once_and_reopens_without_scratch_source(
     channel.gain = 0.5;
     channel.pan = -0.25;
     channel.clips = vec![a, b];
-    open(&mut app, &project, "First take");
+    open(&mut app, &mut project, "First take");
     let before = export(&mut app, "before.wav");
     for (frame, expected) in [(30000, 0.021), (84000, 0.0915251)] {
         near(before.samples[frame * 2], expected);
@@ -261,7 +263,7 @@ fn joining_split_loop_recordings_keeps_alternate_takes_undo_and_portable_audio()
     let track = project.add_audio_track("Loop capture");
     project.track_mut(track).unwrap().gain = 1.0;
     project.track_mut(track).unwrap().audio_input = None;
-    open(&mut app, &project, "Loop capture");
+    open(&mut app, &mut project, "Loop capture");
     app.click("Window");
     app.click("Recording");
     app.click("No input");
@@ -421,7 +423,7 @@ fn audio_join_requires_overlapping_regions_and_cancel_leaves_document_untouched(
         Clip::audio("Middle", 2.0, 4.0, source.to_string_lossy()),
         Clip::audio("Nested", 3.0, 1.0, source.to_string_lossy()),
     ];
-    open(&mut app, &project, "Base");
+    open(&mut app, &mut project, "Base");
     join_dialog(&mut app);
     let invalid = app.click("Nested");
     assert!(
@@ -469,7 +471,7 @@ fn cancel_running_audio_join_retires_worker_cleans_output_and_allows_next_join()
         Clip::audio("First tiny take", 0.0, 1.0, source.to_string_lossy()),
         Clip::audio("Distant end", 2599.0, 1.0, source.to_string_lossy()),
     ];
-    open(&mut app, &project, "First tiny take");
+    open(&mut app, &mut project, "First tiny take");
     join_dialog(&mut app);
     let running = app.click("Join");
     assert_eq!(running["join_pending"], true, "{running}");
@@ -501,7 +503,7 @@ fn cancel_running_audio_join_retires_worker_cleans_output_and_allows_next_join()
     assert_eq!(std::fs::read(&source).unwrap(), source_bytes);
     app.click("Cancel");
     project.track_mut(track).unwrap().clips[1].start = 2.0;
-    open(&mut app, &project, "First tiny take");
+    open(&mut app, &mut project, "First tiny take");
     join_dialog(&mut app);
     app.click("Join");
     let completed = document(&wait_join(&mut app));
@@ -525,7 +527,7 @@ fn join_identifies_linked_instances_by_visible_one_based_beat_ranges() {
     project.track_mut(track).unwrap().clips.push(clip);
     let second = project.clone_clip(track, original).unwrap();
     project.clone_clip(track, second).unwrap();
-    open(&mut app, &project, "Shared phrase");
+    open(&mut app, &mut project, "Shared phrase");
     app.command(json!({"command":"viewport","width":1100,"height":720}));
     join_dialog(&mut app);
     let state = app.inspect();

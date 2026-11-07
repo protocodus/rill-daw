@@ -2,8 +2,11 @@
 
 `.rill` is a portable ZIP archive. Version 6 contains `manifest.json` and the WAV
 files referenced by audio clips. MIDI performance data, edits, routing, automation, and opaque
-instrument/effect state live in the manifest. Legacy JSON projects remain readable
-and writable when their filename has another extension, such as `.daw.json`.
+instrument/effect state live in the manifest. Public `Project::save` always writes
+this portable format, even when an explicit caller chooses another extension.
+Load detects ZIP contents rather than relying on the filename; legacy JSON
+projects remain readable. `save_legacy_json` is an explicit external-reference
+format used for internal recovery and legacy interchange.
 
 The manifest is UTF-8 JSON with this envelope:
 
@@ -154,10 +157,14 @@ version-4 readers can ignore channel assignments without changing recorded audio
 
 Audio entries are named `assets/00000000.wav`, `assets/00000001.wav`, and so on.
 Clips reference these relative names in the manifest. Sources are deduplicated by
-canonical source path; two different files with the same basename remain separate.
+canonical source path and file identity, including hard links; two different
+files with the same basename remain separate.
 Referenced files are included in full, preserving non-destructive offsets, trims,
 and duplicate clips. Assets use ZIP Stored compression to avoid compressing large
 audio files during save; the manifest uses Deflate.
+Every referenced audio clip is included, including muted clips, retained takes,
+frozen originals and printed audio. Save does not trim away hidden source audio.
+There are no external audio paths in a successful portable manifest.
 
 WAV/MP3/FLAC/OGG imports are normalized into managed 32-bit float WAV assets
 before they enter the project. Source sample rate and mono/stereo channels are
@@ -178,10 +185,11 @@ clip paths are absolute. The archive's directory is never used for extraction.
 `Project::load` uses the system temporary directory's `rill-project-assets` folder
 as a fallback for CLI/core callers; the application supplies its configured scratch
 directory. Successful extraction directories persist while projects may reference
-them. This first version creates a fresh directory on every load, so scratch usage
-grows; old extraction directories can be removed after all projects using them are
-closed. Failed loads remove their incomplete directory and leave unrelated scratch
-files alone.
+them. Each load creates a fresh directory, so scratch usage grows. There is no
+automatic media garbage collection: active projects, Undo/Redo, recovery snapshots
+and pending jobs may retain media after it disappears from the visible song.
+Failed loads remove only their incomplete private directory and leave unrelated
+scratch files alone.
 
 The format enforces these limits:
 
@@ -190,13 +198,19 @@ The format enforces these limits:
 | Archive entries, including manifest | 4,096 |
 | ZIP metadata read during parsing/header validation | 4 MiB |
 | Expanded manifest | 256 MiB |
-| Each expanded WAV | 2 GiB |
-| Total expanded data and archive file | 8 GiB each |
+| Each expanded WAV | Just below 4 GiB (`u32::MAX - 128` bytes), compatible with the current RIFF writer |
+| Total expanded data and archive file | 64 GiB each |
 | Opaque state per instrument/effect | 64 MiB |
 
 The manifest limit includes the JSON byte-array representation of plug-in states,
 so several large states can exceed the aggregate limit before reaching the asset
 budget. Save reports that failure without replacing the previous project.
+Media copying uses a fixed 64 KiB buffer; manifest parsing is streamed rather
+than retaining another complete JSON byte buffer. ZIP64 entries/offsets support
+projects larger than 4 GiB. Open-file metadata and identity are checked before
+and after copying, and referenced metadata is checked again before publication.
+Detected source changes or truncation fail the save. Cooperative cancellation
+APIs stop between bounded chunks without replacing the existing destination.
 
 Only the manifest and referenced, numbered asset files are accepted. Absolute paths,
 traversal, backslashes, unexpected entries, duplicate names, symlinks, special files,
@@ -215,7 +229,7 @@ Explicit Save and Open run on one background document pipeline. Saving first flu
 
 Every committed UI or tool edit queues a JSON recovery checkpoint independently of native editor state and the document pipeline. Recovery writes run on a background worker, coalesce pending revisions of the same song, and preserve an outgoing song's pending checkpoint across a load completing. Native state refreshes still run every 30 seconds, after first checkpointing the last acknowledged state. `recovery.daw.json` holds the latest complete snapshot; `recovery.previous.daw.json` retains its valid predecessor. **Recover last session…** falls back to the predecessor if the latest is missing or corrupt. Quit waits for recovery and remains open if it fails. Failure does not retry every frame; new commits and periodic refreshes retry. These snapshots reference existing media paths rather than copying audio. There is a short in-flight window before an asynchronous checkpoint reaches disk; unacknowledged native state, interrupted writes, storage failure, and deleted source media cannot be guaranteed recoverable.
 
-Opening extracts the bundle and prepares waveform data on the worker before flushing the outgoing native editor and replacing the document. Duplicate audio paths decode once. Waveform preparation is limited to 256 MiB per source and 512 MiB total; unavailable/invalid/oversized previews leave their clips linked and display a warning. General WAV decoding rejects declarations exceeding 512 MiB of decoded samples before allocating sample buffers. Streaming sources larger than this is not implemented.
+Opening extracts the bundle and admits source metadata on background workers before flushing the outgoing native editor and replacing the document. Duplicate paths share descriptors. Only files below 32 MiB decoded PCM are retained in the application preview map, within 128 MiB total; larger valid files remain usable through disk-backed descriptors and bounded waveform caches. Missing/invalid sources keep their clips linked and report a warning. Canonical imported float WAVs are bounded to `u32::MAX - 4096` decoded bytes per source and an 8 GiB import batch; archive byte limits above are separate. No full large-source PCM allocation is needed to open a portable project.
 
 ## MIDI input and recording timing
 
