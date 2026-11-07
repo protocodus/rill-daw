@@ -3,8 +3,9 @@ use crate::{ClipContent, Effect, Instrument, Project, model::ProjectFile};
 use anyhow::{Context, Result, ensure};
 use std::{
     cell::Cell,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::RandomState},
     fs::{self, File, Metadata, OpenOptions},
+    hash::{BuildHasher, Hasher},
     io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     rc::Rc,
@@ -30,6 +31,7 @@ struct Asset {
     path: PathBuf,
     name: String,
     metadata: Metadata,
+    fingerprint: Option<u64>,
 }
 
 fn check_cancelled(cancel: Option<&AtomicBool>) -> Result<()> {
@@ -129,6 +131,67 @@ fn copy_asset(asset: &Asset, output: &mut impl Write, cancel: Option<&AtomicBool
     Ok(())
 }
 
+/// A randomized fingerprint only selects comparison candidates. Deduplication
+/// always verifies every byte, so a hash collision cannot discard different audio.
+fn fingerprint(asset: &Asset, state: &RandomState, cancel: Option<&AtomicBool>) -> Result<u64> {
+    struct HashWriter<H>(H);
+    impl<H: Hasher> Write for HashWriter<H> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.write(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut writer = HashWriter(state.build_hasher());
+    copy_asset(asset, &mut writer, cancel)?;
+    Ok(writer.0.finish())
+}
+
+fn equal_assets(left: &Asset, right: &Asset, cancel: Option<&AtomicBool>) -> Result<bool> {
+    if left.metadata.len() != right.metadata.len() {
+        return Ok(false);
+    }
+    // Reuse the bounded copy and source-generation checks on both files. The
+    // comparator consumes the second stream without ever retaining full PCM.
+    struct CompareWriter<R> {
+        input: R,
+        equal: bool,
+        buffer: [u8; COPY_BUFFER],
+    }
+    impl<R: Read> Write for CompareWriter<R> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.input.read_exact(&mut self.buffer[..bytes.len()])?;
+            self.equal &= bytes == &self.buffer[..bytes.len()];
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let input = File::open(&right.path)?;
+    ensure!(
+        unchanged(&right.metadata, &input.metadata()?),
+        "Audio asset changed while optimizing: {}",
+        right.path.display()
+    );
+    let identity = same_file::Handle::from_file(input.try_clone()?)?;
+    let mut writer = CompareWriter {
+        input,
+        equal: true,
+        buffer: [0; COPY_BUFFER],
+    };
+    copy_asset(left, &mut writer, cancel)?;
+    ensure!(
+        unchanged(&right.metadata, &writer.input.metadata()?)
+            && same_file::Handle::from_path(&right.path)? == identity,
+        "Audio asset changed while optimizing: {}",
+        right.path.display()
+    );
+    Ok(writer.equal)
+}
+
 fn asset_name(name: &str) -> bool {
     name.strip_prefix("assets/")
         .and_then(|name| name.strip_suffix(".wav"))
@@ -142,11 +205,31 @@ fn absolute_plugin(path: &mut String, base: &Path) {
 }
 
 pub(crate) fn save(project: &Project, path: &Path, cancel: Option<&AtomicBool>) -> Result<()> {
+    save_with_options(project, path, cancel, false)
+}
+
+pub(crate) fn save_optimized(
+    project: &Project,
+    path: &Path,
+    cancel: Option<&AtomicBool>,
+) -> Result<()> {
+    save_with_options(project, path, cancel, true)
+}
+
+fn save_with_options(
+    project: &Project,
+    path: &Path,
+    cancel: Option<&AtomicBool>,
+    optimized: bool,
+) -> Result<()> {
     check_cancelled(cancel)?;
     let mut portable = project.clone();
     let base = std::env::current_dir()?;
-    let mut names: HashMap<PathBuf, String> = HashMap::new();
+    // Keep metadata for every distinct source, including byte-identical files
+    // omitted by optimization, until the final publication check.
+    let mut names: HashMap<PathBuf, (String, Metadata)> = HashMap::new();
     let mut assets: Vec<Asset> = Vec::new();
+    let fingerprint_state = RandomState::new();
     let mut total = 0u64;
     for track in portable.channels_mut() {
         if let Instrument::Vst3 { path, .. } = &mut track.instrument {
@@ -163,12 +246,16 @@ pub(crate) fn save(project: &Project, path: &Path, cancel: Option<&AtomicBool>) 
             };
             let source =
                 fs::canonicalize(&*path).with_context(|| format!("Collect audio asset {path}"))?;
-            if let Some(name) = names.get(&source) {
+            if let Some((name, _)) = names.get(&source) {
                 *path = name.clone();
                 continue;
             }
             let metadata = source.metadata()?;
             ensure!(metadata.is_file(), "Audio asset is not a regular file");
+            ensure!(
+                metadata.len() <= MAX_ASSET,
+                "Audio asset exceeds the RIFF WAV size limit"
+            );
             if let Some(asset) = assets
                 .iter()
                 .find_map(|asset| match same_asset(asset, &source, &metadata) {
@@ -179,28 +266,45 @@ pub(crate) fn save(project: &Project, path: &Path, cancel: Option<&AtomicBool>) 
                 .transpose()?
             {
                 *path = asset.name.clone();
-                names.insert(source, asset.name.clone());
+                names.insert(source, (asset.name.clone(), metadata));
                 continue;
+            }
+            let mut candidate = Asset {
+                path: source.clone(),
+                name: String::new(),
+                metadata,
+                fingerprint: None,
+            };
+            if optimized {
+                candidate.fingerprint = Some(fingerprint(&candidate, &fingerprint_state, cancel)?);
+                let mut duplicate = None;
+                for asset in &assets {
+                    if asset.metadata.len() == candidate.metadata.len()
+                        && asset.fingerprint == candidate.fingerprint
+                        && equal_assets(asset, &candidate, cancel)?
+                    {
+                        duplicate = Some(asset.name.clone());
+                        break;
+                    }
+                }
+                if let Some(name) = duplicate {
+                    names.insert(source, (name.clone(), candidate.metadata));
+                    *path = name;
+                    continue;
+                }
             }
             ensure!(
                 assets.len() + 1 < MAX_ENTRIES,
                 "Project has too many bundled audio assets"
             );
-            ensure!(
-                metadata.len() <= MAX_ASSET,
-                "Audio asset exceeds the RIFF WAV size limit"
-            );
             total = total
-                .checked_add(metadata.len())
+                .checked_add(candidate.metadata.len())
                 .context("Asset size overflow")?;
             ensure!(total <= MAX_TOTAL, "Project assets exceed 64 GiB");
             let name = format!("assets/{:08}.wav", assets.len());
-            names.insert(source.clone(), name.clone());
-            assets.push(Asset {
-                path: source,
-                name: name.clone(),
-                metadata,
-            });
+            names.insert(source, (name.clone(), candidate.metadata.clone()));
+            candidate.name = name.clone();
+            assets.push(candidate);
             *path = name;
         }
     }
@@ -239,7 +343,11 @@ pub(crate) fn save(project: &Project, path: &Path, cancel: Option<&AtomicBool>) 
             archive.start_file(
                 &asset.name,
                 SimpleFileOptions::default()
-                    .compression_method(CompressionMethod::Stored)
+                    .compression_method(if optimized {
+                        CompressionMethod::Deflated
+                    } else {
+                        CompressionMethod::Stored
+                    })
                     .large_file(true),
             )?;
             copy_asset(asset, &mut archive, cancel)?;
@@ -250,12 +358,12 @@ pub(crate) fn save(project: &Project, path: &Path, cancel: Option<&AtomicBool>) 
         temporary.as_file().metadata()?.len() <= MAX_TOTAL,
         "Project archive exceeds 64 GiB"
     );
-    for asset in assets {
+    for (source, (_, metadata)) in names {
         check_cancelled(cancel)?;
         ensure!(
-            unchanged(&asset.metadata, &asset.path.metadata()?),
+            unchanged(&metadata, &source.metadata()?),
             "Audio asset changed while saving: {}",
-            asset.path.display()
+            source.display()
         );
     }
     temporary.as_file().sync_all()?;
@@ -535,6 +643,7 @@ mod tests {
                 metadata: path.metadata().unwrap(),
                 path: path.clone(),
                 name: "source".into(),
+                fingerprint: None,
             };
             let mut output = ChangingOutput {
                 path: &path,
@@ -579,5 +688,27 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("cancelled"));
         assert_eq!(output.1, COPY_BUFFER);
+    }
+
+    #[test]
+    fn optimization_never_trusts_a_fingerprint_collision_or_stale_duplicate() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut assets = Vec::new();
+        for (name, value) in [("left", 1), ("right", 2)] {
+            let path = directory.path().join(name);
+            fs::write(&path, vec![value; COPY_BUFFER * 3 + 7]).unwrap();
+            assets.push(Asset {
+                metadata: path.metadata().unwrap(),
+                path,
+                name: name.into(),
+                fingerprint: Some(42),
+            });
+        }
+        assert!(!equal_assets(&assets[0], &assets[1], None).unwrap());
+        let cancel = AtomicBool::new(true);
+        assert!(equal_assets(&assets[0], &assets[1], Some(&cancel)).is_err());
+        fs::write(&assets[1].path, vec![1; COPY_BUFFER * 3 + 7]).unwrap();
+        assert!(equal_assets(&assets[0], &assets[1], None).is_err());
+        assert!(fingerprint(&assets[1], &RandomState::new(), None).is_err());
     }
 }

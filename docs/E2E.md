@@ -1,5 +1,11 @@
 # Application E2E tests
 
+`save_optimize_e2e` uses **File → Save and optimize** to remove deleted-clip
+assets from the song file, merge byte-identical sources and losslessly compress
+retained audio. It checks Undo/export after optimization, portable restart after
+removing originals, picker cancellation and failed-save preservation. Run with
+`cargo test --locked -p daw-app --test save_optimize_e2e -- --test-threads=1`.
+
 `waveform_color_e2e` verifies real submitted waveform colors from silence through
 full scale, consistent colors with Fit, and shared Spectrum/Waveform coloring
 View toggles. It checks cached texture reuse, zero spectrum draw while disabled,

@@ -886,6 +886,7 @@ dependencies = [
  "tempfile",
  "winresource",
  "zeroize",
+ "zip",
 ]
 
 [[package]]

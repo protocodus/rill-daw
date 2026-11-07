@@ -1351,6 +1351,29 @@ impl Project {
         crate::archive::save(self, path, Some(cancel))
     }
 
+    /// Save only referenced assets, coalescing byte-identical WAV sources and
+    /// applying lossless compression. Does not delete source files or alter the
+    /// live project, retained takes, Freeze originals, or edit history.
+    pub fn save_optimized(&self, path: impl AsRef<Path>) -> Result<()> {
+        self.validate()?;
+        let path = path.as_ref();
+        self.validate_audio_destination(path)?;
+        crate::archive::save_optimized(self, path, None)
+    }
+
+    /// As `save_optimized`, with cooperative cancellation between bounded reads
+    /// and writes. An interrupted optimization preserves the previous song file.
+    pub fn save_optimized_cancelled(
+        &self,
+        path: impl AsRef<Path>,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<()> {
+        self.validate()?;
+        let path = path.as_ref();
+        self.validate_audio_destination(path)?;
+        crate::archive::save_optimized(self, path, Some(cancel))
+    }
+
     /// Explicit external-reference JSON for internal recovery and legacy-format
     /// interchange. This is not a portable project; ordinary Save uses `save`.
     pub fn save_legacy_json(&self, path: impl AsRef<Path>) -> Result<()> {

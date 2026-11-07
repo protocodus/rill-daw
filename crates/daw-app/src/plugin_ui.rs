@@ -1,6 +1,6 @@
 use crate::{
     app::{ChannelDestination, DawApp, PopupKind},
-    project_io::{DocumentRequest, LoadedProject},
+    project_io::{DocumentRequest, LoadedProject, SaveMode},
 };
 use daw_core::{
     AutomationParameter, AutomationTarget, Instrument, PluginParameterValue, TrackKind,
@@ -32,7 +32,7 @@ pub(crate) type EditorStateSignature =
     (EditorTarget, Instrument, Vec<u8>, Vec<PluginParameterValue>);
 
 enum PendingAction {
-    Save(PathBuf),
+    Save(PathBuf, SaveMode),
     Export(PathBuf, crate::export_ui::ExportSpecification),
     Freeze {
         track: u64,
@@ -497,11 +497,17 @@ impl DawApp {
     }
 
     pub(crate) fn save_to(&mut self, path: PathBuf) {
-        if self.defer_document_request(DocumentRequest::Save(path.clone())) {
+        self.save_to_with_mode(path, SaveMode::Normal);
+    }
+
+    pub(crate) fn save_to_with_mode(&mut self, path: PathBuf, mode: SaveMode) {
+        if self.defer_document_request(DocumentRequest::Save(path.clone(), mode)) {
             return;
         }
-        if let Some(PendingAction::Save(path)) = self.defer_for_editor(PendingAction::Save(path)) {
-            self.finish_project_save(path);
+        if let Some(PendingAction::Save(path, mode)) =
+            self.defer_for_editor(PendingAction::Save(path, mode))
+        {
+            self.finish_project_save(path, mode);
         }
     }
 
@@ -1722,7 +1728,7 @@ impl DawApp {
 
     fn finish_editor_action(&mut self, action: PendingAction, _ctx: &egui::Context) {
         match action {
-            PendingAction::Save(path) => self.finish_project_save(path),
+            PendingAction::Save(path, mode) => self.finish_project_save(path, mode),
             PendingAction::Export(path, specification) => self.start_export(path, specification),
             PendingAction::Freeze { track, clips } => self.begin_freeze(track, clips),
             PendingAction::Unfreeze(track) => self.begin_unfreeze(track),
@@ -2040,7 +2046,7 @@ mod tests {
         assert_eq!(app.automate_plugin_parameter(target, 0, 0.4), None);
         app.instrument_ui.closing = false;
         app.instrument_ui.pending = Some(PendingState {
-            action: PendingAction::Save(directory.path().join("waiting.rill")),
+            action: PendingAction::Save(directory.path().join("waiting.rill"), SaveMode::Normal),
             deadline: Instant::now() + Duration::from_secs(30),
             request_id: Some(1),
             saved: false,
@@ -2407,7 +2413,7 @@ mod tests {
     #[test]
     fn pending_document_action_requires_its_snapshot_and_successful_close() {
         let mut save = PendingState {
-            action: PendingAction::Save(PathBuf::from("session.json")),
+            action: PendingAction::Save(PathBuf::from("session.json"), SaveMode::Normal),
             deadline: Instant::now() + Duration::from_secs(30),
             request_id: Some(42),
             saved: false,
@@ -2480,7 +2486,7 @@ mod tests {
         let mut app = pending_app(&ctx, directory.path());
         let output = directory.path().join("session.daw.json");
         app.instrument_ui.pending = Some(PendingState {
-            action: PendingAction::Save(output.clone()),
+            action: PendingAction::Save(output.clone(), SaveMode::Optimized),
             deadline: Instant::now() - Duration::from_millis(1),
             request_id: Some(1),
             saved: false,

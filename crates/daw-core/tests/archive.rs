@@ -347,6 +347,162 @@ fn cancelled_save_and_load_keep_previous_files_and_do_not_create_extraction() {
 }
 
 #[test]
+fn optimized_save_prunes_removed_media_deduplicates_copies_and_compresses_losslessly() {
+    let temp = tempfile::tempdir().unwrap();
+    let sources = temp.path().join("originals");
+    fs::create_dir(&sources).unwrap();
+    let first = sources.join("first.wav");
+    let copied = sources.join("copied.wav");
+    let different = sources.join("different.wav");
+    let unused = sources.join("removed.wav");
+    let samples = vec![0.25; 80_000];
+    for (path, value) in [(&first, 0.25), (&different, -0.25), (&unused, 0.5)] {
+        AudioData {
+            sample_rate: 8_000,
+            channels: 1,
+            samples: vec![value; samples.len()],
+        }
+        .write_wav(path)
+        .unwrap();
+    }
+    fs::copy(&first, &copied).unwrap();
+    let originals: Vec<_> = [&first, &copied, &different, &unused]
+        .into_iter()
+        .map(|path| (path.clone(), fs::read(path).unwrap()))
+        .collect();
+    let mut project = audio_project(&first);
+    for (name, path) in [
+        ("Retained duplicate", &copied),
+        ("Different content", &different),
+        ("Remove me", &unused),
+    ] {
+        let mut clip = Clip::audio(
+            name,
+            project.tracks[0].clips.len() as f64,
+            1.0,
+            path.to_string_lossy(),
+        );
+        clip.muted = name == "Retained duplicate";
+        project.tracks[0].clips.push(clip);
+    }
+    let saved = temp.path().join("song.rill");
+    project.save(&saved).unwrap();
+    let unoptimized_size = saved.metadata().unwrap().len();
+    assert_eq!(
+        ZipArchive::new(fs::File::open(&saved).unwrap())
+            .unwrap()
+            .len(),
+        5
+    );
+    let scratch = temp.path().join("scratch");
+    let mut opened = Project::load_with_assets(&saved, &scratch).unwrap();
+    let removed = opened.tracks[0].clips.pop().unwrap();
+    let ClipContent::Audio {
+        path: removed_path, ..
+    } = removed.content
+    else {
+        unreachable!()
+    };
+    let before = opened.clone();
+    opened.save_optimized(&saved).unwrap();
+    assert_eq!(
+        opened, before,
+        "Optimization cannot mutate the live model or history sources"
+    );
+    assert!(
+        Path::new(&removed_path).is_file(),
+        "Scratch sources may still be needed by Undo/recovery"
+    );
+    for (path, bytes) in originals {
+        assert_eq!(
+            fs::read(path).unwrap(),
+            bytes,
+            "Source files are never modified"
+        );
+    }
+    let mut zip = ZipArchive::new(fs::File::open(&saved).unwrap()).unwrap();
+    assert_eq!(
+        zip.len(),
+        3,
+        "One manifest and two unique referenced sounds remain"
+    );
+    for index in 0..zip.len() {
+        assert_eq!(
+            zip.by_index(index).unwrap().compression(),
+            CompressionMethod::Deflated
+        );
+    }
+    assert!(saved.metadata().unwrap().len() < unoptimized_size / 4);
+    let manifest: serde_json::Value =
+        serde_json::from_reader(zip.by_name("manifest.json").unwrap()).unwrap();
+    let clips = manifest["project"]["tracks"][0]["clips"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        clips[0]["content"]["Audio"]["path"],
+        clips[1]["content"]["Audio"]["path"]
+    );
+    assert_ne!(
+        clips[0]["content"]["Audio"]["path"],
+        clips[2]["content"]["Audio"]["path"]
+    );
+    assert_eq!(clips[1]["muted"], true);
+    drop(zip);
+    fs::remove_dir_all(sources).unwrap();
+    fs::remove_dir_all(&scratch).unwrap();
+    let recalled = Project::load_with_assets(&saved, &scratch).unwrap();
+    for (clip, value) in recalled.tracks[0].clips.iter().zip([0.25, 0.25, -0.25]) {
+        let ClipContent::Audio { path, .. } = &clip.content else {
+            unreachable!()
+        };
+        assert_eq!(
+            AudioData::load_wav(path).unwrap().samples,
+            vec![value; samples.len()]
+        );
+    }
+}
+
+#[test]
+fn failed_or_cancelled_optimization_preserves_song_and_never_overwrites_audio() {
+    use std::sync::atomic::AtomicBool;
+    let temp = tempfile::tempdir().unwrap();
+    let saved = temp.path().join("song.rill");
+    Project::new().save(&saved).unwrap();
+    let previous = fs::read(&saved).unwrap();
+    assert!(
+        audio_project(temp.path().join("missing.wav"))
+            .save_optimized(&saved)
+            .is_err()
+    );
+    assert_eq!(fs::read(&saved).unwrap(), previous);
+    let source = temp.path().join("source.wav");
+    AudioData {
+        sample_rate: 8_000,
+        channels: 1,
+        samples: vec![0.25; 1024],
+    }
+    .write_wav(&source)
+    .unwrap();
+    let source_bytes = fs::read(&source).unwrap();
+    let project = audio_project(&source);
+    assert!(
+        project
+            .save_optimized_cancelled(&saved, &AtomicBool::new(true))
+            .is_err()
+    );
+    assert_eq!(fs::read(&saved).unwrap(), previous);
+    assert!(project.save_optimized(&source).is_err());
+    assert_eq!(fs::read(&source).unwrap(), source_bytes);
+    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".rill-save-")
+    }));
+}
+
+#[test]
 #[cfg(unix)]
 fn oversized_sparse_riff_source_fails_before_copying_or_replacing_the_project() {
     let temp = tempfile::tempdir().unwrap();

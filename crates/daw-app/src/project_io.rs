@@ -64,8 +64,14 @@ impl From<Project> for LoadedProject {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SaveMode {
+    Normal,
+    Optimized,
+}
+
 pub(crate) enum DocumentRequest {
-    Save(PathBuf),
+    Save(PathBuf, SaveMode),
     Open(PathBuf, bool),
     New,
     Quit,
@@ -78,6 +84,7 @@ enum Completion {
         snapshot: Project,
         path: PathBuf,
         history_state: u64,
+        mode: SaveMode,
     },
     Loaded {
         loaded: LoadedProject,
@@ -308,17 +315,25 @@ impl DawApp {
     }
 
     /// Called only after the matching native-editor save acknowledgement.
-    pub(crate) fn finish_project_save(&mut self, path: PathBuf) {
+    pub(crate) fn finish_project_save(&mut self, path: PathBuf, mode: SaveMode) {
         self.flush_pending_edit();
         self.history.seal_group();
         let snapshot = self.project.clone();
         let history_state = self.history.state_id();
-        self.start_project_job("Saving project…", move || {
-            snapshot.save(&path)?;
+        let status = match mode {
+            SaveMode::Normal => "Saving project…",
+            SaveMode::Optimized => "Saving and optimizing project…",
+        };
+        self.start_project_job(status, move || {
+            match mode {
+                SaveMode::Normal => snapshot.save(&path)?,
+                SaveMode::Optimized => snapshot.save_optimized(&path)?,
+            }
             Ok(Completion::Saved {
                 snapshot,
                 path,
                 history_state,
+                mode,
             })
         });
     }
@@ -389,6 +404,7 @@ impl DawApp {
                         snapshot,
                         path,
                         history_state,
+                        mode,
                     }) => {
                         // Audio graph revision excludes names/colors. Compare the
                         // complete saved document so edits made during I/O stay dirty.
@@ -398,10 +414,13 @@ impl DawApp {
                         self.project_path = Some(path);
                         self.message(
                             Ok(()),
-                            if self.modified {
-                                "Saved · New changes remain"
-                            } else {
-                                "Session saved"
+                            match (mode, self.modified) {
+                                (SaveMode::Normal, true) => "Saved · New changes remain",
+                                (SaveMode::Normal, false) => "Session saved",
+                                (SaveMode::Optimized, true) => {
+                                    "Saved and optimized · New changes remain"
+                                }
+                                (SaveMode::Optimized, false) => "Project saved and optimized",
                             },
                         );
                         self.document_save_finished(true);
@@ -448,7 +467,7 @@ impl DawApp {
             } else if let Some(request) = self.project_io.queue.pop_front() {
                 self.project_io.dispatching = true;
                 match request {
-                    DocumentRequest::Save(path) => self.save_to(path),
+                    DocumentRequest::Save(path, mode) => self.save_to_with_mode(path, mode),
                     DocumentRequest::Open(path, recovery) => {
                         self.request_open_project(path, recovery)
                     }
@@ -558,6 +577,7 @@ mod tests {
                 snapshot: project,
                 path: PathBuf::from("saved.rill"),
                 history_state: saved_state,
+                mode: SaveMode::Optimized,
             }))
             .unwrap();
         app.poll_project_io(&ctx);

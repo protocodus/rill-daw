@@ -597,6 +597,15 @@ Setup persists at `~/Library/Application Support/Rill/settings.json` on macOS, `
 
 Projects save as self-contained `.rill` archives containing every referenced source WAV, including muted clips, retained takes, frozen originals and prints. Edits, MIDI, routing, automation and instrument/effect state live in the manifest. Opening a legacy `.daw.json` remains supported; its next GUI Save offers a new `.rill` filename and keeps the legacy file intact. Explicit application/tool save paths also contain portable audio regardless of their extension. Extracted audio uses the configured scratch directory. Plugins and their own sample libraries must remain installed. Recovery checkpoints still reference managed media, so keep the scratch folder while recovery or unsaved work may need it. See [project format and limits](PROJECT_FORMAT.md).
 
+**File → Save and optimize** rewrites the saved project with only the audio still
+referenced by the song, excluding sources used only by deleted clips. Normal Save
+also omits unused assets; optimization additionally combines byte-identical
+source files and applies lossless audio compression to reduce the archive size.
+It can take longer than Save. Muted clips, retained takes, Freeze originals and
+the full source ranges remain available. Optimization preserves Undo/Redo and
+leaves original and scratch files in place for recovery; it does not clean the
+global scratch folder.
+
 After Save as, the project header shows the saved filename with a dirty marker for later edits; hover it for the full path. Save and WAV/MIDI export pickers reuse that directory and filename stem. Extensionless project saves receive `.rill`. **Export WAV…** warns when visible notes on contributing MIDI tracks have no instrument; Cancel to assign a VST3, or continue without those notes.
 
 The WAV dialog offers **16-bit PCM**, **24-bit PCM**, and **32-bit float**, with an export sample rate independent of playback. **Follow audio setup** uses the current audio rate when Export is pressed. Choose the entire **Arrangement**, or **Loop range** to export between the loop markers at an exact length. The duration summary says **+ tails** when arrangement tails are enabled; loop-range exports always end at the end marker. These choices do not move the transport or change the song.

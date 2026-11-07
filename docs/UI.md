@@ -1046,6 +1046,13 @@ separate 8 MiB budget; they contain no audio samples.
 
 New, Open, recovery and Quit check native plugin state before deciding whether the document has unsaved changes. **Save changes?** offers Save, Don't save and Cancel; Escape cancels and retains the current workspace. Canceling the native save picker keeps the decision open. Save waits for the final native snapshot and successful file write before continuing; failures keep the project and show an error in the dialog. Ctrl/Cmd+S, Ctrl/Cmd+Shift+S and Ctrl/Cmd+O remain available from focused utility views.
 
+**File → Save and optimize** uses the same destination picker, native-state
+barrier and background save pipeline as Save. It repacks referenced audio,
+combines byte-identical sources and compresses audio losslessly, preserving the
+song and its history. Unused audio is omitted from the saved archive; retained
+takes, muted clips and Freeze originals remain included. Source and scratch
+files stay available to Undo/Redo and recovery.
+
 State stays with the caller. Boolean and choice components mark `Response::changed()` only when their value changes. Use `.clicked()` for actions and `.changed()` for committing edits. Shared components do not create undo history, mutate project state indirectly, or rebuild audio themselves.
 
 Viewing a control must not normalize valid stored values to a narrower editing range. Use `SliderClamping::Edits` or `.clamp_existing_to_range(false)` where the project model allows values beyond the control range. Arrangement, Mixer, Routing, Clip Editor, and Properties preserve those values until an intentional edit.

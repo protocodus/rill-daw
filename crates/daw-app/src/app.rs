@@ -1366,6 +1366,9 @@ impl DawApp {
         }
     }
     fn save(&mut self, save_as: bool) {
+        self.save_with_mode(save_as, crate::project_io::SaveMode::Normal);
+    }
+    fn save_with_mode(&mut self, save_as: bool, mode: crate::project_io::SaveMode) {
         let path = if save_as {
             None
         } else {
@@ -1373,7 +1376,7 @@ impl DawApp {
         }
         .or_else(|| self.pick_document_path(crate::document_ui::DocumentDialog::Save));
         if let Some(path) = path {
-            self.save_to(path);
+            self.save_to_with_mode(path, mode);
         }
     }
     pub(crate) fn finish_new_session(&mut self) {
@@ -2532,6 +2535,12 @@ impl DawApp {
                         }
                         if daw_ui::menu_item(ui, "Save as…", Some("Mod+Shift+S")).clicked() {
                             self.save(true);
+                            ui.close();
+                        }
+                        if daw_ui::button(ui, "Save and optimize")
+                            .on_hover_text("Remove unused audio from the saved project, merge identical assets and compress losslessly. Retained takes, Freeze originals and Undo sources are preserved.")
+                            .clicked() {
+                            self.save_with_mode(false, crate::project_io::SaveMode::Optimized);
                             ui.close();
                         }
                         if daw_ui::button(ui, "Rename project…")

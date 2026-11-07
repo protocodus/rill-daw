@@ -160,11 +160,21 @@ Clips reference these relative names in the manifest. Sources are deduplicated b
 canonical source path and file identity, including hard links; two different
 files with the same basename remain separate.
 Referenced files are included in full, preserving non-destructive offsets, trims,
-and duplicate clips. Assets use ZIP Stored compression to avoid compressing large
-audio files during save; the manifest uses Deflate.
+and duplicate clips. Normal Save uses ZIP Stored compression for assets to avoid
+compressing large audio files; the manifest uses Deflate.
 Every referenced audio clip is included, including muted clips, retained takes,
 frozen originals and printed audio. Save does not trim away hidden source audio.
 There are no external audio paths in a successful portable manifest.
+
+**Save and optimize** (`Project::save_optimized`) rewrites the archive with the
+same referenced-asset rules, combines separate source files when their complete
+bytes are identical, and uses lossless ZIP Deflate for audio entries. Both save
+modes omit assets referenced only by deleted clips. Optimization preserves the
+complete WAV bytes and clip edits; it does not trim source ranges, delete muted
+material, or discard takes or Freeze originals. Comparison and copying use
+bounded buffers rather than retaining entire audio files. The current project's
+source paths and Undo/Redo remain unchanged, and no source or scratch file is
+deleted. Optimization targets the saved archive, not global scratch storage.
 
 WAV/MP3/FLAC/OGG imports are normalized into managed 32-bit float WAV assets
 before they enter the project. Source sample rate and mono/stereo channels are
@@ -225,7 +235,7 @@ an existing destination intact and remove the temporary file.
 
 ## Application I/O
 
-Explicit Save and Open run on one background document pipeline. Saving first flushes native plugin state, then writes an immutable project snapshot atomically. Continued edits remain unsaved; completing an older write never marks later names, colors, notes, or plugin edits as saved. New/Open/Save/Quit requests are serialized, and a failed operation cancels queued document replacement/shutdown. Quit waits for pending writes. Both JSON and bundle saves flush the replacement directory entry on Unix after flushing file contents.
+Explicit Save, Save and optimize, and Open run on one background document pipeline. Saving first flushes native plugin state, then writes an immutable project snapshot atomically. Continued edits remain unsaved; completing an older write never marks later names, colors, notes, or plugin edits as saved. New/Open/Save/Quit requests are serialized, and a failed operation cancels queued document replacement/shutdown. Quit waits for pending writes. Both JSON and bundle saves flush the replacement directory entry on Unix after flushing file contents.
 
 Every committed UI or tool edit queues a JSON recovery checkpoint independently of native editor state and the document pipeline. Recovery writes run on a background worker, coalesce pending revisions of the same song, and preserve an outgoing song's pending checkpoint across a load completing. Native state refreshes still run every 30 seconds, after first checkpointing the last acknowledged state. `recovery.daw.json` holds the latest complete snapshot; `recovery.previous.daw.json` retains its valid predecessor. **Recover last session…** falls back to the predecessor if the latest is missing or corrupt. Quit waits for recovery and remains open if it fails. Failure does not retry every frame; new commits and periodic refreshes retry. These snapshots reference existing media paths rather than copying audio. There is a short in-flight window before an asynchronous checkpoint reaches disk; unacknowledged native state, interrupted writes, storage failure, and deleted source media cannot be guaranteed recoverable.
 
